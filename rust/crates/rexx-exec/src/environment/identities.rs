@@ -978,20 +978,24 @@ impl Interp {
 
     /// `PackageClass::findRoutine` (`classes/PackageClass.cpp:897`), as the
     /// `Routine` object or `.nil`.
-    pub(crate) fn package_find_routine(&mut self, package: ObjRef, upper: &[u8]) -> ObjRef {
+    pub(crate) fn package_find_routine(
+        &mut self,
+        package: ObjRef,
+        upper: &[u8],
+    ) -> Result<ObjRef, Failure> {
         if self.routines_written {
-            return match self.find_written_routine(Some(package), upper) {
+            return Ok(match self.find_written_routine(Some(package), upper)? {
                 Some(crate::FoundRoutine::Merged(merged)) => {
-                    self.merged_routine_object(merged).unwrap_or(ObjRef::NIL)
+                    self.merged_routine_object(merged)?.unwrap_or(ObjRef::NIL)
                 }
                 Some(crate::FoundRoutine::Object(object)) => object,
                 None => ObjRef::NIL,
-            };
+            });
         }
-        match self.find_routine(Some(package), upper) {
-            Some(merged) => self.merged_routine_object(merged).unwrap_or(ObjRef::NIL),
+        Ok(match self.find_routine(Some(package), upper) {
+            Some(merged) => self.merged_routine_object(merged)?.unwrap_or(ObjRef::NIL),
             None => ObjRef::NIL,
-        }
+        })
     }
 
     /// Records `parent` as `program`'s parent package. May allocate `program`'s
@@ -1059,26 +1063,29 @@ impl Interp {
         &mut self,
         package: Option<ObjRef>,
         upper: &[u8],
-    ) -> Option<crate::FoundRoutine> {
+    ) -> Result<Option<crate::FoundRoutine>, Failure> {
         let chain: Vec<(ObjRef, bool)> = self
             .package_chain(package)
             .map(|(object, data)| (object, data.routines_written))
             .collect();
         for (package, written) in chain.iter().copied() {
             if written {
-                let table =
-                    self.package_string_table(package, crate::environment::PackageTable::Routines)?;
+                let Some(table) =
+                    self.package_string_table(package, crate::environment::PackageTable::Routines)?
+                else {
+                    return Ok(None);
+                };
                 if let Some(object) = self.native_entry(table, upper) {
-                    return Some(crate::FoundRoutine::Object(object));
+                    return Ok(Some(crate::FoundRoutine::Object(object)));
                 }
             } else if let Some(merged) = self
                 .package_data(package)
                 .and_then(|data| data.routines.get(upper))
             {
-                return Some(crate::FoundRoutine::Merged(*merged));
+                return Ok(Some(crate::FoundRoutine::Merged(*merged)));
             }
         }
-        chain
+        Ok(chain
             .into_iter()
             .find_map(|(package, _)| {
                 self.package_data(package)?
@@ -1086,7 +1093,7 @@ impl Interp {
                     .get(upper)
                     .copied()
             })
-            .map(crate::FoundRoutine::Merged)
+            .map(crate::FoundRoutine::Merged))
     }
 
     /// What a call runs for a `Routine` object a written `.ROUTINES` table
@@ -1150,14 +1157,17 @@ impl Interp {
     /// The `Routine` object one imported routine is: the `::ROUTINE`'s own,
     /// or for a library routine, the one kept for its library code row,
     /// reporting that code's package.
-    pub(crate) fn merged_routine_object(&mut self, merged: crate::MergedRoutine) -> Option<ObjRef> {
-        match merged {
-            crate::MergedRoutine::Installed(installed, _) => self.routine_object(installed),
+    pub(crate) fn merged_routine_object(
+        &mut self,
+        merged: crate::MergedRoutine,
+    ) -> Result<Option<ObjRef>, Failure> {
+        Ok(match merged {
+            crate::MergedRoutine::Installed(installed, _) => self.routine_object(installed)?,
             crate::MergedRoutine::Library(code) => Some(self.library_routine_object(code)),
             crate::MergedRoutine::Internal(index) => Some(self.internal_routine_object(index)),
             crate::MergedRoutine::LibraryObject(_, object)
             | crate::MergedRoutine::InternalObject(_, object) => Some(object),
-        }
+        })
     }
 
     /// The one `Routine` object for the internal package routine at `index`.
@@ -1205,7 +1215,7 @@ impl Interp {
             PackageTable::Routines,
             PackageTable::Resources,
         ] {
-            self.package_string_table(package, kind);
+            self.package_string_table(package, kind)?;
         }
         Ok(())
     }

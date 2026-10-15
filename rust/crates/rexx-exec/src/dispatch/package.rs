@@ -435,7 +435,7 @@ fn source_size(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let lines = source_lines(interp, package_of(interp, receiver)?).len();
+    let lines = source_lines(interp, package_of(interp, receiver)?)?.len();
     Ok(Some(interp.counted(lines)))
 }
 
@@ -447,7 +447,7 @@ fn source(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let lines = source_lines(interp, package_of(interp, receiver)?);
+    let lines = source_lines(interp, package_of(interp, receiver)?)?;
     let mut items = Vec::with_capacity(lines.len());
     let frame = interp.roots.activity_mut().push_frame();
     for line in &lines {
@@ -470,19 +470,29 @@ fn source_line(
 ) -> Result<Option<ObjRef>, Failure> {
     let program = package_of(interp, receiver)?;
     let position = super::required_position_argument(interp, args, 0)?;
-    let lines = source_lines(interp, program);
+    let lines = source_lines(interp, program)?;
     let line = lines.get(position - 1).cloned().unwrap_or_default();
     Ok(Some(interp.text_built(line)))
 }
 
-/// The lines `~source`, `~sourceLine` and `~sourceSize` read.
-fn source_lines(interp: &Interp, program: Option<ProgramId>) -> Vec<Vec<u8>> {
-    let Some(program) = program.and_then(|program| interp.programs.get(program)) else {
-        return Vec::new();
+/// The lines `~source`, `~sourceLine` and `~sourceSize` read, none for the
+/// REXX package. Refuses a `program` that was freed, which only a holder the
+/// collector was not shown reaches.
+fn source_lines(interp: &Interp, program: Option<ProgramId>) -> Result<Vec<Vec<u8>>, Failure> {
+    let Some(program) = program else {
+        return Ok(Vec::new());
     };
-    (1..=program.source.line_count())
-        .filter_map(|number| program.source.line(number).map(<[u8]>::to_vec))
-        .collect()
+    let source = interp.programs.get(program);
+    debug_assert!(
+        source.is_some(),
+        "{program:?} was freed while its package was held"
+    );
+    let Some(source) = source else {
+        return Err(Loud::unknown_receiver("a package whose program was freed").into());
+    };
+    Ok((1..=source.source.line_count())
+        .filter_map(|number| source.source.line(number).map(<[u8]>::to_vec))
+        .collect())
 }
 
 /// `PackageClass::getMainRexx`: the `Routine` a package's leading code
@@ -643,14 +653,14 @@ fn routine_entries(
         .iter()
         .map(|(name, merged)| (name.clone(), *merged))
         .collect();
-    Ok(rooted_routine_objects(interp, named))
+    rooted_routine_objects(interp, named)
 }
 
 /// The `Routine` object for each of `named`, skipping one that has none.
 fn rooted_routine_objects(
     interp: &mut Interp,
     named: Vec<(Box<[u8]>, crate::MergedRoutine)>,
-) -> Vec<(Box<[u8]>, ObjRef)> {
+) -> Result<Vec<(Box<[u8]>, ObjRef)>, Failure> {
     // **Each object is rooted as it is built**, because building the next one
     // allocates: `Interp::routine_object` materialises the declaring
     // program's `.ROUTINES` table on a miss, and a `Routine` produced by an
@@ -660,13 +670,13 @@ fn rooted_routine_objects(
     // `corpus/lang/package_tables.rex` panics at `Interp::not_in_arena`.
     let mut entries = Vec::with_capacity(named.len());
     for (name, merged) in named {
-        let Some(object) = interp.merged_routine_object(merged) else {
+        let Some(object) = interp.merged_routine_object(merged)? else {
             continue;
         };
         interp.roots.activity_mut().push_temp(object);
         entries.push((name, object));
     }
-    entries
+    Ok(entries)
 }
 
 /// `PackageClass::getMethodsRexx`: the package's unattached `::METHOD`s,
@@ -721,7 +731,7 @@ fn package_table_entries(
     receiver: ObjRef,
     kind: PackageTable,
 ) -> Result<Vec<(Box<[u8]>, ObjRef)>, Failure> {
-    let Some(table) = interp.package_string_table(receiver, kind) else {
+    let Some(table) = interp.package_string_table(receiver, kind)? else {
         return Ok(Vec::new());
     };
     let mut pairs = Vec::new();
@@ -796,7 +806,7 @@ fn find_routine(
 ) -> Result<Option<ObjRef>, Failure> {
     fields_of(interp, receiver)?;
     let name = upper_name_argument(interp, args)?;
-    Ok(Some(interp.package_find_routine(receiver, &name)))
+    Ok(Some(interp.package_find_routine(receiver, &name)?))
 }
 
 /// `PackageClass::findPublicRoutineRexx`.
@@ -925,7 +935,7 @@ fn install_routine(
     // `.ROUTINES` answers this same table, so the write has to reach it --
     // measured, oracle rc 0, `.routines~allIndexes` carries a name added by
     // `~addRoutine`.
-    if let Some(table) = interp.package_string_table_for_write(receiver, PackageTable::Routines) {
+    if let Some(table) = interp.package_string_table_for_write(receiver, PackageTable::Routines)? {
         super::hash::directory_put(interp, table, &name, routine)?;
     }
     Ok(Some(receiver))

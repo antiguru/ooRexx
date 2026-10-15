@@ -409,9 +409,9 @@ fn source(
 ) -> Result<Option<ObjRef>, Failure> {
     let lines = match source_of(interp, receiver)? {
         ExecutableSource::Directive { program, directive } => {
-            block_source_lines(interp, program, Some(directive))
+            block_source_lines(interp, program, Some(directive))?
         }
-        ExecutableSource::Main { program } => block_source_lines(interp, program, None),
+        ExecutableSource::Main { program } => block_source_lines(interp, program, None)?,
         ExecutableSource::Native
         | ExecutableSource::External { .. }
         | ExecutableSource::Loaded { .. } => Vec::new(),
@@ -421,21 +421,27 @@ fn source(
 
 /// The physical lines `RexxCode::getSource` answers for one code block:
 /// `Some(i)` is directive `i`'s own body and `None` is the program's main
-/// section.
+/// section. Refuses a `program` that was freed, which only a holder the
+/// collector was not shown reaches.
 fn block_source_lines(
     interp: &Interp,
     program: ProgramId,
     directive: Option<usize>,
-) -> Vec<Vec<u8>> {
-    let Some(source) = interp.programs.get(program) else {
-        return Vec::new();
+) -> Result<Vec<Vec<u8>>, Failure> {
+    let source = interp.programs.get(program);
+    debug_assert!(
+        source.is_some(),
+        "{program:?} was freed while its executable was held"
+    );
+    let Some(source) = source else {
+        return Err(Loud::unknown_receiver("an executable whose program was freed").into());
     };
     let text = &source.source;
     let (first, from) = match directive {
         None => (1, 0),
         Some(directive) => match block_start(source, directive) {
             Some(start) => block_first_line(text, start),
-            None => return Vec::new(),
+            None => return Ok(Vec::new()),
         },
     };
     let next = directive.map_or(0, |directive| directive + 1);
@@ -464,7 +470,7 @@ fn block_source_lines(
         }
         _ => (last, upto),
     };
-    (first..=last)
+    Ok((first..=last)
         .map_while(|line| {
             let span = text.line_span(line)?;
             let cut = span.start.max(from)..span.end.min(upto);
@@ -472,7 +478,7 @@ fn block_source_lines(
                 .map(<[u8]>::to_vec)
                 .or_else(|| Some(Vec::new()))
         })
-        .collect()
+        .collect())
 }
 
 /// The line a block begins on, and the byte within the text it begins at.

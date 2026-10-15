@@ -331,7 +331,7 @@ impl Interp {
                 .find_routine(package, &upper)
                 .map(crate::MergedRoutine::resolved));
         }
-        match self.find_written_routine(package, &upper) {
+        match self.find_written_routine(package, &upper)? {
             Some(crate::FoundRoutine::Merged(merged)) => Ok(Some(merged.resolved())),
             Some(crate::FoundRoutine::Object(object)) => {
                 self.routine_object_resolution(object).map(Some)

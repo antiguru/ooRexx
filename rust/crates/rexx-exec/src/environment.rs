@@ -557,7 +557,7 @@ impl Interp {
             hash::DirectoryEntry::Absent => {}
         }
 
-        if let Some(found) = self.rexx_variable(bare) {
+        if let Some(found) = self.rexx_variable(bare)? {
             return Ok(found);
         }
 
@@ -1039,20 +1039,23 @@ impl Interp {
     /// `RexxActivation::rexxVariable` (`execution/RexxActivation.cpp:2842`):
     /// the names the interpreter answers out of the running activation rather
     /// than out of a directory.
-    fn rexx_variable(&mut self, bare: &[u8]) -> Option<ObjRef> {
+    fn rexx_variable(&mut self, bare: &[u8]) -> Result<Option<ObjRef>, Failure> {
+        let table = match bare {
+            b"METHODS" => PackageTable::UnattachedMethods,
+            b"ROUTINES" => PackageTable::Routines,
+            b"RESOURCES" => PackageTable::Resources,
+            _ => return Ok(self.activation_variable(bare)),
+        };
+        match self.running_program() {
+            Some(program) => self.program_string_table(program, table),
+            None => Ok(None),
+        }
+    }
+
+    /// [`Interp::rexx_variable`]'s names answered out of the running
+    /// activation itself.
+    fn activation_variable(&mut self, bare: &[u8]) -> Option<ObjRef> {
         match bare {
-            b"METHODS" => {
-                let program = self.running_program()?;
-                self.program_string_table(program, PackageTable::UnattachedMethods)
-            }
-            b"ROUTINES" => {
-                let program = self.running_program()?;
-                self.program_string_table(program, PackageTable::Routines)
-            }
-            b"RESOURCES" => {
-                let program = self.running_program()?;
-                self.program_string_table(program, PackageTable::Resources)
-            }
             // `new_integer(current->getLineNumber())`. `clause_state.line()`
             // is the same quantity `SIGL` reads and carries the same
             // `INTERPRET` rule the oracle's own `isInterpret` delegation
@@ -1080,7 +1083,7 @@ impl Interp {
         &mut self,
         package: ObjRef,
         kind: PackageTable,
-    ) -> Option<ObjRef> {
+    ) -> Result<Option<ObjRef>, Failure> {
         self.build_package_string_table(package, kind, false)
     }
 
@@ -1089,7 +1092,7 @@ impl Interp {
         &mut self,
         program: ProgramId,
         kind: PackageTable,
-    ) -> Option<ObjRef> {
+    ) -> Result<Option<ObjRef>, Failure> {
         let package = self.held_package_object(Package::Program(program));
         self.package_string_table(package, kind)
     }
@@ -1113,7 +1116,7 @@ impl Interp {
         &mut self,
         package: ObjRef,
         kind: PackageTable,
-    ) -> Option<ObjRef> {
+    ) -> Result<Option<ObjRef>, Failure> {
         self.build_package_string_table(package, kind, true)
     }
 
@@ -1122,16 +1125,26 @@ impl Interp {
         package: ObjRef,
         kind: PackageTable,
         force: bool,
-    ) -> Option<ObjRef> {
-        let data = self.package_data(package)?;
+    ) -> Result<Option<ObjRef>, Failure> {
+        let Some(data) = self.package_data(package) else {
+            return Ok(None);
+        };
         if let Some(found) = data.tables[kind.index()] {
-            return Some(found);
+            return Ok(Some(found));
         }
         // A copy of the REXX package has no directives, and gets a table only
         // for a write, which is where `~addRoutine` files its routines.
         let source = match data.program {
             Some(program) if !self.untranslated.contains(&program) => {
-                Some(std::rc::Rc::clone(self.programs.get(program)?))
+                let source = self.programs.get(program);
+                debug_assert!(
+                    source.is_some(),
+                    "{program:?} was freed while its package was held"
+                );
+                let Some(source) = source else {
+                    return Err(Loud::unknown_receiver("a package whose program was freed").into());
+                };
+                Some(std::rc::Rc::clone(source))
             }
             _ => None,
         };
@@ -1140,14 +1153,19 @@ impl Interp {
             _ => Vec::new(),
         };
         if entries.is_empty() && !force {
-            return None;
+            return Ok(None);
         }
         // The table is rooted before anything it will hold is allocated, and
         // each value goes into it as soon as it exists: `alloc_with` collects
         // before it allocates.
         self.roots.activity_mut().push_temp(package);
-        let table = crate::dispatch::hash::new_string_table(self).ok()?;
-        self.package_data_mut(package)?.tables[kind.index()] = Some(table);
+        let Ok(table) = crate::dispatch::hash::new_string_table(self) else {
+            return Ok(None);
+        };
+        let Some(data) = self.package_data_mut(package) else {
+            return Ok(None);
+        };
+        data.tables[kind.index()] = Some(table);
         self.routines_tables |= kind == PackageTable::Routines;
         let frame = self.roots.activity_mut().push_frame();
         for (name, value) in entries {
@@ -1212,11 +1230,11 @@ impl Interp {
             self.roots.activity_mut().push_temp(value);
             if crate::dispatch::hash::directory_put(self, table, &name, value).is_err() {
                 self.roots.activity_mut().pop_frame(frame);
-                return None;
+                return Ok(None);
             }
         }
         self.roots.activity_mut().pop_frame(frame);
-        Some(table)
+        Ok(Some(table))
     }
 
     /// A fresh `StringTable` holding `entries`, put in name order: the copy
@@ -1257,12 +1275,15 @@ impl Interp {
     }
 
     /// The one `Routine` object standing for `installed`.
-    pub(crate) fn routine_object(&mut self, installed: crate::InstalledRoutine) -> Option<ObjRef> {
+    pub(crate) fn routine_object(
+        &mut self,
+        installed: crate::InstalledRoutine,
+    ) -> Result<Option<ObjRef>, Failure> {
         if let Some(found) = self.routine_objects.get(&installed).copied() {
-            return Some(found);
+            return Ok(Some(found));
         }
-        self.program_string_table(installed.program, PackageTable::Routines);
-        self.routine_objects.get(&installed).copied()
+        self.program_string_table(installed.program, PackageTable::Routines)?;
+        Ok(self.routine_objects.get(&installed).copied())
     }
 
     /// One `::RESOURCE`'s body as the `Array` of strings `.RESOURCES` holds.

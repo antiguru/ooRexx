@@ -478,7 +478,7 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
             }
             let name = routine_entry_name(interp, program, directive)?;
             let table = interp
-                .program_string_table(program, crate::environment::PackageTable::Routines)
+                .program_string_table(program, crate::environment::PackageTable::Routines)?
                 .ok_or_else(|| Loud::unknown_receiver("a routine whose package has no table"))?;
             interp
                 .native_entry(table, &name)
@@ -597,7 +597,7 @@ pub(crate) fn build_live_frame(interp: &mut Interp, level: LiveLevel) -> Result<
     match level {
         LiveLevel::Activation(depth) => build_frame(interp, depth),
         LiveLevel::Native(row) => build_native_frame_at(interp, row),
-        LiveLevel::Internal(row) => Ok(build_internal_frame_at(interp, row)),
+        LiveLevel::Internal(row) => build_internal_frame_at(interp, row),
         LiveLevel::Fragment(row) => build_fragment_frame(interp, row),
     }
 }
@@ -901,10 +901,7 @@ pub(crate) fn build_native_frame_at(interp: &mut Interp, row: usize) -> Result<O
             Raised::compiled_routine_line(&name),
         )
     };
-    let depth = interp
-        .frames()
-        .position(|activation| Some(activation.id) == caller)
-        .unwrap_or(0);
+    let depth = caller_depth(interp, caller)?;
     let context = interp.context_object_at(depth);
     let frame = interp.roots.activity_mut().push_frame();
     let kind = interp.text(kind);
@@ -940,7 +937,7 @@ pub(crate) fn build_native_frame_at(interp: &mut Interp, row: usize) -> Result<O
 ///
 /// # Panics
 /// If no internal level is in that row.
-fn build_internal_frame_at(interp: &mut Interp, row: usize) -> ObjRef {
+fn build_internal_frame_at(interp: &mut Interp, row: usize) -> Result<ObjRef, Failure> {
     let level = &interp.activity.internal_levels[row];
     let name = match level.name {
         crate::activity::LevelName::Upper => level.row.name.to_ascii_uppercase().into_bytes(),
@@ -949,12 +946,9 @@ fn build_internal_frame_at(interp: &mut Interp, row: usize) -> ObjRef {
     };
     let arguments = level.arguments[level.from..].to_vec();
     let (caller, row) = (level.caller, level.row);
-    let depth = interp
-        .frames()
-        .position(|activation| Some(activation.id) == caller)
-        .unwrap_or(0);
+    let depth = caller_depth(interp, caller)?;
     let executable = interp.internal_routine_object(crate::internal_routines::index_of(row));
-    build_native_level_frame(
+    Ok(build_native_level_frame(
         interp,
         Some(depth),
         &name,
@@ -962,7 +956,26 @@ fn build_internal_frame_at(interp: &mut Interp, row: usize) -> ObjRef {
         &arguments,
         &Raised::compiled_routine_line(&name),
         Some(executable),
-    )
+    ))
+}
+
+/// The depth of the running activation `caller` names. Refuses one that is
+/// not running: [`live_levels`] lists a native or internal level only beside
+/// its caller.
+fn caller_depth(
+    interp: &Interp,
+    caller: Option<crate::activation::ActivationId>,
+) -> Result<usize, Failure> {
+    let depth = interp
+        .frames()
+        .position(|activation| Some(activation.id) == caller);
+    debug_assert!(
+        depth.is_some(),
+        "a level's caller {caller:?} is not running"
+    );
+    depth.ok_or_else(|| {
+        Loud::unknown_receiver("a stack frame whose calling activation is no longer live").into()
+    })
 }
 
 /// The activation at `depth` read out in one pass, before anything allocates.

@@ -21,7 +21,7 @@
 //!
 //! ```text
 //! grep -rnE --include=*.rs \
-//!     'did not build|does not keep|is no longer live|is value-based|this crate did not|this crate does not|this crate built' \
+//!     'did not build|does not keep|is no longer live|is value-based|this crate did not|this crate does not|this crate built|whose program was freed' \
 //!     crates/*/src | grep -vE '/tests(\.rs:|/)'
 //! ```
 
@@ -37,6 +37,7 @@ const PHRASES: &[&str] = &[
     "this crate did not",
     "this crate does not",
     "this crate built",
+    "whose program was freed",
 ];
 
 /// `(file:substring, owner)`: a literal in `file` (relative to `crates/`)
@@ -84,6 +85,32 @@ const ALLOWED: &[(&str, &str)] = &[
     // refused rather than rebuilt.
     (
         "rexx-exec/src/environment/identities.rs:a package whose object is no longer live",
+        "internal guard",
+    ),
+    // A program is freed only at the collection after its last package
+    // object goes, and every package object and executable holds its
+    // program, so a freed program is reached only through a holder the
+    // collector was not shown.
+    (
+        "rexx-exec/src/environment/identities.rs:a package whose program was freed",
+        "internal guard",
+    ),
+    (
+        "rexx-exec/src/environment.rs:a package whose program was freed",
+        "internal guard",
+    ),
+    (
+        "rexx-exec/src/dispatch/package.rs:a package whose program was freed",
+        "internal guard",
+    ),
+    (
+        "rexx-exec/src/dispatch/executable.rs:an executable whose program was freed",
+        "internal guard",
+    ),
+    // `live_levels` lists a native or internal level only beside the running
+    // activation its caller names.
+    (
+        "rexx-exec/src/dispatch/context.rs:a stack frame whose calling activation is no longer live",
         "internal guard",
     ),
     // `native_as_instance` is handed only what a `Method`, `Routine` or
