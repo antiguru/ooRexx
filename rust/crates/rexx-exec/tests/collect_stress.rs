@@ -1889,3 +1889,30 @@ fn a_reused_behaviour_slot_leaves_live_instances_alone() {
         "a e r k1 k2\n",
     );
 }
+
+/// A `run` activation holds the copy it runs: nothing else names this one,
+/// and once it is swept its identity's rows go, so a rebuilt
+/// `.context~executable` would answer the template's flags. Measured, oracle
+/// rc 0 in 3 of 3 runs, with 300 passes of `copies('x', 100000)` as the
+/// filler.
+#[test]
+fn a_run_activation_holds_the_copy_it_runs() {
+    assert_stress_prints(
+        "<run-holds-copy>",
+        concat!(
+            "say .k~new~go\n",
+            "exit\n",
+            "::class k\n",
+            "::method go\n",
+            "  return self~run(.k~method('RUNNER')~copy~~setPrivate)\n",
+            "::method runner\n",
+            "  call filler\n",
+            "  e = .context~executable\n",
+            "  return 'exe' e~class~id e~isPrivate e~isGuarded\n",
+            "::routine filler\n",
+            "  do i = 1 to 3; z = copies('x', 1000); end\n",
+            "  return\n",
+        ),
+        "exe Method 1 1\n",
+    );
+}

@@ -1802,8 +1802,9 @@ pub(crate) struct ExecutableRecord {
     pub(crate) routine: Option<(ProgramId, usize)>,
     /// Whether [`ExecutableRecord::installed`] was minted for this object
     /// alone, so that its rows go at the sweep that frees the object. Every
-    /// dictionary that installs such an identity holds the object too, and an
-    /// activation reads none of its identity's rows once it has entered.
+    /// holder of such an identity holds the object too: a class or object
+    /// method dictionary, a `run` activation's `executable` and the one
+    /// `.context~executable` answered.
     pub(crate) owns_installed: bool,
 }
 
