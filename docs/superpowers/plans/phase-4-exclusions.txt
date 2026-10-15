@@ -1788,7 +1788,12 @@ DEVIATIONS -- permanent, chosen
      Relation refuse the same way, Stem's with `... that is not a stem`,
      MutableBuffer LENGTH with `... that is not a mutable buffer`, and
      Message SEND, START and REPLY with `... that is not a message` (Phase
-     6.1 Task 11a). Through `enhanced`,
+     6.1 Task 11a), and every StackFrame method with `... that is not a
+     stack frame` (Phase 9b1 Task 8). Measured by that task's review, 2 runs
+     each: StackFrame NAME, EXECUTABLE, TYPE and TARGET, and EXECUTABLE
+     installed by setMethod, are SIGSEGV rc 139; LINE answers a pointer that
+     differs every run, CONTEXT `The NIL object` and ARGUMENTS an empty line.
+     Through `enhanced`,
      `.object~enhanced(d)` with `d['E9'] = .array~method('ITEMS')` then
      `~send('E9')` is rc 0 on the oracle and the same refusal here (Task 7
      review). The oracle's answer is a read through the wrong layout, not a
