@@ -824,3 +824,32 @@ fn expunge_empties_the_behaviours_define_retired() {
         "the surviving superclass lost its behaviour"
     );
 }
+
+/// A class defined after another was expunged reuses its emptied behaviour
+/// slots, and answers its own methods from them.
+#[test]
+fn a_new_class_reuses_an_expunged_classs_behaviours() {
+    let object = id(1);
+    let dead = id(2);
+    let fresh = id(3);
+    let mut g = ClassGraph::new();
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define(object, "BASE", MethodId(1));
+    g.define_class(dead, Some(object), ClassKind::Regular, object);
+    let retired = g.instance_behaviour_handle(dead);
+    g.define(dead, "OLD", MethodId(2));
+    let freed = [
+        retired,
+        g.instance_behaviour_handle(dead),
+        g.class_behaviour_handle(dead),
+    ];
+    g.expunge(&[dead]);
+    g.define_class(fresh, Some(object), ClassKind::Regular, object);
+    g.define(fresh, "NEW", MethodId(3));
+    let instance = g.instance_behaviour_handle(fresh);
+    for handle in [instance, g.class_behaviour_handle(fresh)] {
+        assert!(freed.contains(&handle), "{handle:?} is not a freed slot");
+    }
+    assert!(g.has_method_at(instance, "NEW") && g.has_method_at(instance, "BASE"));
+    assert!(!g.has_method_at(instance, "OLD"));
+}

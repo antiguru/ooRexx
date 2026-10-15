@@ -158,6 +158,11 @@ pub struct ClassGraph {
     /// once per superclass per class while the library is being built.
     classes: NameMap<ObjRef, ClassDef>,
     behaviours: Vec<Behaviour>,
+    /// The behaviours an expunged class emptied, which a later allocation
+    /// takes before it grows [`ClassGraph::behaviours`]. Only an instance of
+    /// a class holds one of its handles, and an instance keeps its class
+    /// alive.
+    free_behaviours: Vec<BehaviourHandle>,
     /// Oracle's uninit table restricted to class objects -- the entries
     /// `RexxClass::checkUninit`'s `requiresUninit()` (`ClassClass.cpp:1224`)
     /// makes, in the order it makes them.
@@ -170,6 +175,9 @@ impl ClassGraph {
     }
 
     fn alloc_behaviour(&mut self) -> BehaviourHandle {
+        if let Some(handle) = self.free_behaviours.pop() {
+            return handle;
+        }
         let handle = BehaviourHandle::new(self.behaviours.len());
         self.behaviours.push(Behaviour {
             dict: MethodDict::new(),
@@ -425,6 +433,7 @@ impl ClassGraph {
         let ClassGraph {
             classes,
             behaviours,
+            free_behaviours,
             uninit_classes,
         } = self;
         for class in dead {
@@ -438,6 +447,8 @@ impl ClassGraph {
                     .chain(&def.retired_behaviours)
                 {
                     behaviours[handle.index()].dict.clear();
+                    debug_assert!(!free_behaviours.contains(handle), "{handle:?} freed twice");
+                    free_behaviours.push(*handle);
                 }
             }
             classes.remove(class);
