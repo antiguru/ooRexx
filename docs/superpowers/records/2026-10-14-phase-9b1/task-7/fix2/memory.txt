@@ -1,0 +1,102 @@
+# Class weight, measured on rexx-run-9b1-t7-nocollect: t7e (00a96524a) with COLLECT_FLOOR and
+# COLLECT_BYTES_FLOOR both set to 1 << 40, so no collection runs. Not committed.
+# Each program keeps N Package~new results in an array. Peak RSS by /usr/bin/time -f %M,
+# ulimit -v 8388608, fresh directory each. The slope from N = 20 to N = 60, over 40, is the weight
+# of one package.
+#   A: 20 ::CLASSes of 20 ::METHODs each
+#   B: the same 400 ::METHODs ahead of the first class (attached to none), then 20 bare ::CLASSes
+#   D: the 400 unattached ::METHODs alone
+#   E: 20 '::class cJ subclass Array'      F: 20 '::class cJ subclass Object'
+A0 19360  A20 96844  A60 249492   -> 3816 kB per package
+B0 19664  B20 32316  B60 56904    -> 615 kB per package
+D0 20000  D20 23456  D60 32376    -> 223 kB per package
+E20 32080 E60 57036               -> 624 kB per package, 31.2 kB per Array subclass
+F20 28016 F60 46608               -> 465 kB per package, 23.2 kB per Object subclass
+(B - D) / 20 = 19.6 kB per bare class; (A - B) / 400 = 8.0 kB per own ::METHOD
+
+# programs
+== A20.rex
+src = .array~new
+do j = 1 to 20
+  src~append('::class c'j)
+  do k = 1 to 20
+    src~append('::method m'k)
+  end
+end
+keep = .array~new
+do i = 1 to 20
+  keep~append(.Package~new('q', src))
+end
+say keep~items
+== B20.rex
+src = .array~new
+do j = 1 to 20
+  do k = 1 to 20
+    src~append('::method m'j'_'k)
+  end
+end
+do j = 1 to 20
+  src~append('::class c'j)
+end
+keep = .array~new
+do i = 1 to 20
+  keep~append(.Package~new('q', src))
+end
+say keep~items
+== D20.rex
+src = .array~new
+do j = 1 to 20
+  do k = 1 to 20
+    src~append('::method m'j'_'k)
+  end
+end
+keep = .array~new
+do i = 1 to 20
+  keep~append(.Package~new('q', src))
+end
+say keep~items
+== E20.rex
+src = .array~new
+do j = 1 to 20
+  src~append('::class c'j' subclass Array')
+end
+keep = .array~new
+do i = 1 to 20
+  keep~append(.Package~new('q', src))
+end
+say keep~items
+== F20.rex
+src = .array~new
+do j = 1 to 20
+  src~append('::class c'j' subclass Object')
+end
+keep = .array~new
+do i = 1 to 20
+  keep~append(.Package~new('q', src))
+end
+say keep~items
+# the N = 0 and N = 60 programs differ only in the loop bound
+
+# Witness, rexx-run-9b1-t7f (99404aa00) against the oracle, measure.sh as in ../memory.txt:
+oracle clsmweak 7 1 20632  kB
+rexx-run-9b1-t7f clsmweak 8 1 52356  kB
+rexx-run-9b1-t7f cls50weak 35 1 58748  kB
+rexx-run-9b1-t7f clsweak 705 1 54576  kB
+rexx-run-9b1-t7f clsloop20000 done 59780  kB
+rexx-run-9b1-t7f clsloop80000 done 72120  kB
+rexx-run-9b1-t7e clsmweak 64 1 265792  kB
+== clsmweak.rex
+src = .array~new
+do j = 1 to 20
+  src~append('::class c'j)
+  do k = 1 to 20
+    src~append('::method m'k)
+  end
+end
+p = .Package~new('p', src)
+w = .WeakReference~new(p~classes['C1'])
+p = .nil
+do i = 1 to 20000 until w~value == .nil
+  q = .Package~new('q', src)
+end
+say i (w~value == .nil)
