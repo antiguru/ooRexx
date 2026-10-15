@@ -35,7 +35,7 @@ pub(crate) struct PackageData {
     pub(crate) options: Option<PackageOptions>,
     /// `PackageClass::initialPackageSettings`, entered at the first change.
     pub(crate) initial_options: Option<PackageOptions>,
-    /// The security manager the package carries, which all three
+    /// The security manager the package carries, which the
     /// `setSecurityManager` setters write.
     pub(crate) security_manager: Option<ObjRef>,
     /// Every `::ROUTINE` the program installs and every routine `~addRoutine`

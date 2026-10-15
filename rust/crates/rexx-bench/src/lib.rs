@@ -73,14 +73,14 @@ pub static PROGRAMS: &[&str] = &[
     // Added in the Phase 9a final review's fix: an environment symbol read
     // once the running package has a local, which searches that local first.
     "pkglocal",
-    // Added in Phase 9b1 Task 3's fix round: internal package routine calls,
-    // which push a stack-frame level around the routine's body.
+    // Internal package routine calls, which push a stack-frame level around
+    // the routine's body.
     "intcall",
-    // Added in Phase 9b1 Task 7's fix round: body-byte churn over a live set,
-    // which measures the collector's byte trigger.
+    // Body-byte churn over a live set, which measures the collector's byte
+    // trigger.
     "churn",
-    // Added in Phase 9b1 Task 8's fix round: INTERPRET of a fragment holding
-    // a long literal, which compiles a chunk per pass.
+    // INTERPRET of a fragment holding a long literal, which compiles a chunk
+    // per pass.
     "interpret",
 ];
 
