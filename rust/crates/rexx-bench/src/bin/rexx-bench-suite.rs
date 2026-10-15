@@ -152,6 +152,10 @@ const AXES: &[Axis] = &[
         role: Role::Loop,
     },
     Axis {
+        name: "interpret",
+        role: Role::Loop,
+    },
+    Axis {
         name: "nop",
         role: Role::Loop,
     },

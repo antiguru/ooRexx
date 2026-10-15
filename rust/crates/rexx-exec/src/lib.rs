@@ -3315,7 +3315,11 @@ impl Interp {
             }
             keep
         });
-        self.heap.release_immortal(&interned);
+        if !interned.is_empty() {
+            let interned: rustc_hash::FxHashSet<ObjRef> = interned.into_iter().collect();
+            self.heap
+                .release_immortal(0, |handle| interned.contains(&handle));
+        }
         self.compiled_method_names
             .retain(|program, _| !dead(program));
         self.required_paths.retain(|program, _| !dead(program));

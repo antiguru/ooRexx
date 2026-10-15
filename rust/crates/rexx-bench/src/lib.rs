@@ -79,6 +79,9 @@ pub static PROGRAMS: &[&str] = &[
     // Added in Phase 9b1 Task 7's fix round: body-byte churn over a live set,
     // which measures the collector's byte trigger.
     "churn",
+    // Added in Phase 9b1 Task 8's fix round: INTERPRET of a fragment holding
+    // a long literal, which compiles a chunk per pass.
+    "interpret",
 ];
 
 /// Programs in `bench-programs/` that the criterion harness deliberately does

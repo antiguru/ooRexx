@@ -63,6 +63,8 @@ impl Interp {
                 return Err(Loud::chunk_refused().into());
             }
         };
+        // The literals this chunk interns are interned after this count.
+        let interned_from = self.heap.immortal_count();
         // Truncated on the way out, so a temp this chunk leaks does not outlive it.
         let temps = self.roots.activity_mut().push_frame();
         let arena = self.roots.activity().frames();
@@ -81,8 +83,9 @@ impl Interp {
         // behind would keep its registers rooted for the rest of the run.
         arena.release(registers);
         self.roots.activity_mut().pop_frame(temps);
-        let interned: Vec<ObjRef> = chunk.interned_values().collect();
-        self.heap.release_immortal(&interned);
+        self.heap.release_immortal(interned_from, |handle| {
+            chunk.interned_values().any(|value| value == handle)
+        });
         let flow = match ran {
             Ok(flow) => flow,
             Err(failure) => {

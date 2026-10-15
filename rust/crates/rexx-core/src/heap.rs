@@ -534,14 +534,20 @@ impl Heap {
         self.immortal.len()
     }
 
-    /// Makes each of `released` an ordinary object again, which a collection
-    /// sweeps once nothing reaches it.
-    pub fn release_immortal(&mut self, released: &[ObjRef]) {
-        if released.is_empty() {
-            return;
+    /// Makes each object `released` answers for among those interned since
+    /// the [`Heap::immortal_count`] `from` an ordinary object again, which a
+    /// collection sweeps once nothing reaches it.
+    pub fn release_immortal(&mut self, from: usize, released: impl Fn(ObjRef) -> bool) {
+        let from = from.min(self.immortal.len());
+        let mut kept = from;
+        for at in from..self.immortal.len() {
+            let handle = self.immortal[at];
+            if !released(handle) {
+                self.immortal[kept] = handle;
+                kept += 1;
+            }
         }
-        let released: std::collections::HashSet<ObjRef> = released.iter().copied().collect();
-        self.immortal.retain(|handle| !released.contains(handle));
+        self.immortal.truncate(kept);
     }
 
     /// Allocates without ever collecting, whatever else is enabled. The
