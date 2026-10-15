@@ -1262,8 +1262,6 @@ impl Interp {
         // with 98.985, the same refusal it gives `.Array~inherit()`.
         if self.library_bootstrap {
             self.classes().set_rexx_defined(id);
-        } else {
-            dispatch::charge_class(self, id);
         }
         // The package's own installed-class table, which is what `.NAME`
         // resolution reads first -- see `environment/identities.rs`'s
@@ -1379,6 +1377,10 @@ impl Interp {
             self.inherit_mixin(program, directive, id, mixin)?;
         }
         self.install_class_members(program_id, program, id, attached, false);
+        // Charged once its own methods count toward its behaviours' weight.
+        if !self.library_bootstrap {
+            dispatch::charge_class(self, id);
+        }
         // `RexxClass::makeAbstract` (`ClassClass.cpp:1754`-`:1761`): a
         // metaclass cannot be made abstract, and any other class takes the
         // keyword by setting the flag `~new`'s `checkAbstract` reads.

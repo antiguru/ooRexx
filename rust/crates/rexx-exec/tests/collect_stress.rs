@@ -1666,3 +1666,49 @@ fn a_parked_activitys_frame_keeps_its_program() {
         "hasW 0\nparked 6 guard on when flag = 1\n",
     );
 }
+
+/// A `loadExternalMethod` answer installed by `define` or `setMethod`, a copy
+/// of one, and one flagged private keep running after the program drops
+/// them, while fresh answers come and go. Measured, oracle rc 0, with a
+/// 300-pass loop of `copies('x', 100000)` as the filler.
+#[test]
+fn an_installed_loaded_method_survives_its_dropped_object() {
+    assert_stress_prints(
+        "<installed-loaded-method>",
+        concat!(
+            ".k~define('SEP', .Method~loadExternalMethod('m', 'LIBRARY REXX file_separator'))\n",
+            "call filler\n",
+            "say 'define' .k~new~sep\n",
+            "m = .Method~loadExternalMethod('m', 'LIBRARY REXX file_separator')\n",
+            "m~setPrivate\n",
+            ".k~define('PSEP', m)\n",
+            "drop m\n",
+            "call filler\n",
+            "o = .k~new\n",
+            "say 'private' o~callp o~hasMethod('PSEP') .k~method('PSEP')~isPrivate\n",
+            "o~put('OSEP', .Method~loadExternalMethod('m', 'LIBRARY REXX file_separator')~copy)\n",
+            "call filler\n",
+            "say 'own' o~osep\n",
+            "do i = 1 to 3\n",
+            "  q = .Method~loadExternalMethod('q', 'LIBRARY REXX file_separator')\n",
+            "  q~setProtected\n",
+            "end\n",
+            "drop q\n",
+            "call filler\n",
+            "say 'again' .k~new~sep o~osep o~callp\n",
+            "exit\n",
+            "filler: procedure\n",
+            "  do i = 1 to 3\n",
+            "    z = copies('x', 1000)\n",
+            "  end\n",
+            "  return\n",
+            "::class k\n",
+            "::method callp\n",
+            "  return self~psep\n",
+            "::method put\n",
+            "  use arg name, m\n",
+            "  self~setMethod(name, m)\n",
+        ),
+        "define /\nprivate / 1 1\nown /\nagain / / /\n",
+    );
+}

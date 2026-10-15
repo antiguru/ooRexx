@@ -3251,11 +3251,36 @@ impl Interp {
     }
 
     /// Drops every row keyed by, or naming, a `Method`, `Routine` or
-    /// `Message` object the sweep freed.
+    /// `Message` object the sweep freed, and the rows of the method identity
+    /// a freed `loadExternalMethod` answer ran under, which no program owns.
     fn prune_dead_object_rows(&mut self) {
         let heap = &self.heap;
         let live = |object: &ObjRef| heap.peek(*object).is_some();
-        self.executable_sources.retain(|object, _| live(object));
+        let (loaded, natives) = (&self.defined_library_codes, &self.native_externals);
+        let mut orphaned = Vec::new();
+        self.executable_sources.retain(|object, record| {
+            let keep = live(object);
+            if !keep
+                && let Some(method) = record.installed
+                && (loaded.contains_key(&method)
+                    || (record.source == ExecutableSource::Native && natives.contains_key(&method)))
+            {
+                orphaned.push(method);
+            }
+            keep
+        });
+        for method in &orphaned {
+            self.defined_library_codes.remove(method);
+            self.library_externals.remove(method);
+            self.native_externals.remove(method);
+            self.guarded_externals.remove(method);
+            if let Some(row) = self.special_methods.get_mut(method.0 as usize) {
+                *row = None;
+            }
+        }
+        while matches!(self.special_methods.last(), Some(None)) {
+            self.special_methods.pop();
+        }
         self.method_flag_writes.retain(|object, _| live(object));
         self.executable_objects.retain(|_, object| live(object));
         self.message_outcomes.retain(|message, _| live(message));

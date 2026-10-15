@@ -390,3 +390,134 @@ fn a_collection_drops_the_rows_of_swept_executables_and_messages() {
         "annotations keeps a swept class's row"
     );
 }
+
+/// A collection drops the notification and waiter-identity rows of the
+/// messages it swept: a party raising in `messageComplete` leaves a message
+/// unnotified, and a waiter identity is minted for one by hand.
+#[test]
+fn a_collection_drops_the_unnotified_and_waiter_rows_of_swept_messages() {
+    let mut interp = Interp::new();
+    interp.bootstrap_library().expect("library");
+    let out = say_output_with_directives(
+        &mut interp,
+        b".local['KEEP'] = .context~package\no = .array~of(1, 2)\ndo i = 1 to 3\n  \
+          call trybad o\nend\nsay 'ok'\nexit\n\
+          trybad: procedure\n  use arg o\n  m = .Message~new(o, 'ITEMS'); m~notify(.bad~new)\n  \
+          signal on syntax name s1\n  m~send\n  return\n  s1: return\n\
+          ::class bad inherit MessageNotification\n::method messageComplete\n  \
+          raise syntax 93.900 array('bad')\n",
+    );
+    assert_eq!(String::from_utf8_lossy(&out), "ok\n");
+    assert!(
+        !interp.unnotified_messages.is_empty(),
+        "no unnotified message was recorded"
+    );
+    let message = *interp
+        .message_outcomes
+        .keys()
+        .next()
+        .expect("a message outcome");
+    interp.activities.message_id(message);
+    interp.collect_now();
+    let heap = &interp.heap;
+    let live = |object: &ObjRef| heap.peek(*object).is_some();
+    assert!(heap.peek(message).is_none(), "the probe message survived");
+    assert!(
+        interp.unnotified_messages.iter().all(live),
+        "unnotified_messages keeps a swept message"
+    );
+    assert!(
+        interp
+            .activities
+            .message_rows()
+            .all(|message| live(&message)),
+        "message_ids keeps a swept message"
+    );
+}
+
+/// A program's package is charged toward the next collection when it is
+/// built.
+#[test]
+fn building_a_programs_package_charges_it() {
+    let mut interp = Interp::new();
+    interp.bootstrap_library().expect("library");
+    let program = parse_program(b"nop\n".to_vec()).expect("parses");
+    let id = interp.load_program(Rc::new(program));
+    let before = interp.heap.charge_body_bytes(0);
+    interp
+        .package_object(crate::plan::Package::Program(id))
+        .expect("a package");
+    let after = interp.heap.charge_body_bytes(0);
+    assert!(
+        after >= before + crate::PACKAGE_BYTES,
+        "the package was not charged: {before} -> {after}"
+    );
+}
+
+/// A collection drops the method-identity rows of the `loadExternalMethod`
+/// answers it swept, for a `LIBRARY REXX` entry point and a shared library's
+/// procedure, flag writes included.
+#[test]
+fn a_collection_drops_the_rows_of_swept_loaded_methods() {
+    let mut interp = Interp::new();
+    // Where `rxregexp` is: the oracle's own libraries, as `tests/support/oracle.rs` names them.
+    interp.library_search = vec![std::path::PathBuf::from(
+        "/home/moritz/dev/repos/ooRexx/build/lib",
+    )];
+    interp.bootstrap_library().expect("library");
+    let rows = |interp: &Interp| {
+        (
+            interp.defined_library_codes.len(),
+            interp.library_externals.len(),
+            interp.native_externals.len(),
+            interp.special_methods.iter().flatten().count(),
+        )
+    };
+    let baseline = rows(&interp);
+    let out = say_output_with_directives(
+        &mut interp,
+        b".local['KEEP'] = .context~package\ndo i = 1 to 3\n  \
+          m = .Method~loadExternalMethod('m', 'LIBRARY REXX stream_uninit'); m~setPrivate\n  \
+          n = .Method~loadExternalMethod('n', 'LIBRARY rxregexp RegExp_Match'); n~setPrivate\n  \
+          c = n~copy\nend\nsay m~class~id n~class~id c~isPrivate\ndrop m n c\n",
+    );
+    assert_eq!(String::from_utf8_lossy(&out), "Method Method 1\n");
+    let (codes, libraries, natives, specials) = rows(&interp);
+    assert!(
+        codes > baseline.0
+            && libraries > baseline.1
+            && natives > baseline.2
+            && specials > baseline.3,
+        "a loaded method left no row: {baseline:?} -> {:?}",
+        rows(&interp)
+    );
+    interp.collect_now();
+    assert_eq!(rows(&interp), baseline, "a swept loaded method kept a row");
+}
+
+/// A `::CLASS` is charged once its own `::METHOD`s are installed: the same
+/// source with the methods attached to the class is charged more than with
+/// them ahead of it, attached to none.
+#[test]
+fn a_class_directive_is_charged_with_its_methods() {
+    let methods: String = (1..=20).map(|n| format!("::method m{n}\n")).collect();
+    let charged = |source: String| {
+        let mut interp = Interp::new();
+        interp.bootstrap_library().expect("library");
+        let collections = interp.heap.collections_performed();
+        let before = interp.heap.charge_body_bytes(0);
+        say_output_with_directives(&mut interp, source.as_bytes());
+        assert_eq!(
+            interp.heap.collections_performed(),
+            collections,
+            "a collection reset the charge"
+        );
+        interp.heap.charge_body_bytes(0) - before
+    };
+    let attached = charged(format!("nop\n::class c\n{methods}"));
+    let unattached = charged(format!("nop\n{methods}::class c\n"));
+    assert!(
+        attached >= unattached + 20 * 128,
+        "the class's methods were not charged: {attached} against {unattached}"
+    );
+}
