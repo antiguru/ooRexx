@@ -39,7 +39,7 @@ crates/rexx-exec/src/lib.rs:1590	Interp	rexx_routine_rows	FxHashMap<InstalledRou
 crates/rexx-exec/src/lib.rs:1593	Interp	defined_library_codes	FxHashMap<MethodId, usize>	Method identity	MethodId	2: the identity a loadExternalMethod answer owns, forget_method_identity
 crates/rexx-exec/src/lib.rs:1600	Interp	package_routines	FxHashMap<Vec<u8>, usize>	-	-	not per-object: PackageManager::packageRoutines, by routine name
 crates/rexx-exec/src/lib.rs:1603	Interp	package_routine_codes	Vec<usize>	-	-	not per-object: the code row of each package_routines slot
-crates/rexx-exec/src/lib.rs:1613	Interp	special_methods	Vec<Option<dispatch::AccessScope>>	Method identity	MethodId index	3: prune_program_rows; 2 for an owned identity: forget_method_identity. The vector's length follows the highest identity with a row (reported)
+crates/rexx-exec/src/lib.rs:1616	Interp	special_methods	method_rows::MethodRows<dispatch::AccessScope>	Method identity	MethodId: a vector index below the seal, a map key above it	3: prune_program_rows; 2 for an owned identity: forget_method_identity. A row filed after the library bootstrap seals the table goes in its map, so a pruned identity leaves nothing behind (MethodRows)
 crates/rexx-exec/src/lib.rs:1632	Interp	uninit_ready	Vec<ObjRef>	-	-	not per-object: the queue of objects awaiting UNINIT, drained by run_ready_uninits
 crates/rexx-exec/src/lib.rs:1702	Interp	required_paths	FxHashMap<ProgramId, Box<str>>	Program	ProgramId	3: prune_program_rows
 crates/rexx-exec/src/lib.rs:1706	Interp	required_packages	FxHashMap<Box<[u8]>, ProgramId>	Program	::REQUIRES name, value ProgramId	3: prune_program_rows, and collect_now drops a row whose package was swept
@@ -49,7 +49,7 @@ crates/rexx-exec/src/plan.rs:98	Programs	packages	Vec<PackageSlot>	Program	Progr
 crates/rexx-exec/src/plan.rs:99	Programs	free	Vec<u32>	-	-	not per-object: the free list of program slots
 crates/rexx-exec/src/plan.rs:103	Programs	issued	Vec<ProgramId>	-	-	not per-object: test-only record of issued ids
 crates/rexx-exec/src/plan.rs:106	Programs	freed	Vec<ProgramId>	-	-	not per-object: test-only record of freed ids
-crates/rexx-exec/src/dispatch.rs:1207	ObjectModel	natives	Vec<Option<NativeEntry>>	Method identity	MethodId index	bootstrap rows for the primitive classes; 2 for an owned copy's row: forget_method_identity. The vector's length follows the highest identity with a row (reported)
+crates/rexx-exec/src/dispatch.rs:1198	ObjectModel	natives	MethodRows<NativeEntry>	Method identity	MethodId: a vector index below the seal, a map key above it	bootstrap rows for the primitive classes, indexed; 2 for an owned copy's row, which goes in the map: forget_method_identity
 crates/rexx-exec/src/dispatch.rs:1246	ObjectModel	store_holders	Vec<ObjRef>	-	-	not per-object: the bootstrap's store-holder classes
 crates/rexx-exec/src/libraries.rs:37	Libraries	held	FxHashMap<Vec<u8>, Rc<Library>>	-	-	not per-object: PackageManager::packages: every native library a name loaded
 crates/rexx-exec/src/libraries.rs:108	PackageTable	names	Vec<Option<Vec<u8>>>	-	-	not per-object: a loaded library's routine name table

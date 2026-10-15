@@ -27,7 +27,7 @@ do
   awk -v f="$f" -v keep="$structs" '
     /^(pub(\([a-z]+\))? )?struct [A-Za-z]+ *\{/ { s = $0; sub(/^.*struct /, "", s); sub(/[ <{].*/, "", s); inside = (s ~ keep); next }
     inside && /^\}/ { inside = 0; next }
-    inside && /^    (pub(\([a-z]+\))? )?[a-z_0-9]+: / && /(Map|Set|Vec)</ && !/: (Vec<u8>|Vec<Vec<u8>>|std::cell::Cell<Vec<u8>>),?$/ {
+    inside && /^    (pub(\([a-z]+\))? )?[a-z_0-9]+: / && /(Map|Set|Vec|MethodRows)</ && !/: (Vec<u8>|Vec<Vec<u8>>|std::cell::Cell<Vec<u8>>),?$/ {
       line = $0; sub(/^ +/, "", line); sub(/^pub(\([a-z]+\))? /, "", line)
       name = line; sub(/:.*/, "", name); type = line; sub(/^[a-z_0-9]+: /, "", type); sub(/,$/, "", type)
       printf "%s:%d\t%s\t%s\t%s\n", f, NR, s, name, type

@@ -211,6 +211,9 @@ mod variables;
 // they bind.
 mod install;
 
+// The rows filed per method identity.
+mod method_rows;
+
 // The fields a `Package` object holds.
 mod package_state;
 
@@ -1610,7 +1613,7 @@ struct Interp {
     /// The access scope and protection of every method that has one -- the
     /// oracle's `isSpecial()` set, which is what `RexxObject::messageSend`
     /// consults before it runs anything.
-    special_methods: Vec<Option<dispatch::AccessScope>>,
+    special_methods: method_rows::MethodRows<dispatch::AccessScope>,
     /// The output sink. `SAY` writes here and `Outcome::stdout` is what it
     /// becomes.
     out: Vec<u8>,
@@ -2239,7 +2242,7 @@ impl Interp {
             kept_holders: rustc_hash::FxHashMap::default(),
             kept_carried: 0,
             kept_carried_limit: 4096,
-            special_methods: Vec::new(),
+            special_methods: method_rows::MethodRows::new(),
             out: Vec::new(),
             trace: Vec::new(),
             next_activation_id: 0,
@@ -2306,6 +2309,7 @@ impl Interp {
             .unwrap_or_else(|| panic!("{} is embedded", rexx_lib::ENTRY));
         let outcome = self.enter_library_program(entry, None);
         self.library_bootstrap = false;
+        self.special_methods.seal();
         rexx_classes::remove_setup_methods(self.classes());
         if outcome.is_ok() {
             self.mint_local_directory();
@@ -3357,16 +3361,8 @@ impl Interp {
             self.guarded_externals
                 .retain(|method| !methods.contains(method));
         }
-        for row in &mut self.special_methods {
-            if row.is_some_and(
-                |scope| matches!(scope.package, Package::Program(program) if dead(&program)),
-            ) {
-                *row = None;
-            }
-        }
-        while matches!(self.special_methods.last(), Some(None)) {
-            self.special_methods.pop();
-        }
+        self.special_methods
+            .retain(|scope| !matches!(scope.package, Package::Program(program) if dead(&program)));
         self.routine_objects
             .retain(|installed, _| !dead(&installed.program));
         self.library_routine_codes

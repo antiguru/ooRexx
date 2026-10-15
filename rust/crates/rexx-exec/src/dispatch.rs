@@ -23,6 +23,7 @@ use rexx_parse::{Access, Expr, Operator};
 
 use crate::activation::{Activation, MethodIdentity, Replied, ReplyState, TraceEntry, body_of};
 use crate::error::{FailureSite, Raised};
+use crate::method_rows::MethodRows;
 use crate::plan::{BodyKey, Package, ProgramId};
 use crate::run::{MAX_ACTIVATION_DEPTH, Started};
 use crate::scheduler::Scheduler;
@@ -227,15 +228,6 @@ enum Invocable {
     /// A `::METHOD`/`::ATTRIBUTE ... EXTERNAL 'LIBRARY <name>'` bound at
     /// install to a procedure of a loaded shared library.
     Library(crate::LibraryBinding),
-}
-
-/// Files one native method under its own id, growing the table to reach it.
-fn put_native(natives: &mut Vec<Option<NativeEntry>>, method: MethodId, entry: NativeEntry) {
-    let index = method.0 as usize;
-    if index >= natives.len() {
-        natives.resize(index + 1, None);
-    }
-    natives[index] = Some(entry);
 }
 
 /// The begin half of a primitive method that runs a Rexx activation or parks
@@ -1203,8 +1195,7 @@ pub(crate) const ACTIVATE: &[u8] = b"ACTIVATE";
 /// its `MethodId`s name.
 pub(crate) struct ObjectModel {
     classes: ClassRegistry,
-    /// Indexed by [`MethodId`]'s own number rather than keyed by it.
-    natives: Vec<Option<NativeEntry>>,
+    natives: MethodRows<NativeEntry>,
     /// The classes a value this crate builds answers to, and `.Class`,
     /// resolved once at bootstrap. These are handles into `classes` and not a
     /// second model of it, and holding them buys two things: a send does not
@@ -1277,7 +1268,7 @@ impl ObjectModel {
         mut classes: rexx_classes::ClassRegistry,
         extra: &[(&str, &str, Arity, NativeMethod)],
     ) -> ObjectModel {
-        let mut natives: Vec<Option<NativeEntry>> = Vec::new();
+        let mut natives = MethodRows::new();
         for (class_id, method_name, arity, body) in NATIVE_METHODS
             .iter()
             .chain(buffer::NATIVE_METHODS)
@@ -1328,8 +1319,7 @@ impl ObjectModel {
                          behaviour does not answer"
                     )
                 });
-            put_native(
-                &mut natives,
+            natives.insert(
                 method,
                 NativeEntry {
                     arity: *arity,
@@ -1366,8 +1356,7 @@ impl ObjectModel {
                          class behaviour does not answer"
                     )
                 });
-            put_native(
-                &mut natives,
+            natives.insert(
                 method,
                 NativeEntry {
                     arity: *arity,
@@ -1421,6 +1410,7 @@ impl ObjectModel {
             })
             .collect();
         let nil_behaviour = classes.hiding_behaviour(object, &["COPY", "START", "OBJECTNAME="]);
+        natives.seal();
         ObjectModel {
             classes,
             natives,
@@ -1643,12 +1633,19 @@ impl Interp {
     /// The object model, built on first use.
     pub(crate) fn object_model(&mut self) -> &mut ObjectModel {
         if self.object_model.is_none() {
-            let model = ObjectModel::bootstrap(&mut || self.heap.mint_class());
-            self.install_object_model(model);
+            self.build_object_model();
         }
         self.object_model
             .as_mut()
             .expect("the object model was just installed")
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn build_object_model(&mut self) {
+        let model = ObjectModel::bootstrap(&mut || self.heap.mint_class());
+        self.install_object_model(model);
+        self.special_methods.seal();
     }
 
     /// Stores a freshly built object model and files the access scopes of
@@ -1660,11 +1657,14 @@ impl Interp {
              before the model that mints them exists"
         );
         for &method in model.classes.private_native_methods() {
-            *self.special_method_row_mut(method) = Some(AccessScope {
-                access: Access::Private,
-                protected: false,
-                package: Package::Rexx,
-            });
+            self.special_methods.insert(
+                method,
+                AccessScope {
+                    access: Access::Private,
+                    protected: false,
+                    package: Package::Rexx,
+                },
+            );
         }
         self.object_model = Some(model);
     }
@@ -2204,14 +2204,7 @@ impl Interp {
     /// The access scope and protection of a resolved method, for the methods
     /// that have one.
     fn access_scope_of(&self, method: MethodId) -> Option<AccessScope> {
-        // One bounds check and one load. The table is indexed by the id, so
-        // there is no order to get wrong and no search to check against a
-        // scan -- the assertion that used to stand here guarded a failure mode
-        // this shape does not have.
-        self.special_methods
-            .get(method.0 as usize)
-            .copied()
-            .flatten()
+        self.special_methods.get(method)
     }
 
     /// `MethodClass::isProtected` (`classes/MethodClass.hpp:116`), asked by
@@ -2311,8 +2304,8 @@ impl Interp {
     pub(crate) fn copy_method_identity(&mut self, template: MethodId) -> MethodId {
         let method = self.classes().mint_method_id();
         let natives = &mut self.object_model().natives;
-        if let Some(entry) = natives.get(template.0 as usize).copied().flatten() {
-            put_native(natives, method, entry);
+        if let Some(entry) = natives.get(template) {
+            natives.insert(method, entry);
         }
         if let Some(body) = self.method_bodies.get(&template).copied() {
             self.method_bodies.insert(method, body);
@@ -2335,8 +2328,8 @@ impl Interp {
         if self.guarded_externals.contains(&template) {
             self.guarded_externals.insert(method);
         }
-        if let Some(row) = self.special_method_row(template).copied() {
-            *self.special_method_row_mut(method) = Some(row);
+        if let Some(row) = self.special_methods.get(template) {
+            self.special_methods.insert(method, row);
         }
         method
     }
@@ -2344,10 +2337,13 @@ impl Interp {
     /// Whether the primitive table has a row for `method`.
     #[cfg(test)]
     pub(crate) fn has_native_entry(&mut self, method: MethodId) -> bool {
-        self.object_model()
-            .natives
-            .get(method.0 as usize)
-            .is_some_and(Option::is_some)
+        self.object_model().natives.get(method).is_some()
+    }
+
+    /// The extent of the primitive table's indexed and minted halves.
+    #[cfg(test)]
+    pub(crate) fn native_rows_extent(&mut self) -> (usize, usize) {
+        self.object_model().natives.extent()
     }
 
     /// Drops every row filed under `method`, an identity a swept `Method`
@@ -2361,19 +2357,9 @@ impl Interp {
         self.defined_library_codes.remove(&method);
         self.guarded_externals.remove(&method);
         self.executable_objects.remove(&method);
-        if let Some(row) = self.special_methods.get_mut(method.0 as usize) {
-            *row = None;
-        }
-        while matches!(self.special_methods.last(), Some(None)) {
-            self.special_methods.pop();
-        }
+        self.special_methods.remove(method);
         if let Some(model) = self.object_model.as_mut() {
-            if let Some(row) = model.natives.get_mut(method.0 as usize) {
-                *row = None;
-            }
-            while matches!(model.natives.last(), Some(None)) {
-                model.natives.pop();
-            }
+            model.natives.remove(method);
         }
     }
 
@@ -2423,13 +2409,7 @@ impl Interp {
     /// What a resolved [`MethodId`] runs, or the refusal for one no table
     /// below names.
     fn invocable(&mut self, resolution: Resolution, name: &[u8]) -> Result<Invocable, Failure> {
-        if let Some(entry) = self
-            .object_model()
-            .natives
-            .get(resolution.method.0 as usize)
-            .copied()
-            .flatten()
-        {
+        if let Some(entry) = self.object_model().natives.get(resolution.method) {
             return Ok(Invocable::Native(entry));
         }
         if let Some(installed) = self.method_bodies.get(&resolution.method).copied() {

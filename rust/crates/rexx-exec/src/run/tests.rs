@@ -278,7 +278,7 @@ fn a_freed_programs_id_never_resolves_again() {
             "{id} in method_bodies"
         );
         assert!(
-            !interp.special_methods.iter().flatten().any(
+            !interp.special_methods.rows().any(
                 |scope| matches!(scope.package, crate::plan::Package::Program(program) if program == *id)
             ),
             "{id} in special_methods"
@@ -418,7 +418,7 @@ fn a_collection_drops_the_identity_rows_of_swept_method_copies() {
         [
             interp.method_bodies.contains_key(&method),
             interp.generated_methods.contains_key(&method),
-            interp.special_method_row(method).is_some(),
+            interp.special_methods.get(method).is_some(),
             interp.has_native_entry(method),
             interp.executable_objects.contains_key(&method),
         ]
@@ -549,6 +549,32 @@ fn a_collection_drops_the_unnotified_and_waiter_rows_of_swept_messages() {
     );
 }
 
+/// Identities minted and dropped in a loop leave the method-row tables the
+/// size one live copy needs: a private copy of a Rexx method and of a native
+/// one each keep a row in the minted half, and the indexed half does not grow.
+#[test]
+fn minted_method_identities_do_not_grow_the_method_rows() {
+    let mut interp = Interp::new();
+    interp.bootstrap_library().expect("library");
+    let extents =
+        |interp: &mut Interp| (interp.special_methods.extent(), interp.native_rows_extent());
+    let (specials, natives) = extents(&mut interp);
+    let out = say_output_with_directives(
+        &mut interp,
+        b".local['KEEP'] = .context~package\ndo i = 1 to 200\n  \
+          m = .k~method('FOO')~copy; m~setPrivate\n  \
+          n = .object~method('STRING')~copy; n~setPrivate\nend\n\
+          .local['KEEP2'] = (m, n)\nsay n~isPrivate\n::class k\n::method foo\n  return 1\n",
+    );
+    assert_eq!(String::from_utf8_lossy(&out), "1\n");
+    interp.collect_now();
+    assert_eq!(
+        extents(&mut interp),
+        ((specials.0, specials.1 + 2), (natives.0, natives.1 + 1)),
+        "the method-row tables grew with the identities minted"
+    );
+}
+
 /// A program's package is charged toward the next collection when it is
 /// built.
 #[test]
@@ -584,7 +610,7 @@ fn a_collection_drops_the_rows_of_swept_loaded_methods() {
             interp.defined_library_codes.len(),
             interp.library_externals.len(),
             interp.native_externals.len(),
-            interp.special_methods.iter().flatten().count(),
+            interp.special_methods.rows().count(),
         )
     };
     let baseline = rows(&interp);

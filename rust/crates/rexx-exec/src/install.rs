@@ -2513,37 +2513,17 @@ impl Interp {
         let package = self
             .source_package(self.installed_executable_source(method))
             .unwrap_or(plan::Package::Rexx);
-        let row = self.special_method_row(method);
-        match row {
+        match self.special_methods.get_mut(method) {
             Some(existing) => existing.access = Access::Private,
-            None => {
-                *self.special_method_row_mut(method) = Some(dispatch::AccessScope {
+            None => self.special_methods.insert(
+                method,
+                dispatch::AccessScope {
                     access: Access::Private,
                     protected: false,
                     package,
-                });
-            }
+                },
+            ),
         }
-    }
-
-    /// The access-scope row `method` already has, if it has one.
-    pub(crate) fn special_method_row(
-        &mut self,
-        method: MethodId,
-    ) -> Option<&mut dispatch::AccessScope> {
-        self.special_methods.get_mut(method.0 as usize)?.as_mut()
-    }
-
-    /// The slot `method`'s row lives in, growing the table to reach it.
-    pub(crate) fn special_method_row_mut(
-        &mut self,
-        method: MethodId,
-    ) -> &mut Option<dispatch::AccessScope> {
-        let index = method.0 as usize;
-        if index >= self.special_methods.len() {
-            self.special_methods.resize(index + 1, None);
-        }
-        &mut self.special_methods[index]
     }
 
     /// One `::ROUTINE` over the arguments given, for the rows of
@@ -2602,11 +2582,14 @@ impl Interp {
         if !protected && !scoped {
             return;
         }
-        *self.special_method_row_mut(method) = Some(dispatch::AccessScope {
-            access,
-            protected,
-            package: Package::Program(program),
-        });
+        self.special_methods.insert(
+            method,
+            dispatch::AccessScope {
+                access,
+                protected,
+                package: Package::Program(program),
+            },
+        );
     }
 
     /// Evaluates a `::CONSTANT` directive's parenthesised expression in the
