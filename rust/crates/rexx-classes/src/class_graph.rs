@@ -95,7 +95,8 @@ struct ClassDef {
     instance_behaviour: BehaviourHandle,
     class_behaviour: BehaviourHandle,
     /// Every instance behaviour a [`ClassGraph::define`] replaced, which an
-    /// instance made before it may still hold. Emptied with the class.
+    /// instance made before it may still hold. Emptied with the class, or
+    /// by [`ClassGraph::free_unheld_behaviours`] once no instance holds it.
     retired_behaviours: Vec<BehaviourHandle>,
     /// What `inherit`'s base-class compatibility check reads -- oracle's
     /// `baseClass` field.
@@ -163,6 +164,10 @@ pub struct ClassGraph {
     /// a class holds one of its handles, and an instance keeps its class
     /// alive.
     free_behaviours: Vec<BehaviourHandle>,
+    /// How many handles the live classes' `retired_behaviours` hold.
+    retired: usize,
+    /// The entries of the behaviours retired since [`ClassGraph::take_retired_entries`].
+    retired_entries: usize,
     /// Oracle's uninit table restricted to class objects -- the entries
     /// `RexxClass::checkUninit`'s `requiresUninit()` (`ClassClass.cpp:1224`)
     /// makes, in the order it makes them.
@@ -434,6 +439,8 @@ impl ClassGraph {
             classes,
             behaviours,
             free_behaviours,
+            retired,
+            retired_entries: _,
             uninit_classes,
         } = self;
         for class in dead {
@@ -450,6 +457,7 @@ impl ClassGraph {
                     debug_assert!(!free_behaviours.contains(handle), "{handle:?} freed twice");
                     free_behaviours.push(*handle);
                 }
+                *retired -= def.retired_behaviours.len();
             }
             classes.remove(class);
             uninit_classes.retain(|held| held != class);
@@ -460,6 +468,78 @@ impl ClassGraph {
         for def in classes.values_mut() {
             def.subclasses.retain(|sub| !dead.contains(sub));
         }
+    }
+
+    /// Whether a live class keeps a behaviour `define` retired.
+    pub fn has_retired_behaviours(&self) -> bool {
+        self.retired != 0
+    }
+
+    /// Drops every class's list of retired behaviours without freeing them,
+    /// for the image's classes once the library is built: they are never
+    /// collected, and their instances may hold any of them.
+    pub fn keep_retired_behaviours(&mut self) {
+        for def in self.classes.values_mut() {
+            def.retired_behaviours = Vec::new();
+        }
+        self.retired = 0;
+        self.retired_entries = 0;
+    }
+
+    /// The method entries of the behaviours retired since the last call.
+    pub fn take_retired_entries(&mut self) -> usize {
+        std::mem::take(&mut self.retired_entries)
+    }
+
+    /// Empties and frees every retired behaviour no handle in `held` names,
+    /// `held` being the behaviours the live instances dispatch against.
+    /// Answers each class with a method a freed behaviour named that no
+    /// behaviour left names.
+    pub fn free_unheld_behaviours(
+        &mut self,
+        held: impl Iterator<Item = BehaviourHandle>,
+    ) -> Vec<(ObjRef, MethodId)> {
+        let ClassGraph {
+            classes,
+            behaviours,
+            free_behaviours,
+            retired,
+            ..
+        } = self;
+        let mut is_held = vec![false; behaviours.len()];
+        for handle in held {
+            is_held[handle.index()] = true;
+        }
+        let mut unnamed = Vec::new();
+        for (class, def) in classes.iter_mut() {
+            def.retired_behaviours.retain(|handle| {
+                if is_held[handle.index()] {
+                    return true;
+                }
+                let dict = &mut behaviours[handle.index()].dict;
+                unnamed.extend(dict.methods().map(|method| (*class, method)));
+                dict.clear();
+                debug_assert!(!free_behaviours.contains(handle), "{handle:?} freed twice");
+                free_behaviours.push(*handle);
+                *retired -= 1;
+                false
+            });
+        }
+        if !unnamed.is_empty() {
+            let named: std::collections::HashSet<MethodId> = behaviours
+                .iter()
+                .flat_map(|behaviour| behaviour.dict.methods())
+                .chain(classes.values().flat_map(|def| {
+                    def.own_instance_methods
+                        .methods()
+                        .chain(def.own_class_methods.methods())
+                }))
+                .collect();
+            unnamed.retain(|(_, method)| !named.contains(method));
+            unnamed.sort_unstable_by_key(|(class, method)| (class.bits(), method.0));
+            unnamed.dedup();
+        }
+        unnamed
     }
 
     /// Whether `class` is waiting to have its class-side `UNINIT` run.
@@ -712,6 +792,8 @@ impl ClassGraph {
         // A class in the image is never collected, so nothing reads its list.
         if !def.rexx_defined {
             def.retired_behaviours.push(def.instance_behaviour);
+            self.retired += 1;
+            self.retired_entries += self.behaviours[def.instance_behaviour.index()].dict.len();
         }
         def.instance_behaviour = fresh;
     }

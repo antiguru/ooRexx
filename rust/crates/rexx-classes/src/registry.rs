@@ -290,6 +290,29 @@ impl ClassRegistry {
         self.graph.check_uninit(class);
     }
 
+    /// See [`ClassGraph::has_retired_behaviours`].
+    pub fn has_retired_behaviours(&self) -> bool {
+        self.graph.has_retired_behaviours()
+    }
+
+    /// See [`ClassGraph::keep_retired_behaviours`].
+    pub fn keep_retired_behaviours(&mut self) {
+        self.graph.keep_retired_behaviours();
+    }
+
+    /// See [`ClassGraph::take_retired_entries`].
+    pub fn take_retired_entries(&mut self) -> usize {
+        self.graph.take_retired_entries()
+    }
+
+    /// See [`ClassGraph::free_unheld_behaviours`].
+    pub fn free_unheld_behaviours(
+        &mut self,
+        held: impl Iterator<Item = BehaviourHandle>,
+    ) -> Vec<(ObjRef, MethodId)> {
+        self.graph.free_unheld_behaviours(held)
+    }
+
     /// Drops every row keyed by a class the collector took.
     pub fn expunge(&mut self, dead: &[ObjRef]) {
         let ClassRegistry {

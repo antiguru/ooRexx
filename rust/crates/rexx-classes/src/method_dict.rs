@@ -237,6 +237,17 @@ impl MethodDict {
         self.entries.len()
     }
 
+    /// The method of every defined entry, at every scope.
+    pub fn methods(&self) -> impl Iterator<Item = MethodId> + '_ {
+        self.entries
+            .values()
+            .flatten()
+            .filter_map(|slot| match slot {
+                MethodSlot::Defined { method, .. } => Some(*method),
+                MethodSlot::Hidden => None,
+            })
+    }
+
     /// Whether no name holds an entry.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()

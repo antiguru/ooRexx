@@ -505,6 +505,18 @@ impl Activity {
         );
     }
 
+    /// Appends the program and directive of every activation on the
+    /// activity's stack, the ones [`Activity::running_programs`] names.
+    pub(crate) fn running_bodies(&self, out: &mut Vec<(crate::plan::ProgramId, Option<usize>)>) {
+        out.extend(
+            self.running
+                .iter()
+                .map(std::ops::Deref::deref)
+                .chain(self.suspended.iter().map(Box::as_ref))
+                .map(|activation| (activation.program_id, activation.body)),
+        );
+    }
+
     /// Appends every `ObjRef` the activity must hand the collector to `out`,
     /// and names every field that does not need to be handed over.
     pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {

@@ -21,3 +21,25 @@ Programs: `task-8/memory/copy.rex`, `copypriv.rex`, `nativecopy.rex`, and
 
 Step 1 is within 10% from 20000 to 320000 on every program. On base, `copypriv` 20000 to 80000 is
 +6.3% and 320000 is +29.6%, which is why the table carries a third count.
+
+## Step 2: retired behaviours
+
+Programs: `task-8/memory/define.rex` (`.k~define('BAR', m)`), `defineobj.rex` (`.k~delete('BAR')`),
+and `hide.rex`, which is `do i = 1 to n; .k~define('BAR'); end` on an empty `::class k`. The crate
+binary `rexx-run-step2` is the Step 2 commit.
+
+| program | n | oracle | base | step2 |
+|---|---|---|---|---|
+| define | 5000 / 20000 / 80000 / 320000 | 20352 / 20668 / 20308 / 20300 | 57068 / 170352 / 628364 / - | 57224 / 93156 / 92376 / 92260 |
+| hide | 5000 / 20000 / 80000 / 320000 | 20336 / 19724 / 20592 / 20256 | 54812 / 160444 / 582576 / - | 54980 / 76240 / 76084 / 75784 |
+| defineobj | 5000 / 20000 / 80000 / 320000 | 20368 / 19804 / 20692 / 20724 | 54500 / 157088 / 573136 / - | 53764 / 76448 / 76576 / 76592 |
+
+From 20000 on, step2 is flat within 1%. The rise from 5000 to 20000 is the first collection: a
+retired behaviour is charged 128 bytes per method entry against the 32 MiB byte floor, which 5000
+defines do not reach. That gap is collector tuning, which spec section 6 licenses.
+
+Three mechanisms were each needed, measured in turn at 5000 / 20000 / 80000 / 320000 on `define`:
+- freeing alone: 57848 / 170172 / 519344 (nothing charges a retired behaviour toward a collection);
+- plus the charge: 57332 / 82968 / 104292 / 217212 (the class still owns every `Method` copy
+  `define` made);
+- plus letting go of those copies: the table above.

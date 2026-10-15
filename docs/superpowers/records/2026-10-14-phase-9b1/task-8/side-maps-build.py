@@ -102,7 +102,7 @@ C.update({
  ("ClassRegistry","private_native_methods"): (NP,"-","Setup.cpp's private native methods"),
  ("ClassDef","superclasses"): ("Class","-","1: a field of the class's graph entry"),
  ("ClassDef","subclasses"): ("Class","-","1: a field of the class's graph entry, scrubbed of swept classes in ClassGraph::expunge"),
- ("ClassDef","retired_behaviours"): ("Class","-","1: a field of the class's graph entry; its behaviours are emptied and freed in ClassGraph::expunge. A live class keeps every behaviour define retired (reported)"),
+ ("ClassDef","retired_behaviours"): ("Class","-","1: a field of the class's graph entry. After a collection ClassGraph::free_unheld_behaviours frees each one no live instance holds, and the class lets go of the Method objects only freed behaviours named (Interp::free_unheld_behaviours); ClassGraph::expunge frees the rest with the class. The image's lists are dropped unfreed once the library is built (keep_retired_behaviours)"),
  ("ClassGraph","classes"): ("Class","class ObjRef","2: ClassGraph::expunge"),
  ("ClassGraph","behaviours"): ("Class","BehaviourHandle index","2: ClassGraph::expunge empties a swept class's behaviours, and free_behaviours hands their slots out again"),
  ("ClassGraph","free_behaviours"): (NP,"-","the free list of behaviour slots"),

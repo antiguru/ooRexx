@@ -49,7 +49,7 @@ crates/rexx-exec/src/plan.rs:98	Programs	packages	Vec<PackageSlot>	Program	Progr
 crates/rexx-exec/src/plan.rs:99	Programs	free	Vec<u32>	-	-	not per-object: the free list of program slots
 crates/rexx-exec/src/plan.rs:103	Programs	issued	Vec<ProgramId>	-	-	not per-object: test-only record of issued ids
 crates/rexx-exec/src/plan.rs:106	Programs	freed	Vec<ProgramId>	-	-	not per-object: test-only record of freed ids
-crates/rexx-exec/src/dispatch.rs:1198	ObjectModel	natives	MethodRows<NativeEntry>	Method identity	MethodId: a vector index below the seal, a map key above it	bootstrap rows for the primitive classes, indexed; 2 for an owned copy's row, which goes in the map: forget_method_identity
+crates/rexx-exec/src/dispatch.rs:1203	ObjectModel	natives	MethodRows<NativeEntry>	Method identity	MethodId: a vector index below the seal, a map key above it	bootstrap rows for the primitive classes, indexed; 2 for an owned copy's row, which goes in the map: forget_method_identity
 crates/rexx-exec/src/dispatch.rs:1246	ObjectModel	store_holders	Vec<ObjRef>	-	-	not per-object: the bootstrap's store-holder classes
 crates/rexx-exec/src/libraries.rs:37	Libraries	held	FxHashMap<Vec<u8>, Rc<Library>>	-	-	not per-object: PackageManager::packages: every native library a name loaded
 crates/rexx-exec/src/libraries.rs:108	PackageTable	names	Vec<Option<Vec<u8>>>	-	-	not per-object: a loaded library's routine name table
@@ -125,7 +125,7 @@ crates/rexx-classes/src/registry.rs:40	ClassRegistry	by_system_name	NameMap<Stri
 crates/rexx-classes/src/registry.rs:43	ClassRegistry	private_native_methods	Vec<MethodId>	-	-	not per-object: Setup.cpp's private native methods
 crates/rexx-classes/src/class_graph.rs:82	ClassDef	superclasses	Vec<ObjRef>	Class	-	1: a field of the class's graph entry
 crates/rexx-classes/src/class_graph.rs:88	ClassDef	subclasses	Vec<ObjRef>	Class	-	1: a field of the class's graph entry, scrubbed of swept classes in ClassGraph::expunge
-crates/rexx-classes/src/class_graph.rs:99	ClassDef	retired_behaviours	Vec<BehaviourHandle>	Class	-	1: a field of the class's graph entry; its behaviours are emptied and freed in ClassGraph::expunge. A live class keeps every behaviour define retired (reported)
+crates/rexx-classes/src/class_graph.rs:100	ClassDef	retired_behaviours	Vec<BehaviourHandle>	Class	-	1: a field of the class's graph entry. After a collection ClassGraph::free_unheld_behaviours frees each one no live instance holds, and the class lets go of the Method objects only freed behaviours named (Interp::free_unheld_behaviours); ClassGraph::expunge frees the rest with the class. The image's lists are dropped unfreed once the library is built (keep_retired_behaviours)
 crates/rexx-classes/src/class_graph.rs:159	ClassGraph	classes	NameMap<ObjRef, ClassDef>	Class	class ObjRef	2: ClassGraph::expunge
 crates/rexx-classes/src/class_graph.rs:160	ClassGraph	behaviours	Vec<Behaviour>	Class	BehaviourHandle index	2: ClassGraph::expunge empties a swept class's behaviours, and free_behaviours hands their slots out again
 crates/rexx-classes/src/class_graph.rs:165	ClassGraph	free_behaviours	Vec<BehaviourHandle>	-	-	not per-object: the free list of behaviour slots

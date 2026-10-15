@@ -423,6 +423,13 @@ impl Activities {
         }
     }
 
+    /// [`Activity::running_bodies`] for every activity that is not running.
+    pub(crate) fn running_bodies(&self, out: &mut Vec<(crate::plan::ProgramId, Option<usize>)>) {
+        for idle in self.idle.iter().flatten() {
+            idle.activity.running_bodies(out);
+        }
+    }
+
     /// Appends every `ObjRef` an activity that is not running holds.
     pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
         for failure in &self.late_failures {

@@ -2310,6 +2310,7 @@ impl Interp {
         let outcome = self.enter_library_program(entry, None);
         self.library_bootstrap = false;
         self.special_methods.seal();
+        self.classes().keep_retired_behaviours();
         rexx_classes::remove_setup_methods(self.classes());
         if outcome.is_ok() {
             self.mint_local_directory();
@@ -2898,7 +2899,7 @@ impl Interp {
 
     /// The collection decision every allocation site makes, without the
     /// allocation.
-    fn collect_if_due(&mut self) {
+    pub(crate) fn collect_if_due(&mut self) {
         if self.collect_due
             || (self.heap.will_grow() && self.heap.slot_capacity() >= self.collect_at)
         {
@@ -3237,6 +3238,9 @@ impl Interp {
         if !stats.freed_classes.is_empty() {
             self.prune_freed_classes(&stats.freed_classes);
         }
+        if self.has_retired_behaviours() {
+            self.free_unheld_behaviours();
+        }
         // **Not raised for the stress mode**, which collects on every
         // allocation by definition and must not have its watermark moved
         // out from under it.
@@ -3403,6 +3407,15 @@ impl Interp {
         match self.heap.get_mut(class).map(|held| &mut held.body) {
             Some(rexx_core::Body::Class { owned }) => owned.push(object),
             _ => panic!("class_owns on a handle that is not a live class object"),
+        }
+    }
+
+    /// Undoes every [`Interp::class_owns`] of `object` by `class`.
+    fn class_disowns(&mut self, class: ObjRef, object: ObjRef) {
+        if let Some(rexx_core::Body::Class { owned }) =
+            self.heap.get_mut(class).map(|held| &mut held.body)
+        {
+            owned.retain(|held| *held != object);
         }
     }
 

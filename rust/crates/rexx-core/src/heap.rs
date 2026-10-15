@@ -690,6 +690,14 @@ impl Heap {
         )
     }
 
+    /// Every live object, in slot order.
+    pub fn live_objects(&self) -> impl Iterator<Item = &Object> {
+        self.slots.iter().filter_map(|slot| match slot {
+            Slot::Live { object, .. } => Some(object),
+            Slot::Free { .. } => None,
+        })
+    }
+
     pub fn live_count(&self) -> usize {
         self.live
     }

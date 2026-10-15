@@ -1186,6 +1186,11 @@ const UNINIT: &[u8] = b"UNINIT";
 /// [`Interp::run_termination_uninits`](Interp::run_termination_uninits).
 const SWEEPS: usize = 2;
 
+/// The bytes a retired behaviour is charged per method entry, an estimate:
+/// measured, 80000 `define`s of one class with nothing freeing them peaked at
+/// 628364 kB.
+const RETIRED_ENTRY_BYTES: usize = 128;
+
 /// The message the last install pass sends every class the package built --
 /// `GlobalNames::ACTIVATE`, sent by `ClassDirective::activate`
 /// (`instructions/ClassDirective.cpp:288`).
@@ -1674,6 +1679,61 @@ impl Interp {
     /// installed beside them.
     pub(crate) fn classes(&mut self) -> &mut ClassRegistry {
         &mut self.object_model().classes
+    }
+
+    /// Charges the behaviours a mutator just retired toward the next
+    /// collection, which is what frees them, and collects if that made one
+    /// due: a loop of mutators may allocate nothing else.
+    pub(crate) fn charge_retired_behaviours(&mut self) {
+        let entries = self.classes().take_retired_entries();
+        if entries > 0 {
+            self.charge_unheld(entries * RETIRED_ENTRY_BYTES);
+            self.collect_if_due();
+        }
+    }
+
+    /// Whether a live class keeps a behaviour `define` retired.
+    pub(crate) fn has_retired_behaviours(&self) -> bool {
+        self.object_model
+            .as_ref()
+            .is_some_and(|model| model.classes.has_retired_behaviours())
+    }
+
+    /// Frees the behaviours `define` retired that no live instance holds, and
+    /// lets go of the `Method` objects only those behaviours named, unless
+    /// an activation is running one.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn free_unheld_behaviours(&mut self) {
+        let Some(model) = self.object_model.as_mut() else {
+            return;
+        };
+        let held = self
+            .heap
+            .live_objects()
+            .filter_map(|object| match object.body {
+                Body::Instance { behaviour, .. } => Some(behaviour),
+                _ => None,
+            });
+        let unnamed = model.classes.free_unheld_behaviours(held);
+        if unnamed.is_empty() {
+            return;
+        }
+        let mut running = Vec::new();
+        self.activity.running_bodies(&mut running);
+        self.activities.running_bodies(&mut running);
+        for (class, method) in unnamed {
+            if self
+                .method_bodies
+                .get(&method)
+                .is_some_and(|body| running.contains(&(body.program, Some(body.directive))))
+            {
+                continue;
+            }
+            if let Some(object) = self.executable_objects.get(&method).copied() {
+                self.class_disowns(class, object);
+            }
+        }
     }
 
     /// The rendering of a handle the arena does not hold.
@@ -2204,7 +2264,7 @@ impl Interp {
     /// The access scope and protection of a resolved method, for the methods
     /// that have one.
     fn access_scope_of(&self, method: MethodId) -> Option<AccessScope> {
-        self.special_methods.get(method)
+        self.special_methods.get(method).copied()
     }
 
     /// `MethodClass::isProtected` (`classes/MethodClass.hpp:116`), asked by
@@ -2304,7 +2364,7 @@ impl Interp {
     pub(crate) fn copy_method_identity(&mut self, template: MethodId) -> MethodId {
         let method = self.classes().mint_method_id();
         let natives = &mut self.object_model().natives;
-        if let Some(entry) = natives.get(template) {
+        if let Some(&entry) = natives.get(template) {
             natives.insert(method, entry);
         }
         if let Some(body) = self.method_bodies.get(&template).copied() {
@@ -2328,7 +2388,7 @@ impl Interp {
         if self.guarded_externals.contains(&template) {
             self.guarded_externals.insert(method);
         }
-        if let Some(row) = self.special_methods.get(template) {
+        if let Some(&row) = self.special_methods.get(template) {
             self.special_methods.insert(method, row);
         }
         method
@@ -2409,7 +2469,7 @@ impl Interp {
     /// What a resolved [`MethodId`] runs, or the refusal for one no table
     /// below names.
     fn invocable(&mut self, resolution: Resolution, name: &[u8]) -> Result<Invocable, Failure> {
-        if let Some(entry) = self.object_model().natives.get(resolution.method) {
+        if let Some(&entry) = self.object_model().natives.get(resolution.method) {
             return Ok(Invocable::Native(entry));
         }
         if let Some(installed) = self.method_bodies.get(&resolution.method).copied() {

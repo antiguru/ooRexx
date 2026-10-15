@@ -27,11 +27,11 @@ impl<T: Copy> MethodRows<T> {
     }
 
     #[inline]
-    pub(crate) fn get(&self, method: MethodId) -> Option<T> {
+    pub(crate) fn get(&self, method: MethodId) -> Option<&T> {
         match self.dense.get(method.0 as usize) {
-            Some(row) => *row,
+            Some(row) => row.as_ref(),
             None if self.minted.is_empty() => None,
-            None => self.minted.get(&method).copied(),
+            None => self.minted.get(&method),
         }
     }
 

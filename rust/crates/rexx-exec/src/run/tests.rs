@@ -575,6 +575,56 @@ fn minted_method_identities_do_not_grow_the_method_rows() {
     );
 }
 
+/// A collection frees the behaviours `define` retired once no instance
+/// holds them, and keeps the one a live instance holds.
+#[test]
+fn a_collection_frees_retired_behaviours_no_instance_holds() {
+    let mut interp = Interp::new();
+    interp.bootstrap_library().expect("library");
+    let out = say_output_with_directives(
+        &mut interp,
+        b".local['KEEP'] = .context~package\n.local['OLD'] = .k~new\n\
+          do i = 1 to 20\n  o = .k~new\n  .k~define('FOO', 'return' i)\nend\n\
+          say .local['OLD']~foo o~foo .k~new~foo\ndrop o\n::class k\n::method foo\n  return 0\n",
+    );
+    assert_eq!(String::from_utf8_lossy(&out), "0 19 20\n");
+    interp.collect_now();
+    assert!(
+        interp.has_retired_behaviours(),
+        "the behaviour a held instance dispatches against was freed"
+    );
+    let out = say_output_with_directives(&mut interp, b".local['OLD'] = .nil\nsay 'gone'\n");
+    assert_eq!(String::from_utf8_lossy(&out), "gone\n");
+    interp.collect_now();
+    assert!(
+        !interp.has_retired_behaviours(),
+        "a retired behaviour no instance holds survived a collection"
+    );
+}
+
+/// A class lets go of the `Method` objects only freed behaviours named, so
+/// `define` in a loop leaves the copies it made to the collector.
+#[test]
+fn a_class_lets_go_of_methods_only_freed_behaviours_named() {
+    let mut interp = Interp::new();
+    interp.bootstrap_library().expect("library");
+    let baseline = interp.executable_sources.len();
+    let out = say_output_with_directives(
+        &mut interp,
+        b".local['KEEP'] = .context~package\nm = .k~method('FOO')\n\
+          do i = 1 to 200\n  .k~define('BAR', m)\nend\nsay .k~new~bar\n\
+          ::class k\n::method foo\n  return 1\n",
+    );
+    assert_eq!(String::from_utf8_lossy(&out), "1\n");
+    interp.collect_now();
+    interp.collect_now();
+    assert!(
+        interp.executable_sources.len() < baseline + 20,
+        "the class kept the copies define made: {baseline} -> {}",
+        interp.executable_sources.len()
+    );
+}
+
 /// A program's package is charged toward the next collection when it is
 /// built.
 #[test]
