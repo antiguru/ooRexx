@@ -45,7 +45,36 @@ pub struct SlotRef(Target);
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum Target {
     Slot { frame: SlotFrame, index: usize },
-    Cell(usize),
+    Cell(CellRef),
+}
+
+/// One cell: the [`crate::Body::Cell`] object that keeps it, and the
+/// incarnation of its storage that object owns.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+struct CellRef {
+    object: ObjRef,
+    index: u32,
+    generation: u32,
+}
+
+/// The storage of one cell. `generation` moves on each time the cell's
+/// object is collected, so a stale [`CellRef`] is refused rather than reading
+/// whatever variable took the storage next.
+#[derive(Copy, Clone, Debug)]
+struct Cell {
+    generation: u32,
+    value: Option<ObjRef>,
+}
+
+impl SlotRef {
+    /// The object that keeps this cell, for a variable a `>name` reference
+    /// was taken to.
+    pub fn cell(self) -> Option<ObjRef> {
+        match self.0 {
+            Target::Cell(cell) => Some(cell.object),
+            Target::Slot { .. } => None,
+        }
+    }
 }
 
 /// One frame's alias entries, saved across a park by
@@ -66,8 +95,11 @@ pub struct RootSet {
     /// By name; a name added again replaces its value.
     globals: crate::NameMap<String, ObjRef>,
     /// Storage for variables a `>name` reference has been taken to, outside
-    /// every frame and never truncated.
-    cells: Vec<Option<ObjRef>>,
+    /// every frame. A cell lives as long as its [`crate::Body::Cell`]
+    /// object, which the collector reaches from what holds the cell.
+    cells: Vec<Cell>,
+    /// The indices of `cells` whose objects were collected.
+    free_cells: Vec<u32>,
     /// The next [`SlotFrame::serial`].
     next_serial: u64,
     /// The running activity's roots.
@@ -120,6 +152,7 @@ impl RootSet {
         RootSet {
             globals: crate::NameMap::default(),
             cells: Vec::new(),
+            free_cells: Vec::new(),
             next_serial: 0,
             activity: ActivityRoots::new(),
         }
@@ -165,18 +198,64 @@ impl RootSet {
         self.activity.push_segment(initial_len, serial)
     }
 
-    /// Moves slot `index` of `frame` into a cell and answers that cell, so
-    /// that a reference to the variable survives the frame.
-    pub fn promote(&mut self, frame: SlotFrame, index: usize) -> SlotRef {
-        let target = self.activity.resolve(frame, index);
-        let Target::Slot { frame, index } = target else {
-            return SlotRef(target);
+    /// Reserves an empty cell for [`RootSet::promote`], and answers its
+    /// index, which the [`crate::Body::Cell`] object that keeps it carries.
+    pub fn new_cell(&mut self) -> u32 {
+        match self.free_cells.pop() {
+            Some(index) => index,
+            None => {
+                self.cells.push(Cell {
+                    generation: 0,
+                    value: None,
+                });
+                u32::try_from(self.cells.len() - 1).expect("fewer than 2^32 cells")
+            }
+        }
+    }
+
+    /// Moves slot `index` of `frame` into `cell`, a cell [`RootSet::new_cell`]
+    /// reserved and `object` keeps, so that a reference to the variable
+    /// survives the frame, and answers it.
+    ///
+    /// # Panics
+    ///
+    /// If the slot already resolves to a cell.
+    pub fn promote(
+        &mut self,
+        frame: SlotFrame,
+        index: usize,
+        object: ObjRef,
+        cell: u32,
+    ) -> SlotRef {
+        let Target::Slot { frame, index } = self.activity.resolve(frame, index) else {
+            panic!("promote on a slot that already resolves to a cell");
         };
         let position = self.activity.position(frame, index);
-        self.cells.push(self.activity.slots[position].take());
-        let cell = Target::Cell(self.cells.len() - 1);
-        self.activity.set_alias(position, cell);
-        SlotRef(cell)
+        let storage = &mut self.cells[cell as usize];
+        storage.value = self.activity.slots[position].take();
+        let target = Target::Cell(CellRef {
+            object,
+            index: cell,
+            generation: storage.generation,
+        });
+        self.activity.set_alias(position, target);
+        SlotRef(target)
+    }
+
+    /// The value cell `cell` holds, for the collector, which marks it with
+    /// the cell's object.
+    pub fn cell_value(&self, cell: u32) -> Option<ObjRef> {
+        self.cells[cell as usize].value
+    }
+
+    /// Empties the cells whose objects a collection freed, for reuse.
+    pub fn release_cells(&mut self, freed: &[u32]) {
+        for &cell in freed {
+            let storage = &mut self.cells[cell as usize];
+            storage.generation = storage.generation.wrapping_add(1);
+            storage.value = None;
+            self.free_cells.push(cell);
+        }
     }
 
     /// Reads the storage `slot` names, `None` for an unassigned variable.
@@ -269,6 +348,22 @@ impl RootSet {
         self.write(target, None);
     }
 
+    /// The storage `cell` names.
+    ///
+    /// # Panics
+    ///
+    /// If the cell's object was collected: whatever held `cell` was not
+    /// traced.
+    #[inline(always)]
+    fn cell(&self, cell: CellRef) -> &Cell {
+        let storage = &self.cells[cell.index as usize];
+        assert_eq!(
+            storage.generation, cell.generation,
+            "a variable's cell {cell:?} was collected while something still held it"
+        );
+        storage
+    }
+
     /// Reads the storage `target` names: a frame's slot, or a cell.
     #[inline(always)]
     fn at(&self, target: Target) -> Option<ObjRef> {
@@ -276,7 +371,7 @@ impl RootSet {
             Target::Slot { frame, index } => {
                 self.activity.slots[self.activity.position(frame, index)]
             }
-            Target::Cell(cell) => self.cells[cell],
+            Target::Cell(cell) => self.cell(cell).value,
         }
     }
 
@@ -288,20 +383,19 @@ impl RootSet {
                 let position = self.activity.position(frame, index);
                 self.activity.slots[position] = value;
             }
-            Target::Cell(cell) => self.cells[cell] = value,
+            Target::Cell(cell) => {
+                self.cell(cell);
+                self.cells[cell.index as usize].value = value;
+            }
         }
     }
 
-    /// Yields globals, temps, every live register, and every assigned slot
-    /// across every currently active frame -- a popped frame's slots are
-    /// already gone, truncated out of `slots` by `pop_slots`, so nothing here
-    /// needs to filter them out again by frame.
+    /// Yields globals, temps, every live register, every assigned slot and
+    /// every cell an alias names, across every currently active frame -- a
+    /// popped frame's slots are already gone, truncated out of `slots` by
+    /// `pop_slots`, so nothing here needs to filter them out again by frame.
     pub fn iter(&self) -> impl Iterator<Item = ObjRef> + '_ {
-        self.globals
-            .values()
-            .copied()
-            .chain(self.cells.iter().filter_map(|c| *c))
-            .chain(self.activity.iter())
+        self.globals.values().copied().chain(self.activity.iter())
     }
 }
 
@@ -650,14 +744,18 @@ impl ActivityRoots {
         end - start
     }
 
-    /// Yields this activity's temps, live registers, assigned slots and
-    /// parked values.
+    /// Yields this activity's temps, live registers, assigned slots, the
+    /// cells its aliases name, and parked values.
     pub fn iter(&self) -> impl Iterator<Item = ObjRef> + '_ {
         self.temps
             .iter()
             .copied()
             .chain(self.frames.iter())
             .chain(self.slots.iter().filter_map(|s| *s))
+            .chain(self.aliases.iter().filter_map(|alias| match alias {
+                Some(Target::Cell(cell)) => Some(cell.object),
+                _ => None,
+            }))
             .chain(self.parked.iter().flatten().flatten().copied())
     }
 }

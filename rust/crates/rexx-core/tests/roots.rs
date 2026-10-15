@@ -1,4 +1,11 @@
-use rexx_core::{ObjRef, RootSet};
+use rexx_core::{Body, Heap, ObjRef, RootSet, SlotFrame, SlotRef};
+
+/// [`RootSet::promote`] with the cell `Interp::promote_slot` allocates.
+fn promote(roots: &mut RootSet, heap: &mut Heap, frame: SlotFrame, index: usize) -> SlotRef {
+    let cell = roots.new_cell();
+    let object = heap.alloc(Body::Cell(cell));
+    roots.promote(frame, index, object, cell)
+}
 
 #[test]
 fn globals_are_always_roots() {
@@ -119,11 +126,12 @@ fn the_frame_block_size_cannot_change_under_a_reserved_frame() {
 /// promotion leaves behind.
 #[test]
 fn a_promoted_variable_still_reads_and_writes_by_name() {
+    let mut heap = Heap::new();
     let mut roots = RootSet::new();
     let frame = roots.push_slots(2);
     let first = ObjRef::heap(1, 0);
     roots.set_frame_slot(frame, 0, first);
-    let cell = roots.promote(frame, 0);
+    let cell = promote(&mut roots, &mut heap, frame, 0);
     assert_eq!(roots.frame_slot(frame, 0), Some(first));
     assert_eq!(roots.slot_value(cell), Some(first));
     let second = ObjRef::heap(2, 0);
@@ -133,30 +141,46 @@ fn a_promoted_variable_still_reads_and_writes_by_name() {
     assert_eq!(roots.frame_slot(frame, 0), Some(first));
 }
 
-/// Promotion is idempotent, which is what two `>p` terms on one variable
-/// need: a second one answers the same storage rather than a second copy.
+/// A promoted slot resolves to its cell, which is what lets a second `>p`
+/// term on one variable answer the same storage rather than a second copy.
 #[test]
-fn promoting_a_variable_twice_answers_one_cell() {
+fn a_promoted_slot_resolves_to_its_cell() {
     let mut roots = RootSet::new();
+    let mut heap = Heap::new();
     let frame = roots.push_slots(1);
     roots.set_frame_slot(frame, 0, ObjRef::heap(1, 0));
-    assert_eq!(roots.promote(frame, 0), roots.promote(frame, 0));
+    let cell = promote(&mut roots, &mut heap, frame, 0);
+    assert_eq!(roots.activity().slot_ref(frame, 0), cell);
 }
 
-/// A cell survives the frame that declared the variable, and stays a root --
-/// the whole reason promotion exists, since a reference is an ordinary value
-/// and may outlive the activation.
+/// Promoting a slot that already resolves to a cell is refused.
+#[test]
+#[should_panic(expected = "already resolves to a cell")]
+fn promoting_a_cell_again_is_refused() {
+    let mut roots = RootSet::new();
+    let mut heap = Heap::new();
+    let frame = roots.push_slots(1);
+    promote(&mut roots, &mut heap, frame, 0);
+    promote(&mut roots, &mut heap, frame, 0);
+}
+
+/// A cell survives the frame that declared the variable -- the whole reason
+/// promotion exists, since a reference is an ordinary value and may outlive
+/// the activation -- and is a root only while an alias names it.
 #[test]
 fn a_cell_outlives_the_frame_it_was_promoted_out_of() {
     let mut roots = RootSet::new();
+    let mut heap = Heap::new();
     let outer = roots.push_slots(1);
     let inner = roots.push_slots(1);
     let held = ObjRef::heap(7, 0);
     roots.set_frame_slot(inner, 0, held);
-    let cell = roots.promote(inner, 0);
+    let cell = promote(&mut roots, &mut heap, inner, 0);
+    let object = cell.cell().expect("a promoted slot names a cell");
+    assert!(roots.iter().any(|r| r == object));
     roots.activity_mut().pop_slots(inner);
+    assert!(!roots.iter().any(|r| r == object));
     assert_eq!(roots.slot_value(cell), Some(held));
-    assert!(roots.iter().any(|r| r == held));
     let written = ObjRef::heap(8, 0);
     roots.set_slot_value(cell, written);
     assert_eq!(roots.slot_value(cell), Some(written));
@@ -167,12 +191,13 @@ fn a_cell_outlives_the_frame_it_was_promoted_out_of() {
 /// exposing frame sees a write through the cell.
 #[test]
 fn promoting_an_exposed_name_promotes_the_storage_behind_it() {
+    let mut heap = Heap::new();
     let mut roots = RootSet::new();
     let outer = roots.push_slots(1);
     let inner = roots.push_slots(1);
     let target = roots.activity().slot_ref(outer, 0);
     roots.activity_mut().alias_slot(inner, 0, target);
-    let cell = roots.promote(inner, 0);
+    let cell = promote(&mut roots, &mut heap, inner, 0);
     let written = ObjRef::heap(3, 0);
     roots.set_slot_value(cell, written);
     assert_eq!(roots.frame_slot(outer, 0), Some(written));
@@ -184,12 +209,13 @@ fn promoting_an_exposed_name_promotes_the_storage_behind_it() {
 /// a position that is now itself redirected.
 #[test]
 fn an_alias_taken_before_a_promotion_still_reaches_the_cell() {
+    let mut heap = Heap::new();
     let mut roots = RootSet::new();
     let outer = roots.push_slots(1);
     let inner = roots.push_slots(1);
     let target = roots.activity().slot_ref(outer, 0);
     roots.activity_mut().alias_slot(inner, 0, target);
-    let cell = roots.promote(outer, 0);
+    let cell = promote(&mut roots, &mut heap, outer, 0);
     let written = ObjRef::heap(4, 0);
     roots.set_slot_value(cell, written);
     assert_eq!(roots.frame_slot(inner, 0), Some(written));
@@ -265,6 +291,7 @@ fn an_alias_that_does_not_descend_is_refused() {
 /// leaves the frame beneath it in the source untouched.
 #[test]
 fn a_moved_frame_keeps_its_values_and_cells() {
+    let mut heap = Heap::new();
     let mut roots = RootSet::new();
     let outer = roots.push_slots(1);
     let kept = ObjRef::heap(1, 0);
@@ -274,7 +301,7 @@ fn a_moved_frame_keeps_its_values_and_cells() {
     let celled = ObjRef::heap(3, 0);
     roots.set_frame_slot(frame, 0, plain);
     roots.set_frame_slot(frame, 2, celled);
-    let cell = roots.promote(frame, 2);
+    let cell = promote(&mut roots, &mut heap, frame, 2);
     let mut other = rexx_core::ActivityRoots::new();
     let moved = roots.activity_mut().move_frame(frame, &mut other);
     assert_eq!(roots.activity().live_frames(), 1);

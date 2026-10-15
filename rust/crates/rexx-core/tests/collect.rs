@@ -1,4 +1,6 @@
-use rexx_core::{BehaviourId, Body, Bytes, Heap, ObjRef, Object, RootSet};
+use rexx_core::{
+    BehaviourId, Body, Bytes, Heap, ObjRef, Object, RootSet, SlotRef, VarRef, VarRefHome,
+};
 
 #[test]
 fn unreachable_objects_are_swept() {
@@ -319,4 +321,60 @@ fn growth_does_not_recycle_a_cleared_slot() {
         None,
         "growth yields an unset slot"
     );
+}
+
+/// A frame slot holding `value`, promoted into a cell whose object a
+/// `VarRef` names, the shape `>name` builds; the reference is a temporary.
+fn referenced_cell(heap: &mut Heap, roots: &mut RootSet, value: ObjRef) -> (SlotRef, u32) {
+    let frame = roots.push_slots(1);
+    roots.set_frame_slot(frame, 0, value);
+    let cell = roots.new_cell();
+    let object = heap.alloc(Body::Cell(cell));
+    let slot = roots.promote(frame, 0, object, cell);
+    let reference = heap.alloc(Body::VarRef(Box::new(VarRef {
+        name: b"V".to_vec().into_boxed_slice(),
+        home: VarRefHome::Cell(slot),
+    })));
+    roots.activity_mut().push_temp(reference);
+    roots.activity_mut().pop_slots(frame);
+    (slot, cell)
+}
+
+/// A cell's value lives as long as the cell's object, which a reference
+/// keeps, and the cell is released with the object once nothing holds it.
+#[test]
+fn a_cells_value_lives_as_long_as_its_object() {
+    let mut heap = Heap::new();
+    let mut roots = RootSet::new();
+    let value = heap.alloc(Body::Text {
+        bytes: Bytes::from_slice(b"held"),
+        num: None,
+    });
+    let temps = roots.activity_mut().push_frame();
+    let (slot, cell) = referenced_cell(&mut heap, &mut roots, value);
+    let stats = heap.collect(&roots);
+    assert!(stats.freed_cells.is_empty());
+    assert!(heap.get(value).is_some());
+    assert_eq!(roots.slot_value(slot), Some(value));
+    roots.activity_mut().pop_frame(temps);
+    let stats = heap.collect(&roots);
+    assert_eq!(stats.freed_cells, vec![cell]);
+    assert!(heap.get(value).is_none());
+    roots.release_cells(&stats.freed_cells);
+    assert_eq!(roots.new_cell(), cell);
+}
+
+/// A holder the collector did not see is refused when it reads, rather than
+/// reading the variable that took the cell next.
+#[test]
+#[should_panic(expected = "collected while something still held it")]
+fn a_collected_cell_is_refused() {
+    let mut heap = Heap::new();
+    let mut roots = RootSet::new();
+    let temps = roots.activity_mut().push_frame();
+    let (slot, _) = referenced_cell(&mut heap, &mut roots, ObjRef::NIL);
+    roots.activity_mut().pop_frame(temps);
+    let stats = heap.collect(&roots);
+    roots.release_cells(&stats.freed_cells);
+    roots.slot_value(slot);
 }

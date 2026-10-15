@@ -110,7 +110,8 @@ crates/rexx-core/src/heap.rs:60	Heap	immortal	Vec<ObjRef>	-	-	not per-object: ro
 crates/rexx-core/src/heap.rs:63	Heap	uninit	Vec<ObjRef>	object with UNINIT	ObjRef	2: dropped by the collection that finds the object gone or cleared
 crates/rexx-core/src/heap.rs:85	Heap	names	crate::NameMap<ObjRef, Box<[u8]>>	any object without a name field	ObjRef	2: pruned in Heap::collect's sweep
 crates/rexx-core/src/roots.rs:67	RootSet	globals	crate::NameMap<String, ObjRef>	-	-	not per-object: named global roots; an annotation table's root goes with its program (unroot_annotation_table from prune_program_rows)
-crates/rexx-core/src/roots.rs:70	RootSet	cells	Vec<Option<ObjRef>>	variable a >name reference was taken to	cell index	none: never freed, and each cell's value is a root (reported)
+crates/rexx-core/src/roots.rs:100	RootSet	cells	Vec<Cell>	variable a >name reference was taken to	cell index, carried by the Body::Cell object that keeps it	2: released when its Body::Cell object is swept (CollectStats::freed_cells, RootSet::release_cells); the object is traced from VarRef bodies and alias entries, and the collector marks the value with it
+crates/rexx-core/src/roots.rs:102	RootSet	free_cells	Vec<u32>	-	-	not per-object: the free list of cells
 crates/rexx-core/src/roots.rs:80	ActivityRoots	temps	Vec<ObjRef>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
 crates/rexx-core/src/roots.rs:89	ActivityRoots	slots	Vec<Option<ObjRef>>	-	-	not per-object: the activity's execution state, popped with its frames or its activity
 crates/rexx-core/src/roots.rs:94	ActivityRoots	aliases	Vec<Option<Target>>	-	-	not per-object: the activity's execution state, popped with its frames or its activity

@@ -134,6 +134,10 @@ pub enum Body {
     Class { owned: Vec<ObjRef> },
     /// The object a `>name` term answers: a variable named rather than read.
     VarRef(Box<VarRef>),
+    /// What keeps the storage of a variable a `>name` reference was taken
+    /// to: the index of that storage in [`crate::RootSet`]'s cells, which the
+    /// collector frees with this object.
+    Cell(u32),
 }
 
 // A heap value names no borrowed frame (spec 2026-09-29 section 5, D3).
@@ -1364,17 +1368,18 @@ impl Body {
             // its target alive.
             Body::WeakRef(_) => {}
             Body::Class { owned } => out.extend(owned.iter().copied()),
-            // A cell is rooted by `RootSet::iter`, which is what keeps the
-            // referenced value alive; the owning object of an instance
-            // variable is not, and the reference is the only handle a
-            // program may still have on it.
+            // The owning object of an instance variable is traced because the
+            // reference may be the only handle a program still has on it.
             Body::VarRef(reference) => match reference.home {
-                VarRefHome::Cell(_) => {}
+                VarRefHome::Cell(slot) => out.extend(slot.cell()),
                 VarRefHome::Instance { owner, scope } => {
                     out.push(owner);
                     out.push(scope);
                 }
             },
+            // The value is in the root set's cell, which `Heap::collect`
+            // marks when it marks this object.
+            Body::Cell(_) => {}
         }
     }
 }

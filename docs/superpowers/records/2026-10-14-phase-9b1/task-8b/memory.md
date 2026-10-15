@@ -43,3 +43,18 @@ Three mechanisms were each needed, measured in turn at 5000 / 20000 / 80000 / 32
 - plus the charge: 57332 / 82968 / 104292 / 217212 (the class still owns every `Method` copy
   `define` made);
 - plus letting go of those copies: the table above.
+
+## Step 3: variable-reference cells
+
+Programs: `task-8/memory/varref3.rex` (`r = >y` in a procedure) and `varref.rex` (`call q >y`, `use
+arg >z`). The crate binary `rexx-run-step3` is the Step 3 commit.
+
+| program | n | oracle | base | step3 |
+|---|---|---|---|---|
+| varref3 | 20000 / 80000 / 320000 | 20092 / 20328 / 20388 | 44972 / 112172 / 386440 | 47328 / 49580 / 50260 |
+| varref | 20000 / 80000 / 320000 | 20500 / 20332 / 20624 | 23320 / 33224 / 41788 | 25868 / 29564 / 29516 |
+
+`varref3` is within 10% from 20000 to 320000 (+6.2%). `varref` is +14.3% from 20000 to 80000 and
+flat after it (-0.2% to 320000); an earlier run of an equivalent build measured 26704 / 28728 /
+28564, so the first figure moves with where the first collection falls. The holders, the shapes
+and the mutations are in `cell-holders.md`.

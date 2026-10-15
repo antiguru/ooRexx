@@ -3192,6 +3192,7 @@ impl Interp {
         }
         let stats = self.heap.collect(&self.roots);
         self.roots.activity_mut().pop_frame(frame);
+        self.roots.release_cells(&stats.freed_cells);
         let heap = &self.heap;
         self.kept_strings.retain(|object, _| {
             !matches!(object.decode(), rexx_core::Decoded::Heap { .. })

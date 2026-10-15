@@ -508,7 +508,7 @@ impl Surface for Interp {
                     owner: var.owner,
                     scope: var.scope,
                 },
-                None => VarRefHome::Cell(self.roots.promote(frame, slot)),
+                None => VarRefHome::Cell(self.promote_slot(frame, slot)),
             }
         };
         let reference = self.alloc_with(

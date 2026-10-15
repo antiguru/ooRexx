@@ -90,7 +90,7 @@ C.update({
  ("Heap","uninit"): ("object with UNINIT","ObjRef","2: dropped by the collection that finds the object gone or cleared"),
  ("Heap","names"): ("any object without a name field","ObjRef","2: pruned in Heap::collect's sweep"),
  ("RootSet","globals"): (NP,"-","named global roots; an annotation table's root goes with its program (unroot_annotation_table from prune_program_rows)"),
- ("RootSet","cells"): ("variable a >name reference was taken to","cell index","none: never freed, and each cell's value is a root (reported)"),
+ ("RootSet","cells"): ("variable a >name reference was taken to","cell index, carried by the Body::Cell object that keeps it","2: released when its Body::Cell object is swept (CollectStats::freed_cells, RootSet::release_cells); the object is traced from VarRef bodies and alias entries, and the collector marks the value with it"),
  ("ActivityRoots","temps"): ACT, ("ActivityRoots","slots"): ACT, ("ActivityRoots","aliases"): ACT,
  ("ActivityRoots","segments"): ACT, ("ActivityRoots","parked"): (NP,"-","values an off-stack activation owns, released with it and reused through parked_free"),
  ("ActivityRoots","parked_free"): (NP,"-","the free list of parked"),
@@ -113,6 +113,7 @@ C.update({
  ("Table","entries"): (NP,"-","the handles an extension holds: a native call's locals, gone with its frame, or global references until the extension releases them"),
  ("Released","handles"): ("object a released handle named","handle","2 by limit: Table::release drops the handles whose object is gone when the table doubles"),
 })
+C[("RootSet","free_cells")] = (NP,"-","the free list of cells")
 for f in ["value_buffer","suspended","spare_activations","spare_exposed","native_handles","native_spares","internal_levels","flat_loops","loop_objects","frames","call_tails","parked_calls","parked_levels","native_tails","flat_spares","failure_sites","failure_frames","fragments","requires_installing","failed_sends","guard_waits"]:
     C[("Activity",f)] = ACT
 out=["site\tstruct\tfield\ttype\tdescribes\tkey\tstate and pruning site"]

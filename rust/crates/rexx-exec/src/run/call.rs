@@ -1316,7 +1316,7 @@ impl Interp {
                 owner: var.owner,
                 scope: var.scope,
             },
-            None => VarRefHome::Cell(self.roots.promote(frame, slot)),
+            None => VarRefHome::Cell(self.promote_slot(frame, slot)),
         };
         let name = code.symbols.name(id).as_bytes().into();
         Ok(self.alloc_with(

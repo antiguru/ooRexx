@@ -47,6 +47,9 @@ pub struct CollectStats {
     /// The class objects this collection freed, as they were before their
     /// slots' generations moved on.
     pub freed_classes: Vec<ObjRef>,
+    /// The root set's cells whose [`Body::Cell`] objects this collection
+    /// freed, for [`RootSet::release_cells`].
+    pub freed_cells: Vec<u32>,
     /// The [`Body::held_bytes`] of every object that survived.
     pub live_bytes: usize,
 }
@@ -261,6 +264,9 @@ impl Heap {
             } else {
                 reached.clear();
                 object.body.trace(&mut reached);
+                if let Body::Cell(cell) = object.body {
+                    reached.extend(roots.cell_value(cell));
+                }
                 work.extend(reached.iter().copied());
                 object.body.held_bytes()
             };
@@ -347,6 +353,9 @@ impl Heap {
             survivor_bytes += object.body.held_bytes();
             reached.clear();
             object.body.trace(&mut reached);
+            if let Body::Cell(cell) = object.body {
+                reached.extend(roots.cell_value(cell));
+            }
             resurrect.extend(reached.iter().copied());
         }
 
@@ -356,6 +365,7 @@ impl Heap {
         #[cfg(debug_assertions)]
         let mut freed_bytes = 0;
         let mut freed_classes = Vec::new();
+        let mut freed_cells = Vec::new();
         for slot in 0..self.slots.len() {
             if self.marks[slot] {
                 continue;
@@ -378,6 +388,7 @@ impl Heap {
                     );
                     freed_classes.push(ObjRef::heap(slot as u32, generation));
                 }
+                Body::Cell(cell) => freed_cells.push(*cell),
                 _ => {
                     #[cfg(debug_assertions)]
                     {
@@ -429,6 +440,7 @@ impl Heap {
             live: self.live,
             pending_uninit,
             freed_classes,
+            freed_cells,
             live_bytes: self.held_bytes,
         }
     }

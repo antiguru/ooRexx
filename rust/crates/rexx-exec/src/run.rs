@@ -2454,7 +2454,9 @@ impl Interp {
             // instruction over `v` itself is rc 0 -- so this arm may not
             // chase the way the string conversion beside it does.
             Some(Body::VarRef(_)) => Conversion::Refused,
-            Some(Body::Native(_) | Body::WeakRef(_)) | None => Conversion::Requested,
+            Some(Body::Native(_) | Body::WeakRef(_) | Body::Cell(_)) | None => {
+                Conversion::Requested
+            }
         }
     }
 

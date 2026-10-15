@@ -15,7 +15,7 @@
 use crate::activation::{Activation, InstanceVar};
 use crate::run::{NameShape, shape_of};
 use crate::{Code, Interp, Novalue};
-use rexx_core::{Body, ObjRef, SlotFrame};
+use rexx_core::{BehaviourId, Body, ObjRef, SlotFrame, SlotRef};
 use rexx_parse::SymbolId;
 
 impl Interp {
@@ -51,6 +51,19 @@ impl Interp {
             return self.clear_exposed_variable(frame, slot);
         }
         self.roots.clear_frame_slot(frame, slot);
+    }
+
+    /// The cell slot `slot` of `frame` resolves to, moving the variable into a
+    /// fresh one if it has none yet, so that a reference to it survives the
+    /// frame.
+    pub(crate) fn promote_slot(&mut self, frame: SlotFrame, slot: usize) -> SlotRef {
+        let target = self.roots.activity().slot_ref(frame, slot);
+        if target.cell().is_some() {
+            return target;
+        }
+        let cell = self.roots.new_cell();
+        let object = self.alloc_with(BehaviourId::OBJECT, Body::Cell(cell));
+        self.roots.promote(frame, slot, object, cell)
     }
 
     /// Whether the running activation has bound any name at all to a scope

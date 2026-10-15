@@ -2032,22 +2032,23 @@ fn a_replaced_method_keeps_its_object_while_it_runs() {
 
 /// A `>name` reference returned past its procedure keeps the variable it
 /// names, while references made and dropped after it take cells of their own.
-/// Measured, oracle rc 0 in 3 of 3 runs, with 300 passes of `copies('x',
-/// 100000)` as the filler.
+/// Each value is computed and longer than an inline string, so only the cell
+/// holds it. Measured, oracle rc 0 in 3 of 3 runs, with 300 passes of
+/// `copies('x', 100000)` as the filler.
 #[test]
 fn a_reference_outlives_its_procedure() {
     assert_stress_prints(
         "<varref-past-frame>",
         concat!(
-            "r = mk('a')\n",
-            "s = mk('b')\n",
+            "r = mk(copies('alpha', 2))\n",
+            "s = mk(copies('bravo', 2))\n",
             "call filler\n",
             "do i = 1 to 5\n",
-            "  t = mk('t' i)\n",
+            "  t = mk(copies('tango', 2) i)\n",
             "end\n",
             "drop t\n",
             "call filler\n",
-            "u = mk('u')\n",
+            "u = mk(copies('uniform', 2))\n",
             "r~value = r~value || '!'\n",
             "say r~value s~value u~value r~name\n",
             "exit\n",
@@ -2061,20 +2062,21 @@ fn a_reference_outlives_its_procedure() {
             "  end\n",
             "  return\n",
         ),
-        "a! b u Y\n",
+        "alphaalpha! bravobravo uniformuniform Y\n",
     );
 }
 
 /// A `>name` reference passed as an argument binds the callee's `USE ARG >`
 /// target to the caller's variable, and a reference the callee takes to that
-/// target names the same storage. Measured, oracle rc 0 in 3 of 3 runs, with
-/// 300 passes of `copies('x', 100000)` as the filler.
+/// target names the same storage. Each value is computed and longer than an
+/// inline string, so only the cell holds it. Measured, oracle rc 0 in 3 of 3
+/// runs, with 300 passes of `copies('x', 100000)` as the filler.
 #[test]
 fn a_reference_argument_aliases_the_callers_variable() {
     assert_stress_prints(
         "<varref-argument>",
         concat!(
-            "y = 1\n",
+            "y = copies('0', 10) || 1\n",
             "call p >y\n",
             "say y\n",
             "exit\n",
@@ -2097,8 +2099,9 @@ fn a_reference_argument_aliases_the_callers_variable() {
 }
 
 /// References a procedure stores in a collection keep their variables once
-/// the procedure returns. Measured, oracle rc 0 in 3 of 3 runs, with 300
-/// passes of `copies('x', 100000)` as the filler.
+/// the procedure returns. Each value is computed and longer than an inline
+/// string, so only the cell holds it. Measured, oracle rc 0 in 3 of 3 runs,
+/// with 300 passes of `copies('x', 100000)` as the filler.
 #[test]
 fn a_reference_in_a_collection_outlives_its_procedure() {
     assert_stress_prints(
@@ -2111,13 +2114,13 @@ fn a_reference_in_a_collection_outlives_its_procedure() {
             "  call fill .array~new\n",
             "end\n",
             "call filler\n",
-            "a[1]~value = 'changed'\n",
+            "a[1]~value = copies('changed', 2)\n",
             "say a[1]~value a[2]~value a~items a[1]~name a[2]~name\n",
             "exit\n",
             "fill: procedure\n",
             "  use arg a\n",
-            "  x = 'x1'\n",
-            "  y = 'y1'\n",
+            "  x = copies('xray', 3)\n",
+            "  y = copies('yankee', 2)\n",
             "  a~append(>x)\n",
             "  a~append(>y)\n",
             "  return\n",
@@ -2127,13 +2130,15 @@ fn a_reference_in_a_collection_outlives_its_procedure() {
             "  end\n",
             "  return\n",
         ),
-        "changed y1 2 X Y\n",
+        "changedchanged yankeeyankee 2 X Y\n",
     );
 }
 
 /// A variable whose only holder is its own frame's reference binding keeps
-/// its value while its activity waits on another. Measured, oracle rc 0 in 3
-/// of 3 runs, with 300 passes of `copies('x', 100000)` as the filler.
+/// its value while its activity waits on another. Each value is computed and
+/// longer than an inline string, so only the cell holds it. Measured, oracle
+/// rc 0 in 3 of 3 runs, with 300 passes of `copies('x', 100000)` as the
+/// filler.
 #[test]
 fn a_variable_another_activity_references_survives() {
     assert_stress_prints(
@@ -2149,7 +2154,7 @@ fn a_variable_another_activity_references_survives() {
             "exit\n",
             "::class w\n",
             "::method go\n",
-            "  y = 'w1'\n",
+            "  y = copies('whiskey', 2)\n",
             "  r = >y\n",
             "  drop r\n",
             "  reply 'started'\n",
@@ -2164,28 +2169,29 @@ fn a_variable_another_activity_references_survives() {
             "  end\n",
             "  return\n",
         ),
-        "started\nw1! w1!\n",
+        "started\nwhiskeywhiskey! whiskeywhiskey!\n",
     );
 }
 
 /// A reference answers the variable's state after a `DROP` and after a fresh
 /// assignment, and a variable whose reference was dropped keeps its value.
-/// Measured, oracle rc 0 in 3 of 3 runs, with 300 passes of `copies('x',
-/// 100000)` as the filler.
+/// Each value is computed and longer than an inline string, so only the cell
+/// holds it. Measured, oracle rc 0 in 3 of 3 runs, with 300 passes of
+/// `copies('x', 100000)` as the filler.
 #[test]
 fn a_reference_outlives_its_dropped_variable() {
     assert_stress_prints(
         "<varref-dropped>",
         concat!(
-            "y = 'y1'\n",
+            "y = copies('yankee', 2)\n",
             "r = >y\n",
             "drop y\n",
             "call filler\n",
             "say r~value\n",
-            "y = 'again'\n",
+            "y = copies('again', 2)\n",
             "call filler\n",
             "say r~value\n",
-            "q = 'q1'\n",
+            "q = copies('quebec', 2)\n",
             "s = >q\n",
             "drop s\n",
             "call filler\n",
@@ -2199,6 +2205,42 @@ fn a_reference_outlives_its_dropped_variable() {
             "  end\n",
             "  return\n",
         ),
-        "Y\nagain\nq1!\n",
+        "Y\nagainagain\nquebecquebec!\n",
+    );
+}
+
+/// An object waiting for its `UNINIT` keeps the variable a reference it holds
+/// names, and the finalizer reads it. The value is computed and longer than
+/// an inline string. Measured, oracle rc 0 in 3 of 3 runs, with 300 passes of
+/// `copies('x', 100000)` as the filler.
+#[test]
+fn a_finalized_objects_reference_keeps_its_variable() {
+    assert_stress_prints(
+        "<varref-uninit>",
+        concat!(
+            ".local['SEEN'] = 'none'\n",
+            "call mk\n",
+            "call filler\n",
+            "call filler\n",
+            "say .local['SEEN']\n",
+            "exit\n",
+            "mk: procedure\n",
+            "  v = copies('victor', 2)\n",
+            "  o = .h~new(>v)\n",
+            "  return\n",
+            "::class h\n",
+            "::method init\n",
+            "  expose r\n",
+            "  use arg r\n",
+            "::method uninit\n",
+            "  expose r\n",
+            "  .local['SEEN'] = r~value\n",
+            "::routine filler\n",
+            "  do i = 1 to 3\n",
+            "    z = copies('x', 1000)\n",
+            "  end\n",
+            "  return\n",
+        ),
+        "victorvictor\n",
     );
 }
