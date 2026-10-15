@@ -1,0 +1,68 @@
+# Peak RSS, /usr/bin/time -f %M on each binary itself, each program copied into its own fresh
+# directory, LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib exported for both sides
+# (rxregexp). Same wrappers as ../memory.txt.
+# rexx-run-9b1-t7e: release build at 00a96524a (8d14e52b8 changed only bench files).
+oracle extmeth20000 done Method 19920  kB
+oracle extmeth80000 done Method 20124  kB
+oracle extmeth160000 done Method 20332  kB
+oracle extmeth320000 done Method 20328  kB
+oracle methloop20000 done 20324  kB
+oracle methloop80000 done 19864  kB
+oracle routloop20000 done 20328  kB
+oracle routloop80000 done 20584  kB
+oracle setmloop20000 done 20412  kB
+oracle setmloop80000 done 20900  kB
+oracle pkgloop20000 done 20220  kB
+oracle pkgloop80000 done 20136  kB
+oracle msgloop80000 done 20888  kB
+oracle msgloop320000 done 20068  kB
+oracle extloop20000 done 20608  kB
+oracle extloop80000 done 20572  kB
+oracle clsmweak 7 1 20628  kB
+oracle cls50weak 9 1 22716  kB
+oracle clsweak 243 1 20644  kB
+rexx-run-9b1-t7e extmeth20000 done Method 30996  kB
+rexx-run-9b1-t7e extmeth80000 done Method 54888  kB
+rexx-run-9b1-t7e extmeth160000 done Method 54288  kB
+rexx-run-9b1-t7e extmeth320000 done Method 54928  kB
+rexx-run-9b1-t7e methloop20000 done 45536  kB
+rexx-run-9b1-t7e methloop80000 done 45320  kB
+rexx-run-9b1-t7e routloop20000 done 45132  kB
+rexx-run-9b1-t7e routloop80000 done 45468  kB
+rexx-run-9b1-t7e setmloop20000 done 46256  kB
+rexx-run-9b1-t7e setmloop80000 done 46060  kB
+rexx-run-9b1-t7e pkgloop20000 done 54628  kB
+rexx-run-9b1-t7e pkgloop80000 done 54416  kB
+rexx-run-9b1-t7e msgloop80000 done 43900  kB
+rexx-run-9b1-t7e msgloop320000 done 43844  kB
+rexx-run-9b1-t7e extloop20000 done 54448  kB
+rexx-run-9b1-t7e extloop80000 done 54360  kB
+rexx-run-9b1-t7e clsmweak 64 1 265136  kB
+rexx-run-9b1-t7e cls50weak 53 1 77244  kB
+rexx-run-9b1-t7e clsweak 815 1 60736  kB
+
+# rexx-run-9b1-t7b (before this round), extmeth 20000 / 80000 / 320000: 31304 / 55012 / 80532 kB
+# rexx-run-9b1-t7c (this prune, before the class charge moved) extmeth 10000 / 40000: 26640 / 39180 kB
+
+# programs
+== extmeth20000.rex
+do i = 1 to 20000
+  m = .Method~loadExternalMethod('m', 'LIBRARY rxregexp RegExp_Init')
+end
+say 'done' m~class~id
+== clsmweak.rex
+src = .array~new
+do j = 1 to 20
+  src~append('::class c'j)
+  do k = 1 to 20
+    src~append('::method m'k)
+  end
+end
+p = .Package~new('p', src)
+w = .WeakReference~new(p~classes['C1'])
+p = .nil
+do i = 1 to 20000 until w~value == .nil
+  q = .Package~new('q', src)
+end
+say i (w~value == .nil)
+# the other programs are in ../memory.txt; each NNNN variant is the 20000 one with that bound

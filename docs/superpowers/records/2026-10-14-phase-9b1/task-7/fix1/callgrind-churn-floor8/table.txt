@@ -1,0 +1,2 @@
+program	head	floor8	floor8 d%	head -libc	floor8 -libc	floor8 -libc d%	head spread%	floor8 spread%
+churn	633988570	948618116	+49.6270	380685607	692569624	+81.9269	0.0000	0.0000
