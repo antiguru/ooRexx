@@ -256,3 +256,126 @@ REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=base/class/Package,base/class/Package_Option
    from the first clause stays reachable while the call runs. Scratch `t6/p3/h1.rex`.
 5. Tests were written after the implementation (see TDD evidence); the mutation table is the
    evidence that each one can fail.
+
+## Fix round 1
+
+Commits: `70f730abe` (merged routine holds its package), `0f1baee91` (parked-activity test),
+`23229c39d` (special_methods prune, ObjRef prune assertions), `740486ee9` (no expect in
+`unattached_method_id`), `23e7d1828` (method activation built in place). No commit moved a
+`Loud`/`Raised` constructor: `refusal_sites` passed before each commit.
+
+### (1) The merged_from leak
+
+`MergedRoutine::Installed(InstalledRoutine, ObjRef)` carries the package object of the routine's
+program. `PackageData::trace` follows it in `public_routines` and `merged_public_routines`, the
+tables a merge writes. `merged_from` and its push in `merge_package` are gone. A call whose callee
+has no public routine merges nothing and holds nothing. An entry that loses to an earlier one under
+the same name is never written, so it holds nothing either. Classes need no counterpart: a merged
+class is the class object, and a class holds its own package (Task 5's `class_holds_package`).
+Constructors: `install_directives` (the program's own package, `package_object` before the
+fields) and `added_routine` (`program_package` of the routine's program, `None` if none is built).
+
+Memory (`task-6/fix1/memory.txt`), each loop from its own fresh directory:
+
+| loop | oracle 20000 / 80000 | head `t6e` 20000 / 80000 | 80000 vs 20000 | before (`t6d`) 20000 / 80000 |
+|---|---|---|---|---|
+| `call ext`, `ext.rex` = `return 1` | 19608 / 20252 kB | 423232 / 425420 kB | +0.52% | 643540 / 2511992 kB |
+| the same, `ext.rex` with `::routine pubr public` | 20540 / 20372 kB | 448696 / 449148 kB | +0.10% | 680208 / 2658392 kB |
+
+The four section-6 loops at `t6e`, 20000 / 80000: `Method~new` 175764 / 174712, `Routine~new`
+173992 / 175384, `setMethod` 163360 / 163308, `Package~new` 420832 / 420988 kB.
+
+The e5/e6/e7 tests (`collect_stress -- external`, 6 passed) and the corpus differential (which runs
+`package_external_merge_held.rex`) are green. Mutation F1, deleting
+`MergedRoutine::Installed(_, object) |` from the trace: `collect_stress -- external` (release)
+3 failed, e5/e6/e7, for example `an_external_routines_merged_routine_runs_beside_its_callers_package`
+rc 120 `an activation's body selector names no routine body`.
+
+### (2) The parked activity
+
+`collect_stress::a_parked_activitys_frame_keeps_its_program` is the review's `parked.rex` with
+3-pass fillers. Oracle, the exact test text, 3 of 3 runs rc 0: `hasW 0` /
+`parked 6 guard on when flag = 1`. Green 3 of 3 in debug. Mutation F2, `Activities::running_programs`
+emptied: debug red at `package_object`'s assertion (`identities.rs:178`); release red, rc 120,
+`a message send to a package whose program was freed`, stdout `hasW 0` only. The walk's doc now
+names this shape (`scheduler.rs`). That withdraws Task 5's unwitnessed-walk exception.
+
+### (3) special_methods
+
+`prune_program_rows` sets to `None` every row whose `AccessScope::package` is a freed program, then
+pops trailing `None` rows. Table row added:
+
+| table | key / value | pruned where |
+|---|---|---|
+| `special_methods` | `Vec` by MethodId, value `AccessScope { package }` | `prune_program_rows` |
+
+The stale-id test now sends `m~setPrivate` to each `Method~new`, which files a row under that
+program, and asserts that no row names a freed program. Mutation F3 (no prune): unit red.
+
+### (4) The ObjRef-holding prunes
+
+None of the review's eight unasserted tables holds an `ObjRef`. `LibraryBinding` holds an
+`Rc<Library>` and a row, and the others hold MethodIds, program ids, rows or `&'static` entries. Two
+pruned stores that do hold `ObjRef`s had no assertion, and now have one:
+
+- `executable_objects` (MethodId to object). The test asserts that every key still has a body in
+  `method_bodies`, `generated_methods`, `native_externals` or `library_externals`. F4 (no prune):
+  red.
+- The annotation tables' global roots (`unroot_annotation_table`). `RootSet::global_names` is new
+  in `rexx-core`. The test asserts that no global root's name ends in ` of program <freed id>`. F5
+  (no unroot): red.
+
+The ObjRef-holding prunes already asserted: `routine_objects`, `executable_sources`, `annotations`.
+
+### (5) M2 as a lifetime test
+
+M2b deletes `out.extend(native.executable_package())` from `Body::trace` (`rexx-core`). The `Method`
+object still stores its package, and only the collector stops seeing it. Under collect-every-
+allocation, `a_held_stack_frame_keeps_its_program` goes red in debug and release (rc 120). The
+refusal text is `a message send to a method object this crate did not build`, because once the
+program is freed its `executable_sources` record is pruned. The same mutant binary run plainly
+(`rexx-run`, no forced collection) on the same program prints all three expected lines, rc 0. So the
+failure is the collection, not the refusal. M2b replaces M2.
+
+### (6) The expect in unattached_method_id
+
+`unattached_method_id` takes the program's `&Rc<Program>` from its one caller,
+`build_package_string_table`, which has just looked it up. The second lookup and its `expect` are
+gone, and there is no failure path left to refuse. The caller builds `entries` only when it holds
+`source`, so the `source.as_ref()` it maps over is `Some` whenever an entry exists.
+
+### (7) Activation codegen
+
+`Activation::method` is `#[inline(always)]`. A/B against the same tree without it, one round
+(`task-6/fix1/callgrind-inline-ab/`): sendloop -0.3754%, dispatch -0.2486%, dispatchclass -0.2676%,
+fibcall +0.0000%, intcall +0.0003%, startup +0.0014%. That is 11 instructions a send. Kept.
+
+### Budget
+
+```
+timeout 590 bench-programs/callgrind.sh -B 0.5 -j 16 -o /home/moritz/dev/repos/ooRexx-p9-pin/cg-9b1/task-6-fix1 pin=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run head=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9b1-t6e
+```
+
+Exit 0, full set, 3 rounds, no OVER, no SPREAD (`task-6/fix1/callgrind/`). sendloop +0.0715%
+(was +0.4486%), dispatch -0.1563%, dispatchclass -3.2536%, startup +0.3389%, compound +0.4347%
+(whole-process; -libc +0.0031%), sayloop +0.2277%, hashnew +0.1064%. `t6e` is the release build at
+`23e7d1828`.
+
+### Checks (from `rust/`, `CARGO_INCREMENTAL=0 -j 4 timeout 590 memcap 8G`, at `23e7d1828`, statuses unpiped, outputs in scratch `t6/checks1/`)
+
+| command | exit | result |
+|---|---|---|
+| `cargo fmt --all --check` | 0 | |
+| `cargo clippy -p rexx-exec -p rexx-core --all-targets -- -D warnings` | 0 | |
+| `cargo test -p rexx-exec --test collect_stress` (debug) | 0 | 55 passed |
+| `cargo test --release -p rexx-exec --test collect_stress` | 0 | 55 passed |
+| `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus` | 0 | 29 passed, 1 ignored |
+| the same, debug | 0 | 29 passed, 1 ignored |
+| `cargo test --release -p rexx-exec --lib` | 0 | 1123 passed |
+| the refusal tables and Task 5's binaries (the round's command above) | 0 | all ok |
+| `cargo test --release -p rexx-core` | 0 | |
+
+The debug lib run (1123 passed) was at `740486ee9`, before the one-attribute `23e7d1828`.
+
+Mutations F1 to F5 and M2b were applied and restored as before. After each batch the `git diff`
+was compared with a saved patch, and was identical every time.

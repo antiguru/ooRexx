@@ -1,0 +1,40 @@
+# Peak RSS, /usr/bin/time -f %M on the interpreter itself. Oracle: ( ulimit -v 1048576 -t 120; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib /usr/bin/time -f ... /home/moritz/dev/repos/ooRexx/build/bin/rexx main.rex ); crate: ( ulimit -v 4194304 -t 120; /usr/bin/time -f ... BIN main.rex ). Each external-call loop runs from its own fresh directory holding main.rex and ext.rex.
+# rexx-run-9b1-t6e is built at 23e7d1828; rexx-run-9b1-t6d is the round's base binary.
+oracle ext-plain-20000 19608 kB
+rexx-run-9b1-t6e ext-plain-20000 423232 kB
+rexx-run-9b1-t6d ext-plain-20000 643540 kB
+oracle ext-plain-80000 20252 kB
+rexx-run-9b1-t6e ext-plain-80000 425420 kB
+rexx-run-9b1-t6d ext-plain-80000 2511992 kB
+oracle ext-pub-20000 20540 kB
+rexx-run-9b1-t6e ext-pub-20000 448696 kB
+rexx-run-9b1-t6d ext-pub-20000 680208 kB
+oracle ext-pub-80000 20372 kB
+rexx-run-9b1-t6e ext-pub-80000 449148 kB
+rexx-run-9b1-t6d ext-pub-80000 2658392 kB
+rexx-run-9b1-t6e methloop20000 175764 kB
+rexx-run-9b1-t6e methloop80000 174712 kB
+rexx-run-9b1-t6e routloop20000 173992 kB
+rexx-run-9b1-t6e routloop80000 175384 kB
+rexx-run-9b1-t6e setmloop20000 163360 kB
+rexx-run-9b1-t6e setmloop80000 163308 kB
+rexx-run-9b1-t6e pkgloop20000 420832 kB
+rexx-run-9b1-t6e pkgloop80000 420988 kB
+# programs
+== ext-plain main.rex (20000)
+do i = 1 to 20000
+  call ext
+end
+say 'done'
+== ext-plain ext.rex
+return 1
+== ext-pub main.rex (20000)
+do i = 1 to 20000
+  call ext
+end
+say 'done' pubr()
+== ext-pub ext.rex
+return 1
+::routine pubr public
+  return 2
+# the loop programs are in ../memory.txt
