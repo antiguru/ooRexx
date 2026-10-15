@@ -1,0 +1,10 @@
+use std::io::Write;
+fn main() {
+    let path = std::env::args().nth(1).expect("path");
+    let text = std::fs::read(&path).expect("read");
+    let out = rexx_exec::run_program_collect_every_alloc(&path, text, rexx_exec::Invocation::none());
+    std::io::stdout().write_all(&out.stdout).unwrap();
+    std::io::stderr().write_all(&out.stderr).unwrap();
+    eprintln!("[collections {}]", out.collections);
+    std::process::exit(out.exit_code);
+}

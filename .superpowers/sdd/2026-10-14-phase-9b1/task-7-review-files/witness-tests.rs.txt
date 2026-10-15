@@ -1,0 +1,35 @@
+#[test]
+fn review_p6_p7_rows_pruned() {
+    let mut interp = Interp::new();
+    interp.bootstrap_library().expect("library");
+    let out = say_output_with_directives(
+        &mut interp,
+        b".local['KEEP'] = .context~package\no = .array~of(1, 2)\ndo i = 1 to 3\n  \
+          call trybad o\nend\nsay 'ok'\nexit\n\
+          trybad: procedure\n  use arg o\n  m = .Message~new(o, 'ITEMS'); m~notify(.bad~new)\n  \
+          signal on syntax name s1\n  m~send\n  return\n  s1: return\n\
+          ::class bad inherit MessageNotification\n::method messageComplete\n  \
+          raise syntax 93.900 array('bad')\n",
+    );
+    assert_eq!(String::from_utf8_lossy(&out), "ok\n");
+    assert!(!interp.unnotified_messages.is_empty(), "no unnotified row");
+    let msg = *interp.message_outcomes.keys().next().expect("an outcome");
+    interp.activities.message_id(msg);
+    interp.collect_now();
+    let heap = &interp.heap;
+    let live = |object: &ObjRef| heap.peek(*object).is_some();
+    assert!(heap.peek(msg).is_none(), "the probe message survived");
+    assert!(interp.unnotified_messages.iter().all(live), "P6: unnotified keeps a swept message");
+    assert!(interp.activities.message_rows().all(|m| live(&m)), "P7: message_ids keeps a swept message");
+}
+
+#[test]
+fn review_c2_package_charged() {
+    let mut interp = Interp::new();
+    interp.bootstrap_library().expect("library");
+    let id = interp.load_program(Rc::new(parse_program(b"nop\n".to_vec()).expect("parses")));
+    let before = interp.heap.charge_body_bytes(0);
+    interp.package_object(crate::plan::Package::Program(id)).expect("package");
+    let after = interp.heap.charge_body_bytes(0);
+    assert!(after >= before + crate::PACKAGE_BYTES, "C2: package not charged ({before} -> {after})");
+}

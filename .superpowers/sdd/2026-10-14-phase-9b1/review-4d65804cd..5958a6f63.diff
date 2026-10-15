@@ -1,0 +1,2910 @@
+# Review package: 4d65804cd..5958a6f63
+
+## Commits
+5958a6f63 Phase 9b1 Task 7: records (memory, callgrind, floor experiment, suite)
+5fda502fb Phase 9b1 Task 7: a disposition for unrecorded_executable, and its probes
+f9341ef33 Phase 9b1 Task 7: prune executable and message rows at sweep, charge programs, packages and classes
+
+## Files changed
+ .../task-7/callgrind-floor8/binaries.txt           |   4 +
+ .../task-7/callgrind-floor8/summary.tsv            |  16 +
+ .../task-7/callgrind-floor8/table.txt              |   9 +
+ .../task-7/callgrind/binaries.txt                  |   4 +
+ .../task-7/callgrind/callgrind.log                 |  32 +
+ .../task-7/callgrind/summary.tsv                   | 180 +++++
+ .../task-7/callgrind/table.txt                     |  31 +
+ .../records/2026-10-14-phase-9b1/task-7/memory.txt | 221 ++++++
+ .../task-7/probes/executable_a.rex                 |  26 +
+ .../task-7/probes/executable_b.rex                 |   9 +
+ .../task-7/suite/oracle-differences.tsv            |  31 +
+ .../task-7/suite/run-output.txt                    |  20 +
+ .../2026-10-14-phase-9b1/task-7/suite/table.tsv    |  24 +
+ .../2026-10-14-phase-9b1/task-7/suite/tests.tsv    | 794 +++++++++++++++++++++
+ .../2026-10-14-phase-9b1/task-7/suite/verdicts.tsv |  13 +
+ rust/corpus/lang/package_class_collected.rex       |  23 +
+ rust/corpus/phase-9.txt                            |   3 +
+ rust/corpus/refusal-dispositions.tsv               |   1 +
+ rust/corpus/refusal-sites.tsv                      |  95 +--
+ rust/crates/rexx-exec/src/dispatch.rs              |   2 +-
+ .../rexx-exec/src/dispatch/class_protocol.rs       |  43 +-
+ rust/crates/rexx-exec/src/dispatch/executable.rs   |   9 +-
+ .../rexx-exec/src/dispatch/object_protocol.rs      |   8 +-
+ .../crates/rexx-exec/src/environment/identities.rs |   1 +
+ rust/crates/rexx-exec/src/install.rs               |  12 +-
+ rust/crates/rexx-exec/src/lib.rs                   |  59 +-
+ rust/crates/rexx-exec/src/run/tests.rs             |  81 +++
+ rust/crates/rexx-exec/src/scheduler.rs             |  12 +-
+ rust/crates/rexx-exec/tests/class_lifetime.rs      |  10 +
+ .../rexx-exec/tests/representation_refusals.rs     |  21 -
+ .../sourceline_oracle/package_class_collected.txt  |  24 +
+ 31 files changed, 1699 insertions(+), 119 deletions(-)
+
+## Diff
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind-floor8/binaries.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind-floor8/binaries.txt
+new file mode 100644
+index 000000000..7c1b62b27
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind-floor8/binaries.txt
+@@ -0,0 +1,4 @@
++# 2026-10-15T01:23:19Z rounds=1 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib
++# valgrind-3.27.1
++# head /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9b1-t7b 441b9c2ff3fb2d7ae91355123378888a389fdaee3a4a2d0673aba2d3116c0d05
++# floor8 /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9b1-t7-floor8 743e36c3dcf35bbcb6c742ad00701a8536a9b7045ed834495e461ac6942b463f
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind-floor8/summary.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind-floor8/summary.tsv
+new file mode 100644
+index 000000000..83ce1d1b4
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind-floor8/summary.tsv
+@@ -0,0 +1,16 @@
++head	alloc	r1	22662120613	2468412964	347280	20193360369	rc=0
++floor8	alloc	r1	22662120553	2468412869	347306	20193360378	rc=0
++head	hashnew	r1	2358364534	767092603	347280	1590924651	rc=0
++floor8	hashnew	r1	2355330768	762706580	347306	1592276882	rc=0
++head	startup	r1	119496102	61499689	347280	57649133	rc=0
++floor8	startup	r1	119495695	61499777	347306	57648612	rc=0
++head	strings	r1	18769929725	1271695561	347280	17497886884	rc=0
++floor8	strings	r1	18769929149	1271695487	347161	17497886501	rc=0
++head	dirread	r1	3091842310	457485417	347280	2634009613	rc=0
++floor8	dirread	r1	3091841999	457485463	347306	2634009230	rc=0
++head	heapshape	r1	2432534480	126646197	347310	2305540973	rc=0
++floor8	heapshape	r1	2432534174	126646001	347191	2305540982	rc=0
++head	compound	r1	9288148031	450755858	347266	8837044907	rc=0
++floor8	compound	r1	9288147754	450755896	347306	8837044552	rc=0
++head	pingmsg	r1	7496741347	5872908938	347266	1623485143	rc=0
++floor8	pingmsg	r1	7496741096	5872908974	347334	1623484788	rc=0
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind-floor8/table.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind-floor8/table.txt
+new file mode 100644
+index 000000000..0a0089bdc
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind-floor8/table.txt
+@@ -0,0 +1,9 @@
++program	head	floor8	floor8 d%	head -libc	floor8 -libc	floor8 -libc d%	head spread%	floor8 spread%
++alloc	22662120613	22662120553	-0.0000	20193360369	20193360378	+0.0000	0.0000	0.0000
++hashnew	2358364534	2355330768	-0.1286	1590924651	1592276882	+0.0850	0.0000	0.0000
++startup	119496102	119495695	-0.0003	57649133	57648612	-0.0009	0.0000	0.0000
++strings	18769929725	18769929149	-0.0000	17497886884	17497886501	-0.0000	0.0000	0.0000
++dirread	3091842310	3091841999	-0.0000	2634009613	2634009230	-0.0000	0.0000	0.0000
++heapshape	2432534480	2432534174	-0.0000	2305540973	2305540982	+0.0000	0.0000	0.0000
++compound	9288148031	9288147754	-0.0000	8837044907	8837044552	-0.0000	0.0000	0.0000
++pingmsg	7496741347	7496741096	-0.0000	1623485143	1623484788	-0.0000	0.0000	0.0000
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind/binaries.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind/binaries.txt
+new file mode 100644
+index 000000000..4fb57427c
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind/binaries.txt
+@@ -0,0 +1,4 @@
++# 2026-10-15T01:10:32Z rounds=3 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib
++# valgrind-3.27.1
++# pin /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run c4b4e8c4ce7f1f12e4a73fa37cb15eca262717092c2c1aed727febf437523c67
++# head /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9b1-t7b 441b9c2ff3fb2d7ae91355123378888a389fdaee3a4a2d0673aba2d3116c0d05
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind/callgrind.log b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind/callgrind.log
+new file mode 100644
+index 000000000..ccc410bcc
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind/callgrind.log
+@@ -0,0 +1,32 @@
++program	pin	head	head d%	pin -libc	head -libc	head -libc d%	pin spread%	head spread%
++alloc	22825677966	22662120613	-0.7165	20362612047	20193360369	-0.8312	0.0000	0.0000
++alloc4c	3673339285	3671795694	-0.0420	3106074440	3104475298	-0.0515	0.0000	0.0000
++arith	12084068290	12096449566	+0.1025	11478090242	11491969504	+0.1209	0.0000	0.0000
++assign	18443711946	18444139041	+0.0023	18381875604	18382151633	+0.0015	0.0000	0.0000
++compound	9247948335	9288148031	+0.4347	8836768877	8837044907	+0.0031	0.0000	0.0000
++decloop	2503233069	2507503581	+0.1706	2404646660	2408754383	+0.1708	0.0000	0.0000
++decrender	4631810258	4622981535	-0.1906	4171162211	4162469000	-0.2084	0.0000	0.0000
++dirread	3130118030	3091842310	-1.2228	2663580961	2634009613	-1.1102	0.0000	0.0000
++dispatch	22105710210	22071144969	-0.1564	20673777230	20679059809	+0.0256	0.0000	0.0000
++dispatchclass	16952030028	16400470460	-3.2536	15654210021	15354492653	-1.9146	0.0000	0.0000
++emptyloop	7797087346	7797511454	+0.0054	7735375461	7735651490	+0.0036	0.0000	0.0000
++extcall	8975966670	7791406045	-13.1970	7536919758	7408200881	-1.7078	0.0000	0.0000
++fibcall	9109404880	8797223937	-3.4270	8469931688	8277636097	-2.2703	0.0000	0.0000
++fibfunc	8938581695	8631114211	-3.4398	8300416595	8111559790	-2.2753	0.0000	0.0000
++hashnew	2355780705	2358364534	+0.1097	1588972591	1590924651	+0.1229	0.0000	0.0000
++heapshape	2432938924	2432534480	-0.0166	2306075991	2305540973	-0.0232	0.0000	0.0000
++intcall	839772904	755286066	-10.0607	660893280	601319407	-9.0141	0.0000	0.0000
++nop	9243390273	9243807596	+0.0045	9181614202	9181890231	+0.0030	0.0000	0.0000
++parse	1654598855	1654691294	+0.0056	1552802916	1552720855	-0.0053	0.0000	0.0000
++pkglocal	4185405401	3933836807	-6.0106	3917669232	3613955357	-7.7524	0.0000	0.0000
++sayloop	179667611	180073218	+0.2258	107724363	108000392	+0.2562	0.0000	0.0000
++sendloop	14584920953	14595353075	+0.0715	13818085980	13828368549	+0.0744	0.0000	0.0000
++startup	119095643	119496102	+0.3362	57373104	57649133	+0.4811	0.0002	0.0000
++strings	18808439001	18769929725	-0.2047	17536542235	17497886884	-0.2204	0.0000	0.0000
++textnum	1224167999	1223795058	-0.0305	1150021499	1149497532	-0.0456	0.0000	0.0000
++varlookup	13194527917	13194953287	+0.0032	13132805929	13133081958	+0.0021	0.0000	0.0000
++rexxcps	19278663262	19278747404	+0.0004	17792039695	17789656058	-0.0134	0.0001	0.0000
++pingguard	1314640620	1314361825	-0.0212	1148195482	1146177743	-0.1757	0.0003	0.0001
++pingmsg	7581728617	7496741347	-1.1209	1667809819	1623485143	-2.6577	0.0000	0.0000
++pingsem	1299592816	1301321947	+0.1331	1171627003	1171610846	-0.0014	0.0004	0.0005
++# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9b1/task-7-a
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind/summary.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind/summary.tsv
+new file mode 100644
+index 000000000..84da0a724
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind/summary.tsv
+@@ -0,0 +1,180 @@
++pin	alloc	r1	22825677966	2462719707	346212	20362612047	rc=0
++head	alloc	r1	22662120613	2468412964	347280	20193360369	rc=0
++pin	alloc	r2	22825677966	2462719707	346212	20362612047	rc=0
++head	alloc	r2	22662120613	2468412964	347280	20193360369	rc=0
++pin	alloc	r3	22825677966	2462719707	346212	20362612047	rc=0
++head	alloc	r3	22662120613	2468412964	347280	20193360369	rc=0
++pin	alloc4c	r1	3673339338	566918703	346186	3106074449	rc=0
++head	alloc4c	r1	3671795694	566973116	347280	3104475298	rc=0
++pin	alloc4c	r2	3673339285	566918659	346186	3106074440	rc=0
++head	alloc4c	r2	3671795747	566973160	347280	3104475307	rc=0
++pin	alloc4c	r3	3673339285	566918659	346186	3106074440	rc=0
++head	alloc4c	r3	3671795694	566973116	347280	3104475298	rc=0
++pin	arith	r1	12084068290	605631836	346212	11478090242	rc=0
++head	arith	r1	12096449566	604132927	347135	11491969504	rc=0
++pin	arith	r2	12084068290	605631836	346212	11478090242	rc=0
++head	arith	r2	12096449831	604133047	347280	11491969504	rc=0
++pin	arith	r3	12084068025	605631716	346067	11478090242	rc=0
++head	arith	r3	12096449566	604132927	347135	11491969504	rc=0
++pin	assign	r1	18443711946	61490130	346212	18381875604	rc=0
++head	assign	r1	18444139041	61640128	347280	18382151633	rc=0
++pin	assign	r2	18443711946	61490130	346212	18381875604	rc=0
++head	assign	r2	18444139041	61640128	347280	18382151633	rc=0
++pin	assign	r3	18443711681	61490010	346067	18381875604	rc=0
++head	assign	r3	18444138776	61640008	347135	18382151633	rc=0
++pin	compound	r1	9247948335	410833286	346172	8836768877	rc=0
++head	compound	r1	9288148031	450755858	347266	8837044907	rc=0
++pin	compound	r2	9247948335	410833286	346172	8836768877	rc=0
++head	compound	r2	9288148031	450755858	347266	8837044907	rc=0
++pin	compound	r3	9247948335	410833286	346172	8836768877	rc=0
++head	compound	r3	9288147648	450755620	347121	8837044907	rc=0
++pin	decloop	r1	2503233069	98240223	346186	2404646660	rc=0
++head	decloop	r1	2507503581	98401918	347280	2408754383	rc=0
++pin	decloop	r2	2503233122	98240267	346186	2404646669	rc=0
++head	decloop	r2	2507503581	98401918	347280	2408754383	rc=0
++pin	decloop	r3	2503233069	98240223	346186	2404646660	rc=0
++head	decloop	r3	2507503581	98401918	347280	2408754383	rc=0
++pin	decrender	r1	4631810258	460301980	346067	4171162211	rc=0
++head	decrender	r1	4622981535	460165400	347135	4162469000	rc=0
++pin	decrender	r2	4631810523	460302100	346212	4171162211	rc=0
++head	decrender	r2	4622981535	460165400	347135	4162469000	rc=0
++pin	decrender	r3	4631810258	460301980	346067	4171162211	rc=0
++head	decrender	r3	4622981535	460165400	347135	4162469000	rc=0
++pin	dirread	r1	3130118030	466190883	346186	2663580961	rc=0
++head	dirread	r1	3091842310	457485417	347280	2634009613	rc=0
++pin	dirread	r2	3130118030	466190883	346186	2663580961	rc=0
++head	dirread	r2	3091842045	457485297	347135	2634009613	rc=0
++pin	dirread	r3	3130118047	466190891	346186	2663580970	rc=0
++head	dirread	r3	3091843130	457485456	347280	2634010394	rc=0
++pin	dispatch	r1	22105710210	1431586808	346172	20673777230	rc=0
++head	dispatch	r1	22071144969	1391737894	347266	20679059809	rc=0
++pin	dispatch	r2	22105710210	1431586808	346172	20673777230	rc=0
++head	dispatch	r2	22071144969	1391737894	347266	20679059809	rc=0
++pin	dispatch	r3	22105710210	1431586808	346172	20673777230	rc=0
++head	dispatch	r3	22071144704	1391737774	347121	20679059809	rc=0
++pin	dispatchclass	r1	16952030028	1297473795	346212	15654210021	rc=0
++head	dispatchclass	r1	16400470460	1045630527	347280	15354492653	rc=0
++pin	dispatchclass	r2	16952029763	1297473675	346067	15654210021	rc=0
++head	dispatchclass	r2	16400470460	1045630527	347280	15354492653	rc=0
++pin	dispatchclass	r3	16952030081	1297473839	346212	15654210030	rc=0
++head	dispatchclass	r3	16400470460	1045630527	347280	15354492653	rc=0
++pin	emptyloop	r1	7797087346	61365818	346067	7735375461	rc=0
++head	emptyloop	r1	7797511454	61512684	347280	7735651490	rc=0
++pin	emptyloop	r2	7797087228	61365700	346067	7735375461	rc=0
++head	emptyloop	r2	7797511454	61512684	347280	7735651490	rc=0
++pin	emptyloop	r3	7797087666	61365984	346212	7735375470	rc=0
++head	emptyloop	r3	7797511457	61512678	347280	7735651499	rc=0
++pin	extcall	r1	8975966670	1438625563	421349	7536919758	rc=0
++head	extcall	r1	7791406045	382782762	422402	7408200881	rc=0
++pin	extcall	r2	8975966405	1438625443	421204	7536919758	rc=0
++head	extcall	r2	7791406045	382782762	422402	7408200881	rc=0
++pin	extcall	r3	8975966670	1438625563	421349	7536919758	rc=0
++head	extcall	r3	7791406045	382782762	422402	7408200881	rc=0
++pin	fibcall	r1	9109404880	639127006	346186	8469931688	rc=0
++head	fibcall	r1	8797223937	519240705	347135	8277636097	rc=0
++pin	fibcall	r2	9109404880	639127006	346186	8469931688	rc=0
++head	fibcall	r2	8797224202	519240825	347280	8277636097	rc=0
++pin	fibcall	r3	9109404880	639127006	346186	8469931688	rc=0
++head	fibcall	r3	8797223937	519240705	347135	8277636097	rc=0
++pin	fibfunc	r1	8938581695	637819059	346041	8300416595	rc=0
++head	fibfunc	r1	8631114476	519207406	347280	8111559790	rc=0
++pin	fibfunc	r2	8938581960	637819179	346186	8300416595	rc=0
++head	fibfunc	r2	8631114211	519207286	347135	8111559790	rc=0
++pin	fibfunc	r3	8938581695	637819059	346041	8300416595	rc=0
++head	fibfunc	r3	8631114211	519207286	347135	8111559790	rc=0
++pin	hashnew	r1	2355780705	766461928	346186	1588972591	rc=0
++head	hashnew	r1	2358364534	767092603	347280	1590924651	rc=0
++pin	hashnew	r2	2355780705	766461928	346186	1588972591	rc=0
++head	hashnew	r2	2358364269	767092483	347135	1590924651	rc=0
++pin	hashnew	r3	2355780705	766461928	346186	1588972591	rc=0
++head	hashnew	r3	2358364534	767092603	347280	1590924651	rc=0
++pin	heapshape	r1	2432938924	126516691	346242	2306075991	rc=0
++head	heapshape	r1	2432534480	126646197	347310	2305540973	rc=0
++pin	heapshape	r2	2432938924	126516691	346242	2306075991	rc=0
++head	heapshape	r2	2432534480	126646197	347310	2305540973	rc=0
++pin	heapshape	r3	2432939123	126516773	346242	2306076108	rc=0
++head	heapshape	r3	2432534215	126646077	347165	2305540973	rc=0
++pin	intcall	r1	839772904	178533438	346186	660893280	rc=0
++head	intcall	r1	755286066	153619379	347280	601319407	rc=0
++pin	intcall	r2	839772639	178533318	346041	660893280	rc=0
++head	intcall	r2	755286066	153619379	347280	601319407	rc=0
++pin	intcall	r3	839772904	178533438	346186	660893280	rc=0
++head	intcall	r3	755286066	153619379	347280	601319407	rc=0
++pin	nop	r1	9243390008	61429765	346041	9181614202	rc=0
++head	nop	r1	9243807596	61570085	347280	9181890231	rc=0
++pin	nop	r2	9243390273	61429885	346186	9181614202	rc=0
++head	nop	r2	9243807213	61569847	347135	9181890231	rc=0
++pin	nop	r3	9243390273	61429885	346186	9181614202	rc=0
++head	nop	r3	9243807596	61570085	347280	9181890231	rc=0
++pin	parse	r1	1654598855	101449727	346212	1552802916	rc=0
++head	parse	r1	1654691294	101623159	347280	1552720855	rc=0
++pin	parse	r2	1654598855	101449727	346212	1552802916	rc=0
++head	parse	r2	1654691294	101623159	347280	1552720855	rc=0
++pin	parse	r3	1654598855	101449727	346212	1552802916	rc=0
++head	parse	r3	1654691294	101623159	347280	1552720855	rc=0
++pin	pkglocal	r1	4185405401	267389997	346172	3917669232	rc=0
++head	pkglocal	r1	3933836807	319534184	347266	3613955357	rc=0
++pin	pkglocal	r2	4185405136	267389877	346027	3917669232	rc=0
++head	pkglocal	r2	3933836807	319534184	347266	3613955357	rc=0
++pin	pkglocal	r3	4185405401	267389997	346172	3917669232	rc=0
++head	pkglocal	r3	3933836807	319534184	347266	3613955357	rc=0
++pin	sayloop	r1	179667611	71597062	346186	107724363	rc=0
++head	sayloop	r1	180073218	71725546	347280	108000392	rc=0
++pin	sayloop	r2	179667611	71597062	346186	107724363	rc=0
++head	sayloop	r2	180073218	71725546	347280	108000392	rc=0
++pin	sayloop	r3	179667611	71597062	346186	107724363	rc=0
++head	sayloop	r3	180073218	71725546	347280	108000392	rc=0
++pin	sendloop	r1	14584920953	766488801	346172	13818085980	rc=0
++head	sendloop	r1	14595353075	766637260	347266	13828368549	rc=0
++pin	sendloop	r2	14584920953	766488801	346172	13818085980	rc=0
++head	sendloop	r2	14595353075	766637260	347266	13828368549	rc=0
++pin	sendloop	r3	14584920953	766488801	346172	13818085980	rc=0
++head	sendloop	r3	14595353075	766637260	347266	13828368549	rc=0
++pin	startup	r1	119095643	61376353	346186	57373104	rc=0
++head	startup	r1	119496102	61499689	347280	57649133	rc=0
++pin	startup	r2	119095643	61376353	346186	57373104	rc=0
++head	startup	r2	119496102	61499689	347280	57649133	rc=0
++pin	startup	r3	119095378	61376233	346041	57373104	rc=0
++head	startup	r3	119496102	61499689	347280	57649133	rc=0
++pin	strings	r1	18808439266	1271550845	346186	17536542235	rc=0
++head	strings	r1	18769929725	1271695561	347280	17497886884	rc=0
++pin	strings	r2	18808439001	1271550725	346041	17536542235	rc=0
++head	strings	r2	18769929460	1271695441	347135	17497886884	rc=0
++pin	strings	r3	18808439001	1271550725	346041	17536542235	rc=0
++head	strings	r3	18769929725	1271695561	347280	17497886884	rc=0
++pin	textnum	r1	1224167999	73800314	346186	1150021499	rc=0
++head	textnum	r1	1223795058	73950246	347280	1149497532	rc=0
++pin	textnum	r2	1224167734	73800194	346041	1150021499	rc=0
++head	textnum	r2	1223795058	73950246	347280	1149497532	rc=0
++pin	textnum	r3	1224168052	73800358	346186	1150021508	rc=0
++head	textnum	r3	1223795058	73950246	347280	1149497532	rc=0
++pin	varlookup	r1	13194527652	61375656	346067	13132805929	rc=0
++head	varlookup	r1	13194953287	61524049	347280	13133081958	rc=0
++pin	varlookup	r2	13194527917	61375776	346212	13132805929	rc=0
++head	varlookup	r2	13194953287	61524049	347280	13133081958	rc=0
++pin	varlookup	r3	13194527917	61375776	346212	13132805929	rc=0
++head	varlookup	r3	13194953287	61524049	347280	13133081958	rc=0
++pin	rexxcps	r1	19278668389	1486279920	346202	17792042267	rc=0
++head	rexxcps	r1	19278750285	1488745866	347296	17789657123	rc=0
++pin	rexxcps	r2	19278663262	1486277365	346202	17792039695	rc=0
++head	rexxcps	r2	19278747404	1488744050	347296	17789656058	rc=0
++pin	rexxcps	r3	19278656380	1486272870	346202	17792037308	rc=0
++head	rexxcps	r3	19278742466	1488740922	347296	17789654248	rc=0
++pin	pingguard	r1	1314639439	166098690	346212	1148194537	rc=0
++head	pingguard	r1	1314363023	167837157	347280	1146178586	rc=0
++pin	pingguard	r2	1314640620	166098926	346212	1148195482	rc=0
++head	pingguard	r2	1314361412	167836653	347280	1146177479	rc=0
++pin	pingguard	r3	1314643307	166099582	346212	1148197513	rc=0
++head	pingguard	r3	1314361825	167836802	347280	1146177743	rc=0
++pin	pingmsg	r1	7581728617	5913572626	346172	1667809819	rc=0
++head	pingmsg	r1	7496741347	5872908938	347266	1623485143	rc=0
++pin	pingmsg	r2	7581728617	5913572626	346172	1667809819	rc=0
++head	pingmsg	r2	7496741347	5872908938	347266	1623485143	rc=0
++pin	pingmsg	r3	7581728617	5913572626	346172	1667809819	rc=0
++head	pingmsg	r3	7496741347	5872908938	347266	1623485143	rc=0
++pin	pingsem	r1	1299593644	127619875	346172	1171627597	rc=0
++head	pingsem	r1	1301321947	129363835	347266	1171610846	rc=0
++pin	pingsem	r2	1299592816	127619641	346172	1171627003	rc=0
++head	pingsem	r2	1301323573	129364267	347266	1171612040	rc=0
++pin	pingsem	r3	1299588714	127616080	346027	1171626607	rc=0
++head	pingsem	r3	1301317642	129362629	347266	1171607747	rc=0
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind/table.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind/table.txt
+new file mode 100644
+index 000000000..d8f720673
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/callgrind/table.txt
+@@ -0,0 +1,31 @@
++program	pin	head	head d%	pin -libc	head -libc	head -libc d%	pin spread%	head spread%
++alloc	22825677966	22662120613	-0.7165	20362612047	20193360369	-0.8312	0.0000	0.0000
++alloc4c	3673339285	3671795694	-0.0420	3106074440	3104475298	-0.0515	0.0000	0.0000
++arith	12084068290	12096449566	+0.1025	11478090242	11491969504	+0.1209	0.0000	0.0000
++assign	18443711946	18444139041	+0.0023	18381875604	18382151633	+0.0015	0.0000	0.0000
++compound	9247948335	9288148031	+0.4347	8836768877	8837044907	+0.0031	0.0000	0.0000
++decloop	2503233069	2507503581	+0.1706	2404646660	2408754383	+0.1708	0.0000	0.0000
++decrender	4631810258	4622981535	-0.1906	4171162211	4162469000	-0.2084	0.0000	0.0000
++dirread	3130118030	3091842310	-1.2228	2663580961	2634009613	-1.1102	0.0000	0.0000
++dispatch	22105710210	22071144969	-0.1564	20673777230	20679059809	+0.0256	0.0000	0.0000
++dispatchclass	16952030028	16400470460	-3.2536	15654210021	15354492653	-1.9146	0.0000	0.0000
++emptyloop	7797087346	7797511454	+0.0054	7735375461	7735651490	+0.0036	0.0000	0.0000
++extcall	8975966670	7791406045	-13.1970	7536919758	7408200881	-1.7078	0.0000	0.0000
++fibcall	9109404880	8797223937	-3.4270	8469931688	8277636097	-2.2703	0.0000	0.0000
++fibfunc	8938581695	8631114211	-3.4398	8300416595	8111559790	-2.2753	0.0000	0.0000
++hashnew	2355780705	2358364534	+0.1097	1588972591	1590924651	+0.1229	0.0000	0.0000
++heapshape	2432938924	2432534480	-0.0166	2306075991	2305540973	-0.0232	0.0000	0.0000
++intcall	839772904	755286066	-10.0607	660893280	601319407	-9.0141	0.0000	0.0000
++nop	9243390273	9243807596	+0.0045	9181614202	9181890231	+0.0030	0.0000	0.0000
++parse	1654598855	1654691294	+0.0056	1552802916	1552720855	-0.0053	0.0000	0.0000
++pkglocal	4185405401	3933836807	-6.0106	3917669232	3613955357	-7.7524	0.0000	0.0000
++sayloop	179667611	180073218	+0.2258	107724363	108000392	+0.2562	0.0000	0.0000
++sendloop	14584920953	14595353075	+0.0715	13818085980	13828368549	+0.0744	0.0000	0.0000
++startup	119095643	119496102	+0.3362	57373104	57649133	+0.4811	0.0002	0.0000
++strings	18808439001	18769929725	-0.2047	17536542235	17497886884	-0.2204	0.0000	0.0000
++textnum	1224167999	1223795058	-0.0305	1150021499	1149497532	-0.0456	0.0000	0.0000
++varlookup	13194527917	13194953287	+0.0032	13132805929	13133081958	+0.0021	0.0000	0.0000
++rexxcps	19278663262	19278747404	+0.0004	17792039695	17789656058	-0.0134	0.0001	0.0000
++pingguard	1314640620	1314361825	-0.0212	1148195482	1146177743	-0.1757	0.0003	0.0001
++pingmsg	7581728617	7496741347	-1.1209	1667809819	1623485143	-2.6577	0.0000	0.0000
++pingsem	1299592816	1301321947	+0.1331	1171627003	1171610846	-0.0014	0.0004	0.0005
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-7/memory.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/memory.txt
+new file mode 100644
+index 000000000..075d26e40
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/memory.txt
+@@ -0,0 +1,221 @@
++# Peak RSS, /usr/bin/time -f %M on each interpreter binary itself, each program copied into its
++# own fresh directory (with ext.rex = 'return 1' beside it).
++# oracle: ( ulimit -v 1048576 -t 120; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib /usr/bin/time -f '%M' /home/moritz/dev/repos/ooRexx/build/bin/rexx NAME.rex )
++# crate:  ( ulimit -v 4194304 -t 120; /usr/bin/time -f '%M' /home/moritz/dev/repos/ooRexx-p9-pin/BIN NAME.rex )
++# rexx-run-9b1-t7b: release build at f9341ef33 (5fda502fb changed only tables and records).
++# rexx-run-9b1-t6e: Task 6's final binary (23e7d1828).
++# The *weak programs print the iteration at which the WeakReference cleared, then 1 if it did.
++oracle methloop20000 done 20112  kB
++oracle methloop80000 done 20588  kB
++oracle routloop20000 done 20572  kB
++oracle routloop80000 done 20184  kB
++oracle setmloop20000 done 20268  kB
++oracle setmloop80000 done 20588  kB
++oracle pkgloop20000 done 20584  kB
++oracle pkgloop80000 done 20588  kB
++oracle msgloop20000 done 16220  kB
++oracle msgloop80000 done 20356  kB
++oracle msgloop160000 done 20328  kB
++oracle msgloop320000 done 20460  kB
++oracle extloop20000 done 20376  kB
++oracle extloop80000 done 20608  kB
++oracle clsloop20000 done 23340  kB
++oracle clsloop80000 done 56532  kB
++oracle clsloop160000 done 92060  kB
++oracle copyloop20000 done 12660  kB
++oracle copyloop80000 done 20120  kB
++oracle copyloop320000 done 20584  kB
++oracle flagloop20000 done 12404  kB
++oracle flagloop80000 done 20020  kB
++oracle flagloop320000 done 20628  kB
++oracle natcopy20000 done 12496  kB
++oracle natcopy80000 done 19640  kB
++oracle natcopy320000 done 20320  kB
++oracle startloop20000 done 20304  kB
++oracle startloop80000 done 22232  kB
++oracle pcopy20000 done 18784  kB
++oracle pcopy80000 done 20328  kB
++oracle clsweak 243 1 20632  kB
++oracle pkgweak 651 1 20080  kB
++oracle cls50weak 9 1 22060  kB
++rexx-run-9b1-t7b methloop20000 done 44720  kB
++rexx-run-9b1-t7b methloop80000 done 45180  kB
++rexx-run-9b1-t7b routloop20000 done 44912  kB
++rexx-run-9b1-t7b routloop80000 done 44792  kB
++rexx-run-9b1-t7b setmloop20000 done 45288  kB
++rexx-run-9b1-t7b setmloop80000 done 45936  kB
++rexx-run-9b1-t7b pkgloop20000 done 54196  kB
++rexx-run-9b1-t7b pkgloop80000 done 54692  kB
++rexx-run-9b1-t7b msgloop20000 done 35824  kB
++rexx-run-9b1-t7b msgloop80000 done 43500  kB
++rexx-run-9b1-t7b msgloop160000 done 42852  kB
++rexx-run-9b1-t7b msgloop320000 done 43548  kB
++rexx-run-9b1-t7b extloop20000 done 54840  kB
++rexx-run-9b1-t7b extloop80000 done 54028  kB
++rexx-run-9b1-t7b clsloop20000 done 68756  kB
++rexx-run-9b1-t7b clsloop80000 done 79528  kB
++rexx-run-9b1-t7b clsloop160000 done 93972  kB
++rexx-run-9b1-t7b copyloop20000 done 54864  kB
++rexx-run-9b1-t7b copyloop80000 done 58168  kB
++rexx-run-9b1-t7b copyloop320000 done 73892  kB
++rexx-run-9b1-t7b flagloop20000 done 55160  kB
++rexx-run-9b1-t7b flagloop80000 done 61344  kB
++rexx-run-9b1-t7b flagloop320000 done 82132  kB
++rexx-run-9b1-t7b natcopy20000 done 55144  kB
++rexx-run-9b1-t7b natcopy80000 done 56752  kB
++rexx-run-9b1-t7b natcopy320000 done 68676  kB
++rexx-run-9b1-t7b startloop20000 done 43256  kB
++rexx-run-9b1-t7b startloop80000 done 43844  kB
++rexx-run-9b1-t7b pcopy20000 done 60504  kB
++rexx-run-9b1-t7b pcopy80000 done 60400  kB
++rexx-run-9b1-t7b clsweak 815 1 60060  kB
++rexx-run-9b1-t7b pkgweak 1130 1 54468  kB
++rexx-run-9b1-t7b cls50weak 53 1 77872  kB
++rexx-run-9b1-t6e methloop20000 done 175420  kB
++rexx-run-9b1-t6e methloop80000 done 176060  kB
++rexx-run-9b1-t6e routloop20000 done 175400  kB
++rexx-run-9b1-t6e routloop80000 done 174568  kB
++rexx-run-9b1-t6e setmloop20000 done 163524  kB
++rexx-run-9b1-t6e setmloop80000 done 164080  kB
++rexx-run-9b1-t6e pkgloop20000 done 419460  kB
++rexx-run-9b1-t6e pkgloop80000 done 421280  kB
++rexx-run-9b1-t6e msgloop20000 done 34180  kB
++rexx-run-9b1-t6e msgloop80000 done 45052  kB
++rexx-run-9b1-t6e msgloop160000 done 46740  kB
++rexx-run-9b1-t6e msgloop320000 done 55628  kB
++rexx-run-9b1-t6e extloop20000 done 423892  kB
++rexx-run-9b1-t6e extloop80000 done 426156  kB
++rexx-run-9b1-t6e clsloop20000 done 561672  kB
++rexx-run-9b1-t6e clsloop80000 done 573672  kB
++rexx-run-9b1-t6e clsloop160000 done 588376  kB
++rexx-run-9b1-t6e copyloop20000 done 54796  kB
++rexx-run-9b1-t6e copyloop80000 done 66516  kB
++rexx-run-9b1-t6e copyloop320000 done 117672  kB
++rexx-run-9b1-t6e flagloop20000 done 55736  kB
++rexx-run-9b1-t6e flagloop80000 done 72236  kB
++rexx-run-9b1-t6e flagloop320000 done 138940  kB
++rexx-run-9b1-t6e natcopy20000 done 55336  kB
++rexx-run-9b1-t6e natcopy80000 done 66880  kB
++rexx-run-9b1-t6e natcopy320000 done 116800  kB
++rexx-run-9b1-t6e startloop20000 done 43152  kB
++rexx-run-9b1-t6e startloop80000 done 47072  kB
++rexx-run-9b1-t6e pcopy20000 done 60464  kB
++rexx-run-9b1-t6e pcopy80000 done 60680  kB
++rexx-run-9b1-t6e clsweak 10863 1 559656  kB
++rexx-run-9b1-t6e pkgweak 13036 1 419128  kB
++rexx-run-9b1-t6e cls50weak 1184 1 1303352  kB
++
++# Experiment, not committed: t7b with COLLECT_BYTES_FLOOR = 8 << 20 (rexx-run-9b1-t7-floor8).
++rexx-run-9b1-t7-floor8 methloop80000 done 25784  kB
++rexx-run-9b1-t7-floor8 routloop80000 done 26040  kB
++rexx-run-9b1-t7-floor8 setmloop80000 done 26368  kB
++rexx-run-9b1-t7-floor8 pkgloop80000 done 28560  kB
++rexx-run-9b1-t7-floor8 extloop80000 done 28820  kB
++rexx-run-9b1-t7-floor8 msgloop80000 done 43680  kB
++rexx-run-9b1-t7-floor8 clsloop80000 done 47272  kB
++# Its instruction cost, callgrind.sh -B 0.5 -j 16 -r 1 -p 'alloc hashnew startup strings dirread heapshape compound pingmsg' head=t7b floor8=t7-floor8:
++# every program within 0.0003% except hashnew -0.1286%.
++
++# programs
++== methloop20000.rex
++do i = 1 to 20000
++  m = .Method~new('m', 'return 1')
++end
++say 'done'
++== routloop20000.rex
++do i = 1 to 20000
++  r = .Routine~new('r', 'return 1')
++end
++say 'done'
++== setmloop20000.rex
++o = .k~new
++do i = 1 to 20000
++  o~go
++end
++say 'done'
++::class k
++::method go
++  self~setMethod('FOO', 'return 1')
++== pkgloop20000.rex
++do i = 1 to 20000
++  p = .Package~new('p', 'return 1')
++end
++say 'done'
++== msgloop20000.rex
++o = .array~of(1,2)
++do i = 1 to 20000
++  m = .Message~new(o,'ITEMS'); m~send
++end
++say 'done'
++== extloop20000.rex
++do i = 1 to 20000
++  call ext
++end
++say 'done'
++== ext.rex
++return 1
++== clsloop20000.rex
++do i = 1 to 20000
++  p = .Package~new('p', '::class c')
++end
++say 'done'
++== copyloop20000.rex
++do i = 1 to 20000
++  m = .k~method('FOO')~copy
++end
++say 'done'
++::class k
++::method foo
++  return 1
++== flagloop20000.rex
++do i = 1 to 20000
++  m = .k~method('FOO')~copy; m~setPrivate; m~setUnguarded
++end
++say 'done'
++::class k
++::method foo
++  return 1
++== natcopy20000.rex
++do i = 1 to 20000
++  m = .object~method('STRING')~copy
++end
++say 'done'
++== startloop20000.rex
++o = .array~of(1,2)
++do i = 1 to 20000
++  m = o~start('ITEMS'); x = m~result
++end
++say 'done'
++== pcopy20000.rex
++p = .context~package
++do i = 1 to 20000
++  q = p~copy
++end
++say 'done'
++== clsweak.rex
++p = .Package~new('p', '::class c')
++w = .WeakReference~new(p~classes['C'])
++p = .nil
++do i = 1 to 200000 until w~value == .nil
++  q = .Package~new('q', '::class c')
++end
++say i (w~value == .nil)
++== pkgweak.rex
++w = .WeakReference~new(.Package~new('p', 'return 1'))
++do i = 1 to 200000 until w~value == .nil
++  q = .Package~new('q', 'return 1')
++end
++say i (w~value == .nil)
++== cls50weak.rex
++src = .array~new
++do j = 1 to 50
++  src~append('::class c'j)
++end
++p = .Package~new('p', src)
++w = .WeakReference~new(p~classes['C1'])
++p = .nil
++do i = 1 to 20000 until w~value == .nil
++  q = .Package~new('q', src)
++end
++say i (w~value == .nil)
++# the 80000, 160000 and 320000 programs are the 20000 ones with that bound
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-7/probes/executable_a.rex b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/probes/executable_a.rex
+new file mode 100644
+index 000000000..f2e2e68f1
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/probes/executable_a.rex
+@@ -0,0 +1,26 @@
++m = .Method~new('m', 'return 1')
++say 1 m~copy~isGuarded
++x = .ms~new('x', 'return 2')
++say 2 x~isPrivate x~copy~isPrivate x~source[1]
++r = .rs~new('r', 'return 7')
++say 3 r~call r~copy~call
++o = .k~new
++o~put('Z', m)
++say 4 o~z
++.k~define('W', x)
++say 5 .k~new~w
++.k~defineClassMethod('V', x~copy)
++say 6 .k~v
++y = .ms~new('y', 'return 9')
++say 7 y~class~id
++say 8 .k~method('FOO')~copy~isGuarded
++::class ms subclass Method
++::method init
++  nop
++::class rs subclass Routine
++::class k
++::method foo
++  return 3
++::method put
++  use arg n, m
++  self~setMethod(n, m)
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-7/probes/executable_b.rex b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/probes/executable_b.rex
+new file mode 100644
+index 000000000..8801ac3f4
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/probes/executable_b.rex
+@@ -0,0 +1,9 @@
++n = .object~method('STRING')
++.k~define('S', n)
++say 1 .k~new~s
++.k~defineMethods(.directory~of(('U', .object~method('CLASS'))))
++say 3 .k~new~u
++say 4 .k~new~run(.object~method('CLASS'))
++say 5 n~copy~isGuarded
++say 6 .routine~new('x', 'return 5')~call
++::class k
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/oracle-differences.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/oracle-differences.tsv
+new file mode 100644
+index 000000000..6efa867d9
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/oracle-differences.tsv
+@@ -0,0 +1,31 @@
++# ootest revision 13178
++group	test	oracle	crate
++API/oo/METHOD	TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA	passed	failed
++base/class/Method	TEST_NEW_ARRAY_FROM_FILE	passed	failed
++base/class/Method	TEST_NEW_FILE_COMPILED	passed	failed
++base/class/Package	TEST_NEW01	passed	failed
++base/class/Package	TEST_PROLOG	passed	failed
++base/class/Routine	TEST_NEW_ARRAY_FROM_FILE	passed	failed
++base/class/Routine	TEST_NEW_FILE_COMPILED	passed	failed
++base/directives/REQUIRES	TEST_ACTIVATE	passed	failed
++base/directives/REQUIRES	TEST_BASIC_GOOD_REQUIRES	passed	failed
++base/directives/REQUIRES	TEST_CASCADED_REQUIRES	passed	failed
++base/directives/REQUIRES	TEST_CASCADED_REQUIRES2	passed	failed
++base/directives/REQUIRES	TEST_CASCADED_REQUIRES3	passed	failed
++base/directives/REQUIRES	TEST_MULTIPLE_NAMESPACE	passed	failed
++base/directives/REQUIRES	TEST_MULTIPLE_NAMESPACE2	passed	failed
++base/directives/REQUIRES	TEST_NAMESPACE_GOOD_REQUIRES	passed	failed
++base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_CALL	passed	failed
++base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_CLASS	passed	failed
++base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_ROUTINE	passed	failed
++base/directives/REQUIRES	TEST_NO_PUBLIC_CLASS	passed	failed
++base/directives/REQUIRES	TEST_NO_PUBLIC_ROUTINE	passed	failed
++base/directives/REQUIRES	TEST_PROLOG	passed	failed
++base/directives/REQUIRES	TEST_PROLOG2	passed	failed
++base/directives/REQUIRES	TEST_PROLOG3	passed	failed
++base/directives/REQUIRES	TEST_SEARCH_ORDER_CLS	passed	failed
++base/directives/REQUIRES	TEST_SEARCH_ORDER_NONE	passed	failed
++base/directives/REQUIRES	TEST_SEARCH_ORDER_REX	passed	failed
++base/directives/REQUIRES	TEST_SEARCH_ORDER_TESTGROUP	passed	failed
++base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADLIBRARYNAME	passed	blocked: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)
++base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADNAME	passed	blocked: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/run-output.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/run-output.txt
+new file mode 100644
+index 000000000..60023bbc7
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/run-output.txt
+@@ -0,0 +1,20 @@
++   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
++    Finished `release` profile [optimized + debuginfo] target(s) in 1m 19s
++     Running tests/suite.rs (target/release/deps/suite-ce2523362fb74026)
++
++running 1 test
++suite: 11 groups, 5 red, table /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/table.tsv, verdicts /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/verdicts.tsv
++
++thread 'l3_core_suite' (912459) panicked at crates/rexx-exec/tests/suite.rs:1091:5:
++5 of 11 groups are not green; each reason is in /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/verdicts.tsv
++note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
++test l3_core_suite ... FAILED
++
++failures:
++
++failures:
++    l3_core_suite
++
++test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 51 filtered out; finished in 36.31s
++
++error: test failed, to rerun pass `-p rexx-exec --test suite`
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/table.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/table.tsv
+new file mode 100644
+index 000000000..7127be49a
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/table.tsv
+@@ -0,0 +1,24 @@
++# ootest revision 13178
++group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
++API/oo/METHOD	oracle	320	320	320			-	-	1	yes	ulimit -v 1048576	320
++API/oo/METHOD	crate	320	320	319	TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA		-	-	1	yes	memcap 2G	320
++base/class/Message	oracle	68	68	68			-	-	1	yes	ulimit -v 1048576	68
++base/class/Message	crate	68	68	68			-	-	1	yes	memcap 2G	68
++base/class/Method	oracle	56	56	56			-	-	1	yes	ulimit -v 1048576	56
++base/class/Method	crate	56	56	54	TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED		-	-	1	yes	memcap 2G	56
++base/class/MethodArgs	oracle	10	10	10			-	-	1	yes	ulimit -v 1048576	10
++base/class/MethodArgs	crate	10	10	10			-	-	1	yes	memcap 2G	10
++base/class/Package	oracle	80	80	80			-	-	1	yes	ulimit -v 1048576	80
++base/class/Package	crate	80	80	78	TEST_NEW01 TEST_PROLOG		-	-	1	yes	memcap 2G	80
++base/class/Package_Options	oracle	54	54	54			-	-	1	yes	ulimit -v 1048576	54
++base/class/Package_Options	crate	54	54	54			-	-	1	yes	memcap 2G	54
++base/class/Routine	oracle	60	60	60			-	-	1	yes	ulimit -v 1048576	60
++base/class/Routine	crate	60	60	58	TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED		-	-	1	yes	memcap 2G	60
++base/class/WeakReference	oracle	2	2	2			-	-	1	yes	ulimit -v 1048576	2
++base/class/WeakReference	crate	2	2	2			-	-	1	yes	memcap 2G	2
++base/directives/METHOD	oracle	78	78	78			-	-	1	yes	ulimit -v 1048576	78
++base/directives/METHOD	crate	78	78	78			-	-	1	yes	memcap 2G	78
++base/directives/REQUIRES	oracle	33	33	33			-	-	1	yes	ulimit -v 1048576	33
++base/directives/REQUIRES	crate	33	33	13	TEST_ACTIVATE TEST_BASIC_GOOD_REQUIRES TEST_CASCADED_REQUIRES TEST_CASCADED_REQUIRES2 TEST_CASCADED_REQUIRES3 TEST_MULTIPLE_NAMESPACE TEST_MULTIPLE_NAMESPACE2 TEST_NAMESPACE_GOOD_REQUIRES TEST_NAMESPACE_NO_PUBLIC_CALL TEST_NAMESPACE_NO_PUBLIC_CLASS TEST_NAMESPACE_NO_PUBLIC_ROUTINE TEST_NO_PUBLIC_CLASS TEST_NO_PUBLIC_ROUTINE TEST_PROLOG TEST_PROLOG2 TEST_PROLOG3 TEST_SEARCH_ORDER_CLS TEST_SEARCH_ORDER_NONE TEST_SEARCH_ORDER_REX TEST_SEARCH_ORDER_TESTGROUP		-	-	1	yes	memcap 2G	33
++base/directives/ROUTINE	oracle	28	30	30			-	-	1	yes	ulimit -v 1048576	30
++base/directives/ROUTINE	crate	28	30	28		TESTEXTERNALREGISTEREDBADLIBRARYNAME=rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi) | TESTEXTERNALREGISTEREDBADNAME=rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)	-	-	3	yes	memcap 2G	28
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/tests.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/tests.tsv
+new file mode 100644
+index 000000000..faa76185b
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/tests.tsv
+@@ -0,0 +1,794 @@
++# ootest revision 13178
++# groups base/class/Package,base/class/Package_Options,base/directives/REQUIRES,API/oo/METHOD,base/directives/METHOD,base/directives/ROUTINE,base/class/Method,base/class/MethodArgs,base/class/Routine,base/class/Message,base/class/WeakReference
++group	test	row	oracle	crate
++API/oo/METHOD	TEST000	-	passed	passed
++API/oo/METHOD	TEST001	-	passed	passed
++API/oo/METHOD	TEST002	-	passed	passed
++API/oo/METHOD	TEST003	-	passed	passed
++API/oo/METHOD	TEST004	-	passed	passed
++API/oo/METHOD	TEST005	-	passed	passed
++API/oo/METHOD	TEST006	-	passed	passed
++API/oo/METHOD	TEST007	-	passed	passed
++API/oo/METHOD	TEST008	-	passed	passed
++API/oo/METHOD	TEST009	-	passed	passed
++API/oo/METHOD	TEST010	-	passed	passed
++API/oo/METHOD	TEST011	-	passed	passed
++API/oo/METHOD	TEST012	-	passed	passed
++API/oo/METHOD	TEST013	-	passed	passed
++API/oo/METHOD	TEST014	-	passed	passed
++API/oo/METHOD	TEST015	-	passed	passed
++API/oo/METHOD	TEST016	-	passed	passed
++API/oo/METHOD	TEST017	-	passed	passed
++API/oo/METHOD	TEST018	-	passed	passed
++API/oo/METHOD	TEST019	-	passed	passed
++API/oo/METHOD	TEST020	-	passed	passed
++API/oo/METHOD	TEST021	-	passed	passed
++API/oo/METHOD	TEST022	-	passed	passed
++API/oo/METHOD	TEST023	-	passed	passed
++API/oo/METHOD	TEST023A	-	passed	passed
++API/oo/METHOD	TEST024	-	passed	passed
++API/oo/METHOD	TEST024A	-	passed	passed
++API/oo/METHOD	TEST025	-	passed	passed
++API/oo/METHOD	TEST026	-	passed	passed
++API/oo/METHOD	TEST027	-	passed	passed
++API/oo/METHOD	TEST028	-	passed	passed
++API/oo/METHOD	TEST029	-	passed	passed
++API/oo/METHOD	TEST030	-	passed	passed
++API/oo/METHOD	TEST031	-	passed	passed
++API/oo/METHOD	TEST046	-	passed	passed
++API/oo/METHOD	TESTARGLIST01	-	passed	passed
++API/oo/METHOD	TESTARRAY01	-	passed	passed
++API/oo/METHOD	TESTARRAY02	-	passed	passed
++API/oo/METHOD	TESTARRAY03	-	passed	passed
++API/oo/METHOD	TESTARRAY04	-	passed	passed
++API/oo/METHOD	TESTARRAY05	-	passed	passed
++API/oo/METHOD	TESTARRAYAPPEND01	-	passed	passed
++API/oo/METHOD	TESTARRAYAPPENDSTRING01	-	passed	passed
++API/oo/METHOD	TESTARRAYAT01	-	passed	passed
++API/oo/METHOD	TESTARRAYAT02	-	passed	passed
++API/oo/METHOD	TESTARRAYAT03	-	passed	passed
++API/oo/METHOD	TESTARRAYAT04	-	passed	passed
++API/oo/METHOD	TESTARRAYDIMENSION01	-	passed	passed
++API/oo/METHOD	TESTARRAYITEMS01	-	passed	passed
++API/oo/METHOD	TESTARRAYOFFOUR01	-	passed	passed
++API/oo/METHOD	TESTARRAYOFONE01	-	passed	passed
++API/oo/METHOD	TESTARRAYOFTHREE01	-	passed	passed
++API/oo/METHOD	TESTARRAYOFTWO01	-	passed	passed
++API/oo/METHOD	TESTARRAYPUT01	-	passed	passed
++API/oo/METHOD	TESTARRAYSIZE01	-	passed	passed
++API/oo/METHOD	TESTBUFFER01	-	passed	passed
++API/oo/METHOD	TESTBUFFERNEW01	-	passed	passed
++API/oo/METHOD	TESTCLASS01	-	passed	passed
++API/oo/METHOD	TESTCLASS02	-	passed	passed
++API/oo/METHOD	TESTCLASS03	-	passed	passed
++API/oo/METHOD	TESTCLASS04	-	passed	passed
++API/oo/METHOD	TESTCSTRING01	-	passed	passed
++API/oo/METHOD	TESTCSTRING02	-	passed	passed
++API/oo/METHOD	TESTCSTRINGTOOBJECT	-	passed	passed
++API/oo/METHOD	TESTDIRECTORY01	-	passed	passed
++API/oo/METHOD	TESTDIRECTORY02	-	passed	passed
++API/oo/METHOD	TESTDIRECTORY03	-	passed	passed
++API/oo/METHOD	TESTDOUBLE01	-	passed	passed
++API/oo/METHOD	TESTDOUBLE02	-	passed	passed
++API/oo/METHOD	TESTDOUBLETOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTDROPOBJECTVARIABLE01	-	passed	passed
++API/oo/METHOD	TESTDROPSTEMARRAYELEMENT01	-	passed	passed
++API/oo/METHOD	TESTDROPSTEMELEMENT01	-	passed	passed
++API/oo/METHOD	TESTFINDCONTEXTCLASS01	-	passed	passed
++API/oo/METHOD	TESTFINDCONTEXTCLASS02	-	passed	passed
++API/oo/METHOD	TESTFLOAT01	-	passed	passed
++API/oo/METHOD	TESTFLOAT02	-	passed	passed
++API/oo/METHOD	TESTGETALLSTEMELEMENTS01	-	passed	passed
++API/oo/METHOD	TESTGETARGUMENT01	-	passed	passed
++API/oo/METHOD	TESTGETARGUMENT02	-	passed	passed
++API/oo/METHOD	TESTGETARGUMENT03	-	passed	passed
++API/oo/METHOD	TESTGETARGUMENT04	-	passed	passed
++API/oo/METHOD	TESTGETARGUMENTS01	-	passed	passed
++API/oo/METHOD	TESTGETMETHOD01	-	passed	passed
++API/oo/METHOD	TESTGETMETHODPACKAGE01	-	passed	passed
++API/oo/METHOD	TESTGETOBJECTVARIABLE01	-	passed	passed
++API/oo/METHOD	TESTGETOBJECTVARIABLE02	-	passed	passed
++API/oo/METHOD	TESTGETOBJECTVARIABLE03	-	passed	passed
++API/oo/METHOD	TESTGETPACKAGECLASSES01	-	passed	passed
++API/oo/METHOD	TESTGETPACKAGEPUBLICCLASSES01	-	passed	passed
++API/oo/METHOD	TESTGETPACKAGEPUBLICROUTINES01	-	passed	passed
++API/oo/METHOD	TESTGETPACKAGEROUTINES01	-	passed	passed
++API/oo/METHOD	TESTGETROUTINEPACKAGE01	-	passed	passed
++API/oo/METHOD	TESTGETSTEMARRAYELEMENT01	-	passed	passed
++API/oo/METHOD	TESTGETSTEMARRAYELEMENT02	-	passed	passed
++API/oo/METHOD	TESTGETSTEMELEMENT01	-	passed	passed
++API/oo/METHOD	TESTGETSTEMELEMENT02	-	passed	passed
++API/oo/METHOD	TESTGETSTEMELEMENT03	-	passed	passed
++API/oo/METHOD	TESTGETSTEMVALUE01	-	passed	passed
++API/oo/METHOD	TESTHASMETHOD01	-	passed	passed
++API/oo/METHOD	TESTINT01	-	passed	passed
++API/oo/METHOD	TESTINT02	-	passed	passed
++API/oo/METHOD	TESTINT03	-	passed	passed
++API/oo/METHOD	TESTINT1601	-	passed	passed
++API/oo/METHOD	TESTINT1602	-	passed	passed
++API/oo/METHOD	TESTINT1603	-	passed	passed
++API/oo/METHOD	TESTINT3201	-	passed	passed
++API/oo/METHOD	TESTINT3202	-	passed	passed
++API/oo/METHOD	TESTINT3203	-	passed	passed
++API/oo/METHOD	TESTINT32TOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTINT6401	-	passed	passed
++API/oo/METHOD	TESTINT6402	-	passed	passed
++API/oo/METHOD	TESTINT6403	-	passed	passed
++API/oo/METHOD	TESTINT64TOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTINT801	-	passed	passed
++API/oo/METHOD	TESTINT802	-	passed	passed
++API/oo/METHOD	TESTINT803	-	passed	passed
++API/oo/METHOD	TESTINTPTR01	-	passed	passed
++API/oo/METHOD	TESTINTPTR02	-	passed	passed
++API/oo/METHOD	TESTINTPTR03	-	passed	passed
++API/oo/METHOD	TESTINTPTRTOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTISARRAY01	-	passed	passed
++API/oo/METHOD	TESTISINSTANCEOF01	-	passed	passed
++API/oo/METHOD	TESTISMETHOD01	-	passed	passed
++API/oo/METHOD	TESTISMUTABLEBUFFER	-	passed	passed
++API/oo/METHOD	TESTISROUTINE01	-	passed	passed
++API/oo/METHOD	TESTISSTEM01	-	passed	passed
++API/oo/METHOD	TESTISSTRING01	-	passed	passed
++API/oo/METHOD	TESTLOGICAL01	-	passed	passed
++API/oo/METHOD	TESTLOGICAL02	-	passed	passed
++API/oo/METHOD	TESTLOGICAL03	-	passed	passed
++API/oo/METHOD	TESTLOGICALTOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTMUTABLEBUFFERCAPACITY	-	passed	passed
++API/oo/METHOD	TESTMUTABLEBUFFERLENGTH	-	passed	passed
++API/oo/METHOD	TESTNAME01	-	passed	passed
++API/oo/METHOD	TESTNAME02	-	passed	passed
++API/oo/METHOD	TESTNEWARRAY01	-	passed	passed
++API/oo/METHOD	TESTNEWMETHOD01	-	passed	passed
++API/oo/METHOD	TESTNEWMETHOD02	-	passed	passed
++API/oo/METHOD	TESTNEWMUTABLEBUFFER	-	passed	passed
++API/oo/METHOD	TESTNEWROUTINE01	-	passed	passed
++API/oo/METHOD	TESTNEWROUTINE02	-	passed	passed
++API/oo/METHOD	TESTNEWSTEM01	-	passed	passed
++API/oo/METHOD	TESTNEWSTRING	-	passed	passed
++API/oo/METHOD	TESTNEWSTRINGFROMASCIIZ	-	passed	passed
++API/oo/METHOD	TESTNONNEGATIVEWHOLENUMBER01	-	passed	passed
++API/oo/METHOD	TESTNONNEGATIVEWHOLENUMBER02	-	passed	passed
++API/oo/METHOD	TESTNONNEGATIVEWHOLENUMBER03	-	passed	passed
++API/oo/METHOD	TESTOBJECT01	-	passed	passed
++API/oo/METHOD	TESTOBJECT02	-	passed	passed
++API/oo/METHOD	TESTOBJECT03	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOCSTRING	-	passed	passed
++API/oo/METHOD	TESTOBJECTTODOUBLE01	-	passed	passed
++API/oo/METHOD	TESTOBJECTTODOUBLE01A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTODOUBLE02	-	passed	passed
++API/oo/METHOD	TESTOBJECTTODOUBLE02A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT3201	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT3202	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT3202A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT3203	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT3203A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT6401	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT6402	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT6402A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT6403	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINT6403A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINTPTR01	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINTPTR02	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINTPTR02A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINTPTR03	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOINTPTR03A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOLOGICAL01	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOLOGICAL02	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOLOGICAL02A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOLOGICAL03	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOLOGICAL03A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOSTRING01	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOSTRINGSIZE01	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOSTRINGSIZE02	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOSTRINGSIZE02A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOSTRINGSIZE03	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOSTRINGSIZE03A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUINTPTR01	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUINTPTR02	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUINTPTR02A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUINTPTR03	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUINTPTR03A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUNSIGNEDINT6401	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUNSIGNEDINT6402	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUNSIGNEDINT6402A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUNSIGNEDINT6403	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOUNSIGNEDINT6403A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOWHOLENUMBER01	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOWHOLENUMBER02	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOWHOLENUMBER02A	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOWHOLENUMBER03	-	passed	passed
++API/oo/METHOD	TESTOBJECTTOWHOLENUMBER03A	-	passed	passed
++API/oo/METHOD	TESTOSELF01	-	passed	passed
++API/oo/METHOD	TESTOSELF02	-	passed	passed
++API/oo/METHOD	TESTPOSITIVEWHOLENUMBER01	-	passed	passed
++API/oo/METHOD	TESTPOSITIVEWHOLENUMBER02	-	passed	passed
++API/oo/METHOD	TESTPOSITIVEWHOLENUMBER03	-	passed	passed
++API/oo/METHOD	TESTPOSITIVEWHOLENUMBER04	-	passed	passed
++API/oo/METHOD	TESTRAISEEXCEPTION001	-	passed	passed
++API/oo/METHOD	TESTRAISEEXCEPTION01	-	passed	passed
++API/oo/METHOD	TESTRAISEEXCEPTION101	-	passed	passed
++API/oo/METHOD	TESTRAISEEXCEPTION201	-	passed	passed
++API/oo/METHOD	TESTSCOPE01	-	passed	passed
++API/oo/METHOD	TESTSCOPE02	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE001	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE002	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE003	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE01	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE02	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE03	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE04	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE101	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE102	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE103	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE201	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE202	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE203	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGE204	-	passed	passed
++API/oo/METHOD	TESTSENDMESSAGESCOPED	-	passed	passed
++API/oo/METHOD	TESTSETGETMUTABLEBUFFER	-	passed	passed
++API/oo/METHOD	TESTSETMUTABLEBUFFERCAPACITY	-	passed	passed
++API/oo/METHOD	TESTSETMUTABLEBUFFERLENGTH	-	passed	passed
++API/oo/METHOD	TESTSETOBJECTVARIABLE01	-	passed	passed
++API/oo/METHOD	TESTSETSTEMARRAYELEMENT01	-	passed	passed
++API/oo/METHOD	TESTSETSTEMELEMENT01	-	passed	passed
++API/oo/METHOD	TESTSIZE01	-	passed	passed
++API/oo/METHOD	TESTSIZE02	-	passed	passed
++API/oo/METHOD	TESTSIZE03	-	passed	passed
++API/oo/METHOD	TESTSSIZE01	-	passed	passed
++API/oo/METHOD	TESTSSIZE02	-	passed	passed
++API/oo/METHOD	TESTSSIZE03	-	passed	passed
++API/oo/METHOD	TESTSTEM01	-	passed	passed
++API/oo/METHOD	TESTSTEM02	-	passed	passed
++API/oo/METHOD	TESTSTEM03	-	passed	passed
++API/oo/METHOD	TESTSTEM04	-	passed	passed
++API/oo/METHOD	TESTSTEM05	-	passed	passed
++API/oo/METHOD	TESTSTRING01	-	passed	passed
++API/oo/METHOD	TESTSTRING02	-	passed	passed
++API/oo/METHOD	TESTSTRING03	-	passed	passed
++API/oo/METHOD	TESTSTRING04	-	passed	passed
++API/oo/METHOD	TESTSTRINGDATA01	-	passed	passed
++API/oo/METHOD	TESTSTRINGGET01	-	passed	passed
++API/oo/METHOD	TESTSTRINGLENGTH01	-	passed	passed
++API/oo/METHOD	TESTSTRINGLOWER01	-	passed	passed
++API/oo/METHOD	TESTSTRINGSIZE01	-	passed	passed
++API/oo/METHOD	TESTSTRINGSIZE02	-	passed	passed
++API/oo/METHOD	TESTSTRINGSIZE03	-	passed	passed
++API/oo/METHOD	TESTSTRINGSIZETOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTSTRINGTABLE01	-	passed	passed
++API/oo/METHOD	TESTSTRINGTABLE02	-	passed	passed
++API/oo/METHOD	TESTSTRINGTABLE03	-	passed	passed
++API/oo/METHOD	TESTSTRINGUPPER01	-	passed	passed
++API/oo/METHOD	TESTSUPER01	-	passed	passed
++API/oo/METHOD	TESTSUPER02	-	passed	passed
++API/oo/METHOD	TESTSUPPLIER01	-	passed	passed
++API/oo/METHOD	TESTTESTUNSIGNEDINT32TOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTTESTUNSIGNEDINT32TOOBJECT02	-	passed	passed
++API/oo/METHOD	TESTTESTUNSIGNEDINT32TOOBJECT02A	-	passed	passed
++API/oo/METHOD	TESTTESTUNSIGNEDINT32TOOBJECT03	-	passed	passed
++API/oo/METHOD	TESTTESTUNSIGNEDINT32TOOBJECT03A	-	passed	passed
++API/oo/METHOD	TESTTHROWEXCEPTION001	-	passed	passed
++API/oo/METHOD	TESTTHROWEXCEPTION01	-	passed	passed
++API/oo/METHOD	TESTTHROWEXCEPTION101	-	passed	passed
++API/oo/METHOD	TESTTHROWEXCEPTION201	-	passed	passed
++API/oo/METHOD	TESTUINT1601	-	passed	passed
++API/oo/METHOD	TESTUINT1602	-	passed	passed
++API/oo/METHOD	TESTUINT1603	-	passed	passed
++API/oo/METHOD	TESTUINT3201	-	passed	passed
++API/oo/METHOD	TESTUINT3202	-	passed	passed
++API/oo/METHOD	TESTUINT3203	-	passed	passed
++API/oo/METHOD	TESTUINT6401	-	passed	passed
++API/oo/METHOD	TESTUINT6402	-	passed	passed
++API/oo/METHOD	TESTUINT6403	-	passed	passed
++API/oo/METHOD	TESTUINT801	-	passed	passed
++API/oo/METHOD	TESTUINT802	-	passed	passed
++API/oo/METHOD	TESTUINT803	-	passed	passed
++API/oo/METHOD	TESTUINTPTR01	-	passed	passed
++API/oo/METHOD	TESTUINTPTR02	-	passed	passed
++API/oo/METHOD	TESTUINTPTR03	-	passed	passed
++API/oo/METHOD	TESTUINTPTRTOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTUNSIGNEDINT32TOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTUNSIGNEDINT64TOOBJECT01	-	passed	passed
++API/oo/METHOD	TESTVERSION01	-	passed	passed
++API/oo/METHOD	TESTWHOLENUMBER01	-	passed	passed
++API/oo/METHOD	TESTWHOLENUMBER02	-	passed	passed
++API/oo/METHOD	TESTWHOLENUMBER03	-	passed	passed
++API/oo/METHOD	TESTWHOLENUMBERTOOBJECT01	-	passed	passed
++API/oo/METHOD	TEST_BUG_1838	-	passed	passed
++API/oo/METHOD	TEST_CSTRING_MAKESTRING	-	passed	passed
++API/oo/METHOD	TEST_CSTRING_NIL	-	passed	passed
++API/oo/METHOD	TEST_CSTRING_NO_HEX00	-	passed	passed
++API/oo/METHOD	TEST_CSTRING_NO_STRING_NO_MAKESTRING	-	passed	passed
++API/oo/METHOD	TEST_CSTRING_STRING_NO_MAKESTRING	-	passed	passed
++API/oo/METHOD	TEST_GETOBJECTVARIABLEREFERENCE	-	passed	passed
++API/oo/METHOD	TEST_ISVARIABLEREFERENCE	-	passed	passed
++API/oo/METHOD	TEST_OBJECTMEMORY	-	passed	passed
++API/oo/METHOD	TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA	-	passed	failed
++API/oo/METHOD	TEST_REXXSTRING_HEX00	-	passed	passed
++API/oo/METHOD	TEST_REXXSTRING_MAKESTRING	-	passed	passed
++API/oo/METHOD	TEST_REXXSTRING_NO_STRING_NO_MAKESTRING	-	passed	passed
++API/oo/METHOD	TEST_REXXSTRING_STRING_NO_MAKESTRING	-	passed	passed
++API/oo/METHOD	TEST_SETVARIABLEREFERENCEVALUE	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E20	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E21	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E22	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E23	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E24	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E25	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E26	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E27	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E28	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_FAIL_E29	-	passed	passed
++API/oo/METHOD	TEST_UINT64_BUG1369_PASS	-	passed	passed
++API/oo/METHOD	TEST_VARIABLEREFERENCENAME	-	passed	passed
++API/oo/METHOD	TEST_VARIABLEREFERENCEVALUE	-	passed	passed
++base/class/Message	TEST_ARRAY_OPTION_NO_ARG	-	passed	passed
++base/class/Message	TEST_HALT_START	-	passed	passed
++base/class/Message	TEST_INVALID_OPTION	-	passed	passed
++base/class/Message	TEST_NOTIFY	-	passed	passed
++base/class/Message	TEST_NO_ARGS	-	passed	passed
++base/class/Message	TEST_NO_MESSAGE	-	passed	passed
++base/class/Message	TEST_NO_OPTION	-	passed	passed
++base/class/Message	TEST_NO_TARGET	-	passed	passed
++base/class/Message	TEST_OVERRIDE_AMONG_MIXINCLASSES	-	passed	passed
++base/class/Message	TEST_OVERRIDE_EMPTY_ARRAY	-	passed	passed
++base/class/Message	TEST_OVERRIDE_EXTRA_STUFF	-	passed	passed
++base/class/Message	TEST_OVERRIDE_FROM_NONSELF	-	passed	passed
++base/class/Message	TEST_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS	-	passed	passed
++base/class/Message	TEST_OVERRIDE_MISSING_NAME	-	passed	passed
++base/class/Message	TEST_OVERRIDE_MISSING_SCOPE	-	passed	passed
++base/class/Message	TEST_OVERRIDE_NON_CLASS_SCOPE	-	passed	passed
++base/class/Message	TEST_OVERRIDE_NON_CLASS_SCOPE2	-	passed	passed
++base/class/Message	TEST_OVERRIDE_NON_STRING_NAME	-	passed	passed
++base/class/Message	TEST_REPLY	-	passed	passed
++base/class/Message	TEST_REPLYWITH_NOT_ARRAY	-	passed	passed
++base/class/Message	TEST_REPLYWITH_NO_ARRAY	-	passed	passed
++base/class/Message	TEST_REPLYWITH_OVERRIDE_CONTEXT	-	passed	passed
++base/class/Message	TEST_REPLYWITH_OVERRIDE_NOT_FOUND	-	passed	passed
++base/class/Message	TEST_REPLYWITH_OVERRIDE_NOT_NON_SCOPE	-	passed	passed
++base/class/Message	TEST_REPLYWITH_OVERRIDE_NO_METHOD	-	passed	passed
++base/class/Message	TEST_REPLYWITH_TOO_MANY	-	passed	passed
++base/class/Message	TEST_REPLY_OVERRIDE_CONTEXT	-	passed	passed
++base/class/Message	TEST_REPLY_OVERRIDE_NOT_FOUND	-	passed	passed
++base/class/Message	TEST_REPLY_OVERRIDE_NOT_NON_SCOPE	-	passed	passed
++base/class/Message	TEST_REPLY_OVERRIDE_NO_METHOD	-	passed	passed
++base/class/Message	TEST_SEND	-	passed	passed
++base/class/Message	TEST_SENDWITH_NOT_ARRAY	-	passed	passed
++base/class/Message	TEST_SENDWITH_NO_ARRAY	-	passed	passed
++base/class/Message	TEST_SENDWITH_OVERRIDE_AMONG_MIXINCLASSES	-	passed	passed
++base/class/Message	TEST_SENDWITH_OVERRIDE_CONTEXT	-	passed	passed
++base/class/Message	TEST_SENDWITH_OVERRIDE_FROM_NONSELF	-	passed	passed
++base/class/Message	TEST_SENDWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS	-	passed	passed
++base/class/Message	TEST_SENDWITH_OVERRIDE_NOT_FOUND	-	passed	passed
++base/class/Message	TEST_SENDWITH_OVERRIDE_NOT_NON_SCOPE	-	passed	passed
++base/class/Message	TEST_SENDWITH_OVERRIDE_NO_METHOD	-	passed	passed
++base/class/Message	TEST_SENDWITH_TOO_MANY	-	passed	passed
++base/class/Message	TEST_SEND_OVERRIDE_AMONG_MIXINCLASSES	-	passed	passed
++base/class/Message	TEST_SEND_OVERRIDE_AMONG_MIXINCLASSES_CLASS	-	passed	passed
++base/class/Message	TEST_SEND_OVERRIDE_CONTEXT	-	passed	passed
++base/class/Message	TEST_SEND_OVERRIDE_FROM_NONSELF	-	passed	passed
++base/class/Message	TEST_SEND_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS	-	passed	passed
++base/class/Message	TEST_SEND_OVERRIDE_NOT_FOUND	-	passed	passed
++base/class/Message	TEST_SEND_OVERRIDE_NOT_NON_SCOPE	-	passed	passed
++base/class/Message	TEST_SEND_OVERRIDE_NO_METHOD	-	passed	passed
++base/class/Message	TEST_START	-	passed	passed
++base/class/Message	TEST_STARTWITH_NOT_ARRAY	-	passed	passed
++base/class/Message	TEST_STARTWITH_NO_ARRAY	-	passed	passed
++base/class/Message	TEST_STARTWITH_OVERRIDE_AMONG_MIXINCLASSES	-	passed	passed
++base/class/Message	TEST_STARTWITH_OVERRIDE_CONTEXT	-	passed	passed
++base/class/Message	TEST_STARTWITH_OVERRIDE_FROM_NONSELF	-	passed	passed
++base/class/Message	TEST_STARTWITH_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS	-	passed	passed
++base/class/Message	TEST_STARTWITH_OVERRIDE_NOT_FOUND	-	passed	passed
++base/class/Message	TEST_STARTWITH_OVERRIDE_NOT_NON_SCOPE	-	passed	passed
++base/class/Message	TEST_STARTWITH_OVERRIDE_NO_METHOD	-	passed	passed
++base/class/Message	TEST_STARTWITH_TOO_MANY	-	passed	passed
++base/class/Message	TEST_START_OVERRIDE_AMONG_MIXINCLASSES	-	passed	passed
++base/class/Message	TEST_START_OVERRIDE_CONTEXT	-	passed	passed
++base/class/Message	TEST_START_OVERRIDE_FROM_NONSELF	-	passed	passed
++base/class/Message	TEST_START_OVERRIDE_FROM_NONSELF_METHOD_NOT_IN_SUPERCLASS	-	passed	passed
++base/class/Message	TEST_START_OVERRIDE_NOT_FOUND	-	passed	passed
++base/class/Message	TEST_START_OVERRIDE_NOT_NON_SCOPE	-	passed	passed
++base/class/Message	TEST_START_OVERRIDE_NO_METHOD	-	passed	passed
++base/class/Message	TEST_SUPER_OVERRIDE	-	passed	passed
++base/class/Method	TESTDIRECTIVES	-	passed	passed
++base/class/Method	TESTLOADEXTERNALMETHOD01	-	passed	passed
++base/class/Method	TESTLOADEXTERNALMETHOD02	-	passed	passed
++base/class/Method	TESTLOADEXTERNALMETHOD03	-	passed	passed
++base/class/Method	TESTLOADEXTERNALMETHOD04	-	passed	passed
++base/class/Method	TESTLOADEXTERNALMETHOD05	-	passed	passed
++base/class/Method	TESTLOADEXTERNALMETHOD06	-	passed	passed
++base/class/Method	TESTLOADEXTERNALMETHOD07	-	passed	passed
++base/class/Method	TESTLOADEXTERNALMETHOD08	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_FLOATINGMETHOD	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_IMPORTEDPACKAGE	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_METHOD	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_METHODINHERITED	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_METHODPUBLIC	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_METHODPUBLICINHERITED	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_OMITTED	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_PROGRAMSCOPE	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_REXXPACKAGE	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_ROUTINE	-	passed	passed
++base/class/Method	TEST_NEWFILE_CONTEXT_THISPACKAGE	-	passed	passed
++base/class/Method	TEST_NEWFILE_NO_ARGS	-	passed	passed
++base/class/Method	TEST_NEWFILE_ONE_ARG_NIL	-	passed	passed
++base/class/Method	TEST_NEWFILE_THREE_ARGS	-	passed	passed
++base/class/Method	TEST_NEWFILE_TWO_ARGS_OMITTED_STRING	-	passed	passed
++base/class/Method	TEST_NEWFILE_TWO_ARGS_STRING_BUFFER	-	passed	passed
++base/class/Method	TEST_NEWFILE_TWO_ARGS_STRING_NULL	-	passed	passed
++base/class/Method	TEST_NEW_AND_SOURCE	-	passed	passed
++base/class/Method	TEST_NEW_ARRAY_FROM_FILE	-	passed	failed
++base/class/Method	TEST_NEW_CONTEXT_FLOATINGMETHOD	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_IMPORTEDPACKAGE	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_METHOD	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_METHODINHERITED	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_METHODPUBLIC	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_METHODPUBLICINHERITED	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_OMITTED	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_PROGRAMSCOPE	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_REXXPACKAGE	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_ROUTINE	-	passed	passed
++base/class/Method	TEST_NEW_CONTEXT_THISPACKAGE	-	passed	passed
++base/class/Method	TEST_NEW_FILE_COMPILED	-	passed	failed
++base/class/Method	TEST_NEW_FOUR_ARGS	-	passed	passed
++base/class/Method	TEST_NEW_NO_ARGS	-	passed	passed
++base/class/Method	TEST_NEW_ONE_ARG	-	passed	passed
++base/class/Method	TEST_NEW_ONE_ARG_NIL	-	passed	passed
++base/class/Method	TEST_NEW_THREE_ARGS_OMITTED_STRING_STRING	-	passed	passed
++base/class/Method	TEST_NEW_THREE_ARGS_STRING_OMITTED_BUFFER	-	passed	passed
++base/class/Method	TEST_NEW_THREE_ARGS_STRING_OMITTED_STRING	-	passed	passed
++base/class/Method	TEST_NEW_THREE_ARGS_STRING_STRING_NULL	-	passed	passed
++base/class/Method	TEST_NEW_TWO_ARGS_OMITTED_STRING	-	passed	passed
++base/class/Method	TEST_NEW_TWO_ARGS_STRING_ARRAY_NON_STRING	-	passed	passed
++base/class/Method	TEST_NEW_TWO_ARGS_STRING_NIL	-	passed	passed
++base/class/Method	TEST_NEW_TWO_ARGS_STRING_SPARSE_ARRAY	-	passed	passed
++base/class/Method	TEST_ROUTINE_SOURCE_COMMENT	-	passed	passed
++base/class/Method	TEST_ROUTINE_SOURCE_NOP	-	passed	passed
++base/class/Method	TEST_ROUTINE_SOURCE_WHITESPACE	-	passed	passed
++base/class/Method	TEST_SOURCE	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_CLASS	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_FILE	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_MESSAGE	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_METHOD	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_MUTABLEBUFFER	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_OBJECT	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_PACKAGE	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_ROUTINE	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_STREAM	-	passed	passed
++base/class/MethodArgs	TEST_REQUEST_STRING_STRING	-	passed	passed
++base/class/Package	TESTADDCLASS01	-	passed	passed
++base/class/Package	TESTADDCLASS02	-	passed	passed
++base/class/Package	TESTADDCLASS03	-	passed	passed
++base/class/Package	TESTADDCLASS04	-	passed	passed
++base/class/Package	TESTADDNAMESPACEPACKAGE	-	passed	passed
++base/class/Package	TESTADDPACKAGEBADNAMESPACENAME	-	passed	passed
++base/class/Package	TESTADDPACKAGENOARGS	-	passed	passed
++base/class/Package	TESTADDPACKAGENONEPACKAGE	-	passed	passed
++base/class/Package	TESTADDPACKAGETOOMANYARGS	-	passed	passed
++base/class/Package	TESTADDPUBLICCLASS01	-	passed	passed
++base/class/Package	TESTADDPUBLICCLASS02	-	passed	passed
++base/class/Package	TESTADDPUBLICCLASS03	-	passed	passed
++base/class/Package	TESTADDPUBLICCLASS04	-	passed	passed
++base/class/Package	TESTADDPUBLICROUTINE01	-	passed	passed
++base/class/Package	TESTADDPUBLICROUTINE02	-	passed	passed
++base/class/Package	TESTADDPUBLICROUTINE03	-	passed	passed
++base/class/Package	TESTADDPUBLICROUTINE04	-	passed	passed
++base/class/Package	TESTADDROUTINE01	-	passed	passed
++base/class/Package	TESTADDROUTINE02	-	passed	passed
++base/class/Package	TESTADDROUTINE03	-	passed	passed
++base/class/Package	TESTADDROUTINE04	-	passed	passed
++base/class/Package	TESTANNOTATIONNOARGS	-	passed	passed
++base/class/Package	TESTANNOTATIONNOSTRING	-	passed	passed
++base/class/Package	TESTANNOTATIONTWOARGS	-	passed	passed
++base/class/Package	TESTCLASSES01	-	passed	passed
++base/class/Package	TESTFINDCLASSNOARGS	-	passed	passed
++base/class/Package	TESTFINDCLASSNOSTRING	-	passed	passed
++base/class/Package	TESTFINDCLASSTWOARGS	-	passed	passed
++base/class/Package	TESTFINDPUBLICCLASSNOARGS	-	passed	passed
++base/class/Package	TESTFINDPUBLICCLASSNOSTRING	-	passed	passed
++base/class/Package	TESTFINDPUBLICCLASSTWOARGS	-	passed	passed
++base/class/Package	TESTFINDPUBLICROUTINENOARGS	-	passed	passed
++base/class/Package	TESTFINDPUBLICROUTINENOSTRING	-	passed	passed
++base/class/Package	TESTFINDPUBLICROUTINETWOARGS	-	passed	passed
++base/class/Package	TESTFINDROUTINENOARGS	-	passed	passed
++base/class/Package	TESTFINDROUTINENOSTRING	-	passed	passed
++base/class/Package	TESTFINDROUTINETWOARGS	-	passed	passed
++base/class/Package	TESTIMPORTEDCLASSES01	-	passed	passed
++base/class/Package	TESTIMPORTEDROUTINES01	-	passed	passed
++base/class/Package	TESTLOADLIBRARY01	-	passed	passed
++base/class/Package	TESTLOADLIBRARY02	-	passed	passed
++base/class/Package	TESTLOADLIBRARY03	-	passed	passed
++base/class/Package	TESTMETHODS01	-	passed	passed
++base/class/Package	TESTRECLAIM01	-	passed	passed
++base/class/Package	TESTROUTINES01	-	passed	passed
++base/class/Package	TESTSOURCE01	-	passed	passed
++base/class/Package	TESTSOURCELINEBADLINENUMBER	-	passed	passed
++base/class/Package	TESTSOURCELINENOARGS	-	passed	passed
++base/class/Package	TESTSOURCELINEOUTOFRANGE	-	passed	passed
++base/class/Package	TESTSOURCELINEZEROLINENUMBER	-	passed	passed
++base/class/Package	TEST_NEW01	-	passed	failed
++base/class/Package	TEST_NEW_CONTEXT_FLOATINGMETHOD	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_IMPORTEDPACKAGE	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_METHOD	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_METHODINHERITED	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_METHODPUBLIC	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_METHODPUBLICINHERITED	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_NIL	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_NULL	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_PROGRAMSCOPE	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_REXXPACKAGE	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_ROUTINE	-	passed	passed
++base/class/Package	TEST_NEW_CONTEXT_THISPACKAGE	-	passed	passed
++base/class/Package	TEST_NEW_HASHBANG	-	passed	passed
++base/class/Package	TEST_NEW_SOURCE_NO_ENDOFLINE	-	passed	passed
++base/class/Package	TEST_NEW_SOURCE_NO_ENDOFLINE_ARRAY	-	passed	passed
++base/class/Package	TEST_NEW_SOURCE_SEMICOLON	-	passed	passed
++base/class/Package	TEST_NEW_SOURCE_SEMICOLON_ARRAY	-	passed	passed
++base/class/Package	TEST_NON_STRING_ARRAY_VALUE	-	passed	passed
++base/class/Package	TEST_PACKAGE_FINDPROGRAM_ARG_NOSTRING	-	passed	passed
++base/class/Package	TEST_PACKAGE_FINDPROGRAM_NO_ARG	-	passed	passed
++base/class/Package	TEST_PACKAGE_FINDPROGRAM_NULLSTRING	-	passed	passed
++base/class/Package	TEST_PACKAGE_FINDPROGRAM_REXXTRY	-	passed	passed
++base/class/Package	TEST_PACKAGE_FINDPROGRAM_TWO_ARGS	-	passed	passed
++base/class/Package	TEST_PACKAGE_LOCAL	-	passed	passed
++base/class/Package	TEST_PACKAGE_LOCAL_GET_EMPTY	-	passed	passed
++base/class/Package	TEST_PACKAGE_LOCAL_ONE_ARG	-	passed	passed
++base/class/Package	TEST_PACKAGE_LOCAL_SET	-	passed	passed
++base/class/Package	TEST_PROLOG	-	passed	failed
++base/class/Package	TEST_SPARSE_ARRAY_SOURCE	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_DEFAULTS	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_1	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_10	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_11	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_2	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_3	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_4	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_5	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_6	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_7	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_8	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OPTIONNAMEERROR_9	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OVERRIDE_ARGERROR_2	-	passed	passed
++base/class/Package_Options	TEST_CLASS_OPTIONS_OVERRIDE_OPTION_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_DEFAULT_OPTIONS_OVERRIDES	-	passed	passed
++base/class/Package_Options	TEST_INSTANCE_OPTIONS_OVERRIDE_ERROR_2	-	passed	passed
++base/class/Package_Options	TEST_INSTANCE_OPTIONS_OVERRIDE_OPTION_ERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_ALL_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_CONDITION_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_CONDITION_ARGERROR_2	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_CONDITION_ARGERROR_3	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_CONDITION_ARGERROR_4	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_CONDITION_ARGERROR_5	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_CONDITION_ARGERROR_6	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_DIGITAL_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_DIGITAL_ARGERROR_2	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_DIGITAL_ARGERROR_3	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_DIGITAL_ARGERROR_4	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_FORM_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_FUZZ_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_FUZZ_ARGERROR_2	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_FUZZ_ARGERROR_3	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_FUZZ_ARGERROR_4	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_INITIALPACKAGESETTINGS	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_INITIALPACKAGESETTINGS_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_NUMERIC_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_NUMERIC_2	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_NUMERIC_ARG_ERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_OVERRIDE_COUNTER_CALL_1_MINUS	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_OVERRIDE_COUNTER_CALL_1_PLUS	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_OVERRIDE_COUNTER_CALL_2_PLUS	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_OVERRIDE_COUNTER_REQUIRES_1_MINUS	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_OVERRIDE_COUNTER_REQUIRES_1_PLUS	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_OVERRIDE_COUNTER_REQUIRES_2_PLUS	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_PROLOG_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_SETPACKAGEOPTIONS_ERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_SETPACKAGEOPTIONS_ERROR_2	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_SETPACKAGEOPTIONS_RESET	-	passed	passed
++base/class/Package_Options	TEST_OPTIONS_TRACE_ARGERROR_1	-	passed	passed
++base/class/Package_Options	TEST_OPTION_X	-	passed	passed
++base/class/Package_Options	TEST_REQUIRE_OPTIONS_NUMERIC_ERROR_1	-	passed	passed
++base/class/Package_Options	TEST_REQUIRE_OPTIONS_NUMERIC_ERROR_2	-	passed	passed
++base/class/Routine	TESTCALL	-	passed	passed
++base/class/Routine	TESTCALLWITH	-	passed	passed
++base/class/Routine	TESTDIRECTIVES	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE01	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE02	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE03	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE04	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE05	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE06	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE07	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE08	-	passed	passed
++base/class/Routine	TESTLOADEXTERNALROUTINE09	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_FLOATINGMETHOD	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_IMPORTEDPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_METHOD	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_METHODINHERITED	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_METHODPUBLIC	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_METHODPUBLICINHERITED	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_OMITTED	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_PROGRAMSCOPE	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_REXXPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_ROUTINE	-	passed	passed
++base/class/Routine	TEST_NEWFILE_CONTEXT_THISPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEWFILE_HASHBANG	-	passed	passed
++base/class/Routine	TEST_NEWFILE_NO_ARGS	-	passed	passed
++base/class/Routine	TEST_NEWFILE_ONE_ARG_NIL	-	passed	passed
++base/class/Routine	TEST_NEWFILE_THREE_ARGS	-	passed	passed
++base/class/Routine	TEST_NEWFILE_TWO_ARGS_OMITTED_STRING	-	passed	passed
++base/class/Routine	TEST_NEWFILE_TWO_ARGS_STRING_BUFFER	-	passed	passed
++base/class/Routine	TEST_NEWFILE_TWO_ARGS_STRING_NULL	-	passed	passed
++base/class/Routine	TEST_NEW_AND_SOURCE	-	passed	passed
++base/class/Routine	TEST_NEW_ARRAY_FROM_FILE	-	passed	failed
++base/class/Routine	TEST_NEW_CONTEXT_FLOATINGMETHOD	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_IMPORTEDPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_METHOD	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_METHODINHERITED	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_METHODPUBLIC	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_METHODPUBLICINHERITED	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_OMITTED	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_PROGRAMSCOPE	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_REXXPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_ROUTINE	-	passed	passed
++base/class/Routine	TEST_NEW_CONTEXT_THISPACKAGE	-	passed	passed
++base/class/Routine	TEST_NEW_FILE_COMPILED	-	passed	failed
++base/class/Routine	TEST_NEW_FOUR_ARGS	-	passed	passed
++base/class/Routine	TEST_NEW_HASHBANG	-	passed	passed
++base/class/Routine	TEST_NEW_NO_ARGS	-	passed	passed
++base/class/Routine	TEST_NEW_ONE_ARG	-	passed	passed
++base/class/Routine	TEST_NEW_ONE_ARG_NIL	-	passed	passed
++base/class/Routine	TEST_NEW_THREE_ARGS_OMITTED_STRING_STRING	-	passed	passed
++base/class/Routine	TEST_NEW_THREE_ARGS_STRING_OMITTED_BUFFER	-	passed	passed
++base/class/Routine	TEST_NEW_THREE_ARGS_STRING_OMITTED_STRING	-	passed	passed
++base/class/Routine	TEST_NEW_THREE_ARGS_STRING_STRING_NULL	-	passed	passed
++base/class/Routine	TEST_NEW_TWO_ARGS_OMITTED_STRING	-	passed	passed
++base/class/Routine	TEST_NEW_TWO_ARGS_STRING_ARRAY_NON_STRING	-	passed	passed
++base/class/Routine	TEST_NEW_TWO_ARGS_STRING_NIL	-	passed	passed
++base/class/Routine	TEST_NEW_TWO_ARGS_STRING_SPARSE_ARRAY	-	passed	passed
++base/class/Routine	TEST_NON_STRING_ARRAY_VALUE	-	passed	passed
++base/class/Routine	TEST_ROUTINE_SOURCE	-	passed	passed
++base/class/Routine	TEST_SPARSE_ARRAY_SOURCE	-	passed	passed
++base/class/WeakReference	TESTNEW01	-	passed	passed
++base/class/WeakReference	TESTREFERENCE01	-	passed	passed
++base/directives/METHOD	TESTABSTRACTEXTERNAL	-	passed	passed
++base/directives/METHOD	TESTABSTRACTMETHOD	-	passed	passed
++base/directives/METHOD	TESTABSTRACTTWICE	-	passed	passed
++base/directives/METHOD	TESTARGCOUNT	-	passed	passed
++base/directives/METHOD	TESTARGUMENTPASSING	-	passed	passed
++base/directives/METHOD	TESTATTRIBUTECODEBODY	-	passed	passed
++base/directives/METHOD	TESTATTRIBUTEMETHODS	-	passed	passed
++base/directives/METHOD	TESTATTRIBUTETWICE	-	passed	passed
++base/directives/METHOD	TESTBADNAME	-	passed	passed
++base/directives/METHOD	TESTBADOPTION	-	passed	passed
++base/directives/METHOD	TESTCALLTYPE	-	passed	passed
++base/directives/METHOD	TESTCLASSANDINSTANCE	-	passed	passed
++base/directives/METHOD	TESTCLASSTWICE	-	passed	passed
++base/directives/METHOD	TESTCONTEXTNAME	-	passed	passed
++base/directives/METHOD	TESTCONTEXTPACKAGE	-	passed	passed
++base/directives/METHOD	TESTDELEGATE	-	passed	passed
++base/directives/METHOD	TESTDUPLICATE	-	passed	passed
++base/directives/METHOD	TESTDUPLICATE2	-	passed	passed
++base/directives/METHOD	TESTEMPTYMETHOD	-	passed	passed
++base/directives/METHOD	TESTEXECUTABLE	-	passed	passed
++base/directives/METHOD	TESTEXTERNALABSTRACT	-	passed	passed
++base/directives/METHOD	TESTEXTERNALCODEBODY	-	passed	passed
++base/directives/METHOD	TESTEXTERNALLIBRARYBADLIBRARYNAME	-	passed	passed
++base/directives/METHOD	TESTEXTERNALLIBRARYBADNAME	-	passed	passed
++base/directives/METHOD	TESTEXTERNALLIBRARYBADROUTINETYPE	-	passed	passed
++base/directives/METHOD	TESTEXTERNALLIBRARYBADSPECTYPE	-	passed	passed
++base/directives/METHOD	TESTEXTERNALLIBRARYEXTRATOKEN	-	passed	passed
++base/directives/METHOD	TESTEXTERNALLIBRARYMISSINGLIBRARYNAME	-	passed	passed
++base/directives/METHOD	TESTEXTERNALLIBRARYMISSINGSPEC	-	passed	passed
++base/directives/METHOD	TESTEXTERNALLIBRARYNOTMETHOD	-	passed	passed
++base/directives/METHOD	TESTEXTERNALMETHOD	-	passed	passed
++base/directives/METHOD	TESTEXTERNALNULLSTRING	-	passed	passed
++base/directives/METHOD	TESTEXTERNALTWICE	-	passed	passed
++base/directives/METHOD	TESTGETATTRIBUTEARGUMENTS	-	passed	passed
++base/directives/METHOD	TESTGUARDEDACCESS	-	passed	passed
++base/directives/METHOD	TESTGUARDEDTWICE	-	passed	passed
++base/directives/METHOD	TESTGUARDEDUNGUARDED	-	passed	passed
++base/directives/METHOD	TESTMISPLACEDCLASSMETHOD	-	passed	passed
++base/directives/METHOD	TESTNONAME	-	passed	passed
++base/directives/METHOD	TESTPACKAGE	-	passed	passed
++base/directives/METHOD	TESTPACKAGECLASSMETHOD	-	passed	passed
++base/directives/METHOD	TESTPACKAGECLASSMETHODUSAGE	-	passed	passed
++base/directives/METHOD	TESTPACKAGEEXTERNALMETHOD	-	passed	passed
++base/directives/METHOD	TESTPACKAGEGETATTRIBUTE	-	passed	passed
++base/directives/METHOD	TESTPACKAGEINSTANCEMETHOD	-	passed	passed
++base/directives/METHOD	TESTPACKAGEINSTANCEMETHODUSAGE	-	passed	passed
++base/directives/METHOD	TESTPACKAGEPRIVATE	-	passed	passed
++base/directives/METHOD	TESTPACKAGEPUBLIC	-	passed	passed
++base/directives/METHOD	TESTPACKAGESETATTRIBUTE	-	passed	passed
++base/directives/METHOD	TESTPACKAGETWICE	-	passed	passed
++base/directives/METHOD	TESTPRIVATECLASSMETHOD	-	passed	passed
++base/directives/METHOD	TESTPRIVATECLASSMETHODUSAGE	-	passed	passed
++base/directives/METHOD	TESTPRIVATEEXTERNALMETHOD	-	passed	passed
++base/directives/METHOD	TESTPRIVATEGETATTRIBUTE	-	passed	passed
++base/directives/METHOD	TESTPRIVATEINSTANCEMETHOD	-	passed	passed
++base/directives/METHOD	TESTPRIVATEINSTANCEMETHODUSAGE	-	passed	passed
++base/directives/METHOD	TESTPRIVATEPACKAGE	-	passed	passed
++base/directives/METHOD	TESTPRIVATEPUBLIC	-	passed	passed
++base/directives/METHOD	TESTPRIVATESETATTRIBUTE	-	passed	passed
++base/directives/METHOD	TESTPRIVATETWICE	-	passed	passed
++base/directives/METHOD	TESTPROTECTEDTWICE	-	passed	passed
++base/directives/METHOD	TESTPROTECTEDUNPROTECTED	-	passed	passed
++base/directives/METHOD	TESTPUBLICPACKAGE	-	passed	passed
++base/directives/METHOD	TESTPUBLICPRIVATE	-	passed	passed
++base/directives/METHOD	TESTPUBLICTWICE	-	passed	passed
++base/directives/METHOD	TESTSETATTRIBUTENOARGUMENT	-	passed	passed
++base/directives/METHOD	TESTSETATTRIBUTETWOARGUMENTS	-	passed	passed
++base/directives/METHOD	TESTSTRINGNAME	-	passed	passed
++base/directives/METHOD	TESTSTRINGOPTION	-	passed	passed
++base/directives/METHOD	TESTUNGUARDEDTWICE	-	passed	passed
++base/directives/METHOD	TESTUNPROTECTEDTWICE	-	passed	passed
++base/directives/METHOD	TEST_ABSTRACT_DELEGATE	-	passed	passed
++base/directives/METHOD	TEST_DELEGATE_ABSTRACT	-	passed	passed
++base/directives/METHOD	TEST_DELEGATE_BAD_NAME	-	passed	passed
++base/directives/METHOD	TEST_DELEGATE_EXTERNAL	-	passed	passed
++base/directives/METHOD	TEST_DELEGATE_NO_BODY	-	passed	passed
++base/directives/METHOD	TEST_DELEGATE_NO_NAME	-	passed	passed
++base/directives/METHOD	TEST_DELEGATE_TWICE	-	passed	passed
++base/directives/REQUIRES	TEST_ACTIVATE	-	passed	failed
++base/directives/REQUIRES	TEST_BAD_NAMESPACE_NAME	-	passed	passed
++base/directives/REQUIRES	TEST_BAD_REQUIRES_OPTION	-	passed	passed
++base/directives/REQUIRES	TEST_BASIC_GOOD_REQUIRES	-	passed	failed
++base/directives/REQUIRES	TEST_CASCADED_REQUIRES	-	passed	failed
++base/directives/REQUIRES	TEST_CASCADED_REQUIRES2	-	passed	failed
++base/directives/REQUIRES	TEST_CASCADED_REQUIRES3	-	passed	failed
++base/directives/REQUIRES	TEST_MISSING_LIBRARY_REQUIRES	-	passed	passed
++base/directives/REQUIRES	TEST_MISSING_NAMESPACE_NAME	-	passed	passed
++base/directives/REQUIRES	TEST_MISSING_REQUIRES_FILE	-	passed	passed
++base/directives/REQUIRES	TEST_MULTIPLE_NAMESPACE	-	passed	failed
++base/directives/REQUIRES	TEST_MULTIPLE_NAMESPACE2	-	passed	failed
++base/directives/REQUIRES	TEST_NAMESPACE_GOOD_REQUIRES	-	passed	failed
++base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_CALL	-	passed	failed
++base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_CLASS	-	passed	failed
++base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_ROUTINE	-	passed	failed
++base/directives/REQUIRES	TEST_NO_PUBLIC_CLASS	-	passed	failed
++base/directives/REQUIRES	TEST_NO_PUBLIC_ROUTINE	-	passed	failed
++base/directives/REQUIRES	TEST_NO_REQUIRES_NAME	-	passed	passed
++base/directives/REQUIRES	TEST_NO_REQUIRES_NAME_NOTGOOD	-	passed	passed
++base/directives/REQUIRES	TEST_PROLOG	-	passed	failed
++base/directives/REQUIRES	TEST_PROLOG2	-	passed	failed
++base/directives/REQUIRES	TEST_PROLOG3	-	passed	failed
++base/directives/REQUIRES	TEST_REQUIRES_LIBRARY_CASE_LOWER	-	passed	passed
++base/directives/REQUIRES	TEST_REQUIRES_LIBRARY_CASE_MIXED	-	passed	passed
++base/directives/REQUIRES	TEST_REQUIRES_LIBRARY_STD	-	passed	passed
++base/directives/REQUIRES	TEST_REQUIRES_LIBRARY_SYNTAX1	-	passed	passed
++base/directives/REQUIRES	TEST_REQUIRES_LIBRARY_SYNTAX2	-	passed	passed
++base/directives/REQUIRES	TEST_SEARCH_ORDER_CLS	-	passed	failed
++base/directives/REQUIRES	TEST_SEARCH_ORDER_NONE	-	passed	failed
++base/directives/REQUIRES	TEST_SEARCH_ORDER_REX	-	passed	failed
++base/directives/REQUIRES	TEST_SEARCH_ORDER_TESTGROUP	-	passed	failed
++base/directives/REQUIRES	TEST_STRING_NAMESPACE_NAME	-	passed	passed
++base/directives/ROUTINE	TESTARGCOUNT	-	passed	passed
++base/directives/ROUTINE	TESTARGUMENTPASSING	-	passed	passed
++base/directives/ROUTINE	TESTBADNAME	-	passed	passed
++base/directives/ROUTINE	TESTCALLTYPE	-	passed	passed
++base/directives/ROUTINE	TESTCONTEXTNAME	-	passed	passed
++base/directives/ROUTINE	TESTDOTROUTINES	-	passed	passed
++base/directives/ROUTINE	TESTDUPLICATE	-	passed	passed
++base/directives/ROUTINE	TESTDUPLICATE2	-	passed	passed
++base/directives/ROUTINE	TESTEXECUTABLE	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALCODEBODY	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARY	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYBADLIBRARYNAME	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYBADNAME	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYBADROUTINETYPE	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYBADSPECTYPE	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYEXTRATOKEN	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYMISSINGLIBRARYNAME	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYMISSINGREGISTEREDNAME	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYMISSINGSPEC	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALLIBRARYNOTROUTINE	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALNULLSTRING	-	passed	passed
++base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADLIBRARYNAME	Phase10(Rxapi)	passed	blocked: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)
++base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADNAME	Phase10(Rxapi)	passed	blocked: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)
++base/directives/ROUTINE	TESTEXTERNALREGISTEREDEXTRATOKEN	-	passed	passed
++base/directives/ROUTINE	TESTNONAME	-	passed	passed
++base/directives/ROUTINE	TESTPACKAGE	-	passed	passed
++base/directives/ROUTINE	TESTPRIVATETWICE	-	passed	passed
++base/directives/ROUTINE	TESTPUBLICPRIVATE	-	passed	passed
++base/directives/ROUTINE	TESTPUBLICTWICE	-	passed	passed
++base/directives/ROUTINE	TESTSTRINGOPTION	-	passed	passed
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/verdicts.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/verdicts.tsv
+new file mode 100644
+index 000000000..0d9adcf57
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-7/suite/verdicts.tsv
+@@ -0,0 +1,13 @@
++# ootest revision 13178
++group	verdict	crate	oracle denominator
++API/oo/METHOD	red	not passed: TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA	equal
++base/class/Message	green		equal
++base/class/Method	red	not passed: TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED	equal
++base/class/MethodArgs	green		equal
++base/class/Package	red	not passed: TEST_NEW01 TEST_PROLOG	equal
++base/class/Package_Options	green		equal
++base/class/Routine	red	not passed: TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED	equal
++base/class/WeakReference	green		equal
++base/directives/METHOD	green		equal
++base/directives/REQUIRES	red	not passed: TEST_ACTIVATE TEST_BASIC_GOOD_REQUIRES TEST_CASCADED_REQUIRES TEST_CASCADED_REQUIRES2 TEST_CASCADED_REQUIRES3 TEST_MULTIPLE_NAMESPACE TEST_MULTIPLE_NAMESPACE2 TEST_NAMESPACE_GOOD_REQUIRES TEST_NAMESPACE_NO_PUBLIC_CALL TEST_NAMESPACE_NO_PUBLIC_CLASS TEST_NAMESPACE_NO_PUBLIC_ROUTINE TEST_NO_PUBLIC_CLASS TEST_NO_PUBLIC_ROUTINE TEST_PROLOG TEST_PROLOG2 TEST_PROLOG3 TEST_SEARCH_ORDER_CLS TEST_SEARCH_ORDER_NONE TEST_SEARCH_ORDER_REX TEST_SEARCH_ORDER_TESTGROUP	equal
++base/directives/ROUTINE	green		equal
+diff --git a/rust/corpus/lang/package_class_collected.rex b/rust/corpus/lang/package_class_collected.rex
+new file mode 100644
+index 000000000..1563faf5b
+--- /dev/null
++++ b/rust/corpus/lang/package_class_collected.rex
+@@ -0,0 +1,23 @@
++/* A class and a package that only Package~new made are collected once
++   nothing holds them, while the loop does nothing but make more of them. */
++p = .Package~new('p', '::class c')
++w = .WeakReference~new(p~classes['C'])
++p = .nil
++do i = 1 to 5000 until w~value == .nil
++  q = .Package~new('q', '::class c')
++end
++say 'class cleared:' (w~value == .nil)
++w = .WeakReference~new(.Package~new('p', 'return 1'))
++do i = 1 to 5000 until w~value == .nil
++  q = .Package~new('q', 'return 1')
++end
++say 'package cleared:' (w~value == .nil)
++src = .array~new
++do j = 1 to 50
++  src~append('::class c'j)
++end
++w = .WeakReference~new(.Package~new('p', src)~classes['C1'])
++do i = 1 to 300 until w~value == .nil
++  q = .Package~new('q', src)
++end
++say 'one of many classes cleared:' (w~value == .nil)
+diff --git a/rust/corpus/phase-9.txt b/rust/corpus/phase-9.txt
+index d299fc640..27241ef49 100644
+--- a/rust/corpus/phase-9.txt
++++ b/rust/corpus/phase-9.txt
+@@ -125,10 +125,13 @@ lang/package_copy_mutated.rex
+ 
+ # 9b1 Task 4 fix round 1: a REXX package copy's lookups and merge (I2, I3).
+ lang/package_rexx_copy_lookups.rex
+ 
+ # 9b1 Task 5: packages are collected, and the requires cache holds them weakly.
+ lang/package_rerequire_collected.rex
+ lang/package_library_binder_kept.rex
+ 
+ # 9b1 Task 5 fix round 2: an external routine's merged routines keep its package.
+ lang/package_external_merge_held.rex
++
++# 9b1 Task 7: the collector counts a program, its package and its ::CLASS classes.
++lang/package_class_collected.rex
+diff --git a/rust/corpus/refusal-dispositions.tsv b/rust/corpus/refusal-dispositions.tsv
+index b30aa3aef..05760450c 100644
+--- a/rust/corpus/refusal-dispositions.tsv
++++ b/rust/corpus/refusal-dispositions.tsv
+@@ -61,12 +61,13 @@ signal_op_off_its_node	GUARD	-	compiler invariant: a Signal op matches its SIGNA
+ sim_blocked_command	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4 (a wait only a command's peer can end is refused in sim): a command runs on the baton under a real-time bound, block= (2 s by default), and any command slower than it is refused, whether it waits on another activity or is only slow; timing-dependent by nature, and block= is how a program with slow commands runs under sim
+ sim_blocked_native	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4 (a wait only a native's own thread or a peer can end is refused in sim): a native call that leaves its driver runs on the baton under block=, past which the interpreter's thread is signalled once and the call refused once it returns; any such call slower than the bound is refused, timing-dependent by nature; a native that retries on EINTR or blocks outside a system call stays unbounded, and so does a native call under a pin, which does not leave its driver (it hangs on the oracle too)
+ sim_endless_wait	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4: a deadlock in the simulation mode is a loud refusal; virtual time cannot end a wait only a real signal can
+ sim_foreign_post	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4: any inbox post other than a signal's halt, and a callback from a thread running none of the interpreter's native calls, is a determinism breach, refused loudly
+ sim_replay_diverged	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4 (trace and replay): a replay takes the trace's decisions in order, and one the run takes otherwise (another program, a damaged or edited file) is refused rather than run on a schedule the trace does not hold
+ sim_trace_unwritten	LIMIT	-	docs/superpowers/specs/2026-10-07-phase-6-1-loose-ends.md section 4 (trace and replay): a run asked for a decision trace that it cannot write fails, so a harness that checks the status learns it has none
+ stale_handle	DEVIATION	-	exclusions row "A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED": a local reference used after its call is outside the API
+ store_op_off_its_node	GUARD	-	compiler invariant: a Store op names its own assignment (census d-guard)
+ string_answer_not_a_string	DEVIATION	-	Deviation 30: a user STRING method answering an object with no string value, which the oracle converts to .nil, read by a consumer of its bytes; Task 11a probes bytes_dir, bytes_nil, bytes_queue, bytes_obj
+ unknown_receiver	GUARD	-	scout A b9 b11_ctx_exec_* and weak reference sends b_weakref_*, b2_run_hasmethod_on_weakref; Task 7 probe rc4 and Phase 9a Task 5 probe copy8 (a Method copy passed to define, setMethod and run answers); the rest are handles whose object is gone or kinds receiver_kind has no arm for
++unrecorded_executable	GUARD	-	invariant: every Method and Routine object is recorded where it is built and its record is dropped only with the object; Phase 9b1 Task 7 probes executable_a.rex and executable_b.rex (docs/superpowers/records/2026-10-14-phase-9b1/task-7/probes/: copies, Method and Routine subclass instances, setMethod, define and defineMethods with method objects) answer as the oracle does
+ unreadable_collection	GUARD	-	scout A b18: env_supplier; with no owner it is a directory holding an entry the library bootstrap fills, and only STDQUE (Phase 10) refused
+ unsatisfiable_wait	LIMIT	-	Deviation 20 (rulings P27, P65, P77)
+diff --git a/rust/corpus/refusal-sites.tsv b/rust/corpus/refusal-sites.tsv
+index e70c69d8e..29cf3f4cb 100644
+--- a/rust/corpus/refusal-sites.tsv
++++ b/rust/corpus/refusal-sites.tsv
+@@ -82,152 +82,152 @@ Raised	argument_not_a_symbol	body	crates/rexx-exec/src/error.rs:679	off-send-sur
+ Raised	argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1250	agrees	yes	88.914	p~addRoutine('X', 5) over p = .context~package -- the pair with argument_not_a_class is the class name substituted, and Routine is the one this row raises
+ Raised	argument_not_convertible	send	crates/rexx-exec/src/error.rs:1105	agrees	yes	93.953	.Package~new('X', 'Y', 'Z') -- the third argument is a parent context and anything that is not a Method, a Routine or a Package reaches this
+ Raised	argument_not_in_list	body+send	crates/rexx-exec/src/error.rs:735	agrees	yes	40.904	say .Method~newFile('nofile.rex', 5)
+ Raised	argument_not_non_negative	body+send	crates/rexx-exec/src/error.rs:908	agrees	yes	93.906	.array~new(-1)
+ Raised	argument_not_non_negative_call	body	crates/rexx-exec/src/error.rs:1021	off-send-surface	-	-	-
+ Raised	argument_not_positive	body	crates/rexx-exec/src/error.rs:694	off-send-surface	-	-	-
+ Raised	argument_not_single_dimensional	send	crates/rexx-exec/src/error.rs:1941	agrees	yes	88.913	o~sendWith('M', .array~new(2,2)) -- ~run's A style is the same raise under the name "argument array", and .array~new(2) answers on both sides
+ Raised	argument_not_whole	body	crates/rexx-exec/src/error.rs:643	off-send-surface	-	-	-
+ Raised	argument_out_of_range	body	crates/rexx-exec/src/error.rs:720	off-send-surface	-	-	-
+ Raised	arguments_out_of_order	body	crates/rexx-exec/src/error.rs:1563	off-send-surface	-	-	-
+-Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:666	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
++Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:677	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
+ Raised	array_too_big	send	crates/rexx-exec/src/error.rs:1211	agrees	yes	93.959	.array~new(100000000000000001)
+ Raised	authorization_not_logical	body	crates/rexx-exec/src/error.rs:208	off-send-surface	-	-	-
+ Raised	bad_external_specification	send	crates/rexx-exec/src/error.rs:559	agrees	yes	99.917	say .Method~loadExternalMethod('M9', 'garbage') -- and the same for a one-word descriptor and for the empty string; oracle rc 157
+ Raised	bad_metaclass	body+send	crates/rexx-exec/src/error.rs:432	agrees	yes	99.927	.Object~subclass('K', 5)
+-Loud	binary_operator	body	crates/rexx-exec/src/lib.rs:474	off-send-surface	-	-	-
++Loud	binary_operator	body	crates/rexx-exec/src/lib.rs:485	off-send-surface	-	-	-
+ Raised	c2d_result_too_large	body	crates/rexx-exec/src/error.rs:982	off-send-surface	-	-	-
+-Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:894	off-send-surface	-	-	-
+-Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:818	off-send-surface	-	-	-
+-Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:827	off-send-surface	-	-	-
++Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:916	off-send-surface	-	-	-
++Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:840	off-send-surface	-	-	-
++Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:849	off-send-surface	-	-	-
+ Raised	circular_requires	body	crates/rexx-exec/src/error.rs:565	off-send-surface	-	-	-
+ Raised	class_keyword_needs_class	body	crates/rexx-exec/src/error.rs:405	off-send-surface	-	-	-
+ Raised	class_not_found	body	crates/rexx-exec/src/error.rs:412	off-send-surface	-	-	-
+-Loud	classic_style_routine	send	crates/rexx-exec/src/lib.rs:781	agrees	no	no route: no routine table this crate loads on Linux has a ROUTINE_CLASSIC_STYLE row; git grep --no-index over ootest, testbinaries, extensions and samples finds one only in the Windows rxwinsys	say RxCalcSqrt(4) over ::requires 'rxmath' library, a typed row: 2, rc 0 on both
++Loud	classic_style_routine	send	crates/rexx-exec/src/lib.rs:792	agrees	no	no route: no routine table this crate loads on Linux has a ROUTINE_CLASSIC_STYLE row; git grep --no-index over ootest, testbinaries, extensions and samples finds one only in the Windows rxwinsys	say RxCalcSqrt(4) over ::requires 'rxmath' library, a typed row: 2, rc 0 on both
+ Raised	compare_result_not_whole	send	crates/rexx-exec/src/error.rs:1183	agrees	yes	26.903	.Array~of('b','a')~sortWith(c) over a Comparator whose compare returns 'abc' -- a comparator answering '1.0' also sorts, so the refusal needs a result that is not a number at all
+ Raised	compare_to_result_not_whole	send	crates/rexx-exec/src/error.rs:1189	agrees	yes	26.902	.Array~of(.K~new,.K~new)~sort over ::method compareTo returning 'zzz' -- sortWith on the same objects reaches 26.903 instead, so the default order is the only route
+ Raised	condition	body+send	crates/rexx-exec/src/error.rs:139	agrees	yes	from_utf8_lossy(name)	t~rc('USER BAZ', , .array~of('a'), 'r3') under signal on user baz, over ::method rc external "LIBRARY orxmethod TestRaiseCondition" -- the name is the one the extension passed RaiseCondition
+ Raised	constant_needs_class	body	crates/rexx-exec/src/error.rs:572	off-send-surface	-	-	-
+ Raised	constant_not_initialized	send	crates/rexx-exec/src/error.rs:1670	agrees	yes	97.4	a class-side INIT reading ::constant c (2+3)
+-Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:902	off-send-surface	-	-	-
++Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:924	off-send-surface	-	-	-
+ Raised	context_not_active	send	crates/rexx-exec/src/error.rs:522	agrees	yes	98.981	a `.context` returned out of a ::routine and read after the return
+-Loud	conversion_raised	send	crates/rexx-exec/src/lib.rs:761	agrees	no	no route: both callers of Interp::refusal answer a conversion that raised before reaching it, so the callee's condition is what a program sees	RxCalcSqrt(o) with o an object whose STRING raises 93.900 (scout A c_native_raised): rc 163 on both engines
++Loud	conversion_raised	send	crates/rexx-exec/src/lib.rs:772	agrees	no	no route: both callers of Interp::refusal answer a conversion that raised before reaching it, so the callee's condition is what a program sees	RxCalcSqrt(o) with o an object whose STRING raises 93.900 (scout A c_native_raised): rc 163 on both engines
+ Raised	copy_not_supported	send	crates/rexx-exec/src/error.rs:1631	agrees	yes	93.970	.K~copy
+ Raised	cyclic_inheritance	body	crates/rexx-exec/src/error.rs:534	off-send-surface	-	-	-
+ Raised	d2c_value_not_whole	body	crates/rexx-exec/src/error.rs:971	off-send-surface	-	-	-
+ Raised	d2x_value_not_whole	body	crates/rexx-exec/src/error.rs:964	off-send-surface	-	-	-
+ Raised	date_format_invalid	body	crates/rexx-exec/src/error.rs:822	off-send-surface	-	-	-
+ Raised	deadlock	body+send	crates/rexx-exec/src/error.rs:279	agrees	yes	98.905	m~wait inside a guarded method whose started send m waits for that method's lock (message_wait_deadlock.rex); two activities each holding a lock and sending to the other's (guard_deadlock_two_activities.rex)
+ Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:799	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
+ Raised	duplicate_class	body	crates/rexx-exec/src/error.rs:381	off-send-surface	-	-	-
+ Raised	duplicate_member	body	crates/rexx-exec/src/error.rs:394	off-send-surface	-	-	-
+ Raised	duplicate_resource	body	crates/rexx-exec/src/error.rs:387	off-send-surface	-	-	-
+ Raised	duplicate_routine	body	crates/rexx-exec/src/error.rs:374	off-send-surface	-	-	-
+-Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:675	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
+-Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:645	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
++Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:686	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
++Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:656	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
+ Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1935	off-send-surface	-	-	-
+-Loud	environment_symbol	body+send	crates/rexx-exec/src/lib.rs:634	agrees	no	no route: the send sites ask for .MESSAGENOTIFICATION and .FILE, REXX package classes the library bootstrap installs before any program runs	m~notify(.w~new) over ::class w inherit MessageNotification, after .environment~remove('MESSAGENOTIFICATION') and .local~remove('MESSAGENOTIFICATION') (Phase 9a Task 5 probe nt1), and .rexxinfo~executable (probe info): rc 0 on both
++Loud	environment_symbol	body+send	crates/rexx-exec/src/lib.rs:645	agrees	no	no route: the send sites ask for .MESSAGENOTIFICATION and .FILE, REXX package classes the library bootstrap installs before any program runs	m~notify(.w~new) over ::class w inherit MessageNotification, after .environment~remove('MESSAGENOTIFICATION') and .local~remove('MESSAGENOTIFICATION') (Phase 9a Task 5 probe nt1), and .rexxinfo~executable (probe info): rc 0 on both
+ Raised	error_syntax	body	crates/rexx-exec/src/error.rs:1711	off-send-surface	-	-	-
+ Raised	escalated	body	crates/rexx-exec/src/command.rs:463	off-send-surface	-	-	-
+ Raised	executable_file_unreadable	body	crates/rexx-exec/src/error.rs:552	off-send-surface	-	-	-
+ Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:1918	off-send-surface	-	-	-
+ Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:1876	off-send-surface	-	-	-
+-Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:743	off-send-surface	-	-	-
+-Loud	expression	body	crates/rexx-exec/src/lib.rs:466	off-send-surface	-	-	-
++Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:754	off-send-surface	-	-	-
++Loud	expression	body	crates/rexx-exec/src/lib.rs:477	off-send-surface	-	-	-
+ Raised	external_method_not_found	body	crates/rexx-exec/src/error.rs:293	off-send-surface	-	-	-
+ Raised	external_routine_not_found	body	crates/rexx-exec/src/error.rs:299	off-send-surface	-	-	-
+ Raised	failure_syntax	body	crates/rexx-exec/src/error.rs:1717	off-send-surface	-	-	-
+-Loud	fork_child	body	crates/rexx-exec/src/lib.rs:527	off-send-surface	-	-	-
++Loud	fork_child	body	crates/rexx-exec/src/lib.rs:538	off-send-surface	-	-	-
+ Raised	format_incompatible_separator	body	crates/rexx-exec/src/error.rs:858	off-send-surface	-	-	-
+ Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:1897	off-send-surface	-	-	-
+ Raised	forward_outside_method	body	crates/rexx-exec/src/error.rs:1891	off-send-surface	-	-	-
+ Raised	from	body	crates/rexx-exec/src/error.rs:1983	off-send-surface	-	-	-
+ Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:1881	off-send-surface	-	-	-
+ Raised	halt	body	crates/rexx-exec/src/error.rs:164	off-send-surface	-	-	-
+-Loud	handle_descriptor	send	crates/rexx-exec/src/lib.rs:789	recorded	yes	a HANDLE: stream on descriptor	.Stream~new('HANDLE:7'), recorded as Deviation 35: the oracle makes an inert stream (stream_handle.rs pins this side; HANDLE:2 beside it is made on both)
+-Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:938	off-send-surface	-	-	-
++Loud	handle_descriptor	send	crates/rexx-exec/src/lib.rs:800	recorded	yes	a HANDLE: stream on descriptor	.Stream~new('HANDLE:7'), recorded as Deviation 35: the oracle makes an inert stream (stream_handle.rs pins this side; HANDLE:2 beside it is made on both)
++Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:960	off-send-surface	-	-	-
+ Raised	incorrect_list_index	send	crates/rexx-exec/src/error.rs:1161	agrees	yes	93.918	q=.Queue~new;q~queue('a');q~put('Y',99)
+ Raised	incorrect_native_signature	send	crates/rexx-exec/src/error.rs:336	agrees	yes	40.918	ForgeSelf() over ::requires 'forgesig' LIBRARY in a required package, a forged routine library declaring CSELF; a method over a forged procedure declaring parameter code 9 is 93.968 -- no oracle-built extension declares either, so neither program can be a corpus witness
+ Raised	incorrect_pad	send	crates/rexx-exec/src/error.rs:897	agrees	yes	93.922	.MutableBuffer~new('abcabc')~substr(1, 2, 'xx')
+ Raised	incorrect_queue_index	send	crates/rexx-exec/src/error.rs:1150	agrees	yes	93.966	q=.Queue~new;q~queue('a');q~queue('b');q~put('n',4)
+ Raised	index_does_not_match	send	crates/rexx-exec/src/error.rs:1177	agrees	yes	93.949	.Set~new~put('c','d') -- put with one argument is accepted and put('b','b') is too, so the refusal needs an index that is not the value
+ Raised	inherit_base_class	body+send	crates/rexx-exec/src/error.rs:490	agrees	yes	98.943	.K~inherit(.M) with M a mixin of an unrelated base
+ Raised	inherit_needs_a_mixinclass	body+send	crates/rexx-exec/src/error.rs:483	agrees	yes	98.942	.K~inherit(.Array)
+-Loud	instruction	body+ir	crates/rexx-exec/src/lib.rs:413	off-send-surface	-	-	-
++Loud	instruction	body+ir	crates/rexx-exec/src/lib.rs:424	off-send-surface	-	-	-
+ Raised	insufficient_stack	body+send	crates/rexx-exec/src/error.rs:217	recorded	no	the self-forward family is in oracle-crashes.txt: never run	-
+-Loud	internal_routine	body	crates/rexx-exec/src/lib.rs:500	off-send-surface	-	-	-
++Loud	internal_routine	body	crates/rexx-exec/src/lib.rs:511	off-send-surface	-	-	-
+ Raised	invalid_base64	send	crates/rexx-exec/src/error.rs:1828	agrees	yes	93.962	'YW==YWJj'~decodeBase64
+ Raised	invalid_conversion	body	crates/rexx-exec/src/error.rs:828	off-send-surface	-	-	-
+ Raised	invalid_digit	body	crates/rexx-exec/src/error.rs:1000	off-send-surface	-	-	-
+ Raised	invalid_grouping	body	crates/rexx-exec/src/error.rs:1010	off-send-surface	-	-	-
+ Raised	invalid_length	body+send	crates/rexx-exec/src/error.rs:879	agrees	yes	93.923	.stringtable~new('abc')
+ Raised	invalid_option	body	crates/rexx-exec/src/error.rs:920	off-send-surface	-	-	-
+ Raised	invalid_position	body+send	crates/rexx-exec/src/error.rs:887	agrees	yes	93.924	m = .array~new(2,3) then m[1.5,1]
+ Raised	invalid_routine_option	body	crates/rexx-exec/src/error.rs:1499	off-send-surface	-	-	-
+ Raised	invalid_stream_name	body	crates/rexx-exec/src/error.rs:809	off-send-surface	-	-	-
+-Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:926	off-send-surface	-	-	-
+-Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:844	off-send-surface	-	-	-
++Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:948	off-send-surface	-	-	-
++Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:866	off-send-surface	-	-	-
+ Raised	label_not_found	body	crates/rexx-exec/src/error.rs:593	off-send-surface	-	-	-
+ Raised	length_required_for_negative	body	crates/rexx-exec/src/error.rs:955	off-send-surface	-	-	-
+ Raised	library_not_loaded	body	crates/rexx-exec/src/error.rs:307	off-send-surface	-	-	-
+-Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:699	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
+-Loud	library_source	body	crates/rexx-exec/src/lib.rs:722	off-send-surface	-	-	-
++Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:710	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
++Loud	library_source	body	crates/rexx-exec/src/lib.rs:733	off-send-surface	-	-	-
+ Raised	library_version	body+send	crates/rexx-exec/src/error.rs:313	agrees	yes	98.982	.context~package~loadLibrary('forgever') over a forged extension whose package entry asks for 6.0.0 -- no oracle-built extension asks for a newer interpreter, so the program cannot be a corpus witness
+ Raised	logical_list_element	body	crates/rexx-exec/src/error.rs:234	off-send-surface	-	-	-
+-Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:868	off-send-surface	-	-	-
++Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:890	off-send-surface	-	-	-
+ Raised	lostdigits	body	crates/rexx-exec/src/error.rs:477	off-send-surface	-	-	-
+ Raised	message_array_shape	send	crates/rexx-exec/src/error.rs:1644	agrees	yes	93.946	say o~sendWith(.array~new(2,2)) -- the message-NAME array; the argument array's own multidimensional case is a separate silent divergence
+ Raised	message_name_shape	send	crates/rexx-exec/src/error.rs:1637	agrees	yes	93.972	o~sendWith(o, (1))
+ Raised	message_reuse	send	crates/rexx-exec/src/error.rs:517	agrees	yes	98.915	m~send over m = .message~new(o, 'N'); m~start -- corpus/lang/message_reuse.rex, which also sends ~start and ~sendWith to started messages
+-Loud	metaclass_new_reused_class	send	crates/rexx-exec/src/lib.rs:556	recorded	yes	a metaclass NEW answering a class	say 'id' .object~subclass("k", .MyMeta)~id over ::CLASS MyMeta SUBCLASS Class / ::METHOD new CLASS / return .array (Phase 9a Task 8b review probe metaarr): the oracle id Array, recorded as Deviation 32
++Loud	metaclass_new_reused_class	send	crates/rexx-exec/src/lib.rs:567	recorded	yes	a metaclass NEW answering a class	say 'id' .object~subclass("k", .MyMeta)~id over ::CLASS MyMeta SUBCLASS Class / ::METHOD new CLASS / return .array (Phase 9a Task 8b review probe metaarr): the oracle id Array, recorded as Deviation 32
+ Raised	metaclass_not_found	body	crates/rexx-exec/src/error.rs:426	off-send-surface	-	-	-
+ Raised	method_argument_not_a_number	body	crates/rexx-exec/src/error.rs:1806	off-send-surface	-	-	-
+ Raised	method_argument_not_in_list	send	crates/rexx-exec/src/error.rs:1262	agrees	yes	93.914	.Package~defaultOptions('FORM')
+ Raised	method_argument_not_positive	send	crates/rexx-exec/src/error.rs:1217	agrees	yes	93.907	(1,2,3)~at(0)
+ Raised	method_argument_not_whole	send	crates/rexx-exec/src/error.rs:1129	agrees	yes	93.905	.Package~defaultOptions('C', 'x')
+ Raised	method_option_not_recognised	send	crates/rexx-exec/src/error.rs:1625	agrees	yes	93.915	(1,2)~makeString('X')
+ Raised	method_source_not_all_strings	send	crates/rexx-exec/src/error.rs:1079	agrees	yes	93.952	self~setMethod('Z', (1, .nil))
+ Raised	method_target_not_a_number	body+send	crates/rexx-exec/src/error.rs:1817	agrees	yes	93.943	'abc'~sign
+ Raised	method_target_not_whole	send	crates/rexx-exec/src/error.rs:1822	agrees	yes	93.940	'1.5'~modulo(3)
+ Raised	method_user_defined	body+send	crates/rexx-exec/src/error.rs:1118	agrees	yes	argument 2 must not be empty	.context~package~options('DIGITS', '') -- the message is the whole of what this raise substitutes, so the row's answer is that text rather than an M.N
+ Raised	misplaced_whitespace	body	crates/rexx-exec/src/error.rs:989	off-send-surface	-	-	-
+ Raised	missing_annotation_target	body	crates/rexx-exec/src/error.rs:585	off-send-surface	-	-	-
+ Raised	missing_argument	body	crates/rexx-exec/src/error.rs:627	off-send-surface	-	-	-
+ Raised	missing_argument_named	send	crates/rexx-exec/src/error.rs:1067	agrees	yes	93.903	s~seek('write') over a stream opened read
+ Raised	missing_array_element	send	crates/rexx-exec/src/error.rs:1166	agrees	yes	98.975	a=.Array~new;a[1]='c';a[3]='a';a~sort
+-Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:810	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
++Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:821	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
+ Raised	missing_internal_argument	body+send	crates/rexx-exec/src/error.rs:365	agrees	yes	88.901	say .Stream~new('/dev/null')~position
+ Raised	missing_method_argument	body+send	crates/rexx-exec/src/error.rs:1057	agrees	yes	93.903	o~hasMethod
+ Raised	missing_named_argument	body+send	crates/rexx-exec/src/error.rs:1276	agrees	yes	88.901	self~setMethod with no arguments
+ Raised	missing_native_argument	send	crates/rexx-exec/src/error.rs:320	agrees	yes	88.901	r~parse() over ::requires rxregexp.cls
+ Raised	named_argument_invalid_length	send	crates/rexx-exec/src/error.rs:1611	agrees	yes	88.911	.MutableBuffer~new('abcdef')~replaceAt('a', 1, -1) -- ~'[]='('a', 1, -1) is the same message
+ Raised	named_argument_invalid_pad	send	crates/rexx-exec/src/error.rs:1604	agrees	yes	88.910	.MutableBuffer~new('abcdef')~replaceAt('a', 1, 3, 'xx') -- []= passes no pad and cannot reach it
+ Raised	named_argument_invalid_position	send	crates/rexx-exec/src/error.rs:1618	agrees	yes	88.912	.MutableBuffer~new('abcdef')~replaceAt('a', 0) -- buf['x'] = 'a' is the same message
+ Raised	named_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1597	agrees	yes	88.909	self~setMethod('Z', "return 1", self)
+-Loud	named_semaphore	body	crates/rexx-exec/src/lib.rs:510	off-send-surface	-	-	-
++Loud	named_semaphore	body	crates/rexx-exec/src/lib.rs:521	off-send-surface	-	-	-
+ Raised	namespace_class_not_found	body	crates/rexx-exec/src/error.rs:285	off-send-surface	-	-	-
+ Raised	namespace_not_found	body	crates/rexx-exec/src/error.rs:269	off-send-surface	-	-	-
+ Raised	namespace_routine_not_found	body	crates/rexx-exec/src/error.rs:262	off-send-surface	-	-	-
+ Raised	native_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1341	agrees	yes	88.909	r~does(.object~new) over ::requires 're.cls' declaring does external "LIBRARY rxregexp RegExp_Match" (library_method_no_string_value.rex)
+ Raised	native_argument_not_a_double	send	crates/rexx-exec/src/error.rs:1351	agrees	yes	88.921	RxCalcSqrt('abc') over ::requires 'rxmath' LIBRARY in a required package (library_routine_argument_errors.rex)
+ Raised	native_argument_not_a_number	body+send	crates/rexx-exec/src/error.rs:1289	agrees	yes	88.902	e~wait('abc') over e = .EventSemaphore~new (event_semaphore_wait_not_a_number.rex); m~acquire('x') is the same raise from ACQUIRE
+ Raised	native_argument_not_a_pointer	send	crates/rexx-exec/src/error.rs:1449	agrees	yes	88.919	t~pointerstring('zz') over a required pk.cls declaring pointerstring external "LIBRARY orxmethod TestPointerStringArg" (library_native_refusal_pointer_string.rex)
+ Raised	native_argument_not_a_stem	body+send	crates/rexx-exec/src/error.rs:1467	agrees	yes	93.969	t~stem('zz') over a required pk.cls declaring stem external "LIBRARY orxmethod TestStemArg" (library_native_refusal_stem.rex); the routine form, st('a.b') over ::routine st external "LIBRARY orxfunction TestStemArg", is 40.919 (library_native_refusal_stem_routine.rex)
+ Raised	native_argument_not_an_array	body+send	crates/rexx-exec/src/error.rs:1426	agrees	yes	98.913	t~array(.object~new) over a required pk.cls declaring array external "LIBRARY orxmethod TestArrayArg" (library_native_refusal_array.rex)
+ Raised	native_argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1435	agrees	yes	88.914	t~classarg(1) over a required pk.cls declaring classarg external "LIBRARY orxmethod TestClassArg" (library_native_refusal_instance.rex) -- the Pointer, MutableBuffer and VariableReference rows are the same raise naming their class
+ Raised	native_argument_not_logical	send	crates/rexx-exec/src/error.rs:1416	agrees	yes	34.901	t~logical(3) over a required pk.cls declaring logical external "LIBRARY orxmethod TestLogicalArg" (library_native_refusal_logical.rex)
+ Raised	native_argument_not_nonnegative	body+send	crates/rexx-exec/src/error.rs:1378	agrees	yes	88.904	t~nonneg(-1) over a required pk.cls declaring nonneg external "LIBRARY orxmethod TestNonnegativeWholeNumberArg" (library_native_refusal_nonnegative.rex)
+ Raised	native_argument_not_positive	body+send	crates/rexx-exec/src/error.rs:1364	agrees	yes	88.905	RxCalcSqrt(2, 'x') inside a required package's routine (library_routine_caller_blame.rex)
+ Raised	native_argument_out_of_range	body	crates/rexx-exec/src/error.rs:1293	off-send-surface	-	-	-
+ Raised	native_argument_out_of_range_unsigned	send	crates/rexx-exec/src/error.rs:1314	diverges	yes	88.907	s = .Stream~new('f.txt'); s~charin(1, -1) -- the 88.907 sub line agrees byte for byte; the major line does not, because a native activation's argument-marshalling error names its own declaring package (REXX) and this crate names the program. Recorded in the Phase 7 ledger; the fix needs native entry points to carry a declaring package and is not this task's
+ Raised	native_argument_outside_range	body+send	crates/rexx-exec/src/error.rs:1392	agrees	yes	88.907	t~int8(128) over a required pk.cls declaring int8 external "LIBRARY orxmethod TestInt8Arg" (library_native_refusal_range.rex)
+-Loud	native_method	send	crates/rexx-exec/src/lib.rs:654	diverges	yes	of class	m~dimensions, .Message~new
++Loud	native_method	send	crates/rexx-exec/src/lib.rs:665	diverges	yes	of class	m~dimensions, .Message~new
+ Raised	no_data_returned	body+ir	crates/rexx-exec/src/error.rs:247	off-send-surface	-	-	-
+ Raised	no_method	body+send	crates/rexx-exec/src/error.rs:1651	diverges	yes	97.1	.DN~new~zzz under a ::method defaultName
+ Raised	no_more_supplier_items	send	crates/rexx-exec/src/error.rs:1194	agrees	yes	93.937	.Supplier~new(.Array~new,.Array~new)~item
+ Raised	no_result	body+ir+send	crates/rexx-exec/src/error.rs:1747	agrees	yes	91.999	.Array~of(2,1)~sortWith(a Comparator whose compare returns nothing)
+ Raised	nomethod	send	crates/rexx-exec/src/error.rs:1681	agrees	yes	NOMETHOD	signal on nomethod over o~zzz
+ Raised	nonnumeric	body	crates/rexx-exec/src/error.rs:176	off-send-surface	-	-	-
+ Raised	nostring	send	crates/rexx-exec/src/error.rs:1692	agrees	yes	NOSTRING	substr('abcdef', o)
+ Raised	nostring_syntax	body+send	crates/rexx-exec/src/error.rs:1701	agrees	yes	98.973	say .array over ::options nostring syntax -- the same program without the directive is rc 0 printing the rendering
+ Raised	not_a_method_or_source	send	crates/rexx-exec/src/error.rs:1091	agrees	yes	93.974	self~setMethod('m', .object~new) inside a ::METHOD (corpus/lang/setmethod_object_source.rex); run and define the same
+ Raised	not_a_simple_variable_reference	body	crates/rexx-exec/src/error.rs:1861	off-send-surface	-	-	-
+@@ -235,28 +235,28 @@ Raised	not_a_stem_variable_reference	body	crates/rexx-exec/src/error.rs:1851	off
+ Raised	not_a_valid_class	body	crates/rexx-exec/src/error.rs:420	off-send-surface	-	-	-
+ Raised	not_a_variable_reference	body	crates/rexx-exec/src/error.rs:1835	off-send-surface	-	-	-
+ Raised	not_an_array_or_stem	body	crates/rexx-exec/src/error.rs:1558	off-send-surface	-	-	-
+ Raised	not_enough_arguments	body	crates/rexx-exec/src/error.rs:606	off-send-surface	-	-	-
+ Raised	not_enough_method_arguments	body+send	crates/rexx-exec/src/error.rs:1144	agrees	yes	93.901	(1,2,3)~at()
+ Raised	not_enough_subscripts	send	crates/rexx-exec/src/error.rs:1204	agrees	yes	93.925	.array~new(2,2)~at(1)
+ Raised	not_inherited	body+send	crates/rexx-exec/src/error.rs:504	agrees	yes	98.945	.K~uninherit(.Comparable)
+ Raised	not_logical	body+send	crates/rexx-exec/src/error.rs:201	agrees	yes	34.901	.String~new("abc")~"?"("y", "n") -- it has to be the ? method: say \'abc' is the identical 34.901 from the body site in eval.rs and reaches nothing here
+ Raised	not_one_of	send	crates/rexx-exec/src/error.rs:447	agrees	yes	88.916	self~setMethod('Z', "return 1", 'BOGUS')
+ Raised	notready_syntax	body	crates/rexx-exec/src/error.rs:1734	off-send-surface	-	-	-
+-Loud	numeric_form_without_expression	body	crates/rexx-exec/src/lib.rs:751	off-send-surface	-	-	-
+-Loud	object_method	send	crates/rexx-exec/src/lib.rs:713	agrees	no	no route: SETMETHOD and UNSETMETHOD are private, so a receiver sends them to itself from one of its own methods, and every receiver a program's method runs on is an instance or a class object, which hold methods of their own	'abc'~setMethod('m', 'return 1') is 97.2 on both engines; a class method's self~setMethod('m2', 'return 42') answers 42 (corpus/lang/class_setmethod.rex)
+-Loud	object_name_of_a_value	send	crates/rexx-exec/src/lib.rs:568	recorded	yes	OBJECTNAME= on a String	longs = 'a longer string than seven' / longs~objectName = 'long' (Phase 9a Task 8b probe objname4), recorded as Deviation 36
++Loud	numeric_form_without_expression	body	crates/rexx-exec/src/lib.rs:762	off-send-surface	-	-	-
++Loud	object_method	send	crates/rexx-exec/src/lib.rs:724	agrees	no	no route: SETMETHOD and UNSETMETHOD are private, so a receiver sends them to itself from one of its own methods, and every receiver a program's method runs on is an instance or a class object, which hold methods of their own	'abc'~setMethod('m', 'return 1') is 97.2 on both engines; a class method's self~setMethod('m2', 'return 42') answers 42 (corpus/lang/class_setmethod.rex)
++Loud	object_name_of_a_value	send	crates/rexx-exec/src/lib.rs:579	recorded	yes	OBJECTNAME= on a String	longs = 'a longer string than seven' / longs~objectName = 'long' (Phase 9a Task 8b probe objname4), recorded as Deviation 36
+ Raised	object_not_single_dimensional	body+send	crates/rexx-exec/src/error.rs:1948	agrees	yes	98.913	o~startWith('M', .array~new(2,2)) -- the same call shape ~sendWith reports 88.913 for
+-Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:836	off-send-surface	-	-	-
+-Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:619	off-send-surface	-	-	-
++Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:858	off-send-surface	-	-	-
++Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:630	off-send-surface	-	-	-
+ Raised	package_scope_method	send	crates/rexx-exec/src/error.rs:1663	agrees	yes	97.3	o~m over a ::method m package in a required file, whose ::REQUIRES this phase built
+-Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:800	off-send-surface	-	-	-
++Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:811	off-send-surface	-	-	-
+ Raised	power_exponent_not_whole	body	crates/rexx-exec/src/error.rs:191	off-send-surface	-	-	-
+ Raised	private_method	send	crates/rexx-exec/src/error.rs:1657	agrees	yes	97.2	.K~new~p over ::method p private
+ Raised	procedure_out_of_place	body	crates/rexx-exec/src/error.rs:599	off-send-surface	-	-	-
+ Raised	queue_target_option	body	crates/rexx-exec/src/error.rs:776	off-send-surface	-	-	-
+ Raised	raise_syntax_condition	body	crates/rexx-exec/src/run/raised.rs:95	off-send-surface	-	-	-
+ Raised	raised_available_not_logical	body	crates/rexx-exec/src/run/raised.rs:70	off-send-surface	-	-	-
+ Raised	raised_digit_led	body	crates/rexx-exec/src/run/raised.rs:24	off-send-surface	-	-	-
+ Raised	raised_dot_led	body	crates/rexx-exec/src/run/raised.rs:29	off-send-surface	-	-	-
+ Raised	raised_for_code	body	crates/rexx-exec/src/run/raised.rs:126	off-send-surface	-	-	-
+ Raised	raised_for_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:193	off-send-surface	-	-	-
+@@ -273,77 +273,78 @@ Raised	raised_naming_the_operand	body	crates/rexx-exec/src/run/raised.rs:145	off
+ Raised	raised_numeric_trace_interactive_only	body	crates/rexx-exec/src/trace/format.rs:506	off-send-surface	-	-	-
+ Raised	raised_repetition_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:187	off-send-surface	-	-	-
+ Raised	raised_select_no_when	body	crates/rexx-exec/src/run/raised.rs:79	off-send-surface	-	-	-
+ Raised	raised_symbol_expected	body	crates/rexx-exec/src/run/raised.rs:19	off-send-surface	-	-	-
+ Raised	raised_until_not_logical	body	crates/rexx-exec/src/run/raised.rs:179	off-send-surface	-	-	-
+ Raised	raised_when_case_not_logical	body	crates/rexx-exec/src/run/raised.rs:64	off-send-surface	-	-	-
+ Raised	raised_when_not_logical	body+ir	crates/rexx-exec/src/run/raised.rs:58	off-send-surface	-	-	-
+ Raised	raised_while_not_logical	body	crates/rexx-exec/src/run/raised.rs:174	off-send-surface	-	-	-
+ Raised	random_bounds_reversed	body	crates/rexx-exec/src/error.rs:1048	off-send-surface	-	-	-
+ Raised	random_range_too_wide	body	crates/rexx-exec/src/error.rs:1040	off-send-surface	-	-	-
+-Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:546	diverges	yes	a message send to	say .t~new~go(.array~method('ITEMS')) over ::class t / ::method go / use arg m / return self~run(m): ours rc 120, the oracle a different number each run (Deviation 28)
++Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:557	diverges	yes	a message send to	say .t~new~go(.array~method('ITEMS')) over ::class t / ::method go / use arg m / return self~run(m): ours rc 120, the oracle a different number each run (Deviation 28)
+ Raised	recursive_inherit	body+send	crates/rexx-exec/src/error.rs:497	agrees	yes	98.944	.M~inherit(.M) with M a mixinclass
+-Loud	redirection	body	crates/rexx-exec/src/lib.rs:608	off-send-surface	-	-	-
++Loud	redirection	body	crates/rexx-exec/src/lib.rs:619	off-send-surface	-	-	-
+ Raised	redirection_failed	body	crates/rexx-exec/src/error.rs:782	off-send-surface	-	-	-
+ Raised	redirection_not_supported	body	crates/rexx-exec/src/error.rs:1724	off-send-surface	-	-	-
+-Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:852	off-send-surface	-	-	-
++Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:874	off-send-surface	-	-	-
+ Raised	reply_outside_method	body	crates/rexx-exec/src/error.rs:1886	off-send-surface	-	-	-
+ Raised	reply_twice	body	crates/rexx-exec/src/error.rs:1908	off-send-surface	-	-	-
+ Raised	requires_file_not_found	body	crates/rexx-exec/src/error.rs:541	off-send-surface	-	-	-
+ Raised	restricted_method	send	crates/rexx-exec/src/error.rs:462	agrees	yes	98.991	'abc'~setMethod('Z', "return 1") from a ::method body
+ Raised	return_after_reply	body	crates/rexx-exec/src/error.rs:1913	off-send-surface	-	-	-
+ Raised	rexx_defined_class	send	crates/rexx-exec/src/error.rs:511	agrees	yes	98.985	.Array~define('ZZZ', "return 1")
+ Raised	rexx_package_addition	send	crates/rexx-exec/src/error.rs:528	agrees	yes	98.984	.Array~package~addClass('ZZZ', .Object)
+ Raised	routine_argument_not_a_character	body	crates/rexx-exec/src/error.rs:1520	off-send-surface	-	-	-
+ Raised	routine_failed	body	crates/rexx-exec/src/error.rs:1484	off-send-surface	-	-	-
+ Raised	routine_not_found	body	crates/rexx-exec/src/error.rs:255	off-send-surface	-	-	-
+ Raised	routine_null_argument	body	crates/rexx-exec/src/error.rs:1538	off-send-surface	-	-	-
+ Raised	routine_user_defined	body	crates/rexx-exec/src/error.rs:1551	off-send-surface	-	-	-
+-Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:918	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
++Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:940	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
+ Raised	scope_override_not_a_class	body+send	crates/rexx-exec/src/error.rs:1227	agrees	yes	88.914	o~m:v with v holding 5
+ Raised	scope_override_not_a_scope	send	crates/rexx-exec/src/error.rs:1233	agrees	yes	93.957	o~m:.Array
+-Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:860	off-send-surface	-	-	-
++Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:882	off-send-surface	-	-	-
+ Raised	separator_not_a_char	body	crates/rexx-exec/src/error.rs:834	off-send-surface	-	-	-
+-Loud	setup_method	send	crates/rexx-exec/src/lib.rs:732	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
+-Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:877	off-send-surface	-	-	-
++Loud	setup_method	send	crates/rexx-exec/src/lib.rs:743	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
++Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:899	off-send-surface	-	-	-
+ Loud	sim_blocked_command	body	crates/rexx-exec/src/sim.rs:1383	off-send-surface	-	-	-
+ Loud	sim_blocked_native	body	crates/rexx-exec/src/sim.rs:1394	off-send-surface	-	-	-
+ Loud	sim_endless_wait	body	crates/rexx-exec/src/sim.rs:1420	off-send-surface	-	-	-
+ Loud	sim_foreign_post	body	crates/rexx-exec/src/sim.rs:1372	off-send-surface	-	-	-
+ Loud	sim_replay_diverged	body	crates/rexx-exec/src/sim.rs:1405	off-send-surface	-	-	-
+ Loud	sim_trace_unwritten	body	crates/rexx-exec/src/sim.rs:1410	off-send-surface	-	-	-
+ Raised	single_dimension_only	send	crates/rexx-exec/src/error.rs:1172	agrees	yes	93.954	.Array~new(2,3)~delete(1)
+ Raised	source_not_string_or_array	send	crates/rexx-exec/src/error.rs:1085	agrees	yes	93.961	.method~new('m', .object~new) (corpus/lang/method_new_object_source.rex); Routine~new the same
+ Raised	sourceline_out_of_range	body	crates/rexx-exec/src/error.rs:709	off-send-surface	-	-	-
+-Loud	stale_handle	send	crates/rexx-exec/src/lib.rs:770	recorded	yes	the handle is no longer held by this activation	the forge's StashLocal then UseStashed (stash.rex), recorded as the exclusions row A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED
++Loud	stale_handle	send	crates/rexx-exec/src/lib.rs:781	recorded	yes	the handle is no longer held by this activation	the forge's StashLocal then UseStashed (stash.rex), recorded as the exclusions row A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED
+ Raised	stem_argument_unresolved	body	crates/rexx-exec/src/error.rs:1490	off-send-surface	-	-	-
+ Raised	stem_count_invalid	body	crates/rexx-exec/src/error.rs:1582	off-send-surface	-	-	-
+ Raised	stem_element_unset	body	crates/rexx-exec/src/error.rs:1592	off-send-surface	-	-	-
+ Raised	stem_range	body	crates/rexx-exec/src/error.rs:1587	off-send-surface	-	-	-
+ Raised	stem_size_not_whole	body	crates/rexx-exec/src/error.rs:793	off-send-surface	-	-	-
+ Raised	stem_without_a_size	body	crates/rexx-exec/src/error.rs:788	off-send-surface	-	-	-
+-Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:886	off-send-surface	-	-	-
++Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:908	off-send-surface	-	-	-
+ Raised	stream_not_readable	body	crates/rexx-exec/src/error.rs:760	off-send-surface	-	-	-
+ Raised	stream_not_writeable	body	crates/rexx-exec/src/error.rs:765	off-send-surface	-	-	-
+ Raised	stream_target_option	body	crates/rexx-exec/src/error.rs:771	off-send-surface	-	-	-
+-Loud	string_answer_not_a_string	send	crates/rexx-exec/src/lib.rs:581	recorded	yes	a STRING method answering	o = .k~new / say length(o) over ::class k / ::method string / return .directory~new: ours rc 120, the oracle a pointer-sized number (Deviation 30); an Array answer joins and agrees
++Loud	string_answer_not_a_string	send	crates/rexx-exec/src/lib.rs:592	recorded	yes	a STRING method answering	o = .k~new / say length(o) over ::class k / ::method string / return .directory~new: ours rc 120, the oracle a pointer-sized number (Deviation 30); an Array answer joins and agrees
+ Raised	syntax	body+send	crates/rexx-exec/src/error.rs:124	agrees	yes	Stream not initialized	s = .Stream~new('t.txt'); s~uninit; s~flush -- flush is the guarded half of oracle-crashes.txt entry 12b, so both sides raise 48.1 at rc 208 rather than the segfault the unguarded half gives
+ Raised	syntax_additional	body	crates/rexx-exec/src/error.rs:1903	off-send-surface	-	-	-
+ Raised	system_resources	body+send	crates/rexx-exec/src/error.rs:931	agrees	yes	5.0	.array~new(999999999999999)
+ Raised	too_many_arguments	body	crates/rexx-exec/src/error.rs:616	off-send-surface	-	-	-
+ Raised	too_many_external_arguments	body+send	crates/rexx-exec/src/error.rs:349	agrees	yes	88.922	.K~sep(1) on a class method bound to file_separator
+ Raised	too_many_internal_arguments	body	crates/rexx-exec/src/error.rs:357	off-send-surface	-	-	-
+ Raised	too_many_method_arguments	body+send	crates/rexx-exec/src/error.rs:1099	agrees	yes	93.902	o~hasMethod('M', 1, 2, 3)
+ Raised	too_many_subscripts	send	crates/rexx-exec/src/error.rs:1199	agrees	yes	93.926	.array~new(2,2)~at(1,2,3)
+ Raised	transient_positioning	send	crates/rexx-exec/src/error.rs:1074	agrees	yes	93.958	.Stream~new('/dev/null')~open('write') then ~seek('=1')
+ Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1741	off-send-surface	-	-	-
+-Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:598	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
+-Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:690	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
+-Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:483	off-send-surface	-	-	-
+-Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:910	off-send-surface	-	-	-
++Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:609	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
++Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:701	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
++Loud	unrecorded_executable	send	crates/rexx-exec/src/lib.rs:832	agrees	no	no route: every Method and Routine object is recorded where it is built, and its record is dropped only with the object	m~copy~isGuarded, a Method subclass instance's isPrivate and copy, a Routine subclass instance's call and copy~call, setMethod and define with a method object, define and defineMethods with .object~method(...) (Phase 9b1 Task 7 probes executable_a.rex, executable_b.rex): identical on both, the subclass instances refused with 93.974 by both
++Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:494	off-send-surface	-	-	-
++Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:932	off-send-surface	-	-	-
+ Raised	unsupported_new_method	send	crates/rexx-exec/src/error.rs:1156	agrees	yes	93.967	.Pointer~new
+ Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:1930	off-send-surface	-	-	-
+ Raised	use_local_outside_method	body	crates/rexx-exec/src/error.rs:1924	off-send-surface	-	-	-
+ Raised	variable_reference_not_uninitialised	body	crates/rexx-exec/src/error.rs:1871	off-send-surface	-	-	-
+ Raised	variable_reference_omitted	body	crates/rexx-exec/src/error.rs:1845	off-send-surface	-	-	-
+ Raised	whole_number_user_defined	send	crates/rexx-exec/src/error.rs:1124	agrees	yes	26.900	.context~package~options('FUZZ', 9) at DIGITS 9 (lang/package_option_writes.rex)
+ Raised	x2d_result_too_large	body	crates/rexx-exec/src/error.rs:977	off-send-surface	-	-	-
+diff --git a/rust/crates/rexx-exec/src/dispatch.rs b/rust/crates/rexx-exec/src/dispatch.rs
+index 3dd810186..f630dcd39 100644
+--- a/rust/crates/rexx-exec/src/dispatch.rs
++++ b/rust/crates/rexx-exec/src/dispatch.rs
+@@ -169,21 +169,21 @@ use class_protocol::{
+     SourceTaker, begin_init, class_argument, class_receiver, compile_method_source,
+     compile_method_source_in, compile_routine_source, is_enhanced_instance, method_name_argument,
+     method_source_lines, native_annotation, native_annotations, native_base_class,
+     native_class_copy, native_class_default_name, native_class_inherit, native_define,
+     native_define_class_method, native_define_methods, native_delete, native_enhanced, native_id,
+     native_inherit_instance_methods, native_is_subclass_of, native_metaclass, native_method,
+     native_mixin_class_factory, native_new, native_new_class, native_package,
+     native_package_add_class, native_package_add_public_class, native_scope, native_subclass,
+     native_superclass, native_superclasses, native_uninherit, new_instance, scoped_method,
+ };
+-pub(crate) use class_protocol::{builds_in_place, new_subclass};
++pub(crate) use class_protocol::{builds_in_place, charge_class, new_subclass};
+ 
+ // The native constructors, and `Pointer`'s and `WeakReference`'s methods,
+ // chained the same way.
+ mod construct;
+ use construct::{
+     native_capacity_init, native_directory_new, native_executable_new, native_hash_collection_new,
+     native_load_external, native_message_new, native_new_file, native_stem_new, native_string_new,
+     native_unsupported_new, native_weak_reference_new, pointer_address,
+ };
+ 
+diff --git a/rust/crates/rexx-exec/src/dispatch/class_protocol.rs b/rust/crates/rexx-exec/src/dispatch/class_protocol.rs
+index e14acc741..31f0ba5f4 100644
+--- a/rust/crates/rexx-exec/src/dispatch/class_protocol.rs
++++ b/rust/crates/rexx-exec/src/dispatch/class_protocol.rs
+@@ -429,32 +429,29 @@ pub(super) fn compile_routine_source(
+     }
+     let routine_class = interp.routine_class();
+     let object = interp.native_instance(routine_class);
+     let site = crate::environment::Annotated::Compiled(interp.compiled_methods);
+     interp.compiled_methods += 1;
+     interp.attach_annotations(object, site);
+     interp.record_compiled_routine(object, name, parsed, parent)?;
+     Ok(object)
+ }
+ 
+-/// [`Interp::scoped_method`], or the refusal for a `Method` object this
+-/// crate did not build.
++/// [`Interp::scoped_method`] as a `Result`.
+ pub(super) fn scoped_method(
+     interp: &mut Interp,
+     method: ObjRef,
+     scope: ObjRef,
+ ) -> Result<(ObjRef, rexx_core::MethodId), Failure> {
+-    interp.scoped_method(method, scope).ok_or_else(|| {
+-        Failure::from(Loud::unknown_receiver(
+-            "a method object this crate did not build",
+-        ))
+-    })
++    interp
++        .scoped_method(method, scope)
++        .ok_or_else(|| Failure::from(Loud::unrecorded_executable()))
+ }
+ 
+ /// The `method name` argument `~define`, `~delete` and `~method` share:
+ /// required, string-valued, and upcased before it reaches a dictionary --
+ /// `stringArgument(method_name, "method name")->upper()`
+ /// (`classes/ClassClass.cpp:831`-`:832`, `:961`, `:987`).
+ pub(super) fn method_name_argument(
+     interp: &mut Interp,
+     args: &[Option<ObjRef>],
+ ) -> Result<Vec<u8>, Failure> {
+@@ -501,25 +498,21 @@ pub(super) fn native_define(
+             interp.drop_method_object(class, &name);
+         }
+         Some(source) => {
+             let source = if interp.receiver_kind(source) == Ok(Primitive::Method) {
+                 source
+             } else {
+                 compile_method_source(interp, &written, source, "method", SourceTaker::Method)?
+             };
+             interp
+                 .define_method_object(class, &name, source)
+-                .ok_or_else(|| {
+-                    Failure::from(Loud::unknown_receiver(
+-                        "a method object this crate did not build",
+-                    ))
+-                })?;
++                .ok_or_else(|| Failure::from(Loud::unrecorded_executable()))?;
+         }
+     }
+     Ok(None)
+ }
+ 
+ /// `Class~defineMethods(methods)`: install a whole table of instance methods
+ /// in one mutation -- `RexxClass::defineMethodsRexx`
+ /// (`classes/ClassClass.cpp:518`).
+ pub(super) fn native_define_methods(
+     interp: &mut Interp,
+@@ -543,25 +536,23 @@ pub(super) fn native_define_methods(
+             value
+         } else {
+             // The entry's own index is the method's name, as stored:
+             // `createMethodDictionary` builds the object under
+             // `supplier->index()->requestString()` and keys the dictionary
+             // under its upcase (`classes/ClassClass.cpp:1255`-`:1258`).
+             compile_method_source(interp, &name, value, "method source", SourceTaker::Method)?
+         };
+         entries.push((name, Some(value)));
+     }
+-    interp.define_method_table(class, &entries).ok_or_else(|| {
+-        Failure::from(Loud::unknown_receiver(
+-            "a method object this crate did not build",
+-        ))
+-    })?;
++    interp
++        .define_method_table(class, &entries)
++        .ok_or_else(|| Failure::from(Loud::unrecorded_executable()))?;
+     Ok(None)
+ }
+ 
+ /// Whether `value` is a table `~defineMethods`, `~enhanced` and `~setMethod`
+ /// can walk: one of this crate's own `Body::Native` directories, or a
+ /// `Directory` or `StringTable` a program made, which since Phase 5h Task 4
+ /// is a collection with a hash store.
+ fn string_keyed_table(interp: &mut Interp, value: ObjRef) -> bool {
+     if matches!(
+         interp.receiver_kind(value),
+@@ -799,23 +790,23 @@ pub(crate) fn new_subclass(
+         if !interp.classes().is_cloned(id) {
+             return Err(Loud::metaclass_new_reused_class().into());
+         }
+         interp.roots.activity_mut().push_temp(id);
+         interp.classes().reparent(id, class, kind, metaclass);
+         id
+     };
+     Ok(id)
+ }
+ 
+-/// Charges a class a program built at run time toward the next collection,
+-/// which its behaviours' weight would otherwise not reach.
+-fn charge_class(interp: &mut Interp, class: ObjRef) {
++/// Charges a class a program built toward the next collection, which its
++/// behaviours' weight would otherwise not reach.
++pub(crate) fn charge_class(interp: &mut Interp, class: ObjRef) {
+     let methods = interp.classes().behaviour_names(class);
+     interp.charge_unheld(methods * CLASS_BYTES_PER_METHOD);
+ }
+ 
+ /// Whether `metaclass`'s `NEW` is `Class`'s own and its instances take
+ /// `Object`'s `INIT`, so the `INIT` `Class~new` sends does nothing.
+ pub(crate) fn builds_in_place(interp: &mut Interp, metaclass: ObjRef) -> bool {
+     let modelled = interp.object_model().metaclass;
+     let object = interp.object_model().object;
+     let classes = interp.classes();
+@@ -918,25 +909,21 @@ fn install_enhancing_class_methods(
+         let value = if interp.receiver_kind(value) == Ok(Primitive::Method) {
+             value
+         } else {
+             // Measured, oracle rc 163: a literal array `('return 1', ,
+             // 'nop')` in this table is `93.952 Method argument method source
+             // is an array and does not contain all string values.`
+             compile_method_source(interp, name, value, "method source", SourceTaker::Method)?
+         };
+         interp
+             .define_class_method_object(class, name, value)
+-            .ok_or_else(|| {
+-                Failure::from(Loud::unknown_receiver(
+-                    "a method object this crate did not build",
+-                ))
+-            })?;
++            .ok_or_else(|| Failure::from(Loud::unrecorded_executable()))?;
+     }
+     Ok(())
+ }
+ 
+ /// `Class~delete(name)`: take one instance method back off the receiver --
+ /// `RexxClass::deleteMethod` (`classes/ClassClass.cpp:952`).
+ pub(super) fn native_delete(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+@@ -995,25 +982,21 @@ pub(super) fn native_define_class_method(
+     let Some(Some(source)) = args.get(1).copied() else {
+         return Err(Loud::setup_method("defineClassMethod with no method object").into());
+     };
+     if interp.receiver_kind(source) != Ok(Primitive::Method) {
+         return Err(
+             Loud::setup_method("defineClassMethod with a value that is not a method").into(),
+         );
+     }
+     interp
+         .define_class_method_object(class, &name, source)
+-        .ok_or_else(|| {
+-            Failure::from(Loud::setup_method(
+-                "defineClassMethod with a method object whose body this crate did not record",
+-            ))
+-        })?;
++        .ok_or_else(|| Failure::from(Loud::unrecorded_executable()))?;
+     Ok(None)
+ }
+ 
+ /// `Class~inheritInstanceMethods(source)`: copy `source`'s own instance
+ /// methods into the receiver's dictionary at the receiver's scope, with no
+ /// superclass edge added -- `RexxClass::inheritInstanceMethods`
+ /// (`classes/ClassClass.cpp:558`), the "phony inherit" `CoreClasses.orx:77`
+ /// names in its own comment.
+ pub(super) fn native_inherit_instance_methods(
+     interp: &mut Interp,
+diff --git a/rust/crates/rexx-exec/src/dispatch/executable.rs b/rust/crates/rexx-exec/src/dispatch/executable.rs
+index 263136ab9..e0fe9ef70 100644
+--- a/rust/crates/rexx-exec/src/dispatch/executable.rs
++++ b/rust/crates/rexx-exec/src/dispatch/executable.rs
+@@ -93,28 +93,27 @@ impl Interp {
+             .find(|(object, _)| {
+                 self.executable_sources
+                     .get(object)
+                     .is_some_and(|record| record.installed == Some(method))
+             })
+             .and_then(|(_, writes)| writes.unguarded)
+             .map_or(declared, |unguarded| !unguarded)
+     }
+ }
+ 
+-/// The `ExecutableSource` this receiver reports on, or the refusal for a
+-/// receiver this crate did not build.
++/// The `ExecutableSource` this receiver reports on.
+ fn source_of(interp: &Interp, receiver: ObjRef) -> Result<ExecutableSource, Failure> {
+     interp
+         .executable_sources
+         .get(&receiver)
+         .map(|record| record.source)
+-        .ok_or_else(|| Loud::receiver_class("an executable this crate did not build").into())
++        .ok_or_else(|| Loud::unrecorded_executable().into())
+ }
+ 
+ /// One flag's value for this receiver: what the directive declared, with any
+ /// write the setters have made over it.
+ fn flag(interp: &Interp, receiver: ObjRef, which: Flag) -> Result<bool, Failure> {
+     let declared = declared_flag(interp, source_of(interp, receiver)?, which);
+     let written = interp.method_flag_writes.get(&receiver).copied();
+     Ok(match (which, written) {
+         (Flag::Unguarded, Some(writes)) => writes.unguarded.unwrap_or(declared),
+         (Flag::Private, Some(writes)) => declared || writes.private,
+@@ -571,21 +570,21 @@ pub(crate) fn call_routine_directly(
+ /// The half [`call`] and [`call_with`] share, once the arguments are values,
+ /// `name` being what the routine's frame is called, up to the point a Rexx
+ /// routine's body would run.
+ fn begin_routine(
+     interp: &mut Interp,
+     receiver: ObjRef,
+     mut values: Vec<Option<ObjRef>>,
+     name: &[u8],
+ ) -> Result<NativeStarted, Failure> {
+     let Some(record) = interp.executable_sources.get(&receiver).copied() else {
+-        return Err(Loud::receiver_class("a routine object this crate did not build").into());
++        return Err(Loud::unrecorded_executable().into());
+     };
+     // A library routine runs under its own table spelling, which is the
+     // name `RoutineClass::callRexx` passes
+     // (`interpreter/classes/RoutineClass.cpp:205-211`): measured, `r~call(1,
+     // 2, 3)` over `RxCalcSqrt` is reported under `Compiled routine
+     // "RxCalcSqrt".` whether a directive or `loadExternalRoutine` answered
+     // `r`.
+     let code = match (record.source, record.routine) {
+         (crate::ExecutableSource::Loaded { code }, _) => Some(code),
+         (_, Some((program, directive))) => {
+@@ -611,21 +610,21 @@ fn begin_routine(
+     if let Some(row) = row {
+         return interp
+             .run_internal_as(row, crate::run::InternalName::Row, &mut values, 0)
+             .map(|started| match started {
+                 Started::Ran(value) => NativeStarted::Ran(Some(value)),
+                 Started::Entered => NativeStarted::Entered(Then::Pass),
+             });
+     }
+     let Some((program, directive)) = record.routine else {
+         let crate::ExecutableSource::Main { program } = record.source else {
+-            return Err(Loud::receiver_class("a routine object this crate did not build").into());
++            return Err(Loud::unrecorded_executable().into());
+         };
+         return interp
+             .call_program_main(program, values, name)
+             .map(NativeStarted::Ran);
+     };
+     let started = interp.begin_installed_routine(program, directive, &mut values, name)?;
+     // `.context~executable` inside answers the object the call came through:
+     // measured, oracle rc 0, `r~call == r` and `r~copy~call == r~copy`.
+     if let NativeStarted::Entered(_) = started {
+         interp.activation_mut().cold_mut().executable = Some(receiver);
+diff --git a/rust/crates/rexx-exec/src/dispatch/object_protocol.rs b/rust/crates/rexx-exec/src/dispatch/object_protocol.rs
+index 4eaec89f2..0608a6db2 100644
+--- a/rust/crates/rexx-exec/src/dispatch/object_protocol.rs
++++ b/rust/crates/rexx-exec/src/dispatch/object_protocol.rs
+@@ -641,25 +641,23 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
+         Ok(Primitive::String) => rexx_core::BehaviourId::STRING,
+         // `StackFrameClass` has no `copy` of its own: measured, oracle rc 0,
+         // a frame's copy is a different object answering the same `~type`,
+         // `~line` and `~context`.
+         Ok(Primitive::StackFrame) => rexx_core::BehaviourId::OBJECT,
+         // Measured, oracle rc 0: a copy reads and writes the variable the
+         // original names.
+         Ok(Primitive::VariableReference) => rexx_core::BehaviourId::OBJECT,
+         Ok(Primitive::Method | Primitive::Routine) => {
+             interp.roots.activity_mut().push_temp(receiver);
+-            let copy = interp.copy_method_object(receiver).ok_or_else(|| {
+-                Failure::from(Loud::unknown_receiver(
+-                    "a method object this crate did not build",
+-                ))
+-            })?;
++            let copy = interp
++                .copy_method_object(receiver)
++                .ok_or_else(|| Failure::from(Loud::unrecorded_executable()))?;
+             return Ok(copy);
+         }
+         // `PackageClass::copy`: a field copy, then `deepCopy`'s tables.
+         Ok(Primitive::Package) => rexx_core::BehaviourId::OBJECT,
+         Ok(_) => return Err(Loud::native_method(b"COPY", "Object").into()),
+         Err(kind) => return Err(Loud::unknown_receiver(kind).into()),
+     };
+     // The allocation below collects first, and while the cloned body is a
+     // local the collector does not walk, every value in it is reachable from
+     // the receiver and from nowhere else.
+diff --git a/rust/crates/rexx-exec/src/environment/identities.rs b/rust/crates/rexx-exec/src/environment/identities.rs
+index a2637f6d9..60d21cb5b 100644
+--- a/rust/crates/rexx-exec/src/environment/identities.rs
++++ b/rust/crates/rexx-exec/src/environment/identities.rs
+@@ -218,20 +218,21 @@ impl Interp {
+         // while something reaches it: an activation of its code
+         // (`Interp::package_roots`), a class, `Routine` or `Method` object of
+         // its code, or a holder of the object.
+         match package {
+             Package::Rexx => {
+                 self.roots.add_global(&package_root_key(package), object);
+                 self.rexx_package = Some(object);
+             }
+             Package::Program(program) => {
+                 self.roots.activity_mut().push_temp(object);
++                self.charge_unheld(crate::PACKAGE_BYTES);
+                 let hold = self.programs.set_package(program, object);
+                 if let Some(data) = self.package_data_mut(object) {
+                     data.hold = hold;
+                 }
+             }
+         }
+         self.attach_annotations(object, Annotated::Package(package));
+         Ok(object)
+     }
+ 
+diff --git a/rust/crates/rexx-exec/src/install.rs b/rust/crates/rexx-exec/src/install.rs
+index f254cc9e3..73c4422d4 100644
+--- a/rust/crates/rexx-exec/src/install.rs
++++ b/rust/crates/rexx-exec/src/install.rs
+@@ -706,21 +706,21 @@ impl Interp {
+             return Err(Raised::requires_file_not_found(original).into());
+         };
+         // The search already answered that this names a regular file, so a
+         // read failing here is a permission or a race rather than a miss --
+         // and the oracle reports the same 43.901 for it, since
+         // `PackageManager::loadRequires` answers `OREF_NULL` either way.
+         let Ok(text) = std::fs::read(&resolved) else {
+             return Err(Raised::requires_file_not_found(original).into());
+         };
+         let parsed = Rc::new(self.parse_file(text, resolved.as_bytes())?);
+-        let required = self.programs.insert(Rc::clone(&parsed));
++        let required = self.load_program(Rc::clone(&parsed));
+         self.required_paths
+             .insert(required, resolved.as_str().into());
+         // Built before it is cached: the cache holds the package object
+         // weakly (`PackageManager::addToRequiresCache`,
+         // `package/PackageManager.cpp:921`), so an entry lives exactly as long
+         // as its object.
+         let package = self.package_object(Package::Program(required))?;
+         // Installed before the prologue runs, which is where
+         // `getRequiresFile` puts it (`package/PackageManager.cpp:830`-`:833`).
+         if let Some(manager) = inherited {
+@@ -986,21 +986,21 @@ impl Interp {
+         name: &[u8],
+         lines: &[Vec<u8>],
+         parent: Option<ObjRef>,
+     ) -> Result<ProgramId, Failure> {
+         let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
+         let parsed =
+             match rexx_parse::program_from(rexx_parse::ProgramSource::from_lines(&borrowed)) {
+                 Ok(parsed) => Rc::new(parsed),
+                 Err(rejected) => return Err(self.raise_parse_failure(&rejected, Some(name))),
+             };
+-        let id = self.programs.insert(Rc::clone(&parsed));
++        let id = self.load_program(Rc::clone(&parsed));
+         self.compiled_method_names.insert(id, name.into());
+         // Recorded ahead of the prologue for the reason
+         // `new_file_executable` records its own parent early: the prologue
+         // resolves routines, and must already reach the context.
+         // Built before the prologue, rooted as a temp of this frame: a package
+         // the prologue builds would otherwise go with the prologue's frame.
+         self.package_object(Package::Program(id))?;
+         if let Some(parent) = parent {
+             self.set_package_parent(id, parent)?;
+         }
+@@ -1255,20 +1255,22 @@ impl Interp {
+             ClassKind::Regular
+         };
+         let id = dispatch::new_subclass(self, superclass, name.as_bytes(), metaclass, kind)?;
+         // **A class the interpreter's own library declares is a class in the
+         // image**, and `RexxClass::liveGeneral` sets `REXX_DEFINED` on every
+         // class in the image under `PREPARINGIMAGE` (`ClassClass.cpp:136`-
+         // `:142`). Measured: the oracle refuses `.Alarm~inherit(.Comparable)`
+         // with 98.985, the same refusal it gives `.Array~inherit()`.
+         if self.library_bootstrap {
+             self.classes().set_rexx_defined(id);
++        } else {
++            dispatch::charge_class(self, id);
+         }
+         // The package's own installed-class table, which is what `.NAME`
+         // resolution reads first -- see `environment/identities.rs`'s
+         // `record_package_class` for why the registry's flat table is not
+         // that.
+         // `ClassDirective::install` passes the directive's own `isPublic()`
+         // to `addInstalledClass` (`instructions/ClassDirective.cpp:209`),
+         // which files a public class in both of the package's tables and
+         // every other class in one (`classes/PackageClass.cpp:1410`-`:1419`).
+         // That is the difference `~publicClasses` reads back.
+@@ -1730,21 +1732,21 @@ impl Interp {
+                     protection: Protection::default(),
+                     guard: GuardOption::default(),
+                     external: None,
+                     delegate: None,
+                     body: Some(main),
+                 })),
+                 clause_span: 0..0,
+             }],
+             symbols,
+         });
+-        let program_id = self.programs.insert(program);
++        let program_id = self.load_program(program);
+         self.compiled_method_names.insert(program_id, name.into());
+         self.override_package_settings(program_id)?;
+         // `generateMethod` and `generateRoutine` give the executable's own
+         // package `parent` as its parent (`LanguageParser.cpp:603`, `:637`),
+         // which its routine and class lookups walk.
+         if let Some(parent) = parent {
+             self.set_package_parent(program_id, parent)?;
+         }
+         let method = self.mint_unattached_body(
+             object,
+@@ -1868,21 +1870,21 @@ impl Interp {
+                 kind: DirectiveKind::Routine(Box::new(rexx_parse::RoutineDirective {
+                     name: name.into(),
+                     access: Access::default(),
+                     external: None,
+                     body: Some(main),
+                 })),
+                 clause_span: 0..0,
+             }],
+             symbols,
+         });
+-        let program_id = self.programs.insert(program);
++        let program_id = self.load_program(program);
+         self.compiled_method_names.insert(program_id, name.into());
+         self.override_package_settings(program_id)?;
+         // `generateMethod` and `generateRoutine` give the executable's own
+         // package `parent` as its parent (`LanguageParser.cpp:603`, `:637`),
+         // which its routine and class lookups walk.
+         if let Some(parent) = parent {
+             self.set_package_parent(program_id, parent)?;
+         }
+         self.record_executable(
+             object,
+@@ -1974,21 +1976,21 @@ impl Interp {
+                 }))
+             },
+             clause_span: 0..0,
+         });
+         let program = Rc::new(Program {
+             source,
+             main: CodeBody::default(),
+             directives,
+             symbols,
+         });
+-        let id = self.programs.insert(Rc::clone(&program));
++        let id = self.load_program(Rc::clone(&program));
+         record(self, id);
+         // **Recorded before the directives install, not after.** Installing
+         // runs a `::REQUIRES` prologue, and code running there resolves
+         // routines -- which must already reach the package that built this
+         // executable. `load_requires` caches ahead of its own prologue for
+         // the same reason.
+         if let Some(parent) = parent {
+             self.set_package_parent(id, parent)?;
+         }
+         if let Err(failure) = self.install_directives(id, &program) {
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index 8d75eb0e1..5cb6ac98a 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -322,20 +322,31 @@ pub(crate) fn set_fail_native_wait() {
+ 
+ /// The arena size below which no ordinary run ever collects, and the floor
+ /// every later growth allowance is raised to (see `Interp::collect_at`).
+ const COLLECT_FLOOR: usize = 65_536;
+ 
+ /// The body bytes allocated since a collection below which no ordinary run
+ /// collects on bytes, and the floor every later byte allowance is raised to
+ /// (see `Interp::bytes_due`).
+ const COLLECT_BYTES_FLOOR: usize = 32 << 20;
+ 
++/// The bytes a loaded program is charged toward the next collection, with
++/// [`PROGRAM_BYTES_PER_SOURCE_BYTE`] for each byte of its source. Measured on
++/// `Package~new` before any collection: about 30 kB for a one-line program,
++/// and 83 kB more for 2100 more bytes of source.
++const PROGRAM_BYTES: usize = 24 << 10;
++const PROGRAM_BYTES_PER_SOURCE_BYTE: usize = 40;
++
++/// The bytes a program's package object is charged toward the next
++/// collection. Measured on `Package~copy` before any collection: about 3 kB.
++pub(crate) const PACKAGE_BYTES: usize = 3 << 10;
++
+ /// The globals entry [`Interp::root_exit_value`] writes. A name rather than an
+ /// index because `RootSet::add_global` is keyed by name and replaces in place,
+ /// which is the behaviour wanted here.
+ const EXIT_VALUE_ROOT: &str = "the program's exit value";
+ 
+ /// What one interpreter run produced.
+ #[derive(Debug)]
+ pub struct Outcome {
+     pub exit_code: i32,
+     pub stdout: Vec<u8>,
+@@ -806,20 +817,31 @@ impl Loud {
+     /// An activation's body selector named something that is not a routine
+     /// body -- an internal inconsistency, never a program error.
+     #[cold]
+     #[inline(never)]
+     fn missing_body() -> Loud {
+         Loud {
+             message: "an activation's body selector names no routine body".to_string(),
+         }
+     }
+ 
++    /// A `Method` or `Routine` object with no executable record. Each one is
++    /// recorded where it is built and its record goes only with it, so this
++    /// is an internal inconsistency, never a program error.
++    #[cold]
++    #[inline(never)]
++    fn unrecorded_executable() -> Loud {
++        Loud {
++            message: "a Method or Routine object with no executable record".to_string(),
++        }
++    }
++
+     /// A chunk's instruction map is shorter than the body it was compiled
+     /// from -- an internal inconsistency, never a program error.
+     fn chunk_map_too_short() -> Loud {
+         Loud {
+             message: "a compiled chunk has no op for an instruction of its own body".to_string(),
+         }
+     }
+ 
+     /// A body the compiler refused: one needing more registers, slots or call
+     /// arguments than a `u16` indexes, or more ops than a `u32` does
+@@ -2249,21 +2271,21 @@ impl Interp {
+             pool: new_pool(),
+         }
+     }
+ 
+     // ---- loading and the activation stack ----
+ 
+     /// Loads `program`, runs its main body in a fresh activation, and tears
+     /// the activation down again.
+     fn run(&mut self, program: Program) -> Result<Option<ObjRef>, Failure> {
+         let program = Rc::new(program);
+-        let program_id = self.programs.insert(Rc::clone(&program));
++        let program_id = self.load_program(Rc::clone(&program));
+         self.run_loaded(program, program_id, CallType::Command, None, None)
+     }
+ 
+     /// Runs the interpreter's own Rexx-written library -- `Setup.cpp:1786`'s
+     /// `resolveProgramName(BASEIMAGELOAD)` and the `runProgram` at `:1795`,
+     /// which hands the entry program `TheRexxPackage` as its one argument.
+     pub(crate) fn bootstrap_library(&mut self) -> Result<(), Failure> {
+         debug_assert!(
+             self.object_model.is_none(),
+             "the library bootstrap must build the object model, so nothing may have forced \
+@@ -2326,21 +2348,21 @@ impl Interp {
+         };
+         // Resolved and then unreadable is 3.1 naming the file, not the 43.1
+         // of a name that resolved to nothing -- measured on a mode-000 file.
+         let Ok(text) = std::fs::read(&resolved) else {
+             return Err(Raised::executable_file_unreadable(resolved.as_bytes()).into());
+         };
+         let parsed = Rc::new(self.parse_file(text, resolved.as_bytes())?);
+         let caller = self
+             .running_activation()
+             .map(|activation| activation.program_id);
+-        let program_id = self.programs.insert(Rc::clone(&parsed));
++        let program_id = self.load_program(Rc::clone(&parsed));
+         // Its own path, so the callee's `PARSE SOURCE`, `~package~name` and
+         // traceback name the file rather than the program that called it.
+         self.required_paths
+             .insert(program_id, resolved.as_str().into());
+         let address = self.activation().address.clone();
+         let settings = self.activation().settings.clone();
+         let saved = std::mem::replace(
+             &mut self.activity.call_context,
+             CallContext {
+                 name: Rc::from(name),
+@@ -2383,20 +2405,21 @@ impl Interp {
+         let parsed = match parse_program(program.source.to_vec()) {
+             Ok(parsed) => parsed,
+             // A parse failure here is the embedded source, not a program's:
+             // `rexx-lib` pins each file's sha256, so this can only fire on a
+             // file this crate cannot yet parse.
+             Err(error) => {
+                 return Err(Loud::library_source(program.name, &format!("{error}")).into());
+             }
+         };
+         let parsed = Rc::new(parsed);
++        // Not charged: a library program is never freed.
+         let program_id = self.programs.insert(Rc::clone(&parsed));
+         // `rexx_package_class` searches this list, so a new library package
+         // can turn a miss into a hit and shadow an earlier answer.
+         self.invalidate_rexx_class_cache();
+         self.library_programs.push(program_id);
+         let arguments = arguments.unwrap_or_else(|| {
+             let package = self.held_package_object(Package::Program(program_id));
+             // Rooted for the whole of the bootstrap: `call_context` is not
+             // walked by the collector, and the prologue allocates before it
+             // reads `rexxPackage`.
+@@ -2879,20 +2902,31 @@ impl Interp {
+     /// Charges `bytes` of a body allocated outside its slot. When the bytes
+     /// since the last collection reach `bytes_due`, the next allocation
+     /// collects.
+     #[inline]
+     pub(crate) fn charge_body_bytes(&mut self, bytes: usize) {
+         self.heap.hold_body_bytes(bytes);
+         let since = self.heap.charge_body_bytes(bytes);
+         self.collect_due |= since >= self.bytes_due;
+     }
+ 
++    /// Files `program` under a fresh id, charging its weight toward the
++    /// next collection.
++    pub(crate) fn load_program(&mut self, program: Rc<Program>) -> ProgramId {
++        let source = &program.source;
++        let bytes = source
++            .line_span(source.line_count())
++            .map_or(0, |span| span.end);
++        self.charge_unheld(PROGRAM_BYTES + bytes * PROGRAM_BYTES_PER_SOURCE_BYTE);
++        self.programs.insert(program)
++    }
++
+     /// Counts `bytes` a body holds outside its slot toward the next
+     /// collection without holding them, for a body whose
+     /// [`rexx_core::Body::held_bytes`] does not report them: a `String`
+     /// subclass instance's text.
+     pub(crate) fn charge_unheld(&mut self, bytes: usize) {
+         let since = self.heap.charge_body_bytes(bytes);
+         self.collect_due |= since >= self.bytes_due;
+     }
+ 
+     /// [`Interp::charge_body_bytes`] for a body that may have grown by
+@@ -3155,21 +3189,22 @@ impl Interp {
+         let heap = &self.heap;
+         self.activities.guards.prune_pools(|object| {
+             !matches!(object.decode(), rexx_core::Decoded::Heap { .. })
+                 || heap.peek(object).is_some()
+         });
+         self.activities.semaphores.prune(|object| {
+             !matches!(object.decode(), rexx_core::Decoded::Heap { .. })
+                 || heap.peek(object).is_some()
+         });
+         self.activities
+-            .prune_senders(|message| heap.peek(message).is_some());
++            .prune_messages(|message| heap.peek(message).is_some());
++        self.prune_dead_object_rows();
+         let freed = self.programs.free_unheld();
+         if !freed.is_empty() {
+             self.prune_program_rows(&freed);
+         }
+         let (heap, programs) = (&self.heap, &self.programs);
+         self.required_packages.retain(|_, program| {
+             programs
+                 .package(*program)
+                 .is_some_and(|package| heap.peek(package).is_some())
+         });
+@@ -3190,33 +3225,51 @@ impl Interp {
+         // would cost the whole class population to find the few that died.
+         if !stats.freed_classes.is_empty() {
+             let dead = stats.freed_classes;
+             self.classes().expunge(&dead);
+             for class in &dead {
+                 self.class_variables.remove(class);
+                 self.class_packages.remove(class);
+             }
+             self.method_objects
+                 .retain(|(class, _, _), _| !dead.contains(class));
++            self.annotations.retain(|site, _| match site {
++                environment::Annotated::Class(class)
++                | environment::Annotated::Member(class, _, _) => !dead.contains(class),
++                _ => true,
++            });
+         }
+         // **Not raised for the stress mode**, which collects on every
+         // allocation by definition and must not have its watermark moved
+         // out from under it.
+         if !self.stress_collect {
+             self.collect_at = COLLECT_FLOOR.max(stats.live.saturating_mul(2));
+         }
+         self.bytes_due = COLLECT_BYTES_FLOOR.max(stats.live_bytes);
+         self.collect_due = self.stress_collect || self.sim_collects_at_random();
+         #[cfg(feature = "sharing")]
+         self.heap.sharing_pause(false);
+     }
+ 
++    /// Drops every row keyed by, or naming, a `Method`, `Routine` or
++    /// `Message` object the sweep freed.
++    fn prune_dead_object_rows(&mut self) {
++        let heap = &self.heap;
++        let live = |object: &ObjRef| heap.peek(*object).is_some();
++        self.executable_sources.retain(|object, _| live(object));
++        self.method_flag_writes.retain(|object, _| live(object));
++        self.executable_objects.retain(|_, object| live(object));
++        self.message_outcomes.retain(|message, _| live(message));
++        self.started_messages.retain(live);
++        self.unnotified_messages.retain(live);
++    }
++
+     /// Drops every row that names one of the `freed` programs.
+     #[cold]
+     #[inline(never)]
+     fn prune_program_rows(&mut self, freed: &[ProgramId]) {
+         let freed: rustc_hash::FxHashSet<ProgramId> = freed.iter().copied().collect();
+         let dead = |program: &ProgramId| freed.contains(program);
+         self.plans.retain(|key, _| !dead(&key.program));
+         if self
+             .last_plan
+             .as_ref()
+diff --git a/rust/crates/rexx-exec/src/run/tests.rs b/rust/crates/rexx-exec/src/run/tests.rs
+index aa555a4b1..cbc952e28 100644
+--- a/rust/crates/rexx-exec/src/run/tests.rs
++++ b/rust/crates/rexx-exec/src/run/tests.rs
+@@ -302,10 +302,91 @@ fn a_freed_programs_id_never_resolves_again() {
+                 site,
+                 crate::environment::Annotated::Package(crate::plan::Package::Program(program))
+                     | crate::environment::Annotated::Routine(program, _)
+                     | crate::environment::Annotated::Unattached(program, _)
+                     if program == id
+             )),
+             "{id} in annotations"
+         );
+     }
+ }
++
++/// A collection drops every row keyed by a `Method`, `Routine` or `Message`
++/// object it swept, and every annotation row of a class it swept, while the
++/// program they came from stays loaded.
++#[test]
++fn a_collection_drops_the_rows_of_swept_executables_and_messages() {
++    let mut interp = Interp::new();
++    let out = say_output_with_directives(
++        &mut interp,
++        b".local['KEEP'] = .context~package\no = .array~of(1, 2)\ndo i = 1 to 3\n  \
++          m = .Message~new(o, 'ITEMS'); m~send\n  s = .Message~new(o, 'ITEMS'); s~start\n  \
++          c = .k~method('FOO')~copy; c~setPrivate\n  \
++          t = .object~subclass('t'); a = t~annotations\nend\n\
++          say m~completed c~isPrivate a~items\n\
++          ::class k\n::method foo\n  return 1\n",
++    );
++    assert_eq!(String::from_utf8_lossy(&out), "1 1 0\n");
++    let late = interp.run_started_to_end();
++    assert!(late.is_empty(), "a started message failed");
++    assert!(
++        !interp.message_outcomes.is_empty(),
++        "no message outcome was recorded"
++    );
++    assert!(
++        !interp.started_messages.is_empty(),
++        "no started message was recorded"
++    );
++    assert!(
++        !interp.method_flag_writes.is_empty(),
++        "no flag write was recorded"
++    );
++    assert!(
++        interp
++            .annotations
++            .keys()
++            .any(|site| matches!(site, crate::environment::Annotated::Class(_))),
++        "no class annotation table was recorded"
++    );
++    interp.collect_now();
++    let heap = &interp.heap;
++    let live = |object: &ObjRef| heap.peek(*object).is_some();
++    assert!(
++        interp.executable_sources.keys().all(live),
++        "executable_sources keeps a swept object"
++    );
++    assert!(
++        interp.method_flag_writes.keys().all(live),
++        "method_flag_writes keeps a swept object"
++    );
++    assert!(
++        interp.executable_objects.values().all(live),
++        "executable_objects names a swept object"
++    );
++    assert!(
++        interp.message_outcomes.keys().all(live),
++        "message_outcomes keeps a swept message"
++    );
++    assert!(
++        interp.started_messages.iter().all(live),
++        "started_messages keeps a swept message"
++    );
++    assert!(
++        interp.unnotified_messages.iter().all(live),
++        "unnotified_messages keeps a swept message"
++    );
++    assert!(
++        interp
++            .activities
++            .message_rows()
++            .all(|message| live(&message)),
++        "the scheduler keeps a swept message"
++    );
++    assert!(
++        interp.annotations.keys().all(|site| match site {
++            crate::environment::Annotated::Class(class)
++            | crate::environment::Annotated::Member(class, _, _) => live(class),
++            _ => true,
++        }),
++        "annotations keeps a swept class's row"
++    );
++}
+diff --git a/rust/crates/rexx-exec/src/scheduler.rs b/rust/crates/rexx-exec/src/scheduler.rs
+index 3f8b2baba..5d37bfc7b 100644
+--- a/rust/crates/rexx-exec/src/scheduler.rs
++++ b/rust/crates/rexx-exec/src/scheduler.rs
+@@ -333,23 +333,31 @@ const MAIN: ActivityId = ActivityId(0);
+ /// The Rust stack kept free below the deepest point
+ /// [`Interp::stack_exhausted`] admits, for the work between two of its
+ /// checks and the raise of 11.1.
+ const STACK_MARGIN: usize = 32 * 1024 * 1024;
+ 
+ /// `ActivityManager::MAX_THREAD_POOL_SIZE` (`ActivityManager.hpp:358`): an
+ /// ended activity is pooled while the pool holds no more than this.
+ const MAX_POOLED: usize = 5;
+ 
+ impl Activities {
+-    /// Drops the sender records of messages `live` no longer answers for.
+-    pub(crate) fn prune_senders(&mut self, live: impl Fn(ObjRef) -> bool) {
++    /// Drops the sender and waiter-identity records of messages `live` no
++    /// longer answers for.
++    pub(crate) fn prune_messages(&mut self, live: impl Fn(ObjRef) -> bool) {
+         self.senders.retain(|message, _| live(*message));
++        self.message_ids.retain(|message, _| live(*message));
++    }
++
++    /// Every message a sender or waiter-identity record is keyed by.
++    #[cfg(test)]
++    pub(crate) fn message_rows(&self) -> impl Iterator<Item = ObjRef> + '_ {
++        self.senders.keys().chain(self.message_ids.keys()).copied()
+     }
+ 
+     /// The table of an interpreter whose activities' thread contexts link
+     /// `thread_table`.
+     pub(crate) fn new(thread_table: rexx_api::ffi::ThreadTable) -> Activities {
+         Activities {
+             running: MAIN,
+             idle: vec![None],
+             free: Vec::new(),
+             ready: VecDeque::new(),
+diff --git a/rust/crates/rexx-exec/tests/class_lifetime.rs b/rust/crates/rexx-exec/tests/class_lifetime.rs
+index 8a528592e..c81a1cc7a 100644
+--- a/rust/crates/rexx-exec/tests/class_lifetime.rs
++++ b/rust/crates/rexx-exec/tests/class_lifetime.rs
+@@ -47,10 +47,20 @@ fn an_instance_keeps_its_class_alive_and_nothing_else_does() {
+         "instance alive, delta: 1\ninstance class: TEMPC\ninstance gone, delta: 0\n",
+     );
+ }
+ 
+ /// A class-side `UNINIT` runs at the collection that reaches the class, not at
+ /// termination.
+ #[test]
+ fn a_class_side_uninit_runs_at_the_collection_that_reaches_the_class() {
+     agrees("class_uninit_gc.rex", "before\nclass uninit\nafter\n");
+ }
++
++/// A loop that only makes packages through `Package~new`, with no class, one
++/// `::CLASS` or many, collects: a dropped one's class and package clear.
++#[test]
++fn a_loop_of_package_new_collects_its_classes_and_packages() {
++    agrees(
++        "package_class_collected.rex",
++        "class cleared: 1\npackage cleared: 1\none of many classes cleared: 1\n",
++    );
++}
+diff --git a/rust/crates/rexx-exec/tests/representation_refusals.rs b/rust/crates/rexx-exec/tests/representation_refusals.rs
+index fa24d28f4..3070d3c46 100644
+--- a/rust/crates/rexx-exec/tests/representation_refusals.rs
++++ b/rust/crates/rexx-exec/tests/representation_refusals.rs
+@@ -53,40 +53,20 @@ const ALLOWED: &[(&str, &str)] = &[
+         "Deviation 36",
+     ),
+     (
+         "rexx-exec/src/lib.rs:a directory whose entries this crate does not fill",
+         "Phase 10",
+     ),
+     (
+         "rexx-exec/src/environment/identities.rs:a .ROUTINES entry that is not a routine this crate built",
+         "Deviation 28",
+     ),
+-    (
+-        "rexx-exec/src/dispatch/class_protocol.rs:a method object whose body this crate did not record",
+-        "Task 7",
+-    ),
+-    (
+-        "rexx-exec/src/dispatch/class_protocol.rs:a method object this crate did not build",
+-        "Task 7",
+-    ),
+-    (
+-        "rexx-exec/src/dispatch/object_protocol.rs:a method object this crate did not build",
+-        "Task 7",
+-    ),
+-    (
+-        "rexx-exec/src/dispatch/executable.rs:an executable this crate did not build",
+-        "Task 7",
+-    ),
+-    (
+-        "rexx-exec/src/dispatch/executable.rs:a routine object this crate did not build",
+-        "Task 7",
+-    ),
+     // No leak in `.superpowers/sdd/2026-10-14-phase-9b1/scout-leaks.md` names
+     // these guards on a freed handle or an unexpected body, so the sweep owns them.
+     (
+         "rexx-exec/src/dispatch/context.rs:a stack frame this crate did not build",
+         "Task 8",
+     ),
+     (
+         "rexx-exec/src/dispatch/object_protocol.rs:a stack frame this crate did not build",
+         "Task 8",
+     ),
+@@ -116,21 +96,20 @@ const ALLOWED: &[(&str, &str)] = &[
+         "rexx-exec/src/environment/identities.rs:a package whose object is no longer live",
+         "Task 8",
+     ),
+ ];
+ 
+ /// The owners a row may name.
+ const OWNERS: &[&str] = &[
+     "Deviation 28",
+     "Deviation 32",
+     "Deviation 36",
+-    "Task 7",
+     "Task 8",
+     "Phase 10",
+ ];
+ 
+ fn crates_dir() -> PathBuf {
+     Path::new(env!("CARGO_MANIFEST_DIR"))
+         .parent()
+         .expect("the crate sits in `crates/`")
+         .to_path_buf()
+ }
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/package_class_collected.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/package_class_collected.txt
+new file mode 100644
+index 000000000..15c984c16
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/package_class_collected.txt
+@@ -0,0 +1,24 @@
++count 23
++/* A class and a package that only Package~new made are collected once
++   nothing holds them, while the loop does nothing but make more of them. */
++p = .Package~new('p', '::class c')
++w = .WeakReference~new(p~classes['C'])
++p = .nil
++do i = 1 to 5000 until w~value == .nil
++  q = .Package~new('q', '::class c')
++end
++say 'class cleared:' (w~value == .nil)
++w = .WeakReference~new(.Package~new('p', 'return 1'))
++do i = 1 to 5000 until w~value == .nil
++  q = .Package~new('q', 'return 1')
++end
++say 'package cleared:' (w~value == .nil)
++src = .array~new
++do j = 1 to 50
++  src~append('::class c'j)
++end
++w = .WeakReference~new(.Package~new('p', src)~classes['C1'])
++do i = 1 to 300 until w~value == .nil
++  q = .Package~new('q', src)
++end
++say 'one of many classes cleared:' (w~value == .nil)

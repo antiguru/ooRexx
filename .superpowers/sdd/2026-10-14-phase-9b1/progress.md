@@ -95,3 +95,19 @@ Task 6: fix round 1 dispatched (resume c6-impl).
 Task 6: fix round 1 at 70f730abe, 0f1baee91, 23229c39d, 740486ee9, 23e7d1828, a789c7b1a, a8ba623b2. ext-call loop flat (423/449 MB vs oracle ~20 MB -- absolute gap is the trigger not charging programs, Task 7 Step 2). sendloop +0.0715%. Re-review dispatched (sonnet) with loop measurement.
 Task 6 re-review: resolved, no open findings (loops flat incl. replacement, 3 files, class merge within 3.6%).
 Task 6: complete (1f0b8382f, 40a65669f, e186ebe0c, c27f3b938, 13c5c2390, 70f730abe, 0f1baee91, 23229c39d, 740486ee9, 23e7d1828, a789c7b1a, a8ba623b2). sendloop +0.0715%, startup +0.3372% vs pin.
+Task 7: dispatched (implementer opus, BASE 4d65804cd).
+Task 7: implementer DONE_WITH_CONCERNS (f9341ef33, 5fda502fb, 5958a6f63). Full set OK (startup +0.336%). Peaks 2.1-2.7x oracle; an 8 MB COLLECT_BYTES_FLOOR gives 1.3-1.4x at no measured instruction cost.
+Ruling: Method~copy identity rows (50-90 B each, pruned only with the template's program) -> Task 8 (a per-object map in none of the three states; needs a frame-holds-its-Method ownership rule).
+Ruling: msgloop is judged 80000 vs 320000 (flat on both sides; the oracle itself grows 25.5% from 20000 to 80000, so 20000 is still warm-up) -- spec 6 wording gets that exception -- if wrong, msgloop needs a different program.
+Review dispatched (opus); fix round will carry P6/P7/C2 witnesses and the floor decision.
+Task 7 review: spec fails: loadExternalMethod identity rows (defined_library_codes, library_externals via bind_loaded_method, identities.rs:633-643) never pruned, ~110 B/call, 80 MB at 320000 vs oracle 20 MB. Prune safety m1-m5 match oracle. Charge has no double count/underflow. Memory bars hold. P6/P7/C2 witnesses written by reviewer (task-7-review-files/witness-tests.rs.txt). 8 MB floor: free on the bench set, but body-churn programs cost +52.8%/+22.4%/+4.1% Ir.
+Ruling: do NOT adopt the 8 MB floor; add a churn bench program to rust/bench-programs so future floor changes are measured; floor stays 32 MB -- measured cost on churn -- tell Moritz.
+Ruling: fix loadExternalMethod rows in this fix round (same group, same mechanism); add the reviewer's P6/P7/C2 witnesses; charge a ::CLASS after its methods are installed.
+Queued: instanceMethod .nil after setMethod with a Method object; Error 47.2 prints "&1" for the label (appended to the error-position queue item).
+Task 7: fix round 1 dispatched (resume c7-impl).
+Task 7: fix round 1 at 00a96524a, 8d14e52b8, 06febe9ab. loadExternalMethod (and LIBRARY REXX native_externals) rows pruned; ::CLASS charged after methods; P6/P7/C2 witnessed; churn bench added (+0.41% vs pin; 8 MB floor would cost +49.6%). compound +0.435%.
+Ruling: loadExternalMethod loop gets the msgloop warm-up exception (flat 80000->320000, +0.07%).
+Ruling: CLASS_BYTES_PER_METHOD charging ~1/10 of measured weight is an incomplete Step 2 (the task's goal is that class weight triggers collection): recalibrate it to the measured per-method weight in fix round 2, witness the 20x20 class loop's clearing iteration and peak against the oracle, and re-run the full set -- if wrong, a constant.
+Task 7: fix round 2 at 99404aa00, 780ece09d: class charge recalibrated from measurement (per-name 200 B + 8 kB per own method); 20x20 class loop clears at 8 (oracle 7), peak 52 MB (was 265 MB). Full set exit 0, compound +0.4347%, churn +0.4124%. Controller accepted on the measured figures (constants + one accessor).
+Note: corpus package_class_collected.rex shows classes made by Package~new ARE collected (oracle-matching), contradicting Task 5's concern 3 (D59). Task 8 checks .superpowers/sdd/queued/2026-10-14-class-collection.md and closes it if stale.
+Task 7: complete (f9341ef33, 5fda502fb, 5958a6f63, 00a96524a, 8d14e52b8, 06febe9ab, 99404aa00, 780ece09d).
