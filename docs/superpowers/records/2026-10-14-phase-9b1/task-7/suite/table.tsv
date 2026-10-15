@@ -1,0 +1,24 @@
+# ootest revision 13178
+group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
+API/oo/METHOD	oracle	320	320	320			-	-	1	yes	ulimit -v 1048576	320
+API/oo/METHOD	crate	320	320	319	TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA		-	-	1	yes	memcap 2G	320
+base/class/Message	oracle	68	68	68			-	-	1	yes	ulimit -v 1048576	68
+base/class/Message	crate	68	68	68			-	-	1	yes	memcap 2G	68
+base/class/Method	oracle	56	56	56			-	-	1	yes	ulimit -v 1048576	56
+base/class/Method	crate	56	56	54	TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED		-	-	1	yes	memcap 2G	56
+base/class/MethodArgs	oracle	10	10	10			-	-	1	yes	ulimit -v 1048576	10
+base/class/MethodArgs	crate	10	10	10			-	-	1	yes	memcap 2G	10
+base/class/Package	oracle	80	80	80			-	-	1	yes	ulimit -v 1048576	80
+base/class/Package	crate	80	80	78	TEST_NEW01 TEST_PROLOG		-	-	1	yes	memcap 2G	80
+base/class/Package_Options	oracle	54	54	54			-	-	1	yes	ulimit -v 1048576	54
+base/class/Package_Options	crate	54	54	54			-	-	1	yes	memcap 2G	54
+base/class/Routine	oracle	60	60	60			-	-	1	yes	ulimit -v 1048576	60
+base/class/Routine	crate	60	60	58	TEST_NEW_ARRAY_FROM_FILE TEST_NEW_FILE_COMPILED		-	-	1	yes	memcap 2G	60
+base/class/WeakReference	oracle	2	2	2			-	-	1	yes	ulimit -v 1048576	2
+base/class/WeakReference	crate	2	2	2			-	-	1	yes	memcap 2G	2
+base/directives/METHOD	oracle	78	78	78			-	-	1	yes	ulimit -v 1048576	78
+base/directives/METHOD	crate	78	78	78			-	-	1	yes	memcap 2G	78
+base/directives/REQUIRES	oracle	33	33	33			-	-	1	yes	ulimit -v 1048576	33
+base/directives/REQUIRES	crate	33	33	13	TEST_ACTIVATE TEST_BASIC_GOOD_REQUIRES TEST_CASCADED_REQUIRES TEST_CASCADED_REQUIRES2 TEST_CASCADED_REQUIRES3 TEST_MULTIPLE_NAMESPACE TEST_MULTIPLE_NAMESPACE2 TEST_NAMESPACE_GOOD_REQUIRES TEST_NAMESPACE_NO_PUBLIC_CALL TEST_NAMESPACE_NO_PUBLIC_CLASS TEST_NAMESPACE_NO_PUBLIC_ROUTINE TEST_NO_PUBLIC_CLASS TEST_NO_PUBLIC_ROUTINE TEST_PROLOG TEST_PROLOG2 TEST_PROLOG3 TEST_SEARCH_ORDER_CLS TEST_SEARCH_ORDER_NONE TEST_SEARCH_ORDER_REX TEST_SEARCH_ORDER_TESTGROUP		-	-	1	yes	memcap 2G	33
+base/directives/ROUTINE	oracle	28	30	30			-	-	1	yes	ulimit -v 1048576	30
+base/directives/ROUTINE	crate	28	30	28		TESTEXTERNALREGISTEREDBADLIBRARYNAME=rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi) | TESTEXTERNALREGISTEREDBADNAME=rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)	-	-	3	yes	memcap 2G	28

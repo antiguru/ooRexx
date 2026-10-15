@@ -1,0 +1,221 @@
+# Peak RSS, /usr/bin/time -f %M on each interpreter binary itself, each program copied into its
+# own fresh directory (with ext.rex = 'return 1' beside it).
+# oracle: ( ulimit -v 1048576 -t 120; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib /usr/bin/time -f '%M' /home/moritz/dev/repos/ooRexx/build/bin/rexx NAME.rex )
+# crate:  ( ulimit -v 4194304 -t 120; /usr/bin/time -f '%M' /home/moritz/dev/repos/ooRexx-p9-pin/BIN NAME.rex )
+# rexx-run-9b1-t7b: release build at f9341ef33 (5fda502fb changed only tables and records).
+# rexx-run-9b1-t6e: Task 6's final binary (23e7d1828).
+# The *weak programs print the iteration at which the WeakReference cleared, then 1 if it did.
+oracle methloop20000 done 20112  kB
+oracle methloop80000 done 20588  kB
+oracle routloop20000 done 20572  kB
+oracle routloop80000 done 20184  kB
+oracle setmloop20000 done 20268  kB
+oracle setmloop80000 done 20588  kB
+oracle pkgloop20000 done 20584  kB
+oracle pkgloop80000 done 20588  kB
+oracle msgloop20000 done 16220  kB
+oracle msgloop80000 done 20356  kB
+oracle msgloop160000 done 20328  kB
+oracle msgloop320000 done 20460  kB
+oracle extloop20000 done 20376  kB
+oracle extloop80000 done 20608  kB
+oracle clsloop20000 done 23340  kB
+oracle clsloop80000 done 56532  kB
+oracle clsloop160000 done 92060  kB
+oracle copyloop20000 done 12660  kB
+oracle copyloop80000 done 20120  kB
+oracle copyloop320000 done 20584  kB
+oracle flagloop20000 done 12404  kB
+oracle flagloop80000 done 20020  kB
+oracle flagloop320000 done 20628  kB
+oracle natcopy20000 done 12496  kB
+oracle natcopy80000 done 19640  kB
+oracle natcopy320000 done 20320  kB
+oracle startloop20000 done 20304  kB
+oracle startloop80000 done 22232  kB
+oracle pcopy20000 done 18784  kB
+oracle pcopy80000 done 20328  kB
+oracle clsweak 243 1 20632  kB
+oracle pkgweak 651 1 20080  kB
+oracle cls50weak 9 1 22060  kB
+rexx-run-9b1-t7b methloop20000 done 44720  kB
+rexx-run-9b1-t7b methloop80000 done 45180  kB
+rexx-run-9b1-t7b routloop20000 done 44912  kB
+rexx-run-9b1-t7b routloop80000 done 44792  kB
+rexx-run-9b1-t7b setmloop20000 done 45288  kB
+rexx-run-9b1-t7b setmloop80000 done 45936  kB
+rexx-run-9b1-t7b pkgloop20000 done 54196  kB
+rexx-run-9b1-t7b pkgloop80000 done 54692  kB
+rexx-run-9b1-t7b msgloop20000 done 35824  kB
+rexx-run-9b1-t7b msgloop80000 done 43500  kB
+rexx-run-9b1-t7b msgloop160000 done 42852  kB
+rexx-run-9b1-t7b msgloop320000 done 43548  kB
+rexx-run-9b1-t7b extloop20000 done 54840  kB
+rexx-run-9b1-t7b extloop80000 done 54028  kB
+rexx-run-9b1-t7b clsloop20000 done 68756  kB
+rexx-run-9b1-t7b clsloop80000 done 79528  kB
+rexx-run-9b1-t7b clsloop160000 done 93972  kB
+rexx-run-9b1-t7b copyloop20000 done 54864  kB
+rexx-run-9b1-t7b copyloop80000 done 58168  kB
+rexx-run-9b1-t7b copyloop320000 done 73892  kB
+rexx-run-9b1-t7b flagloop20000 done 55160  kB
+rexx-run-9b1-t7b flagloop80000 done 61344  kB
+rexx-run-9b1-t7b flagloop320000 done 82132  kB
+rexx-run-9b1-t7b natcopy20000 done 55144  kB
+rexx-run-9b1-t7b natcopy80000 done 56752  kB
+rexx-run-9b1-t7b natcopy320000 done 68676  kB
+rexx-run-9b1-t7b startloop20000 done 43256  kB
+rexx-run-9b1-t7b startloop80000 done 43844  kB
+rexx-run-9b1-t7b pcopy20000 done 60504  kB
+rexx-run-9b1-t7b pcopy80000 done 60400  kB
+rexx-run-9b1-t7b clsweak 815 1 60060  kB
+rexx-run-9b1-t7b pkgweak 1130 1 54468  kB
+rexx-run-9b1-t7b cls50weak 53 1 77872  kB
+rexx-run-9b1-t6e methloop20000 done 175420  kB
+rexx-run-9b1-t6e methloop80000 done 176060  kB
+rexx-run-9b1-t6e routloop20000 done 175400  kB
+rexx-run-9b1-t6e routloop80000 done 174568  kB
+rexx-run-9b1-t6e setmloop20000 done 163524  kB
+rexx-run-9b1-t6e setmloop80000 done 164080  kB
+rexx-run-9b1-t6e pkgloop20000 done 419460  kB
+rexx-run-9b1-t6e pkgloop80000 done 421280  kB
+rexx-run-9b1-t6e msgloop20000 done 34180  kB
+rexx-run-9b1-t6e msgloop80000 done 45052  kB
+rexx-run-9b1-t6e msgloop160000 done 46740  kB
+rexx-run-9b1-t6e msgloop320000 done 55628  kB
+rexx-run-9b1-t6e extloop20000 done 423892  kB
+rexx-run-9b1-t6e extloop80000 done 426156  kB
+rexx-run-9b1-t6e clsloop20000 done 561672  kB
+rexx-run-9b1-t6e clsloop80000 done 573672  kB
+rexx-run-9b1-t6e clsloop160000 done 588376  kB
+rexx-run-9b1-t6e copyloop20000 done 54796  kB
+rexx-run-9b1-t6e copyloop80000 done 66516  kB
+rexx-run-9b1-t6e copyloop320000 done 117672  kB
+rexx-run-9b1-t6e flagloop20000 done 55736  kB
+rexx-run-9b1-t6e flagloop80000 done 72236  kB
+rexx-run-9b1-t6e flagloop320000 done 138940  kB
+rexx-run-9b1-t6e natcopy20000 done 55336  kB
+rexx-run-9b1-t6e natcopy80000 done 66880  kB
+rexx-run-9b1-t6e natcopy320000 done 116800  kB
+rexx-run-9b1-t6e startloop20000 done 43152  kB
+rexx-run-9b1-t6e startloop80000 done 47072  kB
+rexx-run-9b1-t6e pcopy20000 done 60464  kB
+rexx-run-9b1-t6e pcopy80000 done 60680  kB
+rexx-run-9b1-t6e clsweak 10863 1 559656  kB
+rexx-run-9b1-t6e pkgweak 13036 1 419128  kB
+rexx-run-9b1-t6e cls50weak 1184 1 1303352  kB
+
+# Experiment, not committed: t7b with COLLECT_BYTES_FLOOR = 8 << 20 (rexx-run-9b1-t7-floor8).
+rexx-run-9b1-t7-floor8 methloop80000 done 25784  kB
+rexx-run-9b1-t7-floor8 routloop80000 done 26040  kB
+rexx-run-9b1-t7-floor8 setmloop80000 done 26368  kB
+rexx-run-9b1-t7-floor8 pkgloop80000 done 28560  kB
+rexx-run-9b1-t7-floor8 extloop80000 done 28820  kB
+rexx-run-9b1-t7-floor8 msgloop80000 done 43680  kB
+rexx-run-9b1-t7-floor8 clsloop80000 done 47272  kB
+# Its instruction cost, callgrind.sh -B 0.5 -j 16 -r 1 -p 'alloc hashnew startup strings dirread heapshape compound pingmsg' head=t7b floor8=t7-floor8:
+# every program within 0.0003% except hashnew -0.1286%.
+
+# programs
+== methloop20000.rex
+do i = 1 to 20000
+  m = .Method~new('m', 'return 1')
+end
+say 'done'
+== routloop20000.rex
+do i = 1 to 20000
+  r = .Routine~new('r', 'return 1')
+end
+say 'done'
+== setmloop20000.rex
+o = .k~new
+do i = 1 to 20000
+  o~go
+end
+say 'done'
+::class k
+::method go
+  self~setMethod('FOO', 'return 1')
+== pkgloop20000.rex
+do i = 1 to 20000
+  p = .Package~new('p', 'return 1')
+end
+say 'done'
+== msgloop20000.rex
+o = .array~of(1,2)
+do i = 1 to 20000
+  m = .Message~new(o,'ITEMS'); m~send
+end
+say 'done'
+== extloop20000.rex
+do i = 1 to 20000
+  call ext
+end
+say 'done'
+== ext.rex
+return 1
+== clsloop20000.rex
+do i = 1 to 20000
+  p = .Package~new('p', '::class c')
+end
+say 'done'
+== copyloop20000.rex
+do i = 1 to 20000
+  m = .k~method('FOO')~copy
+end
+say 'done'
+::class k
+::method foo
+  return 1
+== flagloop20000.rex
+do i = 1 to 20000
+  m = .k~method('FOO')~copy; m~setPrivate; m~setUnguarded
+end
+say 'done'
+::class k
+::method foo
+  return 1
+== natcopy20000.rex
+do i = 1 to 20000
+  m = .object~method('STRING')~copy
+end
+say 'done'
+== startloop20000.rex
+o = .array~of(1,2)
+do i = 1 to 20000
+  m = o~start('ITEMS'); x = m~result
+end
+say 'done'
+== pcopy20000.rex
+p = .context~package
+do i = 1 to 20000
+  q = p~copy
+end
+say 'done'
+== clsweak.rex
+p = .Package~new('p', '::class c')
+w = .WeakReference~new(p~classes['C'])
+p = .nil
+do i = 1 to 200000 until w~value == .nil
+  q = .Package~new('q', '::class c')
+end
+say i (w~value == .nil)
+== pkgweak.rex
+w = .WeakReference~new(.Package~new('p', 'return 1'))
+do i = 1 to 200000 until w~value == .nil
+  q = .Package~new('q', 'return 1')
+end
+say i (w~value == .nil)
+== cls50weak.rex
+src = .array~new
+do j = 1 to 50
+  src~append('::class c'j)
+end
+p = .Package~new('p', src)
+w = .WeakReference~new(p~classes['C1'])
+p = .nil
+do i = 1 to 20000 until w~value == .nil
+  q = .Package~new('q', src)
+end
+say i (w~value == .nil)
+# the 80000, 160000 and 320000 programs are the 20000 ones with that bound
