@@ -136,3 +136,9 @@ Final review (opus, 3e73e84b7..bdb4abf60): ready to close with fixes. I1 merged_
 Ruling: M4 -- the Task 5 ruling "a package defining a class is never collected (D59)" is false: such packages are collected (final review re-ran, both sides clear; package_class_collected.rex). L7 is fixed, not licensed; gate record does not cite D59 for it -- if wrong, L7 reopens.
 Ruling: M5 -- close callgrind runs from the repo's rust/, never a /tmp git-archive copy -- layout noise is not a regression (libc-subtracted +0.0033% both ways) -- if wrong, compound needs a layout control.
 Final fix dispatch: I1, M1, M2, M3 to one opus implementer (c-final-fix).
+Final fix (c-final-fix): 244b38561 (I1), 8fa4a5694 (M1, M2, plus build_native_frame_at), 1d733bb0c (M3), d58e12600 (report). I1 mutant red in collect_stress and corpus.
+Final re-review (sonnet): no Critical/Important. Minor 1: pre-existing silent Ok(None) in build_package_string_table / find_written_routine (environment.rs:1163,1166,1233, identities.rs:1076). Minor 2: older "Added in" bench comments (Phase 6.1, 9a), outside range.
+Ruling: Minor 1 -> queued (pre-existing, not on a freed-program miss, outside 9b1's named sites) -- if wrong, a silent .ROUTINES miss survives into 9c. Minor 2 -> queued with it as comment hygiene -- cosmetic.
+Task 9 (close): gates started on d58e12600 (close/run.sh).
+Task 9: close at d58e12600 -- workspace exit 0, suite 356/402 (only change TESTRECLAIM01 timeout->passed), memory loops flat, callgrind -B 0.5 exit 0 (worst startup +0.335%). Gate record docs/superpowers/plans/phase-9b1-gate.md.
+Task 9: complete.

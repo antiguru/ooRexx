@@ -1,0 +1,14 @@
+# Peak RSS kB, `sh memloop.sh BIN PROGRAM N...` run from this directory (memloop.sh header has both commands).
+# head = /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9b1-d58e12600 (release build at d58e12600, sha256 0a9a562c...).
+oracle methloop.rex 20000 20888  methloop.rex 80000 20624  
+head methloop.rex 20000 45692  methloop.rex 80000 45880  
+oracle routloop.rex 20000 20692  routloop.rex 80000 20576  
+head routloop.rex 20000 45500  routloop.rex 80000 45820  
+oracle pkgloop.rex 20000 20608  pkgloop.rex 80000 20804  
+head pkgloop.rex 20000 54928  pkgloop.rex 80000 54796  
+oracle extloop.rex 20000 20932  extloop.rex 80000 20304  
+head extloop.rex 20000 55384  extloop.rex 80000 55400  
+oracle msgloop.rex 20000 18924  msgloop.rex 80000 20584  msgloop.rex 320000 20628  
+rexx-run-9b1-d58e12600 msgloop.rex 20000 33056  msgloop.rex 80000 32872  msgloop.rex 320000 32556  
+oracle setmloop.rex 20000 20816  setmloop.rex 80000 20628  setmloop.rex 320000 20584  
+rexx-run-9b1-d58e12600 setmloop.rex 20000 45732  setmloop.rex 80000 45192  setmloop.rex 320000 45100  
