@@ -131,3 +131,8 @@ Task 8b review: spec OK, quality approved, no Important. 17 holder shapes match 
 Task 8b: final commit c44f4cf7b (entry 49 extended, crate answer pinned; MethodRows invariant asserted with two mutant-red unit tests).
 Task 8b: complete (2d82c08d1, 25968aeba, fb9b644de, 1ec116aa5, 9344cced8, 800f2b7fa, aaf302608, c44f4cf7b).
 Task 9 (close): controller runs gates.
+All tasks complete; ALLOWED owners only permanent (Dev 28/32/36, Phase 10, internal guard). Final whole-branch review dispatched (opus).
+Final review (opus, 3e73e84b7..bdb4abf60): ready to close with fixes. I1 merged_public_classes trace load-bearing, unwitnessed (s18: external CALL merges a public class without importing). M1 refusal gate blind to "a package whose program was freed" (identities.rs:183). M2 four default-on-miss sites for a freed program id (executable.rs:430, package.rs:480, environment.rs:1134, context.rs:955). M3 comment rules (rexx-bench lib.rs:76/79/82 task history; package_state.rs:38 set size). M4 Task 5 ruling's D59 reason is false. M5 compound figure depends on run location.
+Ruling: M4 -- the Task 5 ruling "a package defining a class is never collected (D59)" is false: such packages are collected (final review re-ran, both sides clear; package_class_collected.rex). L7 is fixed, not licensed; gate record does not cite D59 for it -- if wrong, L7 reopens.
+Ruling: M5 -- close callgrind runs from the repo's rust/, never a /tmp git-archive copy -- layout noise is not a regression (libc-subtracted +0.0033% both ways) -- if wrong, compound needs a layout control.
+Final fix dispatch: I1, M1, M2, M3 to one opus implementer (c-final-fix).
