@@ -81,6 +81,8 @@ impl Interp {
         // behind would keep its registers rooted for the rest of the run.
         arena.release(registers);
         self.roots.activity_mut().pop_frame(temps);
+        let interned: Vec<ObjRef> = chunk.interned_values().collect();
+        self.heap.release_immortal(&interned);
         let flow = match ran {
             Ok(flow) => flow,
             Err(failure) => {

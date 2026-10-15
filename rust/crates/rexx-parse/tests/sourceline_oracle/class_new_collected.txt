@@ -1,0 +1,8 @@
+count 7
+/* A class that only Class~new made is collected once nothing holds it,
+   while the loop does nothing but make more of them. */
+w = .WeakReference~new(.class~new('c'))
+do i = 1 to 5000 until w~value == .nil
+  c = .class~new('c')
+end
+say 'class cleared:' (w~value == .nil)

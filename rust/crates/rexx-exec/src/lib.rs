@@ -1800,6 +1800,11 @@ pub(crate) struct ExecutableRecord {
     /// compiled from source text reports the whole of its own program as its
     /// source and runs the sole directive that program carries.
     pub(crate) routine: Option<(ProgramId, usize)>,
+    /// Whether [`ExecutableRecord::installed`] was minted for this object
+    /// alone, so that its rows go at the sweep that frees the object. Every
+    /// dictionary that installs such an identity holds the object too, and an
+    /// activation reads none of its identity's rows once it has entered.
+    pub(crate) owns_installed: bool,
 }
 
 impl ExecutableRecord {
@@ -2984,7 +2989,8 @@ impl Interp {
             switch: _,
             sim: _,
             slice_deferred: _,
-            // A chunk's interned literals are allocated immortal.
+            // A chunk's interned literals are allocated immortal, and
+            // released when the chunk is dropped.
             chunks: _,
             chunks_refused: _,
             routines_written: _,
@@ -3251,36 +3257,27 @@ impl Interp {
     }
 
     /// Drops every row keyed by, or naming, a `Method`, `Routine` or
-    /// `Message` object the sweep freed, and the rows of the method identity
-    /// a freed `loadExternalMethod` answer ran under, which no program owns.
+    /// `Message` object the sweep freed, and the rows of each method identity
+    /// a freed object owned.
     fn prune_dead_object_rows(&mut self) {
         let heap = &self.heap;
         let live = |object: &ObjRef| heap.peek(*object).is_some();
-        let (loaded, natives) = (&self.defined_library_codes, &self.native_externals);
         let mut orphaned = Vec::new();
         self.executable_sources.retain(|object, record| {
             let keep = live(object);
             if !keep
+                && record.owns_installed
                 && let Some(method) = record.installed
-                && (loaded.contains_key(&method)
-                    || (record.source == ExecutableSource::Native && natives.contains_key(&method)))
             {
                 orphaned.push(method);
             }
             keep
         });
-        for method in &orphaned {
-            self.defined_library_codes.remove(method);
-            self.library_externals.remove(method);
-            self.native_externals.remove(method);
-            self.guarded_externals.remove(method);
-            if let Some(row) = self.special_methods.get_mut(method.0 as usize) {
-                *row = None;
-            }
+        for method in orphaned {
+            self.forget_method_identity(method);
         }
-        while matches!(self.special_methods.last(), Some(None)) {
-            self.special_methods.pop();
-        }
+        let heap = &self.heap;
+        let live = |object: &ObjRef| heap.peek(*object).is_some();
         self.method_flag_writes.retain(|object, _| live(object));
         self.executable_objects.retain(|_, object| live(object));
         self.message_outcomes.retain(|message, _| live(message));
@@ -3302,7 +3299,15 @@ impl Interp {
         {
             self.last_plan = None;
         }
-        self.chunks.retain(|(key, _), _| !dead(&key.program));
+        let mut interned = Vec::new();
+        self.chunks.retain(|(key, _), chunk| {
+            let keep = !dead(&key.program);
+            if !keep {
+                interned.extend(chunk.interned_values());
+            }
+            keep
+        });
+        self.heap.release_immortal(&interned);
         self.compiled_method_names
             .retain(|program, _| !dead(program));
         self.required_paths.retain(|program, _| !dead(program));

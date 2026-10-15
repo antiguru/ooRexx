@@ -391,6 +391,120 @@ fn a_collection_drops_the_rows_of_swept_executables_and_messages() {
     );
 }
 
+/// A collection drops every row of the method identity a swept `Method` copy
+/// owned, and keeps the rows of the identity it was copied from.
+#[test]
+fn a_collection_drops_the_identity_rows_of_swept_method_copies() {
+    let mut interp = Interp::new();
+    let out = say_output_with_directives(
+        &mut interp,
+        b".local['KEEP'] = .context~package\ndo i = 1 to 3\n  \
+          c = .k~method('FOO')~copy; c~setPrivate\n  \
+          n = .object~method('STRING')~copy; n~setProtected\n  \
+          g = .k~method('BAR')~copy\nend\n\
+          say c~isPrivate n~isProtected .k~new~foo\n\
+          ::class k\n::method foo\n  return 1\n::attribute bar\n",
+    );
+    assert_eq!(String::from_utf8_lossy(&out), "1 1 1\n");
+    let owners: Vec<_> = interp
+        .executable_sources
+        .iter()
+        .filter(|(_, record)| record.owns_installed)
+        .filter_map(|(object, record)| Some((*object, record.installed?)))
+        .collect();
+    assert_eq!(owners.len(), 9, "the copies' identities were not recorded");
+    let owned: Vec<_> = owners.iter().map(|(_, method)| *method).collect();
+    let rows = |interp: &mut Interp, method: rexx_classes::MethodId| {
+        [
+            interp.method_bodies.contains_key(&method),
+            interp.generated_methods.contains_key(&method),
+            interp.special_method_row(method).is_some(),
+            interp.has_native_entry(method),
+            interp.executable_objects.contains_key(&method),
+        ]
+    };
+    for method in &owned {
+        assert!(
+            rows(&mut interp, *method).iter().any(|row| *row),
+            "copy identity {method:?} has no row before the collection"
+        );
+    }
+    let shared: Vec<_> = interp
+        .method_bodies
+        .keys()
+        .chain(interp.generated_methods.keys())
+        .filter(|method| !owned.contains(method))
+        .copied()
+        .collect();
+    assert!(!shared.is_empty(), "no directive identity was recorded");
+    interp.collect_now();
+    let mut swept = 0;
+    for (object, method) in &owners {
+        if interp.heap.peek(*object).is_some() {
+            assert!(
+                rows(&mut interp, *method).iter().any(|row| *row),
+                "copy identity {method:?} of a live object lost its rows"
+            );
+            continue;
+        }
+        swept += 1;
+        assert_eq!(
+            rows(&mut interp, *method),
+            [false; 5],
+            "copy identity {method:?} keeps a row after its object was swept"
+        );
+    }
+    assert!(swept >= 6, "only {swept} copies were swept");
+    for method in &shared {
+        assert!(
+            interp.method_bodies.contains_key(method)
+                || interp.generated_methods.contains_key(method),
+            "directive identity {method:?} lost its row"
+        );
+    }
+}
+
+/// How many objects the heap holds immortal after `source` ran and a
+/// collection followed.
+fn immortal_after(source: &[u8]) -> usize {
+    let mut interp = Interp::new();
+    say_output_with_directives(&mut interp, source);
+    interp.collect_now();
+    interp.heap.immortal_count()
+}
+
+/// The literals an `INTERPRET` fragment's chunk interned are released with
+/// the chunk: three passes intern no more than one does.
+#[test]
+fn an_interpreted_literal_is_released_with_its_chunk() {
+    let passes = |n: u32| {
+        immortal_after(
+            format!("do i = 1 to {n}\n  interpret 'x = \"' || copies('a', 50) || i || '\"'\nend\n")
+                .as_bytes(),
+        )
+    };
+    assert_eq!(passes(3), passes(1));
+}
+
+/// The literals a freed program's chunks interned are released with the
+/// program, and a literal `::CONSTANT` is held by its package alone.
+#[test]
+fn a_freed_programs_literals_are_released_with_it() {
+    let passes = |n: u32| {
+        immortal_after(
+            format!(
+                "do i = 1 to {n}\n  m = .Method~new('m', 'return \"' || copies('b', 50) || i '\"')\n  \
+                 x = .k~new~go(m)\n  \
+                 p = .Package~new('p', ('::class c', '::constant v \"' || copies('c', 50) || i || '\"'))\n  \
+                 y = p~classes['C']~new~v\nend\nsay length(x) length(y)\n\
+                 ::class k\n::method go\n  use arg m\n  return self~run(m)\n"
+            )
+            .as_bytes(),
+        )
+    };
+    assert_eq!(passes(3), passes(1));
+}
+
 /// A collection drops the notification and waiter-identity rows of the
 /// messages it swept: a party raising in `messageComplete` leaves a message
 /// unnotified, and a waiter identity is minted for one by hand.

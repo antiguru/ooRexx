@@ -94,6 +94,9 @@ struct ClassDef {
     own_class_methods: MethodDict,
     instance_behaviour: BehaviourHandle,
     class_behaviour: BehaviourHandle,
+    /// Every instance behaviour a [`ClassGraph::define`] replaced, which an
+    /// instance made before it may still hold. Emptied with the class.
+    retired_behaviours: Vec<BehaviourHandle>,
     /// What `inherit`'s base-class compatibility check reads -- oracle's
     /// `baseClass` field.
     base_class: ObjRef,
@@ -211,6 +214,7 @@ impl ClassGraph {
                 own_class_methods: MethodDict::new(),
                 instance_behaviour,
                 class_behaviour,
+                retired_behaviours: Vec::new(),
                 base_class,
                 metaclass,
                 owning_class,
@@ -253,6 +257,7 @@ impl ClassGraph {
                 own_class_methods: MethodDict::new(),
                 instance_behaviour,
                 class_behaviour,
+                retired_behaviours: Vec::new(),
                 base_class: id,
                 metaclass,
                 owning_class: receiver,
@@ -428,7 +433,10 @@ impl ClassGraph {
             // Emptied rather than removed, because a behaviour is named by
             // its index and removing one would move every later index.
             if let Some(def) = classes.get(class) {
-                for handle in [def.instance_behaviour, def.class_behaviour] {
+                for handle in [def.instance_behaviour, def.class_behaviour]
+                    .iter()
+                    .chain(&def.retired_behaviours)
+                {
                     behaviours[handle.index()].dict.clear();
                 }
             }
@@ -686,10 +694,12 @@ impl ClassGraph {
     /// answering the old method set (D43).
     fn copy_instance_behaviour(&mut self, class: ObjRef) {
         let fresh = self.alloc_behaviour();
-        self.classes
+        let def = self
+            .classes
             .get_mut(&class)
-            .expect("copy_instance_behaviour: unknown class")
-            .instance_behaviour = fresh;
+            .expect("copy_instance_behaviour: unknown class");
+        def.retired_behaviours.push(def.instance_behaviour);
+        def.instance_behaviour = fresh;
     }
 
     /// Install a class (static) method directly -- oracle's

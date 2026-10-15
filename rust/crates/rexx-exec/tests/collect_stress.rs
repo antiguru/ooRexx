@@ -1712,3 +1712,137 @@ fn an_installed_loaded_method_survives_its_dropped_object() {
         "define /\nprivate / 1 1\nown /\nagain / / /\n",
     );
 }
+
+/// A `Method` copy keeps running after the program drops it: one that unsets
+/// its own entry, a private one, a primitive one, one `run` runs, and one an
+/// instance's behaviour kept after `define` replaced it, while fresh private
+/// copies come and go. Measured, oracle rc 0 in 3 of 3 runs, with 300 passes
+/// of `copies('x', 100000)` in both fillers.
+#[test]
+fn a_dropped_method_copy_keeps_running() {
+    assert_stress_prints(
+        "<dropped-method-copy>",
+        concat!(
+            "o = .k~new\n",
+            "o~put('X', .k~method('SELFUNSET')~copy)\n",
+            "say 'unset' o~x o~hasMethod('X')\n",
+            "m = .k~method('HELPER')~copy\n",
+            "m~setPrivate\n",
+            "o~put('P', m)\n",
+            "drop m\n",
+            "call filler\n",
+            "say 'private' o~callp o~hasMethod('P')\n",
+            "o~put('S', .object~method('STRING')~copy)\n",
+            "call filler\n",
+            "say 'native' o~s\n",
+            "say 'run' o~go(.k~method('RUNNER')~copy)\n",
+            "a = .k~new\n",
+            ".k~define('BAR', .k~method('HELPER')~copy)\n",
+            "b = .k~new\n",
+            ".k~define('BAR', .k~method('RUNNER')~copy)\n",
+            "call filler\n",
+            "say 'old' b~bar\n",
+            "do i = 1 to 3\n",
+            "  c = .k~method('HELPER')~copy\n",
+            "  c~setPrivate\n",
+            "end\n",
+            "drop c\n",
+            "call filler\n",
+            "say 'again' o~callp .k~method('HELPER')~isPrivate o~s\n",
+            "exit\n",
+            "filler: procedure\n",
+            "  do i = 1 to 3\n",
+            "    z = copies('x', 1000)\n",
+            "  end\n",
+            "  return\n",
+            "::class k\n",
+            "::method selfunset\n",
+            "  self~unsetMethod('X')\n",
+            "  call filler2\n",
+            "  return 'ran' .context~executable~class~id self~helper\n",
+            "::method helper\n",
+            "  return 'h'\n",
+            "::method runner\n",
+            "  call filler2\n",
+            "  return 'r' .context~executable~class~id\n",
+            "::method callp\n",
+            "  return self~p\n",
+            "::method put\n",
+            "  use arg name, m\n",
+            "  self~setMethod(name, m)\n",
+            "::method go\n",
+            "  use arg m\n",
+            "  return self~run(m)\n",
+            "::routine filler2\n",
+            "  do i = 1 to 3\n",
+            "    z = copies('y', 1000)\n",
+            "  end\n",
+            "  return\n",
+        ),
+        "unset ran Method h 0\nprivate h 1\nnative a K\nrun r Method\nold h\nagain h 0 a K\n",
+    );
+}
+
+/// The `Method` object `.context~executable` builds for a body its class no
+/// longer reaches by name owns no identity: once it is swept, an instance
+/// whose behaviour predates the `define` still runs that body. Measured,
+/// oracle rc 0 in 3 of 3 runs, with 300 passes of `copies('x', 100000)` as
+/// the filler.
+#[test]
+fn a_swept_rebuilt_executable_leaves_its_identity_alone() {
+    assert_stress_prints(
+        "<rebuilt-executable-identity>",
+        concat!(
+            "a = .k~new\n",
+            "say a~foo\n",
+            "call filler\n",
+            "say a~foo .k~new~foo\n",
+            "exit\n",
+            "filler: procedure\n",
+            "  do i = 1 to 3\n",
+            "    z = copies('x', 1000)\n",
+            "  end\n",
+            "  return\n",
+            "::class k\n",
+            "::method foo\n",
+            "  .k~define('FOO', .k~method('OTHER'))\n",
+            "  return 'foo' .context~executable~class~id\n",
+            "::method other\n",
+            "  return 'other'\n",
+        ),
+        "foo Method\nfoo Method other\n",
+    );
+}
+
+/// A literal value a variable holds outlives the chunk that interned it: an
+/// `INTERPRET` fragment's, a freed `Method~new` program's, and a literal
+/// `::CONSTANT` of a dropped package. Measured, oracle rc 0 in 3 of 3 runs,
+/// with 300 passes of `copies('x', 100000)` as the filler.
+#[test]
+fn a_held_literal_outlives_its_chunk() {
+    assert_stress_prints(
+        "<held-literal>",
+        concat!(
+            "interpret 'a = \"' || copies('ab', 30) || '\"'\n",
+            "call filler\n",
+            "o = .k~new\n",
+            "b = o~go(.Method~new('m', 'return \"' || copies('cd', 30) || '\"'))\n",
+            "call filler\n",
+            "c = .Package~new('p', ('::class c public', '::constant v \"' || copies('ef', 30) || '\"'))",
+            "~classes['C']~new~v\n",
+            "call filler\n",
+            "say length(a) left(a, 4) length(b) left(b, 4) length(c) left(c, 4)\n",
+            "exit\n",
+            "filler: procedure\n",
+            "  do i = 1 to 3\n",
+            "    z = copies('x', 1000)\n",
+            "  end\n",
+            "  return\n",
+            "::class k\n",
+            "::method go\n",
+            "  use arg m\n",
+            "  return self~run(m)\n",
+        ),
+        "60 abab 60 cdcd 60 efef\n",
+    );
+}

@@ -1094,8 +1094,8 @@ impl Interp {
                 continue;
             };
             let value = match &constant.value {
-                ConstantValue::Name => self.interned_literal(&constant.name),
-                ConstantValue::Text(text) => self.interned_literal(text),
+                ConstantValue::Name => self.literal(&constant.name),
+                ConstantValue::Text(text) => self.literal(text),
                 ConstantValue::Expression(_) => continue,
             };
             self.record_constant_value(id, index, value);
@@ -1765,6 +1765,7 @@ impl Interp {
                 },
                 installed: Some(method),
                 routine: None,
+                owns_installed: false,
             },
         )
     }
@@ -1896,6 +1897,7 @@ impl Interp {
                 },
                 installed: None,
                 routine: Some((program_id, 0)),
+                owns_installed: false,
             },
         )
     }
@@ -2023,6 +2025,7 @@ impl Interp {
                 source: ExecutableSource::Main { program: id },
                 installed,
                 routine: routine.then_some((id, body)),
+                owns_installed: false,
             },
         )?;
         Ok(object)
@@ -2038,6 +2041,7 @@ impl Interp {
                 source: ExecutableSource::Native,
                 installed: None,
                 routine: None,
+                owns_installed: false,
             },
         );
     }
@@ -2053,6 +2057,7 @@ impl Interp {
                 source: ExecutableSource::Loaded { code },
                 installed,
                 routine: None,
+                owns_installed: installed.is_some(),
             },
         );
     }
@@ -2070,6 +2075,7 @@ impl Interp {
         self.executable_objects.insert(method, object);
         if let Some(record) = self.executable_sources.get_mut(&object) {
             record.installed = Some(method);
+            record.owns_installed = true;
         }
     }
 

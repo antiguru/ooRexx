@@ -2341,6 +2341,42 @@ impl Interp {
         method
     }
 
+    /// Whether the primitive table has a row for `method`.
+    #[cfg(test)]
+    pub(crate) fn has_native_entry(&mut self, method: MethodId) -> bool {
+        self.object_model()
+            .natives
+            .get(method.0 as usize)
+            .is_some_and(Option::is_some)
+    }
+
+    /// Drops every row filed under `method`, an identity a swept `Method`
+    /// object owned.
+    pub(crate) fn forget_method_identity(&mut self, method: MethodId) {
+        self.method_bodies.remove(&method);
+        self.generated_methods.remove(&method);
+        self.native_externals.remove(&method);
+        self.library_externals.remove(&method);
+        self.external_packages.remove(&method);
+        self.defined_library_codes.remove(&method);
+        self.guarded_externals.remove(&method);
+        self.executable_objects.remove(&method);
+        if let Some(row) = self.special_methods.get_mut(method.0 as usize) {
+            *row = None;
+        }
+        while matches!(self.special_methods.last(), Some(None)) {
+            self.special_methods.pop();
+        }
+        if let Some(model) = self.object_model.as_mut() {
+            if let Some(row) = model.natives.get_mut(method.0 as usize) {
+                *row = None;
+            }
+            while matches!(model.natives.last(), Some(None)) {
+                model.natives.pop();
+            }
+        }
+    }
+
     /// A method scope's `~id`, [`Interp::class_id_text`]'s rendering:
     /// measured, oracle rc 163, a primitive `setMethod` or `run` installed
     /// under the `.nil` scope is `Compiled method "HM" with scope ".NIL"`.

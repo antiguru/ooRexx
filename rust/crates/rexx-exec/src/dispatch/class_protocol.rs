@@ -205,6 +205,7 @@ pub(super) fn native_method(
                 source: interp.installed_executable_source(method),
                 installed: Some(method),
                 routine: None,
+                owns_installed: false,
             };
             Ok(Some(
                 interp.method_object(class, false, &name, scope, record)?,
@@ -659,6 +660,7 @@ pub(super) fn native_new_class(
         root,
         metaclass,
     );
+    charge_class(interp, id);
     interp.copy_class_package(class, id);
     interp.classes().check_uninit(id);
     interp.flag_class_uninit(id);

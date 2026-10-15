@@ -1197,6 +1197,7 @@ impl Interp {
                                 source: crate::ExecutableSource::Directive { program, directive },
                                 installed: method,
                                 routine: routine.then_some((program, directive)),
+                                owns_installed: false,
                             },
                         )
                         .expect("the package whose table this is holds its program");

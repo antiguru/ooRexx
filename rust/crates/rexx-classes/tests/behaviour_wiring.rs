@@ -790,3 +790,37 @@ fn every_cascade_against_a_handle_bumps_its_version_by_exactly_one() {
     assert_ne!(fresh, orphaned);
     assert_eq!(g.version_at(fresh), 1);
 }
+
+/// A class's expunge empties every instance behaviour a `define` replaced,
+/// not only the two it held last.
+#[test]
+fn expunge_empties_the_behaviours_define_retired() {
+    let object = id(1);
+    let class = id(2);
+    let mut g = ClassGraph::new();
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define(object, "BASE", MethodId(1));
+    g.define_class(class, Some(object), ClassKind::Regular, object);
+    let first = g.instance_behaviour_handle(class);
+    g.define(class, "X", MethodId(2));
+    let second = g.instance_behaviour_handle(class);
+    g.define(class, "Y", MethodId(3));
+    let last = g.instance_behaviour_handle(class);
+    for handle in [first, second, last] {
+        assert!(
+            g.has_method_at(handle, "BASE"),
+            "{handle:?} is not a full behaviour"
+        );
+    }
+    g.expunge(&[class]);
+    for handle in [first, second, last] {
+        assert!(
+            g.method_names_at(handle).is_empty(),
+            "{handle:?} keeps its dictionary after its class was expunged"
+        );
+    }
+    assert!(
+        g.has_method_at(g.instance_behaviour_handle(object), "BASE"),
+        "the surviving superclass lost its behaviour"
+    );
+}

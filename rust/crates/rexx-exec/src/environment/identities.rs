@@ -290,6 +290,7 @@ impl Interp {
                     source: self.installed_executable_source(method),
                     installed: Some(method),
                     routine: None,
+                    owns_installed: false,
                 };
                 self.method_object(scope, false, name, scope, record)
             }
@@ -334,6 +335,7 @@ impl Interp {
                 source: self.installed_executable_source(method),
                 installed: Some(method),
                 routine: None,
+                owns_installed: false,
             };
             return self.method_object(scope, false, name, scope, record);
         }
@@ -381,6 +383,7 @@ impl Interp {
                 source,
                 installed: method,
                 routine: None,
+                owns_installed: false,
             },
         )?;
         if let Some(method) = method {
@@ -440,6 +443,7 @@ impl Interp {
                 source: crate::ExecutableSource::Main { program },
                 installed: None,
                 routine: None,
+                owns_installed: false,
             },
         )?;
         Ok(object)
@@ -507,6 +511,7 @@ impl Interp {
             let copy = self.copy_method_identity(template);
             if let Some(record) = self.executable_sources.get_mut(&object) {
                 record.installed = Some(copy);
+                record.owns_installed = true;
             }
             self.executable_objects.insert(copy, object);
         }
@@ -543,6 +548,7 @@ impl Interp {
             let copy = self.copy_method_identity(template);
             if let Some(record) = self.executable_sources.get_mut(&object) {
                 record.installed = Some(copy);
+                record.owns_installed = true;
             }
             self.executable_objects.insert(copy, object);
         }
@@ -617,6 +623,7 @@ impl Interp {
         let copy = self.copy_method_identity(template);
         if let Some(record) = self.executable_sources.get_mut(&object) {
             record.installed = Some(copy);
+            record.owns_installed = true;
         }
         self.executable_objects.insert(copy, object);
         Some((object, copy))

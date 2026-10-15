@@ -731,6 +731,15 @@ impl Chunk {
         }
     }
 
+    /// Every value this chunk interned, for the caller dropping it.
+    pub(crate) fn interned_values(&self) -> impl Iterator<Item = ObjRef> + '_ {
+        self.interned
+            .iter()
+            .chain(&self.interned_symbols)
+            .map(Cell::get)
+            .filter(|value| *value != ObjRef::NIL)
+    }
+
     /// Whether `reg` is inside the frame `Interp::drive` reserves for this
     /// chunk.
     fn holds_register(&self, reg: u16) -> bool {

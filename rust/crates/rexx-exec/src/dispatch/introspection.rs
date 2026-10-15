@@ -307,6 +307,7 @@ fn method_object_for(
         source: interp.installed_executable_source(method),
         installed: Some(method),
         routine: None,
+        owns_installed: false,
     };
     match selection {
         Selection::ClassSide(_) => interp.method_object(scope, true, name, scope, record),

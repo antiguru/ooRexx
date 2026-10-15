@@ -64,3 +64,8 @@ fn a_loop_of_package_new_collects_its_classes_and_packages() {
         "class cleared: 1\npackage cleared: 1\none of many classes cleared: 1\n",
     );
 }
+
+#[test]
+fn a_loop_of_class_new_collects_its_classes() {
+    agrees("class_new_collected.rex", "class cleared: 1\n");
+}

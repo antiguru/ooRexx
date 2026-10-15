@@ -534,6 +534,16 @@ impl Heap {
         self.immortal.len()
     }
 
+    /// Makes each of `released` an ordinary object again, which a collection
+    /// sweeps once nothing reaches it.
+    pub fn release_immortal(&mut self, released: &[ObjRef]) {
+        if released.is_empty() {
+            return;
+        }
+        let released: std::collections::HashSet<ObjRef> = released.iter().copied().collect();
+        self.immortal.retain(|handle| !released.contains(handle));
+    }
+
     /// Allocates without ever collecting, whatever else is enabled. The
     /// caller holds the bytes the body holds outside its slot
     /// ([`Heap::hold_body_bytes`]).
