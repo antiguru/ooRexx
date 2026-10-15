@@ -1615,3 +1615,32 @@ Effect: SIGSEGV, rc 139, nothing on stdout. Measured 2026-10-15 by Phase 9b1 Tas
 the standard wrapper from a fresh empty directory, 3 of 3. Without the second `call filler` it
 answers `x`, rc 0, measured once. Found while measuring the collect_stress shapes for variable-reference
 cells. This crate answers `x`, rc 0. No upstream ticket.
+
+The same crash follows a reference to a dropped object's instance variable, assigned, then a
+collection:
+
+    r = .k~new~ref
+    call filler
+    say 'p10a' length(r~value) left(r~value,3)
+    r~value = copies('nw', 7)
+    call filler
+    say 'p10b' length(r~value) left(r~value,3)
+    o = .k~new
+    r2 = o~ref
+    drop o
+    call filler
+    say 'p10c' length(r2~value)
+    exit
+    ::class k
+    ::method ref
+      expose v
+      v = copies('ov', 13)
+      return >v
+    ::routine filler
+      do i = 1 to 300; z = copies('x', 100000); end
+      return
+
+Effect: SIGSEGV, rc 139, 3 of 3, measured 2026-10-15 by the Phase 9b1 Task 8b review
+(`.superpowers/sdd/2026-10-14-phase-9b1/task-8b-review-files/refs/p11_objpool_assign_oracle_segv.rex`).
+This crate answers `p10a 26 ovo`, `p10b 14 nwn`, `p10c 26`, rc 0, pinned crate-only by
+`collect_stress`'s `an_instance_variable_reference_outlives_its_object`.

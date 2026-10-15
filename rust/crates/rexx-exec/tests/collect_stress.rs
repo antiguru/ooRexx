@@ -2244,3 +2244,38 @@ fn a_finalized_objects_reference_keeps_its_variable() {
         "victorvictor\n",
     );
 }
+
+/// A reference to an instance variable keeps the object whose pool holds
+/// it, through an assignment and after the program drops the object. Not
+/// compared with the oracle, which segfaults on this program:
+/// `corpus/oracle-crashes.txt` entry 49. The values are computed and
+/// longer than an inline string.
+#[test]
+fn an_instance_variable_reference_outlives_its_object() {
+    assert_stress_prints(
+        "<varref-object-pool>",
+        concat!(
+            "r = .k~new~ref\n",
+            "call filler\n",
+            "say 'p10a' length(r~value) left(r~value,3)\n",
+            "r~value = copies('nw', 7)\n",
+            "call filler\n",
+            "say 'p10b' length(r~value) left(r~value,3)\n",
+            "o = .k~new\n",
+            "r2 = o~ref\n",
+            "drop o\n",
+            "call filler\n",
+            "say 'p10c' length(r2~value)\n",
+            "exit\n",
+            "::class k\n",
+            "::method ref\n",
+            "  expose v\n",
+            "  v = copies('ov', 13)\n",
+            "  return >v\n",
+            "::routine filler\n",
+            "  do i = 1 to 3; z = copies('x', 1000); end\n",
+            "  return\n",
+        ),
+        "p10a 26 ovo\np10b 14 nwn\np10c 26\n",
+    );
+}
