@@ -253,22 +253,29 @@ impl Heap {
             let Slot::Live { object, .. } = &self.slots[slot] else {
                 unreachable!("resolve rejects free slots")
             };
-            if matches!(object.body, Body::WeakRef(_)) {
-                weak_marked.push(slot as u32);
-            }
-            let held = if let Body::Text { bytes, .. } = &object.body {
+            let held = match &object.body {
                 // A string reaches nothing, so it skips the call to trace,
                 // which costs more than reading the string's length.
-                debug_assert_eq!(bytes.heap_len(), object.body.held_bytes());
-                bytes.heap_len()
-            } else {
-                reached.clear();
-                object.body.trace(&mut reached);
-                if let Body::Cell(cell) = object.body {
-                    reached.extend(roots.cell_value(cell));
+                Body::Text { bytes, .. } => {
+                    debug_assert_eq!(bytes.heap_len(), object.body.held_bytes());
+                    bytes.heap_len()
                 }
-                work.extend(reached.iter().copied());
-                object.body.held_bytes()
+                // A weak reference reaches nothing and holds no bytes.
+                Body::WeakRef(_) => {
+                    weak_marked.push(slot as u32);
+                    0
+                }
+                // A cell's value is in the root set, which `trace` cannot see.
+                Body::Cell(cell) => {
+                    work.extend(roots.cell_value(*cell));
+                    0
+                }
+                body => {
+                    reached.clear();
+                    body.trace(&mut reached);
+                    work.extend(reached.iter().copied());
+                    body.held_bytes()
+                }
             };
             survivor_bytes += held;
         }
