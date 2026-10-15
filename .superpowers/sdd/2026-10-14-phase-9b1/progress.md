@@ -120,3 +120,14 @@ Ruling: the three leaks become a new Task 8b (plan amended): each is a per-objec
 Queued: m5 divergences.
 Task 8: fix round 1 at 5e53d7bd7, 57abaeeb5, 27c7e4c6c, b3619002a, f4b2fe8f8. run-hold witnessed (red under M4); release_immortal scans only new interns (interpret +2.81% -> +0.4785%); interpret bench added; image classes keep no retired list (startup +0.3385%); Dev 28 names StackFrame. Note: interpret's whole-process figure is mostly glibc malloc (libc-subtracted within 0.012% across binaries, whole-process ranges +0.33..+0.73%), so its headroom is thin and partly allocator noise -- recorded for the close. Controller accepted on the reported checks (scoped, reviewer's own fixes).
 Task 8: complete (93e7a9a4c, 900fbfd8e, 6a4327069, 882c826eb, d81bacfad, 5e53d7bd7, 57abaeeb5, 27c7e4c6c, b3619002a, f4b2fe8f8).
+Task 8b: dispatched (implementer opus, BASE efbf0fa1d).
+Task 8b: Step 2 needs rexx-classes (class_graph.rs) outside the brief's file list; approved (state lives there).
+Task 8b: implementer DONE_WITH_CONCERNS (2d82c08d1, 25968aeba, fb9b644de, 1ec116aa5, 9344cced8, 800f2b7fa, aaf302608). Loops flat (copypriv +1.8%, define -0.8%, varref3 +4.8%/+6.2% at 320000). New oracle-crashes entry 49.
+Ruling: RootSet::cells as an index table whose rows are pruned when their Body::Cell is swept is spec state 2 -- accepted (value-in-heap variant cost assign +4.9%); a stale read panics as an internal guard.
+Ruling: Step 2's holder rule (a class drops define-installed Method objects once no behaviour names them, unless an activation runs that body) goes to the review for oracle comparison.
+Queued: .context~executable flags in a redefined running method; RESULT reachable between programs on one Interp.
+Review dispatched (opus).
+Task 8b review: spec OK, quality approved, no Important. 17 holder shapes match oracle; Step 2 rule matches; perf fine (startup +0.330%, churn +0.234%, interpret +0.294%). Minors: m3 new oracle SIGSEGV (sibling of 49), m6 MethodRows invariant assert -> small final commit; m1 (.context~variables lists a USE ARG >z alias), m4 (instanceMethod on pre-define instance answers current method), m5 (free_unheld_behaviours HashSet per freeing collection, no define bench) -> queued; m2 matches queued 2026-10-01 reply-continuation item.
+Task 8b: final commit c44f4cf7b (entry 49 extended, crate answer pinned; MethodRows invariant asserted with two mutant-red unit tests).
+Task 8b: complete (2d82c08d1, 25968aeba, fb9b644de, 1ec116aa5, 9344cced8, 800f2b7fa, aaf302608, c44f4cf7b).
+Task 9 (close): controller runs gates.
