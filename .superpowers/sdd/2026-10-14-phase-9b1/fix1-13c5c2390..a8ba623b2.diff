@@ -1,0 +1,913 @@
+diff --git a/.superpowers/sdd/2026-10-14-phase-9b1/task-6-report.md b/.superpowers/sdd/2026-10-14-phase-9b1/task-6-report.md
+index 7e2a59e07..0b375b52b 100644
+--- a/.superpowers/sdd/2026-10-14-phase-9b1/task-6-report.md
++++ b/.superpowers/sdd/2026-10-14-phase-9b1/task-6-report.md
+@@ -256,3 +256,129 @@ REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=base/class/Package,base/class/Package_Option
+    from the first clause stays reachable while the call runs. Scratch `t6/p3/h1.rex`.
+ 5. Tests were written after the implementation (see TDD evidence); the mutation table is the
+    evidence that each one can fail.
++
++## Fix round 1
++
++Commits: `70f730abe` (merged routine holds its package), `0f1baee91` (parked-activity test),
++`23229c39d` (special_methods prune, ObjRef prune assertions), `740486ee9` (no expect in
++`unattached_method_id`), `23e7d1828` (method activation built in place). `refusal_sites` was run
++before `70f730abe`, before `23229c39d` and `740486ee9` (same tree), and before `23e7d1828`, and it
++passed each time. `0f1baee91` was not checked on its own: it changed only `scheduler.rs` and the
++test file, no later commit touches `scheduler.rs`, and the table passes at `23e7d1828`, so no
++re-derivation was owed.
++
++### (1) The merged_from leak
++
++`MergedRoutine::Installed(InstalledRoutine, ObjRef)` carries the package object of the routine's
++program. `PackageData::trace` follows it in `public_routines` and `merged_public_routines`, the
++tables a merge writes. `merged_from` and its push in `merge_package` are gone. A call whose callee
++has no public routine merges nothing and holds nothing. An entry that loses to an earlier one under
++the same name is never written, so it holds nothing either. Classes need no counterpart: a merged
++class is the class object, and a class holds its own package (Task 5's `class_holds_package`).
++Constructors: `install_directives` (the program's own package, `package_object` before the
++fields) and `added_routine` (`program_package` of the routine's program, `None` if none is built).
++
++Memory (`task-6/fix1/memory.txt`), each loop from its own fresh directory:
++
++| loop | oracle 20000 / 80000 | head `t6e` 20000 / 80000 | 80000 vs 20000 | before (`t6d`) 20000 / 80000 |
++|---|---|---|---|---|
++| `call ext`, `ext.rex` = `return 1` | 19608 / 20252 kB | 423232 / 425420 kB | +0.52% | 643540 / 2511992 kB |
++| the same, `ext.rex` with `::routine pubr public` | 20540 / 20372 kB | 448696 / 449148 kB | +0.10% | 680208 / 2658392 kB |
++
++The four section-6 loops at `t6e`, 20000 / 80000: `Method~new` 175764 / 174712, `Routine~new`
++173992 / 175384, `setMethod` 163360 / 163308, `Package~new` 420832 / 420988 kB.
++
++The e5/e6/e7 tests (`collect_stress -- external`, 6 passed) and the corpus differential (which runs
++`package_external_merge_held.rex`) are green. Mutation F1, deleting
++`MergedRoutine::Installed(_, object) |` from the trace: `collect_stress -- external` (release)
++3 failed, e5/e6/e7, for example `an_external_routines_merged_routine_runs_beside_its_callers_package`
++rc 120 `an activation's body selector names no routine body`.
++
++### (2) The parked activity
++
++`collect_stress::a_parked_activitys_frame_keeps_its_program` is the review's `parked.rex` with
++3-pass fillers. Oracle, the exact test text, 3 of 3 runs rc 0: `hasW 0` /
++`parked 6 guard on when flag = 1`. Green 3 of 3 in debug. Mutation F2, `Activities::running_programs`
++emptied: debug red at `package_object`'s assertion (`identities.rs:178`); release red, rc 120,
++`a message send to a package whose program was freed`, stdout `hasW 0` only. The walk's doc now
++names this shape (`scheduler.rs`). That withdraws Task 5's unwitnessed-walk exception.
++
++### (3) special_methods
++
++`prune_program_rows` sets to `None` every row whose `AccessScope::package` is a freed program, then
++pops trailing `None` rows. Table row added:
++
++| table | key / value | pruned where |
++|---|---|---|
++| `special_methods` | `Vec` by MethodId, value `AccessScope { package }` | `prune_program_rows` |
++
++The stale-id test now sends `m~setPrivate` to each `Method~new`, which files a row under that
++program, and asserts that no row names a freed program. Mutation F3 (no prune): unit red.
++
++### (4) The ObjRef-holding prunes
++
++None of the review's eight unasserted tables holds an `ObjRef`. `LibraryBinding` holds an
++`Rc<Library>` and a row, and the others hold MethodIds, program ids, rows or `&'static` entries. Two
++pruned stores that do hold `ObjRef`s had no assertion, and now have one:
++
++- `executable_objects` (MethodId to object). The test asserts that every key still has a body in
++  `method_bodies`, `generated_methods`, `native_externals` or `library_externals`. F4 (no prune):
++  red.
++- The annotation tables' global roots (`unroot_annotation_table`). `RootSet::global_names` is new
++  in `rexx-core`. The test asserts that no global root's name ends in ` of program <freed id>`. F5
++  (no unroot): red.
++
++The ObjRef-holding prunes already asserted: `routine_objects`, `executable_sources`, `annotations`.
++
++### (5) M2 as a lifetime test
++
++M2b deletes `out.extend(native.executable_package())` from `Body::trace` (`rexx-core`). The `Method`
++object still stores its package, and only the collector stops seeing it. Under collect-every-
++allocation, `a_held_stack_frame_keeps_its_program` goes red in debug and release (rc 120). The
++refusal text is `a message send to a method object this crate did not build`, because once the
++program is freed its `executable_sources` record is pruned. The same mutant binary run plainly
++(`rexx-run`, no forced collection) on the same program prints all three expected lines, rc 0. So the
++failure is the collection, not the refusal. M2b replaces M2.
++
++### (6) The expect in unattached_method_id
++
++`unattached_method_id` takes the program's `&Rc<Program>` from its one caller,
++`build_package_string_table`, which has just looked it up. The second lookup and its `expect` are
++gone, and there is no failure path left to refuse. The caller builds `entries` only when it holds
++`source`, so the `source.as_ref()` it maps over is `Some` whenever an entry exists.
++
++### (7) Activation codegen
++
++`Activation::method` is `#[inline(always)]`. A/B against the same tree without it, one round
++(`task-6/fix1/callgrind-inline-ab/`): sendloop -0.3754%, dispatch -0.2486%, dispatchclass -0.2676%,
++fibcall +0.0000%, intcall +0.0003%, startup +0.0014%. That is 11 instructions a send. Kept.
++
++### Budget
++
++```
++timeout 590 bench-programs/callgrind.sh -B 0.5 -j 16 -o /home/moritz/dev/repos/ooRexx-p9-pin/cg-9b1/task-6-fix1 pin=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run head=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9b1-t6e
++```
++
++Exit 0, full set, 3 rounds, no OVER, no SPREAD (`task-6/fix1/callgrind/`). sendloop +0.0715%
++(was +0.4486%), dispatch -0.1563%, dispatchclass -3.2536%, startup +0.3389%, compound +0.4347%
++(whole-process; -libc +0.0031%), sayloop +0.2277%, hashnew +0.1064%. `t6e` is the release build at
++`23e7d1828`.
++
++### Checks (from `rust/`, `CARGO_INCREMENTAL=0 -j 4 timeout 590 memcap 8G`, at `23e7d1828`, statuses unpiped, outputs in scratch `t6/checks1/`)
++
++| command | exit | result |
++|---|---|---|
++| `cargo fmt --all --check` | 0 | |
++| `cargo clippy -p rexx-exec -p rexx-core --all-targets -- -D warnings` | 0 | |
++| `cargo test -p rexx-exec --test collect_stress` (debug) | 0 | 55 passed |
++| `cargo test --release -p rexx-exec --test collect_stress` | 0 | 55 passed |
++| `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus` | 0 | 29 passed, 1 ignored |
++| the same, debug | 0 | 29 passed, 1 ignored |
++| `cargo test --release -p rexx-exec --lib` | 0 | 1123 passed |
++| the refusal tables and Task 5's binaries (the round's command above) | 0 | all ok |
++| `cargo test --release -p rexx-core` | 0 | |
++
++The debug lib run (1123 passed) was at `740486ee9`, before the one-attribute `23e7d1828`.
++
++Mutations F1 to F5 and M2b were applied and restored as before. After each batch the `git diff`
++was compared with a saved patch, and was identical every time.
+diff --git a/docs/superpowers/plans/2026-10-14-phase-9b1.md b/docs/superpowers/plans/2026-10-14-phase-9b1.md
+index a04ee34ad..fdd3d2173 100644
+--- a/docs/superpowers/plans/2026-10-14-phase-9b1.md
++++ b/docs/superpowers/plans/2026-10-14-phase-9b1.md
+@@ -229,8 +229,8 @@ cache), `install.rs`.
+       simulation mode (see `concurrency_tests`' S2 list).
+ - [ ] **Step 4:** `base/class/Package` `TESTRECLAIM01` passes within its own wait. Run the group
+       through the harness and show the test passed, not timed out.
+-- [ ] **Step 5:** Memory: 80000 `Package~new('p', 'return 1')` in a loop peaks within 2x of the
+-      oracle's RSS. Record both with `/usr/bin/time -f %M` on the interpreter itself, not on a
++- [ ] **Step 5:** Memory: 80000 `Package~new('p', 'return 1')` in a loop peaks within 10% of its
++      20000-iteration peak, with the oracle's RSS recorded beside it. Record both with `/usr/bin/time -f %M` on the interpreter itself, not on a
+       wrapper (`time -v timeout <bin>` measures timeout), and record the command.
+ - [ ] **Step 6:** Shrink `ALLOWED`. Per-task check, plus the Task 4 groups. Measure startup, alloc
+       and hashnew against the pin. Commit.
+@@ -251,8 +251,8 @@ cache), `install.rs`.
+       pruning site in the report.
+ - [ ] **Step 3:** Review Focus 4: a frame or a held stack frame whose program would otherwise be
+       freed keeps it. Pin it under `collect_stress`.
+-- [ ] **Step 4:** Memory: 80000 `Method~new('m', 'return 1')` in a loop peaks within 2x of the
+-      oracle's RSS (scout-leaks L8 has the baseline: oracle 20084 kB). Do the same for
++- [ ] **Step 4:** Memory: 80000 `Method~new('m', 'return 1')` in a loop peaks within 10% of its
++      20000-iteration peak, with the oracle's RSS recorded beside it (scout-leaks L8 has the baseline: oracle 20084 kB). Do the same for
+       `Routine~new`, source-string `setMethod`, and 80000 `Package~new('p', 'return 1')` (moved from
+       Task 5: its remaining 27.3 kB per package is program rows). Record the command.
+ - [ ] **Step 5:** Measure the full bench set against the pin, because program lookup is on every call
+@@ -266,8 +266,8 @@ cache), `install.rs`.
+ - [ ] **Step 1:** Each map in scout-leaks' Method/Routine group and Message group becomes a field of
+       its object, or is keyed by ObjRef and pruned at sweep (spec section 5, states 1 and 2). Record
+       which state each map takes, and why. Memory witness: scout-leaks L9's `msgloop` at 20000 and
+-      80000 iterations against the oracle. The growth between the two must be within 2x of the
+-      oracle's.
++      80000 iterations: the 80000-iteration peak is within 10% of the 20000-iteration peak, with the
++      oracle's figures recorded beside them.
+ - [ ] **Step 2:** The allocation charge counts a `::CLASS` class, a package and a program, as it
+       already counts a `~subclass` class. Witness: a loop that only defines classes through
+       `Package~new` collects (a WeakReference to a dropped one clears within the oracle's bound).
+@@ -312,7 +312,7 @@ cache), `install.rs`.
+       - the section 1 witness;
+       - `TESTRECLAIM01` passed, and no test regression against the 9b close's `tests.tsv` (a join on
+         group and test);
+-      - the four memory figures with their commands;
++      - the memory figures (80000 against 20000 iterations, oracle beside) with their commands;
+       - the callgrind table;
+       - the close command's exit status.
+ 
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind-inline-ab/binaries.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind-inline-ab/binaries.txt
+new file mode 100644
+index 000000000..dce3d4c39
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind-inline-ab/binaries.txt
+@@ -0,0 +1,4 @@
++# 2026-10-14T23:39:21Z rounds=1 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib
++# valgrind-3.27.1
++# base /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9b1-t6-fix1-base 6e25790066be6d04347b034625a0ed231d066f4da785be782933863a948c8177
++# exp1 /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9b1-t6-exp1 d95f24c35f2f5323895975558a9e2c94836d91d1f0e959c74ebe6b32157b2683
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind-inline-ab/summary.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind-inline-ab/summary.tsv
+new file mode 100644
+index 000000000..ac92ae309
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind-inline-ab/summary.tsv
+@@ -0,0 +1,12 @@
++base	dispatch	r1	22126145962	1391739326	347306	20734059330	rc=0
++exp1	dispatch	r1	22071148265	1391741515	347292	20679059458	rc=0
++base	sendloop	r1	14650353679	766638470	347161	13883368048	rc=0
++exp1	sendloop	r1	14595356387	766640897	347292	13828368198	rc=0
++base	dispatchclass	r1	16444472005	1045632100	347308	15398492597	rc=0
++exp1	dispatchclass	r1	16400469983	1045630684	347161	15354492138	rc=0
++base	fibcall	r1	8797225089	519242112	347121	8277635856	rc=0
++exp1	fibcall	r1	8797227253	519244427	347306	8277635520	rc=0
++base	intcall	r1	755287344	153621032	347266	601319046	rc=0
++exp1	intcall	r1	755289468	153623332	347306	601318830	rc=0
++base	startup	r1	119497292	61501134	347266	57648892	rc=0
++exp1	startup	r1	119498924	61503207	347161	57648556	rc=0
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind/binaries.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind/binaries.txt
+new file mode 100644
+index 000000000..6a759e733
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind/binaries.txt
+@@ -0,0 +1,4 @@
++# 2026-10-14T23:45:20Z rounds=3 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib
++# valgrind-3.27.1
++# pin /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run c4b4e8c4ce7f1f12e4a73fa37cb15eca262717092c2c1aed727febf437523c67
++# head /home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9b1-t6e fdc85c06ffba30ac261bdc56aa707e63d8560c2495c918e2e7b89e193fd1079f
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind/callgrind.log b/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind/callgrind.log
+new file mode 100644
+index 000000000..893df7e06
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind/callgrind.log
+@@ -0,0 +1,33 @@
++program	pin	head	head d%	pin -libc	head -libc	head -libc d%	pin spread%	head spread%
++alloc	22825677966	22662080766	-0.7167	20362612047	20193316876	-0.8314	0.0000	0.0000
++alloc4c	3673339285	3671785045	-0.0423	3106074440	3104460707	-0.0520	0.0000	0.0000
++arith	12084068290	12096402514	+0.1021	11478090242	11491918471	+0.1205	0.0000	0.0000
++assign	18443711946	18444142474	+0.0023	18381875604	18382151430	+0.0015	0.0000	0.0000
++compound	9247948335	9288151361	+0.4347	8836768877	8837044704	+0.0031	0.0000	0.0000
++decloop	2503233607	2507489564	+0.1700	2404647432	2408736915	+0.1701	0.0000	0.0000
++decrender	4631810523	4622968139	-0.1909	4171162211	4162451532	-0.2088	0.0000	0.0000
++dirread	3130118047	3091842802	-1.2228	2663580970	2634006530	-1.1103	0.0000	0.0000
++dispatch	22105710205	22071148285	-0.1563	20673777239	20679059521	+0.0256	0.0000	0.0000
++dispatchclass	16952030027	16400473918	-3.2536	15654210021	15354492365	-1.9146	0.0000	0.0000
++emptyloop	7797087611	7797514463	+0.0055	7735375461	7735651287	+0.0036	0.0000	0.0000
++extcall	8975966670	7791409455	-13.1970	7536919758	7408200665	-1.7078	0.0000	0.0000
++fibcall	9109404880	8797227576	-3.4270	8469931688	8277635894	-2.2703	0.0000	0.0000
++fibfunc	8938581960	8631030997	-3.4407	8300416595	8111559587	-2.2753	0.0000	0.0000
++hashnew	2355780705	2358286381	+0.1064	1588972591	1590915799	+0.1223	0.0000	0.0000
++heapshape	2432938924	2432546933	-0.0161	2306075991	2305535960	-0.0234	0.0000	0.0000
++intcall	839772904	755289791	-10.0602	660893280	601319204	-9.0142	0.0000	0.0000
++nop	9243390273	9243810943	+0.0046	9181614202	9181890028	+0.0030	0.0000	0.0000
++parse	1654598855	1654682938	+0.0051	1552802916	1552709141	-0.0060	0.0000	0.0000
++pkglocal	4185405401	3933840093	-6.0105	3917669232	3613955142	-7.7524	0.0000	0.0000
++sayloop	179667611	180076662	+0.2277	107724363	108000189	+0.2560	0.0001	0.0000
++sendloop	14584920953	14595356407	+0.0715	13818085980	13828368261	+0.0744	0.0000	0.0000
++startup	119095643	119499247	+0.3389	57373104	57648930	+0.4808	0.0002	0.0002
++strings	18808439054	18796845031	-0.0616	17536542235	17497799409	-0.2209	0.0000	0.0000
++textnum	1224167999	1223798499	-0.0302	1150021499	1149497329	-0.0456	0.0003	0.0000
++varlookup	13194527917	13194956734	+0.0032	13132805929	13133081755	+0.0021	0.0000	0.0000
++rexxcps	19278659843	19280629540	+0.0102	17792037167	17789569565	-0.0139	0.0000	0.0002
++pingguard	1314640130	1314364738	-0.0209	1148195128	1146176931	-0.1758	0.0010	0.0002
++pingmsg	7581728617	7496666107	-1.1219	1667809819	1623443462	-2.6602	0.0000	0.0000
++pingsem	1299597625	1301321897	+0.1327	1171630498	1171608187	-0.0019	0.0005	0.0004
++# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9b1/task-6-fix1
++exit 0
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind/summary.tsv b/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind/summary.tsv
+new file mode 100644
+index 000000000..4b286813f
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind/summary.tsv
+@@ -0,0 +1,180 @@
++pin	alloc	r1	22825677966	2462719707	346212	20362612047	rc=0
++head	alloc	r1	22662080775	2468416619	347280	20193316876	rc=0
++pin	alloc	r2	22825677966	2462719707	346212	20362612047	rc=0
++head	alloc	r2	22662080766	2468416601	347280	20193316885	rc=0
++pin	alloc	r3	22825677966	2462719707	346212	20362612047	rc=0
++head	alloc	r3	22662080510	2468416499	347135	20193316876	rc=0
++pin	alloc4c	r1	3673339340	566918705	346186	3106074449	rc=0
++head	alloc4c	r1	3671785045	566977058	347280	3104460707	rc=0
++pin	alloc4c	r2	3673339285	566918659	346186	3106074440	rc=0
++head	alloc4c	r2	3671785045	566977058	347280	3104460707	rc=0
++pin	alloc4c	r3	3673339285	566918659	346186	3106074440	rc=0
++head	alloc4c	r3	3671785045	566977058	347280	3104460707	rc=0
++pin	arith	r1	12084068290	605631836	346212	11478090242	rc=0
++head	arith	r1	12096402587	604136827	347280	11491918480	rc=0
++pin	arith	r2	12084068290	605631836	346212	11478090242	rc=0
++head	arith	r2	12096402514	604136763	347280	11491918471	rc=0
++pin	arith	r3	12084068290	605631836	346212	11478090242	rc=0
++head	arith	r3	12096402514	604136763	347280	11491918471	rc=0
++pin	assign	r1	18443711946	61490130	346212	18381875604	rc=0
++head	assign	r1	18444142474	61643764	347280	18382151430	rc=0
++pin	assign	r2	18443711946	61490130	346212	18381875604	rc=0
++head	assign	r2	18444142474	61643764	347280	18382151430	rc=0
++pin	assign	r3	18443711999	61490174	346212	18381875613	rc=0
++head	assign	r3	18444142474	61643764	347280	18382151430	rc=0
++pin	compound	r1	9247948070	410833166	346027	8836768877	rc=0
++head	compound	r1	9288151361	450759391	347266	8837044704	rc=0
++pin	compound	r2	9247948335	410833286	346172	8836768877	rc=0
++head	compound	r2	9288151361	450759391	347266	8837044704	rc=0
++pin	compound	r3	9247948335	410833286	346172	8836768877	rc=0
++head	compound	r3	9288151361	450759391	347266	8837044704	rc=0
++pin	decloop	r1	2503233607	98240134	346041	2404647432	rc=0
++head	decloop	r1	2507489555	98405351	347280	2408736924	rc=0
++pin	decloop	r2	2503233607	98240134	346041	2404647432	rc=0
++head	decloop	r2	2507489564	98405369	347280	2408736915	rc=0
++pin	decloop	r3	2503233069	98240223	346186	2404646660	rc=0
++head	decloop	r3	2507489564	98405369	347280	2408736915	rc=0
++pin	decrender	r1	4631810523	460302100	346212	4171162211	rc=0
++head	decrender	r1	4622968139	460169327	347280	4162451532	rc=0
++pin	decrender	r2	4631810258	460301980	346067	4171162211	rc=0
++head	decrender	r2	4622968139	460169327	347280	4162451532	rc=0
++pin	decrender	r3	4631810523	460302100	346212	4171162211	rc=0
++head	decrender	r3	4622968139	460169327	347280	4162451532	rc=0
++pin	dirread	r1	3130118833	466190914	346186	2663581733	rc=0
++head	dirread	r1	3091842802	457488992	347280	2634006530	rc=0
++pin	dirread	r2	3130118030	466190883	346186	2663580961	rc=0
++head	dirread	r2	3091842802	457488992	347280	2634006530	rc=0
++pin	dirread	r3	3130118047	466190891	346186	2663580970	rc=0
++head	dirread	r3	3091842802	457488992	347280	2634006530	rc=0
++pin	dispatch	r1	22105709945	1431586688	346027	20673777230	rc=0
++head	dispatch	r1	22071148020	1391741378	347121	20679059521	rc=0
++pin	dispatch	r2	22105710205	1431586794	346172	20673777239	rc=0
++head	dispatch	r2	22071148285	1391741498	347266	20679059521	rc=0
++pin	dispatch	r3	22105710205	1431586794	346172	20673777239	rc=0
++head	dispatch	r3	22071148285	1391741498	347266	20679059521	rc=0
++pin	dispatchclass	r1	16952029763	1297473675	346067	15654210021	rc=0
++head	dispatchclass	r1	16400473918	1045634273	347280	15354492365	rc=0
++pin	dispatchclass	r2	16952030027	1297473785	346212	15654210030	rc=0
++head	dispatchclass	r2	16400473653	1045634153	347135	15354492365	rc=0
++pin	dispatchclass	r3	16952030028	1297473795	346212	15654210021	rc=0
++head	dispatchclass	r3	16400473918	1045634273	347280	15354492365	rc=0
++pin	emptyloop	r1	7797087611	61365938	346212	7735375461	rc=0
++head	emptyloop	r1	7797514463	61516041	347135	7735651287	rc=0
++pin	emptyloop	r2	7797087664	61365982	346212	7735375470	rc=0
++head	emptyloop	r2	7797514463	61516041	347135	7735651287	rc=0
++pin	emptyloop	r3	7797087611	61365938	346212	7735375461	rc=0
++head	emptyloop	r3	7797514728	61516161	347280	7735651287	rc=0
++pin	extcall	r1	8975966670	1438625563	421349	7536919758	rc=0
++head	extcall	r1	7791409455	382786388	422402	7408200665	rc=0
++pin	extcall	r2	8975966670	1438625563	421349	7536919758	rc=0
++head	extcall	r2	7791409455	382786388	422402	7408200665	rc=0
++pin	extcall	r3	8975966405	1438625443	421204	7536919758	rc=0
++head	extcall	r3	7791409486	382786410	422402	7408200674	rc=0
++pin	fibcall	r1	9109404880	639127006	346186	8469931688	rc=0
++head	fibcall	r1	8797228379	519244433	347280	8277636666	rc=0
++pin	fibcall	r2	9109404880	639127006	346186	8469931688	rc=0
++head	fibcall	r2	8797227576	519244402	347280	8277635894	rc=0
++pin	fibcall	r3	9109404880	639127006	346186	8469931688	rc=0
++head	fibcall	r3	8797227576	519244402	347280	8277635894	rc=0
++pin	fibfunc	r1	8938582498	637819090	346041	8300417367	rc=0
++head	fibfunc	r1	8631030997	519124130	347280	8111559587	rc=0
++pin	fibfunc	r2	8938581960	637819179	346186	8300416595	rc=0
++head	fibfunc	r2	8631030614	519123892	347135	8111559587	rc=0
++pin	fibfunc	r3	8938581960	637819179	346186	8300416595	rc=0
++head	fibfunc	r3	8631030997	519124130	347280	8111559587	rc=0
++pin	hashnew	r1	2355780680	766461894	346186	1588972600	rc=0
++head	hashnew	r1	2358286411	767023332	347280	1590915799	rc=0
++pin	hashnew	r2	2355780705	766461928	346186	1588972591	rc=0
++head	hashnew	r2	2358286349	767023270	347280	1590915799	rc=0
++pin	hashnew	r3	2355780705	766461928	346186	1588972591	rc=0
++head	hashnew	r3	2358286381	767023311	347280	1590915790	rc=0
++pin	heapshape	r1	2432939727	126516722	346242	2306076763	rc=0
++head	heapshape	r1	2432546933	126663663	347310	2305535960	rc=0
++pin	heapshape	r2	2432938924	126516691	346242	2306075991	rc=0
++head	heapshape	r2	2432546933	126663663	347310	2305535960	rc=0
++pin	heapshape	r3	2432938924	126516691	346242	2306075991	rc=0
++head	heapshape	r3	2432546668	126663543	347165	2305535960	rc=0
++pin	intcall	r1	839772904	178533438	346186	660893280	rc=0
++head	intcall	r1	755289791	153623307	347280	601319204	rc=0
++pin	intcall	r2	839772639	178533318	346041	660893280	rc=0
++head	intcall	r2	755289791	153623307	347280	601319204	rc=0
++pin	intcall	r3	839772904	178533438	346186	660893280	rc=0
++head	intcall	r3	755289791	153623307	347280	601319204	rc=0
++pin	nop	r1	9243390273	61429885	346186	9181614202	rc=0
++head	nop	r1	9243810998	61573681	347280	9181890037	rc=0
++pin	nop	r2	9243390008	61429765	346041	9181614202	rc=0
++head	nop	r2	9243810943	61573635	347280	9181890028	rc=0
++pin	nop	r3	9243390273	61429885	346186	9181614202	rc=0
++head	nop	r3	9243810678	61573515	347135	9181890028	rc=0
++pin	parse	r1	1654598855	101449727	346212	1552802916	rc=0
++head	parse	r1	1654682938	101626662	347135	1552709141	rc=0
++pin	parse	r2	1654598855	101449727	346212	1552802916	rc=0
++head	parse	r2	1654683203	101626782	347280	1552709141	rc=0
++pin	parse	r3	1654598590	101449607	346067	1552802916	rc=0
++head	parse	r3	1654682938	101626662	347135	1552709141	rc=0
++pin	pkglocal	r1	4185405401	267389997	346172	3917669232	rc=0
++head	pkglocal	r1	3933840093	319537685	347266	3613955142	rc=0
++pin	pkglocal	r2	4185405401	267389997	346172	3917669232	rc=0
++head	pkglocal	r2	3933839828	319537565	347121	3613955142	rc=0
++pin	pkglocal	r3	4185405401	267389997	346172	3917669232	rc=0
++head	pkglocal	r3	3933840093	319537685	347266	3613955142	rc=0
++pin	sayloop	r1	179667611	71597062	346186	107724363	rc=0
++head	sayloop	r1	180076662	71729193	347280	108000189	rc=0
++pin	sayloop	r2	179667611	71597062	346186	107724363	rc=0
++head	sayloop	r2	180076662	71729193	347280	108000189	rc=0
++pin	sayloop	r3	179667346	71596942	346041	107724363	rc=0
++head	sayloop	r3	180076662	71729193	347280	108000189	rc=0
++pin	sendloop	r1	14584920953	766488801	346172	13818085980	rc=0
++head	sendloop	r1	14595356407	766640880	347266	13828368261	rc=0
++pin	sendloop	r2	14584920688	766488681	346027	13818085980	rc=0
++head	sendloop	r2	14595356142	766640760	347121	13828368261	rc=0
++pin	sendloop	r3	14584920953	766488801	346172	13818085980	rc=0
++head	sendloop	r3	14595356407	766640880	347266	13828368261	rc=0
++pin	startup	r1	119095378	61376233	346041	57373104	rc=0
++head	startup	r1	119499512	61503302	347280	57648930	rc=0
++pin	startup	r2	119095643	61376353	346186	57373104	rc=0
++head	startup	r2	119499247	61503182	347135	57648930	rc=0
++pin	startup	r3	119095643	61376353	346186	57373104	rc=0
++head	startup	r3	119499247	61503182	347135	57648930	rc=0
++pin	strings	r1	18808439266	1271550845	346186	17536542235	rc=0
++head	strings	r1	18796845055	1298698357	347280	17497799418	rc=0
++pin	strings	r2	18808439001	1271550725	346041	17536542235	rc=0
++head	strings	r2	18796844766	1298698222	347135	17497799409	rc=0
++pin	strings	r3	18808439054	1271550769	346041	17536542244	rc=0
++head	strings	r3	18796845031	1298698342	347280	17497799409	rc=0
++pin	textnum	r1	1224167999	73800314	346186	1150021499	rc=0
++head	textnum	r1	1223798499	73953890	347280	1149497329	rc=0
++pin	textnum	r2	1224167999	73800314	346186	1150021499	rc=0
++head	textnum	r2	1223798499	73953890	347280	1149497329	rc=0
++pin	textnum	r3	1224163888	73796738	346041	1150021109	rc=0
++head	textnum	r3	1223798499	73953890	347280	1149497329	rc=0
++pin	varlookup	r1	13194527917	61375776	346212	13132805929	rc=0
++head	varlookup	r1	13194956734	61527699	347280	13133081755	rc=0
++pin	varlookup	r2	13194527915	61375765	346212	13132805938	rc=0
++head	varlookup	r2	13194956469	61527579	347135	13133081755	rc=0
++pin	varlookup	r3	13194527917	61375776	346212	13132805929	rc=0
++head	varlookup	r3	13194956734	61527699	347280	13133081755	rc=0
++pin	rexxcps	r1	19278661862	1486276538	346057	17792039267	rc=0
++head	rexxcps	r1	19280655208	1490728003	347151	17789580054	rc=0
++pin	rexxcps	r2	19278659843	1486276619	346057	17792037167	rc=0
++head	rexxcps	r2	19280629540	1490712679	347296	17789569565	rc=0
++pin	rexxcps	r3	19278656096	1486272926	346202	17792036968	rc=0
++head	rexxcps	r3	19280615460	1490704460	347296	17789563704	rc=0
++pin	pingguard	r1	1314650363	166101538	346212	1148202613	rc=0
++head	pingguard	r1	1314365200	167840743	347280	1146177177	rc=0
++pin	pingguard	r2	1314637388	166098082	346212	1148193094	rc=0
++head	pingguard	r2	1314364738	167840527	347280	1146176931	rc=0
++pin	pingguard	r3	1314640130	166098790	346212	1148195128	rc=0
++head	pingguard	r3	1314362434	167840095	347280	1146175059	rc=0
++pin	pingmsg	r1	7581728352	5913572506	346027	1667809819	rc=0
++head	pingmsg	r1	7496666107	5872875379	347266	1623443462	rc=0
++pin	pingmsg	r2	7581728617	5913572626	346172	1667809819	rc=0
++head	pingmsg	r2	7496666107	5872875379	347266	1623443462	rc=0
++pin	pingmsg	r3	7581728617	5913572626	346172	1667809819	rc=0
++head	pingmsg	r3	7496665842	5872875259	347121	1623443462	rc=0
++pin	pingsem	r1	1299597817	127621027	346172	1171630618	rc=0
++head	pingsem	r1	1301319809	129365940	347266	1171606603	rc=0
++pin	pingsem	r2	1299597625	127620955	346172	1171630498	rc=0
++head	pingsem	r2	1301324798	129367236	347266	1171610296	rc=0
++pin	pingsem	r3	1299591814	127619371	346172	1171626271	rc=0
++head	pingsem	r3	1301321897	129366444	347266	1171608187	rc=0
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind/table.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind/table.txt
+new file mode 100644
+index 000000000..a0e2d9b2a
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/callgrind/table.txt
+@@ -0,0 +1,32 @@
++program	pin	head	head d%	pin -libc	head -libc	head -libc d%	pin spread%	head spread%
++alloc	22825677966	22662080766	-0.7167	20362612047	20193316876	-0.8314	0.0000	0.0000
++alloc4c	3673339285	3671785045	-0.0423	3106074440	3104460707	-0.0520	0.0000	0.0000
++arith	12084068290	12096402514	+0.1021	11478090242	11491918471	+0.1205	0.0000	0.0000
++assign	18443711946	18444142474	+0.0023	18381875604	18382151430	+0.0015	0.0000	0.0000
++compound	9247948335	9288151361	+0.4347	8836768877	8837044704	+0.0031	0.0000	0.0000
++decloop	2503233607	2507489564	+0.1700	2404647432	2408736915	+0.1701	0.0000	0.0000
++decrender	4631810523	4622968139	-0.1909	4171162211	4162451532	-0.2088	0.0000	0.0000
++dirread	3130118047	3091842802	-1.2228	2663580970	2634006530	-1.1103	0.0000	0.0000
++dispatch	22105710205	22071148285	-0.1563	20673777239	20679059521	+0.0256	0.0000	0.0000
++dispatchclass	16952030027	16400473918	-3.2536	15654210021	15354492365	-1.9146	0.0000	0.0000
++emptyloop	7797087611	7797514463	+0.0055	7735375461	7735651287	+0.0036	0.0000	0.0000
++extcall	8975966670	7791409455	-13.1970	7536919758	7408200665	-1.7078	0.0000	0.0000
++fibcall	9109404880	8797227576	-3.4270	8469931688	8277635894	-2.2703	0.0000	0.0000
++fibfunc	8938581960	8631030997	-3.4407	8300416595	8111559587	-2.2753	0.0000	0.0000
++hashnew	2355780705	2358286381	+0.1064	1588972591	1590915799	+0.1223	0.0000	0.0000
++heapshape	2432938924	2432546933	-0.0161	2306075991	2305535960	-0.0234	0.0000	0.0000
++intcall	839772904	755289791	-10.0602	660893280	601319204	-9.0142	0.0000	0.0000
++nop	9243390273	9243810943	+0.0046	9181614202	9181890028	+0.0030	0.0000	0.0000
++parse	1654598855	1654682938	+0.0051	1552802916	1552709141	-0.0060	0.0000	0.0000
++pkglocal	4185405401	3933840093	-6.0105	3917669232	3613955142	-7.7524	0.0000	0.0000
++sayloop	179667611	180076662	+0.2277	107724363	108000189	+0.2560	0.0001	0.0000
++sendloop	14584920953	14595356407	+0.0715	13818085980	13828368261	+0.0744	0.0000	0.0000
++startup	119095643	119499247	+0.3389	57373104	57648930	+0.4808	0.0002	0.0002
++strings	18808439054	18796845031	-0.0616	17536542235	17497799409	-0.2209	0.0000	0.0000
++textnum	1224167999	1223798499	-0.0302	1150021499	1149497329	-0.0456	0.0003	0.0000
++varlookup	13194527917	13194956734	+0.0032	13132805929	13133081755	+0.0021	0.0000	0.0000
++rexxcps	19278659843	19280629540	+0.0102	17792037167	17789569565	-0.0139	0.0000	0.0002
++pingguard	1314640130	1314364738	-0.0209	1148195128	1146176931	-0.1758	0.0010	0.0002
++pingmsg	7581728617	7496666107	-1.1219	1667809819	1623443462	-2.6602	0.0000	0.0000
++pingsem	1299597625	1301321897	+0.1327	1171630498	1171608187	-0.0019	0.0005	0.0004
++exit 0
+diff --git a/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/memory.txt b/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/memory.txt
+new file mode 100644
+index 000000000..cf25355fa
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-14-phase-9b1/task-6/fix1/memory.txt
+@@ -0,0 +1,40 @@
++# Peak RSS, /usr/bin/time -f %M on the interpreter itself. Oracle: ( ulimit -v 1048576 -t 120; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib /usr/bin/time -f ... /home/moritz/dev/repos/ooRexx/build/bin/rexx main.rex ); crate: ( ulimit -v 4194304 -t 120; /usr/bin/time -f ... BIN main.rex ). Each external-call loop runs from its own fresh directory holding main.rex and ext.rex.
++# rexx-run-9b1-t6e is built at 23e7d1828; rexx-run-9b1-t6d is the round's base binary.
++oracle ext-plain-20000 19608 kB
++rexx-run-9b1-t6e ext-plain-20000 423232 kB
++rexx-run-9b1-t6d ext-plain-20000 643540 kB
++oracle ext-plain-80000 20252 kB
++rexx-run-9b1-t6e ext-plain-80000 425420 kB
++rexx-run-9b1-t6d ext-plain-80000 2511992 kB
++oracle ext-pub-20000 20540 kB
++rexx-run-9b1-t6e ext-pub-20000 448696 kB
++rexx-run-9b1-t6d ext-pub-20000 680208 kB
++oracle ext-pub-80000 20372 kB
++rexx-run-9b1-t6e ext-pub-80000 449148 kB
++rexx-run-9b1-t6d ext-pub-80000 2658392 kB
++rexx-run-9b1-t6e methloop20000 175764 kB
++rexx-run-9b1-t6e methloop80000 174712 kB
++rexx-run-9b1-t6e routloop20000 173992 kB
++rexx-run-9b1-t6e routloop80000 175384 kB
++rexx-run-9b1-t6e setmloop20000 163360 kB
++rexx-run-9b1-t6e setmloop80000 163308 kB
++rexx-run-9b1-t6e pkgloop20000 420832 kB
++rexx-run-9b1-t6e pkgloop80000 420988 kB
++# programs
++== ext-plain main.rex (20000)
++do i = 1 to 20000
++  call ext
++end
++say 'done'
++== ext-plain ext.rex
++return 1
++== ext-pub main.rex (20000)
++do i = 1 to 20000
++  call ext
++end
++say 'done' pubr()
++== ext-pub ext.rex
++return 1
++::routine pubr public
++  return 2
++# the loop programs are in ../memory.txt
+diff --git a/docs/superpowers/specs/2026-10-14-phase-9b1-uniform-object-model.md b/docs/superpowers/specs/2026-10-14-phase-9b1-uniform-object-model.md
+index 16e6e5a90..fab5b91b1 100644
+--- a/docs/superpowers/specs/2026-10-14-phase-9b1-uniform-object-model.md
++++ b/docs/superpowers/specs/2026-10-14-phase-9b1-uniform-object-model.md
+@@ -124,8 +124,11 @@ Class maps are already in state 2, the registry's `by_name` included (`ClassRegi
+   has no test regression against the 9b close
+   (`docs/superpowers/records/2026-10-13-phase-9b/close2/suite/tests.tsv`), and the corpus
+   differential stays green.
+-* Memory: 80000 `Method~new` in a loop peaks within 2x of the oracle's RSS under the same memcap, and
+-  so do 80000 `Package~new`. Each is measured, and recorded with its command.
++* Memory: nothing grows with the iteration count. For `Method~new`, `Routine~new`, source-string
++  `setMethod`, `Package~new` and the message loop, the 80000-iteration peak RSS is within 10% of the
++  20000-iteration peak. The oracle's figures are recorded beside ours, with the command. The absolute
++  gap to the oracle is collector tuning (the 32 MB collection floor), which the GC-timing licence
++  covers (controller ruling 2026-10-15, after Task 6 measured it; flagged to Moritz).
+ * Performance: every bench program stays within +0.5% of the Phase 9 pin
+   (`/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run`, sha256 `c4b4e8c4…`), measured as callgrind
+   whole-process instructions with libc included (`rust/bench-programs/callgrind.sh -B 0.5`), at
+diff --git a/rust/crates/rexx-core/src/roots.rs b/rust/crates/rexx-core/src/roots.rs
+index 94455efb6..15e09fc28 100644
+--- a/rust/crates/rexx-core/src/roots.rs
++++ b/rust/crates/rexx-core/src/roots.rs
+@@ -134,6 +134,11 @@ impl RootSet {
+         }
+     }
+ 
++    /// The name of every global root.
++    pub fn global_names(&self) -> impl Iterator<Item = &str> + '_ {
++        self.globals.keys().map(String::as_str)
++    }
++
+     /// Drops the global root `name`, if there is one.
+     pub fn remove_global(&mut self, name: &str) {
+         self.globals.remove(name);
+diff --git a/rust/crates/rexx-exec/src/activation.rs b/rust/crates/rexx-exec/src/activation.rs
+index 6b95395de..2ffbf12da 100644
+--- a/rust/crates/rexx-exec/src/activation.rs
++++ b/rust/crates/rexx-exec/src/activation.rs
+@@ -846,7 +846,10 @@ impl Activation {
+         }
+     }
+ 
+-    /// The activation a message send into a `::METHOD` body pushes.
++    /// The activation a message send into a `::METHOD` body pushes. Built
++    /// in place in the send path: measured, out of line it costs `sendloop`
++    /// 11 instructions a send.
++    #[inline(always)]
+     pub(crate) fn method(
+         id: ActivationId,
+         program: Rc<Program>,
+diff --git a/rust/crates/rexx-exec/src/dispatch/package.rs b/rust/crates/rexx-exec/src/dispatch/package.rs
+index 53a93246f..28a81c863 100644
+--- a/rust/crates/rexx-exec/src/dispatch/package.rs
++++ b/rust/crates/rexx-exec/src/dispatch/package.rs
+@@ -913,7 +913,7 @@ fn install_routine(
+     };
+     writable_package_of(interp, receiver)?;
+     interp.routines_changed();
+-    if let crate::MergedRoutine::Installed(installed) = merged {
++    if let crate::MergedRoutine::Installed(installed, _) = merged {
+         interp.routine_objects.insert(installed, routine);
+     }
+     if let Some(data) = interp.package_data_mut(receiver) {
+diff --git a/rust/crates/rexx-exec/src/environment.rs b/rust/crates/rexx-exec/src/environment.rs
+index 969d918f5..0f39afb5d 100644
+--- a/rust/crates/rexx-exec/src/environment.rs
++++ b/rust/crates/rexx-exec/src/environment.rs
+@@ -1129,11 +1129,14 @@ impl Interp {
+         }
+         // A copy of the REXX package has no directives, and gets a table only
+         // for a write, which is where `~addRoutine` files its routines.
+-        let entries = match data.program {
++        let source = match data.program {
+             Some(program) if !self.untranslated.contains(&program) => {
+-                let source = std::rc::Rc::clone(self.programs.get(program)?);
+-                package_table_entries(program, &source, kind)
++                Some(std::rc::Rc::clone(self.programs.get(program)?))
+             }
++            _ => None,
++        };
++        let entries = match (data.program, &source) {
++            (Some(program), Some(source)) => package_table_entries(program, source, kind),
+             _ => Vec::new(),
+         };
+         if entries.is_empty() && !force {
+@@ -1181,8 +1184,10 @@ impl Interp {
+                             .expect("every TableValue::Instance names a native class");
+                         let object = self.native_instance(class);
+                         self.attach_annotations(object, site);
+-                        let method = (!routine).then(|| {
+-                            let method = self.unattached_method_id(program, directive, &name);
++                        // `entries` is empty unless `source` is this program's.
++                        let method = source.as_ref().filter(|_| !routine).map(|source| {
++                            let method =
++                                self.unattached_method_id(program, source, directive, &name);
+                             self.executable_objects.insert(method, object);
+                             method
+                         });
+diff --git a/rust/crates/rexx-exec/src/environment/identities.rs b/rust/crates/rexx-exec/src/environment/identities.rs
+index 9fdede007..a2637f6d9 100644
+--- a/rust/crates/rexx-exec/src/environment/identities.rs
++++ b/rust/crates/rexx-exec/src/environment/identities.rs
+@@ -1115,7 +1115,9 @@ impl Interp {
+     /// that row answers for, and itself over that row otherwise.
+     pub(crate) fn added_routine(&self, object: ObjRef) -> Option<crate::MergedRoutine> {
+         Some(match self.routine_object_resolution(object).ok()? {
+-            crate::run::Resolved::Routine(installed) => crate::MergedRoutine::Installed(installed),
++            crate::run::Resolved::Routine(installed) => {
++                crate::MergedRoutine::Installed(installed, self.program_package(installed.program)?)
++            }
+             crate::run::Resolved::MergedLibraryRoutine(code) => {
+                 if self.library_routine_objects.get(&code) == Some(&object) {
+                     crate::MergedRoutine::Library(code)
+@@ -1140,7 +1142,7 @@ impl Interp {
+     /// reporting that code's package.
+     pub(crate) fn merged_routine_object(&mut self, merged: crate::MergedRoutine) -> Option<ObjRef> {
+         match merged {
+-            crate::MergedRoutine::Installed(installed) => self.routine_object(installed),
++            crate::MergedRoutine::Installed(installed, _) => self.routine_object(installed),
+             crate::MergedRoutine::Library(code) => Some(self.library_routine_object(code)),
+             crate::MergedRoutine::Internal(index) => Some(self.internal_routine_object(index)),
+             crate::MergedRoutine::LibraryObject(_, object)
+diff --git a/rust/crates/rexx-exec/src/install.rs b/rust/crates/rexx-exec/src/install.rs
+index f2a15e056..f254cc9e3 100644
+--- a/rust/crates/rexx-exec/src/install.rs
++++ b/rust/crates/rexx-exec/src/install.rs
+@@ -354,16 +354,17 @@ impl Interp {
+             }
+         }
+         if !routines.is_empty() || !public_routines.is_empty() {
++            let package = self.package_object(Package::Program(id))?;
+             let data = self.program_fields_mut(id)?;
+             data.routines.extend(
+                 routines
+                     .into_iter()
+-                    .map(|(name, installed)| (name, MergedRoutine::Installed(installed))),
++                    .map(|(name, installed)| (name, MergedRoutine::Installed(installed, package))),
+             );
+             data.public_routines.extend(
+                 public_routines
+                     .into_iter()
+-                    .map(|(name, installed)| (name, MergedRoutine::Installed(installed))),
++                    .map(|(name, installed)| (name, MergedRoutine::Installed(installed, package))),
+             );
+         }
+         self.library_routine_codes.extend(routine_codes);
+@@ -844,9 +845,6 @@ impl Interp {
+         for (name, class) in classes {
+             data.merged_public_classes.entry(name).or_insert(class);
+         }
+-        if from != into && !data.merged_from.contains(&from) {
+-            data.merged_from.push(from);
+-        }
+     }
+ 
+     /// The package a namespace qualifier written in `package` names, or `None`
+@@ -1780,18 +1778,15 @@ impl Interp {
+     /// The identity one `.METHODS` entry runs under, minted with its body
+     /// recorded as [`Interp::install_method`], [`Interp::install_attribute`]
+     /// and [`Interp::install_constant`] record a class's: `name` is the
+-    /// entry's key, which picks the half of an accessor pair.
++    /// entry's key, which picks the half of an accessor pair. `source` is
++    /// `program`'s own.
+     pub(crate) fn unattached_method_id(
+         &mut self,
+         program: ProgramId,
++        source: &Rc<Program>,
+         directive: usize,
+         name: &[u8],
+     ) -> MethodId {
+-        let source = Rc::clone(
+-            self.programs
+-                .get(program)
+-                .expect("the package whose table names it holds the program"),
+-        );
+         let (body, access, protection) = match &source.directives[directive].kind {
+             DirectiveKind::Method(method) => {
+                 let external = dispatch::native::method_external(method);
+@@ -1817,7 +1812,7 @@ impl Interp {
+                     .program_data(program)
+                     .is_some_and(|data| data.constants.contains_key(&directive))
+                 {
+-                    self.record_literal_constants(program, &source, &[directive]);
++                    self.record_literal_constants(program, source, &[directive]);
+                 }
+                 (
+                     InstallBody::Generated(GeneratedKind::Constant),
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index d240152ca..8d75eb0e1 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -1721,8 +1721,9 @@ impl PackageStart {
+ /// One entry of [`Interp::merged_public_routines`].
+ #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+ enum MergedRoutine {
+-    /// A `::ROUTINE` a required package declared or imported.
+-    Installed(InstalledRoutine),
++    /// A `::ROUTINE` a required package declared or imported, and the
++    /// package object of its program, which the entry holds.
++    Installed(InstalledRoutine, ObjRef),
+     /// A library routine, as its [`Interp::library_codes`] row.
+     Library(usize),
+     /// An internal package's routine, as its
+@@ -1749,7 +1750,7 @@ impl MergedRoutine {
+     /// What a call that finds this entry runs.
+     pub(crate) fn resolved(self) -> run::Resolved {
+         match self {
+-            MergedRoutine::Installed(installed) => run::Resolved::Routine(installed),
++            MergedRoutine::Installed(installed, _) => run::Resolved::Routine(installed),
+             MergedRoutine::Library(code) | MergedRoutine::LibraryObject(code, _) => {
+                 run::Resolved::MergedLibraryRoutine(code)
+             }
+@@ -3261,6 +3262,16 @@ impl Interp {
+             self.guarded_externals
+                 .retain(|method| !methods.contains(method));
+         }
++        for row in &mut self.special_methods {
++            if row.is_some_and(
++                |scope| matches!(scope.package, Package::Program(program) if dead(&program)),
++            ) {
++                *row = None;
++            }
++        }
++        while matches!(self.special_methods.last(), Some(None)) {
++            self.special_methods.pop();
++        }
+         self.routine_objects
+             .retain(|installed, _| !dead(&installed.program));
+         self.library_routine_codes
+diff --git a/rust/crates/rexx-exec/src/package_state.rs b/rust/crates/rexx-exec/src/package_state.rs
+index fa1194aba..0d084f3c3 100644
+--- a/rust/crates/rexx-exec/src/package_state.rs
++++ b/rust/crates/rexx-exec/src/package_state.rs
+@@ -71,12 +71,6 @@ pub(crate) struct PackageData {
+     pub(crate) local: Option<ObjRef>,
+     /// `loadedPackages`, in the order they were added.
+     pub(crate) imports: Vec<ObjRef>,
+-    /// Every package whose public routines and classes were merged into this
+-    /// one. A merged `::ROUTINE` names its program, not an object, so this is
+-    /// what keeps the program's package alive for it, as the oracle's merged
+-    /// `Routine` object does. Not `~importedPackages`: an external call
+-    /// merges without importing.
+-    pub(crate) merged_from: Vec<ObjRef>,
+     /// `parentPackage`: the package a routine or class lookup that misses
+     /// this one's own tables walks next.
+     pub(crate) parent: Option<ObjRef>,
+@@ -109,7 +103,6 @@ impl PackageFields for PackageData {
+             namespaces,
+             local,
+             imports,
+-            merged_from,
+             parent,
+             main_routine,
+             tables,
+@@ -117,10 +110,12 @@ impl PackageFields for PackageData {
+         } = self;
+         out.extend(*security_manager);
+         // The `Routine` objects `~addRoutine` filed as themselves, which the
+-        // table does not follow into these copies.
++        // table does not follow into these copies, and the package of each
++        // `::ROUTINE`, as the oracle's merged `Routine` object holds it.
+         for table in [public_routines, merged_public_routines] {
+             out.extend(table.values().filter_map(|merged| match merged {
+-                MergedRoutine::LibraryObject(_, object)
++                MergedRoutine::Installed(_, object)
++                | MergedRoutine::LibraryObject(_, object)
+                 | MergedRoutine::InternalObject(_, object) => Some(*object),
+                 _ => None,
+             }));
+@@ -133,7 +128,6 @@ impl PackageFields for PackageData {
+         out.extend(namespaces.values().copied());
+         out.extend(*local);
+         out.extend(imports.iter().copied());
+-        out.extend(merged_from.iter().copied());
+         out.extend(*parent);
+         out.extend(*main_routine);
+         out.extend(tables.iter().flatten().copied());
+diff --git a/rust/crates/rexx-exec/src/run/tests.rs b/rust/crates/rexx-exec/src/run/tests.rs
+index 2c802d122..aa555a4b1 100644
+--- a/rust/crates/rexx-exec/src/run/tests.rs
++++ b/rust/crates/rexx-exec/src/run/tests.rs
+@@ -204,7 +204,7 @@ fn a_freed_programs_id_never_resolves_again() {
+     interp.enable_stress_collect();
+     let out = say_output_with_directives(
+         &mut interp,
+-        b"do i = 1 to 4\n  m = .Method~new('m', 'return' i)\n  \
++        b"do i = 1 to 4\n  m = .Method~new('m', 'return' i)\n  m~setPrivate\n  \
+           r = .Routine~new('r', 'return' i)\n  \
+           p = .Package~new('p', ('::routine q public', 'return' i))\n  \
+           say .runner~new~go(m) r~call p~findRoutine('Q')~call\nend\n\
+@@ -232,7 +232,24 @@ fn a_freed_programs_id_never_resolves_again() {
+             .any(|site| matches!(site, crate::environment::Annotated::Compiled(_))),
+         "a compiled method's annotation table is held by a row of its own"
+     );
++    for method in interp.executable_objects.keys() {
++        assert!(
++            interp.method_bodies.contains_key(method)
++                || interp.generated_methods.contains_key(method)
++                || interp.native_externals.contains_key(method)
++                || interp.library_externals.contains_key(method),
++            "executable_objects names {method:?}, whose body was pruned"
++        );
++    }
+     for id in &freed {
++        let suffix = format!(" of program {id}");
++        assert!(
++            !interp
++                .roots
++                .global_names()
++                .any(|name| name.ends_with(&suffix)),
++            "a global root names {id}"
++        );
+         assert!(issued.contains(id), "{id} was freed and never issued");
+         assert!(
+             interp.programs.get(*id).is_none(),
+@@ -260,6 +277,12 @@ fn a_freed_programs_id_never_resolves_again() {
+                 .any(|body| body.program == *id),
+             "{id} in method_bodies"
+         );
++        assert!(
++            !interp.special_methods.iter().flatten().any(
++                |scope| matches!(scope.package, crate::plan::Package::Program(program) if program == *id)
++            ),
++            "{id} in special_methods"
++        );
+         assert!(
+             !interp
+                 .routine_objects
+diff --git a/rust/crates/rexx-exec/src/scheduler.rs b/rust/crates/rexx-exec/src/scheduler.rs
+index 98198283b..3f8b2baba 100644
+--- a/rust/crates/rexx-exec/src/scheduler.rs
++++ b/rust/crates/rexx-exec/src/scheduler.rs
+@@ -407,11 +407,8 @@ impl Activities {
+     }
+ 
+     /// [`crate::activity::Activity::running_programs`] of every activity
+-    /// that is not running.
+-    ///
+-    /// No shape was found in which this is a package's only holder. It stays
+-    /// so that a holder missed elsewhere cannot become a refusal partway
+-    /// through a program.
++    /// that is not running: the only holder of a method that unset its own
++    /// entry and is parked in `GUARD WHEN` on a started activity.
+     pub(crate) fn running_programs(&self, out: &mut Vec<crate::plan::ProgramId>) {
+         for idle in self.idle.iter().flatten() {
+             idle.activity.running_programs(out);
+diff --git a/rust/crates/rexx-exec/tests/collect_stress.rs b/rust/crates/rexx-exec/tests/collect_stress.rs
+index 66b8cc4c9..8a243b649 100644
+--- a/rust/crates/rexx-exec/tests/collect_stress.rs
++++ b/rust/crates/rexx-exec/tests/collect_stress.rs
+@@ -1634,3 +1634,35 @@ fn a_running_frame_keeps_its_program() {
+         "ran 6 do i = 1 to 3\nroutine 5 x = .local~remove(\"R\")\nunset 7 do i = 1 to 3 0\n",
+     );
+ }
++
++/// A method that unset its own entry and is parked in `GUARD WHEN` on a
++/// started activity is reached by that idle activity's frame alone, which
++/// keeps its program. Measured, oracle rc 0 in 3 of 3 runs, with 300 passes
++/// of `copies('x', 100000)` in `filler`.
++#[test]
++fn a_parked_activitys_frame_keeps_its_program() {
++    assert_stress_prints(
++        "<parked-frame-program>",
++        concat!(
++            "o = .k~new\n",
++            "o~put('REL', ('expose flag', 'flag = 1'))\n",
++            "o~put('W', ('expose flag', 'self~unsetMethod(\"W\")', 'guard on when flag = 1', ",
++            "'call filler2', ",
++            "'return \"parked\" .context~executable~source~items .context~package~sourceline(3)', ",
++            "'filler2: do j = 1 to 3; z = copies(\"q\", 1000); end; return'))\n",
++            "msg = o~start('W')\n",
++            "call syssleep 0.3\n",
++            "call filler\n",
++            "say 'hasW' o~hasMethod('W')\n",
++            "o~rel\n",
++            "say msg~result\n",
++            "exit\n",
++            "filler: do j = 1 to 3; z = copies('x', 1000); end; return\n",
++            "::class k\n",
++            "::method put\n",
++            "  use arg name, m\n",
++            "  self~setMethod(name, m)\n",
++        ),
++        "hasW 0\nparked 6 guard on when flag = 1\n",
++    );
++}
