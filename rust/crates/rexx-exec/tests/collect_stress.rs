@@ -1567,6 +1567,31 @@ fn an_external_routines_merged_routine_is_found() {
     );
 }
 
+/// An external routine's public class, merged into its caller's package by a
+/// call from a procedure without importing the callee, survives once the
+/// callee's package is gone. Measured, oracle rc 0, the same lines with a
+/// 3000-pass loop of `copies('x', 100000)` in place of the filler.
+#[test]
+fn an_external_routines_merged_class_survives() {
+    let ext18 = "return 'ext'\n::class kx public\n::method v\n  return 'kxv' copies('x', 2)\n";
+    let program = format!(
+        "call sub\n{EXTERNAL_FILLER}\
+         say 'a' .context~package~findClass('KX')\n\
+         say 'b' .context~package~importedClasses~hasIndex('KX') \
+         .context~package~importedPackages~items\n\
+         c = .context~package~findClass('KX')\n\
+         if c \\== .nil then say 'c' c~new~v\n\
+         exit\n\
+         sub: procedure\n  call ext18\n  return\n"
+    );
+    assert_stress_prints_beside(
+        "<external-merged-class>",
+        &[("ext18.rex", ext18)],
+        &program,
+        "a The KX class\nb 1 0\nc kxv xx\n",
+    );
+}
+
 /// A held `StackFrame` keeps the program of the `Method` it ran, after every
 /// other reference to the method is dropped. Measured, oracle rc 0, with a
 /// 300-pass loop of `copies('x', 100000)` in place of the filler.

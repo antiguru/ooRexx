@@ -138,3 +138,6 @@ lang/package_class_collected.rex
 
 # 9b1 Task 8: the collector counts a class Class~new made.
 lang/class_new_collected.rex
+
+# 9b1 final review I1: an external routine's merged classes outlive its package.
+lang/package_external_merge_class_held.rex
