@@ -1,7 +1,8 @@
 # Phase 9c Task 2 report: the raising API, and the scanner and expression sites
 
-Code commit: `fdd1ca33d` (base `cdbbc1568`). The probe programs, runner and results are
-committed in it under `docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/`.
+Commits: `fdd1ca33d` code (base `cdbbc1568`), with the probe programs, runner and results under
+`docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/`; `06cf4a4a7` the witness rows in
+`rust/corpus/errors/parse-errors.tsv` and PENDING keyed per row.
 
 ## What landed
 
@@ -28,9 +29,9 @@ committed in it under `docs/superpowers/records/2026-10-15-phase-9c/task-2-probe
 `instruction.rs`, `instruction/loops.rs`, `instruction/address.rs` and `directive.rs`. Every
 caller passes an arity-0 sub except `instruction.rs:499`, which passes 35.1 where the oracle
 (`InstructionParser.cpp:233`, `:250`) raises 35.1 with the `=` or assignment-operator token as
-insert. Changing the parameter to `Msg<0>` forces edits in Task 3 and 4 files and a restructure
-of `:499`, so I left it and asked the controller. Arity-0 messages render the same through
-`new`, so no PENDING pair depends on it except 35.1 through `:499`.
+insert. Ruled by the controller: this boundary stays in Task 2, and Task 3 (plan Step 1b) owns
+the `Msg<0>` parameter change with its callers, `directive.rs` included, and the `:499`
+restructure. Arity-0 messages render the same through `new`.
 
 ## Site table
 
@@ -91,17 +92,48 @@ Measured by compiling each struct definition alone with `rustc --edition 2021` a
 
 ## PENDING
 
-Before (Task 1, `cdbbc1568`): 92 pairs. Removed, each because every corpus row of the pair now matches
-(`every_pending_message_pair_still_differs_from_the_oracle` named them):
+At `fdd1ca33d` PENDING was still keyed by (major, sub): 92 pairs before (Task 1, `cdbbc1568`), 81
+after. These pairs came out because every corpus row of each pair matched:
 `(6, 1)`, `(13, 1)`, `(15, 1)`, `(15, 2)`, `(15, 3)`, `(15, 4)`, `(20, 930)`, `(30, 1)`,
-`(35, 901)`, `(36, 902)`, `(99, 943)`. After (`fdd1ca33d`): 81. Counted with
+`(35, 901)`, `(36, 902)`, `(99, 943)`. Counted with
 `git show <sha>:rust/crates/rexx-parse/tests/errors.rs | sed -n '/^const PENDING/,/^\];/p' | grep -c '^    ('`.
 
-The pairs my sites raise that stay, with the rows that keep them (all from Task 3 or 4 sites):
-`(31, 2)` rows 361, 480, 800 (`drop 5`, `use local 1`, `drop .5`); `(31, 3)` rows 142, 359
-(`use local .a`, `drop .`); `(35, 1)` rows 510, 660 (`raise syntax`, `a == 1`) and 442, 761 (the
-recorded label-colon deviation, 18.x here against 35.1); `(36, 901)` row 377
-(`::constant c (1+2`).
+**Re-keyed per row at `06cf4a4a7`** (controller ruling). A pair key exempted every row of a
+pair, so the rows a converted site raises were unchecked while any unconverted site shared the
+pair (`(35, 1)`, `(36, 901)`, `(31, 2)` and `(31, 3)` here). `PENDING` is now `&[&str]`, holding
+each pending row's `program` field exactly as the corpus file spells it (escapes included). That
+key survives row insertion, where a line number does not. `Case` carries the field as `source`,
+`message_mismatches` keys by it, and the converse test is renamed
+`every_pending_message_row_still_differs_from_the_oracle`. Every row outside PENDING must render
+the oracle's message. The list was generated from the test's own mismatch output and has 299
+entries (`sed -n '/^const PENDING/,/^\];/p' rust/crates/rexx-parse/tests/errors.rs | grep -c '^    r#'`).
+
+The rows my pairs keep pending, all raised at Task 3 or 4 sites: 31.2 `drop 5`, `use local 1`,
+`drop .5`; 31.3 `use local .a`, `drop .`; 35.1 `raise syntax`, `a == 1`, and the two label-colon
+deviation rows (18.x here, 35.1 on the oracle), which no conversion makes match; 36.901
+`::constant c (1+2`.
+
+### Witness rows added
+
+Twelve rows were appended with `?` in class, expect and line, then filled by
+`corpus/errors/derive.sh SCRATCH > NEW` (exit 0, 21 s). `diff` against the input showed only those
+twelve lines. Each reaches a converted site that no existing row reached, and near-duplicates were
+skipped:
+
+| Program | Pair | Site |
+|---|---|---|
+| `address x with input stream (1` | 36.901 position 29 | `expr.rs:239` |
+| `parse arg a (b` | 36.901 position 13 | `expr.rs:197` |
+| `r = >\n` | 20.930 `found ;` | `expr.rs:794` |
+| `r = 1 +,\n    (2\n` | 36.901 position 5 on line 2 | `expr.rs:961`, the line insert |
+| `x = a \x00 b\n` | 13.1 `""` | `scanner.rs:615` NUL rule |
+| `x = a \x80 b\n` | 13.1 one invalid byte | `scanner.rs:622` |
+| `x = a \xf0\x9f\x98\x80 b\n` | 13.1 four bytes | `scanner.rs:622` |
+| `r = >'80'x\n` | 20.930 raw byte | `expr.rs:806` |
+| `r = >'&1'\n` | 20.930 `found &1` | `expr.rs:806`, an insert that looks like markup |
+| `::resource '&1' end '&2'\nline\n` | 99.943 | `scanner.rs:956`, the same markup case |
+| `say 1\n\nsay 2 /* open /* nested */\nmore\n` | 6.1 on line 3 | `scanner.rs:383` |
+| `o = .object~new\ncall o~string('x')\n` | 35.1 at `~` | the queued ampersand probe |
 
 ## Probes
 
@@ -148,6 +180,16 @@ From `rust/`, all at the committed tree:
 
 No ooTest groups are named for this task, so none were run.
 
+After `06cf4a4a7`, which changes only the TSV and `tests/errors.rs`:
+
+| Command | Exit |
+|---|---|
+| `cargo fmt --all --check` | 0 |
+| `CARGO_INCREMENTAL=0 memcap 8G cargo clippy -j 4 -p rexx-parse --all-targets -- -D warnings` (after a `touch` of `tests/errors.rs`, `Checking rexx-parse` printed) | 0 |
+| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-parse -p rexx-inventory --no-fail-fast` | 0, every binary ok, `errors` 30 passed |
+
+The corpus gate and the rexx-exec runs were not repeated: no crate source changed.
+
 ## Mutation evidence
 
 Each mutant applied by exact replacement (`mutate.py`, kept in the session scratchpad), run, and
@@ -167,23 +209,21 @@ after each batch (identical every time).
 | M8 20.930 insert emptied | same | exit 101, row 1105 `found .` against `found A.B.` |
 | M9 30.1 insert not upcased | same | exit 101, row 1054 |
 | M10 99.943 inserts swapped | same | exit 101, row 1053 |
-| M11 35.1 missing right operand inserts nothing (`expr.rs:594`) | same | **exit 0, 30 passed** |
-| M12 13.1 NUL rule disabled (`scanner.rs:615`) | same | **exit 0, 30 passed** |
+| M11 35.1 missing right operand inserts nothing (`expr.rs:594`) | same | at `fdd1ca33d`: exit 0, 30 passed. At `06cf4a4a7`: exit 101, rows 1061 and 1062 (`r = a +`, `r = a ||`) |
+| M12 13.1 NUL rule disabled (`scanner.rs:615`) | same | at `fdd1ca33d`: exit 0, 30 passed. At `06cf4a4a7`: exit 101, new row 1115 (`x = a \x00 b`) renders `"\0"` against `""` |
+| M13 20.930 at the clause end inserts nothing (`expr.rs:794`) | same, at `06cf4a4a7` | exit 101, new row 1113 (`r = >`) `found .` against `found ;` |
+| M14 35.1 in `parse_constant_expression` inserts nothing (`expr.rs:244`) | same, at `06cf4a4a7` | exit 101, row 199 (`address system with error using x`), which the pair key had exempted |
+| M15 a matching row (`r = >\n`) put in PENDING | same, at `06cf4a4a7` | exit 101, `every_pending_message_row_still_differs_from_the_oracle` FAILED, `PENDING entries that now match: ["r = >\\n"]` |
 
-M11 and M12 survive: no corpus row covers a NUL source byte, and every 35.1 row is exempt
-while `(35, 1)` stays in PENDING. The same holds for every expr.rs 35.1 site and for 36.901,
-31.2 and 31.3. The probes witness them (results above), but no test does.
+M11 and M12 stayed green at `fdd1ca33d`, under the pair key. The per-row key and the new rows
+turn them red.
 
 ## Concerns
 
-1. **The `missing: u16` boundary** (section above). I sent the question to the controller and
-   had no answer when I committed.
-2. **No test gates the expr.rs 35.1, 36.901, 31.2 and 31.3 inserts, or the 13.1 NUL rule**
-   (M11, M12). The durable witness would be `parse-errors.tsv` rows, which is Task 4's file. I
-   asked the controller whether to add them here and had no answer when I committed. The
-   `results.txt` shapes are ready to become rows.
-3. **`tests/errors.rs`'s `an_interpret_error_raised_without_its_insert_keeps_the_marker`
+1. **`tests/errors.rs`'s `an_interpret_error_raised_without_its_insert_keeps_the_marker`
    pins `found "&1"`** for 47.1, raised at `instruction.rs:424` with no insert. The oracle prints
    `found "X"`. Task 3 has to change the expectation when it converts that site.
-4. `Result<(), ParseError>` grows from 24 to 32 bytes: the `Option<Box<..>>` niche is spent on
-   the `Option`. Parse-time only, and no perf gate ran in this task.
+2. **The two label-colon deviation rows stay in PENDING under any conversion.** We raise 18.x
+   there and the oracle raises 35.1. Task 4 empties PENDING and has to decide what happens to them.
+3. `Result<(), ParseError>` grows from 24 to 32 bytes, because the `Option<Box<..>>` niche goes
+   to the `Option`. It affects parsing only, and no perf gate ran in this task.
