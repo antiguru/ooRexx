@@ -23,3 +23,13 @@ Ruling: ParseError(Box<ParseErrorFields>) accepted over the brief's Option<Box> 
 Task 2: scoped re-review dispatched (sonnet).
 Task 2 re-review (sonnet): approved, none open; perf figures match summary.tsv; no speculative ParseError construction on valid paths.
 Task 2: complete (fdd1ca33d, 5cd02f326, 06cf4a4a7, aade11443, a23fdba9e, dd253ad15, 0f8af4e3a). Moritz: stop after Task 2.
+Pre-dispatch check Task 3: instruction.rs:239 error helper, :424 47.1 raise, :499 expr(...,1) 35.1 call, instruction/{loops,address,parse}.rs exist.
+Task 3: dispatched (implementer opus, BASE 93de0ca29); carries Task 2 perf lesson (cold error construction; own delta startup/interpret/parse <= +0.05%).
+Task 3: implementer DONE (7436ca94e code + 59 rows, b17078946 report). PENDING 299->204. Own deltas startup +0.0094%, interpret -0.0015%, parse +0.0007%. Concerns: (1) oracle's 'unmatched DO OVER loop subkey 29' / 'DO WITH conditional 0' reproduced (internal enum as insert) -> for Moritz; (2) four sites (89.1, 89.2, 20.922, 27.1) oracle passes an unused insert -> condition additional array may differ -> reviewer measures; (3) block.rs:660 -> plan Task 4 (7706d5f9f).
+Task 3: review dispatched (opus).
+Task 3 review (opus): spec OK; quality needs fixes. Important 1: trapped additional array empty where oracle has 1 item at 89.1, 20.922, 27.1 (unused insert). Concern 1 confirmed oracle bug (IP:1491, :1700 'should really never happen'; enum value as insert). Minors: loops.rs:376-377 wrong subject, :399-400 set size. 61 probes identical; 6 spot mutants red; derive reproduces.
+Ruling: Important 1 fixed in Task 3 -- additional array is observable under trap -- if wrong, extra override table only.
+Open for Moritz: DO OVER/WITH 49.2 'subkey 29'/'conditional 0' copies an oracle bug (internal enum exposed); crate keeps oracle text until ruled.
+Task 3: fix round 1 dispatched (resume c9c-impl-3).
+Task 3: fix round 1 6ada7047e, d5cb987d1 (ARITY_OVERRIDES for 20.922, 27.1, 89.1; witness parse_error_unused_insert.rex; corpus 1063/1063). Re-review (sonnet): approved, none open; ~45 extra shapes match.
+Task 3: complete (7436ca94e, b17078946, 6ada7047e, d5cb987d1). Moritz: stop after Task 3. Open: DO OVER/WITH subkey ruling.
