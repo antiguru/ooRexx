@@ -72,7 +72,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     )
     rc=$(<"$dir/rc")
     [ "$rc" = 99 ] && fail "row $row: cannot enter $dir"
-    got=$(LC_ALL=C perl -e "$extract" <"$dir/err" || fail "row $row: unreadable or multi-line oracle stderr, see $dir/err")
+    got=$(LC_ALL=C perl -e "$extract" <"$dir/err" || fail "row $row: unreadable or multi-line oracle stderr, see $dir/err") || exit 1
     IFS=$'\t' read -r gexpect gat gmsg <<<"$got"
 
     if [ "$class" = '?' ]; then
