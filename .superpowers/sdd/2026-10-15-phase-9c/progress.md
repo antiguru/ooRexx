@@ -33,3 +33,8 @@ Open for Moritz: DO OVER/WITH 49.2 'subkey 29'/'conditional 0' copies an oracle 
 Task 3: fix round 1 dispatched (resume c9c-impl-3).
 Task 3: fix round 1 6ada7047e, d5cb987d1 (ARITY_OVERRIDES for 20.922, 27.1, 89.1; witness parse_error_unused_insert.rex; corpus 1063/1063). Re-review (sonnet): approved, none open; ~45 extra shapes match.
 Task 3: complete (7436ca94e, b17078946, 6ada7047e, d5cb987d1). Moritz: stop after Task 3. Open: DO OVER/WITH subkey ruling.
+Moritz 2026-10-16: DO OVER/WITH subkey -> 'a keyword error is better'. Deviation 38 (stream buffering renumbered 39 in plan, d88044e92).
+Task 3b (ruling follow-up): dispatched (implementer opus, BASE d88044e92).
+Ruling (3b): 25.927 'Unknown keyword following "FOR"; found "TO".' -- only DO-header keyword error is 27.901 whose text names FOREVER (false here); 25.927's text is true -- if wrong, one constant changes.
+Task 3b: DONE 90b1412ae (25.927, Deviation 38, do_subkey_deviation exemption pinned to its rows), da84dcc0d report. Mutation (49.2 arm back) reddens 3 tests; corpus gate green; derive reproduces. Controller read the loops.rs diff (error arm only, cold self.error); accepted without separate review (small, ruled, mutation-shown).
+Task 3b: complete. Stopped per Moritz.
