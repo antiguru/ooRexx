@@ -20,21 +20,22 @@ use crate::ProgramSource;
 use crate::token::ParseError;
 
 impl ParseError {
-    /// The interpreter's message text for this error, rendered from the
-    /// generated table.
-    pub fn message(&self) -> String {
-        // The sub-message row first, because it is the specific one, and the
-        // major's row only when the specific one would leave a placeholder
-        // visible. Filling the placeholder is not an option here -- see the
-        // module's note on scope -- and a user-facing message reading
-        // `found "&1"` would be worse than the generic one that is true.
-        let specific = row(self.code, self.sub);
-        if let Some(text) = specific.filter(|text| !has_placeholder(text)) {
-            return text.to_string();
-        }
-        row(self.code, 0)
-            .unwrap_or_else(|| panic!("no interpreter message for error {}", self.code))
-            .to_string()
+    /// The interpreter's secondary message for this error, its `&1`, `&2`, ...
+    /// replaced by [`ParseError::inserts`] as bytes.
+    ///
+    /// # Panics
+    ///
+    /// If the catalogue has no row for this error's (major, sub) pair.
+    pub fn message(&self) -> Vec<u8> {
+        let text = rexx_inventory::errors::lookup(self.code, self.sub)
+            .unwrap_or_else(|| {
+                panic!(
+                    "no interpreter message for error {}.{}",
+                    self.code, self.sub
+                )
+            })
+            .text;
+        substitute(text, self.inserts())
     }
 
     /// The 1-based physical line this error is reported on.
@@ -44,30 +45,39 @@ impl ParseError {
 }
 
 impl std::fmt::Display for ParseError {
-    /// `13.1: Invalid character in program.`
+    /// `8.2: ELSE has no corresponding THEN clause.`, the message lossily decoded.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}.{}: {}", self.code, self.sub, self.message())
+        write!(
+            f,
+            "{}.{}: {}",
+            self.code,
+            self.sub,
+            String::from_utf8_lossy(&self.message())
+        )
     }
 }
 
 impl std::error::Error for ParseError {}
 
-/// The generated table's text for one `(major, sub)` pair, or `None` when the
-/// table has no such row.
-fn row(code: u16, sub: u16) -> Option<&'static str> {
-    rexx_inventory::errors::lookup(code, sub).map(|message| message.text)
-}
-
-/// Whether `text` still holds a `&1`-style substitution placeholder.
-fn has_placeholder(text: &str) -> bool {
-    let mut rest = text;
-    while let Some(at) = rest.find('&') {
-        rest = &rest[at + 1..];
-        if rest.starts_with(|c: char| c.is_ascii_digit()) {
-            return true;
+/// `text` with each `&k` replaced by `values[k - 1]`, and a `&k` with no value
+/// left as it is.
+fn substitute(text: &str, values: &[Vec<u8>]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(text.len());
+    let mut bytes = text.bytes().peekable();
+    while let Some(byte) = bytes.next() {
+        let value = match (byte, bytes.peek()) {
+            (b'&', Some(digit @ b'1'..=b'9')) => values.get(usize::from(digit - b'1')),
+            _ => None,
+        };
+        match value {
+            Some(value) => {
+                bytes.next();
+                out.extend_from_slice(value);
+            }
+            None => out.push(byte),
         }
     }
-    false
+    out
 }
 
 #[cfg(test)]

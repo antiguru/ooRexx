@@ -40,3 +40,43 @@ fn error_13_is_invalid_character_in_program() {
     let m = errors::lookup(13, 0).expect("error 13 exists");
     assert!(m.text.to_ascii_lowercase().contains("invalid character"));
 }
+
+/// The `N` a message constant's type carries.
+fn arity<const N: usize>(_: errors::Msg<N>) -> usize {
+    N
+}
+
+/// The highest `&k` in the catalogue text of `(major, sub)`.
+fn highest_placeholder(code: (u16, u16)) -> usize {
+    let text = errors::lookup(code.0, code.1)
+        .expect("the constant names a row")
+        .text;
+    text.split('&')
+        .skip(1)
+        .filter_map(|rest| rest.chars().next()?.to_digit(10))
+        .max()
+        .map_or(0, |k| k as usize)
+}
+
+#[test]
+fn a_constants_arity_is_its_texts_highest_placeholder() {
+    let sample = [
+        (errors::E35_1.code(), arity(errors::E35_1)),
+        (errors::E13_1.code(), arity(errors::E13_1)),
+        (errors::E10_2.code(), arity(errors::E10_2)),
+        (errors::E99_943.code(), arity(errors::E99_943)),
+        (errors::E6_1.code(), arity(errors::E6_1)),
+    ];
+    for (code, n) in sample {
+        assert_eq!(n, highest_placeholder(code), "{code:?}");
+    }
+    assert_eq!(arity(errors::E13_1), 2);
+    assert_eq!(arity(errors::E10_2), 3);
+}
+
+#[test]
+fn a_message_with_no_placeholder_takes_no_inserts() {
+    let _: errors::Msg<0> = errors::E8_2;
+    assert_eq!(highest_placeholder(errors::E8_2.code()), 0);
+    assert_eq!(errors::E8_2.code(), (8, 2));
+}

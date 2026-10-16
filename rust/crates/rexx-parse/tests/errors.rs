@@ -409,24 +409,18 @@ fn every_error_the_corpus_raises_renders_a_non_empty_message() {
 /// The (major, sub) pairs whose message this parser does not yet render as the
 /// oracle does.
 const PENDING: &[(u16, u16)] = &[
-    (6, 1),
     (7, 1),
     (7, 2),
     (10, 2),
     (10, 3),
     (10, 4),
     (10, 7),
-    (13, 1),
     (14, 1),
     (14, 2),
     (14, 3),
     (14, 4),
     (14, 5),
     (14, 901),
-    (15, 1),
-    (15, 2),
-    (15, 3),
-    (15, 4),
     (18, 1),
     (18, 2),
     (19, 923),
@@ -434,7 +428,6 @@ const PENDING: &[(u16, u16)] = &[
     (20, 905),
     (20, 919),
     (20, 929),
-    (20, 930),
     (20, 931),
     (21, 901),
     (21, 903),
@@ -481,14 +474,11 @@ const PENDING: &[(u16, u16)] = &[
     (26, 7),
     (27, 901),
     (27, 902),
-    (30, 1),
     (31, 2),
     (31, 3),
     (35, 1),
-    (35, 901),
     (35, 935),
     (36, 901),
-    (36, 902),
     (38, 1),
     (38, 2),
     (46, 1),
@@ -499,7 +489,6 @@ const PENDING: &[(u16, u16)] = &[
     (49, 2),
     (99, 917),
     (99, 925),
-    (99, 943),
     (99, 948),
 ];
 
@@ -518,7 +507,7 @@ fn message_mismatches() -> std::collections::BTreeMap<(u16, u16), String> {
         let pair = case.error.expect("a translation row has a number");
         let got = match parse(&case.program) {
             Ok(()) => b"<accepted>".to_vec(),
-            Err(error) => error.message().into_bytes(),
+            Err(error) => error.message(),
         };
         if got != want {
             wrong.entry(pair).or_insert_with(|| {
@@ -723,20 +712,19 @@ fn an_interpret_error_with_no_substitution_renders_the_condition_objects_message
     // `condition('o')~message`. Measured:
     //     code=99.908  message=INTERPRET data must not contain EXPOSE.
     let error = parse_interpret(b"expose a".to_vec()).expect_err("EXPOSE is rejected");
-    assert_eq!(error.message(), "INTERPRET data must not contain EXPOSE.");
+    assert_eq!(error.message(), b"INTERPRET data must not contain EXPOSE.");
 }
 
 #[test]
-fn an_interpret_error_with_a_substitution_renders_the_condition_objects_errortext() {
-    // 47.1's sub-message substitutes the label, so `message()` falls back to the
-    // major -- which is byte-identical to `condition('o')~errortext`, the other
-    // field the condition object carries. Measured:
-    //     code=47.1  errortext=Unexpected label.
-    //                message=INTERPRET data must not contain labels; found "X".
-    //                additional=X
-    // That `additional` is the value Phase 4 owes and this phase does not carry.
+fn an_interpret_error_raised_without_its_insert_keeps_the_marker() {
+    // 47.1's sub-message substitutes the label. Measured on the oracle:
+    //     code=47.1  message=INTERPRET data must not contain labels; found "X".
+    // This site raises it with no insert, and an unfilled `&1` stays visible.
     let error = parse_interpret(b"x: nop".to_vec()).expect_err("a label is rejected");
-    assert_eq!(error.message(), "Unexpected label.");
+    assert_eq!(
+        error.message(),
+        br#"INTERPRET data must not contain labels; found "&1"."#
+    );
 }
 
 #[test]

@@ -14,6 +14,8 @@
 
 use std::ops::Range;
 
+use rexx_inventory::errors::Msg;
+
 mod cursor;
 mod keywords;
 mod symbols;
@@ -37,11 +39,15 @@ pub struct ParseError {
     /// reads like the latter; it is not.
     pub byte: usize,
     /// Where the source the traceback line echoes ends; see [`ParseError::clause`].
-    /// Zero until the scanner or `parse` resolves it. A `u32` keeps the error
-    /// two words wide, which every `Result` the parser returns carries: an
-    /// echo ending past `u32::MAX` is cut there, and one starting past it is
-    /// empty.
+    /// Zero until the scanner or `parse` resolves it. An echo ending past
+    /// `u32::MAX` is cut there, and one starting past it is empty.
     end: u32,
+    /// The secondary message's inserts, `None` for a message that takes none.
+    #[expect(
+        clippy::box_collection,
+        reason = "one word in every parser `Result`, where a `Vec` or a boxed slice is more"
+    )]
+    inserts: Option<Box<Vec<Vec<u8>>>>,
 }
 
 impl ParseError {
@@ -52,7 +58,26 @@ impl ParseError {
             sub,
             byte,
             end: 0,
+            inserts: None,
         }
+    }
+
+    /// The error `msg` reports against the clause starting at `byte`, with
+    /// `inserts` for its `&1`, `&2`, ... in order.
+    pub fn raise<const N: usize>(msg: Msg<N>, byte: usize, inserts: [Vec<u8>; N]) -> Self {
+        let (code, sub) = msg.code();
+        ParseError {
+            code,
+            sub,
+            byte,
+            end: 0,
+            inserts: (N > 0).then(|| Box::new(Vec::from(inserts))),
+        }
+    }
+
+    /// The values the secondary message substitutes, in insert order.
+    pub fn inserts(&self) -> &[Vec<u8>] {
+        self.inserts.as_deref().map_or(&[], Vec::as_slice)
     }
 
     /// The source the error's traceback line echoes: the clause being

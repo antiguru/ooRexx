@@ -1981,7 +1981,7 @@ impl From<FormatError> for Raised {
 /// ```
 impl From<&ParseError> for Raised {
     fn from(error: &ParseError) -> Raised {
-        Raised::syntax(error.code, error.sub, Vec::new())
+        Raised::syntax(error.code, error.sub, error.inserts().to_vec())
     }
 }
 
@@ -2415,6 +2415,18 @@ pub(crate) fn displayable(bytes: &mut [u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_parse_errors_inserts_render_the_same_secondary_line_through_raised() {
+        let error = ParseError::raise(
+            rexx_inventory::errors::E36_901,
+            0,
+            [b"5".to_vec(), vec![0x80]],
+        );
+        let raised = Raised::from(&error);
+        assert_eq!(raised.message(36, 901), error.message());
+        assert_eq!(raised.additional, error.inserts());
+    }
 
     /// One `FailureSite`, for the tests that predate the stack.
     fn one(line: usize, text: &[u8], indent: usize) -> Vec<FailureSite> {

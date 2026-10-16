@@ -583,9 +583,7 @@ fn every_element_of_a_logical_list_is_required_including_the_first() {
 
 #[test]
 fn the_error_corpus_reports_the_interpreters_numbers() {
-    // Every case was run through `build/bin/rexxc` as `r = <expr>`, and the
-    // number and sub-number are what this phase gates. The message text and
-    // its substitutions are deliberately not reproduced.
+    // Every case was run through `build/bin/rexxc` as `r = <expr>`.
     let cases: &[(&str, (u16, u16))] = &[
         (")", (37, 2)),
         ("]", (37, 901)),

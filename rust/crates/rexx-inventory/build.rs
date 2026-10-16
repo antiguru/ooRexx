@@ -182,8 +182,44 @@ fn generate_errors(path: &Path) -> String {
         )
         .expect("writing to a String cannot fail");
     }
-    out.push_str("];\n");
+    out.push_str("];\n\n");
+    out.push_str(
+        "/// One catalogue message, typed by how many inserts its text takes: `N`\n\
+         /// is the highest `&k` it holds.\n\
+         #[derive(Copy, Clone, PartialEq, Eq, Debug)]\n\
+         pub struct Msg<const N: usize> {\n\
+         \x20   major: u16,\n\
+         \x20   sub: u16,\n\
+         }\n\n\
+         impl<const N: usize> Msg<N> {\n\
+         \x20   /// The (major, sub) pair this message is catalogued under.\n\
+         \x20   pub const fn code(self) -> (u16, u16) {\n\
+         \x20       (self.major, self.sub)\n\
+         \x20   }\n\
+         }\n\n",
+    );
+    for m in &messages {
+        writeln!(
+            out,
+            "pub const E{major}_{sub}: Msg<{n}> = Msg {{ major: {major}, sub: {sub} }};",
+            major = m.major,
+            sub = m.sub,
+            n = highest_insert(&m.text),
+        )
+        .expect("writing to a String cannot fail");
+    }
     out
+}
+
+/// The highest `k` of any `&k` in `text`, or zero for none.
+fn highest_insert(text: &str) -> usize {
+    let bytes = text.as_bytes();
+    bytes
+        .windows(2)
+        .filter(|pair| pair[0] == b'&' && pair[1].is_ascii_digit())
+        .map(|pair| usize::from(pair[1] - b'0'))
+        .max()
+        .unwrap_or(0)
 }
 
 fn parse_num(raw: &str, what: &str) -> u16 {

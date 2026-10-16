@@ -13,6 +13,10 @@
 
 use std::ops::Range;
 
+use rexx_inventory::errors::{
+    E6_1, E6_2, E6_3, E13_1, E15_1, E15_2, E15_3, E15_4, E15_5, E15_6, E30_1, E99_943,
+};
+
 use crate::token::{
     Keywords, Operator, ParseError, SymbolClass, SymbolId, SymbolTable, Tag, Token, TokenKind,
 };
@@ -369,12 +373,14 @@ impl<'a> Scanner<'a> {
         let mut level = 1;
         self.step_position();
         self.step_position();
+        let start_line = self.line_number;
 
         while level > 0 {
             if !self.more_chars() {
                 self.next_line();
                 if !self.more_lines() {
-                    return Err(ParseError::new(6, 1, self.clause_start));
+                    let line = start_line.to_string().into_bytes();
+                    return Err(ParseError::raise(E6_1, self.clause_start, [line]));
                 }
                 continue;
             }
@@ -602,9 +608,19 @@ impl<'a> Scanner<'a> {
                 // 0x80 up lands here unless it is inside a literal or a
                 // comment, which is why `bäc = 2` is error 13.1.
                 _ => {
-                    let end = start + utf8_width(&self.line[self.line_offset - 1..]);
-                    let error = ParseError::new(13, 1, self.clause_start);
-                    return Err(error.echoing(self.clause_start..end));
+                    let at = self.line_offset - 1;
+                    let width = utf8_width(&self.line[at..]);
+                    let bad = &self.line[at..at + width];
+                    // `snprintf("%s")` stops at a NUL.
+                    let shown = if bad[0] == 0 {
+                        Vec::new()
+                    } else {
+                        bad.to_vec()
+                    };
+                    let hex = bad.iter().map(|b| format!("{b:02X}")).collect::<String>();
+                    let error =
+                        ParseError::raise(E13_1, self.clause_start, [shown, hex.into_bytes()]);
+                    return Err(error.echoing(self.clause_start..start + width));
                 }
             };
 
@@ -746,7 +762,8 @@ impl<'a> Scanner<'a> {
         let bytes = &self.line[start..self.line_offset];
 
         if length > MAX_SYMBOL_LENGTH {
-            return Err(ParseError::new(30, 1, self.clause_start));
+            let name = bytes.to_ascii_uppercase();
+            return Err(ParseError::raise(E30_1, self.clause_start, [name]));
         }
 
         // Infallible: `characterTable` admits only ASCII, and the one byte a
@@ -800,8 +817,8 @@ impl<'a> Scanner<'a> {
             if !self.more_chars() {
                 // A literal never spans lines, so running out of characters
                 // is the end of it. Measured: 6.2 for `'`, 6.3 for `"`.
-                let sub = if delimiter == b'\'' { 2 } else { 3 };
-                return Err(ParseError::new(6, sub, self.clause_start));
+                let msg = if delimiter == b'\'' { E6_2 } else { E6_3 };
+                return Err(ParseError::raise(msg, self.clause_start, []));
             }
 
             if self.get_char() == delimiter {
@@ -900,10 +917,9 @@ impl<'a> Scanner<'a> {
             TokenKind::Symbol { id, .. } if id == self.resource_id => {}
             _ => return Ok(()),
         }
-        // The resource name, which the scanner does not otherwise need.
-        if self.token_value(real[2]).is_none() {
+        let Some(name) = self.token_value(real[2]) else {
             return Ok(());
-        }
+        };
 
         let marker = if count == 5 {
             // The only sub-keyword a `::RESOURCE` accepts is `END`, and it
@@ -936,7 +952,8 @@ impl<'a> Scanner<'a> {
                 // Measured: error 99.943, reported against the directive.
                 let start = self.tokens[directive].span.start;
                 let end = self.tokens.last().map_or(start, |eoc| eoc.span.end);
-                return Err(ParseError::new(99, 943, start).echoing(start..end));
+                let inserts = [marker, name];
+                return Err(ParseError::raise(E99_943, start, inserts).echoing(start..end));
             }
             if self.check_marker(&marker) {
                 self.next_line();
@@ -994,9 +1011,10 @@ fn pack_hex_literal(data: &[u8], clause_start: usize) -> Result<Vec<u8>, ParseEr
         let byte = data[i - 1];
         if byte == b' ' || byte == b'\t' {
             if i == 1 || i == data.len() {
-                return Err(ParseError::new(15, 1, clause_start));
+                let position = i.to_string().into_bytes();
+                return Err(ParseError::raise(E15_1, clause_start, [position]));
             } else if !group_count.is_multiple_of(2) {
-                return Err(ParseError::new(15, 5, clause_start));
+                return Err(ParseError::raise(E15_5, clause_start, []));
             }
             group_count = 0;
         } else {
@@ -1024,7 +1042,7 @@ fn pack_hex_literal(data: &[u8], clause_start: usize) -> Result<Vec<u8>, ParseEr
                 b'0'..=b'9' => nibble - b'0',
                 b'a'..=b'f' => nibble - b'a' + 10,
                 b'A'..=b'F' => nibble - b'A' + 10,
-                _ => return Err(ParseError::new(15, 3, clause_start)),
+                _ => return Err(ParseError::raise(E15_3, clause_start, [vec![nibble]])),
             };
             byte = (byte << 4) + value;
         }
@@ -1049,9 +1067,10 @@ fn pack_binary_literal(data: &[u8], clause_start: usize) -> Result<Vec<u8>, Pars
         let byte = data[i - 1];
         if byte == b' ' || byte == b'\t' {
             if i == 1 || i == data.len() {
-                return Err(ParseError::new(15, 2, clause_start));
+                let position = i.to_string().into_bytes();
+                return Err(ParseError::raise(E15_2, clause_start, [position]));
             } else if !group_count.is_multiple_of(4) {
-                return Err(ParseError::new(15, 6, clause_start));
+                return Err(ParseError::raise(E15_6, clause_start, []));
             }
             group_count = 0;
         } else {
@@ -1083,7 +1102,7 @@ fn pack_binary_literal(data: &[u8], clause_start: usize) -> Result<Vec<u8>, Pars
             if bit == b'1' {
                 byte += 1;
             } else if bit != b'0' {
-                return Err(ParseError::new(15, 4, clause_start));
+                return Err(ParseError::raise(E15_4, clause_start, [vec![bit]]));
             }
         }
         bits_this_byte = 8;

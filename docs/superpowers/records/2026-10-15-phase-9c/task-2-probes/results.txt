@@ -1,0 +1,317 @@
+# Task 2 probes: each program run once on build/bin/rexx and on target/debug/rexx-run (built from the Task 2 tree), from a fresh dir; stdout, stderr and rc compared separately. Error lines shown through cat -v.
+o1/abuttal_missing	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "+".
+	oracle: Error 35.1:  Incorrect expression detected at "+".
+o1/amp_call	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "~".
+	oracle: Error 35.1:  Incorrect expression detected at "~".
+o1/amp_token	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "+".
+	oracle: Error 35.1:  Incorrect expression detected at "+".
+o1/arg_bracket_line2	oracle rc=220 crate rc=220	stdout same	stderr same
+	crate:  Error 36.902:  Square bracket "[" in position 6 on line 1 requires a corresponding right square bracket "]".
+	oracle: Error 36.902:  Square bracket "[" in position 6 on line 1 requires a corresponding right square bracket "]".
+o1/assign_in_expr	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "+=".
+	oracle: Error 35.1:  Incorrect expression detected at "+=".
+o1/backslash_dyadic	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "\".
+	oracle: Error 35.1:  Incorrect expression detected at "\".
+o1/bad_80	oracle rc=243 crate rc=243	stdout same	stderr same
+	crate:  Error 13.1:  Incorrect character in program "M-^@" ('80'X).
+	oracle: Error 13.1:  Incorrect character in program "M-^@" ('80'X).
+o1/bad_ctl	oracle rc=243 crate rc=243	stdout same	stderr same
+	crate:  Error 13.1:  Incorrect character in program "?" ('01'X).
+	oracle: Error 13.1:  Incorrect character in program "?" ('01'X).
+o1/bad_nul	oracle rc=243 crate rc=243	stdout same	stderr same
+	crate:  Error 13.1:  Incorrect character in program "" ('00'X).
+	oracle: Error 13.1:  Incorrect character in program "" ('00'X).
+o1/bad_utf8	oracle rc=243 crate rc=243	stdout same	stderr same
+	crate:  Error 13.1:  Incorrect character in program "M-CM-$" ('C3A4'X).
+	oracle: Error 13.1:  Incorrect character in program "M-CM-$" ('C3A4'X).
+o1/bin_bad_digit	oracle rc=241 crate rc=241	stdout same	stderr same
+	crate:  Error 15.4:  Only 0, 1, and whitespace characters are valid in a binary string; found "2".
+	oracle: Error 15.4:  Only 0, 1, and whitespace characters are valid in a binary string; found "2".
+o1/bin_group	oracle rc=0 crate rc=0	stdout same	stderr same
+o1/bin_lead_blank	oracle rc=241 crate rc=241	stdout same	stderr same
+	crate:  Error 15.2:  Incorrect location of whitespace character in position 1 in binary string.
+	oracle: Error 15.2:  Incorrect location of whitespace character in position 1 in binary string.
+o1/bracket_unclosed	oracle rc=220 crate rc=220	stdout same	stderr same
+	crate:  Error 36.902:  Square bracket "[" in position 6 on line 1 requires a corresponding right square bracket "]".
+	oracle: Error 36.902:  Square bracket "[" in position 6 on line 1 requires a corresponding right square bracket "]".
+o1/call_unclosed	oracle rc=220 crate rc=220	stdout same	stderr same
+	crate:  Error 36.901:  Left parenthesis "(" in position 6 on line 1 requires a corresponding right parenthesis ")".
+	oracle: Error 36.901:  Left parenthesis "(" in position 6 on line 1 requires a corresponding right parenthesis ")".
+o1/colon_in_expr	oracle rc=158 crate rc=158	stdout same	stderr same
+	crate:  Error 98.987:  Namespace "1" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t2/p1/colon_in_expr.rex".
+	oracle: Error 98.987:  Namespace "1" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t2/p1/colon_in_expr.rex".
+o1/comment_open	oracle rc=250 crate rc=250	stdout same	stderr same
+	crate:  Error 6.1:  Unmatched comment delimiter ("/*") on line 2.
+	oracle: Error 6.1:  Unmatched comment delimiter ("/*") on line 2.
+o1/const_expr_bad	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "*".
+	oracle: Error 35.1:  Incorrect expression detected at "*".
+o1/dcolon_term	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "::".
+	oracle: Error 35.1:  Incorrect expression detected at "::".
+o1/dquote_open	oracle rc=250 crate rc=250	stdout same	stderr same
+	crate:  Error 6.3:  Unmatched double quote (").
+	oracle: Error 6.3:  Unmatched double quote (").
+o1/eq_after_term	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "=".
+	oracle: Error 35.1:  Incorrect expression detected at "=".
+o1/group_line2	oracle rc=220 crate rc=220	stdout same	stderr same
+	crate:  Error 36.901:  Left parenthesis "(" in position 5 on line 2 requires a corresponding right parenthesis ")".
+	oracle: Error 36.901:  Left parenthesis "(" in position 5 on line 2 requires a corresponding right parenthesis ")".
+o1/group_unclosed	oracle rc=220 crate rc=220	stdout same	stderr same
+	crate:  Error 36.901:  Left parenthesis "(" in position 5 on line 1 requires a corresponding right parenthesis ")".
+	oracle: Error 36.901:  Left parenthesis "(" in position 5 on line 1 requires a corresponding right parenthesis ")".
+o1/hex_bad_digit	oracle rc=241 crate rc=241	stdout same	stderr same
+	crate:  Error 15.3:  Only 0-9, a-f, A-F, and whitespace characters are valid in a hexadecimal string; found "g".
+	oracle: Error 15.3:  Only 0-9, a-f, A-F, and whitespace characters are valid in a hexadecimal string; found "g".
+o1/hex_group	oracle rc=0 crate rc=0	stdout same	stderr same
+o1/hex_lead_blank	oracle rc=241 crate rc=241	stdout same	stderr same
+	crate:  Error 15.1:  Incorrect location of whitespace character in position 1 in hexadecimal string.
+	oracle: Error 15.1:  Incorrect location of whitespace character in position 1 in hexadecimal string.
+o1/hex_trail_blank	oracle rc=241 crate rc=241	stdout same	stderr same
+	crate:  Error 15.1:  Incorrect location of whitespace character in position 3 in hexadecimal string.
+	oracle: Error 15.1:  Incorrect location of whitespace character in position 3 in hexadecimal string.
+o1/literal_display	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "=".
+	oracle: Error 35.1:  Incorrect expression detected at "=".
+o1/long_symbol	oracle rc=226 crate rc=226	stdout same	stderr same
+	crate:  Error 30.1:  Name or symbol exceeds 250 characters:  "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".
+	oracle: Error 30.1:  Name or symbol exceeds 250 characters:  "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".
+o1/msg_bad_name	oracle rc=237 crate rc=237	stdout same	stderr same
+	crate:  Error 19.909:  String or symbol expected after tilde (~).
+	oracle: Error 19.909:  String or symbol expected after tilde (~).
+o1/paren_empty	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "(".
+	oracle: Error 35.1:  Incorrect expression detected at "(".
+o1/parse_dot_var	oracle rc=225 crate rc=225	stdout same	stderr same
+	crate:  Error 31.3:  Variable symbol must not start with a "."; found ".A".
+	oracle: Error 31.3:  Variable symbol must not start with a "."; found ".A".
+o1/parse_paren_unclosed	oracle rc=220 crate rc=220	stdout same	stderr same
+	crate:  Error 36.901:  Left parenthesis "(" in position 13 on line 1 requires a corresponding right parenthesis ")".
+	oracle: Error 36.901:  Left parenthesis "(" in position 13 on line 1 requires a corresponding right parenthesis ")".
+o1/plus_missing	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "+".
+	oracle: Error 35.1:  Incorrect expression detected at "+".
+o1/prefix_missing	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.918:  Missing expression following assignment instruction.
+	oracle: Error 35.918:  Missing expression following assignment instruction.
+o1/qualified_bad	oracle rc=158 crate rc=158	stdout same	stderr same
+	crate:  Error 98.987:  Namespace "NS" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t2/p1/qualified_bad.rex".
+	oracle: Error 98.987:  Namespace "NS" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t2/p1/qualified_bad.rex".
+o1/raise_array_unclosed	oracle rc=220 crate rc=220	stdout same	stderr same
+	crate:  Error 36.901:  Left parenthesis "(" in position 22 on line 1 requires a corresponding right parenthesis ")".
+	oracle: Error 36.901:  Left parenthesis "(" in position 22 on line 1 requires a corresponding right parenthesis ")".
+o1/ref_literal	oracle rc=236 crate rc=236	stdout same	stderr same
+	crate:  Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found lit.
+	oracle: Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found lit.
+o1/ref_missing	oracle rc=236 crate rc=236	stdout same	stderr same
+	crate:  Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found ;.
+	oracle: Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found ;.
+o1/ref_number	oracle rc=236 crate rc=236	stdout same	stderr same
+	crate:  Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found 1.
+	oracle: Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found 1.
+o1/resource_default	oracle rc=157 crate rc=157	stdout same	stderr same
+	crate:  Error 99.943:  Missing ::RESOURCE end marker "::END" for resource "RR".
+	oracle: Error 99.943:  Missing ::RESOURCE end marker "::END" for resource "RR".
+o1/resource_open	oracle rc=157 crate rc=157	stdout same	stderr same
+	crate:  Error 99.943:  Missing ::RESOURCE end marker "XX" for resource "R".
+	oracle: Error 99.943:  Missing ::RESOURCE end marker "XX" for resource "R".
+o1/squote_open	oracle rc=250 crate rc=250	stdout same	stderr same
+	crate:  Error 6.2:  Unmatched single quote (').
+	oracle: Error 6.2:  Unmatched single quote (').
+o1/star_prefix	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "*".
+	oracle: Error 35.1:  Incorrect expression detected at "*".
+o1/stray_rbracket	oracle rc=219 crate rc=219	stdout same	stderr same
+	crate:  Error 37.901:  Unexpected "]".
+	oracle: Error 37.901:  Unexpected "]".
+o1/stray_rparen	oracle rc=219 crate rc=219	stdout same	stderr same
+	crate:  Error 37.2:  Unmatched ")" in expression.
+	oracle: Error 37.2:  Unmatched ")" in expression.
+o1/subterm_op	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "=".
+	oracle: Error 35.1:  Incorrect expression detected at "=".
+o1/super_bad	oracle rc=236 crate rc=236	stdout same	stderr same
+	crate:  Error 20.917:  Symbol expected after superclass colon (:).
+	oracle: Error 20.917:  Symbol expected after superclass colon (:).
+o1/symbol_lower_op	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "|".
+	oracle: Error 35.1:  Incorrect expression detected at "|".
+o1/use_arg_number	oracle rc=225 crate rc=225	stdout same	stderr same
+	crate:  Error 31.2:  Variable symbol must not start with a number; found "5".
+	oracle: Error 31.2:  Variable symbol must not start with a number; found "5".
+o2/bad_emoji	oracle rc=243 crate rc=243	stdout same	stderr same
+	crate:  Error 13.1:  Incorrect character in program "M-pM-^_M-^XM-^@" ('F09F9880'X).
+	oracle: Error 13.1:  Incorrect character in program "M-pM-^_M-^XM-^@" ('F09F9880'X).
+o2/bad_overlong	oracle rc=243 crate rc=243	stdout same	stderr same
+	crate:  Error 13.1:  Incorrect character in program "M-@" ('C0'X).
+	oracle: Error 13.1:  Incorrect character in program "M-@" ('C0'X).
+o2/bad_truncated	oracle rc=243 crate rc=243	stdout same	stderr same
+	crate:  Error 13.1:  Incorrect character in program "M-C" ('C3'X).
+	oracle: Error 13.1:  Incorrect character in program "M-C" ('C3'X).
+o2/bin_bad_group	oracle rc=241 crate rc=241	stdout same	stderr same
+	crate:  Error 15.6:  Binary strings must be grouped in units that are multiples of four characters.
+	oracle: Error 15.6:  Binary strings must be grouped in units that are multiples of four characters.
+o2/comment_line3	oracle rc=250 crate rc=250	stdout same	stderr same
+	crate:  Error 6.1:  Unmatched comment delimiter ("/*") on line 3.
+	oracle: Error 6.1:  Unmatched comment delimiter ("/*") on line 3.
+o2/hex_bad_group	oracle rc=241 crate rc=241	stdout same	stderr same
+	crate:  Error 15.5:  Hexadecimal strings must be grouped in units that are multiples of two characters.
+	oracle: Error 15.5:  Hexadecimal strings must be grouped in units that are multiples of two characters.
+o2/multi_line_bracket	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "[".
+	oracle: Error 35.1:  Incorrect expression detected at "[".
+o2/not_prefix	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.901:  Prefix operator "\" is not followed by an expression term.
+	oracle: Error 35.901:  Prefix operator "\" is not followed by an expression term.
+o2/prefix_after_op	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "+".
+	oracle: Error 35.1:  Incorrect expression detected at "+".
+o2/ref_amp_literal	oracle rc=236 crate rc=236	stdout same	stderr same
+	crate:  Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found &1.
+	oracle: Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found &1.
+o2/ref_raw_byte	oracle rc=236 crate rc=236	stdout same	stderr same
+	crate:  Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found M-^@.
+	oracle: Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found M-^@.
+o2/resource_amp	oracle rc=157 crate rc=157	stdout same	stderr same
+	crate:  Error 99.943:  Missing ::RESOURCE end marker "&2" for resource "&1".
+	oracle: Error 99.943:  Missing ::RESOURCE end marker "&2" for resource "&1".
+o2/say_prefix	oracle rc=0 crate rc=0	stdout same	stderr same
+o3/e00	oracle rc=219 crate rc=219	stdout same	stderr same
+	crate:  Error 37.2:  Unmatched ")" in expression.
+	oracle: Error 37.2:  Unmatched ")" in expression.
+o3/e01	oracle rc=219 crate rc=219	stdout same	stderr same
+	crate:  Error 37.901:  Unexpected "]".
+	oracle: Error 37.901:  Unexpected "]".
+o3/e02	oracle rc=219 crate rc=219	stdout same	stderr same
+	crate:  Error 37.901:  Unexpected "]".
+	oracle: Error 37.901:  Unexpected "]".
+o3/e03	oracle rc=219 crate rc=219	stdout same	stderr same
+	crate:  Error 37.2:  Unmatched ")" in expression.
+	oracle: Error 37.2:  Unmatched ")" in expression.
+o3/e04	oracle rc=219 crate rc=219	stdout same	stderr same
+	crate:  Error 37.2:  Unmatched ")" in expression.
+	oracle: Error 37.2:  Unmatched ")" in expression.
+o3/e05	oracle rc=219 crate rc=219	stdout same	stderr same
+	crate:  Error 37.2:  Unmatched ")" in expression.
+	oracle: Error 37.2:  Unmatched ")" in expression.
+o3/e06	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "+".
+	oracle: Error 35.1:  Incorrect expression detected at "+".
+o3/e07	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "||".
+	oracle: Error 35.1:  Incorrect expression detected at "||".
+o3/e08	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "||".
+	oracle: Error 35.1:  Incorrect expression detected at "||".
+o3/e09	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "*".
+	oracle: Error 35.1:  Incorrect expression detected at "*".
+o3/e10	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "**".
+	oracle: Error 35.1:  Incorrect expression detected at "**".
+o3/e11	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "~".
+	oracle: Error 35.1:  Incorrect expression detected at "~".
+o3/e12	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "%".
+	oracle: Error 35.1:  Incorrect expression detected at "%".
+o3/e13	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "\".
+	oracle: Error 35.1:  Incorrect expression detected at "\".
+o3/e14	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "(".
+	oracle: Error 35.1:  Incorrect expression detected at "(".
+o3/e15	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.901:  Prefix operator "\" is not followed by an expression term.
+	oracle: Error 35.901:  Prefix operator "\" is not followed by an expression term.
+o3/e16	oracle rc=220 crate rc=220	stdout same	stderr same
+	crate:  Error 36.901:  Left parenthesis "(" in position 5 on line 1 requires a corresponding right parenthesis ")".
+	oracle: Error 36.901:  Left parenthesis "(" in position 5 on line 1 requires a corresponding right parenthesis ")".
+o3/e17	oracle rc=220 crate rc=220	stdout same	stderr same
+	crate:  Error 36.901:  Left parenthesis "(" in position 5 on line 1 requires a corresponding right parenthesis ")".
+	oracle: Error 36.901:  Left parenthesis "(" in position 5 on line 1 requires a corresponding right parenthesis ")".
+o3/e18	oracle rc=220 crate rc=220	stdout same	stderr same
+	crate:  Error 36.901:  Left parenthesis "(" in position 6 on line 1 requires a corresponding right parenthesis ")".
+	oracle: Error 36.901:  Left parenthesis "(" in position 6 on line 1 requires a corresponding right parenthesis ")".
+o3/e19	oracle rc=220 crate rc=220	stdout same	stderr same
+	crate:  Error 36.902:  Square bracket "[" in position 6 on line 1 requires a corresponding right square bracket "]".
+	oracle: Error 36.902:  Square bracket "[" in position 6 on line 1 requires a corresponding right square bracket "]".
+o3/e20	oracle rc=220 crate rc=220	stdout same	stderr same
+	crate:  Error 36.902:  Square bracket "[" in position 6 on line 1 requires a corresponding right square bracket "]".
+	oracle: Error 36.902:  Square bracket "[" in position 6 on line 1 requires a corresponding right square bracket "]".
+o3/e21	oracle rc=220 crate rc=220	stdout same	stderr same
+	crate:  Error 36.902:  Square bracket "[" in position 7 on line 1 requires a corresponding right square bracket "]".
+	oracle: Error 36.902:  Square bracket "[" in position 7 on line 1 requires a corresponding right square bracket "]".
+o3/e22	oracle rc=237 crate rc=237	stdout same	stderr same
+	crate:  Error 19.909:  String or symbol expected after tilde (~).
+	oracle: Error 19.909:  String or symbol expected after tilde (~).
+o3/e23	oracle rc=237 crate rc=237	stdout same	stderr same
+	crate:  Error 19.909:  String or symbol expected after tilde (~).
+	oracle: Error 19.909:  String or symbol expected after tilde (~).
+o3/e24	oracle rc=237 crate rc=237	stdout same	stderr same
+	crate:  Error 19.909:  String or symbol expected after tilde (~).
+	oracle: Error 19.909:  String or symbol expected after tilde (~).
+o3/e25	oracle rc=237 crate rc=237	stdout same	stderr same
+	crate:  Error 19.909:  String or symbol expected after tilde (~).
+	oracle: Error 19.909:  String or symbol expected after tilde (~).
+o3/e26	oracle rc=219 crate rc=219	stdout same	stderr same
+	crate:  Error 37.2:  Unmatched ")" in expression.
+	oracle: Error 37.2:  Unmatched ")" in expression.
+o3/e27	oracle rc=219 crate rc=219	stdout same	stderr same
+	crate:  Error 37.901:  Unexpected "]".
+	oracle: Error 37.901:  Unexpected "]".
+o3/e28	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "[".
+	oracle: Error 35.1:  Incorrect expression detected at "[".
+o3/e29	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "[".
+	oracle: Error 35.1:  Incorrect expression detected at "[".
+o3/e30	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "+=".
+	oracle: Error 35.1:  Incorrect expression detected at "+=".
+o3/e31	oracle rc=236 crate rc=236	stdout same	stderr same
+	crate:  Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found 1.
+	oracle: Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found 1.
+o3/e32	oracle rc=236 crate rc=236	stdout same	stderr same
+	crate:  Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found &1.
+	oracle: Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found &1.
+o3/e33	oracle rc=236 crate rc=236	stdout same	stderr same
+	crate:  Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found A.B.
+	oracle: Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found A.B.
+o3/e34	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "+".
+	oracle: Error 35.1:  Incorrect expression detected at "+".
+o3/e35	oracle rc=236 crate rc=236	stdout same	stderr same
+	crate:  Error 20.917:  Symbol expected after superclass colon (:).
+	oracle: Error 20.917:  Symbol expected after superclass colon (:).
+o3/e36	oracle rc=220 crate rc=220	stdout same	stderr same
+	crate:  Error 36.901:  Left parenthesis "(" in position 8 on line 1 requires a corresponding right parenthesis ")".
+	oracle: Error 36.901:  Left parenthesis "(" in position 8 on line 1 requires a corresponding right parenthesis ")".
+o3/e37	oracle rc=220 crate rc=220	stdout same	stderr same
+	crate:  Error 36.901:  Left parenthesis "(" in position 3 on line 2 requires a corresponding right parenthesis ")".
+	oracle: Error 36.901:  Left parenthesis "(" in position 3 on line 2 requires a corresponding right parenthesis ")".
+o3/e38	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "::".
+	oracle: Error 35.1:  Incorrect expression detected at "::".
+o3/e39	oracle rc=0 crate rc=0	stdout same	stderr same
+o3/e40	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "|".
+	oracle: Error 35.1:  Incorrect expression detected at "|".
+o3/e41	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "+".
+	oracle: Error 35.1:  Incorrect expression detected at "+".
+o3/e42	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.901:  Prefix operator "+" is not followed by an expression term.
+	oracle: Error 35.901:  Prefix operator "+" is not followed by an expression term.
+o3/e43	oracle rc=221 crate rc=221	stdout same	stderr same
+	crate:  Error 35.1:  Incorrect expression detected at "==".
+	oracle: Error 35.1:  Incorrect expression detected at "==".
+o3/e44	oracle rc=158 crate rc=158	stdout same	stderr same
+	crate:  Error 98.987:  Namespace "NS" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t2/p3/e44.rex".
+	oracle: Error 98.987:  Namespace "NS" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t2/p3/e44.rex".

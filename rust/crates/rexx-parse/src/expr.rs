@@ -13,6 +13,11 @@
 
 use std::ops::Range;
 
+use rexx_inventory::errors::{
+    E11_1, E19_909, E20_917, E20_923, E20_930, E31_2, E31_3, E35_1, E35_901, E36_901, E36_902,
+    E37_1, E37_2, E37_901, Msg,
+};
+
 use crate::ast::{CallTarget, Expr, ExprKind, PrefixOp};
 use crate::token::{
     Operator, ParseCtx, ParseError, SymbolClass, SymbolId, Tag, Token, TokenCursor, TokenKind,
@@ -137,7 +142,7 @@ pub(crate) fn parse_expr(
     let mut parser = Parser::new(ctx, cursor);
     match parser.expression(term)? {
         Some(expr) => Ok(expr),
-        None => Err(parser.error(35, missing)),
+        None => Err(parser.missing_expression(missing)),
     }
 }
 
@@ -186,9 +191,10 @@ pub(crate) fn parse_paren_expression(
     cursor: &mut TokenCursor,
 ) -> Result<Option<Expr>, ParseError> {
     let mut parser = Parser::new(ctx, cursor);
+    let opener = parser.previous();
     let inner = parser.subexpression(Terminators::RIGHT)?;
     if parser.peek_tag() != Some(Tag::RightParen) {
-        return Err(parser.unmatched(false));
+        return Err(parser.unmatched(opener, false));
     }
     parser.advance();
     Ok(inner)
@@ -230,12 +236,12 @@ pub(crate) fn parse_constant_expression(
             // `parseFullSubExpression` and not `parseSubExpression`.
             let inner = parser.full_subexpression(Terminators::RIGHT)?;
             if parser.peek_tag() != Some(Tag::RightParen) {
-                return Err(parser.unmatched(false));
+                return Err(parser.unmatched(token, false));
             }
             parser.advance();
             Ok(inner)
         }
-        _ => Err(parser.error(35, 1)),
+        _ => Err(parser.raise(E35_1, [display_value(ctx, Some(token))])),
     }
 }
 
@@ -297,14 +303,9 @@ pub(crate) fn need_variable(
     ) {
         return Ok(());
     }
-    // `Error_Invalid_variable_period` is 31.3 and
-    // `Error_Invalid_variable_number` is 31.2.
-    let sub = if ctx.symbols.name(id).starts_with('.') {
-        3
-    } else {
-        2
-    };
-    Err(ParseError::new(31, sub, byte))
+    let name = ctx.symbols.name(id);
+    let msg = if name.starts_with('.') { E31_3 } else { E31_2 };
+    Err(ParseError::raise(msg, byte, [name.as_bytes().to_vec()]))
 }
 
 /// One expression parse in progress.
@@ -335,13 +336,43 @@ impl<'a, 'c> Parser<'a, 'c> {
         }
     }
 
-    fn error(&self, code: u16, sub: u16) -> ParseError {
-        ParseError::new(code, sub, self.clause_byte)
+    fn raise<const N: usize>(&self, msg: Msg<N>, inserts: [Vec<u8>; N]) -> ParseError {
+        ParseError::raise(msg, self.clause_byte, inserts)
     }
 
-    /// Error 36's two sub-numbers, for an opener with no matching closer.
-    fn unmatched(&self, bracket: bool) -> ParseError {
-        self.error(36, if bracket { 902 } else { 901 })
+    /// The error 35 the caller names for an expression that is absent.
+    fn missing_expression(&self, sub: u16) -> ParseError {
+        ParseError::new(35, sub, self.clause_byte)
+    }
+
+    /// 35.1 at `token`, `None` being the end of the clause.
+    fn invalid_at(&self, token: Option<&Token>) -> ParseError {
+        self.raise(E35_1, [display_value(self.ctx, token)])
+    }
+
+    /// Error 36's two sub-numbers, for `opener` with no matching closer:
+    /// `errorPosition` (`LanguageParser.cpp:4114`) inserts its 1-based
+    /// offset in its line, then the line.
+    fn unmatched(&self, opener: &Token, bracket: bool) -> ParseError {
+        debug_assert!(matches!(
+            opener.kind,
+            TokenKind::LeftParen | TokenKind::LeftBracket
+        ));
+        let source = self.ctx.source;
+        let line = source.line_of(opener.span.start);
+        let line_start = source.line_span(line).map_or(0, |span| span.start);
+        let inserts = [
+            (opener.span.start - line_start + 1)
+                .to_string()
+                .into_bytes(),
+            line.to_string().into_bytes(),
+        ];
+        self.raise(if bracket { E36_902 } else { E36_901 }, inserts)
+    }
+
+    /// The token just consumed, which opened the construct being parsed.
+    fn previous(&self) -> &'a Token {
+        &self.ctx.tokens[self.cursor.position() - 1]
     }
 
     /// The next token, or `None` at the end of the clause.
@@ -475,7 +506,7 @@ impl<'a, 'c> Parser<'a, 'c> {
         let mut parts: Vec<Expr> = Vec::new();
         loop {
             let Some(part) = self.subexpression(term)? else {
-                return Err(self.error(35, missing));
+                return Err(self.missing_expression(missing));
             };
             parts.push(part);
             if self.peek_tag() == Some(Tag::Comma) {
@@ -532,7 +563,9 @@ impl<'a, 'c> Parser<'a, 'c> {
                 }
                 // `\` is prefix-only. This is why `a \(1 = 2)` is 35.1 rather
                 // than a concatenation.
-                TokenKind::Operator(Operator::Backslash) => return Err(self.error(35, 1)),
+                TokenKind::Operator(Operator::Backslash) => {
+                    return Err(self.invalid_at(Some(token)));
+                }
                 TokenKind::Operator(op) => *op,
                 // The C++'s TILDE, DTILDE and SQLEFT cases, which reattach the
                 // message to the term already parsed. Reached whenever the left
@@ -545,11 +578,10 @@ impl<'a, 'c> Parser<'a, 'c> {
                     left = self.cascade(left, term)?;
                     continue;
                 }
-                TokenKind::RightParen => return Err(self.error(37, 2)),
-                TokenKind::RightBracket => return Err(self.error(37, 901)),
+                TokenKind::RightParen => return Err(self.raise(E37_2, [])),
+                TokenKind::RightBracket => return Err(self.raise(E37_901, [])),
                 // `+=` and friends are assignments, not operators.
-                TokenKind::Assignment(_) => return Err(self.error(35, 1)),
-                _ => return Err(self.error(35, 1)),
+                _ => return Err(self.invalid_at(Some(token))),
             };
             let prec = precedence(op);
             if prec < min_prec {
@@ -559,7 +591,7 @@ impl<'a, 'c> Parser<'a, 'c> {
                 self.advance();
             }
             let Some(right) = self.message_subterm(term)? else {
-                return Err(self.error(35, 1));
+                return Err(self.raise(E35_1, [op.spelling().as_bytes().to_vec()]));
             };
             let right = self.binary_rest(right, prec + 1, term)?;
             left = Expr::binary(op, left, right);
@@ -588,7 +620,7 @@ impl<'a, 'c> Parser<'a, 'c> {
                     self.advance();
                     return self.variable_reference_term(from).map(Some);
                 }
-                _ => return Err(self.error(35, 1)),
+                _ => return Err(self.invalid_at(Some(token))),
             };
             self.advance();
             // Recursing on the whole subterm rather than on an atom is what
@@ -596,7 +628,7 @@ impl<'a, 'c> Parser<'a, 'c> {
             // which is 4. It also means a chain works, though `--` is a line
             // comment so `- -2` needs the blank.
             let Some(operand) = self.message_subterm(term)? else {
-                return Err(self.error(35, 901));
+                return Err(self.raise(E35_901, [op.spelling().as_bytes().to_vec()]));
             };
             return Ok(Some(Expr::new(
                 ExprKind::Prefix {
@@ -684,9 +716,9 @@ impl<'a, 'c> Parser<'a, 'c> {
                     value.iter().map(|b| b.to_ascii_uppercase()).collect()
                 }
                 // `a~[3]` is 19.909: a bracket is not a message name.
-                _ => return Err(self.error(19, 909)),
+                _ => return Err(self.raise(E19_909, [])),
             },
-            _ => return Err(self.error(19, 909)),
+            _ => return Err(self.raise(E19_909, [])),
         };
         // Interned upcased, which is where `parseMessage` interns it:
         // `messagename = commonString(messagename->upper())`
@@ -728,17 +760,17 @@ impl<'a, 'c> Parser<'a, 'c> {
     /// compound variable or a dot symbol.
     fn super_class_term(&mut self, term: Terminators) -> Result<Expr, ParseError> {
         let Some(token) = self.peek() else {
-            return Err(self.error(20, 917));
+            return Err(self.raise(E20_917, []));
         };
         if self.is_terminator(Some(token), term) {
-            return Err(self.error(20, 917));
+            return Err(self.raise(E20_917, []));
         }
         let span = token.span.clone();
         // `isVariableOrDot` reads only the subclass, so a literal token cannot
         // pass it whatever it holds, and this match on `Symbol` is the same
         // gate.
         let TokenKind::Symbol { id, class } = &token.kind else {
-            return Err(self.error(20, 917));
+            return Err(self.raise(E20_917, []));
         };
         if !matches!(
             class,
@@ -747,7 +779,7 @@ impl<'a, 'c> Parser<'a, 'c> {
                 | SymbolClass::Compound
                 | SymbolClass::DotSymbol
         ) {
-            return Err(self.error(20, 917));
+            return Err(self.raise(E20_917, []));
         }
         let kind = symbol_kind(*id, *class);
         self.advance();
@@ -759,7 +791,7 @@ impl<'a, 'c> Parser<'a, 'c> {
     fn variable_reference_term(&mut self, from: usize) -> Result<Expr, ParseError> {
         self.skip_blanks();
         let Some(token) = self.peek() else {
-            return Err(self.error(20, 930));
+            return Err(self.raise(E20_930, [display_value(self.ctx, None)]));
         };
         let span = token.span.clone();
         let kind = match &token.kind {
@@ -771,7 +803,7 @@ impl<'a, 'c> Parser<'a, 'c> {
                 id,
                 class: SymbolClass::Stem,
             } => ExprKind::Stem(*id),
-            _ => return Err(self.error(20, 930)),
+            _ => return Err(self.raise(E20_930, [display_value(self.ctx, Some(token))])),
         };
         self.advance();
         let inner = Expr::new(kind, span);
@@ -791,7 +823,7 @@ impl<'a, 'c> Parser<'a, 'c> {
         // the same stack. Counted against the same budget for the reason
         // `MAX_EXPR_DEPTH`'s doc gives.
         if self.expr_depth >= MAX_EXPR_DEPTH {
-            return Err(self.error(11, 1));
+            return Err(self.raise(E11_1, []));
         }
         self.expr_depth += 1;
         let args = self.arg_list_inner(closer);
@@ -805,6 +837,7 @@ impl<'a, 'c> Parser<'a, 'c> {
 
     fn arg_list_inner(&mut self, closer: Option<Tag>) -> Result<Vec<Option<Expr>>, ParseError> {
         let bracket = closer == Some(Tag::RightBracket);
+        let opener = closer.map(|_| self.previous());
         let term = match closer {
             Some(Tag::RightBracket) => Terminators::SQRIGHT,
             Some(_) => Terminators::RIGHT,
@@ -828,7 +861,8 @@ impl<'a, 'c> Parser<'a, 'c> {
         }
         if let Some(closer) = closer {
             if self.peek_tag() != Some(closer) {
-                return Err(self.unmatched(bracket));
+                let opener = opener.expect("a closer has its opener");
+                return Err(self.unmatched(opener, bracket));
             }
             self.advance();
         }
@@ -912,7 +946,7 @@ impl<'a, 'c> Parser<'a, 'c> {
                 // `MAX_EXPR_DEPTH`'s own doc comment for the two measured
                 // cliffs this sits between.
                 if self.expr_depth >= MAX_EXPR_DEPTH {
-                    return Err(self.error(11, 1));
+                    return Err(self.raise(E11_1, []));
                 }
                 self.expr_depth += 1;
                 // The enclosing terminators are dropped, because the brackets
@@ -921,10 +955,10 @@ impl<'a, 'c> Parser<'a, 'c> {
                 self.expr_depth -= 1;
                 let Some(inner) = inner? else {
                     // `()` is 35.1.
-                    return Err(self.error(35, 1));
+                    return Err(self.invalid_at(Some(token)));
                 };
                 if self.peek_tag() != Some(Tag::RightParen) {
-                    return Err(self.unmatched(false));
+                    return Err(self.unmatched(token, false));
                 }
                 self.advance();
                 // The parenthesised expression is returned unchanged, so
@@ -981,16 +1015,16 @@ impl<'a, 'c> Parser<'a, 'c> {
                     self.advance();
                     self.variable_reference_term(from).map(Some)
                 }
-                _ => Err(self.error(35, 1)),
+                _ => Err(self.invalid_at(Some(token))),
             },
-            TokenKind::RightParen => Err(self.error(37, 2)),
-            TokenKind::RightBracket => Err(self.error(37, 901)),
+            TokenKind::RightParen => Err(self.raise(E37_2, [])),
+            TokenKind::RightBracket => Err(self.raise(E37_901, [])),
             // 37.1, which cannot be reached: a comma always terminates, so
             // the terminator check above caught it.
-            TokenKind::Comma => Err(self.error(37, 1)),
+            TokenKind::Comma => Err(self.raise(E37_1, [])),
             // A blank, a colon, a `::` or a `[` where a term was expected.
             // `a [1]` is 35.1 for exactly this reason.
-            _ => Err(self.error(35, 1)),
+            _ => Err(self.invalid_at(Some(token))),
         }
     }
 
@@ -998,10 +1032,10 @@ impl<'a, 'c> Parser<'a, 'c> {
     /// qualified call or a class lookup.
     fn qualified_symbol(&mut self, namespace: SymbolId, from: usize) -> Result<Expr, ParseError> {
         let Some(token) = self.peek() else {
-            return Err(self.error(20, 923));
+            return Err(self.raise(E20_923, []));
         };
         let TokenKind::Symbol { id: name, .. } = token.kind else {
-            return Err(self.error(20, 923));
+            return Err(self.raise(E20_923, []));
         };
         self.advance();
         // Only an immediately following parenthesis makes this a call.
@@ -1024,6 +1058,33 @@ impl<'a, 'c> Parser<'a, 'c> {
             extent,
         ))
     }
+}
+
+/// `RexxToken::displayValue` (`Token.cpp:308`): what an error insert shows for
+/// `token`, `None` being the end of the clause.
+fn display_value(ctx: &ParseCtx, token: Option<&Token>) -> Vec<u8> {
+    let Some(token) = token else {
+        return b";".to_vec();
+    };
+    let text: &[u8] = match &token.kind {
+        TokenKind::Symbol { id, .. } => ctx.symbols.name(*id).as_bytes(),
+        TokenKind::Literal { value } => value,
+        TokenKind::Operator(op) => op.spelling().as_bytes(),
+        TokenKind::Assignment(op) => return format!("{}=", op.spelling()).into_bytes(),
+        TokenKind::Blank => b" ",
+        TokenKind::Eoc => b";",
+        TokenKind::Comma => b",",
+        TokenKind::LeftParen => b"(",
+        TokenKind::RightParen => b")",
+        TokenKind::LeftBracket => b"[",
+        TokenKind::RightBracket => b"]",
+        TokenKind::Colon => b":",
+        TokenKind::Tilde => b"~",
+        TokenKind::DTilde => b"~~",
+        TokenKind::DColon => b"::",
+        TokenKind::Null | TokenKind::Prefix | TokenKind::Point | TokenKind::Continue => b"",
+    };
+    text.to_vec()
 }
 
 /// The leaf node a symbol token stands for, from its scanned class.
