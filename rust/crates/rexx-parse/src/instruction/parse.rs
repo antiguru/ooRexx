@@ -11,6 +11,10 @@
 
 //! `PARSE`, `ARG` and `PULL`: the options, the source and the template.
 
+use rexx_inventory::errors::{
+    E20_903, E20_904, E25_12, E35_931, E38_1, E38_2, E38_3, E38_901, E89_2,
+};
+
 use crate::ast::{Expr, Parse, ParseSource, ParseTrigger, TriggerKind};
 use crate::expr::{
     Terminators, need_variable, parse_paren_expression, parse_variable_or_message_term, symbol_kind,
@@ -39,19 +43,19 @@ impl<'a> Inst<'a> {
                 // repeat falls through to the source-keyword switch, where it
                 // is an unknown source: measured, `parse upper upper arg a` is
                 // rc 231, Error 25.12.
-                let option = loop {
+                let (option, token) = loop {
                     let Some(token) = self.next_real() else {
-                        return Err(self.error(20, 903));
+                        return Err(self.error(E20_903, []));
                     };
                     if token.kind.tag() != Tag::Symbol {
-                        return Err(self.error(20, 903));
+                        return Err(self.error(E20_903, []));
                     }
                     let option = self.parse_option(token);
                     match option {
                         Some(POPT_UPPER) if !upper && !lower => upper = true,
                         Some(POPT_LOWER) if !upper && !lower => lower = true,
                         Some(POPT_CASELESS) if !caseless => caseless = true,
-                        _ => break option,
+                        _ => break (option, token),
                     }
                 };
                 match option {
@@ -65,10 +69,10 @@ impl<'a> Inst<'a> {
                         // is 31.2, so the symbol test and the variable test are
                         // separate.
                         let Some(name) = self.next_real() else {
-                            return Err(self.error(20, 904));
+                            return Err(self.error(E20_904, []));
                         };
                         let TokenKind::Symbol { id, class } = name.kind else {
-                            return Err(self.error(20, 904));
+                            return Err(self.error(E20_904, []));
                         };
                         need_variable(self.ctx, id, class, self.clause_byte)?;
                         ParseSource::Var(id)
@@ -83,12 +87,12 @@ impl<'a> Inst<'a> {
                             .next_real()
                             .filter(|token| self.sub_keyword(token) == Some(SUB_WITH));
                         if with.is_none() {
-                            return Err(self.error(38, 3));
+                            return Err(self.error(E38_3, []));
                         }
                         ParseSource::Value(value)
                     }
                     // `Error_Invalid_subkeyword_parse`.
-                    _ => return Err(self.error(25, 12)),
+                    _ => return Err(self.found(E25_12, Some(token))),
                 }
             }
         };
@@ -154,7 +158,7 @@ impl<'a> Inst<'a> {
                         Operator::GreaterThan => TriggerKind::PlusLength,
                         // `Error_Invalid_template_trigger`. Measured:
                         // `parse arg *3` is rc 218, Error 38.1.
-                        _ => return Err(self.error(38, 1)),
+                        _ => return Err(self.found(E38_1, Some(token))),
                     };
                     let value = self.trigger_position()?;
                     template.push(Some(ParseTrigger {
@@ -167,7 +171,7 @@ impl<'a> Inst<'a> {
                     let Some(value) = parse_paren_expression(self.ctx, &mut self.cursor)? else {
                         // `Error_Invalid_expression_parse`. Measured:
                         // `parse arg +()` is rc 221, Error 35.931.
-                        return Err(self.error(35, 931));
+                        return Err(self.error(E35_931, []));
                     };
                     template.push(Some(ParseTrigger {
                         kind: string_kind,
@@ -210,12 +214,12 @@ impl<'a> Inst<'a> {
                                     targets.push(Some(target));
                                 }
                                 // `Error_Variable_expected_PARSE`, 89.2.
-                                None => return Err(self.error(89, 2)),
+                                None => return Err(self.error(E89_2, [])),
                             }
                         }
                     }
                 }
-                _ => return Err(self.error(38, 1)),
+                _ => return Err(self.found(E38_1, Some(token))),
             }
         }
         Ok(template)
@@ -226,12 +230,12 @@ impl<'a> Inst<'a> {
         let Some(token) = self.next_real() else {
             // `Error_Invalid_template_missing`. Measured: `parse arg +` is
             // rc 218, Error 38.901.
-            return Err(self.error(38, 901));
+            return Err(self.error(E38_901, []));
         };
         match &token.kind {
             TokenKind::LeftParen => match parse_paren_expression(self.ctx, &mut self.cursor)? {
                 Some(value) => Ok(value),
-                None => Err(self.error(35, 931)),
+                None => Err(self.error(E35_931, [])),
             },
             TokenKind::Symbol { id, class } => {
                 // `Error_Invalid_template_position`, for a variable, a stem or
@@ -240,11 +244,11 @@ impl<'a> Inst<'a> {
                     class,
                     SymbolClass::Variable | SymbolClass::Stem | SymbolClass::Compound
                 ) {
-                    return Err(self.error(38, 2));
+                    return Err(self.found(E38_2, Some(token)));
                 }
                 Ok(Expr::new(symbol_kind(*id, *class), token.span.clone()))
             }
-            _ => Err(self.error(38, 2)),
+            _ => Err(self.found(E38_2, Some(token))),
         }
     }
 }

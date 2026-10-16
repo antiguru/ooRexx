@@ -1120,3 +1120,62 @@ translation	20.930	1	Simple variable or stem symbol expected after > or < prefix
 translation	99.943	1	Missing ::RESOURCE end marker "&2" for resource "&1".	::resource '&1' end '&2'\nline\n
 translation	6.1	3	Unmatched comment delimiter ("/*") on line 3.	say 1\n\nsay 2 /* open /* nested */\nmore\n
 translation	35.1	2	Incorrect expression detected at "~".	o = .object~new\ncall o~string('x')\n
+translation	35.1	1	Incorrect expression detected at "==".	a~b == 1\n
+translation	35.1	1	Incorrect expression detected at "=".	a~b =\n
+translation	35.1	1	Incorrect expression detected at "+=".	a~b +=\n
+translation	35.917	1	Missing expression following VALUE keyword of a NUMERIC FORM instruction.	numeric form value\n
+-	ok	-	-	trace -\n
+translation	35.1	1	Incorrect expression detected at ";".	trace -;\n
+translation	35.1	1	Incorrect expression detected at "(".	trace -(1)\n
+translation	24.1	1	TRACE request letter must be one of "ACEFILNOR"; found "S".	trace ?s\n
+translation	25.916	1	Unknown keyword on FORWARD instruction; found "x".	forward 'x'\n
+translation	25.921	1	Duplicate CLASS keyword found.	forward class (1) class (2)\n
+translation	35.928	1	Missing expression following CLASS keyword of a FORWARD instruction.	forward class\n
+translation	25.922	1	Duplicate MESSAGE keyword found.	forward message 'a' message 'b'\n
+translation	35.927	1	Missing expression following MESSAGE keyword of a FORWARD instruction.	forward message\n
+translation	25.918	1	Duplicate ARGUMENTS or ARRAY keyword found.	forward arguments (1) arguments (2)\n
+translation	35.926	1	Missing expression following ARGUMENTS keyword of a FORWARD instruction.	forward arguments\n
+translation	25.906	1	RAISE must be followed by one of the keywords ERROR, FAILURE, HALT, LOSTDIGITS, NOMETHOD, NOSTRING, NOTREADY, NOVALUE, PROPAGATE, SYNTAX, or USER; found "1".	raise 1\n
+translation	20.915	1	Symbol expected after USER keyword.	raise user 'x'\n
+translation	25.907	1	Unknown keyword on RAISE instruction; found "1".	raise halt 1\n
+translation	25.908	1	Duplicate DESCRIPTION keyword found.	raise halt description 'a' description 'b'\n
+translation	35.922	1	Missing expression following DESCRIPTION keyword of a RAISE instruction.	raise halt description\n
+translation	25.909	1	Duplicate ADDITIONAL or ARRAY keyword found.	raise halt additional 'a' additional 'b'\n
+translation	35.923	1	Missing expression following ADDITIONAL keyword of a RAISE instruction.	raise halt additional\n
+translation	35.924	1	Missing "(" on expression list of the ARRAY keyword.	raise halt array 1\n
+translation	20.931	1	Simple variable or stem symbol expected after > or < USE ARG reference operator; found ;.	use arg >\n
+translation	20.931	1	Simple variable or stem symbol expected after > or < USE ARG reference operator; found 1.	use arg >1\n
+translation	46.902	1	Extra token ("B") found in USE ARG variable reference; "," or end of instruction expected.	use arg >a b\n
+translation	89.1	1	The USE instruction requires a comma-separated list of variables or assignment message terms.	use arg (a)\n
+translation	35.930	1	Invalid or missing expression following "=" token of a USE ARG instruction.	use arg a = 1 b\n
+translation	20.927	1	Symbol expected after USE LOCAL.	use local 'a'\n
+translation	20.922	1	Symbol expected as a routine name of qualified CALL instruction.	call ns:'x'\n
+translation	35.932	1	Missing expression for calculated CALL name.	call ()\n
+translation	35.915	1	Missing expression following VALUE keyword of a SIGNAL instruction.	signal value\n
+translation	25.1	1	CALL ON must be followed by one of the keywords ERROR, FAILURE, HALT, NOTREADY, USER, or ANY; found "1".	call on 1\n
+translation	19.3	1	String or symbol expected after NAME keyword.	call on error name (x)\n
+translation	20.906	1	Symbol expected after "(" of a variable reference.	drop ('a')\n
+translation	20.904	1	Symbol expected after PARSE VAR.	parse var 'a'\n
+translation	35.931	1	Missing expression following "(" of parse template.	parse arg a ()\n
+translation	38.1	1	Incorrect PARSE template detected at ")".	parse arg a )\n
+translation	35.1	1	Incorrect expression detected at "==".	do label == 1\nend\n
+translation	35.1	1	Incorrect expression detected at "==".	do i == 1\nend\n
+translation	35.904	1	Missing initial expression for DO or LOOP control variable.	do i =\nend\n
+translation	35.906	1	Missing expression following TO keyword.	do i = 1 to\nend\n
+translation	35.905	1	Missing expression following BY keyword.	do i = 1 by\nend\n
+translation	35.907	1	Missing expression following FOR keyword.	do i = 1 for\nend\n
+translation	35.911	1	Missing expression following OVER keyword.	do i over\nend\n
+translation	35.911	1	Missing expression following OVER keyword.	do with index i over\nend\n
+translation	20.929	1	Symbol expected after INDEX keyword.	do with index 'a' over x\nend\n
+translation	35.907	1	Missing expression following FOR keyword.	do i over x for\nend\n
+translation	49.2	1	Interpretation error: unmatched DO OVER loop subkey 2.	do i over x for 1 by 2\nend\n
+translation	49.2	1	Interpretation error: unmatched DO WITH conditional 0.	do with index i over x for 1 to 2\nend\n
+translation	20.933	1	Symbol expected after WITH keyword.	address system with 'input'\n
+translation	25.933	1	Acceptable ADDRESS WITH I/O types are NORMAL, STEM, STREAM, and USING; found "x".	address system with input 'x'\n
+translation	20.932	1	Stem symbol expected after STEM keyword.	address system with input stem\n
+translation	21.901	1	Data must not follow the NOP keyword; found "1".	nop 1\n
+translation	21.903	1	Data must not follow the NAME trap name; found "X".	signal on error name lab x\n
+translation	20.914	1	Symbol expected after RAISE keyword.	raise 'x'\n
+translation	25.907	1	Unknown keyword on RAISE instruction; found "x".	raise halt 'x'\n
+translation	20.931	1	Simple variable or stem symbol expected after > or < USE ARG reference operator; found a.	use arg >'a'\n
+translation	20.911	1	Symbol expected after ON keyword.	call on 'x'\n

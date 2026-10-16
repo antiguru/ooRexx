@@ -11,6 +11,10 @@
 
 //! `ADDRESS` and the redirections of its `WITH` clause.
 
+use rexx_inventory::errors::{
+    E20_932, E20_933, E25_930, E25_931, E25_932, E25_933, E25_934, E35_914, E35_935,
+};
+
 use crate::ast::{Address, AddressIo, OutputOption, Redirection};
 use crate::expr::{Terminators, parse_constant_expression};
 use crate::token::{ParseError, SymbolClass, Tag, TokenKind};
@@ -36,7 +40,7 @@ impl<'a> Inst<'a> {
             self.seek(index + 1);
             // `Error_Invalid_expression_address`, measured as 35.914 for
             // `address value`.
-            address.dynamic = Some(self.expr(Terminators::PARSE_WITH, 914)?);
+            address.dynamic = Some(self.expr(Terminators::PARSE_WITH, E35_914)?);
         } else {
             self.seek(index + 1);
             address.environment = Some(self.value_of(token));
@@ -65,12 +69,12 @@ impl<'a> Inst<'a> {
         // `Error_Symbol_expected_address_with`, measured as 20.933 for
         // `address system with`.
         if self.at_end() {
-            return Err(self.error(20, 933));
+            return Err(self.error(E20_933, []));
         }
         let mut seen = [false; 3];
         while let Some(token) = self.next_real() {
             if token.kind.tag() != Tag::Symbol {
-                return Err(self.error(20, 933));
+                return Err(self.error(E20_933, []));
             }
             // The three duplicate errors are 25.930, 25.931 and 25.932, one per
             // stream. Measured: `with input normal input normal` is 25.930.
@@ -80,10 +84,10 @@ impl<'a> Inst<'a> {
                 Some(SUB_ERROR) => 2,
                 // `Error_Invalid_subkeyword_address_with_option`, measured as
                 // 25.934 for `address system with foo` and for `with 1`.
-                _ => return Err(self.error(25, 934)),
+                _ => return Err(self.found(E25_934, Some(token))),
             };
             if seen[stream] {
-                return Err(self.error(25, 930 + u16::try_from(stream).expect("0, 1 or 2")));
+                return Err(self.error([E25_930, E25_931, E25_932][stream], []));
             }
             seen[stream] = true;
             // `NORMAL` resets the stream and takes no target.
@@ -141,10 +145,10 @@ impl<'a> Inst<'a> {
         // `Error_Invalid_subkeyword_address_with_io_option`, measured as 25.933
         // for `address system with input` and for `with input foo`.
         let Some(token) = self.next_real() else {
-            return Err(self.error(25, 933));
+            return Err(self.found(E25_933, None));
         };
         if token.kind.tag() != Tag::Symbol {
-            return Err(self.error(25, 933));
+            return Err(self.found(E25_933, Some(token)));
         }
         match self.sub_keyword(token) {
             Some(SUB_STEM) => {
@@ -152,14 +156,14 @@ impl<'a> Inst<'a> {
                 // 20.932 for `with input stem a`, because `a` is a variable and
                 // not a stem.
                 let Some(name) = self.next_real() else {
-                    return Err(self.error(20, 932));
+                    return Err(self.error(E20_932, []));
                 };
                 let TokenKind::Symbol {
                     id,
                     class: SymbolClass::Stem,
                 } = name.kind
                 else {
-                    return Err(self.error(20, 932));
+                    return Err(self.error(E20_932, []));
                 };
                 Ok(Redirection::Stem(id))
             }
@@ -169,8 +173,16 @@ impl<'a> Inst<'a> {
             Some(index @ (SUB_STREAM | SUB_USING)) => {
                 match parse_constant_expression(self.ctx, &mut self.cursor)? {
                     // `Error_Invalid_expression_missing_general`, measured as
-                    // 35.935 for `with input stream`.
-                    None => Err(self.error(35, 935)),
+                    // 35.935 for `with input stream`, naming the keyword and
+                    // the instruction.
+                    None => {
+                        let keyword: &[u8] = if index == SUB_STREAM {
+                            b"STREAM"
+                        } else {
+                            b"USING"
+                        };
+                        Err(self.error(E35_935, [keyword.to_vec(), b"ADDRESS".to_vec()]))
+                    }
                     Some(value) => Ok(if index == SUB_STREAM {
                         Redirection::Stream(value)
                     } else {
@@ -178,7 +190,7 @@ impl<'a> Inst<'a> {
                     }),
                 }
             }
-            _ => Err(self.error(25, 933)),
+            _ => Err(self.found(E25_933, Some(token))),
         }
     }
 }

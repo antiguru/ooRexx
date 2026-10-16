@@ -12,13 +12,18 @@
 //! The loop header of `DO` and `LOOP`: `createLoop` and the loop forms it
 //! builds.
 
+use rexx_inventory::errors::{
+    E20_918, E20_929, E20_934, E27_1, E27_901, E27_902, E27_903, E27_904, E27_905, E35_1, E35_904,
+    E35_905, E35_906, E35_907, E35_911, E35_929, E49_2, Msg,
+};
+
 use crate::ast::{ControlExpr, Controlled, Expr, Loop, LoopConditional, LoopKind};
 use crate::expr::{Terminators, need_variable};
 use crate::token::{Operator, ParseError, SymbolId, Tag, Token, TokenKind};
 
 use super::{
     Inst, SUB_BY, SUB_COUNTER, SUB_FOR, SUB_FOREVER, SUB_INDEX, SUB_ITEM, SUB_LABEL, SUB_OVER,
-    SUB_TO, SUB_UNTIL, SUB_WHILE, SUB_WITH, UNREACHABLE_SWITCH,
+    SUB_TO, SUB_UNTIL, SUB_WHILE, SUB_WITH,
 };
 
 impl<'a> Inst<'a> {
@@ -65,12 +70,13 @@ impl<'a> Inst<'a> {
                     return Ok(control);
                 }
                 Some(TokenKind::Operator(Operator::StrictEqual)) => {
-                    return Err(self.error(35, 1));
+                    return Err(self.found(E35_1, name));
                 }
                 // `Error_Symbol_expected_LABEL` is 20.918 and
                 // `Error_Symbol_expected_counter` is 20.934.
                 _ => {
-                    return Err(self.error(20, if which == SUB_LABEL { 918 } else { 934 }));
+                    let msg = if which == SUB_LABEL { E20_918 } else { E20_934 };
+                    return Err(self.error(msg, []));
                 }
             }
         }
@@ -82,7 +88,7 @@ impl<'a> Inst<'a> {
             }
             // `newSimpleDo` takes no counter, because a block does not iterate.
             if counter.is_some() {
-                return Err(self.error(27, 905));
+                return Err(self.error(E27_905, []));
             }
             return Ok(Loop {
                 label,
@@ -102,7 +108,7 @@ impl<'a> Inst<'a> {
         }
         let second = self.nth_real(1);
         match second.map(|token| &token.kind) {
-            Some(TokenKind::Operator(Operator::StrictEqual)) => Err(self.error(35, 1)),
+            Some(TokenKind::Operator(Operator::StrictEqual)) => Err(self.found(E35_1, second)),
             Some(TokenKind::Operator(Operator::Equal)) => self.controlled(label, counter, first),
             _ => {
                 // `DO name OVER expr`. This test comes BEFORE the WITH one, so
@@ -151,7 +157,7 @@ impl<'a> Inst<'a> {
         counter: Option<SymbolId>,
         kind: LoopKind,
     ) -> Result<Loop, ParseError> {
-        let conditional = self.loop_conditional((27, 901))?;
+        let conditional = self.loop_conditional(Some(E27_901))?;
         Ok(Loop {
             label,
             counter,
@@ -169,7 +175,7 @@ impl<'a> Inst<'a> {
         counter: Option<SymbolId>,
     ) -> Result<Loop, ParseError> {
         let count = self.opt_expr(Terminators::COND)?;
-        let conditional = self.loop_conditional(UNREACHABLE_SWITCH)?;
+        let conditional = self.loop_conditional(None)?;
         Ok(Loop {
             label,
             counter,
@@ -195,7 +201,7 @@ impl<'a> Inst<'a> {
         let equals = self.nth_real_index(1).expect("the `=` that got us here");
         self.seek(equals + 1);
 
-        let initial = self.expr(Terminators::CONTROL, 904)?;
+        let initial = self.expr(Terminators::CONTROL, E35_904)?;
         let mut control = Controlled {
             control: id,
             initial,
@@ -207,21 +213,21 @@ impl<'a> Inst<'a> {
         let mut conditional = None;
         while let Some(token) = self.peek_real() {
             let (slot, missing, entry) = match self.sub_keyword(token) {
-                Some(SUB_BY) => (&mut control.by, 905, ControlExpr::By),
-                Some(SUB_TO) => (&mut control.to, 906, ControlExpr::To),
-                Some(SUB_FOR) => (&mut control.for_count, 907, ControlExpr::For),
+                Some(SUB_BY) => (&mut control.by, E35_905, ControlExpr::By),
+                Some(SUB_TO) => (&mut control.to, E35_906, ControlExpr::To),
+                Some(SUB_FOR) => (&mut control.for_count, E35_907, ControlExpr::For),
                 Some(SUB_WHILE | SUB_UNTIL) => {
                     // `parseLoopConditional` allows nothing after itself, so
                     // this ends the clause.
-                    conditional = self.loop_conditional(UNREACHABLE_SWITCH)?;
+                    conditional = self.loop_conditional(None)?;
                     break;
                 }
-                _ => return Err(self.error(UNREACHABLE_SWITCH.0, UNREACHABLE_SWITCH.1)),
+                _ => return Err(self.unreachable_switch("loop subkey", Some(token))),
             };
             if slot.is_some() {
-                // `Error_Invalid_do_duplicate`. Measured: `do i = 1 to 3 to 4`
-                // is rc 229, Error 27.902.
-                return Err(self.error(27, 902));
+                // `Error_Invalid_do_duplicate`, naming the keyword. Measured:
+                // `do i = 1 to 3 to 4` is rc 229, Error 27.902.
+                return Err(self.found(E27_902, Some(token)));
             }
             self.next_real();
             let value = self.expr(Terminators::CONTROL, missing)?;
@@ -258,8 +264,8 @@ impl<'a> Inst<'a> {
         // Step past the control variable and the OVER keyword.
         let over = self.nth_real_index(1).expect("the OVER that got us here");
         self.seek(over + 1);
-        let target = self.expr(Terminators::OVER, 911)?;
-        let (for_count, conditional) = self.for_and_conditional()?;
+        let target = self.expr(Terminators::OVER, E35_911)?;
+        let (for_count, conditional) = self.for_and_conditional(false)?;
         Ok(Loop {
             label: label.or(Some(id)),
             counter,
@@ -292,18 +298,16 @@ impl<'a> Inst<'a> {
                 _ => break,
             };
             if slot.is_some() {
-                return Err(self.error(27, 902));
+                return Err(self.found(E27_902, Some(token)));
             }
             self.next_real();
             // `requiredVariable` then `addVariable`, so a non-symbol is
-            // 20.929 and a symbol that is not a variable is `needVariable`'s
-            // own number: measured, `do with index 1 over x` is 31.2 and
-            // `do with index .a over x` is 31.3.
-            let Some(name) = self.next_real() else {
-                return Err(self.error(20, 929));
-            };
-            let TokenKind::Symbol { id, class } = name.kind else {
-                return Err(self.error(20, 929));
+            // 20.929 naming the keyword and a symbol that is not a variable is
+            // `needVariable`'s own number: measured, `do with index 1 over x`
+            // is 31.2 and `do with index .a over x` is 31.3.
+            let Some(&TokenKind::Symbol { id, class }) = self.next_real().map(|name| &name.kind)
+            else {
+                return Err(self.error(E20_929, [self.value_of(token).into_vec()]));
             };
             need_variable(self.ctx, id, class, self.clause_byte)?;
             match self.sub_keyword(token) {
@@ -315,7 +319,7 @@ impl<'a> Inst<'a> {
             // `Error_Invalid_do_with_no_control`. Unreachable through
             // `createLoop`, which only comes here when the token after WITH is
             // INDEX or ITEM, and kept because `newDoWithLoop` checks it.
-            return Err(self.error(27, 903));
+            return Err(self.error(E27_903, []));
         }
         // `Error_Invalid_do_with_no_over`. Measured: `do with index i x` is
         // rc 229, Error 27.904.
@@ -323,11 +327,11 @@ impl<'a> Inst<'a> {
             .peek_real()
             .filter(|token| token.kind.tag() == Tag::Symbol);
         if over.and_then(|token| self.sub_keyword(token)) != Some(SUB_OVER) {
-            return Err(self.error(27, 904));
+            return Err(self.error(E27_904, []));
         }
         self.next_real();
-        let target = self.expr(Terminators::OVER, 911)?;
-        let (for_count, conditional) = self.for_and_conditional()?;
+        let target = self.expr(Terminators::OVER, E35_911)?;
+        let (for_count, conditional) = self.for_and_conditional(true)?;
         Ok(Loop {
             label,
             counter,
@@ -343,9 +347,10 @@ impl<'a> Inst<'a> {
     }
 
     /// The `FOR n` and `WHILE`/`UNTIL` tail that `DO OVER` and `DO WITH`
-    /// share.
+    /// share, `with` saying which.
     fn for_and_conditional(
         &mut self,
+        with: bool,
     ) -> Result<(Option<Expr>, Option<LoopConditional>), ParseError> {
         let mut for_count = None;
         let mut conditional = None;
@@ -353,26 +358,49 @@ impl<'a> Inst<'a> {
             match self.sub_keyword(token) {
                 Some(SUB_FOR) => {
                     if for_count.is_some() {
-                        return Err(self.error(27, 902));
+                        return Err(self.found(E27_902, Some(token)));
                     }
                     self.next_real();
-                    for_count = Some(self.expr(Terminators::CONTROL, 907)?);
+                    for_count = Some(self.expr(Terminators::CONTROL, E35_907)?);
                 }
                 Some(SUB_WHILE | SUB_UNTIL) => {
-                    conditional = self.loop_conditional(UNREACHABLE_SWITCH)?;
+                    conditional = self.loop_conditional(None)?;
                     break;
                 }
-                _ => return Err(self.error(UNREACHABLE_SWITCH.0, UNREACHABLE_SWITCH.1)),
+                _ => return Err(self.unmatched_loop_keyword(with, token)),
             }
         }
         Ok((for_count, conditional))
     }
 
+    /// The `Error_Interpretation_switch` a `TO` or `BY` gets after a `DO OVER`
+    /// or `DO WITH` header's expression, which stops there. `DO OVER` names the
+    /// keyword's `InstructionSubKeyword` value (`Token.hpp:263`) and `DO WITH`
+    /// its conditional type, still `SUBKEY_NONE` (`InstructionParser.cpp:1494`,
+    /// `:1703`).
+    #[cold]
+    #[inline(never)]
+    fn unmatched_loop_keyword(&self, with: bool, token: &Token) -> ParseError {
+        let (what, value): (&[u8], u8) = if with {
+            (b"DO WITH conditional", 0)
+        } else {
+            let value = match self.sub_keyword(token) {
+                Some(SUB_BY) => 2,
+                Some(SUB_TO) => 29,
+                _ => 0,
+            };
+            (b"DO OVER loop subkey", value)
+        };
+        self.error(E49_2, [what.to_vec(), value.to_string().into_bytes()])
+    }
+
     /// `parseLoopConditional` (`InstructionParser.cpp:4600`): an optional
-    /// trailing `WHILE` or `UNTIL`, and nothing after it.
+    /// trailing `WHILE` or `UNTIL`, and nothing after it. `unexpected` names
+    /// anything else, `None` where the caller has already stopped at one of
+    /// the two.
     fn loop_conditional(
         &mut self,
-        unexpected: (u16, u16),
+        unexpected: Option<Msg<1>>,
     ) -> Result<Option<LoopConditional>, ParseError> {
         let Some(token) = self.next_real() else {
             return Ok(None);
@@ -380,19 +408,26 @@ impl<'a> Inst<'a> {
         let until = match self.sub_keyword(token) {
             Some(SUB_WHILE) => false,
             Some(SUB_UNTIL) => true,
-            _ => return Err(self.error(unexpected.0, unexpected.1)),
+            _ => {
+                return Err(match unexpected {
+                    Some(msg) => self.found(msg, Some(token)),
+                    None => self.unreachable_switch("loop conditional", Some(token)),
+                });
+            }
         };
-        // 929 is `Error_Invalid_expression_logical_list`, for the same reason the
+        // 35.929 is `Error_Invalid_expression_logical_list`, for the same reason the
         // `IF` arm passes it: `parseLogical` raises it itself as soon as a
         // sub-expression comes back null, so `requiredLogicalExpression`'s
         // per-caller `Error_Invalid_expression_while` (35.908) and
         // `Error_Invalid_expression_until` (35.909) are unreachable for every
         // caller. Measured: `do while` then `end` and `do until` then `end` both
         // give `Error 35.929` under `rexxc`, not 908 or 909.
-        let condition = self.logical(Terminators::COND, 929)?;
+        let condition = self.logical(Terminators::COND, E35_929)?;
         // `Error_Invalid_do_whileuntil`. Measured:
         // `do i = 1 to 3 while 1 until 2` is rc 229, Error 27.1.
-        self.required_end(27, 1)?;
+        if !self.at_end() {
+            return Err(self.error(E27_1, []));
+        }
         Ok(Some(LoopConditional { until, condition }))
     }
 }

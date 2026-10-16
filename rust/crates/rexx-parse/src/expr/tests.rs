@@ -3,6 +3,8 @@
 
 use std::cell::RefCell;
 
+use rexx_inventory::errors::{E35_912, E35_918, E35_929};
+
 use crate::ast::{Expr, ExprKind};
 use crate::clause::split_clauses;
 use crate::selector::SelectorTable;
@@ -15,9 +17,8 @@ use super::{Terminators, parse_expr, parse_expression, parse_logical};
 /// which one it is exercising.
 #[derive(Copy, Clone)]
 pub(super) enum Entry {
-    /// `parse_expr`: required, end of clause only. 918 stands in for the
-    /// sub-number an instruction parser passes, which for an assignment is
-    /// 35.918.
+    /// `parse_expr`: required, end of clause only, raising an assignment's
+    /// 35.918 when absent.
     Required,
     /// `parse_expression` with a terminator set.
     Optional(Terminators),
@@ -52,10 +53,10 @@ pub(super) fn parse(text: &str, entry: Entry) -> Result<(Expr, SymbolTable), Par
         };
         let mut cursor = TokenCursor::new(clauses[0].tokens.clone());
         match entry {
-            Entry::Required => parse_expr(&ctx, &mut cursor, Terminators::EOC, 918),
+            Entry::Required => parse_expr(&ctx, &mut cursor, Terminators::EOC, E35_918),
             Entry::Optional(term) => parse_expression(&ctx, &mut cursor, term)
                 .map(|e| e.expect("the test input is not an empty expression")),
-            Entry::Logical(term) => parse_logical(&ctx, &mut cursor, term, 929),
+            Entry::Logical(term) => parse_logical(&ctx, &mut cursor, term, E35_929),
         }
     };
     result.map(|expr| (expr, scanned.symbols))
@@ -657,11 +658,11 @@ fn an_empty_required_expression_raises_the_sub_number_the_caller_supplied() {
         keywords: &scanned.keywords,
         resources: &scanned.resources,
     };
-    for sub in [918, 912] {
+    for msg in [E35_918, E35_912] {
         let mut cursor = TokenCursor::new(1..1);
-        let err = parse_expr(&ctx, &mut cursor, Terminators::EOC, sub)
+        let err = parse_expr(&ctx, &mut cursor, Terminators::EOC, msg)
             .expect_err("an empty expression is an error");
-        assert_eq!((err.code, err.sub), (35, sub));
+        assert_eq!((err.code, err.sub), msg.code());
     }
 }
 

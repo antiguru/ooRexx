@@ -14,8 +14,8 @@
 use std::ops::Range;
 
 use rexx_inventory::errors::{
-    E11_1, E19_909, E20_917, E20_923, E20_930, E31_2, E31_3, E35_1, E35_901, E36_901, E36_902,
-    E37_1, E37_2, E37_901, Msg,
+    E11_1, E19_909, E20_917, E20_923, E20_930, E31_2, E31_3, E35_1, E35_901, E35_934, E36_901,
+    E36_902, E37_1, E37_2, E37_901, Msg,
 };
 
 use crate::ast::{CallTarget, Expr, ExprKind, PrefixOp};
@@ -137,7 +137,7 @@ pub(crate) fn parse_expr(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
     term: Terminators,
-    missing: u16,
+    missing: Msg<0>,
 ) -> Result<Expr, ParseError> {
     let mut parser = Parser::new(ctx, cursor);
     match parser.expression(term)? {
@@ -160,7 +160,7 @@ pub(crate) fn parse_logical(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
     term: Terminators,
-    missing: u16,
+    missing: Msg<0>,
 ) -> Result<Expr, ParseError> {
     Parser::new(ctx, cursor).logical(term, missing)
 }
@@ -172,7 +172,7 @@ pub(crate) fn parse_case_when_list(
     cursor: &mut TokenCursor,
     term: Terminators,
 ) -> Result<Vec<Expr>, ParseError> {
-    Parser::new(ctx, cursor).comma_list(term, 934)
+    Parser::new(ctx, cursor).comma_list(term, E35_934)
 }
 
 /// Parses an argument list up to `closer`, which is consumed.
@@ -350,9 +350,11 @@ impl<'a, 'c> Parser<'a, 'c> {
         ParseError::raise(msg, self.clause_byte, inserts)
     }
 
-    /// The error 35 the caller names for an expression that is absent.
-    fn missing_expression(&self, sub: u16) -> ParseError {
-        ParseError::new(35, sub, self.clause_byte)
+    /// The error the caller names for an expression that is absent.
+    #[cold]
+    #[inline(never)]
+    fn missing_expression(&self, msg: Msg<0>) -> ParseError {
+        self.raise(msg, [])
     }
 
     /// 35.1 at `token`, `None` being the end of the clause.
@@ -510,7 +512,7 @@ impl<'a, 'c> Parser<'a, 'c> {
     }
 
     /// `parseLogical` (`LanguageParser.cpp:4264`).
-    fn logical(&mut self, term: Terminators, missing: u16) -> Result<Expr, ParseError> {
+    fn logical(&mut self, term: Terminators, missing: Msg<0>) -> Result<Expr, ParseError> {
         let from = {
             self.skip_blanks();
             self.cursor.position()
@@ -525,7 +527,7 @@ impl<'a, 'c> Parser<'a, 'c> {
 
     /// The comma-separated loop that `parseLogical` (`LanguageParser.cpp:4264`)
     /// and `parseCaseWhenList` (`:3168`) share.
-    fn comma_list(&mut self, term: Terminators, missing: u16) -> Result<Vec<Expr>, ParseError> {
+    fn comma_list(&mut self, term: Terminators, missing: Msg<0>) -> Result<Vec<Expr>, ParseError> {
         self.skip_blanks();
         let mut parts: Vec<Expr> = Vec::new();
         loop {
@@ -1086,7 +1088,7 @@ impl<'a, 'c> Parser<'a, 'c> {
 
 /// `RexxToken::displayValue` (`Token.cpp:308`): what an error insert shows for
 /// `token`, `None` being the end of the clause.
-fn display_value(ctx: &ParseCtx, token: Option<&Token>) -> Vec<u8> {
+pub(crate) fn display_value(ctx: &ParseCtx, token: Option<&Token>) -> Vec<u8> {
     let Some(token) = token else {
         return b";".to_vec();
     };

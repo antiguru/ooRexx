@@ -11,6 +11,8 @@
 
 //! The directive grammar: one `::` clause in, one directive out.
 
+use rexx_inventory::errors::E35_936;
+
 use crate::ast::{
     Access, Annotate, Annotation, AnnotationTarget, AttributeDirective, AttributeStyle,
     ClassDirective, ClassRef, CodeBody, ConditionOption, ConstantDirective, ConstantValue,
@@ -714,7 +716,7 @@ impl<'a> Dir<'a> {
     fn constant_expression(&mut self) -> Result<Expr, ParseError> {
         // `Error_Invalid_expression_missing_constant`. Measured:
         // `::constant c ()` is 35.936.
-        let expr = parse_expr(self.ctx, &mut self.cursor, Terminators::RIGHT, 936)?;
+        let expr = parse_expr(self.ctx, &mut self.cursor, Terminators::RIGHT, E35_936)?;
         // `Error_Unmatched_parenthesis_paren`. Measured: `::constant c (1+2`
         // is 36.901. No blank can sit before a `)`, so `nextToken` and
         // `nextReal` agree here.

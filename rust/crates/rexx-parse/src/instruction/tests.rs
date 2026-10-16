@@ -297,7 +297,7 @@ fn an_assignment_target_must_be_a_variable() {
 
 #[test]
 fn an_empty_assignment_right_hand_side_is_35_918() {
-    // The sub-number the instruction parser owes `parse_expr`. Verified with
+    // The message the instruction parser passes `parse_expr`. Verified with
     // rexxc: `r =` is rc 221, Error 35.918.
     assert_eq!(err("r ="), (35, 918));
 }

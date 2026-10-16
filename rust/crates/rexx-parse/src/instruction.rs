@@ -13,6 +13,18 @@
 
 use std::ops::Range;
 
+use rexx_inventory::errors::{
+    E8_1, E9_1, E18_1, E18_2, E19_2, E19_3, E19_4, E20_901, E20_902, E20_905, E20_906, E20_907,
+    E20_908, E20_909, E20_911, E20_912, E20_914, E20_915, E20_918, E20_922, E20_927, E20_931,
+    E21_901, E21_903, E21_904, E21_905, E21_906, E21_907, E21_908, E21_909, E21_911, E24_1, E25_1,
+    E25_2, E25_3, E25_4, E25_11, E25_15, E25_17, E25_905, E25_906, E25_907, E25_908, E25_909,
+    E25_911, E25_912, E25_913, E25_914, E25_915, E25_916, E25_917, E25_918, E25_919, E25_921,
+    E25_922, E25_923, E25_929, E26_7, E31_2, E31_3, E35_1, E35_912, E35_913, E35_915, E35_916,
+    E35_917, E35_918, E35_922, E35_923, E35_924, E35_925, E35_926, E35_927, E35_928, E35_929,
+    E35_930, E35_932, E35_933, E46_1, E46_901, E46_902, E47_1, E49_2, E89_1, E99_907, E99_908,
+    E99_910, E99_912, E99_913, E99_915, E99_923, E99_924, E99_930, E99_948, E99_950, Msg,
+};
+
 use crate::ast::{
     Call, ConditionTrap, Expr, ExprKind, Forward, Guard, Instruction, InstructionKind,
     NumericSetting, ParseSource, Raise, RaiseResult, Signal, Tail, Trace, Use, UseTarget,
@@ -22,9 +34,9 @@ use crate::block::{Block, EnclosingSelect};
 use crate::clause::{Clause, ClauseCursor, PendingThen};
 use crate::convert::{check_trace_setting, whole_number};
 use crate::expr::{
-    Terminators, need_variable, parse_arg_list, parse_case_when_list, parse_constant_expression,
-    parse_expr, parse_expression, parse_logical, parse_message_term, parse_paren_expression,
-    parse_variable_or_message_term, symbol_kind,
+    Terminators, display_value, need_variable, parse_arg_list, parse_case_when_list,
+    parse_constant_expression, parse_expr, parse_expression, parse_logical, parse_message_term,
+    parse_paren_expression, parse_variable_or_message_term, symbol_kind,
 };
 use crate::source::SourceKind;
 use crate::token::{
@@ -152,17 +164,18 @@ const SUB_WHEN: usize = 47;
 const SUB_WHILE: usize = 48;
 const SUB_WITH: usize = 49;
 
-/// The error the C++ raises where its own `switch` has no case left.
-const UNREACHABLE_SWITCH: (u16, u16) = (49, 2);
-
-/// The sub-number of the missing-`THEN` error, which names the instruction
-/// that wanted it: `Error_Then_expected_if` is 18.1 and
-/// `Error_Then_expected_when` is 18.2.
-pub(crate) fn missing_then_sub(which: PendingThen) -> u16 {
+/// The missing-`THEN` error, which names the instruction that wanted it:
+/// `Error_Then_expected_if` is 18.1 and `Error_Then_expected_when` is 18.2.
+pub(crate) fn missing_then(which: PendingThen) -> Msg<1> {
     match which {
-        PendingThen::If => 1,
-        PendingThen::When => 2,
+        PendingThen::If => E18_1,
+        PendingThen::When => E18_2,
     }
+}
+
+/// The sub-number of [`missing_then`].
+pub(crate) fn missing_then_sub(which: PendingThen) -> u16 {
+    missing_then(which).code().1
 }
 
 /// Parses the clause the cursor is sitting on, advancing it.
@@ -192,17 +205,10 @@ pub(crate) fn parse_instruction(
         // `then: nop`, measured 35.1 for both the IF and the WHEN spelling,
         // and only the number differs.
         if parser.clause.label.is_some() || parser.first_keyword() != Some(KW_THEN) {
-            // Reported against THIS clause, the offending one, and not against
-            // the IF. The error carries both positions and only a source with
-            // blank lines between them can tell which is which: measured,
-            // `nop` / `if 1 = 1` / blank / blank / `nop` reports
-            // `line 5: THEN expected` with `IF instruction on line 2` as a
-            // substitution. This phase reproduces the reported line and not
-            // the substitutions, so `byte` -- the IF's -- is deliberately
-            // unused here. It is used where there is no offending clause, in
-            // `translate_block`.
-            let _ = byte;
-            return Err(parser.error(18, missing_then_sub(which)));
+            // Reported against THIS clause, the offending one, naming the IF's
+            // line: measured, `nop` / `if 1 = 1` / blank / blank / `nop`
+            // reports `line 5: THEN expected` with `IF instruction on line 2`.
+            return Err(parser.then_expected(which, byte));
         }
         let end_at = parser.keyword_end();
         parser.next_real();
@@ -236,8 +242,50 @@ impl<'a> Inst<'a> {
         }
     }
 
-    fn error(&self, code: u16, sub: u16) -> ParseError {
-        ParseError::new(code, sub, self.clause_byte)
+    /// `msg` reported against this clause, with `inserts` for its `&1`,
+    /// `&2`, ...
+    #[cold]
+    #[inline(never)]
+    fn error<const N: usize>(&self, msg: Msg<N>, inserts: [Vec<u8>; N]) -> ParseError {
+        ParseError::raise(msg, self.clause_byte, inserts)
+    }
+
+    /// `msg` naming `token` as `RexxToken::displayValue` shows it, `None`
+    /// being the end of the clause.
+    #[cold]
+    #[inline(never)]
+    fn found(&self, msg: Msg<1>, token: Option<&Token>) -> ParseError {
+        self.error(msg, [display_value(self.ctx, token)])
+    }
+
+    /// The missing-`THEN` error for the `IF` or `WHEN` whose clause starts at
+    /// `byte`, naming its line (`errorLine`, `LanguageParser.cpp:4101`).
+    #[cold]
+    #[inline(never)]
+    fn then_expected(&self, which: PendingThen, byte: usize) -> ParseError {
+        let line = self.ctx.source.line_of(byte);
+        self.error(missing_then(which), [line.to_string().into_bytes()])
+    }
+
+    /// `Error_Interpretation_switch`, for a `switch` over `what` with no case
+    /// left for `token`.
+    #[cold]
+    #[inline(never)]
+    fn unreachable_switch(&self, what: &str, token: Option<&Token>) -> ParseError {
+        self.error(
+            E49_2,
+            [what.as_bytes().to_vec(), display_value(self.ctx, token)],
+        )
+    }
+
+    /// 24.1 for a `TRACE` setting `check_trace_setting` refused, naming its
+    /// first letter that is not `?` (`TraceSetting::parseTraceSetting`'s
+    /// `badOption`).
+    #[cold]
+    #[inline(never)]
+    fn bad_trace_setting(&self, value: &[u8]) -> ParseError {
+        let bad = value.iter().copied().find(|&byte| byte != b'?');
+        self.error(E24_1, [bad.into_iter().collect()])
     }
 
     /// Index of the next token that is not a blank, without consuming.
@@ -312,12 +360,12 @@ impl<'a> Inst<'a> {
         self.peek_real_index().is_none()
     }
 
-    /// `requiredEndOfClause`: nothing may follow.
-    fn required_end(&self, code: u16, sub: u16) -> Result<(), ParseError> {
-        if self.at_end() {
-            return Ok(());
+    /// `requiredEndOfClause`: nothing may follow, and `msg` names what does.
+    fn required_end(&self, msg: Msg<1>) -> Result<(), ParseError> {
+        match self.peek_real() {
+            None => Ok(()),
+            Some(token) => Err(self.found(msg, Some(token))),
         }
-        Err(self.error(code, sub))
     }
 
     /// The instruction-keyword index of the clause's next real token.
@@ -338,7 +386,7 @@ impl<'a> Inst<'a> {
 
     // ---- expression grammar, on this clause's cursor ----
 
-    fn expr(&mut self, term: Terminators, missing: u16) -> Result<Expr, ParseError> {
+    fn expr(&mut self, term: Terminators, missing: Msg<0>) -> Result<Expr, ParseError> {
         parse_expr(self.ctx, &mut self.cursor, term, missing)
     }
 
@@ -346,7 +394,7 @@ impl<'a> Inst<'a> {
         parse_expression(self.ctx, &mut self.cursor, term)
     }
 
-    fn logical(&mut self, term: Terminators, missing: u16) -> Result<Expr, ParseError> {
+    fn logical(&mut self, term: Terminators, missing: Msg<0>) -> Result<Expr, ParseError> {
         parse_logical(self.ctx, &mut self.cursor, term, missing)
     }
 
@@ -421,7 +469,7 @@ impl<'a> Inst<'a> {
     /// `labelNew` (`InstructionParser.cpp:2792`).
     fn label(&self, label: Range<usize>) -> Result<InstructionKind, ParseError> {
         if self.ctx.source.kind() == SourceKind::Interpret {
-            return Err(self.error(47, 1));
+            return Err(self.found(E47_1, Some(&self.ctx.tokens[label.start])));
         }
         // A label may be a literal too, `"here": nop`. Both spellings reach
         // `addLabel` through `token->value()`, which is why the name is bytes
@@ -451,14 +499,16 @@ impl<'a> Inst<'a> {
         let op = match &second.kind {
             // `symbol == expr` is not an assignment and not an expression
             // either: it is rejected outright.
-            TokenKind::Operator(Operator::StrictEqual) => return Err(self.error(35, 1)),
+            TokenKind::Operator(Operator::StrictEqual) => {
+                return Err(self.found(E35_1, Some(second)));
+            }
             TokenKind::Operator(Operator::Equal) => None,
             TokenKind::Assignment(op) => Some(*op),
             _ => return Ok(None),
         };
         need_variable(self.ctx, id, class, self.clause_byte)?;
         self.seek(self.cursor.position() + 2);
-        let value = self.expr(Terminators::EOC, 918)?;
+        let value = self.expr(Terminators::EOC, E35_918)?;
         // `assignmentOpNew` expands `a += b` into `a = a + b` at parse time,
         // building the binary node itself, so there is one instruction form
         // and not two.
@@ -478,12 +528,15 @@ impl<'a> Inst<'a> {
         };
         // A term came back, so the trial's position is the real one.
         self.cursor = trial;
-        let op = match self.peek_token(0).map(|token| &token.kind) {
+        let second = self.peek_token(0);
+        let op = match second.map(|token| &token.kind) {
             // The whole clause was the message send.
             None => {
                 return Ok(Some(InstructionKind::Message { term, value: None }));
             }
-            Some(TokenKind::Operator(Operator::StrictEqual)) => return Err(self.error(35, 1)),
+            Some(TokenKind::Operator(Operator::StrictEqual)) => {
+                return Err(self.found(E35_1, second));
+            }
             Some(TokenKind::Operator(Operator::Equal)) => None,
             Some(TokenKind::Assignment(op)) => Some(*op),
             // Anything else means this was not a message instruction after
@@ -496,7 +549,11 @@ impl<'a> Inst<'a> {
             }
         };
         self.cursor.advance();
-        let value = self.expr(Terminators::EOC, 1)?;
+        // A missing value names the `=` or assignment operator
+        // (`InstructionParser.cpp:237`, `:250`).
+        let Some(value) = self.opt_expr(Terminators::EOC)? else {
+            return Err(self.found(E35_1, second));
+        };
         let value = match op {
             None => value,
             // `messageAssignmentOpNew` keeps a copy of the message term as the
@@ -529,7 +586,7 @@ impl<'a> Inst<'a> {
             KW_NOP => {
                 self.next_real();
                 // `nopNew`: nothing may follow.
-                self.required_end(21, 901)?;
+                self.required_end(E21_901)?;
                 Ok(self.finish(cursor, InstructionKind::Nop))
             }
             KW_IF => {
@@ -594,7 +651,7 @@ impl<'a> Inst<'a> {
             }
             KW_DROP => {
                 self.next_real();
-                let variables = self.variable_list(901)?;
+                let variables = self.variable_list(E20_901)?;
                 Ok(self.finish(cursor, InstructionKind::Drop { variables }))
             }
             KW_EXPOSE => {
@@ -603,7 +660,7 @@ impl<'a> Inst<'a> {
                 // time, because rexxc never parses the string:
                 // `interpret "expose a"` is rc 157, Error 99.908.
                 if self.ctx.source.kind() == SourceKind::Interpret {
-                    return Err(self.error(99, 908));
+                    return Err(self.error(E99_908, []));
                 }
                 // `Error_Translation_expose`: nothing may precede an EXPOSE,
                 // not even a label, because a label would give SIGNAL or CALL a
@@ -611,9 +668,9 @@ impl<'a> Inst<'a> {
                 // rather than assumed: `nop` / `expose a` in the MAIN program is
                 // 99.907 too.
                 if !block.at_body_start() {
-                    return Err(self.error(99, 907));
+                    return Err(self.error(E99_907, []));
                 }
-                let variables = self.variable_list(902)?;
+                let variables = self.variable_list(E20_902)?;
                 for name in &variables {
                     // Only the direct spelling is exposed for the GUARD check.
                     // Measured: `expose (a)` / `guard on when a` is 99.913.
@@ -657,7 +714,7 @@ impl<'a> Inst<'a> {
                 self.next_real();
                 // Measured at run time: `interpret "reply 1"` is Error 99.924.
                 if self.ctx.source.kind() == SourceKind::Interpret {
-                    return Err(self.error(99, 924));
+                    return Err(self.error(E99_924, []));
                 }
                 let expression = self.opt_expr(Terminators::EOC)?;
                 Ok(self.finish(cursor, InstructionKind::Reply { expression }))
@@ -665,13 +722,13 @@ impl<'a> Inst<'a> {
             KW_INTERPRET => {
                 self.next_real();
                 // `Error_Invalid_expression_interpret`, measured as 35.912.
-                let expression = self.expr(Terminators::EOC, 912)?;
+                let expression = self.expr(Terminators::EOC, E35_912)?;
                 Ok(self.finish(cursor, InstructionKind::Interpret { expression }))
             }
             KW_OPTIONS => {
                 self.next_real();
                 // `Error_Invalid_expression_options`, measured as 35.913.
-                let expression = self.expr(Terminators::EOC, 913)?;
+                let expression = self.expr(Terminators::EOC, E35_913)?;
                 Ok(self.finish(cursor, InstructionKind::Options { expression }))
             }
             KW_PROCEDURE => {
@@ -683,10 +740,10 @@ impl<'a> Inst<'a> {
                     None => Vec::new(),
                     Some(token) => {
                         if self.sub_keyword(token) != Some(SUB_EXPOSE) {
-                            return Err(self.error(25, 17));
+                            return Err(self.found(E25_17, Some(token)));
                         }
                         self.next_real();
-                        self.variable_list(902)?
+                        self.variable_list(E20_902)?
                     }
                 };
                 Ok(self.finish(cursor, InstructionKind::Procedure { variables }))
@@ -754,23 +811,23 @@ impl<'a> Inst<'a> {
             // program holding an unreachable LEAVE.
             KW_LEAVE => {
                 self.next_real();
-                let name = self.block_name(907)?;
+                let name = self.block_name(E20_907, E21_907)?;
                 Ok(self.finish(cursor, InstructionKind::Leave { name }))
             }
             KW_ITERATE => {
                 self.next_real();
-                let name = self.block_name(908)?;
+                let name = self.block_name(E20_908, E21_908)?;
                 Ok(self.finish(cursor, InstructionKind::Iterate { name }))
             }
             // A THEN that reaches the keyword dispatch is always misplaced,
             // because a real one is consumed above. `nextInstruction`'s own
             // arm is the same unconditional error.
-            KW_THEN => Err(self.error(8, 1)),
-            // Unreachable: `index` came from a 35-entry table and all 35 have
-            // an arm above, which `tests::keyword_indices_still_name_their_own_spellings`
+            KW_THEN => Err(self.error(E8_1, [])),
+            // Unreachable: `index` came from the keyword table and every entry
+            // has an arm above, which `tests::keyword_indices_still_name_their_own_spellings`
             // pins. `nextInstruction`'s own default is the same
             // `Error_Interpretation_switch`.
-            _ => Err(self.error(UNREACHABLE_SWITCH.0, UNREACHABLE_SWITCH.1)),
+            _ => Err(self.unreachable_switch("keyword", self.peek_real())),
         }
     }
 
@@ -780,9 +837,9 @@ impl<'a> Inst<'a> {
             return Ok(None);
         };
         let TokenKind::Symbol { id, .. } = token.kind else {
-            return Err(self.error(20, 909));
+            return Err(self.error(E20_909, []));
         };
-        self.required_end(21, 909)?;
+        self.required_end(E21_909)?;
         Ok(Some(id))
     }
 
@@ -791,10 +848,10 @@ impl<'a> Inst<'a> {
         // `Error_Symbol_expected_numeric`, measured as 20.905 for a bare
         // `numeric` and for `numeric "x"`.
         let Some(token) = self.next_real() else {
-            return Err(self.error(20, 905));
+            return Err(self.found(E20_905, None));
         };
         if token.kind.tag() != Tag::Symbol {
-            return Err(self.error(20, 905));
+            return Err(self.found(E20_905, Some(token)));
         }
         match self.sub_keyword(token) {
             Some(SUB_DIGITS) => Ok((NumericSetting::Digits, self.opt_expr(Terminators::EOC)?)),
@@ -815,26 +872,26 @@ impl<'a> Inst<'a> {
                     // `Error_Invalid_data_form`, measured as 21.911 for
                     // `numeric form scientific x`.
                     Some(SUB_SCIENTIFIC) => {
-                        self.required_end(21, 911)?;
+                        self.required_end(E21_911)?;
                         Ok((NumericSetting::FormScientific, None))
                     }
                     Some(SUB_ENGINEERING) => {
-                        self.required_end(21, 911)?;
+                        self.required_end(E21_911)?;
                         Ok((NumericSetting::FormEngineering, None))
                     }
                     // `Error_Invalid_expression_form`, 35.917.
                     Some(SUB_VALUE) => Ok((
                         NumericSetting::FormValue,
-                        Some(self.expr(Terminators::EOC, 917)?),
+                        Some(self.expr(Terminators::EOC, E35_917)?),
                     )),
                     // `Error_Invalid_subkeyword_form`, measured as 25.11 for
                     // `numeric form foo`.
-                    _ => Err(self.error(25, 11)),
+                    _ => Err(self.found(E25_11, Some(token))),
                 }
             }
             // `Error_Invalid_subkeyword_numeric`, measured as 25.15 for
             // `numeric foo`.
-            _ => Err(self.error(25, 15)),
+            _ => Err(self.found(E25_15, Some(token))),
         }
     }
 
@@ -850,17 +907,17 @@ impl<'a> Inst<'a> {
                 if self.sub_keyword(token) == Some(SUB_VALUE) {
                     self.seek(index + 1);
                     // `Error_Invalid_expression_trace`, measured as 35.916.
-                    return Ok(Trace::Value(self.expr(Terminators::EOC, 916)?));
+                    return Ok(Trace::Value(self.expr(Terminators::EOC, E35_916)?));
                 }
                 self.seek(index + 1);
                 let value = self.value_of(token);
                 // `Error_Invalid_data_trace`, measured as 21.906 for
                 // `trace 5 x` and for `trace r x`.
-                self.required_end(21, 906)?;
+                self.required_end(E21_906)?;
                 match whole_number(&value, TRACE_DIGITS) {
                     Some(skip) => Ok(Trace::Skip(skip)),
                     None => {
-                        check_trace_setting(&value).map_err(|_| self.error(24, 1))?;
+                        check_trace_setting(&value).map_err(|()| self.bad_trace_setting(&value))?;
                         Ok(Trace::Setting(value))
                     }
                 }
@@ -872,16 +929,16 @@ impl<'a> Inst<'a> {
                 // Measured: `trace -a` is rc 230, Error 26.7, so the number
                 // test happens after the end-of-clause test.
                 let Some(number) = self.next_real() else {
-                    return Err(self.error(35, 1));
+                    return Err(self.found(E35_1, None));
                 };
                 if !matches!(number.kind.tag(), Tag::Symbol | Tag::Literal) {
-                    return Err(self.error(35, 1));
+                    return Err(self.found(E35_1, Some(number)));
                 }
                 let value = self.value_of(number);
-                self.required_end(21, 906)?;
+                self.required_end(E21_906)?;
                 // `Error_Invalid_whole_number_trace`, 26.7.
                 let Some(skip) = whole_number(&value, TRACE_DIGITS) else {
-                    return Err(self.error(26, 7));
+                    return Err(self.error(E26_7, [value.into_vec()]));
                 };
                 Ok(Trace::Skip(if negate { -skip } else { skip }))
             }
@@ -898,17 +955,17 @@ impl<'a> Inst<'a> {
     fn guard(&mut self, block: &Block) -> Result<Guard, ParseError> {
         // Measured at run time: `interpret "guard on"` is Error 99.912.
         if self.ctx.source.kind() == SourceKind::Interpret {
-            return Err(self.error(99, 912));
+            return Err(self.error(E99_912, []));
         }
         // `Error_Invalid_subkeyword_guard`, measured as 25.913 for a bare
         // `guard` and for `guard foo`.
         let Some(token) = self.next_real() else {
-            return Err(self.error(25, 913));
+            return Err(self.found(E25_913, None));
         };
         let on = match self.sub_keyword(token) {
             Some(SUB_ON) => true,
             Some(SUB_OFF) => false,
-            _ => return Err(self.error(25, 913)),
+            _ => return Err(self.found(E25_913, Some(token))),
         };
         let mut watched = Vec::new();
         let condition = match self.next_real() {
@@ -917,11 +974,11 @@ impl<'a> Inst<'a> {
                 // `Error_Invalid_subkeyword_guard_on`, measured as 25.912 for
                 // `guard on foo` and for `guard on 1`.
                 if self.sub_keyword(token) != Some(SUB_WHEN) {
-                    return Err(self.error(25, 912));
+                    return Err(self.found(E25_912, Some(token)));
                 }
                 // `Error_Invalid_expression_guard` is 35.921, and like every
                 // other logical list the empty case is 35.929 first.
-                let condition = self.logical(Terminators::EOC, 929)?;
+                let condition = self.logical(Terminators::EOC, E35_929)?;
                 // `Error_Translation_guard_expose`: a GUARD expression that
                 // names no exposed variable can never be woken again, so it is
                 // rejected. The C++ collects the names as it evaluates the
@@ -934,7 +991,7 @@ impl<'a> Inst<'a> {
                 // it.
                 self.guard_exposes(&condition, block, &mut watched);
                 if watched.is_empty() {
-                    return Err(self.error(99, 913));
+                    return Err(self.error(E99_913, []));
                 }
                 Some(condition)
             }
@@ -951,35 +1008,37 @@ impl<'a> Inst<'a> {
     fn forward(&mut self) -> Result<Forward, ParseError> {
         // Measured at run time: `interpret "forward to 1"` is Error 99.923.
         if self.ctx.source.kind() == SourceKind::Interpret {
-            return Err(self.error(99, 923));
+            return Err(self.error(E99_923, []));
         }
         let mut forward = Forward::default();
         while let Some(token) = self.next_real() {
             // `Error_Invalid_subkeyword_forward_option`, measured as 25.916.
             if token.kind.tag() != Tag::Symbol {
-                return Err(self.error(25, 916));
+                return Err(self.found(E25_916, Some(token)));
             }
             match self.sub_keyword(token) {
                 // `Error_Invalid_subkeyword_to` is 25.917 and
                 // `Error_Invalid_expression_forward_to` is 35.925. Measured:
                 // `forward to 1 to 2` is 25.917 and `forward to` is 35.925.
-                Some(SUB_TO) => self.forward_option(&mut forward.to, 917, 925)?,
-                Some(SUB_CLASS) => self.forward_option(&mut forward.class, 921, 928)?,
-                Some(SUB_MESSAGE) => self.forward_option(&mut forward.message, 922, 927)?,
+                Some(SUB_TO) => self.forward_option(&mut forward.to, E25_917, E35_925)?,
+                Some(SUB_CLASS) => self.forward_option(&mut forward.class, E25_921, E35_928)?,
+                Some(SUB_MESSAGE) => {
+                    self.forward_option(&mut forward.message, E25_922, E35_927)?;
+                }
                 // ARGUMENTS and ARRAY exclude each other and share one error,
                 // `Error_Invalid_subkeyword_arguments`, 25.918.
                 Some(SUB_ARGUMENTS) => {
                     if forward.arguments.is_some() || forward.array.is_some() {
-                        return Err(self.error(25, 918));
+                        return Err(self.error(E25_918, []));
                     }
                     let Some(value) = parse_constant_expression(self.ctx, &mut self.cursor)? else {
-                        return Err(self.error(35, 926));
+                        return Err(self.error(E35_926, []));
                     };
                     forward.arguments = Some(value);
                 }
                 Some(SUB_ARRAY) => {
                     if forward.arguments.is_some() || forward.array.is_some() {
-                        return Err(self.error(25, 918));
+                        return Err(self.error(E25_918, []));
                     }
                     // `Error_Invalid_expression_raise_list`, shared with
                     // RAISE ARRAY. Measured: `forward array 1` is 35.924.
@@ -987,18 +1046,18 @@ impl<'a> Inst<'a> {
                         .next_real()
                         .filter(|token| token.kind.tag() == Tag::LeftParen);
                     if open.is_none() {
-                        return Err(self.error(35, 924));
+                        return Err(self.error(E35_924, []));
                     }
                     forward.array = Some(self.arg_list(Some(Tag::RightParen))?);
                 }
                 // `Error_Invalid_subkeyword_continue`, measured as 25.919.
                 Some(SUB_CONTINUE) => {
                     if forward.continue_ {
-                        return Err(self.error(25, 919));
+                        return Err(self.error(E25_919, []));
                     }
                     forward.continue_ = true;
                 }
-                _ => return Err(self.error(25, 916)),
+                _ => return Err(self.found(E25_916, Some(token))),
             }
         }
         Ok(forward)
@@ -1008,18 +1067,18 @@ impl<'a> Inst<'a> {
     fn forward_option(
         &mut self,
         slot: &mut Option<Expr>,
-        duplicate: u16,
-        missing: u16,
+        duplicate: Msg<0>,
+        missing: Msg<0>,
     ) -> Result<(), ParseError> {
         if slot.is_some() {
-            return Err(self.error(25, duplicate));
+            return Err(self.error(duplicate, []));
         }
         match parse_constant_expression(self.ctx, &mut self.cursor)? {
             Some(value) => {
                 *slot = Some(value);
                 Ok(())
             }
-            None => Err(self.error(35, missing)),
+            None => Err(self.error(missing, [])),
         }
     }
 
@@ -1029,10 +1088,10 @@ impl<'a> Inst<'a> {
         // `Error_Symbol_expected_raise`, measured as 20.914 for a bare
         // `raise`.
         let Some(token) = self.next_real() else {
-            return Err(self.error(20, 914));
+            return Err(self.error(E20_914, []));
         };
         let TokenKind::Symbol { id, .. } = token.kind else {
-            return Err(self.error(20, 914));
+            return Err(self.error(E20_914, []));
         };
         let which = self.ctx.keywords.conditions.index_of(id);
         let mut raise = Raise {
@@ -1050,18 +1109,19 @@ impl<'a> Inst<'a> {
             // shape records here.
             Some(COND_FAILURE | COND_ERROR | COND_SYNTAX) => {
                 let Some(value) = parse_constant_expression(self.ctx, &mut self.cursor)? else {
-                    // Measured: `raise syntax` with no value is 35.1.
-                    return Err(self.error(35, 1));
+                    // Measured: `raise syntax` with no value is 35.1, naming
+                    // the end of the clause.
+                    return Err(self.found(E35_1, None));
                 };
                 raise.rc = Some(value);
             }
             Some(COND_USER) => {
                 // `Error_Symbol_expected_user`, measured as 20.915.
                 let Some(name) = self.next_real() else {
-                    return Err(self.error(20, 915));
+                    return Err(self.error(E20_915, []));
                 };
                 let TokenKind::Symbol { .. } = name.kind else {
-                    return Err(self.error(20, 915));
+                    return Err(self.error(E20_915, []));
                 };
                 let mut composed = b"USER ".to_vec();
                 composed.extend_from_slice(&self.value_of(name));
@@ -1075,39 +1135,39 @@ impl<'a> Inst<'a> {
             // `Error_Invalid_subkeyword_raise`. ANY reaches here, because
             // nothing can be raised for every condition at once: measured,
             // `raise any` is rc 231, Error 25.906, as is `raise foo`.
-            _ => return Err(self.error(25, 906)),
+            _ => return Err(self.found(E25_906, Some(token))),
         }
 
         while let Some(token) = self.next_real() {
             // `Error_Invalid_subkeyword_raiseoption`, measured as 25.907.
             if token.kind.tag() != Tag::Symbol {
-                return Err(self.error(25, 907));
+                return Err(self.found(E25_907, Some(token)));
             }
             match self.sub_keyword(token) {
                 // `Error_Invalid_subkeyword_description` is 25.908 and
                 // `Error_Invalid_expression_raise_description` is 35.922.
                 Some(SUB_DESCRIPTION) => {
-                    self.forward_option(&mut raise.description, 908, 922)?;
+                    self.forward_option(&mut raise.description, E25_908, E35_922)?;
                 }
                 // ADDITIONAL and ARRAY exclude each other and share 25.909.
                 Some(SUB_ADDITIONAL) => {
                     if raise.additional.is_some() || raise.array.is_some() {
-                        return Err(self.error(25, 909));
+                        return Err(self.error(E25_909, []));
                     }
                     let Some(value) = parse_constant_expression(self.ctx, &mut self.cursor)? else {
-                        return Err(self.error(35, 923));
+                        return Err(self.error(E35_923, []));
                     };
                     raise.additional = Some(value);
                 }
                 Some(SUB_ARRAY) => {
                     if raise.additional.is_some() || raise.array.is_some() {
-                        return Err(self.error(25, 909));
+                        return Err(self.error(E25_909, []));
                     }
                     let open = self
                         .next_real()
                         .filter(|token| token.kind.tag() == Tag::LeftParen);
                     if open.is_none() {
-                        return Err(self.error(35, 924));
+                        return Err(self.error(E35_924, []));
                     }
                     raise.array = Some(self.arg_list(Some(Tag::RightParen))?);
                 }
@@ -1116,7 +1176,7 @@ impl<'a> Inst<'a> {
                 // OPTIONAL value: measured, `raise error 1 return` is rc 0.
                 Some(index @ (SUB_RETURN | SUB_EXIT)) => {
                     if raise.result.is_some() {
-                        return Err(self.error(25, 911));
+                        return Err(self.error(E25_911, []));
                     }
                     let value = parse_constant_expression(self.ctx, &mut self.cursor)?;
                     raise.result = Some(RaiseResult {
@@ -1124,7 +1184,7 @@ impl<'a> Inst<'a> {
                         value,
                     });
                 }
-                _ => return Err(self.error(25, 907)),
+                _ => return Err(self.found(E25_907, Some(token))),
             }
         }
         Ok(raise)
@@ -1143,11 +1203,9 @@ impl<'a> Inst<'a> {
         }
         // `Error_Invalid_subkeyword_use` is 25.905 and `_use_strict` is
         // 25.929. Measured: `use foo` is 25.905 and `use strict foo` is 25.929.
-        let arg = self
-            .next_real()
-            .filter(|token| self.sub_keyword(token) == Some(SUB_ARG));
-        if arg.is_none() {
-            return Err(self.error(25, if strict { 929 } else { 905 }));
+        let arg = self.next_real();
+        if arg.and_then(|token| self.sub_keyword(token)) != Some(SUB_ARG) {
+            return Err(self.found(if strict { E25_929 } else { E25_905 }, arg));
         }
         let mut targets: Vec<Option<UseTarget>> = Vec::new();
         let mut allow_optionals = false;
@@ -1167,7 +1225,7 @@ impl<'a> Inst<'a> {
                 self.seek(index + 1);
                 allow_optionals = true;
                 if !self.at_end() {
-                    return Err(self.error(99, 930));
+                    return Err(self.error(E99_930, []));
                 }
                 break;
             }
@@ -1181,13 +1239,13 @@ impl<'a> Inst<'a> {
                 // 20.931 for `use arg >a.b`, because a compound cannot be
                 // aliased.
                 let Some(name) = self.next_real() else {
-                    return Err(self.error(20, 931));
+                    return Err(self.found(E20_931, None));
                 };
                 let TokenKind::Symbol { id, class } = name.kind else {
-                    return Err(self.error(20, 931));
+                    return Err(self.found(E20_931, Some(name)));
                 };
                 if !matches!(class, SymbolClass::Variable | SymbolClass::Stem) {
-                    return Err(self.error(20, 931));
+                    return Err(self.found(E20_931, Some(name)));
                 }
                 targets.push(Some(UseTarget {
                     target: Expr::new(symbol_kind(id, class), name.span.clone()),
@@ -1200,10 +1258,10 @@ impl<'a> Inst<'a> {
                     // `Error_Translation_use_arg_reference_no_default`,
                     // measured as 99.950 for `use arg >a = 1`.
                     Some(next) if matches!(next.kind, TokenKind::Operator(Operator::Equal)) => {
-                        return Err(self.error(99, 950));
+                        return Err(self.error(E99_950, []));
                     }
                     // `Error_Variable_reference_use`, measured as 46.902.
-                    Some(_) => return Err(self.error(46, 902)),
+                    Some(next) => return Err(self.found(E46_902, Some(next))),
                 }
             }
             // A variable or a message term. Measured: `use arg q~x` is rc 0.
@@ -1214,7 +1272,7 @@ impl<'a> Inst<'a> {
                     target
                 }
                 // `Error_Variable_expected_USE`, 89.1.
-                None => return Err(self.error(89, 1)),
+                None => return Err(self.error(E89_1, [])),
             };
             let mut default = None;
             match self.next_real() {
@@ -1231,7 +1289,7 @@ impl<'a> Inst<'a> {
                     // `Error_Invalid_expression_use_arg_default`, measured as
                     // 35.930 for `use arg a = `.
                     let Some(value) = parse_constant_expression(self.ctx, &mut self.cursor)? else {
-                        return Err(self.error(35, 930));
+                        return Err(self.error(E35_930, []));
                     };
                     default = Some(value);
                     match self.next_real() {
@@ -1244,11 +1302,11 @@ impl<'a> Inst<'a> {
                             break;
                         }
                         Some(next) if next.kind.tag() == Tag::Comma => {}
-                        Some(_) => return Err(self.error(35, 930)),
+                        Some(_) => return Err(self.error(E35_930, [])),
                     }
                 }
                 // `use arg a b` is 46.902, not a two-variable list.
-                Some(_) => return Err(self.error(46, 902)),
+                Some(next) => return Err(self.found(E46_902, Some(next))),
             }
             targets.push(Some(UseTarget {
                 target,
@@ -1267,12 +1325,12 @@ impl<'a> Inst<'a> {
     fn use_local(&mut self, block: &mut Block) -> Result<Use, ParseError> {
         // Measured at run time: `interpret "use local a"` is Error 99.915.
         if self.ctx.source.kind() == SourceKind::Interpret {
-            return Err(self.error(99, 915));
+            return Err(self.error(E99_915, []));
         }
         // `Error_Translation_use_local`, the same placement rule as EXPOSE and
         // for the same reason.
         if !block.at_body_start() {
-            return Err(self.error(99, 910));
+            return Err(self.error(E99_910, []));
         }
         // `autoExpose()` comes before the list is read, so the five special
         // names are local even in a `USE LOCAL` with no names of its own.
@@ -1281,13 +1339,13 @@ impl<'a> Inst<'a> {
         while let Some(token) = self.next_real() {
             // `Error_Symbol_expected_use_local`, 20.927.
             let TokenKind::Symbol { id, class } = token.kind else {
-                return Err(self.error(20, 927));
+                return Err(self.error(E20_927, []));
             };
-            need_variable_class(class, self.clause_byte)?;
+            self.need_variable_class(token, class)?;
             // `Error_Translation_use_local_compound`, measured as 99.948 for
             // `use local a.b`: only a simple variable or a stem can be local.
             if class == SymbolClass::Compound {
-                return Err(self.error(99, 948));
+                return Err(self.found(E99_948, Some(token)));
             }
             block.local_variable(Box::from(self.ctx.symbols.name(id).as_bytes()));
             variables.push(VariableRef::Direct(id));
@@ -1300,7 +1358,7 @@ impl<'a> Inst<'a> {
     fn call(&mut self) -> Result<Call, ParseError> {
         // `Error_Symbol_or_string_call`, measured as 19.2 for a bare `call`.
         let Some(token) = self.next_real() else {
-            return Err(self.error(19, 2));
+            return Err(self.error(E19_2, []));
         };
         match &token.kind {
             TokenKind::Symbol { id, .. } => {
@@ -1312,10 +1370,10 @@ impl<'a> Inst<'a> {
                     // `Error_Symbol_expected_qualified_call`, measured as
                     // 20.922 for `call ns:`.
                     let Some(name) = self.next_real() else {
-                        return Err(self.error(20, 922));
+                        return Err(self.error(E20_922, []));
                     };
                     let TokenKind::Symbol { id: name, .. } = name.kind else {
-                        return Err(self.error(20, 922));
+                        return Err(self.error(E20_922, []));
                     };
                     let args = self.arg_list(None)?;
                     return Ok(Call::Qualified {
@@ -1354,12 +1412,12 @@ impl<'a> Inst<'a> {
             TokenKind::LeftParen => {
                 let Some(target) = parse_paren_expression(self.ctx, &mut self.cursor)? else {
                     // `Error_Invalid_expression_call`.
-                    return Err(self.error(35, 932));
+                    return Err(self.error(E35_932, []));
                 };
                 let args = self.arg_list(None)?;
                 Ok(Call::Dynamic { target, args })
             }
-            _ => Err(self.error(19, 2)),
+            _ => Err(self.error(E19_2, [])),
         }
     }
 
@@ -1369,7 +1427,7 @@ impl<'a> Inst<'a> {
         // `Error_Symbol_or_string_signal`, measured as 19.4 for a bare
         // `signal`.
         let Some(index) = self.peek_real_index() else {
-            return Err(self.error(19, 4));
+            return Err(self.error(E19_4, []));
         };
         let token = &self.ctx.tokens[index];
         match &token.kind {
@@ -1386,7 +1444,7 @@ impl<'a> Inst<'a> {
                         // `Error_Invalid_data_signal`. Measured: `signal lab x`
                         // and `signal 1+1` are both rc 235, Error 21.905,
                         // because a number is a symbol and so a label name.
-                        self.required_end(21, 905)?;
+                        self.required_end(E21_905)?;
                         Ok(Signal::Label(name))
                     }
                 }
@@ -1394,7 +1452,7 @@ impl<'a> Inst<'a> {
             TokenKind::Literal { value } => {
                 let name = value.clone();
                 self.seek(index + 1);
-                self.required_end(21, 905)?;
+                self.required_end(E21_905)?;
                 Ok(Signal::Label(name))
             }
             // Anything else is an implicit `SIGNAL VALUE`, with the token left
@@ -1406,7 +1464,7 @@ impl<'a> Inst<'a> {
     /// `dynamicSignalNew` (`InstructionParser.cpp:3899`).
     fn dynamic_signal(&mut self) -> Result<Signal, ParseError> {
         // `Error_Invalid_expression_signal`.
-        let target = self.expr(Terminators::EOC, 915)?;
+        let target = self.expr(Terminators::EOC, E35_915)?;
         Ok(Signal::Value(target))
     }
 
@@ -1416,21 +1474,21 @@ impl<'a> Inst<'a> {
     fn condition_trap(&mut self, on: bool, is_call: bool) -> Result<ConditionTrap, ParseError> {
         // `Error_Symbol_expected_on` is 20.911 and `Error_Symbol_expected_off`
         // is 20.912. Measured: `call on` is 20.911 and `call off` is 20.912.
-        let missing = if on { 911 } else { 912 };
+        let missing = if on { E20_911 } else { E20_912 };
         let Some(token) = self.next_real() else {
-            return Err(self.error(20, missing));
+            return Err(self.error(missing, []));
         };
         let TokenKind::Symbol { id, .. } = token.kind else {
-            return Err(self.error(20, missing));
+            return Err(self.error(missing, []));
         };
         let condition = self.ctx.keywords.conditions.index_of(id);
         // `Error_Invalid_subkeyword_callon` is 25.1 and `_calloff` 25.2;
         // `_signalon` is 25.3 and `_signaloff` 25.4.
         let bad = match (is_call, on) {
-            (true, true) => 1,
-            (true, false) => 2,
-            (false, true) => 3,
-            (false, false) => 4,
+            (true, true) => E25_1,
+            (true, false) => E25_2,
+            (false, true) => E25_3,
+            (false, false) => E25_4,
         };
         let rejected = match condition {
             None => true,
@@ -1446,7 +1504,7 @@ impl<'a> Inst<'a> {
             _ => false,
         };
         if rejected {
-            return Err(self.error(25, bad));
+            return Err(self.found(bad, Some(token)));
         }
         let mut label;
         let condition_name;
@@ -1454,10 +1512,10 @@ impl<'a> Inst<'a> {
             // `Error_Symbol_expected_user`, measured as 20.915 for
             // `call on user`.
             let Some(name) = self.next_real() else {
-                return Err(self.error(20, 915));
+                return Err(self.error(E20_915, []));
             };
             let TokenKind::Symbol { .. } = name.kind else {
-                return Err(self.error(20, 915));
+                return Err(self.error(E20_915, []));
             };
             let name = self.value_of(name);
             // The condition's own name is `USER name`, built the way
@@ -1476,21 +1534,21 @@ impl<'a> Inst<'a> {
             if let Some(token) = self.next_real() {
                 // `Error_Invalid_subkeyword_callonname` is 25.914 and
                 // `_signalonname` is 25.915.
-                let name_sub = if is_call { 914 } else { 915 };
                 if self.sub_keyword(token) != Some(SUB_NAME) {
-                    return Err(self.error(25, name_sub));
+                    let msg = if is_call { E25_914 } else { E25_915 };
+                    return Err(self.found(msg, Some(token)));
                 }
                 // `Error_Symbol_or_string_name`, measured as 19.3 for
                 // `call on error name`.
                 let Some(target) = self.next_real() else {
-                    return Err(self.error(19, 3));
+                    return Err(self.error(E19_3, []));
                 };
                 if !matches!(target.kind.tag(), Tag::Symbol | Tag::Literal) {
-                    return Err(self.error(19, 3));
+                    return Err(self.error(E19_3, []));
                 }
                 label = Some(self.value_of(target));
                 // `Error_Invalid_data_name`, measured as 21.903.
-                self.required_end(21, 903)?;
+                self.required_end(E21_903)?;
             }
         } else {
             // The OFF form has no label at all, which is how the C++ tells the
@@ -1498,7 +1556,7 @@ impl<'a> Inst<'a> {
             label = None;
             // `Error_Invalid_data_condition`, measured as 21.904 for
             // `call off error x`.
-            self.required_end(21, 904)?;
+            self.required_end(E21_904)?;
         }
 
         Ok(ConditionTrap {
@@ -1516,7 +1574,7 @@ impl<'a> Inst<'a> {
 
     /// `processVariableList` (`InstructionParser.cpp:4469`), shared by `DROP`,
     /// `EXPOSE` and `PROCEDURE EXPOSE`.
-    fn variable_list(&mut self, missing: u16) -> Result<Vec<VariableRef>, ParseError> {
+    fn variable_list(&mut self, missing: Msg<0>) -> Result<Vec<VariableRef>, ParseError> {
         let mut out = Vec::new();
         while let Some(token) = self.next_real() {
             match &token.kind {
@@ -1524,7 +1582,7 @@ impl<'a> Inst<'a> {
                     // The CLASS test, not the spelling test. Measured, and the
                     // two disagree: `drop .5` is 31.2 from here while
                     // `drop (.5)` is 31.3 from `addVariable`'s `needVariable`.
-                    need_variable_class(*class, self.clause_byte)?;
+                    self.need_variable_class(token, *class)?;
                     out.push(VariableRef::Direct(*id));
                 }
                 // `(name)`, whose value names the variable. This path goes
@@ -1532,41 +1590,42 @@ impl<'a> Inst<'a> {
                 // spelling and not from the class.
                 TokenKind::LeftParen => {
                     let Some(inner) = self.next_real() else {
-                        return Err(self.error(20, 906));
+                        return Err(self.error(E20_906, []));
                     };
                     let TokenKind::Symbol { id, class } = inner.kind else {
-                        return Err(self.error(20, 906));
+                        return Err(self.error(E20_906, []));
                     };
                     need_variable(self.ctx, id, class, self.clause_byte)?;
                     out.push(VariableRef::Indirect(id));
                     match self.next_real() {
                         // `Error_Variable_reference_missing`, measured as
                         // 46.901 for `drop (v`.
-                        None => return Err(self.error(46, 901)),
+                        None => return Err(self.error(E46_901, [])),
                         Some(close) if close.kind.tag() == Tag::RightParen => {}
                         // `Error_Variable_reference_extra`, 46.1 for
                         // `drop (v x`.
-                        Some(_) => return Err(self.error(46, 1)),
+                        Some(other) => return Err(self.found(E46_1, Some(other))),
                     }
                 }
-                _ => return Err(self.error(20, missing)),
+                _ => return Err(self.error(missing, [])),
             }
         }
         if out.is_empty() {
-            return Err(self.error(20, missing));
+            return Err(self.error(missing, []));
         }
         Ok(out)
     }
 
-    /// `LEAVE`'s and `ITERATE`'s optional block name.
-    fn block_name(&mut self, sub: u16) -> Result<Option<SymbolId>, ParseError> {
+    /// `LEAVE`'s and `ITERATE`'s optional block name, `symbol` raised for a
+    /// name that is not a symbol and `data` for anything after it.
+    fn block_name(&mut self, symbol: Msg<0>, data: Msg<1>) -> Result<Option<SymbolId>, ParseError> {
         let Some(token) = self.next_real() else {
             return Ok(None);
         };
         let TokenKind::Symbol { id, .. } = token.kind else {
-            return Err(self.error(20, sub));
+            return Err(self.error(symbol, []));
         };
-        self.required_end(21, sub)?;
+        self.required_end(data)?;
         Ok(Some(id))
     }
 
@@ -1579,16 +1638,16 @@ impl<'a> Inst<'a> {
         if let Some(token) = self.peek_real() {
             // Anything that is not a symbol cannot be either keyword.
             if token.kind.tag() != Tag::Symbol {
-                return Err(self.error(25, 923));
+                return Err(self.found(E25_923, Some(token)));
             }
             let mut token = token;
             if self.sub_keyword(token) == Some(SUB_LABEL) {
                 self.next_real();
                 let Some(name) = self.next_real() else {
-                    return Err(self.error(20, 918));
+                    return Err(self.error(E20_918, []));
                 };
                 let TokenKind::Symbol { id, .. } = name.kind else {
-                    return Err(self.error(20, 918));
+                    return Err(self.error(E20_918, []));
                 };
                 label = Some(id);
                 match self.peek_real() {
@@ -1598,15 +1657,27 @@ impl<'a> Inst<'a> {
             }
             if token.kind.tag() == Tag::Symbol {
                 if self.sub_keyword(token) != Some(SUB_CASE) {
-                    return Err(self.error(25, 923));
+                    return Err(self.found(E25_923, Some(token)));
                 }
                 self.next_real();
-                case = Some(self.expr(Terminators::EOC, 933)?);
+                case = Some(self.expr(Terminators::EOC, E35_933)?);
             }
             // Nothing else may follow either option.
-            self.required_end(25, 923)?;
+            self.required_end(E25_923)?;
         }
         Ok(select_node(label, case))
+    }
+
+    /// Raises the error a non-variable symbol `token` of `class` gets in a
+    /// `DROP`, `EXPOSE`, `PROCEDURE EXPOSE` or `USE LOCAL` list, naming it.
+    fn need_variable_class(&self, token: &Token, class: SymbolClass) -> Result<(), ParseError> {
+        match class {
+            SymbolClass::Variable | SymbolClass::Stem | SymbolClass::Compound => Ok(()),
+            // `Error_Invalid_variable_number`.
+            SymbolClass::Constant => Err(self.found(E31_2, Some(token))),
+            // `Error_Invalid_variable_period`.
+            SymbolClass::Dummy | SymbolClass::DotSymbol => Err(self.found(E31_3, Some(token))),
+        }
     }
 
     /// `RexxToken::value`: the upcased spelling of a symbol, or a literal's
@@ -1635,12 +1706,12 @@ impl<'a> Inst<'a> {
         which: PendingThen,
         block: &Block,
     ) -> Result<Instruction, ParseError> {
-        // 929 is `Error_Invalid_expression_logical_list`, which `parseLogical`
+        // 35.929 is `Error_Invalid_expression_logical_list`, which `parseLogical`
         // raises before `requiredLogicalExpression`'s own 35.902 or 35.903 can
         // be reached.
         let kind = match which {
             PendingThen::If => InstructionKind::If {
-                condition: self.logical(Terminators::IF, 929)?,
+                condition: self.logical(Terminators::IF, E35_929)?,
                 false_target: None,
             },
             // `whenNew` asks the control stack which SELECT it is in, and the
@@ -1651,9 +1722,9 @@ impl<'a> Inst<'a> {
                 // nothing open at all and for one inside a `DO` that is itself
                 // inside a `SELECT`, which is 9.1 too because the `DO` stops the
                 // search, and for one after an `OTHERWISE`.
-                EnclosingSelect::None => return Err(self.error(9, 1)),
+                EnclosingSelect::None => return Err(self.error(E9_1, [])),
                 EnclosingSelect::Plain => InstructionKind::When {
-                    condition: self.logical(Terminators::IF, 929)?,
+                    condition: self.logical(Terminators::IF, E35_929)?,
                     false_target: None,
                     exit: None,
                 },
@@ -1717,18 +1788,6 @@ fn select_node(label: Option<SymbolId>, case: Option<Expr>) -> InstructionKind {
         whens: Vec::new(),
         otherwise: None,
         end: None,
-    }
-}
-
-/// Raises the error a non-variable symbol gets in a `DROP`, `EXPOSE`,
-/// `PROCEDURE EXPOSE` or `USE LOCAL` list.
-fn need_variable_class(class: SymbolClass, byte: usize) -> Result<(), ParseError> {
-    match class {
-        SymbolClass::Variable | SymbolClass::Stem | SymbolClass::Compound => Ok(()),
-        // `Error_Invalid_variable_number`.
-        SymbolClass::Constant => Err(ParseError::new(31, 2, byte)),
-        // `Error_Invalid_variable_period`.
-        SymbolClass::Dummy | SymbolClass::DotSymbol => Err(ParseError::new(31, 3, byte)),
     }
 }
 
