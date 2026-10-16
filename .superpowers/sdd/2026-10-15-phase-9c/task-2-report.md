@@ -2,18 +2,23 @@
 
 Commits: `fdd1ca33d` code (base `cdbbc1568`), with the probe programs, runner and results under
 `docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/`; `06cf4a4a7` the witness rows in
-`rust/corpus/errors/parse-errors.tsv` and PENDING keyed per row.
+`rust/corpus/errors/parse-errors.tsv` and PENDING keyed per row. Fix round 1: `a23fdba9e`
+(cold error construction, the full arity check, the re-substitution test) and `dd253ad15`
+(`ParseError` is one boxed word).
 
 ## What landed
 
 * `rexx-inventory/build.rs` generates `Msg<const N: usize>` (private `major`/`sub`,
   `pub const fn code(self) -> (u16, u16)`) and one `pub const E{major}_{sub}: Msg<N>` per
   catalogue row, `N` being the highest `&k` in the row's text (`highest_insert`).
-* `ParseError` gains `inserts: Option<Box<Vec<Vec<u8>>>>` (`clippy::box_collection` is
-  `#[expect]`ed with its reason: a boxed slice is two words). `ParseError::raise(msg, byte,
-  inserts: [Vec<u8>; N])` stores `None` when `N == 0`. `inserts()` answers `&[Vec<u8>]`.
-  `code` and `sub` stay public fields. The `token.rs` sentence about a `u32` keeping the error
-  two words wide is deleted.
+* `ParseError` is `ParseError(Box<ParseErrorFields>)` since `dd253ad15`. `code`, `sub` and
+  `byte` are public fields of `ParseErrorFields` and read through `Deref` as before, and the
+  inserts are a `Vec<Vec<u8>>` in the box. This replaces the brief's single
+  `Option<Box<..>>` field, which cost startup +0.39% (fix round 1 below). **It deviates from the
+  brief in one respect: every error allocates its box, including one with no inserts.**
+  `ParseError::raise(msg, byte, inserts: [Vec<u8>; N])` and `new` are `#[cold]
+  #[inline(never)]`. `inserts()` answers `&[Vec<u8>]`. The `token.rs` sentence about a `u32`
+  keeping the error two words wide is deleted.
 * `ParseError::message()` returns `Vec<u8>`: the (major, sub) row with `&k` replaced by insert
   `k`, a `&k` with no insert left as it is (the oracle's `messageSubstitution` loop runs only
   `additional->size()` times, `Activity.cpp:1246`). No fallback to the major's text, and the
@@ -83,12 +88,15 @@ offset in its line, then its line number.
 Measured by compiling each struct definition alone with `rustc --edition 2021` and printing
 `size_of` (old: `git show HEAD:rust/crates/rexx-parse/src/token.rs`'s struct at `cdbbc1568`):
 
-| | old | new |
-|---|---|---|
-| `ParseError` | 16 | 24 |
-| `Result<(), ParseError>` | 24 | 32 |
+| | old (`cdbbc1568`) | `fdd1ca33d` | `dd253ad15` |
+|---|---|---|---|
+| `ParseError` | 16 | 24 | 8 |
+| `Result<(), ParseError>` | 24 | 32 | 8 |
+| `Result<Token, ParseError>` | 40 | 40 | |
 
-`error/tests.rs`'s `a_parse_error_is_three_words` pins 24.
+The `Result<Token, ..>` row and the `fdd1ca33d` column come from a throwaway test that printed
+`size_of` in both trees. `error/tests.rs`'s `a_parse_error_is_one_word` pins 8 for both
+`ParseError` and `Result<(), ParseError>`.
 
 ## PENDING
 
@@ -117,8 +125,10 @@ deviation rows (18.x here, 35.1 on the oracle), which no conversion makes match;
 
 Twelve rows were appended with `?` in class, expect and line, then filled by
 `corpus/errors/derive.sh SCRATCH > NEW` (exit 0, 21 s). `diff` against the input showed only those
-twelve lines. Each reaches a converted site that no existing row reached, and near-duplicates were
-skipped:
+twelve lines. Some reach a converted site that no existing row reached: `expr.rs:197`, `:239`
+and `:794`, and the line insert of `:961`. The others witness an insert behaviour, such as NUL, a
+raw byte, markup or a nested comment, at a site that existing rows already reached. The
+reviewer's mutants D, F, G and H show which rows those are. Near-duplicates were skipped:
 
 | Program | Pair | Site |
 |---|---|---|
@@ -218,6 +228,66 @@ after each batch (identical every time).
 M11 and M12 stayed green at `fdd1ca33d`, under the pair key. The per-row key and the new rows
 turn them red.
 
+## Fix round 1
+
+### Startup: the measurement and the fix
+
+The review measured Task 2 at startup +0.3611% against `cdbbc1568`. Moving every
+insert-building construction into `#[cold] #[inline(never)]` helpers came first (`a23fdba9e`).
+In `scanner.rs` these are `invalid_character`, `unmatched_comment`, `name_too_long`,
+`missing_resource_end`, `misplaced_blank` and `invalid_digit`. In `expr.rs` they are
+`not_a_variable`, `invalid_at`, `operator_without_term`, `not_a_reference`, `unmatched` and
+`raise`, plus `ParseError::raise` itself. `unmatched` takes the opener's token index, and only the
+error path reads the token. With all that, startup was still +0.2737% against the base (callgrind,
+3 rounds, `/home/moritz/dev/repos/ooRexx-p9-pin/cg-9c-t2-fix1`).
+
+The per-function diff put the rest on `rexx_parse::parse`'s self cost, where `scan` is inlined:
++444,597 Ir. The token `Result`s were unchanged at 40 bytes. An experiment kept every helper and
+removed only the `inserts` field (a throwaway build with `inserts()` answering `&[]`). One
+callgrind round against the base gave startup -0.1136% and interpret -0.0769%, against +0.2737%
+and +0.0561% for `a23fdba9e`. So the field itself was the cost. A candidate with the fields boxed
+behind one word gave -0.2810%, -0.0901% and -0.0199% in one round. Committed as `dd253ad15`: its
+release binary is byte-identical (`cmp`) to the candidate's.
+
+Command, from `rust/`:
+`bash bench-programs/callgrind.sh -B 0.5 -o /home/moritz/dev/repos/ooRexx-p9-pin/cg-9c-t2-fix1b -p 'startup interpret parse' pin=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run base=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9c-t2-cdbbc1568 head=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9c-t2-dd253ad15`,
+exit 0, 3 rounds. The base was built in a `git worktree add --detach` copy at `cdbbc1568` after
+touching every file (`Compiling rexx-parse` printed once), with
+`CARGO_TARGET_DIR` under the scratchpad. The worktree and that target dir were removed afterwards.
+
+| program | pin | base `cdbbc1568` | head `dd253ad15` | base vs pin | head vs pin | **head vs base (Task 2)** | spreads (pin/base/head) |
+|---|---|---|---|---|---|---|---|
+| startup | 119,095,681 | 119,494,272 | 119,166,974 | +0.3347% | +0.0599% | **-0.2739%** | 0.0000 / 0.0042 / 0.0034% |
+| interpret | 4,207,371,545 | 4,219,634,339 | 4,215,836,639 | +0.2915% | +0.2012% | **-0.0900%** | 0.0000 / 0.0001 / 0.0000% |
+| parse | 1,654,598,893 | 1,653,123,818 | 1,652,794,456 | -0.0892% | -0.1091% | **-0.0199%** | 0.0000 / 0.0002 / 0.0000% |
+
+All three are under the +0.05% target. The libc-subtracted deltas, head against base, are
+-0.6013%, -0.2303% and -0.0224% in the one-round candidate run. The full table, with libc-subtracted
+columns, is in `cg-9c-t2-fix1b`'s `summary.tsv`.
+
+### Minors
+
+* `an_insert_is_not_substituted_again` now uses `E99_943` with `[b"&2", b"&1"]`. Mutant ME
+  substitutes twice and turns it red (exit 101, along with `an_insert_reaches_the_message_unconverted`).
+* `build.rs` also generates `ARITIES: &[((u16, u16), usize)]`, one entry per constant, built from
+  `Msg::arity()` (`pub const fn`, answering `N`).
+  `every_constants_arity_is_its_texts_highest_placeholder` checks every entry against the text
+  `lookup` returns, and that `ARITIES` is as long as `MESSAGES`. Mutant M16 caps each insert number
+  at 3. That spares every sampled constant and turns the test red (exit 101).
+* The false "no existing row reached" sentence is replaced, above.
+* `previous()` is gone. See the startup section.
+
+### Checks at `dd253ad15`, from `rust/`, exit statuses unpiped
+
+| Command | Exit |
+|---|---|
+| `cargo fmt --all --check` | 0 |
+| `CARGO_INCREMENTAL=0 memcap 8G cargo clippy -j 4 -p rexx-inventory -p rexx-parse -p rexx-exec --all-targets -- -D warnings` | 0 |
+| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-parse -p rexx-inventory --no-fail-fast` | 0, no failures |
+| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-exec --lib error::` | 0, 13 passed |
+| the six refusal-table binaries, as above | 0 |
+| `REXX_CORPUS_GATE=1 CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test corpus` | 0, `1062 of 1062 matching` |
+
 ## Concerns
 
 1. **`tests/errors.rs`'s `an_interpret_error_raised_without_its_insert_keeps_the_marker`
@@ -225,5 +295,6 @@ turn them red.
    `found "X"`. Task 3 has to change the expectation when it converts that site.
 2. **The two label-colon deviation rows stay in PENDING under any conversion.** We raise 18.x
    there and the oracle raises 35.1. Task 4 empties PENDING and has to decide what happens to them.
-3. `Result<(), ParseError>` grows from 24 to 32 bytes, because the `Option<Box<..>>` niche goes
-   to the `Option`. It affects parsing only, and no perf gate ran in this task.
+3. **`ParseError` is boxed whole, and every error allocates its box** (`dd253ad15`), where the
+   brief has a message with no inserts allocate nothing. The brief's shape measured startup
+   +0.39% over this one. The controller should rule on whether that trade stands.
