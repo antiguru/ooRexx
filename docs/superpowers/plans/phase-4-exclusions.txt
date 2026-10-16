@@ -2137,6 +2137,49 @@ DEVIATIONS -- permanent, chosen
      the sort looks for it, and both raise 40.924 under `SIGNAL ON SYNTAX`.
      Not witnessed in the corpus.
 
+ 38. A DO OVER OR DO WITH HEADER WITH TO OR BY RAISES A KEYWORD ERROR,
+     WHERE THE ORACLE RAISES 49.2 WITH AN INTERNAL ENUM VALUE (Phase 9c).
+     OWNER: none.
+
+     Ruled by Moritz 2026-10-16: "a keyword error is better". The FOR count
+     of a `DO OVER` or `DO WITH` is parsed with `TERM_CONTROL`, which stops
+     at `TO` and `BY`, and the subkeyword switch after it has no case for
+     them. The oracle reaches the "should really never happen" default and
+     raises `Error_Interpretation_switch` with the `InstructionSubKeyword`
+     value for DO OVER and the still-`SUBKEY_NONE` conditional type for DO
+     WITH (/home/moritz/dev/repos/ooRexx/interpreter/parser/InstructionParser.cpp:1491
+     and :1700). This crate raises 25.927, `Error_Invalid_subkeyword_following`,
+     naming `FOR` and the keyword it found, on the clause's line as the
+     oracle's 49.2 is. The oracle's only keyword error for an unexpected
+     `TO` or `BY` in a DO header is 27.901, whose text names FOREVER, so it
+     is not used here. Measured, `x = .array~of(1,2)` then the header, `nop`
+     and `end`, fresh empty directory, 1 run a side (parse errors are
+     deterministic), oracle then this crate:
+
+       `do i over x for 1 to 2`         rc 207, 49.2 "unmatched DO OVER
+                                        loop subkey 29"
+                                        rc 231, 25.927 "Unknown keyword
+                                        following "FOR"; found "TO""
+       `do i over x for 1 by 2`         rc 207, 49.2 "unmatched DO OVER
+                                        loop subkey 2"
+                                        rc 231, 25.927 ... found "BY"
+       `do with item v over x for 1 to 2`
+                                        rc 207, 49.2 "unmatched DO WITH
+                                        conditional 0"
+                                        rc 231, 25.927 ... found "TO"
+       `do with item v over x for 1 by 2`
+                                        rc 207, 49.2 "unmatched DO WITH
+                                        conditional 0"
+                                        rc 231, 25.927 ... found "BY"
+
+     Not reached by a `TO` or `BY` directly after the OVER expression, which
+     `TERM_OVER` does not stop at: both sides fold it into the expression.
+     The corpus/errors/parse-errors.tsv rows for these shapes keep the
+     oracle's answer and are exempted by `do_subkey_deviation`
+     (rust/crates/rexx-parse/tests/errors.rs), which
+     `the_do_subkey_rows_differ_from_the_oracle_as_deviation_38_says` pins
+     to those rows and this crate's message.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 

@@ -260,7 +260,7 @@ fn every_program_the_oracle_refuses_to_translate_this_parser_rejects_the_same_wa
         }
         let expected = case.error.expect("a translation error has a number");
         let ours = parse(&case.program).err().map(|e| (e.code, e.sub));
-        if label_colon_deviation(ours, expected) {
+        if label_colon_deviation(ours, expected) || do_subkey_deviation(ours, expected) {
             continue;
         }
         checked += 1;
@@ -633,6 +633,7 @@ fn message_mismatches() -> std::collections::BTreeMap<String, String> {
         let pair = case.error.expect("a translation row has a number");
         let got = match parse(&case.program) {
             Ok(()) => b"<accepted>".to_vec(),
+            Err(error) if do_subkey_deviation(Some((error.code, error.sub)), pair) => continue,
             Err(error) => error.message(),
         };
         if got != want {
@@ -737,6 +738,71 @@ fn the_label_colon_rule_covers_exactly_the_two_corpus_rows_it_was_written_for() 
         })
         .count();
     assert_eq!(count, 2, "the label-colon deviation grew");
+}
+
+/// Whether `(ours, oracle)` is Deviation 38: a `TO` or `BY` after a `DO OVER`
+/// or `DO WITH` header's FOR count.
+fn do_subkey_deviation(ours: Option<(u16, u16)>, oracle: (u16, u16)) -> bool {
+    matches!((ours, oracle), (Some((25, 927)), (49, 2)))
+}
+
+#[test]
+fn the_do_subkey_rule_fires_for_the_pair_it_was_written_for() {
+    assert!(do_subkey_deviation(Some((25, 927)), (49, 2)));
+}
+
+#[test]
+fn the_do_subkey_rule_does_not_fire_for_a_near_miss() {
+    assert!(!do_subkey_deviation(Some((49, 2)), (49, 2)));
+    assert!(!do_subkey_deviation(Some((25, 927)), (25, 927)));
+    assert!(!do_subkey_deviation(Some((27, 901)), (49, 2)));
+    assert!(!do_subkey_deviation(Some((25, 927)), (49, 1)));
+    assert!(!do_subkey_deviation(None, (49, 2)));
+}
+
+#[test]
+fn the_do_subkey_rows_differ_from_the_oracle_as_deviation_38_says() {
+    let mut covered = Vec::new();
+    for case in cases() {
+        if case.class != Class::Translation {
+            continue;
+        }
+        let oracle = case.error.expect("a translation error has a number");
+        let Err(error) = parse(&case.program) else {
+            continue;
+        };
+        if !do_subkey_deviation(Some((error.code, error.sub)), oracle) {
+            continue;
+        }
+        let want = if case.source.contains(" by ") {
+            &b"Unknown keyword following \"FOR\"; found \"BY\"."[..]
+        } else {
+            &b"Unknown keyword following \"FOR\"; found \"TO\"."[..]
+        };
+        assert_eq!(
+            String::from_utf8_lossy(&error.message()),
+            String::from_utf8_lossy(want),
+            "row {}",
+            case.row
+        );
+        assert_ne!(
+            Some(error.message()),
+            case.message,
+            "row {}: the oracle now agrees",
+            case.row
+        );
+        let source = ProgramSource::new(case.program.clone(), SourceKind::Program);
+        assert_eq!(Some(error.line(&source)), case.line, "row {}", case.row);
+        covered.push(case.source);
+    }
+    assert_eq!(
+        covered,
+        [
+            r#"do i over x for 1 to 2\nend"#,
+            r#"do i over x for 1 by 2\nend\n"#,
+            r#"do with index i over x for 1 to 2\nend\n"#,
+        ]
+    );
 }
 
 #[test]

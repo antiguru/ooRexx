@@ -13,8 +13,8 @@
 //! builds.
 
 use rexx_inventory::errors::{
-    E20_918, E20_929, E20_934, E27_1, E27_901, E27_902, E27_903, E27_904, E27_905, E35_1, E35_904,
-    E35_905, E35_906, E35_907, E35_911, E35_929, E49_2, Msg,
+    E20_918, E20_929, E20_934, E25_927, E27_1, E27_901, E27_902, E27_903, E27_904, E27_905, E35_1,
+    E35_904, E35_905, E35_906, E35_907, E35_911, E35_929, Msg,
 };
 
 use crate::ast::{ControlExpr, Controlled, Expr, Loop, LoopConditional, LoopKind};
@@ -265,7 +265,7 @@ impl<'a> Inst<'a> {
         let over = self.nth_real_index(1).expect("the OVER that got us here");
         self.seek(over + 1);
         let target = self.expr(Terminators::OVER, E35_911)?;
-        let (for_count, conditional) = self.for_and_conditional(false)?;
+        let (for_count, conditional) = self.for_and_conditional()?;
         Ok(Loop {
             label: label.or(Some(id)),
             counter,
@@ -331,7 +331,7 @@ impl<'a> Inst<'a> {
         }
         self.next_real();
         let target = self.expr(Terminators::OVER, E35_911)?;
-        let (for_count, conditional) = self.for_and_conditional(true)?;
+        let (for_count, conditional) = self.for_and_conditional()?;
         Ok(Loop {
             label,
             counter,
@@ -347,10 +347,9 @@ impl<'a> Inst<'a> {
     }
 
     /// The `FOR n` and `WHILE`/`UNTIL` tail that `DO OVER` and `DO WITH`
-    /// share, `with` saying which.
+    /// share.
     fn for_and_conditional(
         &mut self,
-        with: bool,
     ) -> Result<(Option<Expr>, Option<LoopConditional>), ParseError> {
         let mut for_count = None;
         let mut conditional = None;
@@ -367,31 +366,17 @@ impl<'a> Inst<'a> {
                     conditional = self.loop_conditional(None)?;
                     break;
                 }
-                _ => return Err(self.unmatched_loop_keyword(with, token)),
+                // Only a `TO` or `BY` that ended the FOR expression gets here.
+                // Deviation 38: the oracle raises 49.2 with an internal enum
+                // value (`InstructionParser.cpp:1491`, `:1700`).
+                _ => {
+                    return Err(
+                        self.error(E25_927, [b"FOR".to_vec(), self.value_of(token).into_vec()])
+                    );
+                }
             }
         }
         Ok((for_count, conditional))
-    }
-
-    /// The `Error_Interpretation_switch` a `TO` or `BY` gets after the `FOR`
-    /// expression of a `DO OVER` or `DO WITH`, which stops there. `DO OVER` names the
-    /// keyword's `InstructionSubKeyword` value (`Token.hpp:263`) and `DO WITH`
-    /// its conditional type, still `SUBKEY_NONE` (`InstructionParser.cpp:1494`,
-    /// `:1703`).
-    #[cold]
-    #[inline(never)]
-    fn unmatched_loop_keyword(&self, with: bool, token: &Token) -> ParseError {
-        let (what, value): (&[u8], u8) = if with {
-            (b"DO WITH conditional", 0)
-        } else {
-            let value = match self.sub_keyword(token) {
-                Some(SUB_BY) => 2,
-                Some(SUB_TO) => 29,
-                _ => 0,
-            };
-            (b"DO OVER loop subkey", value)
-        };
-        self.error(E49_2, [what.to_vec(), value.to_string().into_bytes()])
     }
 
     /// `parseLoopConditional` (`InstructionParser.cpp:4600`): an optional
