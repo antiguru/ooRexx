@@ -191,7 +191,7 @@ pub(crate) fn parse_paren_expression(
     cursor: &mut TokenCursor,
 ) -> Result<Option<Expr>, ParseError> {
     let mut parser = Parser::new(ctx, cursor);
-    let opener = parser.previous();
+    let opener = parser.cursor.position() - 1;
     let inner = parser.subexpression(Terminators::RIGHT)?;
     if parser.peek_tag() != Some(Tag::RightParen) {
         return Err(parser.unmatched(opener, false));
@@ -211,6 +211,7 @@ pub(crate) fn parse_constant_expression(
     let Some(token) = parser.peek() else {
         return Ok(None);
     };
+    let at = parser.cursor.position();
     let span = token.span.clone();
     match &token.kind {
         TokenKind::Literal { value } => {
@@ -236,12 +237,12 @@ pub(crate) fn parse_constant_expression(
             // `parseFullSubExpression` and not `parseSubExpression`.
             let inner = parser.full_subexpression(Terminators::RIGHT)?;
             if parser.peek_tag() != Some(Tag::RightParen) {
-                return Err(parser.unmatched(token, false));
+                return Err(parser.unmatched(at, false));
             }
             parser.advance();
             Ok(inner)
         }
-        _ => Err(parser.raise(E35_1, [display_value(ctx, Some(token))])),
+        _ => Err(parser.invalid_at(Some(token))),
     }
 }
 
@@ -303,9 +304,16 @@ pub(crate) fn need_variable(
     ) {
         return Ok(());
     }
+    Err(not_a_variable(ctx, id, byte))
+}
+
+/// 31.3 for a symbol starting with `.`, 31.2 for any other, naming it.
+#[cold]
+#[inline(never)]
+fn not_a_variable(ctx: &ParseCtx, id: SymbolId, byte: usize) -> ParseError {
     let name = ctx.symbols.name(id);
     let msg = if name.starts_with('.') { E31_3 } else { E31_2 };
-    Err(ParseError::raise(msg, byte, [name.as_bytes().to_vec()]))
+    ParseError::raise(msg, byte, [name.as_bytes().to_vec()])
 }
 
 /// One expression parse in progress.
@@ -336,6 +344,8 @@ impl<'a, 'c> Parser<'a, 'c> {
         }
     }
 
+    #[cold]
+    #[inline(never)]
     fn raise<const N: usize>(&self, msg: Msg<N>, inserts: [Vec<u8>; N]) -> ParseError {
         ParseError::raise(msg, self.clause_byte, inserts)
     }
@@ -346,14 +356,33 @@ impl<'a, 'c> Parser<'a, 'c> {
     }
 
     /// 35.1 at `token`, `None` being the end of the clause.
+    #[cold]
+    #[inline(never)]
     fn invalid_at(&self, token: Option<&Token>) -> ParseError {
         self.raise(E35_1, [display_value(self.ctx, token)])
     }
 
-    /// Error 36's two sub-numbers, for `opener` with no matching closer:
-    /// `errorPosition` (`LanguageParser.cpp:4114`) inserts its 1-based
-    /// offset in its line, then the line.
-    fn unmatched(&self, opener: &Token, bracket: bool) -> ParseError {
+    /// `msg` naming `op`, the operator left without its term.
+    #[cold]
+    #[inline(never)]
+    fn operator_without_term(&self, msg: Msg<1>, op: Operator) -> ParseError {
+        self.raise(msg, [op.spelling().as_bytes().to_vec()])
+    }
+
+    /// 20.930 naming `token`, `None` being the end of the clause.
+    #[cold]
+    #[inline(never)]
+    fn not_a_reference(&self, token: Option<&Token>) -> ParseError {
+        self.raise(E20_930, [display_value(self.ctx, token)])
+    }
+
+    /// Error 36's two sub-numbers, for the token at index `opener` with no
+    /// matching closer: `errorPosition` (`LanguageParser.cpp:4114`) inserts
+    /// its 1-based offset in its line, then the line.
+    #[cold]
+    #[inline(never)]
+    fn unmatched(&self, opener: usize, bracket: bool) -> ParseError {
+        let opener = &self.ctx.tokens[opener];
         debug_assert!(matches!(
             opener.kind,
             TokenKind::LeftParen | TokenKind::LeftBracket
@@ -368,11 +397,6 @@ impl<'a, 'c> Parser<'a, 'c> {
             line.to_string().into_bytes(),
         ];
         self.raise(if bracket { E36_902 } else { E36_901 }, inserts)
-    }
-
-    /// The token just consumed, which opened the construct being parsed.
-    fn previous(&self) -> &'a Token {
-        &self.ctx.tokens[self.cursor.position() - 1]
     }
 
     /// The next token, or `None` at the end of the clause.
@@ -591,7 +615,7 @@ impl<'a, 'c> Parser<'a, 'c> {
                 self.advance();
             }
             let Some(right) = self.message_subterm(term)? else {
-                return Err(self.raise(E35_1, [op.spelling().as_bytes().to_vec()]));
+                return Err(self.operator_without_term(E35_1, op));
             };
             let right = self.binary_rest(right, prec + 1, term)?;
             left = Expr::binary(op, left, right);
@@ -628,7 +652,7 @@ impl<'a, 'c> Parser<'a, 'c> {
             // which is 4. It also means a chain works, though `--` is a line
             // comment so `- -2` needs the blank.
             let Some(operand) = self.message_subterm(term)? else {
-                return Err(self.raise(E35_901, [op.spelling().as_bytes().to_vec()]));
+                return Err(self.operator_without_term(E35_901, op));
             };
             return Ok(Some(Expr::new(
                 ExprKind::Prefix {
@@ -791,7 +815,7 @@ impl<'a, 'c> Parser<'a, 'c> {
     fn variable_reference_term(&mut self, from: usize) -> Result<Expr, ParseError> {
         self.skip_blanks();
         let Some(token) = self.peek() else {
-            return Err(self.raise(E20_930, [display_value(self.ctx, None)]));
+            return Err(self.not_a_reference(None));
         };
         let span = token.span.clone();
         let kind = match &token.kind {
@@ -803,7 +827,7 @@ impl<'a, 'c> Parser<'a, 'c> {
                 id,
                 class: SymbolClass::Stem,
             } => ExprKind::Stem(*id),
-            _ => return Err(self.raise(E20_930, [display_value(self.ctx, Some(token))])),
+            _ => return Err(self.not_a_reference(Some(token))),
         };
         self.advance();
         let inner = Expr::new(kind, span);
@@ -837,7 +861,8 @@ impl<'a, 'c> Parser<'a, 'c> {
 
     fn arg_list_inner(&mut self, closer: Option<Tag>) -> Result<Vec<Option<Expr>>, ParseError> {
         let bracket = closer == Some(Tag::RightBracket);
-        let opener = closer.map(|_| self.previous());
+        // The `(` or `[` the caller consumed.
+        let opener = self.cursor.position().wrapping_sub(1);
         let term = match closer {
             Some(Tag::RightBracket) => Terminators::SQRIGHT,
             Some(_) => Terminators::RIGHT,
@@ -861,7 +886,6 @@ impl<'a, 'c> Parser<'a, 'c> {
         }
         if let Some(closer) = closer {
             if self.peek_tag() != Some(closer) {
-                let opener = opener.expect("a closer has its opener");
                 return Err(self.unmatched(opener, bracket));
             }
             self.advance();
@@ -958,7 +982,7 @@ impl<'a, 'c> Parser<'a, 'c> {
                     return Err(self.invalid_at(Some(token)));
                 };
                 if self.peek_tag() != Some(Tag::RightParen) {
-                    return Err(self.unmatched(token, false));
+                    return Err(self.unmatched(from, false));
                 }
                 self.advance();
                 // The parenthesised expression is returned unchanged, so

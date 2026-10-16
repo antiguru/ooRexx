@@ -64,6 +64,8 @@ impl ParseError {
 
     /// The error `msg` reports against the clause starting at `byte`, with
     /// `inserts` for its `&1`, `&2`, ... in order.
+    #[cold]
+    #[inline(never)]
     pub fn raise<const N: usize>(msg: Msg<N>, byte: usize, inserts: [Vec<u8>; N]) -> Self {
         let (code, sub) = msg.code();
         ParseError {

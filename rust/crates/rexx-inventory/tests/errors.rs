@@ -59,17 +59,15 @@ fn highest_placeholder(code: (u16, u16)) -> usize {
 }
 
 #[test]
-fn a_constants_arity_is_its_texts_highest_placeholder() {
-    let sample = [
-        (errors::E35_1.code(), arity(errors::E35_1)),
-        (errors::E13_1.code(), arity(errors::E13_1)),
-        (errors::E10_2.code(), arity(errors::E10_2)),
-        (errors::E99_943.code(), arity(errors::E99_943)),
-        (errors::E6_1.code(), arity(errors::E6_1)),
-    ];
-    for (code, n) in sample {
-        assert_eq!(n, highest_placeholder(code), "{code:?}");
+fn every_constants_arity_is_its_texts_highest_placeholder() {
+    let mut wrong = Vec::new();
+    for &(code, n) in errors::ARITIES {
+        if n != highest_placeholder(code) {
+            wrong.push(code);
+        }
     }
+    assert!(wrong.is_empty(), "{wrong:?}");
+    assert_eq!(errors::ARITIES.len(), errors::MESSAGES.len());
     assert_eq!(arity(errors::E13_1), 2);
     assert_eq!(arity(errors::E10_2), 3);
 }

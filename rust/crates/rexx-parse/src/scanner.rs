@@ -14,7 +14,7 @@
 use std::ops::Range;
 
 use rexx_inventory::errors::{
-    E6_1, E6_2, E6_3, E13_1, E15_1, E15_2, E15_3, E15_4, E15_5, E15_6, E30_1, E99_943,
+    E6_1, E6_2, E6_3, E13_1, E15_1, E15_2, E15_3, E15_4, E15_5, E15_6, E30_1, E99_943, Msg,
 };
 
 use crate::token::{
@@ -379,8 +379,7 @@ impl<'a> Scanner<'a> {
             if !self.more_chars() {
                 self.next_line();
                 if !self.more_lines() {
-                    let line = start_line.to_string().into_bytes();
-                    return Err(ParseError::raise(E6_1, self.clause_start, [line]));
+                    return Err(unmatched_comment(start_line, self.clause_start));
                 }
                 continue;
             }
@@ -607,21 +606,7 @@ impl<'a> Scanner<'a> {
                 // Anything else cannot appear in a program. Every byte from
                 // 0x80 up lands here unless it is inside a literal or a
                 // comment, which is why `bäc = 2` is error 13.1.
-                _ => {
-                    let at = self.line_offset - 1;
-                    let width = utf8_width(&self.line[at..]);
-                    let bad = &self.line[at..at + width];
-                    // `snprintf("%s")` stops at a NUL.
-                    let shown = if bad[0] == 0 {
-                        Vec::new()
-                    } else {
-                        bad.to_vec()
-                    };
-                    let hex = bad.iter().map(|b| format!("{b:02X}")).collect::<String>();
-                    let error =
-                        ParseError::raise(E13_1, self.clause_start, [shown, hex.into_bytes()]);
-                    return Err(error.echoing(self.clause_start..start + width));
-                }
+                _ => return Err(self.invalid_character(start)),
             };
 
             return Ok(Some(Token {
@@ -762,8 +747,7 @@ impl<'a> Scanner<'a> {
         let bytes = &self.line[start..self.line_offset];
 
         if length > MAX_SYMBOL_LENGTH {
-            let name = bytes.to_ascii_uppercase();
-            return Err(ParseError::raise(E30_1, self.clause_start, [name]));
+            return Err(name_too_long(bytes, self.clause_start));
         }
 
         // Infallible: `characterTable` admits only ASCII, and the one byte a
@@ -952,8 +936,7 @@ impl<'a> Scanner<'a> {
                 // Measured: error 99.943, reported against the directive.
                 let start = self.tokens[directive].span.start;
                 let end = self.tokens.last().map_or(start, |eoc| eoc.span.end);
-                let inserts = [marker, name];
-                return Err(ParseError::raise(E99_943, start, inserts).echoing(start..end));
+                return Err(missing_resource_end(marker, name, start..end));
             }
             if self.check_marker(&marker) {
                 self.next_line();
@@ -965,6 +948,26 @@ impl<'a> Scanner<'a> {
 
         self.resources.push(ResourceBody { directive, lines });
         Ok(())
+    }
+
+    /// 13.1 for the character the scan stopped on, which starts at byte
+    /// `start`: the UTF-8 sequence there (one byte where none is valid), then
+    /// its bytes in hex.
+    #[cold]
+    #[inline(never)]
+    fn invalid_character(&self, start: usize) -> ParseError {
+        let at = self.line_offset - 1;
+        let width = utf8_width(&self.line[at..]);
+        let bad = &self.line[at..at + width];
+        // `snprintf("%s")` stops at a NUL.
+        let shown = if bad[0] == 0 {
+            Vec::new()
+        } else {
+            bad.to_vec()
+        };
+        let hex = bad.iter().map(|b| format!("{b:02X}")).collect::<String>();
+        let error = ParseError::raise(E13_1, self.clause_start, [shown, hex.into_bytes()]);
+        error.echoing(self.clause_start..start + width)
     }
 
     /// A token's value the way `RexxToken::value()` gives it: upcased for a
@@ -982,6 +985,42 @@ impl<'a> Scanner<'a> {
     fn check_marker(&self, marker: &[u8]) -> bool {
         marker.len() <= self.line.len() && &self.line[..marker.len()] == marker
     }
+}
+
+/// 6.1 for a comment opened on `line`.
+#[cold]
+#[inline(never)]
+fn unmatched_comment(line: usize, clause_start: usize) -> ParseError {
+    ParseError::raise(E6_1, clause_start, [line.to_string().into_bytes()])
+}
+
+/// 30.1 naming the symbol `bytes`, upcased.
+#[cold]
+#[inline(never)]
+fn name_too_long(bytes: &[u8], clause_start: usize) -> ParseError {
+    ParseError::raise(E30_1, clause_start, [bytes.to_ascii_uppercase()])
+}
+
+/// 99.943 for a `::RESOURCE` named `name` whose `marker` never came,
+/// reported against and echoing `directive`.
+#[cold]
+#[inline(never)]
+fn missing_resource_end(marker: Vec<u8>, name: Vec<u8>, directive: Range<usize>) -> ParseError {
+    ParseError::raise(E99_943, directive.start, [marker, name]).echoing(directive)
+}
+
+/// 15.1 or 15.2 for a blank at 1-based position `i` of the literal's text.
+#[cold]
+#[inline(never)]
+fn misplaced_blank(msg: Msg<1>, i: usize, clause_start: usize) -> ParseError {
+    ParseError::raise(msg, clause_start, [i.to_string().into_bytes()])
+}
+
+/// 15.3 or 15.4 naming the byte that is not a digit of the literal's base.
+#[cold]
+#[inline(never)]
+fn invalid_digit(msg: Msg<1>, digit: u8, clause_start: usize) -> ParseError {
+    ParseError::raise(msg, clause_start, [vec![digit]])
 }
 
 /// The length of the UTF-8 sequence `bytes` starts with, or 1 where it starts
@@ -1011,8 +1050,7 @@ fn pack_hex_literal(data: &[u8], clause_start: usize) -> Result<Vec<u8>, ParseEr
         let byte = data[i - 1];
         if byte == b' ' || byte == b'\t' {
             if i == 1 || i == data.len() {
-                let position = i.to_string().into_bytes();
-                return Err(ParseError::raise(E15_1, clause_start, [position]));
+                return Err(misplaced_blank(E15_1, i, clause_start));
             } else if !group_count.is_multiple_of(2) {
                 return Err(ParseError::raise(E15_5, clause_start, []));
             }
@@ -1042,7 +1080,7 @@ fn pack_hex_literal(data: &[u8], clause_start: usize) -> Result<Vec<u8>, ParseEr
                 b'0'..=b'9' => nibble - b'0',
                 b'a'..=b'f' => nibble - b'a' + 10,
                 b'A'..=b'F' => nibble - b'A' + 10,
-                _ => return Err(ParseError::raise(E15_3, clause_start, [vec![nibble]])),
+                _ => return Err(invalid_digit(E15_3, nibble, clause_start)),
             };
             byte = (byte << 4) + value;
         }
@@ -1067,8 +1105,7 @@ fn pack_binary_literal(data: &[u8], clause_start: usize) -> Result<Vec<u8>, Pars
         let byte = data[i - 1];
         if byte == b' ' || byte == b'\t' {
             if i == 1 || i == data.len() {
-                let position = i.to_string().into_bytes();
-                return Err(ParseError::raise(E15_2, clause_start, [position]));
+                return Err(misplaced_blank(E15_2, i, clause_start));
             } else if !group_count.is_multiple_of(4) {
                 return Err(ParseError::raise(E15_6, clause_start, []));
             }
@@ -1102,7 +1139,7 @@ fn pack_binary_literal(data: &[u8], clause_start: usize) -> Result<Vec<u8>, Pars
             if bit == b'1' {
                 byte += 1;
             } else if bit != b'0' {
-                return Err(ParseError::raise(E15_4, clause_start, [vec![bit]]));
+                return Err(invalid_digit(E15_4, bit, clause_start));
             }
         }
         bits_this_byte = 8;

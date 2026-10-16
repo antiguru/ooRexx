@@ -195,6 +195,10 @@ fn generate_errors(path: &Path) -> String {
          \x20   /// The (major, sub) pair this message is catalogued under.\n\
          \x20   pub const fn code(self) -> (u16, u16) {\n\
          \x20       (self.major, self.sub)\n\
+         \x20   }\n\n\
+         \x20   /// How many inserts the message takes.\n\
+         \x20   pub const fn arity(self) -> usize {\n\
+         \x20       N\n\
          \x20   }\n\
          }\n\n",
     );
@@ -208,6 +212,20 @@ fn generate_errors(path: &Path) -> String {
         )
         .expect("writing to a String cannot fail");
     }
+    out.push_str(
+        "\n/// Every message constant's (major, sub) pair and arity.\n\
+         pub const ARITIES: &[((u16, u16), usize)] = &[\n",
+    );
+    for m in &messages {
+        writeln!(
+            out,
+            "    (E{major}_{sub}.code(), E{major}_{sub}.arity()),",
+            major = m.major,
+            sub = m.sub,
+        )
+        .expect("writing to a String cannot fail");
+    }
+    out.push_str("];\n");
     out
 }
 

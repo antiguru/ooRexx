@@ -11,7 +11,7 @@
 
 //! `message`, `line`, and how the inserts reach the message.
 
-use rexx_inventory::errors::{E7_1, E8_2, E13_1, E25_901, E35_1, E36_901};
+use rexx_inventory::errors::{E7_1, E8_2, E13_1, E25_901, E36_901, E99_943};
 
 use crate::token::ParseError;
 use crate::{ProgramSource, SourceKind};
@@ -83,8 +83,8 @@ fn a_message_raised_with_no_inserts_never_falls_back_to_the_major() {
 #[test]
 fn an_insert_is_not_substituted_again() {
     assert_eq!(
-        ParseError::raise(E35_1, 0, [b"&1".to_vec()]).message(),
-        br#"Incorrect expression detected at "&1"."#
+        ParseError::raise(E99_943, 0, [b"&2".to_vec(), b"&1".to_vec()]).message(),
+        br#"Missing ::RESOURCE end marker "&2" for resource "&1"."#
     );
 }
 
