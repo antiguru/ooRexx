@@ -1,0 +1,2956 @@
+# Review package: cdbbc1568..aade11443
+
+## Commits
+aade11443 Phase 9c Task 2 report: witness rows, per-row PENDING, rulings
+06cf4a4a7 Phase 9c Task 2: insert witness rows, PENDING keyed per row
+2ec226bfd Phase 9c plan: Task 3 updates the 47.1 test it unpins
+5cd02f326 Phase 9c Task 2 report
+fdd1ca33d Phase 9c Task 2: Msg<N>, ParseError::raise, scanner and expression inserts
+3d7bb38c6 Phase 9c plan: rewrap
+1766cc7f7 Phase 9c plan: PENDING ruling text keyed per row
+ba860f7de Phase 9c plan: PENDING per row, a TSV row per converted site (Task 2 ruling)
+1c7445742 Phase 9c plan: Task 3 owns expr.rs's missing parameter (Task 2 ruling)
+
+## Files changed
+ .../sdd/2026-10-15-phase-9c/task-2-report.md       | 229 +++++++++++
+ docs/superpowers/plans/2026-10-15-phase-9c.md      |  20 +-
+ .../2026-10-15-phase-9c/task-2-probes/mk.py        |  58 +++
+ .../2026-10-15-phase-9c/task-2-probes/mk2.py       |  20 +
+ .../2026-10-15-phase-9c/task-2-probes/mk3.py       |  13 +
+ .../2026-10-15-phase-9c/task-2-probes/results.txt  | 317 +++++++++++++++
+ .../2026-10-15-phase-9c/task-2-probes/run.sh       |  12 +
+ rust/corpus/errors/parse-errors.tsv                |  12 +
+ rust/crates/rexx-exec/src/error.rs                 |  14 +-
+ rust/crates/rexx-inventory/build.rs                |  38 +-
+ rust/crates/rexx-inventory/tests/errors.rs         |  40 ++
+ rust/crates/rexx-parse/src/error.rs                |  72 ++--
+ rust/crates/rexx-parse/src/error/tests.rs          | 150 +++----
+ rust/crates/rexx-parse/src/expr.rs                 | 153 +++++---
+ rust/crates/rexx-parse/src/expr/tests.rs           |   4 +-
+ rust/crates/rexx-parse/src/scanner.rs              |  53 ++-
+ rust/crates/rexx-parse/src/token.rs                |  33 +-
+ rust/crates/rexx-parse/tests/errors.rs             | 437 +++++++++++++++------
+ 18 files changed, 1359 insertions(+), 316 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-15-phase-9c/task-2-report.md b/.superpowers/sdd/2026-10-15-phase-9c/task-2-report.md
+new file mode 100644
+index 000000000..501a60ecc
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-15-phase-9c/task-2-report.md
+@@ -0,0 +1,229 @@
++# Phase 9c Task 2 report: the raising API, and the scanner and expression sites
++
++Commits: `fdd1ca33d` code (base `cdbbc1568`), with the probe programs, runner and results under
++`docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/`; `06cf4a4a7` the witness rows in
++`rust/corpus/errors/parse-errors.tsv` and PENDING keyed per row.
++
++## What landed
++
++* `rexx-inventory/build.rs` generates `Msg<const N: usize>` (private `major`/`sub`,
++  `pub const fn code(self) -> (u16, u16)`) and one `pub const E{major}_{sub}: Msg<N>` per
++  catalogue row, `N` being the highest `&k` in the row's text (`highest_insert`).
++* `ParseError` gains `inserts: Option<Box<Vec<Vec<u8>>>>` (`clippy::box_collection` is
++  `#[expect]`ed with its reason: a boxed slice is two words). `ParseError::raise(msg, byte,
++  inserts: [Vec<u8>; N])` stores `None` when `N == 0`. `inserts()` answers `&[Vec<u8>]`.
++  `code` and `sub` stay public fields. The `token.rs` sentence about a `u32` keeping the error
++  two words wide is deleted.
++* `ParseError::message()` returns `Vec<u8>`: the (major, sub) row with `&k` replaced by insert
++  `k`, a `&k` with no insert left as it is (the oracle's `messageSubstitution` loop runs only
++  `additional->size()` times, `Activity.cpp:1246`). No fallback to the major's text, and the
++  `has_placeholder` machinery and its tests are gone with it. `Display` decodes it with
++  `String::from_utf8_lossy`.
++* `From<&ParseError> for Raised` passes `error.inserts().to_vec()` as `additional`.
++* Every raise site in `scanner.rs` and `expr.rs` is on `ParseError::raise`, except the one below.
++
++### The site left on `ParseError::new`
++
++`parse_expr`'s and `comma_list`'s absent-expression raise (`expr.rs:145`, `:509`) take the
++35 sub from their callers as `missing: u16`, through `missing_expression`. The callers are in
++`instruction.rs`, `instruction/loops.rs`, `instruction/address.rs` and `directive.rs`. Every
++caller passes an arity-0 sub except `instruction.rs:499`, which passes 35.1 where the oracle
++(`InstructionParser.cpp:233`, `:250`) raises 35.1 with the `=` or assignment-operator token as
++insert. Ruled by the controller: this boundary stays in Task 2, and Task 3 (plan Step 1b) owns
++the `Msg<0>` parameter change with its callers, `directive.rs` included, and the `:499`
++restructure. Arity-0 messages render the same through `new`.
++
++## Site table
++
++Oracle paths are under `/home/moritz/dev/repos/ooRexx/interpreter/`. "display" is
++`RexxToken::displayValue` (`parser/Token.cpp:308`), implemented as `expr.rs`'s `display_value`:
++a symbol's upcased name, a literal's value, an operator's `GlobalNames` spelling, an assignment
++operator's spelling plus `=`, the punctuation's own spelling, and `;` for the end of the clause.
++"position" is `errorPosition` (`parser/LanguageParser.cpp:4114`): the opener's 1-based byte
++offset in its line, then its line number.
++
++| Rust site | Oracle site | Inserts |
++|---|---|---|
++| `scanner.rs:383` 6.1 | `parser/Scanner.cpp:232` | line the comment opened on (`startLine`, read after stepping over `/*`) |
++| `scanner.rs:622` 13.1 | `parser/Scanner.cpp:1207` | the bad UTF-8 sequence (1 to 4 bytes, one byte where invalid, empty for NUL as `snprintf("%s")` stops there); its bytes as uppercase hex |
++| `scanner.rs:766` 30.1 | `parser/Scanner.cpp:1524` | the symbol upcased |
++| `scanner.rs:821` 6.2 / 6.3 | `parser/Scanner.cpp:1650`, `:1654` | none (chosen at run time between two `Msg<0>`) |
++| `scanner.rs:956` 99.943 | `parser/DirectiveParser.cpp:2337` | end marker, resource name (`token->value()`) |
++| `scanner.rs:1015` 15.1 | `parser/Scanner.cpp:453` | position `i` from the right-to-left scan |
++| `scanner.rs:1017` 15.5 | `parser/Scanner.cpp:459` | none |
++| `scanner.rs:1045` 15.3 | `parser/Scanner.cpp:546` | the bad character, raw |
++| `scanner.rs:1071` 15.2 | `parser/Scanner.cpp:607` | position `i` |
++| `scanner.rs:1073` 15.6 | `parser/Scanner.cpp:613` | none |
++| `scanner.rs:1105` 15.4 | `parser/Scanner.cpp:696` | the bad character, raw |
++| `expr.rs:197` 36.901 (`parse_paren_expression`) | `parser/LanguageParser.cpp:2705` | position of the `(` the caller consumed |
++| `expr.rs:239` 36.901 (`parse_constant_expression`) | `parser/LanguageParser.cpp:2675` | position of the `(` |
++| `expr.rs:244` 35.1 (`parse_constant_expression`) | `parser/LanguageParser.cpp:2663` | display of the token |
++| `expr.rs:308` 31.2 / 31.3 (`need_variable`) | `parser/LanguageParser.cpp:894`, `:898` | the symbol's name (chosen at run time between two `Msg<1>`) |
++| `expr.rs:567` 35.1 dyadic `\` | `parser/LanguageParser.cpp:2921` | display (`\`) |
++| `expr.rs:581` 37.2 | `parser/LanguageParser.cpp:2984` | none |
++| `expr.rs:582` 37.901 | `parser/LanguageParser.cpp:2991` | none |
++| `expr.rs:584` 35.1 (assignment op, anything else) | `parser/LanguageParser.cpp:2975`, `:2998` | display |
++| `expr.rs:594` 35.1 missing right operand | `parser/LanguageParser.cpp:2963` | the operator's spelling |
++| `expr.rs:623` 35.1 non-prefix operator | `parser/LanguageParser.cpp:3672` | display |
++| `expr.rs:631` 35.901 | `parser/LanguageParser.cpp:3655` | the prefix operator's spelling |
++| `expr.rs:719`, `:721` 19.909 | `parser/LanguageParser.cpp:3385`, `:3348` | none |
++| `expr.rs:763`-`:782` 20.917 | `parser/LanguageParser.cpp:3407`, `:3348` | none |
++| `expr.rs:794`, `:806` 20.930 | `parser/LanguageParser.cpp:3729` | display of the token after the prefix, `;` at the clause end |
++| `expr.rs:826`, `:949` 11.1 | `concurrency/Activity.cpp:2308` | none |
++| `expr.rs:865` 36.901 / 36.902 (`arg_list_inner`) | `parser/LanguageParser.cpp:3133`, `:3139` | position of the `(` or `[` consumed just before the list (the oracle's `firstToken`, every caller at `:3231`, `:3281`, `:3317`, `:3431`, `InstructionParser.cpp:2543`, `:3672`) |
++| `expr.rs:958` 35.1 `()` | `parser/LanguageParser.cpp:3788` | display (`(`) |
++| `expr.rs:961` 36.901 | `parser/LanguageParser.cpp:3793` | position of the `(` |
++| `expr.rs:1018` 35.1 operator as a term | `parser/LanguageParser.cpp:3871` | display |
++| `expr.rs:1020`, `:1021`, `:1024` 37.2, 37.901, 37.1 | `parser/LanguageParser.cpp:3878`, `:3886`, `:3882` | none |
++| `expr.rs:1027` 35.1 | `parser/LanguageParser.cpp:3891` | display |
++| `expr.rs:1035`, `:1038` 20.923 | `parser/LanguageParser.cpp:3267` | none |
++
++## `size_of::<ParseError>()`
++
++Measured by compiling each struct definition alone with `rustc --edition 2021` and printing
++`size_of` (old: `git show HEAD:rust/crates/rexx-parse/src/token.rs`'s struct at `cdbbc1568`):
++
++| | old | new |
++|---|---|---|
++| `ParseError` | 16 | 24 |
++| `Result<(), ParseError>` | 24 | 32 |
++
++`error/tests.rs`'s `a_parse_error_is_three_words` pins 24.
++
++## PENDING
++
++At `fdd1ca33d` PENDING was still keyed by (major, sub): 92 pairs before (Task 1, `cdbbc1568`), 81
++after. These pairs came out because every corpus row of each pair matched:
++`(6, 1)`, `(13, 1)`, `(15, 1)`, `(15, 2)`, `(15, 3)`, `(15, 4)`, `(20, 930)`, `(30, 1)`,
++`(35, 901)`, `(36, 902)`, `(99, 943)`. Counted with
++`git show <sha>:rust/crates/rexx-parse/tests/errors.rs | sed -n '/^const PENDING/,/^\];/p' | grep -c '^    ('`.
++
++**Re-keyed per row at `06cf4a4a7`** (controller ruling). A pair key exempted every row of a
++pair, so the rows a converted site raises were unchecked while any unconverted site shared the
++pair (`(35, 1)`, `(36, 901)`, `(31, 2)` and `(31, 3)` here). `PENDING` is now `&[&str]`, holding
++each pending row's `program` field exactly as the corpus file spells it (escapes included). That
++key survives row insertion, where a line number does not. `Case` carries the field as `source`,
++`message_mismatches` keys by it, and the converse test is renamed
++`every_pending_message_row_still_differs_from_the_oracle`. Every row outside PENDING must render
++the oracle's message. The list was generated from the test's own mismatch output and has 299
++entries (`sed -n '/^const PENDING/,/^\];/p' rust/crates/rexx-parse/tests/errors.rs | grep -c '^    r#'`).
++
++The rows my pairs keep pending, all raised at Task 3 or 4 sites: 31.2 `drop 5`, `use local 1`,
++`drop .5`; 31.3 `use local .a`, `drop .`; 35.1 `raise syntax`, `a == 1`, and the two label-colon
++deviation rows (18.x here, 35.1 on the oracle), which no conversion makes match; 36.901
++`::constant c (1+2`.
++
++### Witness rows added
++
++Twelve rows were appended with `?` in class, expect and line, then filled by
++`corpus/errors/derive.sh SCRATCH > NEW` (exit 0, 21 s). `diff` against the input showed only those
++twelve lines. Each reaches a converted site that no existing row reached, and near-duplicates were
++skipped:
++
++| Program | Pair | Site |
++|---|---|---|
++| `address x with input stream (1` | 36.901 position 29 | `expr.rs:239` |
++| `parse arg a (b` | 36.901 position 13 | `expr.rs:197` |
++| `r = >\n` | 20.930 `found ;` | `expr.rs:794` |
++| `r = 1 +,\n    (2\n` | 36.901 position 5 on line 2 | `expr.rs:961`, the line insert |
++| `x = a \x00 b\n` | 13.1 `""` | `scanner.rs:615` NUL rule |
++| `x = a \x80 b\n` | 13.1 one invalid byte | `scanner.rs:622` |
++| `x = a \xf0\x9f\x98\x80 b\n` | 13.1 four bytes | `scanner.rs:622` |
++| `r = >'80'x\n` | 20.930 raw byte | `expr.rs:806` |
++| `r = >'&1'\n` | 20.930 `found &1` | `expr.rs:806`, an insert that looks like markup |
++| `::resource '&1' end '&2'\nline\n` | 99.943 | `scanner.rs:956`, the same markup case |
++| `say 1\n\nsay 2 /* open /* nested */\nmore\n` | 6.1 on line 3 | `scanner.rs:383` |
++| `o = .object~new\ncall o~string('x')\n` | 35.1 at `~` | the queued ampersand probe |
++
++## Probes
++
++`docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/`: `mk.py`, `mk2.py`, `mk3.py` write
++the programs, `run.sh` runs each from its own probe directory on
++`build/bin/rexx` (under `ulimit -v 1048576`, `timeout -k 5 20`) and on `rust/target/debug/rexx-run`
++built from this tree (under `memcap 2G`, `timeout -k 5 20`), comparing stdout, stderr and rc
++separately. `results.txt` has every program's rcs, both comparisons and both sides' `Error N.M:`
++line through `cat -v`. Every program is one run per side; none is concurrent.
++
++All 108 programs: stdout identical, stderr identical, rc identical (`grep -c DIFF results.txt`
++answers 0, and `run.sh` answered `yes` for every program). stdout is empty for every error
++program. The ones the brief names, crate stderr secondary lines:
++
++* scout C 35.1 at `"("`, `say ()`: `Error 35.1:  Incorrect expression detected at "(".`, rc 221.
++* scout C 13.1, `b\xc3\xa4c = 2` on line 2: `Error 13.1:  Incorrect character in program "M-CM-$" ('C3A4'X).`, rc 243.
++  Also `\x80` (`"M-^@" ('80'X)`), NUL (`"" ('00'X)`), `\x01` (`"?" ('01'X)`, the report's
++  `displayable`), a 4-byte sequence (`('F09F9880'X)`), an overlong `\xc0\xaf` (`"M-@" ('C0'X)`)
++  and a `\xc3` at the end of the file (`"M-C" ('C3'X)`).
++* `2026-10-13-error-position-ampersand.md`, `call o~string('x')`: `Error 35.1:  Incorrect expression detected at "~".`, rc 221.
++
++Inserts that look like markup reach the output once, unsubstituted: `x = >'&1'` gives
++`found &1.`, and `::resource '&1' end '&2'` gives `Missing ::RESOURCE end marker "&2" for
++resource "&1".` A raw byte from a literal: `x = >'80'x` gives `found M-^@.` on both sides.
++
++Probes that did not reach the path they were named for, read from their stdout and stderr:
++`hex_group` and `bin_group` translate (`'1 23'x` and `'1 0101'b` are legal), `colon_in_expr` and
++`qualified_bad` are run-time 98.987, `prefix_missing` (`x = -`) is 35.918, `say_prefix` (`say -`)
++runs with rc 0, `e39` (`r = a = = 1`) runs. `hex_bad_group`, `bin_bad_group`, `not_prefix`
++(35.901) and `e42` (`r = +`, 35.901) cover the paths those missed.
++
++## Commands, exit statuses unpiped
++
++From `rust/`, all at the committed tree:
++
++| Command | Exit |
++|---|---|
++| `cargo fmt --all --check` | 0 |
++| `CARGO_INCREMENTAL=0 memcap 8G cargo clippy -j 4 -p rexx-inventory -p rexx-parse -p rexx-exec --all-targets -- -D warnings` | 0 |
++| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-parse -p rexx-inventory --no-fail-fast` | 0 (rexx-parse lib 261 passed, `errors` 30, inventory `errors` 7, `oracle_agreement` 1, no failures) |
++| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-exec --lib error::` | 0 (13 passed) |
++| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-exec --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions --no-fail-fast` | 0 (8, 6, 5, 3, 5, 3 passed) |
++| `REXX_CORPUS_GATE=1 CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test corpus` | 0, `1062 of 1062 matching`, 29 passed 1 ignored |
++
++No ooTest groups are named for this task, so none were run.
++
++After `06cf4a4a7`, which changes only the TSV and `tests/errors.rs`:
++
++| Command | Exit |
++|---|---|
++| `cargo fmt --all --check` | 0 |
++| `CARGO_INCREMENTAL=0 memcap 8G cargo clippy -j 4 -p rexx-parse --all-targets -- -D warnings` (after a `touch` of `tests/errors.rs`, `Checking rexx-parse` printed) | 0 |
++| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-parse -p rexx-inventory --no-fail-fast` | 0, every binary ok, `errors` 30 passed |
++
++The corpus gate and the rexx-exec runs were not repeated: no crate source changed.
++
++## Mutation evidence
++
++Each mutant applied by exact replacement (`mutate.py`, kept in the session scratchpad), run, and
++restored from a copy, with `git diff --stat -- rust` compared against the pre-mutation baseline
++after each batch (identical every time).
++
++| Mutant | Run | Result |
++|---|---|---|
++| M1 `highest_insert` caps each digit at 1 | `-p rexx-inventory --test errors` | exit 101, `a_constants_arity_is_its_texts_highest_placeholder` FAILED |
++| M1b `highest_insert`'s `unwrap_or(0)` to `unwrap_or(1)` | same | exit 101, E0308 at `let _: errors::Msg<0> = errors::E8_2` |
++| M2 `raise` stores `Some` for `N == 0` | `-p rexx-parse --lib error::` | exit 101, `a_message_with_no_inserts_carries_none` FAILED |
++| M3 `substitute` indexes `digit - b'0'` | same | exit 101, five tests FAILED, among them `a_token_insert_fills_the_sub_message` and `an_insert_reaches_the_message_unconverted` |
++| M4 `From<&ParseError>` passes `Vec::new()` | `-p rexx-exec --lib error::` | exit 101, `a_parse_errors_inserts_render_the_same_secondary_line_through_raised` FAILED |
++| M5 13.1 hex lowercase | `-p rexx-parse --test errors` | exit 101, row 1044 `('c3a4'X)` against `('C3A4'X)` |
++| M6 6.1 line plus one | same | exit 101, row 1036 `on line 2` against `on line 1` |
++| M7 36.x position without the `+ 1` | same | exit 101, row 1074 `position 5` against `position 6` |
++| M8 20.930 insert emptied | same | exit 101, row 1105 `found .` against `found A.B.` |
++| M9 30.1 insert not upcased | same | exit 101, row 1054 |
++| M10 99.943 inserts swapped | same | exit 101, row 1053 |
++| M11 35.1 missing right operand inserts nothing (`expr.rs:594`) | same | at `fdd1ca33d`: exit 0, 30 passed. At `06cf4a4a7`: exit 101, rows 1061 and 1062 (`r = a +`, `r = a ||`) |
++| M12 13.1 NUL rule disabled (`scanner.rs:615`) | same | at `fdd1ca33d`: exit 0, 30 passed. At `06cf4a4a7`: exit 101, new row 1115 (`x = a \x00 b`) renders `"\0"` against `""` |
++| M13 20.930 at the clause end inserts nothing (`expr.rs:794`) | same, at `06cf4a4a7` | exit 101, new row 1113 (`r = >`) `found .` against `found ;` |
++| M14 35.1 in `parse_constant_expression` inserts nothing (`expr.rs:244`) | same, at `06cf4a4a7` | exit 101, row 199 (`address system with error using x`), which the pair key had exempted |
++| M15 a matching row (`r = >\n`) put in PENDING | same, at `06cf4a4a7` | exit 101, `every_pending_message_row_still_differs_from_the_oracle` FAILED, `PENDING entries that now match: ["r = >\\n"]` |
++
++M11 and M12 stayed green at `fdd1ca33d`, under the pair key. The per-row key and the new rows
++turn them red.
++
++## Concerns
++
++1. **`tests/errors.rs`'s `an_interpret_error_raised_without_its_insert_keeps_the_marker`
++   pins `found "&1"`** for 47.1, raised at `instruction.rs:424` with no insert. The oracle prints
++   `found "X"`. Task 3 has to change the expectation when it converts that site.
++2. **The two label-colon deviation rows stay in PENDING under any conversion.** We raise 18.x
++   there and the oracle raises 35.1. Task 4 empties PENDING and has to decide what happens to them.
++3. `Result<(), ParseError>` grows from 24 to 32 bytes, because the `Option<Box<..>>` niche goes
++   to the `Option`. It affects parsing only, and no perf gate ran in this task.
+diff --git a/docs/superpowers/plans/2026-10-15-phase-9c.md b/docs/superpowers/plans/2026-10-15-phase-9c.md
+index 7caee47b4..c5648609b 100644
+--- a/docs/superpowers/plans/2026-10-15-phase-9c.md
++++ b/docs/superpowers/plans/2026-10-15-phase-9c.md
+@@ -50,22 +50,22 @@ follow the revised spec.
+    and Deviation 38 licenses what a kill loses from it. Task 7 implements it.
+ 
+ ## Rulings made in this plan
+ 
+ * Ruling: the raising API takes a message constant whose type carries the catalogue's insert count
+   (`Msg<N>`, generated from `interpreter/messages/rexxmsg.xml` by `rexx-inventory/build.rs`) and an
+   array of exactly `N` inserts. A wrong arity does not compile, and nothing in the crate restates
+   the counts. If wrong (a site needs an arity the catalogue does not give), the site's report names
+   the oracle's raise site and the controller rules.
+ * Ruling: the old `ParseError::new(code, sub, byte)` survives Tasks 2 and 3 for the files not yet
+-  converted, and Task 4 deletes it. The reader's `PENDING` list of unconverted (major, sub) pairs
+-  shrinks per task and is empty at Task 4. A test that stays red until the last conversion cannot
++  converted, and Task 4 deletes it. The reader's `PENDING` list of rows still raised by unconverted
++  sites (keyed per row since Task 2) shrinks per task and is empty at Task 4. A test that stays red until the last conversion cannot
+   gate a task.
+ * Ruling: the harness's `interpreter_bin` points at `rexx` in Task 5, so the task that builds
+   `rexx` is witnessed by `rexx_command`. Every other caller moves in Task 6.
+ * Ruling: `.rxo` header. Bytes 0-19 are `#!/usr/bin/env rexx\n`. The 48-byte header that follows has
+   the oracle's `fileTag` (`/**/@REXX` padded with NUL to 16 bytes), a `magicNumber` other than the
+   oracle's 11111, this crate's own format version, and the source length. The source follows. `-e`
+   writes the `#!` line, `/**/@REXX@\n`, then the base64 of header and source in 72-column lines, as
+   the oracle does (scout C section 2). R5: no compatibility is promised between versions of this
+   crate, so a header whose magic or version this build does not write is 3.903.
+ * Ruling: the version banner (`rexx -v`, `rexxc` without `-s`) is the oracle's
+@@ -217,28 +217,40 @@ hold anything), holding the oracle's secondary line after `Error N.M:  ` with th
+       (Rust site, oracle file:line, inserts). A site whose code is chosen at run time picks among
+       constants of the same arity, or is restructured so it does.
+ - [ ] **Step 5:** Shrink `PENDING` by every pair now right. Run the scout C probes (`35.1` at `"("`,
+       `13.1`) and the queued `2026-10-13-error-position-ampersand.md` 35.1 probe on both sides, and
+       read the stdout. Per-task check, including `cargo test -p rexx-parse` and `-p rexx-inventory`.
+       Commit.
+ 
+ ### Task 3: The instruction sites
+ 
+ **Files:** `rust/crates/rexx-parse/src/instruction.rs` (helper `error` at `:239`),
+-`src/instruction/loops.rs`, `src/instruction/address.rs`, `src/instruction/parse.rs`.
++`src/instruction/loops.rs`, `src/instruction/address.rs`, `src/instruction/parse.rs`, `src/expr.rs`
++(the `missing` parameter), and the `directive.rs` callers of `parse_expr`.
+ 
+ **Consumes:** `Msg<N>`, `ParseError::raise` from Task 2.
+ 
+ - [ ] **Step 1:** Convert every raise site in these files, with the report table as in Task 2. The
+       queued probe `2026-10-10-translation-error-inserts.md` (`trace ?s`, 24.1 found `"S"`) is a
+       witness here.
+-- [ ] **Step 2:** Shrink `PENDING`. Per-task check. Commit.
++- [ ] **Step 1b** (ruling, Task 2): `expr.rs`'s `parse_expr`, `parse_logical` and
++      `parse_case_when_list` take `missing: u16`, the 35.x sub raised when the expression is absent,
++      and Task 2 left that raise (`parse_expr`'s `None` arm and `comma_list`'s missing arm) on
++      `ParseError::new`. Change the parameter to `missing: Msg<0>` with every caller (in
++      `instruction.rs`, `loops.rs`, `address.rs` and `directive.rs`; the `directive.rs` callers
++      move here too), and convert those two raises. `instruction.rs:499` passes 35.1, which takes
++      one insert: restructure it so the assignment raises 35.1 itself with the `=` or
++      assignment-operator token as its insert, as `InstructionParser.cpp:233` and `:250` do.
++      The 47.1 test pins `found "&1"` (Task 2): update it when converting `instruction.rs:424`.
++- [ ] **Step 2:** Shrink `PENDING`, which since Task 2 is keyed per row, not per (major, sub). Each
++      converted site needs a `parse-errors.tsv` row that reaches it (added and re-derived with
++      `derive.sh` in this task), shown red under a mutation of the site. Per-task check. Commit.
+ 
+ ### Task 4: The block, directive and program sites, the coverage test, and the old API gone
+ 
+ **Files:** `rust/crates/rexx-parse/src/block.rs` (`:356`, `:384`, `:395`, `:442`, `:650-670`),
+ `src/directive.rs` (helper at `:140`), `src/lib.rs:201` (`ParseError::new(99, 914, ..)`),
+ `src/token.rs`, `tests/errors.rs`,
+ `rust/corpus/errors/parse-errors.tsv`, `rust/corpus/suite-9d-set.txt`,
+ `docs/superpowers/plans/phase-4-exclusions.txt` (the note opened 2026-08-20 at `:5205-5262`).
+ 
+ - [ ] **Step 1:** Convert every remaining site, with the report table. Witnesses: the queued
+diff --git a/docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/mk.py b/docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/mk.py
+new file mode 100644
+index 000000000..ed7670bdc
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/mk.py
+@@ -0,0 +1,58 @@
++import sys, os
++d = sys.argv[1]
++long = "a" * 251
++progs = {
++ "paren_empty": b"say ()\n",
++ "bad_utf8": b"say 1\nb\xc3\xa4c = 2\n",
++ "bad_80": b"say 1\nx = a \x80 b\n",
++ "bad_nul": b"x = a \x00 b\n",
++ "bad_ctl": b"x = a \x01 b\n",
++ "amp_call": b"o = .object~new\ncall o~string('x')\n",
++ "plus_missing": b"x = 1 +\n",
++ "backslash_dyadic": b"x = a \\ b\n",
++ "prefix_missing": b"x = -\n",
++ "assign_in_expr": b"x = 1 += 2\n",
++ "ref_number": b"x = >1\n",
++ "ref_literal": b"x = >'lit'\n",
++ "ref_missing": b"x = >\n",
++ "call_unclosed": b"x = f(1\n",
++ "bracket_unclosed": b"x = a[1\n",
++ "group_unclosed": b"x = (1\n",
++ "group_line2": b"x = 1 +,\n    (2\n",
++ "star_prefix": b"x = *1\n",
++ "stray_rparen": b"x = 1)\n",
++ "stray_rbracket": b"x = 1]\n",
++ "colon_in_expr": b"x = 1 : 2\n",
++ "dcolon_term": b"x = :: 2\n",
++ "hex_lead_blank": b"x = ' 12'x\n",
++ "hex_trail_blank": b"x = '12 'x\n",
++ "hex_bad_digit": b"x = '1g'x\n",
++ "hex_group": b"x = '1 23'x\n",
++ "bin_lead_blank": b"x = ' 1'b\n",
++ "bin_bad_digit": b"x = '102'b\n",
++ "bin_group": b"x = '1 0101'b\n",
++ "long_symbol": ("x = " + long + "\n").encode(),
++ "comment_open": b"say 1\n/* open\nsay 2\n",
++ "dquote_open": b'say "abc\n',
++ "squote_open": b"say 'abc\n",
++ "resource_open": b"say 1\n::resource r end xx\nline\n",
++ "resource_default": b"say 1\n::resource rr\nline\n",
++ "parse_dot_var": b"parse arg .a\n",
++ "use_arg_number": b"use arg 5\n",
++ "msg_bad_name": b"x = a~[3]\n",
++ "super_bad": b"x = a~m:1\n",
++ "qualified_bad": b"x = ns:1\n",
++ "const_expr_bad": b"numeric digits\naddress x with input stream *\n",
++ "parse_paren_unclosed": b"parse arg a (b\n",
++ "raise_array_unclosed": b"raise syntax 1 array (1\n",
++ "arg_bracket_line2": b"x = a[1,,\n  2\n",
++ "literal_display": b"x = 'abc' = \n",
++ "symbol_lower_op": b"x = a | \n",
++ "abuttal_missing": b"x = a'b'+\n",
++ "subterm_op": b"x = (=1)\n",
++ "amp_token": b"x = '&1' +\n",
++ "eq_after_term": b"x = (1 =)\n",
++}
++for name, body in progs.items():
++    with open(os.path.join(d, name + ".rex"), "wb") as f:
++        f.write(body)
+diff --git a/docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/mk2.py b/docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/mk2.py
+new file mode 100644
+index 000000000..2d76e28e7
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/mk2.py
+@@ -0,0 +1,20 @@
++import sys, os
++d = sys.argv[1]
++progs = {
++ "prefix_after_op": b"x = 1 + -\n",
++ "say_prefix": b"say -\n",
++ "not_prefix": b"say \\\n",
++ "hex_bad_group": b"x = '12 3'x\n",
++ "bin_bad_group": b"x = '0101 1'b\n",
++ "ref_amp_literal": b"x = >'&1'\n",
++ "ref_raw_byte": b"x = >'80'x\n",
++ "bad_emoji": b"x = a \xf0\x9f\x98\x80 b\n",
++ "bad_truncated": b"x = a \xc3",
++ "bad_overlong": b"x = a \xc0\xaf b\n",
++ "resource_amp": b"::resource '&1' end '&2'\nline\n",
++ "comment_line3": b"say 1\n\nsay 2 /* open /* nested */\nmore\n",
++ "multi_line_bracket": b"x = a[1,,\n  [2\n",
++}
++for name, body in progs.items():
++    with open(os.path.join(d, name + ".rex"), "wb") as f:
++        f.write(body)
+diff --git a/docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/mk3.py b/docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/mk3.py
+new file mode 100644
+index 000000000..42f2be82e
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/mk3.py
+@@ -0,0 +1,13 @@
++import sys, os
++d = sys.argv[1]
++exprs = [")", "]", "a[1]]", "1 2 3)", "a b )", "(a))", "a +", "a ||", "a || || b", "a + * b",
++ "**2", "~a", "a %% b", "a \\(1 = 2)", "()", "\\", "(a", "((a)", "f(a b", "a[", "a[1", "(a[1",
++ "a~", "a~~", "a~b~", ".array~of(1,2)~[1]", "a[1)", "a(1]", "a [1]", "a[1] [2]", "a += 1",
++ ">1", ">'&1'", "> a.b", "1 + -", "a~m:1", "a~m(1", "f(1,\n  (2", "1 :: 2", "a = = 1", "a | ",
++ "'x' '80'x +", "+", "a ==", "ns:1"]
++with open(os.path.join(d, "index.tsv"), "w") as idx:
++    for i, e in enumerate(exprs):
++        name = "e%02d" % i
++        with open(os.path.join(d, name + ".rex"), "wb") as f:
++            f.write(b"r = " + e.encode() + b"\n")
++        idx.write(name + "\t" + e.replace("\n", "\\n") + "\n")
+diff --git a/docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/results.txt b/docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/results.txt
+new file mode 100644
+index 000000000..805c5fc64
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/results.txt
+@@ -0,0 +1,317 @@
++# Task 2 probes: each program run once on build/bin/rexx and on target/debug/rexx-run (built from the Task 2 tree), from a fresh dir; stdout, stderr and rc compared separately. Error lines shown through cat -v.
++o1/abuttal_missing	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "+".
++	oracle: Error 35.1:  Incorrect expression detected at "+".
++o1/amp_call	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "~".
++	oracle: Error 35.1:  Incorrect expression detected at "~".
++o1/amp_token	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "+".
++	oracle: Error 35.1:  Incorrect expression detected at "+".
++o1/arg_bracket_line2	oracle rc=220 crate rc=220	stdout same	stderr same
++	crate:  Error 36.902:  Square bracket "[" in position 6 on line 1 requires a corresponding right square bracket "]".
++	oracle: Error 36.902:  Square bracket "[" in position 6 on line 1 requires a corresponding right square bracket "]".
++o1/assign_in_expr	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "+=".
++	oracle: Error 35.1:  Incorrect expression detected at "+=".
++o1/backslash_dyadic	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "\".
++	oracle: Error 35.1:  Incorrect expression detected at "\".
++o1/bad_80	oracle rc=243 crate rc=243	stdout same	stderr same
++	crate:  Error 13.1:  Incorrect character in program "M-^@" ('80'X).
++	oracle: Error 13.1:  Incorrect character in program "M-^@" ('80'X).
++o1/bad_ctl	oracle rc=243 crate rc=243	stdout same	stderr same
++	crate:  Error 13.1:  Incorrect character in program "?" ('01'X).
++	oracle: Error 13.1:  Incorrect character in program "?" ('01'X).
++o1/bad_nul	oracle rc=243 crate rc=243	stdout same	stderr same
++	crate:  Error 13.1:  Incorrect character in program "" ('00'X).
++	oracle: Error 13.1:  Incorrect character in program "" ('00'X).
++o1/bad_utf8	oracle rc=243 crate rc=243	stdout same	stderr same
++	crate:  Error 13.1:  Incorrect character in program "M-CM-$" ('C3A4'X).
++	oracle: Error 13.1:  Incorrect character in program "M-CM-$" ('C3A4'X).
++o1/bin_bad_digit	oracle rc=241 crate rc=241	stdout same	stderr same
++	crate:  Error 15.4:  Only 0, 1, and whitespace characters are valid in a binary string; found "2".
++	oracle: Error 15.4:  Only 0, 1, and whitespace characters are valid in a binary string; found "2".
++o1/bin_group	oracle rc=0 crate rc=0	stdout same	stderr same
++o1/bin_lead_blank	oracle rc=241 crate rc=241	stdout same	stderr same
++	crate:  Error 15.2:  Incorrect location of whitespace character in position 1 in binary string.
++	oracle: Error 15.2:  Incorrect location of whitespace character in position 1 in binary string.
++o1/bracket_unclosed	oracle rc=220 crate rc=220	stdout same	stderr same
++	crate:  Error 36.902:  Square bracket "[" in position 6 on line 1 requires a corresponding right square bracket "]".
++	oracle: Error 36.902:  Square bracket "[" in position 6 on line 1 requires a corresponding right square bracket "]".
++o1/call_unclosed	oracle rc=220 crate rc=220	stdout same	stderr same
++	crate:  Error 36.901:  Left parenthesis "(" in position 6 on line 1 requires a corresponding right parenthesis ")".
++	oracle: Error 36.901:  Left parenthesis "(" in position 6 on line 1 requires a corresponding right parenthesis ")".
++o1/colon_in_expr	oracle rc=158 crate rc=158	stdout same	stderr same
++	crate:  Error 98.987:  Namespace "1" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t2/p1/colon_in_expr.rex".
++	oracle: Error 98.987:  Namespace "1" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t2/p1/colon_in_expr.rex".
++o1/comment_open	oracle rc=250 crate rc=250	stdout same	stderr same
++	crate:  Error 6.1:  Unmatched comment delimiter ("/*") on line 2.
++	oracle: Error 6.1:  Unmatched comment delimiter ("/*") on line 2.
++o1/const_expr_bad	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "*".
++	oracle: Error 35.1:  Incorrect expression detected at "*".
++o1/dcolon_term	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "::".
++	oracle: Error 35.1:  Incorrect expression detected at "::".
++o1/dquote_open	oracle rc=250 crate rc=250	stdout same	stderr same
++	crate:  Error 6.3:  Unmatched double quote (").
++	oracle: Error 6.3:  Unmatched double quote (").
++o1/eq_after_term	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "=".
++	oracle: Error 35.1:  Incorrect expression detected at "=".
++o1/group_line2	oracle rc=220 crate rc=220	stdout same	stderr same
++	crate:  Error 36.901:  Left parenthesis "(" in position 5 on line 2 requires a corresponding right parenthesis ")".
++	oracle: Error 36.901:  Left parenthesis "(" in position 5 on line 2 requires a corresponding right parenthesis ")".
++o1/group_unclosed	oracle rc=220 crate rc=220	stdout same	stderr same
++	crate:  Error 36.901:  Left parenthesis "(" in position 5 on line 1 requires a corresponding right parenthesis ")".
++	oracle: Error 36.901:  Left parenthesis "(" in position 5 on line 1 requires a corresponding right parenthesis ")".
++o1/hex_bad_digit	oracle rc=241 crate rc=241	stdout same	stderr same
++	crate:  Error 15.3:  Only 0-9, a-f, A-F, and whitespace characters are valid in a hexadecimal string; found "g".
++	oracle: Error 15.3:  Only 0-9, a-f, A-F, and whitespace characters are valid in a hexadecimal string; found "g".
++o1/hex_group	oracle rc=0 crate rc=0	stdout same	stderr same
++o1/hex_lead_blank	oracle rc=241 crate rc=241	stdout same	stderr same
++	crate:  Error 15.1:  Incorrect location of whitespace character in position 1 in hexadecimal string.
++	oracle: Error 15.1:  Incorrect location of whitespace character in position 1 in hexadecimal string.
++o1/hex_trail_blank	oracle rc=241 crate rc=241	stdout same	stderr same
++	crate:  Error 15.1:  Incorrect location of whitespace character in position 3 in hexadecimal string.
++	oracle: Error 15.1:  Incorrect location of whitespace character in position 3 in hexadecimal string.
++o1/literal_display	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "=".
++	oracle: Error 35.1:  Incorrect expression detected at "=".
++o1/long_symbol	oracle rc=226 crate rc=226	stdout same	stderr same
++	crate:  Error 30.1:  Name or symbol exceeds 250 characters:  "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".
++	oracle: Error 30.1:  Name or symbol exceeds 250 characters:  "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".
++o1/msg_bad_name	oracle rc=237 crate rc=237	stdout same	stderr same
++	crate:  Error 19.909:  String or symbol expected after tilde (~).
++	oracle: Error 19.909:  String or symbol expected after tilde (~).
++o1/paren_empty	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "(".
++	oracle: Error 35.1:  Incorrect expression detected at "(".
++o1/parse_dot_var	oracle rc=225 crate rc=225	stdout same	stderr same
++	crate:  Error 31.3:  Variable symbol must not start with a "."; found ".A".
++	oracle: Error 31.3:  Variable symbol must not start with a "."; found ".A".
++o1/parse_paren_unclosed	oracle rc=220 crate rc=220	stdout same	stderr same
++	crate:  Error 36.901:  Left parenthesis "(" in position 13 on line 1 requires a corresponding right parenthesis ")".
++	oracle: Error 36.901:  Left parenthesis "(" in position 13 on line 1 requires a corresponding right parenthesis ")".
++o1/plus_missing	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "+".
++	oracle: Error 35.1:  Incorrect expression detected at "+".
++o1/prefix_missing	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.918:  Missing expression following assignment instruction.
++	oracle: Error 35.918:  Missing expression following assignment instruction.
++o1/qualified_bad	oracle rc=158 crate rc=158	stdout same	stderr same
++	crate:  Error 98.987:  Namespace "NS" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t2/p1/qualified_bad.rex".
++	oracle: Error 98.987:  Namespace "NS" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t2/p1/qualified_bad.rex".
++o1/raise_array_unclosed	oracle rc=220 crate rc=220	stdout same	stderr same
++	crate:  Error 36.901:  Left parenthesis "(" in position 22 on line 1 requires a corresponding right parenthesis ")".
++	oracle: Error 36.901:  Left parenthesis "(" in position 22 on line 1 requires a corresponding right parenthesis ")".
++o1/ref_literal	oracle rc=236 crate rc=236	stdout same	stderr same
++	crate:  Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found lit.
++	oracle: Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found lit.
++o1/ref_missing	oracle rc=236 crate rc=236	stdout same	stderr same
++	crate:  Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found ;.
++	oracle: Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found ;.
++o1/ref_number	oracle rc=236 crate rc=236	stdout same	stderr same
++	crate:  Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found 1.
++	oracle: Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found 1.
++o1/resource_default	oracle rc=157 crate rc=157	stdout same	stderr same
++	crate:  Error 99.943:  Missing ::RESOURCE end marker "::END" for resource "RR".
++	oracle: Error 99.943:  Missing ::RESOURCE end marker "::END" for resource "RR".
++o1/resource_open	oracle rc=157 crate rc=157	stdout same	stderr same
++	crate:  Error 99.943:  Missing ::RESOURCE end marker "XX" for resource "R".
++	oracle: Error 99.943:  Missing ::RESOURCE end marker "XX" for resource "R".
++o1/squote_open	oracle rc=250 crate rc=250	stdout same	stderr same
++	crate:  Error 6.2:  Unmatched single quote (').
++	oracle: Error 6.2:  Unmatched single quote (').
++o1/star_prefix	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "*".
++	oracle: Error 35.1:  Incorrect expression detected at "*".
++o1/stray_rbracket	oracle rc=219 crate rc=219	stdout same	stderr same
++	crate:  Error 37.901:  Unexpected "]".
++	oracle: Error 37.901:  Unexpected "]".
++o1/stray_rparen	oracle rc=219 crate rc=219	stdout same	stderr same
++	crate:  Error 37.2:  Unmatched ")" in expression.
++	oracle: Error 37.2:  Unmatched ")" in expression.
++o1/subterm_op	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "=".
++	oracle: Error 35.1:  Incorrect expression detected at "=".
++o1/super_bad	oracle rc=236 crate rc=236	stdout same	stderr same
++	crate:  Error 20.917:  Symbol expected after superclass colon (:).
++	oracle: Error 20.917:  Symbol expected after superclass colon (:).
++o1/symbol_lower_op	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "|".
++	oracle: Error 35.1:  Incorrect expression detected at "|".
++o1/use_arg_number	oracle rc=225 crate rc=225	stdout same	stderr same
++	crate:  Error 31.2:  Variable symbol must not start with a number; found "5".
++	oracle: Error 31.2:  Variable symbol must not start with a number; found "5".
++o2/bad_emoji	oracle rc=243 crate rc=243	stdout same	stderr same
++	crate:  Error 13.1:  Incorrect character in program "M-pM-^_M-^XM-^@" ('F09F9880'X).
++	oracle: Error 13.1:  Incorrect character in program "M-pM-^_M-^XM-^@" ('F09F9880'X).
++o2/bad_overlong	oracle rc=243 crate rc=243	stdout same	stderr same
++	crate:  Error 13.1:  Incorrect character in program "M-@" ('C0'X).
++	oracle: Error 13.1:  Incorrect character in program "M-@" ('C0'X).
++o2/bad_truncated	oracle rc=243 crate rc=243	stdout same	stderr same
++	crate:  Error 13.1:  Incorrect character in program "M-C" ('C3'X).
++	oracle: Error 13.1:  Incorrect character in program "M-C" ('C3'X).
++o2/bin_bad_group	oracle rc=241 crate rc=241	stdout same	stderr same
++	crate:  Error 15.6:  Binary strings must be grouped in units that are multiples of four characters.
++	oracle: Error 15.6:  Binary strings must be grouped in units that are multiples of four characters.
++o2/comment_line3	oracle rc=250 crate rc=250	stdout same	stderr same
++	crate:  Error 6.1:  Unmatched comment delimiter ("/*") on line 3.
++	oracle: Error 6.1:  Unmatched comment delimiter ("/*") on line 3.
++o2/hex_bad_group	oracle rc=241 crate rc=241	stdout same	stderr same
++	crate:  Error 15.5:  Hexadecimal strings must be grouped in units that are multiples of two characters.
++	oracle: Error 15.5:  Hexadecimal strings must be grouped in units that are multiples of two characters.
++o2/multi_line_bracket	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "[".
++	oracle: Error 35.1:  Incorrect expression detected at "[".
++o2/not_prefix	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.901:  Prefix operator "\" is not followed by an expression term.
++	oracle: Error 35.901:  Prefix operator "\" is not followed by an expression term.
++o2/prefix_after_op	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "+".
++	oracle: Error 35.1:  Incorrect expression detected at "+".
++o2/ref_amp_literal	oracle rc=236 crate rc=236	stdout same	stderr same
++	crate:  Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found &1.
++	oracle: Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found &1.
++o2/ref_raw_byte	oracle rc=236 crate rc=236	stdout same	stderr same
++	crate:  Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found M-^@.
++	oracle: Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found M-^@.
++o2/resource_amp	oracle rc=157 crate rc=157	stdout same	stderr same
++	crate:  Error 99.943:  Missing ::RESOURCE end marker "&2" for resource "&1".
++	oracle: Error 99.943:  Missing ::RESOURCE end marker "&2" for resource "&1".
++o2/say_prefix	oracle rc=0 crate rc=0	stdout same	stderr same
++o3/e00	oracle rc=219 crate rc=219	stdout same	stderr same
++	crate:  Error 37.2:  Unmatched ")" in expression.
++	oracle: Error 37.2:  Unmatched ")" in expression.
++o3/e01	oracle rc=219 crate rc=219	stdout same	stderr same
++	crate:  Error 37.901:  Unexpected "]".
++	oracle: Error 37.901:  Unexpected "]".
++o3/e02	oracle rc=219 crate rc=219	stdout same	stderr same
++	crate:  Error 37.901:  Unexpected "]".
++	oracle: Error 37.901:  Unexpected "]".
++o3/e03	oracle rc=219 crate rc=219	stdout same	stderr same
++	crate:  Error 37.2:  Unmatched ")" in expression.
++	oracle: Error 37.2:  Unmatched ")" in expression.
++o3/e04	oracle rc=219 crate rc=219	stdout same	stderr same
++	crate:  Error 37.2:  Unmatched ")" in expression.
++	oracle: Error 37.2:  Unmatched ")" in expression.
++o3/e05	oracle rc=219 crate rc=219	stdout same	stderr same
++	crate:  Error 37.2:  Unmatched ")" in expression.
++	oracle: Error 37.2:  Unmatched ")" in expression.
++o3/e06	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "+".
++	oracle: Error 35.1:  Incorrect expression detected at "+".
++o3/e07	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "||".
++	oracle: Error 35.1:  Incorrect expression detected at "||".
++o3/e08	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "||".
++	oracle: Error 35.1:  Incorrect expression detected at "||".
++o3/e09	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "*".
++	oracle: Error 35.1:  Incorrect expression detected at "*".
++o3/e10	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "**".
++	oracle: Error 35.1:  Incorrect expression detected at "**".
++o3/e11	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "~".
++	oracle: Error 35.1:  Incorrect expression detected at "~".
++o3/e12	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "%".
++	oracle: Error 35.1:  Incorrect expression detected at "%".
++o3/e13	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "\".
++	oracle: Error 35.1:  Incorrect expression detected at "\".
++o3/e14	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "(".
++	oracle: Error 35.1:  Incorrect expression detected at "(".
++o3/e15	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.901:  Prefix operator "\" is not followed by an expression term.
++	oracle: Error 35.901:  Prefix operator "\" is not followed by an expression term.
++o3/e16	oracle rc=220 crate rc=220	stdout same	stderr same
++	crate:  Error 36.901:  Left parenthesis "(" in position 5 on line 1 requires a corresponding right parenthesis ")".
++	oracle: Error 36.901:  Left parenthesis "(" in position 5 on line 1 requires a corresponding right parenthesis ")".
++o3/e17	oracle rc=220 crate rc=220	stdout same	stderr same
++	crate:  Error 36.901:  Left parenthesis "(" in position 5 on line 1 requires a corresponding right parenthesis ")".
++	oracle: Error 36.901:  Left parenthesis "(" in position 5 on line 1 requires a corresponding right parenthesis ")".
++o3/e18	oracle rc=220 crate rc=220	stdout same	stderr same
++	crate:  Error 36.901:  Left parenthesis "(" in position 6 on line 1 requires a corresponding right parenthesis ")".
++	oracle: Error 36.901:  Left parenthesis "(" in position 6 on line 1 requires a corresponding right parenthesis ")".
++o3/e19	oracle rc=220 crate rc=220	stdout same	stderr same
++	crate:  Error 36.902:  Square bracket "[" in position 6 on line 1 requires a corresponding right square bracket "]".
++	oracle: Error 36.902:  Square bracket "[" in position 6 on line 1 requires a corresponding right square bracket "]".
++o3/e20	oracle rc=220 crate rc=220	stdout same	stderr same
++	crate:  Error 36.902:  Square bracket "[" in position 6 on line 1 requires a corresponding right square bracket "]".
++	oracle: Error 36.902:  Square bracket "[" in position 6 on line 1 requires a corresponding right square bracket "]".
++o3/e21	oracle rc=220 crate rc=220	stdout same	stderr same
++	crate:  Error 36.902:  Square bracket "[" in position 7 on line 1 requires a corresponding right square bracket "]".
++	oracle: Error 36.902:  Square bracket "[" in position 7 on line 1 requires a corresponding right square bracket "]".
++o3/e22	oracle rc=237 crate rc=237	stdout same	stderr same
++	crate:  Error 19.909:  String or symbol expected after tilde (~).
++	oracle: Error 19.909:  String or symbol expected after tilde (~).
++o3/e23	oracle rc=237 crate rc=237	stdout same	stderr same
++	crate:  Error 19.909:  String or symbol expected after tilde (~).
++	oracle: Error 19.909:  String or symbol expected after tilde (~).
++o3/e24	oracle rc=237 crate rc=237	stdout same	stderr same
++	crate:  Error 19.909:  String or symbol expected after tilde (~).
++	oracle: Error 19.909:  String or symbol expected after tilde (~).
++o3/e25	oracle rc=237 crate rc=237	stdout same	stderr same
++	crate:  Error 19.909:  String or symbol expected after tilde (~).
++	oracle: Error 19.909:  String or symbol expected after tilde (~).
++o3/e26	oracle rc=219 crate rc=219	stdout same	stderr same
++	crate:  Error 37.2:  Unmatched ")" in expression.
++	oracle: Error 37.2:  Unmatched ")" in expression.
++o3/e27	oracle rc=219 crate rc=219	stdout same	stderr same
++	crate:  Error 37.901:  Unexpected "]".
++	oracle: Error 37.901:  Unexpected "]".
++o3/e28	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "[".
++	oracle: Error 35.1:  Incorrect expression detected at "[".
++o3/e29	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "[".
++	oracle: Error 35.1:  Incorrect expression detected at "[".
++o3/e30	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "+=".
++	oracle: Error 35.1:  Incorrect expression detected at "+=".
++o3/e31	oracle rc=236 crate rc=236	stdout same	stderr same
++	crate:  Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found 1.
++	oracle: Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found 1.
++o3/e32	oracle rc=236 crate rc=236	stdout same	stderr same
++	crate:  Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found &1.
++	oracle: Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found &1.
++o3/e33	oracle rc=236 crate rc=236	stdout same	stderr same
++	crate:  Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found A.B.
++	oracle: Error 20.930:  Simple variable or stem symbol expected after > or < prefix operator; found A.B.
++o3/e34	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "+".
++	oracle: Error 35.1:  Incorrect expression detected at "+".
++o3/e35	oracle rc=236 crate rc=236	stdout same	stderr same
++	crate:  Error 20.917:  Symbol expected after superclass colon (:).
++	oracle: Error 20.917:  Symbol expected after superclass colon (:).
++o3/e36	oracle rc=220 crate rc=220	stdout same	stderr same
++	crate:  Error 36.901:  Left parenthesis "(" in position 8 on line 1 requires a corresponding right parenthesis ")".
++	oracle: Error 36.901:  Left parenthesis "(" in position 8 on line 1 requires a corresponding right parenthesis ")".
++o3/e37	oracle rc=220 crate rc=220	stdout same	stderr same
++	crate:  Error 36.901:  Left parenthesis "(" in position 3 on line 2 requires a corresponding right parenthesis ")".
++	oracle: Error 36.901:  Left parenthesis "(" in position 3 on line 2 requires a corresponding right parenthesis ")".
++o3/e38	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "::".
++	oracle: Error 35.1:  Incorrect expression detected at "::".
++o3/e39	oracle rc=0 crate rc=0	stdout same	stderr same
++o3/e40	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "|".
++	oracle: Error 35.1:  Incorrect expression detected at "|".
++o3/e41	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "+".
++	oracle: Error 35.1:  Incorrect expression detected at "+".
++o3/e42	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.901:  Prefix operator "+" is not followed by an expression term.
++	oracle: Error 35.901:  Prefix operator "+" is not followed by an expression term.
++o3/e43	oracle rc=221 crate rc=221	stdout same	stderr same
++	crate:  Error 35.1:  Incorrect expression detected at "==".
++	oracle: Error 35.1:  Incorrect expression detected at "==".
++o3/e44	oracle rc=158 crate rc=158	stdout same	stderr same
++	crate:  Error 98.987:  Namespace "NS" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t2/p3/e44.rex".
++	oracle: Error 98.987:  Namespace "NS" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t2/p3/e44.rex".
+diff --git a/docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/run.sh b/docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/run.sh
+new file mode 100644
+index 000000000..15d020b6f
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-15-phase-9c/task-2-probes/run.sh
+@@ -0,0 +1,12 @@
++#!/bin/bash
++# usage: run.sh PROBEDIR OUTDIR CRATEBIN
++P=$1; O=$2; BIN=$3
++mkdir -p "$O"
++for f in "$P"/*.rex; do
++  n=$(basename "$f" .rex)
++  ( cd "$P" && ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib timeout -k 5 20 /home/moritz/dev/repos/ooRexx/build/bin/rexx "$f" >"$O/$n.o.out" 2>"$O/$n.o.err"; echo $? >"$O/$n.o.rc" )
++  ( cd "$P" && memcap 2G timeout -k 5 20 "$BIN" "$f" >"$O/$n.c.out" 2>"$O/$n.c.err"; echo $? >"$O/$n.c.rc" )
++  same=yes
++  for k in out err rc; do cmp -s "$O/$n.o.$k" "$O/$n.c.$k" || same="no($k)"; done
++  echo "$n $same"
++done
+diff --git a/rust/corpus/errors/parse-errors.tsv b/rust/corpus/errors/parse-errors.tsv
+index 06870ad54..b82f718f0 100644
+--- a/rust/corpus/errors/parse-errors.tsv
++++ b/rust/corpus/errors/parse-errors.tsv
+@@ -1101,10 +1101,22 @@ translation	99.938	2	Constant methods cannot have a method body.	::constant c\ns
+ translation	20.917	1	Symbol expected after superclass colon (:).	r = a~b:1\n
+ translation	20.917	1	Symbol expected after superclass colon (:).	r = a~b:1e5\n
+ translation	20.917	1	Symbol expected after superclass colon (:).	r = a~b:.\n
+ translation	20.917	1	Symbol expected after superclass colon (:).	r = a~b:'c'\n
+ translation	20.930	1	Simple variable or stem symbol expected after > or < prefix operator; found A.B.	r = >a.b\n
+ translation	20.930	1	Simple variable or stem symbol expected after > or < prefix operator; found 1.	r = >1\n
+ translation	20.930	1	Simple variable or stem symbol expected after > or < prefix operator; found x.	r = >"x"\n
+ translation	35.929	1	Missing expression in logical expression list.	if then nop\n
+ translation	35.929	1	Missing expression in logical expression list.	if , 1 = 1 then nop\n
+ translation	35.929	1	Missing expression in logical expression list.	if 1 = 1, then nop\n
++translation	36.901	1	Left parenthesis "(" in position 29 on line 1 requires a corresponding right parenthesis ")".	address x with input stream (1
++translation	36.901	1	Left parenthesis "(" in position 13 on line 1 requires a corresponding right parenthesis ")".	parse arg a (b
++translation	20.930	1	Simple variable or stem symbol expected after > or < prefix operator; found ;.	r = >\n
++translation	36.901	1	Left parenthesis "(" in position 5 on line 2 requires a corresponding right parenthesis ")".	r = 1 +,\n    (2\n
++translation	13.1	1	Incorrect character in program "" ('00'X).	x = a \x00 b\n
++translation	13.1	1	Incorrect character in program "\x80" ('80'X).	x = a \x80 b\n
++translation	13.1	1	Incorrect character in program "\xf0\x9f\x98\x80" ('F09F9880'X).	x = a \xf0\x9f\x98\x80 b\n
++translation	20.930	1	Simple variable or stem symbol expected after > or < prefix operator; found \x80.	r = >'80'x\n
++translation	20.930	1	Simple variable or stem symbol expected after > or < prefix operator; found &1.	r = >'&1'\n
++translation	99.943	1	Missing ::RESOURCE end marker "&2" for resource "&1".	::resource '&1' end '&2'\nline\n
++translation	6.1	3	Unmatched comment delimiter ("/*") on line 3.	say 1\n\nsay 2 /* open /* nested */\nmore\n
++translation	35.1	2	Incorrect expression detected at "~".	o = .object~new\ncall o~string('x')\n
+diff --git a/rust/crates/rexx-exec/src/error.rs b/rust/crates/rexx-exec/src/error.rs
+index 1f6e410d7..89c44d63d 100644
+--- a/rust/crates/rexx-exec/src/error.rs
++++ b/rust/crates/rexx-exec/src/error.rs
+@@ -1974,21 +1974,21 @@ impl From<FormatError> for Raised {
+ /// Converts a `rexx-parse` translation failure into the condition the oracle
+ /// raises for it.
+ /// ```text
+ ///      2 *-* do forever then
+ ///      2 *-* interpret "do forever then"
+ /// Error 27 running /abs/p1.rex line 2:  Invalid DO or LOOP syntax.
+ /// Error 27.901:  Incorrect data following FOREVER keyword on the loop; found "THEN".
+ /// ```
+ impl From<&ParseError> for Raised {
+     fn from(error: &ParseError) -> Raised {
+-        Raised::syntax(error.code, error.sub, Vec::new())
++        Raised::syntax(error.code, error.sub, error.inserts().to_vec())
+     }
+ }
+ 
+ impl Raised {
+     /// The condition `error` raises in `source`, positioned at `line`, and the
+     /// text of the clause its traceback line echoes
+     /// (`LanguageParser::createStackFrame`).
+     pub(crate) fn parse_failure(
+         error: &ParseError,
+         source: &ProgramSource,
+@@ -2409,20 +2409,32 @@ pub(crate) fn displayable(bytes: &mut [u8]) {
+         if *byte < 0x20 && !matches!(*byte, b'\t' | b'\n' | b'\r') {
+             *byte = b'?';
+         }
+     }
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn a_parse_errors_inserts_render_the_same_secondary_line_through_raised() {
++        let error = ParseError::raise(
++            rexx_inventory::errors::E36_901,
++            0,
++            [b"5".to_vec(), vec![0x80]],
++        );
++        let raised = Raised::from(&error);
++        assert_eq!(raised.message(36, 901), error.message());
++        assert_eq!(raised.additional, error.inserts());
++    }
++
+     /// One `FailureSite`, for the tests that predate the stack.
+     fn one(line: usize, text: &[u8], indent: usize) -> Vec<FailureSite> {
+         vec![FailureSite::Clause {
+             line,
+             text: text.to_vec(),
+             indent,
+         }]
+     }
+ 
+     /// The 7.3 transcript, captured from `build/bin/rexx` with `cat -A` so the
+diff --git a/rust/crates/rexx-inventory/build.rs b/rust/crates/rexx-inventory/build.rs
+index 5a16fe134..ebc7278f9 100644
+--- a/rust/crates/rexx-inventory/build.rs
++++ b/rust/crates/rexx-inventory/build.rs
+@@ -175,24 +175,60 @@ fn generate_errors(path: &Path) -> String {
+          pub static MESSAGES: &[Message] = &[\n",
+     );
+     for m in &messages {
+         writeln!(
+             out,
+             "    Message {{ major: {}, sub: {}, number: {}, symbol: {:?}, text: {:?} }},",
+             m.major, m.sub, m.number, m.symbol, m.text
+         )
+         .expect("writing to a String cannot fail");
+     }
+-    out.push_str("];\n");
++    out.push_str("];\n\n");
++    out.push_str(
++        "/// One catalogue message, typed by how many inserts its text takes: `N`\n\
++         /// is the highest `&k` it holds.\n\
++         #[derive(Copy, Clone, PartialEq, Eq, Debug)]\n\
++         pub struct Msg<const N: usize> {\n\
++         \x20   major: u16,\n\
++         \x20   sub: u16,\n\
++         }\n\n\
++         impl<const N: usize> Msg<N> {\n\
++         \x20   /// The (major, sub) pair this message is catalogued under.\n\
++         \x20   pub const fn code(self) -> (u16, u16) {\n\
++         \x20       (self.major, self.sub)\n\
++         \x20   }\n\
++         }\n\n",
++    );
++    for m in &messages {
++        writeln!(
++            out,
++            "pub const E{major}_{sub}: Msg<{n}> = Msg {{ major: {major}, sub: {sub} }};",
++            major = m.major,
++            sub = m.sub,
++            n = highest_insert(&m.text),
++        )
++        .expect("writing to a String cannot fail");
++    }
+     out
+ }
+ 
++/// The highest `k` of any `&k` in `text`, or zero for none.
++fn highest_insert(text: &str) -> usize {
++    let bytes = text.as_bytes();
++    bytes
++        .windows(2)
++        .filter(|pair| pair[0] == b'&' && pair[1].is_ascii_digit())
++        .map(|pair| usize::from(pair[1] - b'0'))
++        .max()
++        .unwrap_or(0)
++}
++
+ fn parse_num(raw: &str, what: &str) -> u16 {
+     raw.trim()
+         .parse()
+         .unwrap_or_else(|e| panic!("{what} {raw:?} is not a number: {e}"))
+ }
+ 
+ // ---------------------------------------------------------------- builtins --
+ 
+ fn generate_builtins(path: &Path) -> String {
+     let src = std::fs::read_to_string(path)
+diff --git a/rust/crates/rexx-inventory/tests/errors.rs b/rust/crates/rexx-inventory/tests/errors.rs
+index a2ad90cdd..2ae20c514 100644
+--- a/rust/crates/rexx-inventory/tests/errors.rs
++++ b/rust/crates/rexx-inventory/tests/errors.rs
+@@ -33,10 +33,50 @@ fn q_markup_around_literal_text_still_renders_its_quotes() {
+     // Dropping the wrapper would diverge from the oracle on every one.
+     let m = errors::lookup(6, 0).expect("the unmatched-quote error exists");
+     assert_eq!(m.text, "Unmatched \"/*\" or quote.");
+ }
+ 
+ #[test]
+ fn error_13_is_invalid_character_in_program() {
+     let m = errors::lookup(13, 0).expect("error 13 exists");
+     assert!(m.text.to_ascii_lowercase().contains("invalid character"));
+ }
++
++/// The `N` a message constant's type carries.
++fn arity<const N: usize>(_: errors::Msg<N>) -> usize {
++    N
++}
++
++/// The highest `&k` in the catalogue text of `(major, sub)`.
++fn highest_placeholder(code: (u16, u16)) -> usize {
++    let text = errors::lookup(code.0, code.1)
++        .expect("the constant names a row")
++        .text;
++    text.split('&')
++        .skip(1)
++        .filter_map(|rest| rest.chars().next()?.to_digit(10))
++        .max()
++        .map_or(0, |k| k as usize)
++}
++
++#[test]
++fn a_constants_arity_is_its_texts_highest_placeholder() {
++    let sample = [
++        (errors::E35_1.code(), arity(errors::E35_1)),
++        (errors::E13_1.code(), arity(errors::E13_1)),
++        (errors::E10_2.code(), arity(errors::E10_2)),
++        (errors::E99_943.code(), arity(errors::E99_943)),
++        (errors::E6_1.code(), arity(errors::E6_1)),
++    ];
++    for (code, n) in sample {
++        assert_eq!(n, highest_placeholder(code), "{code:?}");
++    }
++    assert_eq!(arity(errors::E13_1), 2);
++    assert_eq!(arity(errors::E10_2), 3);
++}
++
++#[test]
++fn a_message_with_no_placeholder_takes_no_inserts() {
++    let _: errors::Msg<0> = errors::E8_2;
++    assert_eq!(highest_placeholder(errors::E8_2.code()), 0);
++    assert_eq!(errors::E8_2.code(), (8, 2));
++}
+diff --git a/rust/crates/rexx-parse/src/error.rs b/rust/crates/rexx-parse/src/error.rs
+index 49eb0e882..116093037 100644
+--- a/rust/crates/rexx-parse/src/error.rs
++++ b/rust/crates/rexx-parse/src/error.rs
+@@ -13,62 +13,72 @@
+ //! physical line it is reported on.
+ //! ```text
+ //! Error 7 running select.rex line 3:  WHEN or OTHERWISE expected.
+ //! Error 7.1:  SELECT on line 3 requires WHEN.
+ //! ```
+ 
+ use crate::ProgramSource;
+ use crate::token::ParseError;
+ 
+ impl ParseError {
+-    /// The interpreter's message text for this error, rendered from the
+-    /// generated table.
+-    pub fn message(&self) -> String {
+-        // The sub-message row first, because it is the specific one, and the
+-        // major's row only when the specific one would leave a placeholder
+-        // visible. Filling the placeholder is not an option here -- see the
+-        // module's note on scope -- and a user-facing message reading
+-        // `found "&1"` would be worse than the generic one that is true.
+-        let specific = row(self.code, self.sub);
+-        if let Some(text) = specific.filter(|text| !has_placeholder(text)) {
+-            return text.to_string();
+-        }
+-        row(self.code, 0)
+-            .unwrap_or_else(|| panic!("no interpreter message for error {}", self.code))
+-            .to_string()
++    /// The interpreter's secondary message for this error, its `&1`, `&2`, ...
++    /// replaced by [`ParseError::inserts`] as bytes.
++    ///
++    /// # Panics
++    ///
++    /// If the catalogue has no row for this error's (major, sub) pair.
++    pub fn message(&self) -> Vec<u8> {
++        let text = rexx_inventory::errors::lookup(self.code, self.sub)
++            .unwrap_or_else(|| {
++                panic!(
++                    "no interpreter message for error {}.{}",
++                    self.code, self.sub
++                )
++            })
++            .text;
++        substitute(text, self.inserts())
+     }
+ 
+     /// The 1-based physical line this error is reported on.
+     pub fn line(&self, source: &ProgramSource) -> usize {
+         source.line_of(self.byte)
+     }
+ }
+ 
+ impl std::fmt::Display for ParseError {
+-    /// `13.1: Invalid character in program.`
++    /// `8.2: ELSE has no corresponding THEN clause.`, the message lossily decoded.
+     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+-        write!(f, "{}.{}: {}", self.code, self.sub, self.message())
++        write!(
++            f,
++            "{}.{}: {}",
++            self.code,
++            self.sub,
++            String::from_utf8_lossy(&self.message())
++        )
+     }
+ }
+ 
+ impl std::error::Error for ParseError {}
+ 
+-/// The generated table's text for one `(major, sub)` pair, or `None` when the
+-/// table has no such row.
+-fn row(code: u16, sub: u16) -> Option<&'static str> {
+-    rexx_inventory::errors::lookup(code, sub).map(|message| message.text)
+-}
+-
+-/// Whether `text` still holds a `&1`-style substitution placeholder.
+-fn has_placeholder(text: &str) -> bool {
+-    let mut rest = text;
+-    while let Some(at) = rest.find('&') {
+-        rest = &rest[at + 1..];
+-        if rest.starts_with(|c: char| c.is_ascii_digit()) {
+-            return true;
++/// `text` with each `&k` replaced by `values[k - 1]`, and a `&k` with no value
++/// left as it is.
++fn substitute(text: &str, values: &[Vec<u8>]) -> Vec<u8> {
++    let mut out = Vec::with_capacity(text.len());
++    let mut bytes = text.bytes().peekable();
++    while let Some(byte) = bytes.next() {
++        let value = match (byte, bytes.peek()) {
++            (b'&', Some(digit @ b'1'..=b'9')) => values.get(usize::from(digit - b'1')),
++            _ => None,
++        };
++        match value {
++            Some(value) => {
++                bytes.next();
++                out.extend_from_slice(value);
++            }
++            None => out.push(byte),
+         }
+     }
+-    false
++    out
+ }
+ 
+ #[cfg(test)]
+ mod tests;
+diff --git a/rust/crates/rexx-parse/src/error/tests.rs b/rust/crates/rexx-parse/src/error/tests.rs
+index 2e9fc11f1..b81af5393 100644
+--- a/rust/crates/rexx-parse/src/error/tests.rs
++++ b/rust/crates/rexx-parse/src/error/tests.rs
+@@ -2,173 +2,125 @@
+ /*                                                                            */
+ /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+ /*                                                                            */
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+-//! `message`, `line` and the placeholder rule that decides between the two
+-//! table rows an error has.
++//! `message`, `line`, and how the inserts reach the message.
++
++use rexx_inventory::errors::{E7_1, E8_2, E13_1, E25_901, E35_1, E36_901};
+ 
+ use crate::token::ParseError;
+ use crate::{ProgramSource, SourceKind};
+ 
+-use super::has_placeholder;
+-
+ #[test]
+ fn a_sub_message_that_needs_no_substitution_is_the_message() {
+     // `build/bin/rexxc` on a file holding `nop` then `else nop` prints, verbatim:
+     //     2 *-* else nop
+     //     Error 8 running <file> line 2:  Unexpected THEN or ELSE.
+     //     Error 8.2:  ELSE has no corresponding THEN clause.
+-    // so the sub-message is the specific one and needs nothing filled in.
+     assert_eq!(
+         ParseError::new(8, 2, 0).message(),
+-        "ELSE has no corresponding THEN clause."
++        b"ELSE has no corresponding THEN clause."
+     );
+ }
+ 
+ #[test]
+ fn a_second_sub_message_that_needs_no_substitution_is_also_the_message() {
+-    // A separate test rather than a second assertion above, because a shared
+-    // `#[test]` hid a wrong expectation twice in this task: the first assertion
+-    // fails, the run stops, and the second is never evaluated.
+     assert_eq!(
+         ParseError::new(10, 1, 0).message(),
+-        "END has no corresponding DO, LOOP, or SELECT."
++        b"END has no corresponding DO, LOOP, or SELECT."
+     );
+ }
+ 
+ #[test]
+-fn a_sub_message_that_would_substitute_a_token_falls_back_to_the_majors_text() {
++fn a_token_insert_fills_the_sub_message() {
+     // `rexxc` on `::class c junk` prints, verbatim:
+     //     1 *-* ::class c junk
+     //     Error 25 running <file> line 1:  Invalid subkeyword found.
+     //     Error 25.901:  Unknown keyword on ::CLASS directive; found "JUNK".
+-    // The sub-message's `&1` is the offending token, which this phase does not
+-    // carry, so the major's own line is what comes out -- and it is byte for byte
+-    // what the oracle's first line says.
+     assert_eq!(
+-        ParseError::new(25, 901, 0).message(),
+-        "Invalid subkeyword found."
++        ParseError::raise(E25_901, 0, [b"JUNK".to_vec()]).message(),
++        br#"Unknown keyword on ::CLASS directive; found "JUNK"."#
+     );
+ }
+ 
+ #[test]
+-fn a_sub_message_that_would_substitute_a_line_falls_back_to_the_majors_text() {
+-    // The open-construct-line family. `rexxc` on `nop`, blank, `select`, blank,
+-    // `end` prints, verbatim:
++fn a_line_insert_fills_the_sub_message() {
++    // `rexxc` on `nop`, blank, `select`, blank, `end` prints, verbatim:
+     //     3 *-* select
+     //     Error 7 running <file> line 3:  WHEN or OTHERWISE expected.
+     //     Error 7.1:  SELECT on line 3 requires WHEN.
+     assert_eq!(
+-        ParseError::new(7, 1, 0).message(),
+-        "WHEN or OTHERWISE expected."
++        ParseError::raise(E7_1, 0, [b"3".to_vec()]).message(),
++        b"SELECT on line 3 requires WHEN."
+     );
+ }
+ 
+ #[test]
+-fn the_one_substitution_this_phase_will_not_produce_falls_back_too() {
+-    // 36.901's `&1` is a byte offset within a line, which the brief rules out.
++fn two_inserts_fill_in_order() {
+     // `rexxc` on `r = (a` prints, verbatim:
+-    //     1 *-* r = (a
+-    //     Error 36 running <file> line 1:  Unmatched "(" or "[" in expression.
+     //     Error 36.901:  Left parenthesis "(" in position 5 on line 1 requires a
+     //     corresponding right parenthesis ")".
+     assert_eq!(
+-        ParseError::new(36, 901, 0).message(),
+-        r#"Unmatched "(" or "[" in expression."#
++        ParseError::raise(E36_901, 0, [b"5".to_vec(), b"1".to_vec()]).message(),
++        br#"Left parenthesis "(" in position 5 on line 1 requires a corresponding right parenthesis ")"."#
+     );
+ }
+ 
+ #[test]
+-fn no_message_the_parser_can_produce_holds_a_placeholder() {
+-    // The property, not an instance of it: whatever branch `message` takes, an
+-    // `&1` must never reach a user. Checked over every row of the generated
+-    // table, so a table update that moves a substitution into a major's own
+-    // text fails here rather than in whatever prints it.
+-    for message in rexx_inventory::errors::MESSAGES {
+-        if MAJORS_THAT_SUBSTITUTE.contains(&message.major) {
+-            continue;
+-        }
+-        let error = ParseError::new(message.major, message.sub, 0);
+-        // A major with no sub-0 row would panic in `message`. None of the majors
+-        // in the table lacks one, which is asserted separately below.
+-        assert!(
+-            !has_placeholder(&error.message()),
+-            "{}.{:03} renders {:?}",
+-            message.major,
+-            message.sub,
+-            error.message()
+-        );
+-    }
+-}
+-
+-/// The majors whose own sub-0 text substitutes, so the fallback cannot make
+-/// them placeholder-free. There is exactly one, and it is not a translation
+-/// error, so nothing this crate raises reaches the exception. The test below is
+-/// what keeps that true.
+-const MAJORS_THAT_SUBSTITUTE: &[u16] = &[101];
+-
+-#[test]
+-fn only_a_runtime_major_has_a_substitution_in_its_own_text() {
+-    let found: Vec<u16> = rexx_inventory::errors::MESSAGES
+-        .iter()
+-        .filter(|m| m.sub == 0 && has_placeholder(m.text))
+-        .map(|m| m.major)
+-        .collect();
+-    // 101.000 is `Error &1 running &2, line &3:.`, a wrapper the interpreter
+-    // fills in when it reports any error at all. It is not raised as an error
+-    // itself and it is not a translation error, so exempting it does not exempt
+-    // anything this parser produces. A second major appearing here would mean
+-    // the exemption list above has to be re-argued, not extended.
+-    assert_eq!(found, vec![101]);
++fn a_message_raised_with_no_inserts_never_falls_back_to_the_major() {
++    // The oracle's `messageSubstitution` leaves a marker it has no value for.
++    assert_eq!(
++        ParseError::new(25, 901, 0).message(),
++        br#"Unknown keyword on ::CLASS directive; found "&1"."#
++    );
+ }
+ 
+ #[test]
+-fn every_major_in_the_table_has_a_sub_zero_row_to_fall_back_to() {
+-    // `message`'s fallback panics without one, so this is the precondition for
+-    // the test above rather than a separate property.
+-    let mut missing = Vec::new();
+-    for message in rexx_inventory::errors::MESSAGES {
+-        if rexx_inventory::errors::lookup(message.major, 0).is_none() {
+-            missing.push(message.major);
+-        }
+-    }
+-    missing.dedup();
+-    assert!(missing.is_empty(), "majors with no sub-0 row: {missing:?}");
++fn an_insert_is_not_substituted_again() {
++    assert_eq!(
++        ParseError::raise(E35_1, 0, [b"&1".to_vec()]).message(),
++        br#"Incorrect expression detected at "&1"."#
++    );
+ }
+ 
+ #[test]
+-fn the_placeholder_test_finds_a_digit_after_the_ampersand() {
+-    assert!(has_placeholder("found &1."));
+-    assert!(has_placeholder("&12 and &2"));
+-    assert!(has_placeholder("trailing &9"));
++fn an_insert_reaches_the_message_unconverted() {
++    // The oracle's 13.1 for a `'80'x` source byte prints that byte raw.
++    assert_eq!(
++        ParseError::raise(E13_1, 0, [vec![0x80], b"80".to_vec()]).message(),
++        b"Incorrect character in program \"\x80\" ('80'X)."
++    );
+ }
+ 
+ #[test]
+-fn the_placeholder_test_ignores_an_ampersand_with_nothing_fillable_after_it() {
+-    // A `&` with no digit after it is text, not a template. No table row is
+-    // spelled this way today, which is why the property is asserted on the
+-    // function rather than only through the table.
+-    assert!(!has_placeholder("A & B"));
+-    assert!(!has_placeholder("&"));
+-    assert!(!has_placeholder("&x"));
+-    assert!(!has_placeholder(""));
++fn a_message_with_no_inserts_carries_none() {
++    let error = ParseError::raise(E8_2, 4, []);
++    assert!(error.inserts().is_empty());
++    assert_eq!(error, ParseError::new(8, 2, 4));
+ }
+ 
+ #[test]
+-fn the_placeholder_test_does_not_stop_at_the_first_ampersand() {
+-    assert!(has_placeholder("A & B &2"));
++fn the_inserts_read_back_in_order() {
++    let error = ParseError::raise(E36_901, 0, [b"5".to_vec(), b"1".to_vec()]);
++    assert_eq!(error.inserts(), [b"5".to_vec(), b"1".to_vec()]);
++    assert_eq!((error.code, error.sub), (36, 901));
++}
++
++#[test]
++fn a_parse_error_is_three_words() {
++    assert_eq!(std::mem::size_of::<ParseError>(), 24);
+ }
+ 
+ /// Three lines of five bytes each plus a terminator, so line 1 is bytes 0-4,
+ /// its `\n` is byte 5, line 2 is bytes 6-10 with its `\n` at 11, and line 3 is
+ /// bytes 12-16 with its `\n` at 17.
+ fn three_lines() -> ProgramSource {
+     ProgramSource::new(b"say 1\nsay 2\nsay 3\n".to_vec(), SourceKind::Program)
+ }
+ 
+ #[test]
+@@ -205,14 +157,22 @@ fn display_names_the_number_the_sub_number_and_the_message() {
+         "8.2: ELSE has no corresponding THEN clause."
+     );
+ }
+ 
+ #[test]
+ fn display_does_not_zero_pad_a_three_digit_sub_number() {
+     // `25.901` is how the interpreter prints it, even though the table stores the
+     // sub as 901 and its own XML spells it 901 inside a `<Subcode>` that pads
+     // two-digit ones to three.
+     assert_eq!(
+-        ParseError::new(25, 901, 0).to_string(),
+-        "25.901: Invalid subkeyword found."
++        ParseError::raise(E25_901, 0, [b"JUNK".to_vec()]).to_string(),
++        r#"25.901: Unknown keyword on ::CLASS directive; found "JUNK"."#
++    );
++}
++
++#[test]
++fn display_decodes_a_non_utf8_insert_lossily() {
++    assert_eq!(
++        ParseError::raise(E13_1, 0, [vec![0x80], b"80".to_vec()]).to_string(),
++        "13.1: Incorrect character in program \"\u{fffd}\" ('80'X)."
+     );
+ }
+diff --git a/rust/crates/rexx-parse/src/expr.rs b/rust/crates/rexx-parse/src/expr.rs
+index a0649d534..d458224a5 100644
+--- a/rust/crates/rexx-parse/src/expr.rs
++++ b/rust/crates/rexx-parse/src/expr.rs
+@@ -6,20 +6,25 @@
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! The expression grammar: hand-written recursive descent, per D10.
+ 
+ use std::ops::Range;
+ 
++use rexx_inventory::errors::{
++    E11_1, E19_909, E20_917, E20_923, E20_930, E31_2, E31_3, E35_1, E35_901, E36_901, E36_902,
++    E37_1, E37_2, E37_901, Msg,
++};
++
+ use crate::ast::{CallTarget, Expr, ExprKind, PrefixOp};
+ use crate::token::{
+     Operator, ParseCtx, ParseError, SymbolClass, SymbolId, Tag, Token, TokenCursor, TokenKind,
+ };
+ 
+ /// How many levels of nested expression the parser will descend before
+ /// raising `11.1`, "Insufficient control stack space; cannot continue
+ /// execution", instead of recursing one level deeper.
+ pub const MAX_EXPR_DEPTH: u32 = 50_000;
+ 
+@@ -130,21 +135,21 @@ const SUBKEY_WITH: usize = 49;
+ /// Parses one required expression, stopping at `term`.
+ pub(crate) fn parse_expr(
+     ctx: &ParseCtx,
+     cursor: &mut TokenCursor,
+     term: Terminators,
+     missing: u16,
+ ) -> Result<Expr, ParseError> {
+     let mut parser = Parser::new(ctx, cursor);
+     match parser.expression(term)? {
+         Some(expr) => Ok(expr),
+-        None => Err(parser.error(35, missing)),
++        None => Err(parser.missing_expression(missing)),
+     }
+ }
+ 
+ /// Parses an expression that may be absent, stopping at `term`.
+ pub(crate) fn parse_expression(
+     ctx: &ParseCtx,
+     cursor: &mut TokenCursor,
+     term: Terminators,
+ ) -> Result<Option<Expr>, ParseError> {
+     Parser::new(ctx, cursor).expression(term)
+@@ -179,23 +184,24 @@ pub(crate) fn parse_arg_list(
+     Parser::new(ctx, cursor).arg_list(closer)
+ }
+ 
+ /// Parses the expression inside a `(`, whose `(` is already consumed, and
+ /// consumes the `)`.
+ pub(crate) fn parse_paren_expression(
+     ctx: &ParseCtx,
+     cursor: &mut TokenCursor,
+ ) -> Result<Option<Expr>, ParseError> {
+     let mut parser = Parser::new(ctx, cursor);
++    let opener = parser.previous();
+     let inner = parser.subexpression(Terminators::RIGHT)?;
+     if parser.peek_tag() != Some(Tag::RightParen) {
+-        return Err(parser.unmatched(false));
++        return Err(parser.unmatched(opener, false));
+     }
+     parser.advance();
+     Ok(inner)
+ }
+ 
+ /// Parses the restricted expression form that `RAISE`, `FORWARD`, `USE ARG`
+ /// defaults and `ADDRESS ... WITH` accept.
+ pub(crate) fn parse_constant_expression(
+     ctx: &ParseCtx,
+     cursor: &mut TokenCursor,
+@@ -223,26 +229,26 @@ pub(crate) fn parse_constant_expression(
+             let kind = symbol_kind(*id, *class);
+             parser.advance();
+             Ok(Some(Expr::new(kind, span)))
+         }
+         TokenKind::LeftParen => {
+             parser.advance();
+             // A comma list is allowed in here, which is why this is
+             // `parseFullSubExpression` and not `parseSubExpression`.
+             let inner = parser.full_subexpression(Terminators::RIGHT)?;
+             if parser.peek_tag() != Some(Tag::RightParen) {
+-                return Err(parser.unmatched(false));
++                return Err(parser.unmatched(token, false));
+             }
+             parser.advance();
+             Ok(inner)
+         }
+-        _ => Err(parser.error(35, 1)),
++        _ => Err(parser.raise(E35_1, [display_value(ctx, Some(token))])),
+     }
+ }
+ 
+ /// Parses a term that is a message send, or reports that the clause does not
+ /// start with one.
+ pub(crate) fn parse_message_term(
+     ctx: &ParseCtx,
+     cursor: &mut TokenCursor,
+ ) -> Result<Option<Expr>, ParseError> {
+     Parser::new(ctx, cursor).message_term()
+@@ -290,28 +296,23 @@ pub(crate) fn need_variable(
+     id: SymbolId,
+     class: SymbolClass,
+     byte: usize,
+ ) -> Result<(), ParseError> {
+     if matches!(
+         class,
+         SymbolClass::Variable | SymbolClass::Stem | SymbolClass::Compound
+     ) {
+         return Ok(());
+     }
+-    // `Error_Invalid_variable_period` is 31.3 and
+-    // `Error_Invalid_variable_number` is 31.2.
+-    let sub = if ctx.symbols.name(id).starts_with('.') {
+-        3
+-    } else {
+-        2
+-    };
+-    Err(ParseError::new(31, sub, byte))
++    let name = ctx.symbols.name(id);
++    let msg = if name.starts_with('.') { E31_3 } else { E31_2 };
++    Err(ParseError::raise(msg, byte, [name.as_bytes().to_vec()]))
+ }
+ 
+ /// One expression parse in progress.
+ struct Parser<'a, 'c> {
+     ctx: &'a ParseCtx<'a>,
+     cursor: &'c mut TokenCursor,
+     /// The byte offset every error is reported against.
+     clause_byte: usize,
+     /// How many levels of nested expression are currently open: a grouping
+     /// `(...)` through `subterm`'s `TokenKind::LeftParen` arm, plus an
+@@ -328,27 +329,57 @@ impl<'a, 'c> Parser<'a, 'c> {
+             .get(cursor.start())
+             .map_or(0, |token| token.span.start);
+         Parser {
+             ctx,
+             cursor,
+             clause_byte,
+             expr_depth: 0,
+         }
+     }
+ 
+-    fn error(&self, code: u16, sub: u16) -> ParseError {
+-        ParseError::new(code, sub, self.clause_byte)
++    fn raise<const N: usize>(&self, msg: Msg<N>, inserts: [Vec<u8>; N]) -> ParseError {
++        ParseError::raise(msg, self.clause_byte, inserts)
+     }
+ 
+-    /// Error 36's two sub-numbers, for an opener with no matching closer.
+-    fn unmatched(&self, bracket: bool) -> ParseError {
+-        self.error(36, if bracket { 902 } else { 901 })
++    /// The error 35 the caller names for an expression that is absent.
++    fn missing_expression(&self, sub: u16) -> ParseError {
++        ParseError::new(35, sub, self.clause_byte)
++    }
++
++    /// 35.1 at `token`, `None` being the end of the clause.
++    fn invalid_at(&self, token: Option<&Token>) -> ParseError {
++        self.raise(E35_1, [display_value(self.ctx, token)])
++    }
++
++    /// Error 36's two sub-numbers, for `opener` with no matching closer:
++    /// `errorPosition` (`LanguageParser.cpp:4114`) inserts its 1-based
++    /// offset in its line, then the line.
++    fn unmatched(&self, opener: &Token, bracket: bool) -> ParseError {
++        debug_assert!(matches!(
++            opener.kind,
++            TokenKind::LeftParen | TokenKind::LeftBracket
++        ));
++        let source = self.ctx.source;
++        let line = source.line_of(opener.span.start);
++        let line_start = source.line_span(line).map_or(0, |span| span.start);
++        let inserts = [
++            (opener.span.start - line_start + 1)
++                .to_string()
++                .into_bytes(),
++            line.to_string().into_bytes(),
++        ];
++        self.raise(if bracket { E36_902 } else { E36_901 }, inserts)
++    }
++
++    /// The token just consumed, which opened the construct being parsed.
++    fn previous(&self) -> &'a Token {
++        &self.ctx.tokens[self.cursor.position() - 1]
+     }
+ 
+     /// The next token, or `None` at the end of the clause.
+     fn peek(&self) -> Option<&'a Token> {
+         self.cursor.peek().map(|i| &self.ctx.tokens[i])
+     }
+ 
+     fn peek_tag(&self) -> Option<Tag> {
+         self.peek().map(|token| token.kind.tag())
+     }
+@@ -468,21 +499,21 @@ impl<'a, 'c> Parser<'a, 'c> {
+         Ok(Expr::new(ExprKind::Logical(parts), extent))
+     }
+ 
+     /// The comma-separated loop that `parseLogical` (`LanguageParser.cpp:4264`)
+     /// and `parseCaseWhenList` (`:3168`) share.
+     fn comma_list(&mut self, term: Terminators, missing: u16) -> Result<Vec<Expr>, ParseError> {
+         self.skip_blanks();
+         let mut parts: Vec<Expr> = Vec::new();
+         loop {
+             let Some(part) = self.subexpression(term)? else {
+-                return Err(self.error(35, missing));
++                return Err(self.missing_expression(missing));
+             };
+             parts.push(part);
+             if self.peek_tag() == Some(Tag::Comma) {
+                 self.advance();
+             } else {
+                 break;
+             }
+         }
+         Ok(parts)
+     }
+@@ -525,48 +556,49 @@ impl<'a, 'c> Parser<'a, 'c> {
+                     // because `nextReal` moved past it, so the blanks are
+                     // skipped rather than left for the caller.
+                     if self.is_terminator(self.peek_real(), term) {
+                         self.skip_blanks();
+                         return Ok(left);
+                     }
+                     Operator::Blank
+                 }
+                 // `\` is prefix-only. This is why `a \(1 = 2)` is 35.1 rather
+                 // than a concatenation.
+-                TokenKind::Operator(Operator::Backslash) => return Err(self.error(35, 1)),
++                TokenKind::Operator(Operator::Backslash) => {
++                    return Err(self.invalid_at(Some(token)));
++                }
+                 TokenKind::Operator(op) => *op,
+                 // The C++'s TILDE, DTILDE and SQLEFT cases, which reattach the
+                 // message to the term already parsed. Reached whenever the left
+                 // term did not come back through `message_subterm`'s own
+                 // cascade loop, which is what a prefix `>` or `<` does:
+                 // `variable_reference_term` returns straight to the caller, so
+                 // the `~` in `>a~b` arrives here. Measured, `r = >a~b` and
+                 // `r = >a[1]` both translate.
+                 TokenKind::Tilde | TokenKind::DTilde | TokenKind::LeftBracket => {
+                     left = self.cascade(left, term)?;
+                     continue;
+                 }
+-                TokenKind::RightParen => return Err(self.error(37, 2)),
+-                TokenKind::RightBracket => return Err(self.error(37, 901)),
++                TokenKind::RightParen => return Err(self.raise(E37_2, [])),
++                TokenKind::RightBracket => return Err(self.raise(E37_901, [])),
+                 // `+=` and friends are assignments, not operators.
+-                TokenKind::Assignment(_) => return Err(self.error(35, 1)),
+-                _ => return Err(self.error(35, 1)),
++                _ => return Err(self.invalid_at(Some(token))),
+             };
+             let prec = precedence(op);
+             if prec < min_prec {
+                 return Ok(left);
+             }
+             if op != Operator::Abuttal {
+                 self.advance();
+             }
+             let Some(right) = self.message_subterm(term)? else {
+-                return Err(self.error(35, 1));
++                return Err(self.raise(E35_1, [op.spelling().as_bytes().to_vec()]));
+             };
+             let right = self.binary_rest(right, prec + 1, term)?;
+             left = Expr::binary(op, left, right);
+         }
+     }
+ 
+     /// `parseMessageSubterm` (`LanguageParser.cpp:3617`): prefix operators,
+     /// then a subterm with every message send that follows it.
+     fn message_subterm(&mut self, term: Terminators) -> Result<Option<Expr>, ParseError> {
+         let Some(token) = self.peek() else {
+@@ -581,29 +613,29 @@ impl<'a, 'c> Parser<'a, 'c> {
+             let prefix = match op {
+                 Operator::Plus => PrefixOp::Plus,
+                 Operator::Subtract => PrefixOp::Minus,
+                 Operator::Backslash => PrefixOp::Not,
+                 // A prefix `>` or `<` is not an operator: it takes a
+                 // reference to a variable.
+                 Operator::LessThan | Operator::GreaterThan => {
+                     self.advance();
+                     return self.variable_reference_term(from).map(Some);
+                 }
+-                _ => return Err(self.error(35, 1)),
++                _ => return Err(self.invalid_at(Some(token))),
+             };
+             self.advance();
+             // Recursing on the whole subterm rather than on an atom is what
+             // puts prefix operators above `**`: `-2 ** 2` is `(-2) ** 2`,
+             // which is 4. It also means a chain works, though `--` is a line
+             // comment so `- -2` needs the blank.
+             let Some(operand) = self.message_subterm(term)? else {
+-                return Err(self.error(35, 901));
++                return Err(self.raise(E35_901, [op.spelling().as_bytes().to_vec()]));
+             };
+             return Ok(Some(Expr::new(
+                 ExprKind::Prefix {
+                     op: prefix,
+                     operand: Box::new(operand),
+                 },
+                 op_span,
+             )));
+         }
+         let Some(atom) = self.subterm(term)? else {
+@@ -677,23 +709,23 @@ impl<'a, 'c> Parser<'a, 'c> {
+                 TokenKind::Symbol { id, .. } => self.ctx.symbols.name(*id).as_bytes().to_vec(),
+                 // `parseMessage` upcases a literal name too, with
+                 // `RexxString::upper`, which is `Utilities::toUpper` per byte
+                 // and so upcases ASCII only (`Utilities.hpp:52`). Measured,
+                 // `"abc"~'length'`, `"abc"~'LENGTH'` and `"abc"~"lEnGtH"` all
+                 // give 3.
+                 TokenKind::Literal { value } => {
+                     value.iter().map(|b| b.to_ascii_uppercase()).collect()
+                 }
+                 // `a~[3]` is 19.909: a bracket is not a message name.
+-                _ => return Err(self.error(19, 909)),
++                _ => return Err(self.raise(E19_909, [])),
+             },
+-            _ => return Err(self.error(19, 909)),
++            _ => return Err(self.raise(E19_909, [])),
+         };
+         // Interned upcased, which is where `parseMessage` interns it:
+         // `messagename = commonString(messagename->upper())`
+         // (`parser/LanguageParser.cpp:3391`).
+         let name = self.ctx.selectors.borrow_mut().intern(&name);
+         self.advance();
+ 
+         let mut super_class = None;
+         if self.peek_tag() == Some(Tag::Colon) {
+             self.advance();
+@@ -721,97 +753,98 @@ impl<'a, 'c> Parser<'a, 'c> {
+             },
+             extent,
+         ))
+     }
+ 
+     /// The `:superclass` override's term, which must pass
+     /// `isVariableOrDot` (`Token.hpp:576`): a simple variable, a stem, a
+     /// compound variable or a dot symbol.
+     fn super_class_term(&mut self, term: Terminators) -> Result<Expr, ParseError> {
+         let Some(token) = self.peek() else {
+-            return Err(self.error(20, 917));
++            return Err(self.raise(E20_917, []));
+         };
+         if self.is_terminator(Some(token), term) {
+-            return Err(self.error(20, 917));
++            return Err(self.raise(E20_917, []));
+         }
+         let span = token.span.clone();
+         // `isVariableOrDot` reads only the subclass, so a literal token cannot
+         // pass it whatever it holds, and this match on `Symbol` is the same
+         // gate.
+         let TokenKind::Symbol { id, class } = &token.kind else {
+-            return Err(self.error(20, 917));
++            return Err(self.raise(E20_917, []));
+         };
+         if !matches!(
+             class,
+             SymbolClass::Variable
+                 | SymbolClass::Stem
+                 | SymbolClass::Compound
+                 | SymbolClass::DotSymbol
+         ) {
+-            return Err(self.error(20, 917));
++            return Err(self.raise(E20_917, []));
+         }
+         let kind = symbol_kind(*id, *class);
+         self.advance();
+         Ok(Expr::new(kind, span))
+     }
+ 
+     /// `parseVariableReferenceTerm` (`LanguageParser.cpp:3719`): a prefix `>`
+     /// or `<` on a simple variable or a stem.
+     fn variable_reference_term(&mut self, from: usize) -> Result<Expr, ParseError> {
+         self.skip_blanks();
+         let Some(token) = self.peek() else {
+-            return Err(self.error(20, 930));
++            return Err(self.raise(E20_930, [display_value(self.ctx, None)]));
+         };
+         let span = token.span.clone();
+         let kind = match &token.kind {
+             TokenKind::Symbol {
+                 id,
+                 class: SymbolClass::Variable,
+             } => ExprKind::Variable(*id),
+             TokenKind::Symbol {
+                 id,
+                 class: SymbolClass::Stem,
+             } => ExprKind::Stem(*id),
+-            _ => return Err(self.error(20, 930)),
++            _ => return Err(self.raise(E20_930, [display_value(self.ctx, Some(token))])),
+         };
+         self.advance();
+         let inner = Expr::new(kind, span);
+         let extent = self.extent(from);
+         Ok(Expr::new(
+             ExprKind::VariableReference(Box::new(inner)),
+             extent,
+         ))
+     }
+ 
+     /// `parseArgList` (`LanguageParser.cpp:3083`): comma-separated arguments
+     /// up to `closer`, which is consumed.
+     fn arg_list(&mut self, closer: Option<Tag>) -> Result<Vec<Option<Expr>>, ParseError> {
+         // Task 3d: an argument list re-enters expression parsing, so
+         // `f(f(f(...)))` and `a[a[a[...]]]` recurse once per nesting level
+         // exactly as grouping parentheses do, through different code and off
+         // the same stack. Counted against the same budget for the reason
+         // `MAX_EXPR_DEPTH`'s doc gives.
+         if self.expr_depth >= MAX_EXPR_DEPTH {
+-            return Err(self.error(11, 1));
++            return Err(self.raise(E11_1, []));
+         }
+         self.expr_depth += 1;
+         let args = self.arg_list_inner(closer);
+         // Decremented before the `?` in the caller's chain, so an error path
+         // unwinds the count as faithfully as a success path. `arg_list` has
+         // several early returns inside, which is why the body is a separate
+         // function rather than this being a bracketed block.
+         self.expr_depth -= 1;
+         args
+     }
+ 
+     fn arg_list_inner(&mut self, closer: Option<Tag>) -> Result<Vec<Option<Expr>>, ParseError> {
+         let bracket = closer == Some(Tag::RightBracket);
++        let opener = closer.map(|_| self.previous());
+         let term = match closer {
+             Some(Tag::RightBracket) => Terminators::SQRIGHT,
+             Some(_) => Terminators::RIGHT,
+             None => Terminators::EOC,
+         };
+         // Skips the blank a `CALL` keyword leaves before its first argument.
+         self.skip_blanks();
+         let mut args: Vec<Option<Expr>> = Vec::new();
+         let mut real = 0;
+         loop {
+@@ -821,21 +854,22 @@ impl<'a, 'c> Parser<'a, 'c> {
+             }
+             args.push(arg);
+             if self.peek_tag() == Some(Tag::Comma) {
+                 self.advance();
+                 continue;
+             }
+             break;
+         }
+         if let Some(closer) = closer {
+             if self.peek_tag() != Some(closer) {
+-                return Err(self.unmatched(bracket));
++                let opener = opener.expect("a closer has its opener");
++                return Err(self.unmatched(opener, bracket));
+             }
+             self.advance();
+         }
+         args.truncate(real);
+         Ok(args)
+     }
+ 
+     /// `parseMessageTerm` (`LanguageParser.cpp:3500`): a subterm with at least
+     /// one `~`, `~~` or `[` applied to it.
+     fn message_term(&mut self) -> Result<Option<Expr>, ParseError> {
+@@ -905,33 +939,33 @@ impl<'a, 'c> Parser<'a, 'c> {
+         match &token.kind {
+             TokenKind::LeftParen => {
+                 self.advance();
+                 // Task 3c: one more level would recurse past MAX_EXPR_DEPTH,
+                 // so raise the same condition the oracle raises somewhere
+                 // past its own, differently-sized cliff, rather than
+                 // descending into `full_subexpression` at all. See
+                 // `MAX_EXPR_DEPTH`'s own doc comment for the two measured
+                 // cliffs this sits between.
+                 if self.expr_depth >= MAX_EXPR_DEPTH {
+-                    return Err(self.error(11, 1));
++                    return Err(self.raise(E11_1, []));
+                 }
+                 self.expr_depth += 1;
+                 // The enclosing terminators are dropped, because the brackets
+                 // disambiguate, and a comma list is allowed again in here.
+                 let inner = self.full_subexpression(Terminators::RIGHT);
+                 self.expr_depth -= 1;
+                 let Some(inner) = inner? else {
+                     // `()` is 35.1.
+-                    return Err(self.error(35, 1));
++                    return Err(self.invalid_at(Some(token)));
+                 };
+                 if self.peek_tag() != Some(Tag::RightParen) {
+-                    return Err(self.unmatched(false));
++                    return Err(self.unmatched(token, false));
+                 }
+                 self.advance();
+                 // The parenthesised expression is returned unchanged, so
+                 // there is no node for the parentheses and the span still
+                 // covers only what built the node. See `ast`'s module docs.
+                 Ok(Some(inner))
+             }
+             TokenKind::Symbol { id, class } => {
+                 let (id, class) = (*id, *class);
+                 self.advance();
+@@ -974,41 +1008,41 @@ impl<'a, 'c> Parser<'a, 'c> {
+             }
+             TokenKind::Operator(op) => match op {
+                 // Not this function's business: `message_subterm` handles a
+                 // prefix operator, so report nothing found rather than an
+                 // error. Unreachable from there, mirrored from the C++.
+                 Operator::Plus | Operator::Subtract | Operator::Backslash => Ok(None),
+                 Operator::LessThan | Operator::GreaterThan => {
+                     self.advance();
+                     self.variable_reference_term(from).map(Some)
+                 }
+-                _ => Err(self.error(35, 1)),
++                _ => Err(self.invalid_at(Some(token))),
+             },
+-            TokenKind::RightParen => Err(self.error(37, 2)),
+-            TokenKind::RightBracket => Err(self.error(37, 901)),
++            TokenKind::RightParen => Err(self.raise(E37_2, [])),
++            TokenKind::RightBracket => Err(self.raise(E37_901, [])),
+             // 37.1, which cannot be reached: a comma always terminates, so
+             // the terminator check above caught it.
+-            TokenKind::Comma => Err(self.error(37, 1)),
++            TokenKind::Comma => Err(self.raise(E37_1, [])),
+             // A blank, a colon, a `::` or a `[` where a term was expected.
+             // `a [1]` is 35.1 for exactly this reason.
+-            _ => Err(self.error(35, 1)),
++            _ => Err(self.invalid_at(Some(token))),
+         }
+     }
+ 
+     /// `parseQualifiedSymbol` (`LanguageParser.cpp:3261`): `ns:name`, either a
+     /// qualified call or a class lookup.
+     fn qualified_symbol(&mut self, namespace: SymbolId, from: usize) -> Result<Expr, ParseError> {
+         let Some(token) = self.peek() else {
+-            return Err(self.error(20, 923));
++            return Err(self.raise(E20_923, []));
+         };
+         let TokenKind::Symbol { id: name, .. } = token.kind else {
+-            return Err(self.error(20, 923));
++            return Err(self.raise(E20_923, []));
+         };
+         self.advance();
+         // Only an immediately following parenthesis makes this a call.
+         if self.peek_tag() == Some(Tag::LeftParen) {
+             self.advance();
+             let args = self.arg_list(Some(Tag::RightParen))?;
+             let extent = self.extent(from);
+             return Ok(Expr::new(
+                 ExprKind::QualifiedCall {
+                     namespace,
+@@ -1019,20 +1053,47 @@ impl<'a, 'c> Parser<'a, 'c> {
+             ));
+         }
+         let extent = self.extent(from);
+         Ok(Expr::new(
+             ExprKind::ClassResolver { namespace, name },
+             extent,
+         ))
+     }
+ }
+ 
++/// `RexxToken::displayValue` (`Token.cpp:308`): what an error insert shows for
++/// `token`, `None` being the end of the clause.
++fn display_value(ctx: &ParseCtx, token: Option<&Token>) -> Vec<u8> {
++    let Some(token) = token else {
++        return b";".to_vec();
++    };
++    let text: &[u8] = match &token.kind {
++        TokenKind::Symbol { id, .. } => ctx.symbols.name(*id).as_bytes(),
++        TokenKind::Literal { value } => value,
++        TokenKind::Operator(op) => op.spelling().as_bytes(),
++        TokenKind::Assignment(op) => return format!("{}=", op.spelling()).into_bytes(),
++        TokenKind::Blank => b" ",
++        TokenKind::Eoc => b";",
++        TokenKind::Comma => b",",
++        TokenKind::LeftParen => b"(",
++        TokenKind::RightParen => b")",
++        TokenKind::LeftBracket => b"[",
++        TokenKind::RightBracket => b"]",
++        TokenKind::Colon => b":",
++        TokenKind::Tilde => b"~",
++        TokenKind::DTilde => b"~~",
++        TokenKind::DColon => b"::",
++        TokenKind::Null | TokenKind::Prefix | TokenKind::Point | TokenKind::Continue => b"",
++    };
++    text.to_vec()
++}
++
+ /// The leaf node a symbol token stands for, from its scanned class.
+ pub(crate) fn symbol_kind(id: SymbolId, class: SymbolClass) -> ExprKind {
+     match class {
+         SymbolClass::Dummy | SymbolClass::Constant => ExprKind::Constant(id),
+         SymbolClass::Variable => ExprKind::Variable(id),
+         SymbolClass::Stem => ExprKind::Stem(id),
+         SymbolClass::Compound => ExprKind::Compound(id),
+         SymbolClass::DotSymbol => ExprKind::DotVariable(id),
+     }
+ }
+diff --git a/rust/crates/rexx-parse/src/expr/tests.rs b/rust/crates/rexx-parse/src/expr/tests.rs
+index 61ccdce5a..3c132c8bc 100644
+--- a/rust/crates/rexx-parse/src/expr/tests.rs
++++ b/rust/crates/rexx-parse/src/expr/tests.rs
+@@ -576,23 +576,21 @@ fn every_element_of_a_logical_list_is_required_including_the_first() {
+     );
+     assert_eq!(logical_error("1 = 1, then nop", Terminators::IF), (35, 929));
+ }
+ 
+ // ---------------------------------------------------------------------------
+ // Errors, against the corpus `d10-decision.md` recorded from `build/bin/rexxc`.
+ // ---------------------------------------------------------------------------
+ 
+ #[test]
+ fn the_error_corpus_reports_the_interpreters_numbers() {
+-    // Every case was run through `build/bin/rexxc` as `r = <expr>`, and the
+-    // number and sub-number are what this phase gates. The message text and
+-    // its substitutions are deliberately not reproduced.
++    // Every case was run through `build/bin/rexxc` as `r = <expr>`.
+     let cases: &[(&str, (u16, u16))] = &[
+         (")", (37, 2)),
+         ("]", (37, 901)),
+         ("a[1]]", (37, 901)),
+         ("1 2 3)", (37, 2)),
+         ("a b )", (37, 2)),
+         ("(a))", (37, 2)),
+         ("a +", (35, 1)),
+         ("a ||", (35, 1)),
+         ("a || || b", (35, 1)),
+diff --git a/rust/crates/rexx-parse/src/scanner.rs b/rust/crates/rexx-parse/src/scanner.rs
+index 19aa3109d..944bedb59 100644
+--- a/rust/crates/rexx-parse/src/scanner.rs
++++ b/rust/crates/rexx-parse/src/scanner.rs
+@@ -6,20 +6,24 @@
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! Turning retained source into a token vector.
+ 
+ use std::ops::Range;
+ 
++use rexx_inventory::errors::{
++    E6_1, E6_2, E6_3, E13_1, E15_1, E15_2, E15_3, E15_4, E15_5, E15_6, E30_1, E99_943,
++};
++
+ use crate::token::{
+     Keywords, Operator, ParseError, SymbolClass, SymbolId, SymbolTable, Tag, Token, TokenKind,
+ };
+ use crate::{ProgramSource, SourceKind};
+ 
+ /// The longest symbol the interpreter accepts
+ /// (`LanguageParser::MAX_SYMBOL_LENGTH`). Measured: a 250-character name
+ /// works, 251 raises error 30.1.
+ pub(crate) const MAX_SYMBOL_LENGTH: usize = 250;
+ 
+@@ -362,26 +366,28 @@ impl<'a> Scanner<'a> {
+ 
+         Ok(Located::ClauseEol)
+     }
+ 
+     /// `LanguageParser::scanComment`: step over a `/* */` comment, which
+     /// nests and may span lines.
+     fn scan_comment(&mut self) -> Result<(), ParseError> {
+         let mut level = 1;
+         self.step_position();
+         self.step_position();
++        let start_line = self.line_number;
+ 
+         while level > 0 {
+             if !self.more_chars() {
+                 self.next_line();
+                 if !self.more_lines() {
+-                    return Err(ParseError::new(6, 1, self.clause_start));
++                    let line = start_line.to_string().into_bytes();
++                    return Err(ParseError::raise(E6_1, self.clause_start, [line]));
+                 }
+                 continue;
+             }
+ 
+             let inch = self.get_char();
+             self.step_position();
+             if inch == b'*' && self.more_chars() && self.get_char() == b'/' {
+                 self.step_position();
+                 level -= 1;
+             } else if inch == b'/' && self.more_chars() && self.get_char() == b'*' {
+@@ -595,23 +601,33 @@ impl<'a> Scanner<'a> {
+                         }
+                     } else {
+                         Operator::Backslash
+                     };
+                     TokenKind::Operator(op)
+                 }
+                 // Anything else cannot appear in a program. Every byte from
+                 // 0x80 up lands here unless it is inside a literal or a
+                 // comment, which is why `bäc = 2` is error 13.1.
+                 _ => {
+-                    let end = start + utf8_width(&self.line[self.line_offset - 1..]);
+-                    let error = ParseError::new(13, 1, self.clause_start);
+-                    return Err(error.echoing(self.clause_start..end));
++                    let at = self.line_offset - 1;
++                    let width = utf8_width(&self.line[at..]);
++                    let bad = &self.line[at..at + width];
++                    // `snprintf("%s")` stops at a NUL.
++                    let shown = if bad[0] == 0 {
++                        Vec::new()
++                    } else {
++                        bad.to_vec()
++                    };
++                    let hex = bad.iter().map(|b| format!("{b:02X}")).collect::<String>();
++                    let error =
++                        ParseError::raise(E13_1, self.clause_start, [shown, hex.into_bytes()]);
++                    return Err(error.echoing(self.clause_start..start + width));
+                 }
+             };
+ 
+             return Ok(Some(Token {
+                 kind,
+                 span: start..end,
+             }));
+         }
+     }
+ 
+@@ -739,21 +755,22 @@ impl<'a> Scanner<'a> {
+                 // A non-symbol character ends the symbol, whatever state the
+                 // number machine is in.
+                 break;
+             }
+         }
+ 
+         let length = self.line_offset - start;
+         let bytes = &self.line[start..self.line_offset];
+ 
+         if length > MAX_SYMBOL_LENGTH {
+-            return Err(ParseError::new(30, 1, self.clause_start));
++            let name = bytes.to_ascii_uppercase();
++            return Err(ParseError::raise(E30_1, self.clause_start, [name]));
+         }
+ 
+         // Infallible: `characterTable` admits only ASCII, and the one byte a
+         // symbol can hold that it does not admit is an exponent sign, also
+         // ASCII.
+         let text = std::str::from_utf8(bytes)
+             .expect("a symbol's bytes are ASCII: characterTable is zero for 0x80 to 0xFF");
+         let id = self.symbols.intern(text);
+ 
+         // Classification works on the source bytes because `translateChar`
+@@ -793,22 +810,22 @@ impl<'a> Scanner<'a> {
+         let mut doubled = 0usize;
+         let mut kind = LiteralKind::String;
+ 
+         let literal_end = loop {
+             // First time round this steps over the opening quote.
+             self.step_position();
+ 
+             if !self.more_chars() {
+                 // A literal never spans lines, so running out of characters
+                 // is the end of it. Measured: 6.2 for `'`, 6.3 for `"`.
+-                let sub = if delimiter == b'\'' { 2 } else { 3 };
+-                return Err(ParseError::new(6, sub, self.clause_start));
++                let msg = if delimiter == b'\'' { E6_2 } else { E6_3 };
++                return Err(ParseError::raise(msg, self.clause_start, []));
+             }
+ 
+             if self.get_char() == delimiter {
+                 let end = self.line_offset - 1;
+                 self.step_position();
+                 if !self.more_chars() || self.get_char() != delimiter {
+                     break end;
+                 }
+                 // A doubled delimiter: still inside the literal, and the
+                 // value will be one byte shorter than the text.
+@@ -893,24 +910,23 @@ impl<'a> Scanner<'a> {
+             real[count] = index;
+             count += 1;
+         }
+         if count != 3 && count != 5 {
+             return Ok(());
+         }
+         match self.tokens[real[1]].kind {
+             TokenKind::Symbol { id, .. } if id == self.resource_id => {}
+             _ => return Ok(()),
+         }
+-        // The resource name, which the scanner does not otherwise need.
+-        if self.token_value(real[2]).is_none() {
++        let Some(name) = self.token_value(real[2]) else {
+             return Ok(());
+-        }
++        };
+ 
+         let marker = if count == 5 {
+             // The only sub-keyword a `::RESOURCE` accepts is `END`, and it
+             // must be a symbol rather than a literal.
+             match self.tokens[real[3]].kind {
+                 TokenKind::Symbol { id, .. } if id == self.end_id => {}
+                 _ => return Ok(()),
+             }
+             match self.token_value(real[4]) {
+                 Some(value) => value,
+@@ -929,21 +945,22 @@ impl<'a> Scanner<'a> {
+         }
+ 
+         let directive = real[0];
+         let mut lines = Vec::new();
+         loop {
+             if !self.more_lines() {
+                 // Without this the rest of the program would be swallowed.
+                 // Measured: error 99.943, reported against the directive.
+                 let start = self.tokens[directive].span.start;
+                 let end = self.tokens.last().map_or(start, |eoc| eoc.span.end);
+-                return Err(ParseError::new(99, 943, start).echoing(start..end));
++                let inserts = [marker, name];
++                return Err(ParseError::raise(E99_943, start, inserts).echoing(start..end));
+             }
+             if self.check_marker(&marker) {
+                 self.next_line();
+                 break;
+             }
+             lines.push(self.line_start..self.line_start + self.line.len());
+             self.next_line();
+         }
+ 
+         self.resources.push(ResourceBody { directive, lines });
+@@ -987,23 +1004,24 @@ fn pack_hex_literal(data: &[u8], clause_start: usize) -> Result<Vec<u8>, ParseEr
+     }
+ 
+     // Right to left, because that is what makes the group boundaries easy to
+     // check: the odd group, if any, is the leftmost one.
+     let mut group_count = 0usize;
+     let mut nibble_count = 0usize;
+     for i in (1..=data.len()).rev() {
+         let byte = data[i - 1];
+         if byte == b' ' || byte == b'\t' {
+             if i == 1 || i == data.len() {
+-                return Err(ParseError::new(15, 1, clause_start));
++                let position = i.to_string().into_bytes();
++                return Err(ParseError::raise(E15_1, clause_start, [position]));
+             } else if !group_count.is_multiple_of(2) {
+-                return Err(ParseError::new(15, 5, clause_start));
++                return Err(ParseError::raise(E15_5, clause_start, []));
+             }
+             group_count = 0;
+         } else {
+             group_count += 1;
+             nibble_count += 1;
+         }
+     }
+ 
+     let mut nibbles_this_byte = 2 - (nibble_count % 2);
+     let character_count = nibble_count / 2 + (nibble_count % 2);
+@@ -1017,21 +1035,21 @@ fn pack_hex_literal(data: &[u8], clause_start: usize) -> Result<Vec<u8>, ParseEr
+         }
+         for _ in 0..nibbles_this_byte {
+             // In range because the validation above accounted for every
+             // non-blank character and rejected trailing whitespace.
+             let nibble = data[pos];
+             pos += 1;
+             let value = match nibble {
+                 b'0'..=b'9' => nibble - b'0',
+                 b'a'..=b'f' => nibble - b'a' + 10,
+                 b'A'..=b'F' => nibble - b'A' + 10,
+-                _ => return Err(ParseError::new(15, 3, clause_start)),
++                _ => return Err(ParseError::raise(E15_3, clause_start, [vec![nibble]])),
+             };
+             byte = (byte << 4) + value;
+         }
+         // Only the first byte can be short.
+         nibbles_this_byte = 2;
+         out.push(byte);
+     }
+ 
+     Ok(out)
+ }
+@@ -1042,23 +1060,24 @@ fn pack_binary_literal(data: &[u8], clause_start: usize) -> Result<Vec<u8>, Pars
+     if data.is_empty() {
+         return Ok(Vec::new());
+     }
+ 
+     let mut group_count = 0usize;
+     let mut bit_count = 0usize;
+     for i in (1..=data.len()).rev() {
+         let byte = data[i - 1];
+         if byte == b' ' || byte == b'\t' {
+             if i == 1 || i == data.len() {
+-                return Err(ParseError::new(15, 2, clause_start));
++                let position = i.to_string().into_bytes();
++                return Err(ParseError::raise(E15_2, clause_start, [position]));
+             } else if !group_count.is_multiple_of(4) {
+-                return Err(ParseError::new(15, 6, clause_start));
++                return Err(ParseError::raise(E15_6, clause_start, []));
+             }
+             group_count = 0;
+         } else {
+             group_count += 1;
+             bit_count += 1;
+         }
+     }
+ 
+     let mut bits_this_byte = bit_count % 8;
+     let character_count = bit_count / 8 + usize::from(bits_this_byte != 0);
+@@ -1076,19 +1095,19 @@ fn pack_binary_literal(data: &[u8], clause_start: usize) -> Result<Vec<u8>, Pars
+             let mut bit = data[pos];
+             pos += 1;
+             while bit == b' ' || bit == b'\t' {
+                 bit = data[pos];
+                 pos += 1;
+             }
+             byte <<= 1;
+             if bit == b'1' {
+                 byte += 1;
+             } else if bit != b'0' {
+-                return Err(ParseError::new(15, 4, clause_start));
++                return Err(ParseError::raise(E15_4, clause_start, [vec![bit]]));
+             }
+         }
+         bits_this_byte = 8;
+         out.push(byte);
+     }
+ 
+     Ok(out)
+ }
+diff --git a/rust/crates/rexx-parse/src/token.rs b/rust/crates/rexx-parse/src/token.rs
+index da2b67d71..3a6927c96 100644
+--- a/rust/crates/rexx-parse/src/token.rs
++++ b/rust/crates/rexx-parse/src/token.rs
+@@ -7,20 +7,22 @@
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! Tokens, symbol interning, the keyword tables, and the context every
+ //! `parse_*` function is handed.
+ 
+ use std::ops::Range;
+ 
++use rexx_inventory::errors::Msg;
++
+ mod cursor;
+ mod keywords;
+ mod symbols;
+ 
+ pub(crate) use cursor::{ParseCtx, TokenCursor};
+ pub use keywords::{KeywordSet, Keywords};
+ pub use symbols::{SymbolId, SymbolTable};
+ 
+ /// A parse-time error, identified the way the interpreter identifies it: a
+ /// major number and a sub-number, as in `13.1` or `99.943`.
+@@ -30,38 +32,61 @@ pub struct ParseError {
+     /// program`.
+     pub code: u16,
+     /// The sub-number, e.g. 1 for `Error 13.1`. Zero means the major error
+     /// with no sub-code.
+     pub sub: u16,
+     /// The byte offset the error is *reported against*, which is the start of
+     /// the clause being translated and not the offending character. The name
+     /// reads like the latter; it is not.
+     pub byte: usize,
+     /// Where the source the traceback line echoes ends; see [`ParseError::clause`].
+-    /// Zero until the scanner or `parse` resolves it. A `u32` keeps the error
+-    /// two words wide, which every `Result` the parser returns carries: an
+-    /// echo ending past `u32::MAX` is cut there, and one starting past it is
+-    /// empty.
++    /// Zero until the scanner or `parse` resolves it. An echo ending past
++    /// `u32::MAX` is cut there, and one starting past it is empty.
+     end: u32,
++    /// The secondary message's inserts, `None` for a message that takes none.
++    #[expect(
++        clippy::box_collection,
++        reason = "one word in every parser `Result`, where a `Vec` or a boxed slice is more"
++    )]
++    inserts: Option<Box<Vec<Vec<u8>>>>,
+ }
+ 
+ impl ParseError {
+     /// An error reported against the clause starting at `byte`.
+     pub fn new(code: u16, sub: u16, byte: usize) -> Self {
+         ParseError {
+             code,
+             sub,
+             byte,
+             end: 0,
++            inserts: None,
+         }
+     }
+ 
++    /// The error `msg` reports against the clause starting at `byte`, with
++    /// `inserts` for its `&1`, `&2`, ... in order.
++    pub fn raise<const N: usize>(msg: Msg<N>, byte: usize, inserts: [Vec<u8>; N]) -> Self {
++        let (code, sub) = msg.code();
++        ParseError {
++            code,
++            sub,
++            byte,
++            end: 0,
++            inserts: (N > 0).then(|| Box::new(Vec::from(inserts))),
++        }
++    }
++
++    /// The values the secondary message substitutes, in insert order.
++    pub fn inserts(&self) -> &[Vec<u8>] {
++        self.inserts.as_deref().map_or(&[], Vec::as_slice)
++    }
++
+     /// The source the error's traceback line echoes: the clause being
+     /// translated, from its first token to the last one scanned
+     /// (`LanguageParser::createStackFrame`'s `clauseLocation`).
+     pub fn clause(&self) -> Range<usize> {
+         self.byte..(self.end as usize).max(self.byte)
+     }
+ 
+     /// This error reported against `clause` and echoing it, unless it already
+     /// echoes one.
+     pub(crate) fn echoing(mut self, clause: Range<usize>) -> Self {
+diff --git a/rust/crates/rexx-parse/tests/errors.rs b/rust/crates/rexx-parse/tests/errors.rs
+index 6c4946ef2..253495df9 100644
+--- a/rust/crates/rexx-parse/tests/errors.rs
++++ b/rust/crates/rexx-parse/tests/errors.rs
+@@ -34,20 +34,22 @@ struct Case {
+     program: Vec<u8>,
+     class: Class,
+     /// `None` when `rexxc` answered rc 0, meaning the program translates.
+     error: Option<(u16, u16)>,
+     /// The line the oracle's main message named. `None` for an accepted
+     /// program.
+     line: Option<usize>,
+     /// The oracle's secondary message with its inserts filled, or `None` where
+     /// it printed none.
+     message: Option<Vec<u8>>,
++    /// The `program` field as the corpus file spells it, escapes and all.
++    source: String,
+     /// 1-based row number in the corpus file, for a failure message that can be
+     /// looked up.
+     row: usize,
+ }
+ 
+ fn corpus_path() -> PathBuf {
+     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/errors/parse-errors.tsv")
+ }
+ 
+ /// Reverses the corpus file's escaping: `\\`, `\t`, `\n`, `\r` and `\xNN`.
+@@ -132,20 +134,21 @@ fn cases() -> Vec<Case> {
+         };
+         let line = error
+             .is_some()
+             .then(|| at.parse().unwrap_or_else(|e| panic!("row {row}: {e}")));
+         cases.push(Case {
+             program: unescape(&program, row),
+             class,
+             error,
+             line,
+             message: (message != "-").then(|| unescape(&message, row)),
++            source: program,
+             row,
+         });
+     }
+     cases
+ }
+ 
+ fn parse(program: &[u8]) -> Result<(), ParseError> {
+     parse_program(program.to_vec()).map(|_| ())
+ }
+ 
+@@ -399,175 +402,382 @@ fn every_error_the_corpus_raises_renders_a_non_empty_message() {
+         checked += 1;
+         assert!(
+             !error.message().is_empty(),
+             "row {}: empty message",
+             case.row
+         );
+     }
+     assert!(checked >= 567, "only {checked} messages were rendered");
+ }
+ 
+-/// The (major, sub) pairs whose message this parser does not yet render as the
+-/// oracle does.
+-const PENDING: &[(u16, u16)] = &[
+-    (6, 1),
+-    (7, 1),
+-    (7, 2),
+-    (10, 2),
+-    (10, 3),
+-    (10, 4),
+-    (10, 7),
+-    (13, 1),
+-    (14, 1),
+-    (14, 2),
+-    (14, 3),
+-    (14, 4),
+-    (14, 5),
+-    (14, 901),
+-    (15, 1),
+-    (15, 2),
+-    (15, 3),
+-    (15, 4),
+-    (18, 1),
+-    (18, 2),
+-    (19, 923),
+-    (19, 925),
+-    (20, 905),
+-    (20, 919),
+-    (20, 929),
+-    (20, 930),
+-    (20, 931),
+-    (21, 901),
+-    (21, 903),
+-    (21, 904),
+-    (21, 905),
+-    (21, 906),
+-    (21, 907),
+-    (21, 908),
+-    (21, 909),
+-    (21, 911),
+-    (21, 913),
+-    (21, 914),
+-    (24, 1),
+-    (25, 1),
+-    (25, 3),
+-    (25, 11),
+-    (25, 12),
+-    (25, 15),
+-    (25, 17),
+-    (25, 901),
+-    (25, 902),
+-    (25, 903),
+-    (25, 904),
+-    (25, 905),
+-    (25, 906),
+-    (25, 907),
+-    (25, 912),
+-    (25, 913),
+-    (25, 914),
+-    (25, 915),
+-    (25, 916),
+-    (25, 923),
+-    (25, 924),
+-    (25, 925),
+-    (25, 926),
+-    (25, 927),
+-    (25, 928),
+-    (25, 929),
+-    (25, 933),
+-    (25, 934),
+-    (25, 935),
+-    (26, 5),
+-    (26, 6),
+-    (26, 7),
+-    (27, 901),
+-    (27, 902),
+-    (30, 1),
+-    (31, 2),
+-    (31, 3),
+-    (35, 1),
+-    (35, 901),
+-    (35, 935),
+-    (36, 901),
+-    (36, 902),
+-    (38, 1),
+-    (38, 2),
+-    (46, 1),
+-    (46, 902),
+-    (47, 2),
+-    (47, 3),
+-    (47, 4),
+-    (49, 2),
+-    (99, 917),
+-    (99, 925),
+-    (99, 943),
+-    (99, 948),
++/// The translation rows whose message this parser does not yet render as the
++/// oracle does, each named by its `program` field as the corpus spells it.
++const PENDING: &[&str] = &[
++    r#"::attribute a guarded unguarded\n"#,
++    r#"nop\n\nif 1 = 1 then nop\n\nlab:\n\nelse nop\n"#,
++    r#"if 1 = 1\nnop"#,
++    r#"trace 1234567890"#,
++    r#"call on error name lab x"#,
++    r#"nop\n\nnop\n\nif 1 = 1\n"#,
++    r#"::constant c 5 6\n"#,
++    r#"signal lab x"#,
++    r#"nop\n\nselect\n\ndo\n\nend\n\nend\n"#,
++    r#"::requires x DELEGATE\n"#,
++    r#"::attribute a class class\n"#,
++    r#"do i over x for 1 to 2\nend"#,
++    r#"nop\n\nif 1 = 1 then nop\n\nelse\n"#,
++    r#"if 1 = 1\nlab: nop"#,
++    r#"::requires x DIGITS\n"#,
++    r#"call off error x"#,
++    r#"::requires x NOPROLOG\n"#,
++    r#"use local .a"#,
++    r#"::class c LIBRARY\n"#,
++    r#"::attribute "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\n"#,
++    r#"nop\n\nselect\n\nif 1 = 1 then nop\n\nend\n"#,
++    r#"do\n\nnop\n\nnop\n\nnop\n"#,
++    r#"::options digits "9.5"\n"#,
++    r#"nop\nnop\nif 1 = 1\n"#,
++    r#"trace 1e-2"#,
++    r#"parse upper lower arg a"#,
++    r#"trace 1e20"#,
++    r#"::requires x FUZZ\n"#,
++    r#"::attribute 3\n"#,
++    r#"nop\n\nif 1 = 1 then\n"#,
++    r#"::attribute .a\n"#,
++    r#"nop 1"#,
++    r#"::options numeric syntax\n"#,
++    r#"::requires x UNGUARDED\n"#,
++    r#"::method m attribute external "junk"\n"#,
++    r#"numeric "x""#,
++    r#"::class c junk\n"#,
++    r#"::method m protected unprotected\n"#,
++    r#"::attribute a get set\n"#,
++    r#"do forever x\nend"#,
++    r#"address system with using x"#,
++    r#"signal on error label lab"#,
++    r#"::requires x UNPROTECTED\n"#,
++    r#"::method m abstract abstract\n"#,
++    r#"::options lostdigits error\n"#,
++    r#"::attribute "1e+5"\n"#,
++    r#"::requires x TRACE\n"#,
++    r#"address system with output append"#,
++    r#"::options novalue\n"#,
++    r#"::requires x FORM\n"#,
++    r#"nop\n\nloop forever\n\nlab:\n\nnop\n\nend\n"#,
++    r#"::annotate package "a" 1\n"#,
++    r#"nop\n\ndo\n\nnop\n"#,
++    r#"::requires x PACKAGE\n"#,
++    r#"::annotate package a *\n"#,
++    r#"::resource d junk\nbody\n::END\n"#,
++    r#"trace zzz"#,
++    r#"::class c\n\n\n\n::method m junk\n"#,
++    r#"::routine r public private\n"#,
++    r#"nop\n\ndo\n\nnop\n\nend 1\n"#,
++    r#"raise any"#,
++    r#"::method m class class\n"#,
++    r#"procedure foo"#,
++    r#"::requires x CONDITION\n"#,
++    r#"::method m delegate 5\n  return 1\n"#,
++    r#"nop\n\nif 1 = 1 then\n\nlab:\n\nnop\n"#,
++    r#"call on nostring"#,
++    r#"::requires x namespace a namespace b\n"#,
++    r#"address system with input"#,
++    r#"::attribute 3\n  return 1\n"#,
++    r#"select "x"\nend"#,
++    r#"use arg a b"#,
++    r#"::requires x METACLASS\n"#,
++    r#"::class c mixinclass object subclass object\n"#,
++    r#"::requires x EXTERNAL\n"#,
++    r#"do i = 1 by 2 by 3\nend"#,
++    r#"nop\n\nselect\n\nwhen 1 = 1\n\n::routine r\nnop\n"#,
++    r#"::options junk\n"#,
++    r#"::options digits 1234567890123456789\n"#,
++    r#"nop\n\nselect case 1\n\nnop\n\nend\n"#,
++    r#"trace '999999999.6'"#,
++    r#"::attribute 3 abstract\n"#,
++    r#"use foo"#,
++    r#"::annotate class\n"#,
++    r#"::requires x library namespace ns\n"#,
++    r#"::resource d "end" x\nbody\n::END\n"#,
++    r#"numeric"#,
++    r#"::class c abstract abstract\n"#,
++    r#"::attribute a delegate 5\n"#,
++    r#"forward foo"#,
++    r#"::requires x ERROR\n"#,
++    r#"::requires x METHOD\n"#,
++    r#"drop ."#,
++    r#"drop 5"#,
++    r#"nop\n\nselect\n\nwhen 1 = 1 then nop\n\nend 1\n"#,
++    r#"address system with input stream"#,
++    r#"nop\n\nselect case 1\n\notherwise nop\n\nend\n"#,
++    r#"nop\n\nselect case 1\n\nwhen 1 then nop\n"#,
++    r#"::requires x FAILURE\n"#,
++    r#"select\nwhen 1 = 1\nlab: nop\nend"#,
++    r#"::class c public public\n"#,
++    r#"::constant c (1+2\n"#,
++    r#"guard on foo"#,
++    r#"::requires x CONSTANT\n"#,
++    r#"::requires x GUARDED\n"#,
++    r#"::class c NAMESPACE\n"#,
++    r#"nop\n\ndo i = 1 to 3\n\nnop\n\nend j\n"#,
++    r#"nop\n\nselect case 1\n\nwhen 1 then nop\n\nend 1\n"#,
++    r#"select\nwhen 1 = 1\n\n\nnop\nend\n"#,
++    r#"nop\n\ndo label a\n\nnop\n\nend b\n"#,
++    r#"parse arg +x a"#,
++    r#"nop\n\nselect\n\nend\n"#,
++    r#"trace '+ - 9'"#,
++    r#"::method m delegate .p\n"#,
++    r#"::attribute a get get\n"#,
++    r#"nop\n\nif 1 = 1\n\n::routine r\nnop\n"#,
++    r#"::routine r external "LIBRARY x" external "LIBRARY y"\n"#,
++    r#"address system with foo"#,
++    r#"::method m subclass object\n"#,
++    r#"select\nwhen 1 = 1\nthen: nop\nend"#,
++    r#"::method m external "junk"\n  return 1\n"#,
++    r#"::class c metaclass class metaclass class\n"#,
++    r#"::method .a attribute\n"#,
++    r#"trace 1e9"#,
++    r#"nop\n\ndo i over x\n\nnop\n"#,
++    r#"trace 1.5"#,
++    r#"::options digits "1e-2"\n"#,
++    r#"::attribute a get external "junk"\n"#,
++    r#"nop\n\nselect\n\nwhen 1 = 1 then nop\n\notherwise\n"#,
++    r#"nop\n\ndo 3\n\nnop\n"#,
++    r#"::requires x PROLOG\n"#,
++    r#"numeric foo"#,
++    r#"::requires x library library\n"#,
++    r#"use local 1"#,
++    r#"drop (v x"#,
++    r#"raise foo"#,
++    r#"nop\n\nselect label a\n\nwhen 1 = 1 then nop\n\notherwise nop\n\nend b\n"#,
++    r#"::attribute "a-b"\n"#,
++    r#"::options fuzz "-1"\n"#,
++    r#"::attribute "a b"\n"#,
++    r#"trace r x"#,
++    r#"raise syntax"#,
++    r#"::attribute a inherit x\n"#,
++    r#"::routine r package\n"#,
++    r#"::requires x SUBCLASS\n"#,
++    r#"trace -a"#,
++    r#"::method m guarded unguarded\n"#,
++    r#"::attribute 3 external "LIBRARY x"\n"#,
++    r#"::class c guarded\n"#,
++    r#"guard foo"#,
++    r#"guard 1"#,
++    r#"select\nwhen 1 = 1\nnop\nend\n"#,
++    r#"nop\n\nif 1 = 1 then\n\n::routine r\n"#,
++    r#"nop\n\ndo while 1\n\nnop\n"#,
++    r#"::requires x SET\n"#,
++    r#"parse arg +a. a"#,
++    r#"nop\nif 1 = 1\nnop\n"#,
++    r#"nop\n\nloop\n\nnop\n"#,
++    r#"::class c public private\n"#,
++    r#"::routine r external "junk"\n  return 1\n"#,
++    r#"nop\nif 1 = 1,\n   1 = 1\n"#,
++    r#"::attribute 3 get\n"#,
++    r#"::method m delegate p delegate q\n"#,
++    r#"address system with input foo"#,
++    r#"call on propagate"#,
++    r#"trace 5 x"#,
++    r#"nop\n\ndo\n\n::routine r\n"#,
++    r#"nop\n\ndo\n\nlab:\n\nnop\n\nend\n"#,
++    r#"::requires x END\n"#,
++    r#"::method m junk\n"#,
++    r#"::method m abstract external "LIBRARY x"\n"#,
++    r#"::options failure error\n"#,
++    r#"::options "digits" 9\n"#,
++    r#"::requires x junk\n"#,
++    r#"::method m external "LIBRARY x" abstract\n"#,
++    r#"::options all error\n"#,
++    r#"call on syntax"#,
++    r#"::requires x LOSTDIGITS\n"#,
++    r#"::annotate public k 1\n"#,
++    r#"trace '9 5'"#,
++    r#"::class c private public\n"#,
++    r#"select label a "x"\nend"#,
++    r#"nop\nif 1 = 1,\n   1 = 1\nnop\n"#,
++    r#"nop\n\nselect\n\nwhen 1 = 1 then nop\n\notherwise nop\n"#,
++    r#"a == 1"#,
++    r#"call on novalue"#,
++    r#"trace '99999999.6'"#,
++    r#"::method m attribute attribute\n"#,
++    r#"::method m external "junk"\n"#,
++    r#"use arg >a.b"#,
++    r#"::requires x CLASS\n"#,
++    r#"signal 1+1"#,
++    r#"::attribute a get delegate 5\n"#,
++    r#"parse upper upper arg a"#,
++    r#"::requires x MIXINCLASS\n"#,
++    r#"::options trace zzz\n"#,
++    r#"do i over x for 1 for 2\nend"#,
++    r#"::resource d public x\nbody\n::END\n"#,
++    r#"nop\nif 1 = 1\n\n\nnop\n"#,
++    r#"::resource d end "x" extra\nbody\nx\n"#,
++    r#"guard"#,
++    r#"::method m external "libraryx x"\n"#,
++    r#"::attribute a abstract delegate p\n"#,
++    r#"::method m external "REGISTERED x"\n"#,
++    r#"select x\nwhen 1 then nop\nend"#,
++    r#"guard on 1"#,
++    r#"::class c subclass object mixinclass object\n"#,
++    r#"::class c subclass object subclass object\n"#,
++    r#"do with item v item w over x\nend"#,
++    r#"nop\n\nselect\n\nlab:\n\nwhen 1 = 1 then nop\n\nend\n"#,
++    r#"::requires x PRIVATE\n"#,
++    r#"nop\n\nselect\n\nnop\n\nend\n"#,
++    r#"::annotate package a -abc\n"#,
++    r#"::options error error\n"#,
++    r#"::method 3 attribute\n"#,
++    r#"::requires x ABSTRACT\n"#,
++    r#"address system with 1"#,
++    r#"::requires x NOSTRING\n"#,
++    r#"::method m external "LIBRARY a b c"\n"#,
++    r#"nop\n\nselect label a\n\nwhen 1 = 1 then nop\n\nend b\n"#,
++    r#"::requires x INHERIT\n"#,
++    r#"parse caseless caseless arg a"#,
++    r#"::class c, public\n"#,
++    r#"::requires x ALL\n"#,
++    r#"nop\n\ndo label a\n\nnop\n"#,
++    r#"if 1 = 1\nthen: nop"#,
++    r#"call on error label lab"#,
++    r#"::method m external "LIBRARY"\n"#,
++    r#"parse arg *3"#,
++    r#"do i = 1 to 3 to 4\nend"#,
++    r#"::class c package\n"#,
++    r#"::requires x SYNTAX\n"#,
++    r#"drop .5"#,
++    r#"parse arg +"x""#,
++    r#"::requires x NOVALUE\n"#,
++    r#"::method m external ""\n"#,
++    r#"::annotate package a -5x\n"#,
++    r#"::requires x PUBLIC\n"#,
++    r#"leave a b"#,
++    r#"::routine r junk\n"#,
++    r#"raise error 1 foo"#,
++    r#"call on nomethod"#,
++    r#"nop\n\nselect\n\nwhen 1 = 1 then nop\n\notherwise\n\nlab:\n\nnop\n\nend\n"#,
++    r#"nop\n\nselect\n\nelse nop\n\nend\n"#,
++    r#"do\nnop\nend a b"#,
++    r#"::method m delegate p abstract\n"#,
++    r#"::options novalue "syntax"\n"#,
++    r#"select\nwhen 1 = 1\nnop\nend"#,
++    r#"::options digits abc\n"#,
++    r#"call on foo"#,
++    r#"::method m delegate 5\n"#,
++    r#"::options fuzz abc\n"#,
++    r#"call on lostdigits"#,
++    r#"::attribute a junk\n"#,
++    r#"::requires x PROTECTED\n"#,
++    r#"nop\n\nloop forever\n\nnop\n\nend 1\n"#,
++    r#"::options digits 0\n"#,
++    r#"::requires x namespace ns library\n"#,
++    r#"forward 1"#,
++    r#"::requires x ROUTINE\n"#,
++    r#"::attribute a set get\n"#,
++    r#"::requires x NOTREADY\n"#,
++    r#"::routine r external "REGISTERED a b c"\n"#,
++    r#"::options nostring error\n"#,
++    r#"::requires x ATTRIBUTE\n"#,
++    r#"::options form value\n"#,
++    r#"do\nnop\n::routine r\nend\n"#,
++    r#"::options digits 1E18\n"#,
++    r#"nop\n\nselect\n\nwhen 1 = 1 then nop\n"#,
++    r#"::options digits ""\n"#,
++    r#"numeric form scientific x"#,
++    r#"::options notready error\n"#,
++    r#"::annotate junk k 1\n"#,
++    r#"::attribute a public private\n"#,
++    r#"::routine r external "REGISTERED"\n"#,
++    r#"::attribute a protected unprotected\n"#,
++    r#"signal on error name lab x"#,
++    r#"use strict foo"#,
++    r#"::requires x GET\n"#,
++    r#"::requires x NUMERIC\n"#,
++    r#"nop\n\ndo 3\n\nnop\n\nend 1\n"#,
++    r#"::attribute a get delegate 5\n  return 1\n"#,
++    r#"nop\nnop\nnop\nif 1 = 1\nnop\n"#,
++    r#"::routine r public public\n"#,
++    r#"::routine r class\n"#,
++    r#"use local a.b"#,
++    r#"::attribute a abstract abstract\n"#,
++    r#"if 1 = 1"#,
++    r#"iterate a b"#,
++    r#"nop\n\nselect\n\nwhen 1 = 1 then\n"#,
++    r#"parse foo a"#,
++    r#"nop\n\nif 1 = 1\n\nthen\n"#,
++    r#"::attribute "3"\n"#,
++    r#"nop\n\nloop forever\n\nnop\n"#,
++    r#"::method m public private\n"#,
++    r#"numeric form foo"#,
++    r#"signal on propagate"#,
++    r#"nop\n\nselect\n\nwhen 1 = 1 then nop\n\nlab:\n\nwhen 2 = 2 then nop\n\nend\n"#,
++    r#"say "main"\n::routine r\nif 1 = 1\n"#,
+ ];
+ 
+-/// The (major, sub) pairs of the translation rows whose rendered message is
+-/// not the oracle's, each with the first row that shows it.
+-fn message_mismatches() -> std::collections::BTreeMap<(u16, u16), String> {
++/// The translation rows whose rendered message is not the oracle's, keyed by
++/// their `program` field, each with what it renders.
++fn message_mismatches() -> std::collections::BTreeMap<String, String> {
+     let mut wrong = std::collections::BTreeMap::new();
+     for case in cases() {
+         if case.class != Class::Translation {
+             continue;
+         }
+         let want = case
+             .message
+             .as_deref()
+             .unwrap_or_else(|| panic!("row {}: a translation row needs a message", case.row));
+         let pair = case.error.expect("a translation row has a number");
+         let got = match parse(&case.program) {
+             Ok(()) => b"<accepted>".to_vec(),
+-            Err(error) => error.message().into_bytes(),
++            Err(error) => error.message(),
+         };
+         if got != want {
+-            wrong.entry(pair).or_insert_with(|| {
++            wrong.entry(case.source.clone()).or_insert_with(|| {
+                 format!(
+                     "row {}: {}.{} renders {:?}, the oracle {:?}",
+                     case.row,
+                     pair.0,
+                     pair.1,
+                     String::from_utf8_lossy(&got),
+                     String::from_utf8_lossy(want)
+                 )
+             });
+         }
+     }
+     wrong
+ }
+ 
+ #[test]
+ fn every_secondary_message_matches_the_oracle() {
+     let wrong = message_mismatches();
+     let unexpected: Vec<&String> = wrong
+         .iter()
+-        .filter(|(pair, _)| !PENDING.contains(pair))
++        .filter(|(source, _)| !PENDING.contains(&source.as_str()))
+         .map(|(_, shown)| shown)
+         .collect();
+     assert!(
+         unexpected.is_empty(),
+         "{}",
+         unexpected
+             .iter()
+             .map(|shown| shown.as_str())
+             .collect::<Vec<_>>()
+             .join("\n")
+     );
+ }
+ 
+ #[test]
+-fn every_pending_message_pair_still_differs_from_the_oracle() {
++fn every_pending_message_row_still_differs_from_the_oracle() {
+     let wrong = message_mismatches();
+-    let stale: Vec<&(u16, u16)> = PENDING
++    let stale: Vec<&&str> = PENDING
+         .iter()
+-        .filter(|pair| !wrong.contains_key(*pair))
++        .filter(|source| !wrong.contains_key(**source))
+         .collect();
+     assert!(
+         stale.is_empty(),
+         "PENDING entries that now match: {stale:?}"
+     );
+ }
+ 
+ // ---- the recorded deviations, each pinned in both directions ----
+ 
+ /// Whether `(ours, oracle)` is the recorded label-colon deviation.
+@@ -716,34 +926,33 @@ fn the_interpret_only_errors_match_the_condition_objects_own_code() {
+     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+ }
+ 
+ #[test]
+ fn an_interpret_error_with_no_substitution_renders_the_condition_objects_message() {
+     // 99.908's sub-message takes no substitution, so `message()` returns it, and
+     // it is byte-identical to what the trapped program reads out of
+     // `condition('o')~message`. Measured:
+     //     code=99.908  message=INTERPRET data must not contain EXPOSE.
+     let error = parse_interpret(b"expose a".to_vec()).expect_err("EXPOSE is rejected");
+-    assert_eq!(error.message(), "INTERPRET data must not contain EXPOSE.");
++    assert_eq!(error.message(), b"INTERPRET data must not contain EXPOSE.");
+ }
+ 
+ #[test]
+-fn an_interpret_error_with_a_substitution_renders_the_condition_objects_errortext() {
+-    // 47.1's sub-message substitutes the label, so `message()` falls back to the
+-    // major -- which is byte-identical to `condition('o')~errortext`, the other
+-    // field the condition object carries. Measured:
+-    //     code=47.1  errortext=Unexpected label.
+-    //                message=INTERPRET data must not contain labels; found "X".
+-    //                additional=X
+-    // That `additional` is the value Phase 4 owes and this phase does not carry.
++fn an_interpret_error_raised_without_its_insert_keeps_the_marker() {
++    // 47.1's sub-message substitutes the label. Measured on the oracle:
++    //     code=47.1  message=INTERPRET data must not contain labels; found "X".
++    // This site raises it with no insert, and an unfilled `&1` stays visible.
+     let error = parse_interpret(b"x: nop".to_vec()).expect_err("a label is rejected");
+-    assert_eq!(error.message(), "Unexpected label.");
++    assert_eq!(
++        error.message(),
++        br#"INTERPRET data must not contain labels; found "&1"."#
++    );
+ }
+ 
+ #[test]
+ fn an_interpret_fragment_that_is_legal_is_still_accepted() {
+     // The other direction, so the test above cannot pass by rejecting every
+     // fragment: `interpret "say 1"` runs, and `expose`/`guard` are rejected for
+     // being INTERPRET-specific rather than for being unparseable.
+     parse_interpret(b"say 1".to_vec()).expect("a plain SAY interprets");
+     parse_interpret(b"a = 1; say a".to_vec()).expect("two clauses interpret");
+ }

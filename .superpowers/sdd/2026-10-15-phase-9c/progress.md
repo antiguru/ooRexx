@@ -9,3 +9,17 @@ Task 1 review (sonnet): spec PASS, quality PASS; derive re-run byte-identical; m
 Task 1: fix round 1 dispatched (resume c9c-impl-1) for all three minors.
 Task 1: fix round 1 at 021415b17, c567d95ce (all three minors). Controller read the diff: fail inside $(...) exits only the subshell -> controller fix 20fc86a69 (|| exit 1); derive re-run byte-identical, 15.5 s.
 Task 1: complete (39fcc7450, 1db6c4c75, 021415b17, c567d95ce, 20fc86a69). Moritz: Task 1 only; stopped here.
+Pre-dispatch check Task 2: build.rs:49 generate_errors, expr.rs:338 error, rexx-exec error.rs:1982 From<&ParseError>, token.rs:40-44 sentence exist; error.rs:22 is the impl line (message() inside).
+Task 2: dispatched (implementer opus, BASE cdbbc1568).
+Ruling (Task 2): expr.rs missing: u16 param and its None/comma_list raises stay on ParseError::new in Task 2; Task 3 Step 1b changes it to Msg<0> with callers and restructures instruction.rs:499 (35.1 with = token) -- keeps Task 2 inside its files; arity-0 subs already render right -- if wrong, 35.1 at :499 stays PENDING one task longer. Plan amended 1c7445742.
+Ruling (Task 2): converted sites get their own TSV rows in the converting task (Task 2 adds them now), and PENDING is re-keyed per row (survives insertion) so a pair's converted rows are gated while unconverted rows stay pending -- per-pair PENDING left converted sites unwitnessed -- if wrong, extra rows only. Plan Task 3 Step 2 amended ba860f7de.
+Task 2: implementer DONE (fdd1ca33d, 5cd02f326); PENDING 92->81 pairs; ParseError 16->24 B; corpus 1062/1062. Rulings arrived late -> resumed for ruling 2 (rows + per-row PENDING) before review. 47.1 note into plan Task 3 (2ec226bfd).
+Task 2: rulings applied 06cf4a4a7 (12 TSV rows, PENDING per row &[&str], M11-M15 red), report aade11443. Label-colon Deviation rows -> plan Task 4 Step 2 (45721cabd). Review dispatched (opus), range cdbbc1568..aade11443 (plan-only commits interleaved).
+Task 2 review (opus): spec compliant; quality conditional. Important 1: startup +0.7246% vs pin (OVER), Task 2 share +0.3611% (scan lost inlining into parse, need_variable out of line, eager previous()); interpret +0.149%. Minors: can't-fail unit test, inventory test samples 5, false report sentence.
+Ruling: perf fix in Task 2 before Task 3 adds sites -- Task 2 own delta on startup/interpret/parse <= +0.05% -- if wrong, close task pays.
+Task 2: fix round 1 dispatched (resume c9c-impl-2).
+Task 2: fix round 1 a23fdba9e, dd253ad15, 0f8af4e3a. Task 2 own deltas: startup -0.2739%, interpret -0.0900%, parse -0.0199%; vs pin startup +0.0599%, interpret +0.2012%.
+Ruling: ParseError(Box<ParseErrorFields>) accepted over the brief's Option<Box> field -- measured: the field itself cost +0.39% startup; boxing allocates only when an error is built -- if wrong (speculative construction on a hot path), re-review finds it. Plan amended dae4be4eb.
+Task 2: scoped re-review dispatched (sonnet).
+Task 2 re-review (sonnet): approved, none open; perf figures match summary.tsv; no speculative ParseError construction on valid paths.
+Task 2: complete (fdd1ca33d, 5cd02f326, 06cf4a4a7, aade11443, a23fdba9e, dd253ad15, 0f8af4e3a). Moritz: stop after Task 2.
