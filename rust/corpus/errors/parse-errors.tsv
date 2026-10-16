@@ -1108,3 +1108,15 @@ translation	20.930	1	Simple variable or stem symbol expected after > or < prefix
 translation	35.929	1	Missing expression in logical expression list.	if then nop\n
 translation	35.929	1	Missing expression in logical expression list.	if , 1 = 1 then nop\n
 translation	35.929	1	Missing expression in logical expression list.	if 1 = 1, then nop\n
+translation	36.901	1	Left parenthesis "(" in position 29 on line 1 requires a corresponding right parenthesis ")".	address x with input stream (1
+translation	36.901	1	Left parenthesis "(" in position 13 on line 1 requires a corresponding right parenthesis ")".	parse arg a (b
+translation	20.930	1	Simple variable or stem symbol expected after > or < prefix operator; found ;.	r = >\n
+translation	36.901	1	Left parenthesis "(" in position 5 on line 2 requires a corresponding right parenthesis ")".	r = 1 +,\n    (2\n
+translation	13.1	1	Incorrect character in program "" ('00'X).	x = a \x00 b\n
+translation	13.1	1	Incorrect character in program "\x80" ('80'X).	x = a \x80 b\n
+translation	13.1	1	Incorrect character in program "\xf0\x9f\x98\x80" ('F09F9880'X).	x = a \xf0\x9f\x98\x80 b\n
+translation	20.930	1	Simple variable or stem symbol expected after > or < prefix operator; found \x80.	r = >'80'x\n
+translation	20.930	1	Simple variable or stem symbol expected after > or < prefix operator; found &1.	r = >'&1'\n
+translation	99.943	1	Missing ::RESOURCE end marker "&2" for resource "&1".	::resource '&1' end '&2'\nline\n
+translation	6.1	3	Unmatched comment delimiter ("/*") on line 3.	say 1\n\nsay 2 /* open /* nested */\nmore\n
+translation	35.1	2	Incorrect expression detected at "~".	o = .object~new\ncall o~string('x')\n
