@@ -373,8 +373,8 @@ impl<'a> Inst<'a> {
         Ok((for_count, conditional))
     }
 
-    /// The `Error_Interpretation_switch` a `TO` or `BY` gets after a `DO OVER`
-    /// or `DO WITH` header's expression, which stops there. `DO OVER` names the
+    /// The `Error_Interpretation_switch` a `TO` or `BY` gets after the `FOR`
+    /// expression of a `DO OVER` or `DO WITH`, which stops there. `DO OVER` names the
     /// keyword's `InstructionSubKeyword` value (`Token.hpp:263`) and `DO WITH`
     /// its conditional type, still `SUBKEY_NONE` (`InstructionParser.cpp:1494`,
     /// `:1703`).
@@ -396,8 +396,8 @@ impl<'a> Inst<'a> {
 
     /// `parseLoopConditional` (`InstructionParser.cpp:4600`): an optional
     /// trailing `WHILE` or `UNTIL`, and nothing after it. `unexpected` names
-    /// anything else, `None` where the caller has already stopped at one of
-    /// the two.
+    /// anything else, `None` where the caller has already stopped at `WHILE` or
+    /// `UNTIL`.
     fn loop_conditional(
         &mut self,
         unexpected: Option<Msg<1>>,
@@ -425,9 +425,7 @@ impl<'a> Inst<'a> {
         let condition = self.logical(Terminators::COND, E35_929)?;
         // `Error_Invalid_do_whileuntil`. Measured:
         // `do i = 1 to 3 while 1 until 2` is rc 229, Error 27.1.
-        if !self.at_end() {
-            return Err(self.error(E27_1, []));
-        }
+        self.required_end(E27_1)?;
         Ok(Some(LoopConditional { until, condition }))
     }
 }

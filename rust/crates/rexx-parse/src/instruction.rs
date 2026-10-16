@@ -1272,7 +1272,7 @@ impl<'a> Inst<'a> {
                     target
                 }
                 // `Error_Variable_expected_USE`, 89.1.
-                None => return Err(self.error(E89_1, [])),
+                None => return Err(self.found(E89_1, Some(token))),
             };
             let mut default = None;
             match self.next_real() {
@@ -1370,10 +1370,10 @@ impl<'a> Inst<'a> {
                     // `Error_Symbol_expected_qualified_call`, measured as
                     // 20.922 for `call ns:`.
                     let Some(name) = self.next_real() else {
-                        return Err(self.error(E20_922, []));
+                        return Err(self.found(E20_922, None));
                     };
                     let TokenKind::Symbol { id: name, .. } = name.kind else {
-                        return Err(self.error(E20_922, []));
+                        return Err(self.found(E20_922, Some(name)));
                     };
                     let args = self.arg_list(None)?;
                     return Ok(Call::Qualified {

@@ -62,7 +62,8 @@ fn highest_placeholder(code: (u16, u16)) -> usize {
 fn every_constants_arity_is_its_texts_highest_placeholder() {
     let mut wrong = Vec::new();
     for &(code, n) in errors::ARITIES {
-        if n != highest_placeholder(code) {
+        let overridden = errors::ARITY_OVERRIDES.iter().find(|(c, _)| *c == code);
+        if n != overridden.map_or_else(|| highest_placeholder(code), |&(_, n)| n) {
             wrong.push(code);
         }
     }
@@ -70,6 +71,15 @@ fn every_constants_arity_is_its_texts_highest_placeholder() {
     assert_eq!(errors::ARITIES.len(), errors::MESSAGES.len());
     assert_eq!(arity(errors::E13_1), 2);
     assert_eq!(arity(errors::E10_2), 3);
+}
+
+#[test]
+fn every_arity_override_exceeds_its_texts_placeholders() {
+    for &(code, n) in errors::ARITY_OVERRIDES {
+        assert!(n > highest_placeholder(code), "{code:?}");
+    }
+    assert_eq!(arity(errors::E89_1), 1);
+    assert_eq!(highest_placeholder(errors::E89_1.code()), 0);
 }
 
 #[test]

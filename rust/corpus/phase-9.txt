@@ -141,3 +141,6 @@ lang/class_new_collected.rex
 
 # 9b1 final review I1: an external routine's merged classes outlive its package.
 lang/package_external_merge_class_held.rex
+
+# 9c Task 3 fix round 1: inserts the oracle passes beyond its message text.
+lang/parse_error_unused_insert.rex

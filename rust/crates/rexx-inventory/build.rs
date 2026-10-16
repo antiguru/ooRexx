@@ -8,6 +8,17 @@ use std::path::{Path, PathBuf};
 const MESSAGES_XML: &str = "../../../interpreter/messages/rexxmsg.xml";
 const BUILTINS_CPP: &str = "../../../interpreter/expression/BuiltinFunctions.cpp";
 
+/// Messages the oracle raises with more inserts than their text uses, each with
+/// that count. The extra inserts reach a trapped condition's `ADDITIONAL`.
+const ARITY_OVERRIDES: &[((u16, u16), usize)] = &[
+    // `InstructionParser.cpp:1122`, the token after `CALL ns:`.
+    ((20, 922), 1),
+    // `requiredEndOfClause`, `InstructionParser.cpp:4616`, `:4631`.
+    ((27, 1), 1),
+    // `InstructionParser.cpp:4393`, the token the term started at.
+    ((89, 1), 1),
+];
+
 fn main() {
     println!("cargo::rerun-if-changed={MESSAGES_XML}");
     println!("cargo::rerun-if-changed={BUILTINS_CPP}");
@@ -184,8 +195,8 @@ fn generate_errors(path: &Path) -> String {
     }
     out.push_str("];\n\n");
     out.push_str(
-        "/// One catalogue message, typed by how many inserts its text takes: `N`\n\
-         /// is the highest `&k` it holds.\n\
+        "/// One catalogue message, typed by how many inserts it takes: `N` is the\n\
+         /// highest `&k` its text holds, or the count in `ARITY_OVERRIDES`.\n\
          #[derive(Copy, Clone, PartialEq, Eq, Debug)]\n\
          pub struct Msg<const N: usize> {\n\
          \x20   major: u16,\n\
@@ -208,7 +219,7 @@ fn generate_errors(path: &Path) -> String {
             "pub const E{major}_{sub}: Msg<{n}> = Msg {{ major: {major}, sub: {sub} }};",
             major = m.major,
             sub = m.sub,
-            n = highest_insert(&m.text),
+            n = arity(m),
         )
         .expect("writing to a String cannot fail");
     }
@@ -225,8 +236,24 @@ fn generate_errors(path: &Path) -> String {
         )
         .expect("writing to a String cannot fail");
     }
+    out.push_str(
+        "];\n\n/// The messages whose arity exceeds their text's highest `&k`.\n\
+         pub const ARITY_OVERRIDES: &[((u16, u16), usize)] = &[\n",
+    );
+    for ((major, sub), n) in ARITY_OVERRIDES {
+        writeln!(out, "    (({major}, {sub}), {n}),").expect("writing to a String cannot fail");
+    }
     out.push_str("];\n");
     out
+}
+
+/// The insert count `m`'s constant takes: its override, or its text's highest
+/// `&k`.
+fn arity(m: &Message) -> usize {
+    ARITY_OVERRIDES
+        .iter()
+        .find(|(code, _)| *code == (m.major, m.sub))
+        .map_or_else(|| highest_insert(&m.text), |&(_, n)| n)
 }
 
 /// The highest `k` of any `&k` in `text`, or zero for none.
