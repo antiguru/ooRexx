@@ -15,7 +15,10 @@ extract='
 undef $/;
 my $e = <STDIN>;
 my ($sub, $msg, $at);
-$sub = "$1.$2", $msg = $3 if $e =~ /^Error (\d+)\.(\d+):  ([^\n]*)$/m;
+if ($e =~ /^Error (\d+)\.(\d+):  ([^\n]*)\n?(.*)\z/ms) {
+    ($sub, $msg) = ("$1.$2", $3);
+    die "the message spans more than one line\n" if $4 =~ /\S/;
+}
 $at = $1 if $e =~ /^Error \d+ running .* line (\d+):/m;
 if (!defined $sub) { print "ok\t-\t-"; exit }
 die "no main line\n" unless defined $at;
@@ -32,6 +35,7 @@ fail() {
     exit 1
 }
 
+layout=
 row=0
 while IFS= read -r line || [ -n "$line" ]; do
     row=$((row + 1))
@@ -49,6 +53,7 @@ while IFS= read -r line || [ -n "$line" ]; do
         continue
         ;;
     esac
+    [ -n "$layout" ] || fail "row $row: no class header line before the first row"
     if [ "$layout" = 5 ]; then
         IFS=$'\t' read -r class expect at _old program <<<"$line"
     else
@@ -67,7 +72,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     )
     rc=$(<"$dir/rc")
     [ "$rc" = 99 ] && fail "row $row: cannot enter $dir"
-    got=$(LC_ALL=C perl -e "$extract" <"$dir/err" || fail "row $row: unreadable stderr")
+    got=$(LC_ALL=C perl -e "$extract" <"$dir/err" || fail "row $row: unreadable or multi-line oracle stderr, see $dir/err")
     IFS=$'\t' read -r gexpect gat gmsg <<<"$got"
 
     if [ "$class" = '?' ]; then

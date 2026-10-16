@@ -57,28 +57,28 @@
 # only escapes. It is last because it is the only field that can contain
 # anything.
 #
-# How it was generated, in four steps. The `ok`/`err` helpers of
+# How it was generated, in steps. The `ok`/`err` helpers of
 # src/instruction/tests.rs, src/directive/tests.rs and src/block/tests.rs were
 # temporarily instrumented to dump every program they parse. `cargo test
 # -p rexx-parse --lib` collected them. The case tables in tests/scanner.rs and
 # src/expr/tests.rs were transcribed by hand, the latter as the program
-# `r = <expr>` it was measured as, and so were the eight error programs of
+# `r = <expr>` it was measured as, and so were the error programs of
 # tests/program.rs. Then build/bin/rexxc was run on each and its answer recorded.
 # The instrumentation was reverted and the tree verified clean.
 #
-# The seven `error(...)` assertions of src/expr/tests.rs that sit outside its own
-# case table, and the three `logical_error(...)` ones as the `if <condition>`
+# The `error(...)` assertions of src/expr/tests.rs that sit outside its own
+# case table, and the `logical_error(...)` ones as the `if <condition>`
 # programs they were measured as, were transcribed in a later pass: a diff of
 # every error pair any test file asserts against every pair the gate covers found
 # 20.917 and 20.930 asserted and ungated. That diff is the check that "every test
 # file" is really every test file, rather than a claim about which files were
 # read.
 #
-# Two rows were added separately, `r = a:` and `r = (a:)`, because mutation
+# Rows were added separately, `r = a:` and `r = (a:)`, because mutation
 # testing found that error 20.923 had no coverage anywhere in the crate -- not
-# one row and not one assertion. Five more, the `::class c` / `nop` family, were
+# one row and not one assertion. More, the `::class c` / `nop` family, were
 # added in the same round on the mistaken belief that 99.916's second raise site
-# was equally uncovered. It was not: tests/program.rs had pinned all five kinds
+# was equally uncovered. It was not: tests/program.rs had pinned every kind
 # since Task 3.7b, and the mutation was scored against a single test target, so a
 # miss there read as a survivor. They are kept because they are valid measured
 # rows with a different spelling from tests/program.rs's, not because they closed
