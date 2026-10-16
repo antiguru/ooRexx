@@ -112,8 +112,9 @@ fn the_inserts_read_back_in_order() {
 }
 
 #[test]
-fn a_parse_error_is_three_words() {
-    assert_eq!(std::mem::size_of::<ParseError>(), 24);
+fn a_parse_error_is_one_word() {
+    assert_eq!(std::mem::size_of::<ParseError>(), 8);
+    assert_eq!(std::mem::size_of::<Result<(), ParseError>>(), 8);
 }
 
 /// Three lines of five bytes each plus a terminator, so line 1 is bytes 0-4,

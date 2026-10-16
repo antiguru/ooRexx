@@ -25,41 +25,59 @@ pub use keywords::{KeywordSet, Keywords};
 pub use symbols::{SymbolId, SymbolTable};
 
 /// A parse-time error, identified the way the interpreter identifies it: a
-/// major number and a sub-number, as in `13.1` or `99.943`.
+/// major number and a sub-number, as in `13.1` or `99.943`. One word, so the
+/// parser's `Result`s stay narrow: the fields live behind the box and read
+/// through `Deref`.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct ParseError {
+pub struct ParseError(Box<ParseErrorFields>);
+
+/// What a [`ParseError`] carries.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ParseErrorFields {
     /// The major error number, e.g. 13 for `Error 13: Invalid character in
     /// program`.
     pub code: u16,
     /// The sub-number, e.g. 1 for `Error 13.1`. Zero means the major error
     /// with no sub-code.
     pub sub: u16,
-    /// The byte offset the error is *reported against*, which is the start of
-    /// the clause being translated and not the offending character. The name
-    /// reads like the latter; it is not.
-    pub byte: usize,
     /// Where the source the traceback line echoes ends; see [`ParseError::clause`].
     /// Zero until the scanner or `parse` resolves it. An echo ending past
     /// `u32::MAX` is cut there, and one starting past it is empty.
     end: u32,
-    /// The secondary message's inserts, `None` for a message that takes none.
-    #[expect(
-        clippy::box_collection,
-        reason = "one word in every parser `Result`, where a `Vec` or a boxed slice is more"
-    )]
-    inserts: Option<Box<Vec<Vec<u8>>>>,
+    /// The byte offset the error is *reported against*, which is the start of
+    /// the clause being translated and not the offending character. The name
+    /// reads like the latter; it is not.
+    pub byte: usize,
+    /// The secondary message's inserts, in insert order.
+    inserts: Vec<Vec<u8>>,
+}
+
+impl std::ops::Deref for ParseError {
+    type Target = ParseErrorFields;
+
+    fn deref(&self) -> &ParseErrorFields {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for ParseError {
+    fn deref_mut(&mut self) -> &mut ParseErrorFields {
+        &mut self.0
+    }
 }
 
 impl ParseError {
     /// An error reported against the clause starting at `byte`.
+    #[cold]
+    #[inline(never)]
     pub fn new(code: u16, sub: u16, byte: usize) -> Self {
-        ParseError {
+        ParseError(Box::new(ParseErrorFields {
             code,
             sub,
-            byte,
             end: 0,
-            inserts: None,
-        }
+            byte,
+            inserts: Vec::new(),
+        }))
     }
 
     /// The error `msg` reports against the clause starting at `byte`, with
@@ -68,18 +86,18 @@ impl ParseError {
     #[inline(never)]
     pub fn raise<const N: usize>(msg: Msg<N>, byte: usize, inserts: [Vec<u8>; N]) -> Self {
         let (code, sub) = msg.code();
-        ParseError {
+        ParseError(Box::new(ParseErrorFields {
             code,
             sub,
-            byte,
             end: 0,
-            inserts: (N > 0).then(|| Box::new(Vec::from(inserts))),
-        }
+            byte,
+            inserts: Vec::from(inserts),
+        }))
     }
 
     /// The values the secondary message substitutes, in insert order.
     pub fn inserts(&self) -> &[Vec<u8>] {
-        self.inserts.as_deref().map_or(&[], Vec::as_slice)
+        &self.inserts
     }
 
     /// The source the error's traceback line echoes: the clause being
