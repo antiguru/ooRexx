@@ -245,6 +245,7 @@ fn the_command_line_answers_as_the_oracles_does() {
 /// One row of `parse-errors.tsv`.
 struct Row {
     line: usize,
+    class: String,
     expect: String,
     main_line: String,
     message: Vec<u8>,
@@ -293,11 +294,12 @@ fn rows() -> Vec<Row> {
             continue;
         }
         let fields: Vec<&str> = line.splitn(5, '\t').collect();
-        let [_, expect, main_line, message, program] = fields[..] else {
+        let [class, expect, main_line, message, program] = fields[..] else {
             panic!("line {}: five fields", index + 1);
         };
         rows.push(Row {
             line: index + 1,
+            class: class.to_string(),
             expect: expect.to_string(),
             main_line: main_line.to_string(),
             message: if message == "-" {
@@ -318,6 +320,13 @@ fn names_registered(program: &[u8]) -> bool {
     program
         .windows(b"REGISTERED".len())
         .any(|window| window.eq_ignore_ascii_case(b"REGISTERED"))
+}
+
+/// Whether `row` is exempt from the agreement: an `install` row whose
+/// program names `REGISTERED`, which the oracle's parser resolves through
+/// rxapi. A translation row naming it is checked like any other.
+fn exempt(row: &Row) -> bool {
+    row.class == "install" && names_registered(&row.program)
 }
 
 /// Runs this crate's `rexxc FILE -s` on `program`, from a fresh directory
@@ -403,11 +412,28 @@ fn answer(root: &Path, row: &Row) -> Answer {
 #[test]
 fn rexxc_agrees_with_every_recorded_parse_error_row() {
     let rows = rows();
-    let checked: Vec<&Row> = rows
-        .iter()
-        .filter(|row| !names_registered(&row.program))
+    let (exempted, checked): (Vec<&Row>, Vec<&Row>) = rows.iter().partition(|row| exempt(row));
+    assert!(!exempted.is_empty(), "the exempt rows are found");
+    assert!(
+        checked.iter().any(|row| names_registered(&row.program)),
+        "a translation row naming REGISTERED is checked"
+    );
+    // An exempt row is one this crate refuses with the `Rxapi` reason, so an
+    // exemption wider than that refusal hides a row that would agree.
+    let exempt_root = scratch("tsv-exempt");
+    let unrefused: Vec<usize> = exempted
+        .par_iter()
+        .filter(|row| {
+            let output = compile(&exempt_root, &row.line.to_string(), &row.program);
+            !String::from_utf8_lossy(&output.stderr).contains("(Phase 10 Rxapi)")
+        })
+        .map(|row| row.line)
         .collect();
-    assert!(checked.len() < rows.len(), "the exempt rows are found");
+    std::fs::remove_dir_all(&exempt_root).expect("the exempt row directories are removed");
+    assert!(
+        unrefused.is_empty(),
+        "exempt rows not refused with the Rxapi reason, at lines {unrefused:?}"
+    );
     assert!(
         checked
             .iter()
@@ -466,7 +492,7 @@ fn registered_is_refused_with_the_rxapi_reason() {
     assert!(
         recorded
             .iter()
-            .any(|row| row.program == program && names_registered(&row.program)),
+            .any(|row| row.program == program && exempt(row)),
         "the witness is a recorded, exempt row"
     );
     let root = scratch("registered");
