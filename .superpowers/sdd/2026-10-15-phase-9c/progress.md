@@ -52,3 +52,18 @@ Task 4: scoped re-review dispatched (sonnet).
 Moritz 2026-10-17: label-colon -> Deviation 39 ('Our error message is clearer'), written by controller 395f39e00; buffering renumbered Deviation 40 in plan.
 Task 4 re-review (sonnet): approved, none open (49.2 probes clean on both sides; M3 deletions false-only; coverage red with a row removed).
 Task 4: complete (dbbcdafb0, e1bfac290, 16e89ac59, fb69dafb0, 338e8f5dc, 15b29ae3a; Deviation 39 at 395f39e00). Paused per Moritz.
+Pre-dispatch check Task 5: invocation.rs:41, lib.rs:3465/:3703, require.rs:30/:57/:129, group_runner.rs:706, suite.rs:298/:1883 resolve; banner ruling is in global-constraints.md.
+Task 5: dispatched (implementer opus, BASE 6391ead7c).
+Ruling (Task 5): program-path chain widened to bytes here (program_path, ClauseSite::path, package_path, required_paths) -- a lossy boundary is the defect Review Focus 4 targets; compiler enumerates the callers -- if wrong, wider diff than briefed. Partial close of queued lossy-path-sites reported.
+Ruling (Task 5): .SYSCARGS consumer widened into environment.rs (leading empty slots per ignored option; entry absent under -e), pinned vs oracle -- otherwise with_*/without_syscargs have no consumer -- if wrong, small revert.
+Ruling (Task 5): TEST_PASSINGARGS7 (child rexx writes all stdout then stderr at exit; merged array out of order) red in Task 5, owned by Task 7; Task 7 hands pending stdout over before each stderr hand-over, so shared-pipe order matches the oracle (Deviation 40 loses its interleave clause) -- costs nothing without stderr writes -- if wrong, Moritz overrides the refinement. Plan 1ce4cda11.
+Task 5: implementer DONE (629f2d79b, 860fff6fc) before rulings arrived: applied (B) to paths. A/B no OVER; front end +27-28k Ir/run (startup +0.0233%); head vs pin max churn +0.151%. rexx_command 29/30 (PASSINGARGS7). Stale lib test pins found "&1" (from Tasks 2-4).
+Task 5: fix round 1 dispatched (resume c9c-impl-5): paths (A), lib test, -o ordering justification, partial A/B re-run.
+Task 5: fix round 1 9994f5c1c (paths bytes), 4e2c99aae (A/B re-run: churn +0.1414%, front end 28-30k Ir/run; interpret base -2.20% unexplained). Lib test not fixed by implementer -> controller dc16e526e (oracle 'found "THEN"'), --lib 1143/1143.
+Task 5: review dispatched (opus).
+Task 5 review (opus): spec FAIL, quality needs fixes. Critical 1: mixed encodings in resolve_search/require search (non-ASCII dirs 43.x, cwd d€ panic require.rs:191, REXX_PATH rpé 3.1) -- regression vs base rexx-run. Important 1: rexx.rs canonicalize resolves symlinks (oracle reports typed path). Minors: wrong interpret explanation (codegen in SymbolTable::intern), false interleave comment, bare tuple. 41 extra shapes clean; mains match; A/B reproduces (front end 17k Ir/run -libc).
+Task 5: fix round 2 dispatched (resume c9c-impl-5).
+Task 5: fix round 2 1acd33e22, 271a082ef (one bytes search in require::search; symlinks typed path; minors). A/B re-run: <=42 Ir/program -libc. --lib reported 1141 vs 1143 at dc16e526e -> re-review checks.
+Task 5: scoped re-review dispatched (sonnet).
+Task 5 re-review (sonnet): approved, none open; 17 shapes match; lib 1142 (one justified deletion). Controller fixed the two minors (doc sentence, report count).
+Task 5: complete (629f2d79b, 860fff6fc, 9994f5c1c, 4e2c99aae, dc16e526e, 1acd33e22, 271a082ef + records). Stopped per Moritz.

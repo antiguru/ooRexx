@@ -314,7 +314,7 @@ Checks at `1acd33e22`, statuses unpiped in
 | `... --test suite` | 0 | 52 passed |
 | `... --test refusal_sites`, `owners`, `closed_phases`, `phase_ten_reasons`, `representation_refusals` | 0 each | 5, 6, 8, 5, 3 passed |
 | `REXX_CORPUS_GATE=1 ... --test corpus` | 0 | 1065 of 1065 matching |
-| `... --lib` | 0 | 1141 passed (`dc16e526e` fixed the 27.901 test) |
+| `... --lib` | 0 | 1142 passed (`dc16e526e` fixed the 27.901 test; `launcher::widening_a_name_round_trips_every_byte` deleted with the private `widen`/`narrow`, covered by the oracle-compared cases; re-review count) |
 | the rexx_command group (command as in Step 4, table in `task-5/suite3/`) | 101 | oracle 30/30, crate 29/30, `TEST_PASSINGARGS7` only |
 
 `REXX_REFUSAL_SITES_REFRESH=1` left `corpus/refusal-sites.tsv` unchanged.

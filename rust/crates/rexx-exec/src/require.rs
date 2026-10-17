@@ -181,9 +181,8 @@ fn has_directory(name: &str) -> bool {
 ///
 /// **Every input is bytes and every candidate is `stat`ed as bytes.** Each
 /// byte is carried through the `str` functions above as the `char` of the
-/// same value, so a path that is not ASCII is never re-encoded:
-/// `to_ascii_lowercase` leaves the chars above 127 alone, which is
-/// `strlower`'s rule.
+/// same value, so a path that is not ASCII is never re-encoded, and the
+/// lowercased candidate keeps every byte above 127, as `strlower` does.
 pub(crate) fn search(
     program: Option<&[u8]>,
     name: &[u8],
