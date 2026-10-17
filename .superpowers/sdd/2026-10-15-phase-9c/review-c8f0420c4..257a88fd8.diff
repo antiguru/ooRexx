@@ -1,0 +1,1771 @@
+# Review package: c8f0420c4..HEAD
+
+## Commits
+257a88fd8 Phase 9c Task 6: remove rexx-run, every caller uses rexx
+
+## Files changed
+ .../sdd/2026-10-15-phase-9c/task-6-report.md       |  93 +++++++++++++
+ rust/CLAUDE.md                                     |   2 +-
+ rust/bench-programs/wallclock.sh                   |   6 +-
+ rust/corpus/README.md                              |   2 +-
+ rust/corpus/phase-4c.txt                           |   2 +-
+ rust/crates/rexx-bench/src/bin/rexx-arms.rs        |   2 +-
+ rust/crates/rexx-bench/src/bin/rexx-bench-band.rs  |   2 +-
+ rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs |  15 +--
+ .../rexx-bench/src/bin/rexx-bench-suite/report.rs  |   4 +-
+ rust/crates/rexx-bench/src/child.rs                |   4 +-
+ rust/crates/rexx-exec/src/bin/rexx-run.rs          | 149 ---------------------
+ rust/crates/rexx-exec/src/lib.rs                   |   4 +-
+ .../rexx-exec/tests/buffer_growth_error_exit.rs    |   2 +-
+ rust/crates/rexx-exec/tests/datetime_zone.rs       |   4 +-
+ rust/crates/rexx-exec/tests/input_oracle.rs        |  12 +-
+ .../crates/rexx-exec/tests/instance_copy_memory.rs |   2 +-
+ .../rexx-exec/tests/library_routine_memory.rs      |   2 +-
+ rust/crates/rexx-exec/tests/method_bodies.rs       |   2 +-
+ rust/crates/rexx-exec/tests/package_requires.rs    |   6 +-
+ rust/crates/rexx-exec/tests/program_end.rs         |   8 +-
+ rust/crates/rexx-exec/tests/prompt_before_read.rs  |   8 +-
+ .../rexx-exec/tests/release_local_reference.rs     |   2 +-
+ rust/crates/rexx-exec/tests/rexxutil_process.rs    |  10 +-
+ rust/crates/rexx-exec/tests/signals.rs             |  38 +++---
+ rust/crates/rexx-exec/tests/sim_processes.rs       |  16 +--
+ rust/crates/rexx-exec/tests/stdin_contention.rs    |   6 +-
+ rust/crates/rexx-exec/tests/support/arity.rs       |   2 +-
+ .../crates/rexx-exec/tests/support/group_runner.rs |   6 +-
+ rust/crates/rexx-parse/tests/deep.rs               |   2 +-
+ 29 files changed, 177 insertions(+), 236 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-15-phase-9c/task-6-report.md b/.superpowers/sdd/2026-10-15-phase-9c/task-6-report.md
+new file mode 100644
+index 000000000..16d1ea1f8
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-15-phase-9c/task-6-report.md
+@@ -0,0 +1,93 @@
++# Phase 9c Task 6 report: the `rexx-run` switch
++
++Implementer: c9c-impl-6. Base `c8f0420c4`.
++
++## Status
++
++Done. `rexx-run.rs` is deleted and every caller uses `rexx`. Both sample client groups stay in
++`suite-9d-set.txt` (cause below).
++
++## Enumeration
++
++`git grep -l 'rexx-run' -- rust` at the start listed 23 files: `rust/CLAUDE.md`,
++`bench-baselines/PINNED.md`, `bench-programs/wallclock.sh`, `corpus/README.md`,
++`corpus/phase-4c.txt`, the five `rexx-bench` sources (`rexx-arms.rs`, `rexx-bench-band.rs`,
++`rexx-bench-suite.rs`, `rexx-bench-suite/report.rs`, `child.rs`), `rexx-exec/src/bin/rexx-run.rs`,
++`rexx-exec/src/lib.rs`, fifteen files under `rexx-exec/tests/` (`buffer_growth_error_exit`,
++`datetime_zone`, `input_oracle`, `instance_copy_memory`, `library_routine_memory`,
++`method_bodies`, `package_requires`, `program_end`, `prompt_before_read`,
++`release_local_reference`, `rexxutil_process`, `signals`, `sim_processes`, `stdin_contention`,
++`support/arity.rs`, `support/group_runner.rs`) and `rexx-parse/tests/deep.rs`. `suite-9d-set.txt`
++holds no `rexx-run` text. Count: 92 matching lines outside the deleted source.
++
++After: `git grep -n 'rexx-run' -- rust` prints 10 lines, all in `bench-baselines/PINNED.md`
++(lines 3, 8, 20, 51, 65, 69, 79, 80, 81, 82).
++
++## Kept PINNED.md lines
++
++All ten name a pin that was a `rexx-run` binary (`rexx-run-f558ea501`, `rexx-run-15a1ffa98`,
++`rexx-run-pre-phase-5`) or say `pinned/` holds `rexx-run` binaries. They record which binary
++a historical pin was. The perf pin outside the repo keeps its name.
++
++## Step 1
++
++`git rm` of the source; `sed s/rexx-run/rexx/g` over the other 21 files (every
++`CARGO_BIN_EXE_rexx-run`, `target/release/rexx-run`, `--bin rexx-run`, the wallclock stage name,
++and the prose). `cargo fmt` then joined one array in `rexx-bench-suite.rs`.
++
++## Step 2 audit
++
++Command: `git grep -n 'usage\|Some(2)\|status.code' -- crates/rexx-exec/tests crates/rexx-bench crates/rexx-parse/tests`.
++
++| Site | Relied on | Result |
++|---|---|---|
++| `sim_processes.rs:124-132` | rc 2 and the text `rexx-run: REXX_SWITCH_MODE: ...` | `rexx` returns 2 on that path and prints `rexx: REXX_SWITCH_MODE: ...`; text changed by the rename, test passes |
++| `signals.rs:1163-1180` | the main thread's name, `/proc` comm of the binary, `rexx-run` | now `rexx`; the list is sorted by name and `rexx` sorts first, so the expected order was rewritten (this test failed once before the fix) |
++| `sim_processes.rs:147` | a symlink named `rexx` to the binary | target now `CARGO_BIN_EXE_rexx` |
++| `arity.rs:399`, `rexx-bench-band.rs:143`, `rexx-bench-suite.rs:601-658` | literal `target/release/rexx-run` | `target/release/rexx` |
++| `rexx-parse/tests/program.rs:234` `Some(2)` | not `rexx-run` | unaffected |
++| other `status.code()` readers | program exit codes | unaffected |
++
++No assertion relied on rexx-run's usage text or on rc 2 for a missing argument.
++
++## Step 3: samples groups
++
++Each run: `REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=samples/G REXX_SUITE_TABLE=<own dir>/t.tsv CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite`.
++
++| Group | exit | oracle | crate |
++|---|---|---|---|
++| samples/scserver | 0 | 2 of 2 | 2 of 2 |
++| samples/sfserver | 0 | 2 of 2 | 2 of 2 |
++| samples/scclient | 101 | 2 of 2 | TEST_04_SCCLIENT.REX failed |
++| samples/sfclient | 101 | 2 of 2 | TEST_04_SFCLIENT.REX failed |
++
++Cause of both: the client test starts `rexx scserver`/`rexx scclient`, which `::requires
++'socket.cls'`, which does `::requires "rxsock" LIBRARY`. The crate answers `Error 98.903: Unable
++to load library "rxsock"` (reproduced by hand with the crate `rexx` and `REXX_PATH` at
++`build/bin`). The crate has no rxsock library. This is independent of the switch.
++`suite-9d-set.txt` is unchanged: the two client lines stay, the servers were never in it.
++
++## Checks
++
++All from `rust/`, `CARGO_INCREMENTAL=0`, runs under `memcap 8G`, unpiped status.
++
++| Command | Exit | Result |
++|---|---|---|
++| `cargo fmt --all --check` | 0 (after `cargo fmt --all`) | |
++| `cargo clippy --workspace --all-targets -- -D warnings` | 0 | |
++| `cargo build -p rexx-bench` | 0 | |
++| `cargo test --release -p rexx-exec` with the 15 touched tests plus `rexx_command` | 101, then 0 | one failure in `signals` (above); after the fix `signals` 37, `sim_processes` 4, `stdin_contention` 1, `collection_arity` 24, `introspection_arity` 26 pass |
++| other touched binaries | 0 | `buffer_growth_error_exit` 1, `datetime_zone` 22, `input_oracle` 22, `instance_copy_memory` 21, `library_routine_memory` 21, `method_bodies` 23, `package_requires` 24, `program_end` 2, `prompt_before_read` 2, `release_local_reference` 3, `rexxutil_process` 3, `rexx_command` 1 |
++| `cargo test --release -p rexx-exec --lib` | 0 | 1141 passed |
++| `--test refusal_sites --test refusal_dispositions` | 0 | 3 and 5 passed |
++| `cargo test --release -p rexx-parse --test deep` | 0 | 6 passed |
++| `cargo test --release -p rexx-exec --test suite` | 0 | 52 passed |
++| `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus` | 0 | 1065 of 1065 matching, 29 passed |
++
++`rexx_command` passes as one test here because the group gate is off; the group's
++`TEST_PASSINGARGS7` red is Task 7's and was not touched.
++
++## Concerns
++
++None beyond the two client groups. `.superpowers/sdd/2026-10-15-phase-9c/progress.md` was already
++modified when I started and is not in my commit.
+diff --git a/rust/CLAUDE.md b/rust/CLAUDE.md
+index c16fdb640..dd4fe2814 100644
+--- a/rust/CLAUDE.md
++++ b/rust/CLAUDE.md
+@@ -39,21 +39,21 @@ keep X" or a new side map keyed by an id, that is this rule being broken: stop a
+   **`rexx-bench-suite` counts every run and prints all of this**, so the live figures are a table rather than a sentence: `perf-baseline.md`'s newest counted section has cycles, instructions and IPC per axis per side. Read them there rather than from a number written down here, which is the whole reason the suite was taught to count.
+   **Instruction counts stay the instrument for A/B-ing a change of this crate's own**, because they are deterministic where cycles move a few percent between runs here -- one axis reproduced to eight significant figures across two runs minutes apart -- and that is why every optimisation in this tree is justified with them. What they are not is the scoreboard. **A ratio quoted against the oracle must either be in cycles, or say that it is instructions.**
+ 
+ * **`ulimit -v` caps address space, not memory used, and that difference has already produced a misleading finding.**
+   It charges a process for memory it merely *reserves*: `INTERPRETER_STACK_BYTES` reserves 512 MiB for the sized interpreter thread before any program runs, so under a 1 GiB cap this crate has ~500 MiB to allocate in where the oracle has ~1000, and a large-result comparison turns over exactly there.
+   Measured 2026-08-05: raising the cap by precisely that 512 MiB makes the two sides agree again.
+   **A cgroup memory limit is the right instrument** -- `systemd-run --user -p MemoryMax=`, or `memory.max` in a delegated cgroup -- because it charges RSS and would cost a reservation nothing.
+   It is unavailable here: there is no user systemd manager ("offline"), no user bus, and `/sys` is a tmpfs with no cgroup filesystem mounted, so `systemd-run` cannot run and no cgroup can be created. Linux's `RLIMIT_RSS` (`ulimit -m`) is documented as having no effect.
+   So `ulimit -v` stays, and any memory finding taken under it must say whether it survives the reservation being free.
+ * **Read stdout, stderr and exit status as three separate descriptors.** Never capture `2>&1` as one string: the trace sink and stdout interleave undefinedly by design, and comparing them together produced two false regressions.
+-* Run `rexx-run` from `rust/`.
++* Run `rexx` from `rust/`.
+ 
+ ## Probes
+ 
+ * **Run every probe from a fresh empty subdirectory you `mkdir` yourself**, never the scratchpad root.
+   The scratchpad is on the oracle's **external-routine search path** and holds hundreds of stale `.rex` files, so a probe calling any unresolved name finds one and executes it.
+   Measured: the same three-line program reported `44.1 rc 212` from the root and `43.1 rc 213` from a clean directory.
+ * **Use absolute paths for every redirect.** A relative redirect inside a subshell that has `cd`'d writes where you did not intend; that produced three false mismatches against correct code and left stray files in the repository.
+ * **Never instantiate `.Package~new` on a file inside the repository** -- it executes that file's prolog and has written untracked files into the tree.
+ * **Never run `select; when 1 = 0 then; when 2 = 2 then nop; end`** -- it segfaults the oracle (upstream SF #2018).
+ * **Never run a clause that queues the same `CALL ON` condition twice**, as in `zr = ra() + ra()` where `ra` ends `raise user c1 return 1` and `c1` is trapped. The oracle runs the handler once and then segfaults at rc 139, measured 2026-08-15. Two *differently* named conditions in the same clause are fine and are how the drain rule was measured; it is the same name arriving twice at one boundary that kills it. `corpus/oracle-crashes.txt` carries the whole program.
+diff --git a/rust/bench-programs/wallclock.sh b/rust/bench-programs/wallclock.sh
+index fb874437f..581c08225 100755
+--- a/rust/bench-programs/wallclock.sh
++++ b/rust/bench-programs/wallclock.sh
+@@ -3,21 +3,21 @@
+ #
+ # usage: wallclock.sh [-r ROUNDS] [-o OUTDIR] [-x ORACLE_PROGRAMS] [-T] NAME=BINARY...
+ #   ROUNDS    rounds (default 5); round r starts at arm r
+ #   OUTDIR    output directory (default: mktemp -d)
+ #   ORACLE_PROGRAMS  programs also run on the oracle (arm name "oracle")
+ #   -T        print the table for OUTDIR's wall.tsv without running
+ # env: REXX_LIB_DIR  put on LD_LIBRARY_PATH (default: the oracle's build/lib)
+ #      ORACLE_ROOT   the oracle's build directory (default /home/moritz/dev/repos/ooRexx/build)
+ #      PROGRAMS      the programs to run (default: callgrind.sh's PROGRAMS)
+ #
+-# Each binary is copied to OUTDIR/stage/rexx-run before each of its runs; bash's
++# Each binary is copied to OUTDIR/stage/rexx before each of its runs; bash's
+ # `time` times the interpreter process.
+ # Exits 1 if a run exits non-zero or its stdout differs from the first binary's
+ # (except on TIMED).
+ set -u
+ here=$(cd "$(dirname "$0")" && pwd)
+ rounds=5 out= with_oracle= table_only=
+ while getopts r:o:x:T opt; do
+     case $opt in
+         r) rounds=$OPTARG ;;
+         o) out=$OPTARG ;;
+@@ -54,22 +54,22 @@ if [ -z "$table_only" ]; then
+ } > "$out/binaries.txt"
+ 
+ TIMED="heapshape rexxcps"
+ TIMEFORMAT=%R
+ run() { # arm program round
+     local d t f="$out/${2//\//_}.$1.r$3"
+     d=$(mktemp -d)
+     if [ "$1" = oracle ]; then
+         t=$( { cd "$d"; ( ulimit -v 1048576; export LD_LIBRARY_PATH=$lib; time "$oracle_root/bin/rexx" "$(prog "$2")" > "$f.out" 2> "$f.err"; echo $? > "$f.rc" ); } 2>&1 )
+     else
+-        cp "${bin[$1]}" "$out/stage/rexx-run"
+-        t=$( { cd "$d"; ( export LD_LIBRARY_PATH=$lib; time "$out/stage/rexx-run" "$(prog "$2")" > "$f.out" 2> "$f.err"; echo $? > "$f.rc" ); } 2>&1 )
++        cp "${bin[$1]}" "$out/stage/rexx"
++        t=$( { cd "$d"; ( export LD_LIBRARY_PATH=$lib; time "$out/stage/rexx" "$(prog "$2")" > "$f.out" 2> "$f.err"; echo $? > "$f.rc" ); } 2>&1 )
+     fi
+     rmdir "$d"
+     printf '%s\t%s\tr%s\t%s\n' "$1" "$2" "$3" "$t" >> "$out/wall.tsv"
+ }
+ : > "$out/wall.tsv"
+ for ((r = 1; r <= rounds; r++)); do
+     for p in $PROGRAMS; do
+         arms=("${names[@]}")
+         [[ " $with_oracle " == *" $p "* ]] && arms+=(oracle)
+         n=${#arms[@]}
+diff --git a/rust/corpus/README.md b/rust/corpus/README.md
+index 96757a9c1..f53af4c35 100644
+--- a/rust/corpus/README.md
++++ b/rust/corpus/README.md
+@@ -285,21 +285,21 @@ header states, per block, which wrong answer a defective engine prints.
+ | `pull_queue.rex` | `PULL`, `PARSE PULL`, `PARSE LINEIN` and the `ARG` instruction: the queue's interleaved storage order read back, an exhausted console answering the null string repeatedly, `PARSE LINEIN` declining to consult the queue, and the same five constructs under `TRACE R` and `TRACE I` -- a bare `PULL`'s `>K>` line carries the value before the upcase and the `>>>` after it the value after |
+ | `address_env.rex` | `ADDRESS` naming an environment: the constant, the two computed forms and the bare toggle under `TRACE R` and `TRACE I`, the 250-byte name limit either side of the boundary, and -- read back through `ADDRESS()` -- the platform default, the swap four toggles deep, and inheritance into a callee in both halves of the pair |
+ | `state_builtins.rex` | the builtins that read interpreter state other than `ADDRESS`: the `NUMERIC` trio across a call, `TRACE()`'s five settings that trace nothing and are still five distinct answers, `ARG` over a call with an interior omission, and `CONDITION` from inside both a `SIGNAL ON` and a `CALL ON` handler -- including the re-arm that separates the stored `I` from the live `S` |
+ | `procedure_entry_rule.rex` | which entries admit a `PROCEDURE`: the two internal-call shapes that are legal, the two `::ROUTINE` shapes that raise 17.1, and -- once the refusal is trapped -- the caller's own next variable, which is where admitting it corrupts the frame stack |
+ | `builtin_argument_range.rex` | one range message twice: a builtin's 40.9xx substitutes the integer its argument converted to, not the rendering D15 fixed at creation, and only an argument that is not an integer literal crossed with a `NUMERIC DIGITS` setting can tell the two apart. Fatal, so it is the last clause |
+ 
+ The command line and a non-empty console are outside every corpus program's
+ reach: the harness passes no arguments and an empty stdin, and a program whose
+ output depended on the console could not be deterministic. Both are compared
+ against the oracle in `crates/rexx-exec/tests/input_oracle.rs`, which drives
+-the `rexx-run` binary with an `argv` and a fed stdin instead.
++the `rexx` binary with an `argv` and a fed stdin instead.
+ 
+ ### `num/` — Phase 2, the numeric core
+ 
+ `digits_rounding.rex`, `exponential.rex` and `operators.rex` are listed here
+ as corpus programs but are **not** in the Phase 4a subset (`phase-4a.txt`):
+ all three build `ExprKind::List` from a comma in a `SAY`, which is out of
+ 4a's scope. They stay in this directory for Phase 5, once `List` exists --
+ the general form builds an Array, which is Phase 5's object model, not a 4b
+ or 4c one (`docs/superpowers/plans/phase-4-exclusions.txt`, "EXPRKIND
+ OWNERSHIP").
+diff --git a/rust/corpus/phase-4c.txt b/rust/corpus/phase-4c.txt
+index eba5a33c3..b47fda175 100644
+--- a/rust/corpus/phase-4c.txt
++++ b/rust/corpus/phase-4c.txt
+@@ -30,21 +30,21 @@
+ #   would be a claim about which binary the oracle was built from. It is pinned
+ #   as a measured constant in parse_template.rs instead.
+ #
+ #   The ARG and PULL instruction spellings, and the PARSE PULL and PARSE LINEIN
+ #   sources (4c Task 8). The queue a program fills itself is fair game; the
+ #   console is not, beyond reading it at end of input, because the harness gives
+ #   both interpreters an empty stdin and a program whose answers depended on the
+ #   console's contents could not be deterministic here. A command-line argument
+ #   is likewise out of reach: the harness passes none, so a program here can
+ #   only ever see the no-argument case. Both of those are witnessed against the
+-#   oracle in crates/rexx-exec/tests/input_oracle.rs, which drives the rexx-run
++#   oracle in crates/rexx-exec/tests/input_oracle.rs, which drives the rexx
+ #   binary with argv and a fed stdin rather than calling run_program in process.
+ #
+ #   The ADDRESS instruction's environment-naming forms (4c Task 9): the
+ #   constant `ADDRESS env`, the computed `ADDRESS VALUE expr` and `ADDRESS
+ #   (expr)`, and the bare toggle. `ADDRESS env command` and any `WITH`
+ #   redirection are the command dispatch and stay out, with the command
+ #   clause. Of the C++'s five readers of the environment, the only two a Rexx
+ #   program can reach are the ADDRESS() builtin and issuing a command; this
+ #   subset admits the first since Task 10, so a program here CAN now print the
+ #   environment back. lang/address_env.rex's own header carries the
+diff --git a/rust/crates/rexx-bench/src/bin/rexx-arms.rs b/rust/crates/rexx-bench/src/bin/rexx-arms.rs
+index 560f5205a..07e265442 100644
+--- a/rust/crates/rexx-bench/src/bin/rexx-arms.rs
++++ b/rust/crates/rexx-bench/src/bin/rexx-arms.rs
+@@ -5,21 +5,21 @@
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! The in-phase measurement front end: both engine arms of one build, both
+ //! instruments, two problem sizes, one sitting.
+ //! ```text
+-//! rexx-arms --build base=/path/to/rexx-run --build head=target/release/rexx-run \
++//! rexx-arms --build base=/path/to/rexx --build head=target/release/rexx \
+ //!           --axis varlookup --axis emptyloop --rounds 5 \
+ //!           --task 7-M2 --commit ced6c209 --baseline bench-baselines/phase-4e-arms.tsv
+ //! ```
+ 
+ use std::io::Write;
+ use std::path::{Path, PathBuf};
+ use std::process::ExitCode;
+ 
+ use rexx_bench::arms::{
+     Arm, Build, Figure, Instrument, MINIMUM_ROUNDS, Measured, Sitting, Size, Workload, measure,
+diff --git a/rust/crates/rexx-bench/src/bin/rexx-bench-band.rs b/rust/crates/rexx-bench/src/bin/rexx-bench-band.rs
+index 7d15cbaaf..96b5628f4 100644
+--- a/rust/crates/rexx-bench/src/bin/rexx-bench-band.rs
++++ b/rust/crates/rexx-bench/src/bin/rexx-bench-band.rs
+@@ -133,21 +133,21 @@ fn collect(arguments: &[String]) -> ExitCode {
+         // committed rows were taken over every privilege level.
+         counters: if arguments.iter().any(|arg| arg == "--counters") {
+             Counted::Total
+         } else {
+             Counted::Nothing
+         },
+     };
+     let header = arguments.iter().any(|arg| arg == "--header");
+ 
+     let oracle = Side::oracle();
+-    let rust_binary = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/release/rexx-run");
++    let rust_binary = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/release/rexx");
+     let rust_binary = rust_binary.canonicalize().unwrap_or(rust_binary);
+     if !rust_binary.is_file() || !oracle.binary.is_file() {
+         eprintln!(
+             "rexx-bench-band: {} or {} is missing; build both interpreters first",
+             rust_binary.display(),
+             oracle.binary.display()
+         );
+         return ExitCode::FAILURE;
+     }
+     let rust = Side::rust(rust_binary, arm);
+diff --git a/rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs b/rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs
+index 758815d49..f05d751d9 100644
+--- a/rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs
++++ b/rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs
+@@ -191,26 +191,26 @@ const AXES: &[Axis] = &[
+         name: "varlookup",
+         role: Role::Loop,
+     },
+ ];
+ 
+ fn main() -> ExitCode {
+     let arguments: Vec<String> = std::env::args().collect();
+     let self_check = arguments.iter().any(|arg| arg == "--self-check");
+     // Which engine "this crate" means, named rather than inherited, and
+     // printed in the provenance block beside every other identity a ratio
+-    // here depends on. The default is the engine `rexx-run` ships, so a run
++    // here depends on. The default is the engine `rexx` ships, so a run
+     // with no arguments measures what this crate now is; `phase-4e-anchor.md`
+     // and `perf-baseline.md` were taken before this choice existed and are
+     // tree-walker figures, so reproducing either needs
+     // `--engine tree-walker`. An unrecognised value is refused rather than
+-    // defaulted, exactly as `rexx-run` refuses one.
++    // defaulted, exactly as `rexx` refuses one.
+     // **No `--engine`.** It used to choose an arm; accepting `tree-walker`
+     // now would set a `REXX_ENGINE` nothing reads and label the rows for an
+     // engine that did not run them.
+     let arm = Arm::Ir;
+     let (pairs, warmup, offset_pairs, offset_warmup) = if self_check {
+         (1, 0, 3, 0)
+     } else {
+         (PAIRS, WARMUP_PAIRS, OFFSET_PAIRS, OFFSET_WARMUP_PAIRS)
+     };
+     // Off by default, so a run with no arguments is the run the committed
+@@ -587,27 +587,24 @@ fn loop_count(program: &Path) -> Result<u64, String> {
+ fn capture(program: &str, args: &[&str]) -> String {
+     Command::new(program)
+         .args(args)
+         .output()
+         .ok()
+         .filter(|output| output.status.success())
+         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+         .unwrap_or_else(|| format!("<{program} failed>"))
+ }
+ 
+-/// Where `rexx-run` is built, release first.
++/// Where `rexx` is built, release first.
+ fn rust_binary_candidates() -> [PathBuf; 2] {
+     let target = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target");
+-    [
+-        target.join("release/rexx-run"),
+-        target.join("debug/rexx-run"),
+-    ]
++    [target.join("release/rexx"), target.join("debug/rexx")]
+ }
+ 
+ /// The ooRexx shared objects `binary` actually loads, sorted.
+ fn oracle_objects(binary: &Path) -> Vec<PathBuf> {
+     let listing = capture("ldd", &[&binary.display().to_string()]);
+     let mut objects: Vec<PathBuf> = listing
+         .lines()
+         .filter_map(|line| line.split_once(" => "))
+         .filter_map(|(_, resolved)| resolved.split(" (").next())
+         .map(|path| PathBuf::from(path.trim()))
+@@ -645,24 +642,24 @@ mod tests {
+ 
+     /// Every axis declared `Role::Blocked` really does fail on this crate, and
+     /// every axis declared `Role::SelfTimed` really does run.
+     #[test]
+     fn every_declared_runnability_still_holds() {
+         let binary = rust_binary_candidates()
+             .into_iter()
+             .find(|path| path.is_file())
+             .unwrap_or_else(|| {
+                 panic!(
+-                    "neither target/release/rexx-run nor target/debug/rexx-run exists. This \
++                    "neither target/release/rexx nor target/debug/rexx exists. This \
+                      test runs the blocked axes through this crate, and skipping instead \
+                      would let the roles below go unchecked while the run stayed green. \
+-                     `cargo build -p rexx-exec --bin rexx-run` first."
++                     `cargo build -p rexx-exec --bin rexx` first."
+                 )
+             });
+         let side = Side {
+             label: "rust",
+             binary,
+             env: Vec::new(),
+         };
+         let dir = std::env::temp_dir().join(format!(
+             "rexx-bench-suite-blocked-{}-{:?}",
+             std::process::id(),
+diff --git a/rust/crates/rexx-bench/src/bin/rexx-bench-suite/report.rs b/rust/crates/rexx-bench/src/bin/rexx-bench-suite/report.rs
+index c8826ad67..3f9135f2e 100644
+--- a/rust/crates/rexx-bench/src/bin/rexx-bench-suite/report.rs
++++ b/rust/crates/rexx-bench/src/bin/rexx-bench-suite/report.rs
+@@ -165,31 +165,31 @@ pub(super) fn write_provenance(
+             report,
+             "| oracle `lib/{}` | {} |",
+             object
+                 .file_name()
+                 .map_or_else(|| "?".into(), |name| name.to_string_lossy()),
+             fingerprint(object)
+         );
+     }
+     let _ = writeln!(
+         report,
+-        "| this crate `rexx-run` | `{}` -- {} |",
++        "| this crate `rexx` | `{}` -- {} |",
+         rust_binary.display(),
+         fingerprint(rust_binary)
+     );
+     // The engine still belongs here for the same reason the sha256 does: it
+     // decides what the ratios below are ratios of, and a baseline taken on
+     // another arm must not be comparable with nothing to notice. It is no
+     // longer a choice -- there is one engine and no `REXX_ENGINE` to set --
+     // so the row states that rather than reporting a variable nothing reads.
+     // Every figure recorded before this row existed is a tree-walker figure,
+-    // because that is what `rexx-run` defaulted to at the time.
++    // because that is what `rexx` defaulted to at the time.
+     let _ = writeln!(
+         report,
+         "| this crate's engine | the compiled stream, the only one; \
+          `REXX_ENGINE` is not read |"
+     );
+     let _ = writeln!(
+         report,
+         "| address-space cap | `ulimit -v {ADDRESS_SPACE_LIMIT_KIB}` KiB, **both sides, every axis** |"
+     );
+     let _ = writeln!(
+diff --git a/rust/crates/rexx-bench/src/child.rs b/rust/crates/rexx-bench/src/child.rs
+index 1554e693f..973254794 100644
+--- a/rust/crates/rexx-bench/src/child.rs
++++ b/rust/crates/rexx-bench/src/child.rs
+@@ -40,29 +40,29 @@ impl Side {
+         Side {
+             label: "oracle",
+             binary: PathBuf::from(ORACLE_ROOT).join("bin/rexx"),
+             env: vec![(
+                 "LD_LIBRARY_PATH".to_string(),
+                 PathBuf::from(ORACLE_ROOT).join("lib").display().to_string(),
+             )],
+         }
+     }
+ 
+-    /// This crate's `rexx-run` at `binary`, on `arm`.
++    /// This crate's `rexx` at `binary`, on `arm`.
+     pub fn rust(binary: PathBuf, arm: Arm) -> Side {
+         Side {
+             label: match arm {
+                 Arm::Ir => "rust-ir",
+             },
+             binary,
+             // **No environment.** The arm used to be selected per child
+-            // through `REXX_ENGINE`; `rexx-run` reads no such variable now,
++            // through `REXX_ENGINE`; `rexx` reads no such variable now,
+             // so setting one would be a row labelled with an arm nobody
+             // chose.
+             env: Vec::new(),
+         }
+     }
+ 
+     /// This side with `LD_LIBRARY_PATH` added for an axis that loads a
+     /// library, and unchanged for any other.
+     pub fn for_axis(&self, axis: &str) -> Side {
+         let mut env = self.env.clone();
+diff --git a/rust/crates/rexx-exec/src/bin/rexx-run.rs b/rust/crates/rexx-exec/src/bin/rexx-run.rs
+deleted file mode 100644
+index 68a2918ed..000000000
+--- a/rust/crates/rexx-exec/src/bin/rexx-run.rs
++++ /dev/null
+@@ -1,149 +0,0 @@
+-/*----------------------------------------------------------------------------*/
+-/*                                                                            */
+-/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+-/*                                                                            */
+-/* This program and the accompanying materials are made available under       */
+-/* the terms of the Common Public License v1.0 which accompanies this         */
+-/* distribution. A copy is also available at the following address:           */
+-/* https://www.oorexx.org/license.html                                        */
+-/*                                                                            */
+-/*----------------------------------------------------------------------------*/
+-
+-//! The runner the L0 differential tests drive: `rexx-run FILE`.
+-
+-use std::io::Write;
+-use std::os::unix::ffi::OsStrExt;
+-use std::process::ExitCode;
+-
+-fn main() -> ExitCode {
+-    rexx_exec::install_signal_handlers();
+-    let mut args = std::env::args_os().skip(1);
+-    let Some(path) = args.next() else {
+-        eprintln!("usage: rexx-run FILE [arguments]");
+-        return ExitCode::from(2);
+-    };
+-
+-    // Everything after the program path is the program's argument, joined into
+-    // the single string a Rexx program can see. `rexx_exec::join_command_line`
+-    // owns the joining rule and the measurements behind it; what belongs here
+-    // is only the decision to hand it every remaining word, because that
+-    // matches where the oracle does the same thing -- its own launcher
+-    // (`utilities/rexx/platform/unix/rexx.cpp`'s `main`) builds `arg_buffer`
+-    // from `argv` and the interpreter never sees the separate words.
+-    // This process owns real descriptors, so reading them here is the one
+-    // place it is legitimate: `QUERY STREAMTYPE` and 93.958 both turn on
+-    // whether a standard stream is transient, and the interpreter itself
+-    // writes to a buffer and cannot know.
+-    let invocation = rexx_exec::join_command_line(args.map(|arg| arg.as_bytes().to_vec()))
+-        .with_input(rexx_exec::ProgramInput::Stdin)
+-        .with_standard_transient(std::array::from_fn(|fd| {
+-            use std::os::unix::fs::FileTypeExt;
+-            std::fs::metadata(format!("/proc/self/fd/{fd}"))
+-                .is_ok_and(|meta| meta.file_type().is_char_device() || meta.file_type().is_fifo())
+-        }))
+-        // The other half of owning real descriptors: a program that asks a
+-        // question and then reads standard input needs the question to have
+-        // been written, and the interpreter only appends to a buffer. An
+-        // interactive `TRACE` pause is the case -- its prompt and the read
+-        // that waits for the answer are the same clause.
+-        .with_sinks(rexx_exec::Sinks {
+-            stdout: Box::new(|bytes| {
+-                let _ = std::io::stdout().write_all(bytes);
+-                let _ = std::io::stdout().flush();
+-            }),
+-            stderr: Box::new(|bytes| {
+-                let _ = std::io::stderr().write_all(bytes);
+-                let _ = std::io::stderr().flush();
+-            }),
+-        });
+-
+-    // `REXX_SWITCH_MODE` is the deterministic switch mode, for tests:
+-    // `every`, `at:K` for the program's K-th clause, or the simulation mode,
+-    // `sim`, `sim:SEED[,...]` or `sim:replay=FILE[,trace=FILE]`.
+-    let invocation = match std::env::var("REXX_SWITCH_MODE").as_deref() {
+-        Ok("every") => invocation.with_switch_mode(rexx_exec::SwitchMode::EveryOpportunity),
+-        Ok(mode) if mode == "sim" || mode.starts_with("sim:") => {
+-            match rexx_exec::SimConfig::parse(mode) {
+-                Ok(config) => {
+-                    if mode == "sim" {
+-                        eprintln!("rexx-sim: seed={}", config.seed);
+-                    }
+-                    invocation.with_switch_mode(rexx_exec::SwitchMode::Sim(config))
+-                }
+-                Err(error) => {
+-                    eprintln!("rexx-run: REXX_SWITCH_MODE: {error}");
+-                    return ExitCode::from(2);
+-                }
+-            }
+-        }
+-        Ok(mode) => match mode.strip_prefix("at:").map(str::parse) {
+-            Some(Ok(clause)) => {
+-                invocation.with_switch_mode(rexx_exec::SwitchMode::AtClause(clause))
+-            }
+-            _ => {
+-                eprintln!(
+-                    "rexx-run: REXX_SWITCH_MODE is `every`, `at:K` or `sim[:SEED,...]`, not `{mode}`"
+-                );
+-                return ExitCode::from(2);
+-            }
+-        },
+-        Err(_) => invocation,
+-    };
+-
+-    let text = match std::fs::read(&path) {
+-        Ok(text) => text,
+-        Err(error) => {
+-            eprintln!("rexx-run: {}: {error}", path.to_string_lossy());
+-            return ExitCode::from(2);
+-        }
+-    };
+-
+-    // The oracle names the program in its error reports by the absolute,
+-    // dot-normalised path, whatever was typed on the command line: measured,
+-    // `./sub/../sub/rel.rex` and a bare `rel.rex` run from the directory both
+-    // report the same canonical path. `canonicalize` is that normalisation and
+-    // also resolves symlinks, which is one step further than the oracle has
+-    // been measured to go; nothing in the corpus runs through a symlink, so
+-    // that difference is unobserved rather than known to agree.
+-    let reported = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone().into());
+-    let outcome = rexx_exec::run_program(&reported.to_string_lossy(), text, invocation);
+-
+-    // Whatever the sinks above did not already take: written in the order the
+-    // program produced them relative to each other, which is no order at all
+-    // -- they are separate descriptors, and D17 records that their
+-    // interleaving is not observable.
+-    let _ = std::io::stdout().write_all(&outcome.stdout);
+-    let _ = std::io::stdout().flush();
+-    let _ = std::io::stderr().write_all(&outcome.stderr);
+-    if let Some(sim) = outcome
+-        .sim
+-        .filter(|_| std::env::var_os(rexx_exec::SIM_CHILD_ENV).is_none())
+-    {
+-        let trace = sim
+-            .trace_hash
+-            .map(|hash| format!(" trace={hash:016x}"))
+-            .unwrap_or_default();
+-        let profile = if cfg!(debug_assertions) {
+-            "debug"
+-        } else {
+-            "release"
+-        };
+-        eprintln!(
+-            "rexx-sim: seed={} policy={} steps={} contended={} switches={}{trace} profile={profile} \
+-             stack={}",
+-            sim.seed,
+-            sim.policy,
+-            sim.steps,
+-            sim.contended,
+-            sim.switches,
+-            rexx_exec::INTERPRETER_STACK_BYTES
+-        );
+-    }
+-
+-    // `ExitCode::from` takes a `u8`, which is the whole range a process exit
+-    // status carries anyway. What makes that range meaningful is
+-    // `Raised::exit_code`'s `256 - major`, which `execute` applies, and now
+-    // `EXIT expr`'s own result, which `Interp::exit_code_for` (`lib.rs`)
+-    // converts into an `i32` that can be negative or wider than a byte.
+-    ExitCode::from(outcome.exit_code as u8)
+-}
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index b57cde010..70c0a51a8 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -2848,22 +2848,22 @@ impl Interp {
+             .find(|(name, _)| name == b"RXTRACE")
+             .is_some_and(|(_, value)| value.eq_ignore_ascii_case(b"ON"))
+     }
+ 
+     // `plan_for` and `activation`/`activation_mut` live in `plan.rs`/
+     // `activation.rs` (Task 6), beside the types they operate on.
+ 
+     // `fragment_plan` and `slot_of` live in `plan.rs` (Task 6), beside
+     // `Plan` itself.
+ 
+-    /// Converts `EXIT`'s result into the raw exit code, before `rexx-run`'s
+-    /// own 8-bit truncation (`bin/rexx-run.rs`) narrows it to a process exit
++    /// Converts `EXIT`'s result into the raw exit code, before `rexx`'s
++    /// own 8-bit truncation (`bin/rexx.rs`) narrows it to a process exit
+     /// status.
+     fn exit_code_for(&mut self, value: Option<ObjRef>) -> i32 {
+         let Some(value) = value else { return 0 };
+         let Ok(number) = self.to_number(value) else {
+             return 0;
+         };
+         match number.whole_value(rexx_num::ARGUMENT_DIGITS) {
+             Some(whole) => i32::try_from(whole).unwrap_or(0),
+             None => 0,
+         }
+diff --git a/rust/crates/rexx-exec/tests/buffer_growth_error_exit.rs b/rust/crates/rexx-exec/tests/buffer_growth_error_exit.rs
+index 0ea2c5845..fa55d1f3f 100644
+--- a/rust/crates/rexx-exec/tests/buffer_growth_error_exit.rs
++++ b/rust/crates/rexx-exec/tests/buffer_growth_error_exit.rs
+@@ -52,21 +52,21 @@ fn a_buffer_grown_before_a_failed_insert_is_counted() {
+          say condition('o')~code b~getBufferSize\n\
+          do i = 1 to 200000; x = .object~new; end\n\
+          drop b\n\
+          do i = 1 to 200000; x = .object~new; end\n\
+          say 'done'\n",
+     )
+     .expect("the program is writable");
+     let output = Command::new("bash")
+         .arg("-c")
+         .arg(format!("ulimit -v {CAP_KIB} && exec \"$0\" main.rex"))
+-        .arg(env!("CARGO_BIN_EXE_rexx-run"))
++        .arg(env!("CARGO_BIN_EXE_rexx"))
+         .current_dir(&dir)
+         .stdin(Stdio::null())
+         .output()
+         .expect("the capped run spawns");
+     assert_eq!(
+         (
+             output.status.code(),
+             String::from_utf8_lossy(&output.stdout).into_owned(),
+             String::from_utf8_lossy(&output.stderr).into_owned()
+         ),
+diff --git a/rust/crates/rexx-exec/tests/datetime_zone.rs b/rust/crates/rexx-exec/tests/datetime_zone.rs
+index 589b39960..cdde8b946 100644
+--- a/rust/crates/rexx-exec/tests/datetime_zone.rs
++++ b/rust/crates/rexx-exec/tests/datetime_zone.rs
+@@ -30,21 +30,21 @@ const PROBES: &[(&str, &str)] = &[
+ ];
+ 
+ fn probe_dir() -> PathBuf {
+     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("datetime-zone");
+     fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
+     dir
+ }
+ 
+ /// This crate's three descriptors for `path` under `zone`, as a subprocess.
+ fn run_crate(path: &Path, zone: &str) -> (Vec<u8>, Vec<u8>, i32) {
+-    let out = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
++    let out = Command::new(env!("CARGO_BIN_EXE_rexx"))
+         .arg(path)
+         .env("TZ", zone)
+         .output()
+         .unwrap_or_else(|e| {
+             panic!(
+                 "cannot run this crate on {} under TZ={zone}: {e}",
+                 path.display()
+             )
+         });
+     (out.stdout, out.stderr, out.status.code().unwrap_or(-1))
+@@ -151,21 +151,21 @@ fn the_file_date_time_witness_reads_the_zone_the_oracle_does() {
+         .canonicalize()
+         .expect("the witness is in the corpus");
+     let mut outputs = Vec::new();
+     for zone in FILE_ZONES {
+         let tag = zone.replace('/', "_");
+         let cpp = oracle.run_in(
+             &witness,
+             &empty_dir(&format!("oracle-{tag}")),
+             &[("TZ", zone)],
+         );
+-        let out = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
++        let out = Command::new(env!("CARGO_BIN_EXE_rexx"))
+             .arg(&witness)
+             .current_dir(empty_dir(&format!("crate-{tag}")))
+             .env("TZ", zone)
+             .output()
+             .unwrap_or_else(|e| panic!("cannot run this crate under TZ={zone}: {e}"));
+         assert_eq!(
+             cpp.termination,
+             Termination::Exited(out.status.code().unwrap_or(-1)),
+             "exit status under TZ={zone}"
+         );
+diff --git a/rust/crates/rexx-exec/tests/input_oracle.rs b/rust/crates/rexx-exec/tests/input_oracle.rs
+index d6800d192..3eeaf4f0d 100644
+--- a/rust/crates/rexx-exec/tests/input_oracle.rs
++++ b/rust/crates/rexx-exec/tests/input_oracle.rs
+@@ -314,41 +314,41 @@ const CASES: &[Case] = &[
+         name: "input-closed-pipe",
+         program: INPUT_PROGRAM,
+         args: &[],
+         stdin: Some(b""),
+         why: "a pipe closed with nothing in it, which is not the same \
+               descriptor as `/dev/null` and must answer the same way. The \
+               `None` rows above are the `/dev/null` half",
+     },
+ ];
+ 
+-/// Runs `rexx-run` the way a shell would, with the same `argv` and the same
++/// Runs `rexx` the way a shell would, with the same `argv` and the same
+ /// console the oracle gets.
+ fn run_rust(path: &Path, args: &[&str], stdin: Option<&[u8]>) -> CppOutcome {
+-    let mut command = Command::new(env!("CARGO_BIN_EXE_rexx-run"));
++    let mut command = Command::new(env!("CARGO_BIN_EXE_rexx"));
+     command
+         .arg(path)
+         .args(args)
+         .current_dir(path.parent().unwrap_or(Path::new(".")))
+         .stdin(match stdin {
+             None => Stdio::null(),
+             Some(_) => Stdio::piped(),
+         });
+     let output = match stdin {
+         None => command
+             .stdout(Stdio::piped())
+             .stderr(Stdio::piped())
+             .output()
+-            .unwrap_or_else(|e| panic!("failed to spawn rexx-run for {}: {e}", path.display())),
++            .unwrap_or_else(|e| panic!("failed to spawn rexx for {}: {e}", path.display())),
+         Some(bytes) => write_and_wait(&mut command, bytes, path),
+     };
+-    // `rexx-run` has no deadline of its own -- `write_and_wait` and
++    // `rexx` has no deadline of its own -- `write_and_wait` and
+     // `Command::output` above both block without one -- so a `None` exit
+     // code here can only be a signal death, never the harness's own kill.
+     // See `support::oracle::write_and_wait`'s doc for why this stays the
+     // simpler, un-deadlined form rather than gaining one.
+     CppOutcome {
+         stdout: output.stdout,
+         stderr: output.stderr,
+         termination: classify_termination(output.status.code(), false),
+     }
+ }
+@@ -493,26 +493,26 @@ fn an_unreadable_console_is_end_of_input() {
+ 
+     // The directory itself is the descriptor. Opened read-only, which succeeds
+     // on Linux for a directory; it is the `read` that fails.
+     let as_stdin = || {
+         Stdio::from(
+             fs::File::open(&dir).unwrap_or_else(|e| panic!("cannot open {}: {e}", dir.display())),
+         )
+     };
+ 
+     let oracle = support::oracle::locate();
+-    let rust = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
++    let rust = Command::new(env!("CARGO_BIN_EXE_rexx"))
+         .arg(&abs)
+         .current_dir(&dir)
+         .stdin(as_stdin())
+         .output()
+-        .expect("rexx-run starts");
++        .expect("rexx starts");
+     // Through the harness, not a hand-rolled `sh -c` wrapper: the memory limit
+     // and the invocation counter are exactly what `run_with_stdin` exists to
+     // keep in one place, and the counter is asserted below.
+     let cpp = oracle.run_with_stdin(&abs, &[], as_stdin());
+ 
+     // Structural, and checked before the byte comparison below, same as this
+     // file's other `oracle.run_with`/`run_with_stdin` call site (`:449`):
+     // an unread console must not turn a non-finish into a divergence.
+     assert!(
+         !did_not_finish(&cpp),
+diff --git a/rust/crates/rexx-exec/tests/instance_copy_memory.rs b/rust/crates/rexx-exec/tests/instance_copy_memory.rs
+index c95030922..471295869 100644
+--- a/rust/crates/rexx-exec/tests/instance_copy_memory.rs
++++ b/rust/crates/rexx-exec/tests/instance_copy_memory.rs
+@@ -42,21 +42,21 @@ fn copies_of_a_large_string_subclass_instance_run_under_the_oracles_memory_cap()
+          do i = 1 to 3000; y = big~copy; end\n\
+          say 'done' y~length y~class~id\n\
+          ::class k subclass string\n",
+     )
+     .expect("the program is writable");
+     let output = Command::new("bash")
+         .arg("-c")
+         .arg(format!(
+             "ulimit -v {ORACLE_MEMORY_LIMIT_KIB} && exec \"$0\" main.rex"
+         ))
+-        .arg(env!("CARGO_BIN_EXE_rexx-run"))
++        .arg(env!("CARGO_BIN_EXE_rexx"))
+         .current_dir(&dir)
+         .stdin(Stdio::null())
+         .output()
+         .expect("the capped run spawns");
+     assert_eq!(
+         (
+             output.status.code(),
+             String::from_utf8_lossy(&output.stdout).into_owned(),
+             String::from_utf8_lossy(&output.stderr).into_owned()
+         ),
+diff --git a/rust/crates/rexx-exec/tests/library_routine_memory.rs b/rust/crates/rexx-exec/tests/library_routine_memory.rs
+index 90dbb86da..531aaeb28 100644
+--- a/rust/crates/rexx-exec/tests/library_routine_memory.rs
++++ b/rust/crates/rexx-exec/tests/library_routine_memory.rs
+@@ -63,21 +63,21 @@ fn imported_routines_sent_in_a_loop_run_under_the_oracles_memory_cap() {
+          end\n\
+          say 'done'\n\
+          ::requires 'rxmath' LIBRARY\n",
+     )
+     .expect("the program is writable");
+     let output = Command::new("bash")
+         .arg("-c")
+         .arg(format!(
+             "ulimit -v {ORACLE_MEMORY_LIMIT_KIB} && exec \"$0\" main.rex"
+         ))
+-        .arg(env!("CARGO_BIN_EXE_rexx-run"))
++        .arg(env!("CARGO_BIN_EXE_rexx"))
+         .current_dir(&dir)
+         .env("LD_LIBRARY_PATH", oracle.lib_dir())
+         .stdin(Stdio::null())
+         .output()
+         .expect("the capped run spawns");
+     assert_eq!(
+         (
+             output.status.code(),
+             String::from_utf8_lossy(&output.stdout).into_owned(),
+             String::from_utf8_lossy(&output.stderr).into_owned()
+diff --git a/rust/crates/rexx-exec/tests/method_bodies.rs b/rust/crates/rexx-exec/tests/method_bodies.rs
+index c13187864..be9db9b79 100644
+--- a/rust/crates/rexx-exec/tests/method_bodies.rs
++++ b/rust/crates/rexx-exec/tests/method_bodies.rs
+@@ -528,21 +528,21 @@ fn run_probe_twice(abs: &Path, text: &[u8]) -> CrateSide {
+ 
+ /// Whether two crate runs agree on all three descriptors.
+ fn same_outcome(left: &Outcome, right: &Outcome) -> bool {
+     wrapped_exit_code(left.exit_code) == wrapped_exit_code(right.exit_code)
+         && left.stdout == right.stdout
+         && left.stderr == right.stderr
+ }
+ 
+ /// This crate's answer to `abs` with `TZ` set, as a subprocess.
+ fn run_crate_in_zone(abs: &Path, zone: &str) -> Outcome {
+-    let out = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
++    let out = Command::new(env!("CARGO_BIN_EXE_rexx"))
+         .arg(abs)
+         .env("TZ", zone)
+         .output()
+         .unwrap_or_else(|e| {
+             panic!(
+                 "failed to run this crate on {} under TZ={zone}: {e}",
+                 abs.display()
+             )
+         });
+     Outcome {
+diff --git a/rust/crates/rexx-exec/tests/package_requires.rs b/rust/crates/rexx-exec/tests/package_requires.rs
+index 1600b0d57..95b3ec5e3 100644
+--- a/rust/crates/rexx-exec/tests/package_requires.rs
++++ b/rust/crates/rexx-exec/tests/package_requires.rs
+@@ -88,32 +88,32 @@ fn fresh_root(name: &str) -> PathBuf {
+         .as_nanos();
+     let root = Path::new(env!("CARGO_TARGET_TMPDIR"))
+         .join(format!("requires-{name}-{}-{nanos}", std::process::id()));
+     for sub in ["prog", "cwd", "rexxpath", "syspath"] {
+         let dir = root.join(sub);
+         fs::create_dir_all(&dir).unwrap_or_else(|e| panic!("cannot create {}: {e}", dir.display()));
+     }
+     root
+ }
+ 
+-/// Runs `rexx-run` on `path` from `cwd` with `environment` set, the same three
++/// Runs `rexx` on `path` from `cwd` with `environment` set, the same three
+ /// descriptors the oracle side answers with.
+ fn run_rust_in(path: &Path, cwd: &Path, environment: &[(&str, &str)]) -> (Vec<u8>, Vec<u8>, i32) {
+-    let mut command = Command::new(env!("CARGO_BIN_EXE_rexx-run"));
++    let mut command = Command::new(env!("CARGO_BIN_EXE_rexx"));
+     command.arg(path).current_dir(cwd);
+     for (name, value) in environment {
+         command.env(name, value);
+     }
+     let output = command
+         .stdin(Stdio::null())
+         .output()
+-        .unwrap_or_else(|e| panic!("failed to spawn rexx-run for {}: {e}", path.display()));
++        .unwrap_or_else(|e| panic!("failed to spawn rexx for {}: {e}", path.display()));
+     (
+         output.stdout,
+         output.stderr,
+         output.status.code().unwrap_or(-1),
+     )
+ }
+ 
+ /// Each of the four routes finds the required file on its own, the first of
+ /// them wins when all four hold a copy, and a name no route holds is the
+ /// oracle's own 43.901 rather than anything quieter.
+diff --git a/rust/crates/rexx-exec/tests/program_end.rs b/rust/crates/rexx-exec/tests/program_end.rs
+index b6f3e29da..d4137b07c 100644
+--- a/rust/crates/rexx-exec/tests/program_end.rs
++++ b/rust/crates/rexx-exec/tests/program_end.rs
+@@ -4,56 +4,56 @@
+ /*                                                                            */
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! Program end with an activity that never finishes (the Phase 6 S2-S5
+ //! plan's Review Focus 2): the oracle waits for ever, and so does
+-//! `rexx-run`, with main's output written and without spinning. Each test
++//! `rexx`, with main's output written and without spinning. Each test
+ //! kills the process once it has seen that.
+ 
+ #![expect(
+     clippy::disallowed_methods,
+     reason = "this harness times or bounds real runs"
+ )]
+ 
+ use std::io::Read;
+ use std::path::PathBuf;
+ use std::process::{Child, Command, Stdio};
+ use std::sync::mpsc;
+ use std::time::{Duration, Instant};
+ 
+ /// How long main's output may take to appear.
+ const OUTPUT_WAIT: Duration = Duration::from_secs(30);
+ 
+ /// How long the process is watched once main's output is out.
+ const WATCH: Duration = Duration::from_secs(1);
+ 
+-/// Runs `source` under `rexx-run`, waits for `main_output` on its stdout,
++/// Runs `source` under `rexx`, waits for `main_output` on its stdout,
+ /// then asserts the process is still running after [`WATCH`] and, on
+ /// Linux, that it spent at most a tenth of that on the CPU.
+ fn stays_alive_after(name: &str, source: &str, main_output: &str) {
+     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+         .join(format!("program-end-{name}-{}", std::process::id()));
+     std::fs::create_dir_all(&dir).expect("the probe directory");
+     let file = dir.join(format!("{name}.rex"));
+     std::fs::write(&file, source).expect("the probe");
+-    let mut child = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
++    let mut child = Command::new(env!("CARGO_BIN_EXE_rexx"))
+         .arg(&file)
+         .stdin(Stdio::null())
+         .stdout(Stdio::piped())
+         .stderr(Stdio::piped())
+         .spawn()
+-        .expect("rexx-run starts");
++        .expect("rexx starts");
+     let mut stdout = child.stdout.take().expect("piped stdout");
+     let (sender, receiver) = mpsc::channel();
+     std::thread::spawn(move || {
+         let mut buffer = [0u8; 256];
+         while let Ok(read) = stdout.read(&mut buffer) {
+             if read == 0 || sender.send(buffer[..read].to_vec()).is_err() {
+                 break;
+             }
+         }
+     });
+diff --git a/rust/crates/rexx-exec/tests/prompt_before_read.rs b/rust/crates/rexx-exec/tests/prompt_before_read.rs
+index 05da5dc9c..049a2f18e 100644
+--- a/rust/crates/rexx-exec/tests/prompt_before_read.rs
++++ b/rust/crates/rexx-exec/tests/prompt_before_read.rs
+@@ -9,21 +9,21 @@
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! A prompt reaches the terminal before the read that waits for its answer.
+ //!
+ //! **No corpus program can see this.** The differential harness supplies
+ //! stdin as a buffer and compares the two output streams once the run is
+ //! over, so a prompt written at exit and a prompt written before the read
+ //! compare equal. What the two differ in is whether a person is looking at
+ //! the question while the interpreter waits for their answer, which is a
+-//! property of `rexx-run`'s own descriptors and is only observable by
++//! property of `rexx`'s own descriptors and is only observable by
+ //! spawning it.
+ 
+ #![expect(
+     clippy::disallowed_methods,
+     reason = "this harness times or bounds real runs"
+ )]
+ 
+ use std::io::{BufRead, BufReader, Read, Write};
+ use std::path::PathBuf;
+ use std::process::{Child, Command, Stdio};
+@@ -42,34 +42,34 @@ fn probe_dir(name: &str) -> PathBuf {
+         std::process::id(),
+         std::time::SystemTime::now()
+             .duration_since(std::time::UNIX_EPOCH)
+             .expect("the clock is after the epoch")
+             .as_nanos()
+     ));
+     std::fs::create_dir_all(&base).expect("a private probe directory");
+     base
+ }
+ 
+-/// `rexx-run` on `source`, with all three descriptors piped and **nothing
++/// `rexx` on `source`, with all three descriptors piped and **nothing
+ /// written to its standard input**.
+ fn waiting_run(name: &str, source: &str) -> (Child, PathBuf) {
+     let dir = probe_dir(name);
+     let path = dir.join("ask.rex");
+     std::fs::write(&path, source).expect("the probe program is writable");
+-    let child = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
++    let child = Command::new(env!("CARGO_BIN_EXE_rexx"))
+         .arg("ask.rex")
+         .current_dir(&dir)
+         .stdin(Stdio::piped())
+         .stdout(Stdio::piped())
+         .stderr(Stdio::piped())
+         .spawn()
+-        .unwrap_or_else(|e| panic!("failed to spawn rexx-run: {e}"));
++        .unwrap_or_else(|e| panic!("failed to spawn rexx: {e}"));
+     (child, dir)
+ }
+ 
+ /// Reads `stream` line by line on a thread of its own, so that a line can be
+ /// waited for with a deadline rather than by blocking the test.
+ fn lines_of(stream: impl Read + Send + 'static) -> Receiver<String> {
+     let (sender, receiver) = channel();
+     std::thread::spawn(move || {
+         for line in BufReader::new(stream).lines() {
+             let Ok(line) = line else { return };
+diff --git a/rust/crates/rexx-exec/tests/release_local_reference.rs b/rust/crates/rexx-exec/tests/release_local_reference.rs
+index d0657f4b6..5beb3d709 100644
+--- a/rust/crates/rexx-exec/tests/release_local_reference.rs
++++ b/rust/crates/rexx-exec/tests/release_local_reference.rs
+@@ -98,21 +98,21 @@ fn peak_kib(dir: &Path, passes: u32) -> u64 {
+             "timeout",
+             "-k",
+             "5",
+             "120",
+             "/usr/bin/time",
+             "-f",
+             "%M",
+             "-o",
+         ])
+         .arg(&rss)
+-        .arg(env!("CARGO_BIN_EXE_rexx-run"))
++        .arg(env!("CARGO_BIN_EXE_rexx"))
+         .arg(&program)
+         .current_dir(dir)
+         .env("LD_LIBRARY_PATH", dir)
+         .stdin(Stdio::null())
+         .output()
+         .expect("the capped run spawns");
+     assert_eq!(
+         (
+             output.status.code(),
+             String::from_utf8_lossy(&output.stdout).into_owned(),
+diff --git a/rust/crates/rexx-exec/tests/rexxutil_process.rs b/rust/crates/rexx-exec/tests/rexxutil_process.rs
+index 0f1a1ab81..6cebdde9a 100644
+--- a/rust/crates/rexx-exec/tests/rexxutil_process.rs
++++ b/rust/crates/rexx-exec/tests/rexxutil_process.rs
+@@ -18,40 +18,40 @@ use std::process::Command;
+ const PROGRAM: &str = "a = .w~new~start('WAIT')\nb = .w~new~start('WAIT')\n\
+      say SysWait()\nsay a~result\nsay b~result\n\
+      ::class w\n::method wait\n  return SysWait()\n";
+ 
+ /// A command that runs `program` in a directory of its own named for `name`,
+ /// answering the directory too.
+ fn rexx_run(name: &str, program: &str) -> (Command, std::path::PathBuf) {
+     let dir = std::env::temp_dir().join(format!("rexx-{name}-{}", std::process::id()));
+     std::fs::create_dir_all(&dir).expect("a directory");
+     std::fs::write(dir.join("p.rex"), program).expect("the program written");
+-    let mut command = Command::new(env!("CARGO_BIN_EXE_rexx-run"));
++    let mut command = Command::new(env!("CARGO_BIN_EXE_rexx"));
+     command
+         .arg(dir.join("p.rex"))
+         .stdin(std::process::Stdio::null());
+     (command, dir)
+ }
+ 
+ /// `SysWait` reaps any child of the process, so running it in a test binary
+ /// whose other tests start commands would take their children. With no child
+ /// it answers `-1`, where the oracle answers a status it never set
+ /// (`corpus/oracle-crashes.txt` entry 45), from the main activity and from
+ /// two started ones, normally and under the simulation mode.
+ #[test]
+ fn sys_wait_with_no_child_answers_minus_one() {
+     let run = |mode: Option<&str>| {
+         let (mut command, dir) = rexx_run("sys-wait", PROGRAM);
+         if let Some(mode) = mode {
+             command.env("REXX_SWITCH_MODE", mode);
+         }
+-        let output = command.output().expect("rexx-run runs");
++        let output = command.output().expect("rexx runs");
+         let _ = std::fs::remove_dir_all(&dir);
+         output
+     };
+     let runs = [
+         None,
+         Some("sim:1"),
+         Some("sim:2,uniform:1"),
+         Some("sim:3,pct:3,k=4"),
+     ]
+     .map(|mode| (mode, run(mode)));
+@@ -70,21 +70,21 @@ fn sys_wait_with_no_child_answers_minus_one() {
+ }
+ 
+ /// `PGID` is the parent's process group, `getpgid(getppid())`: a child in a
+ /// group of its own answers this process's group and not its own.
+ #[test]
+ fn pgid_is_the_parents_group() {
+     let (mut command, dir) = rexx_run(
+         "sys-query-pgid",
+         "say SysQueryProcess('PGID') SysQueryProcess('PID')\n",
+     );
+-    let output = command.process_group(0).output().expect("rexx-run runs");
++    let output = command.process_group(0).output().expect("rexx runs");
+     let _ = std::fs::remove_dir_all(&dir);
+     let text = String::from_utf8_lossy(&output.stdout);
+     let (group, pid) = text.trim().split_once(' ').expect("two words");
+     let ours = rustix::process::getpgrp().as_raw_nonzero().get();
+     assert_eq!(group, ours.to_string(), "{text}");
+     assert_ne!(group, pid, "{text}");
+ }
+ 
+ /// A command whose child a `SysWait` on another activity reaped answers `127`
+ /// with a `FAILURE`, where the oracle reads the status of its own failed
+@@ -103,26 +103,26 @@ fn a_command_whose_child_was_reaped_elsewhere_fails_with_127() {
+         ::method run\n\
+         call on failure name failed\n\
+         'touch started; sleep 0.6; exit 5'\n\
+         return 'rc' rc\n\
+         failed:\n\
+         say 'failure' rc\n\
+         return\n";
+     let (_, dir) = rexx_run("sys-wait-reaped", program);
+     let output = Command::new("timeout")
+         .args(["-k", "5", "60"])
+-        .arg(env!("CARGO_BIN_EXE_rexx-run"))
++        .arg(env!("CARGO_BIN_EXE_rexx"))
+         .arg(dir.join("p.rex"))
+         .current_dir(&dir)
+         .stdin(std::process::Stdio::null())
+         .output()
+-        .expect("timeout runs rexx-run");
++        .expect("timeout runs rexx");
+     let _ = std::fs::remove_dir_all(&dir);
+     assert!(
+         output.status.success(),
+         "{:?}: {}",
+         output.status,
+         String::from_utf8_lossy(&output.stderr)
+     );
+     let stdout = String::from_utf8_lossy(&output.stdout);
+     let mut lines: Vec<&str> = stdout.lines().collect();
+     lines.sort_unstable();
+diff --git a/rust/crates/rexx-exec/tests/signals.rs b/rust/crates/rexx-exec/tests/signals.rs
+index edf7bf13b..570c4019c 100644
+--- a/rust/crates/rexx-exec/tests/signals.rs
++++ b/rust/crates/rexx-exec/tests/signals.rs
+@@ -3,21 +3,21 @@
+ /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+ /*                                                                            */
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! A signal halts running Rexx (spec 2026-09-29 section 4): each witness runs
+-//! `rexx-run` in a subprocess with SIGINT, SIGTERM and SIGHUP at their
++//! `rexx` in a subprocess with SIGINT, SIGTERM and SIGHUP at their
+ //! defaults whatever this process inherited (ruling P62), waits for its
+ //! readiness line, signals that process by its PID, or its process group as
+ //! a terminal's Ctrl-C does, and asserts all three descriptors. The expected
+ //! bytes are the oracle's, measured under `timeout -s SIGNAL 1` or by the
+ //! same PID or group signal, 30 runs each, except where a test says
+ //! otherwise.
+ //!
+ //! Every test here depends on a wall-clock boundary (ruling P48): the signal
+ //! must land inside a sleep, and the halt within [`PROMPT`]. A mismatch is
+ //! run again once, and only a second mismatch fails; the Ctrl-C witnesses
+@@ -43,21 +43,21 @@ const READY_WAIT: Duration = Duration::from_secs(30);
+ /// first: what `timeout -s SIGNAL 1` gave the oracle.
+ const UNREADY_WAIT: Duration = Duration::from_secs(1);
+ 
+ /// How soon after the signal the process must end: well inside the
+ /// witnesses' five-second sleeps.
+ const PROMPT: Duration = Duration::from_secs(3);
+ 
+ /// How long a process is given to end before it is killed.
+ const END_WAIT: Duration = Duration::from_secs(20);
+ 
+-/// How `rexx-run` is started.
++/// How `rexx` is started.
+ #[derive(Clone, Copy, PartialEq)]
+ enum Launch {
+     Plain,
+     /// Through `nohup`, which ignores SIGHUP.
+     Nohup,
+     /// With SIGINT ignored, as a non-interactive shell starts a background
+     /// job.
+     IgnoringInt,
+     /// In a process group of its own, signalled as a group, with standard
+     /// input a pipe held open and never written.
+@@ -76,21 +76,21 @@ enum Step {
+     Write(&'static str),
+ }
+ 
+ #[derive(Debug, PartialEq)]
+ struct Ended {
+     code: Option<i32>,
+     stdout: String,
+     stderr: String,
+ }
+ 
+-/// Runs `source` under `rexx-run` started as `launch`, takes `steps` once
++/// Runs `source` under `rexx` started as `launch`, takes `steps` once
+ /// `ready` is on its stdout, or after [`UNREADY_WAIT`] where `ready` is
+ /// empty, and answers how it ended and how long after the first signal.
+ fn run_steps(
+     name: &str,
+     source: &str,
+     ready: &str,
+     steps: &[Step],
+     launch: Launch,
+ ) -> (Ended, Duration) {
+     let signal = first_signal(steps);
+@@ -108,28 +108,28 @@ fn run_steps(
+         Launch::IgnoringInt => {
+             command.args(["sh", "-c", "trap '' INT; exec \"$0\" \"$1\""]);
+         }
+         Launch::Group => {
+             command.process_group(0);
+         }
+         Launch::Plain | Launch::Reading => {}
+     }
+     let reads = matches!(launch, Launch::Group | Launch::Reading);
+     let mut child = command
+-        .arg(env!("CARGO_BIN_EXE_rexx-run"))
++        .arg(env!("CARGO_BIN_EXE_rexx"))
+         .arg(&file)
+         .current_dir(&dir)
+         .stdin(if reads { Stdio::piped() } else { Stdio::null() })
+         .stdout(Stdio::piped())
+         .stderr(Stdio::piped())
+         .spawn()
+-        .expect("rexx-run starts");
++        .expect("rexx starts");
+     let mut stdout = child.stdout.take().expect("piped stdout");
+     let mut stderr = child.stderr.take().expect("piped stderr");
+     let (sender, receiver) = mpsc::channel();
+     let reader = std::thread::spawn(move || {
+         let mut buffer = [0u8; 256];
+         while let Ok(read) = stdout.read(&mut buffer) {
+             if read == 0 || sender.send(buffer[..read].to_vec()).is_err() {
+                 break;
+             }
+         }
+@@ -1011,50 +1011,50 @@ fn a_stdin_read_waits_without_spinning() {
+     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+         .join(format!("signals-spin-{}", std::process::id()));
+     std::fs::create_dir_all(&dir).expect("the probe directory");
+     let file = dir.join("spin.rex");
+     std::fs::write(
+         &file,
+         "o = .w~new\no~start('w')\ncall SysSleep 0.2\nparse pull v\nsay 'v=['v']'\nexit\n\
+          ::class w\n::method w\n  address system 'sleep 1'\n",
+     )
+     .expect("the probe");
+-    let mut child = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
++    let mut child = Command::new(env!("CARGO_BIN_EXE_rexx"))
+         .arg(&file)
+         .current_dir(&dir)
+         .stdin(Stdio::piped())
+         .stdout(Stdio::piped())
+         .stderr(Stdio::null())
+         .spawn()
+-        .expect("rexx-run starts");
++        .expect("rexx starts");
+     std::thread::sleep(Duration::from_millis(1500));
+     let before = cpu_ticks(child.id());
+     std::thread::sleep(Duration::from_millis(1000));
+     let after = cpu_ticks(child.id());
+     {
+         use std::io::Write;
+         let mut input = child.stdin.take().expect("piped stdin");
+         input.write_all(b"hi\n").expect("the write");
+     }
+     let written = Instant::now();
+     while written.elapsed() < END_WAIT && matches!(child.try_wait(), Ok(None)) {
+         std::thread::sleep(Duration::from_millis(10));
+     }
+     let ended = !matches!(child.try_wait(), Ok(None));
+     if !ended {
+         let _ = child.kill();
+     }
+-    let output = child.wait_with_output().expect("rexx-run ends");
++    let output = child.wait_with_output().expect("rexx ends");
+     std::fs::remove_dir_all(&dir).expect("the probe directory is removed");
+     assert!(
+         ended,
+-        "rexx-run still running {END_WAIT:?} after the read's input"
++        "rexx still running {END_WAIT:?} after the read's input"
+     );
+     assert_eq!(output.status.code(), Some(0));
+     assert_eq!(String::from_utf8_lossy(&output.stdout), "v=[hi]\n");
+     // USER_HZ is 100: under a tenth of the second the read waited.
+     assert!(
+         after - before < 10,
+         "{} ticks over a 1 s wait",
+         after - before
+     );
+ }
+@@ -1066,35 +1066,35 @@ fn no_activity_runs_while_main_reads() {
+     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+         .join(format!("signals-readruns-{}", std::process::id()));
+     std::fs::create_dir_all(&dir).expect("the probe directory");
+     let file = dir.join("readruns.rex");
+     std::fs::write(
+         &file,
+         "o = .w~new\no~start('go')\nparse pull v\nsay 'main' v\nexit\n\
+          ::class w\n::method go\n  do i = 1 to 8\n    say 'w' i\n    call SysSleep 0.1\n  end\n",
+     )
+     .expect("the probe");
+-    let mut child = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
++    let mut child = Command::new(env!("CARGO_BIN_EXE_rexx"))
+         .arg(&file)
+         .current_dir(&dir)
+         .stdin(Stdio::piped())
+         .stdout(Stdio::piped())
+         .stderr(Stdio::piped())
+         .spawn()
+-        .expect("rexx-run starts");
++        .expect("rexx starts");
+     std::thread::sleep(Duration::from_millis(1500));
+     {
+         use std::io::Write;
+         let mut input = child.stdin.take().expect("piped stdin");
+         input.write_all(b"hi\n").expect("the write");
+     }
+-    let output = child.wait_with_output().expect("rexx-run ends");
++    let output = child.wait_with_output().expect("rexx ends");
+     std::fs::remove_dir_all(&dir).expect("the probe directory is removed");
+     assert_eq!(
+         String::from_utf8_lossy(&output.stdout),
+         "main hi\nw 1\nw 2\nw 3\nw 4\nw 5\nw 6\nw 7\nw 8\n"
+     );
+     assert_eq!(String::from_utf8_lossy(&output.stderr), "");
+ }
+ 
+ /// Each thread's blocked halting signals, by thread name.
+ fn halting_blocked(pid: u32) -> Vec<(String, bool)> {
+@@ -1130,54 +1130,54 @@ fn only_the_interpreter_and_its_waits_take_the_halting_signals() {
+         .join(format!("signals-masks-{}", std::process::id()));
+     std::fs::create_dir_all(&dir).expect("the probe directory");
+     let file = dir.join("masks.rex");
+     std::fs::write(
+         &file,
+         "address system 'sleep 2'\ncall SysSleep 2\nparse pull v\nsay v\n",
+     )
+     .expect("the probe");
+     let mut child = Command::new("env")
+         .arg("--default-signal=INT,TERM,HUP")
+-        .arg(env!("CARGO_BIN_EXE_rexx-run"))
++        .arg(env!("CARGO_BIN_EXE_rexx"))
+         .arg(&file)
+         .current_dir(&dir)
+         .stdin(Stdio::piped())
+         .stdout(Stdio::piped())
+         .stderr(Stdio::piped())
+         .spawn()
+-        .expect("rexx-run starts");
++        .expect("rexx starts");
+     let mut seen = Vec::new();
+     for _ in 0..3 {
+         std::thread::sleep(Duration::from_secs(1));
+         seen.push(halting_blocked(child.id()));
+         std::thread::sleep(Duration::from_secs(1));
+     }
+     {
+         use std::io::Write;
+         let mut input = child.stdin.take().expect("piped stdin");
+         input.write_all(b"x\n").expect("the write");
+     }
+-    let output = child.wait_with_output().expect("rexx-run ends");
++    let output = child.wait_with_output().expect("rexx ends");
+     std::fs::remove_dir_all(&dir).expect("the probe directory is removed");
+     assert_eq!(String::from_utf8_lossy(&output.stdout), "x\n");
+     let thread = |name: &str, blocked: bool| (name.to_string(), blocked);
+-    let run = thread("rexx-run", true);
++    let run = thread("rexx", true);
+     let timer = thread("rexx-timer", true);
+     let interp = thread("rexx-interp", false);
+     // A command's wait reads the child's error stream on a thread of its own.
+     let waiting = thread("rexx-pool", false);
+     let idle = thread("rexx-pool", true);
+     assert_eq!(
+         seen,
+         [
+             vec![
++                run.clone(),
+                 interp.clone(),
+                 waiting.clone(),
+                 waiting.clone(),
+-                run.clone(),
+                 timer.clone()
+             ],
+-            vec![interp.clone(), idle, run.clone(), timer.clone()],
+-            vec![interp, waiting, run, timer],
++            vec![run.clone(), interp.clone(), idle, timer.clone()],
++            vec![run, interp, waiting, timer],
+         ]
+     );
+ }
+diff --git a/rust/crates/rexx-exec/tests/sim_processes.rs b/rust/crates/rexx-exec/tests/sim_processes.rs
+index 4f80d6e34..96ac3c0ef 100644
+--- a/rust/crates/rexx-exec/tests/sim_processes.rs
++++ b/rust/crates/rexx-exec/tests/sim_processes.rs
+@@ -15,26 +15,26 @@ use std::process::Command;
+ 
+ /// Sleeps, reads `TIME` and `DATE`, draws unseeded `RANDOM` in main and in
+ /// started activities that wait on each other.
+ const PROGRAM: &str = "call SysSleep 3\nsay random() time('L') date('S') time('E')\n\
+      m = .w~new~start('DRAW', 0.5)\nn = .w~new~start('DRAW', 0.25)\n\
+      say n~result m~result\nsay random() time('E')\n\
+      ::class w\n::method draw\n  use arg pause\n  call SysSleep pause\n  \
+      return random() time('L')\n";
+ 
+ fn run(dir: &std::path::Path, mode: &str) -> std::process::Output {
+-    Command::new(env!("CARGO_BIN_EXE_rexx-run"))
++    Command::new(env!("CARGO_BIN_EXE_rexx"))
+         .arg(dir.join("p.rex"))
+         .env("REXX_SWITCH_MODE", mode)
+         .stdin(std::process::Stdio::null())
+         .output()
+-        .expect("rexx-run runs")
++        .expect("rexx runs")
+ }
+ 
+ #[test]
+ fn a_seed_gives_one_output_in_two_processes() {
+     let dir = std::env::temp_dir().join(format!("rexx-sim-processes-{}", std::process::id()));
+     std::fs::create_dir_all(&dir).expect("a directory");
+     std::fs::write(dir.join("p.rex"), PROGRAM).expect("the program written");
+     let first = run(&dir, "sim:1");
+     let second = run(&dir, "sim:1");
+     let other = run(&dir, "sim:2");
+@@ -69,27 +69,27 @@ const TIMED_NATIVE: &str = "call time 'R'\ncall SysSleep 5\ne = time('E')\n\
+ #[test]
+ fn a_seed_gives_one_trace_hash_in_two_processes() {
+     let lib = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+         .join("../../../build/lib")
+         .canonicalize()
+         .expect("the worktree's build/lib");
+     let dir = std::env::temp_dir().join(format!("rexx-sim-hash-{}", std::process::id()));
+     std::fs::create_dir_all(&dir).expect("a directory");
+     std::fs::write(dir.join("p.rex"), TIMED_NATIVE).expect("the program written");
+     let run = || {
+-        Command::new(env!("CARGO_BIN_EXE_rexx-run"))
++        Command::new(env!("CARGO_BIN_EXE_rexx"))
+             .arg(dir.join("p.rex"))
+             .env("REXX_SWITCH_MODE", "sim:1,uniform:0.3")
+             .env("LD_LIBRARY_PATH", &lib)
+             .stdin(std::process::Stdio::null())
+             .output()
+-            .expect("rexx-run runs")
++            .expect("rexx runs")
+     };
+     let first = run();
+     let second = run();
+     let _ = std::fs::remove_dir_all(&dir);
+     let stderr = String::from_utf8_lossy(&first.stderr).into_owned();
+     assert!(first.status.success(), "{stderr}");
+     assert_eq!(
+         String::from_utf8_lossy(&first.stdout),
+         "slept 1 1\nrang 1\nwaited 0\nelapsed 1 1\nroot 4\n"
+     );
+@@ -119,61 +119,61 @@ fn a_damaged_trace_is_refused_before_the_run() {
+     let damaged = run(&dir, &format!("sim:replay={}", file.display()));
+     let _ = std::fs::remove_dir_all(&dir);
+     assert!(recorded.status.success());
+     assert!(replayed.status.success());
+     assert_eq!(recorded.stdout, replayed.stdout);
+     assert_eq!(damaged.status.code(), Some(2));
+     assert_eq!(damaged.stdout, b"");
+     assert_eq!(
+         String::from_utf8_lossy(&damaged.stderr),
+         format!(
+-            "rexx-run: REXX_SWITCH_MODE: `{}`: the decisions hash to {hash}, the header holds \
++            "rexx: REXX_SWITCH_MODE: `{}`: the decisions hash to {hash}, the header holds \
+              0123456789abcdef\n",
+             file.display()
+         )
+     );
+ }
+ 
+ /// A child `rexx` of a run in the simulation mode runs in it and writes no
+ /// `rexx-sim:` line: a program capturing the child's standard error with its
+ /// output, as ooTest's `issueCmd` does, reads the child's lines only. The
+ /// run's own line stays.
+ #[test]
+ fn a_child_writes_no_sim_line_into_output_its_parent_captures() {
+     let dir = std::env::temp_dir().join(format!("rexx-sim-child-{}", std::process::id()));
+     let bin = dir.join("bin");
+     std::fs::create_dir_all(&bin).expect("a directory");
+     let link = bin.join("rexx");
+     if !link.exists() {
+-        std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_rexx-run"), &link).expect("the link");
++        std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_rexx"), &link).expect("the link");
+     }
+     std::fs::write(
+         dir.join("c.rex"),
+         "say 'child' value('REXX_SWITCH_MODE',,'ENVIRONMENT')~left(4)\n",
+     )
+     .expect("the child written");
+     std::fs::write(
+         dir.join("p.rex"),
+         "o = .array~new\n\
+          address system 'rexx c.rex' with output append using (o) error append using (o)\n\
+          say o~items\ndo line over o; say line; end\n",
+     )
+     .expect("the program written");
+     let path = std::env::join_paths(std::iter::once(bin).chain(std::env::split_paths(
+         &std::env::var_os("PATH").expect("a PATH"),
+     )))
+     .expect("a PATH");
+-    let ran = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
++    let ran = Command::new(env!("CARGO_BIN_EXE_rexx"))
+         .arg(dir.join("p.rex"))
+         .current_dir(&dir)
+         .env("PATH", path)
+         .env("REXX_SWITCH_MODE", "sim:5")
+         .stdin(std::process::Stdio::null())
+         .output()
+-        .expect("rexx-run runs");
++        .expect("rexx runs");
+     let _ = std::fs::remove_dir_all(&dir);
+     let stderr = String::from_utf8_lossy(&ran.stderr).into_owned();
+     assert!(ran.status.success(), "{stderr}");
+     assert_eq!(String::from_utf8_lossy(&ran.stdout), "1\nchild sim:\n");
+     assert!(stderr.starts_with("rexx-sim: seed=5 "), "{stderr}");
+     assert_eq!(stderr.lines().count(), 1, "{stderr}");
+ }
+diff --git a/rust/crates/rexx-exec/tests/stdin_contention.rs b/rust/crates/rexx-exec/tests/stdin_contention.rs
+index 90b618851..290667298 100644
+--- a/rust/crates/rexx-exec/tests/stdin_contention.rs
++++ b/rust/crates/rexx-exec/tests/stdin_contention.rs
+@@ -3,21 +3,21 @@
+ /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+ /*                                                                            */
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! Activities that touch standard input while another reads it: each case
+-//! runs `rexx-run` with standard input a pipe, writes lines to it (and
++//! runs `rexx` with standard input a pipe, writes lines to it (and
+ //! signals it) at the times its `run` line names, and compares all three
+ //! descriptors with the oracle's, 30 runs each. Every case depends on a
+ //! wall-clock boundary (ruling P48), so a mismatch is run again once.
+ 
+ #![expect(
+     clippy::disallowed_methods,
+     reason = "this harness times or bounds real runs"
+ )]
+ 
+ use std::io::{Read, Write};
+@@ -62,28 +62,28 @@ fn actions(case: &datadriven::TestCase) -> Vec<(Duration, Action)> {
+ }
+ 
+ fn render(label: &str, case: &datadriven::TestCase) -> String {
+     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+         .join(format!("stdin-contention-{label}-{}", std::process::id()));
+     std::fs::create_dir_all(&dir).expect("the probe directory");
+     let file = dir.join("p.rex");
+     std::fs::write(&file, &case.input).expect("the probe");
+     let mut child = Command::new("env")
+         .arg("--default-signal=INT,TERM,HUP")
+-        .arg(env!("CARGO_BIN_EXE_rexx-run"))
++        .arg(env!("CARGO_BIN_EXE_rexx"))
+         .arg(&file)
+         .current_dir(&dir)
+         .stdin(Stdio::piped())
+         .stdout(Stdio::piped())
+         .stderr(Stdio::piped())
+         .spawn()
+-        .expect("rexx-run starts");
++        .expect("rexx starts");
+     let mut stdout = child.stdout.take().expect("piped stdout");
+     let mut stderr = child.stderr.take().expect("piped stderr");
+     let out = std::thread::spawn(move || {
+         let mut all = Vec::new();
+         let _ = stdout.read_to_end(&mut all);
+         all
+     });
+     let err = std::thread::spawn(move || {
+         let mut all = Vec::new();
+         let _ = stderr.read_to_end(&mut all);
+diff --git a/rust/crates/rexx-exec/tests/support/arity.rs b/rust/crates/rexx-exec/tests/support/arity.rs
+index 1c02df063..6dc468bdb 100644
+--- a/rust/crates/rexx-exec/tests/support/arity.rs
++++ b/rust/crates/rexx-exec/tests/support/arity.rs
+@@ -389,21 +389,21 @@ fn probe_dir(prefix: &str) -> PathBuf {
+ /// The three sides for every row, plus the oracle's stdout so the harness
+ /// rule can be checked separately from the verdict.
+ pub fn measured(layout: &Layout) -> Vec<(Row, String)> {
+     let receivers = layout.receivers();
+     let dir = probe_dir(layout.probe_prefix);
+     let path = dir.join("probe.rex");
+     if layout.fixture {
+         fs::write(dir.join(FIXTURE), "return 1\n").expect("the fixture is writable");
+     }
+     let oracle = oracle::oracle_root();
+-    let binary = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/release/rexx-run");
++    let binary = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/release/rexx");
+     assert!(
+         binary.is_file(),
+         "this test compares the release binary; build it first ({})",
+         binary.display()
+     );
+     let mut rows = Vec::new();
+     for (class, method, arm, list) in layout.arguments() {
+         if let Some(reason) = list.strip_prefix(EXEMPT) {
+             rows.push((
+                 Row {
+diff --git a/rust/crates/rexx-exec/tests/support/group_runner.rs b/rust/crates/rexx-exec/tests/support/group_runner.rs
+index a328f550f..071a3bef8 100644
+--- a/rust/crates/rexx-exec/tests/support/group_runner.rs
++++ b/rust/crates/rexx-exec/tests/support/group_runner.rs
+@@ -71,21 +71,21 @@ const TIMINGS: &[&str] = &[
+ const STAMPED: &[&str] = &["[failure] ", "[error] "];
+ 
+ /// How the crate's side schedules activities.
+ #[derive(Clone, Debug, PartialEq, Eq)]
+ pub enum SwitchMode {
+     /// The scheduler as it ships.
+     None,
+     /// A switch at every clause boundary, as `rexx_exec::SwitchMode` names it.
+     EveryOpportunity,
+     /// The simulation mode, its `REXX_SWITCH_MODE` value (`sim:SEED,...`): the
+-    /// run is a `rexx-run` process of its own, see [`run_crate_process`].
++    /// run is a `rexx` process of its own, see [`run_crate_process`].
+     Sim(String),
+ }
+ 
+ /// One run's three descriptors.
+ pub struct Run {
+     pub stdout: Vec<u8>,
+     pub stderr: Vec<u8>,
+     pub status: Option<i32>,
+ }
+ 
+@@ -558,35 +558,35 @@ pub enum Ended {
+ }
+ 
+ /// One [`run_crate_process`]: its descriptors (status `None` unless it
+ /// exited), how it ended and how long it took.
+ pub struct ProcessRun {
+     pub run: Run,
+     pub ended: Ended,
+     pub took: std::time::Duration,
+ }
+ 
+-/// Runs `rexx-run` on `words` (the program, then its arguments) from `cwd`
++/// Runs `rexx` on `words` (the program, then its arguments) from `cwd`
+ /// with `REXX_SWITCH_MODE` set to `mode`, in a process group of its own that
+ /// is killed at `deadline`; a command a simulation run starts runs in a group
+ /// of its own, which that kill does not reach. `environment`
+ /// replaces the process's own where given, else is inherited; `stdin` is
+ /// written to its standard input, which is otherwise empty.
+ pub fn run_crate_process(
+     words: &[String],
+     cwd: &Path,
+     environment: Option<Vec<(Vec<u8>, Vec<u8>)>>,
+     mode: &str,
+     stdin: Option<&[u8]>,
+     deadline: std::time::Duration,
+ ) -> ProcessRun {
+-    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_rexx-run"));
++    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_rexx"));
+     if let Some(environment) = environment {
+         set_environment(&mut command, environment);
+     }
+     command
+         .args(words)
+         .current_dir(cwd)
+         .env("REXX_SWITCH_MODE", mode);
+     run_process(command, stdin, deadline)
+ }
+ 
+diff --git a/rust/crates/rexx-parse/tests/deep.rs b/rust/crates/rexx-parse/tests/deep.rs
+index 9b8491b27..f9de796ac 100644
+--- a/rust/crates/rexx-parse/tests/deep.rs
++++ b/rust/crates/rexx-parse/tests/deep.rs
+@@ -3,21 +3,21 @@
+ /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+ /*                                                                            */
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! Task 3b: a deep `1 + 1 + ... + 1` chain must parse and drop on a normal,
+-//! default-stack test thread, not just on the wide thread `rexx-run` uses.
++//! default-stack test thread, not just on the wide thread `rexx` uses.
+ 
+ use rexx_parse::{MAX_EXPR_DEPTH, parse_program};
+ 
+ /// Builds `say (((...('a')...)))` with `depth` levels of parenthesis
+ /// nesting.
+ fn deep_paren_program(depth: usize) -> Vec<u8> {
+     let mut src = String::from("say ");
+     src.push_str(&"(".repeat(depth));
+     src.push_str("'a'");
+     src.push_str(&")".repeat(depth));

@@ -196,14 +196,6 @@ const AXES: &[Axis] = &[
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().collect();
     let self_check = arguments.iter().any(|arg| arg == "--self-check");
-    // Which engine "this crate" means, named rather than inherited, and
-    // printed in the provenance block beside every other identity a ratio
-    // here depends on. The default is the engine `rexx` ships, so a run
-    // with no arguments measures what this crate now is; `phase-4e-anchor.md`
-    // and `perf-baseline.md` were taken before this choice existed and are
-    // tree-walker figures, so reproducing either needs
-    // `--engine tree-walker`. An unrecognised value is refused rather than
-    // defaulted, exactly as `rexx` refuses one.
     // **No `--engine`.** It used to choose an arm; accepting `tree-walker`
     // now would set a `REXX_ENGINE` nothing reads and label the rows for an
     // engine that did not run them.

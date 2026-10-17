@@ -181,8 +181,7 @@ pub(super) fn write_provenance(
     // another arm must not be comparable with nothing to notice. It is no
     // longer a choice -- there is one engine and no `REXX_ENGINE` to set --
     // so the row states that rather than reporting a variable nothing reads.
-    // Every figure recorded before this row existed is a tree-walker figure,
-    // because that is what `rexx` defaulted to at the time.
+    // Every figure recorded before this row existed is a tree-walker figure.
     let _ = writeln!(
         report,
         "| this crate's engine | the compiled stream, the only one; \

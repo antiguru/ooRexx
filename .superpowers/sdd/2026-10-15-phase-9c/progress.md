@@ -67,3 +67,9 @@ Task 5: fix round 2 1acd33e22, 271a082ef (one bytes search in require::search; s
 Task 5: scoped re-review dispatched (sonnet).
 Task 5 re-review (sonnet): approved, none open; 17 shapes match; lib 1142 (one justified deletion). Controller fixed the two minors (doc sentence, report count).
 Task 5: complete (629f2d79b, 860fff6fc, 9994f5c1c, 4e2c99aae, dc16e526e, 1acd33e22, 271a082ef + records). Stopped per Moritz.
+Moritz 2026-10-17: 'copy Python's behavior' (tty line, file/pipe block, stderr line). Refinement (stdout before stderr) withdrawn; TEST_PASSINGARGS7 licensed under Deviation 40 via suite-licences.txt. Plan c8f0420c4.
+Pre-dispatch check Task 6: git grep -l rexx-run -- rust lists 29 files at c8f0420c4; task enumerates at start.
+Task 6: dispatched (implementer sonnet, BASE c8f0420c4).
+Task 6: implementer DONE 257a88fd8 (rexx-run deleted; grep only PINNED.md historical lines; signals thread-name order fixed; scserver/sfserver pass, scclient/sfclient stay: rxsock 98.903). Review dispatched (sonnet).
+Task 6 review (sonnet): spec PASS, quality PASS; minors (two false sentences after the rename) fixed by controller (deleted, plus the stale --engine paragraph).
+Task 6: complete (257a88fd8 + controller minors). Stopped per Moritz.
