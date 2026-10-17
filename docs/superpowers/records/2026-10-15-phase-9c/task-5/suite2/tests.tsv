@@ -1,0 +1,33 @@
+# ootest revision 13178
+# groups utilities/rexx/rexx_command
+group	test	row	oracle	crate
+utilities/rexx/rexx_command	TEST_NOARGS	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTE1	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTE10	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTE11	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTE2	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTE3	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTE4	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTE5	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTE6	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTE7	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTE8	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTE9	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTENOCODE	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTONOSTRING1	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTONOSTRING2	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTV1	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTV2	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTV3	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTV4	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTV5	-	passed	passed
+utilities/rexx/rexx_command	TEST_OPTV6	-	passed	passed
+utilities/rexx/rexx_command	TEST_PASSINGARGS0	-	passed	passed
+utilities/rexx/rexx_command	TEST_PASSINGARGS1	-	passed	passed
+utilities/rexx/rexx_command	TEST_PASSINGARGS2	-	passed	passed
+utilities/rexx/rexx_command	TEST_PASSINGARGS3	-	passed	passed
+utilities/rexx/rexx_command	TEST_PASSINGARGS4	-	passed	passed
+utilities/rexx/rexx_command	TEST_PASSINGARGS5	-	passed	passed
+utilities/rexx/rexx_command	TEST_PASSINGARGS6	-	passed	passed
+utilities/rexx/rexx_command	TEST_PASSINGARGS7	-	passed	failed
+utilities/rexx/rexx_command	TEST_UNKNOWNSW	-	passed	passed

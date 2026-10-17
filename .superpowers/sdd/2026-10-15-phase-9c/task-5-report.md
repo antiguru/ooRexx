@@ -1,13 +1,14 @@
 # Phase 9c Task 5 report: `rexx` beside `rexx-run`, and the A/B
 
-Implementer: c9c-impl-5. Base `6391ead7c`. Code commit `629f2d79b`. This report and the A/B
-record are the commit after it.
+Implementer: c9c-impl-5. Base `6391ead7c`. Commits: `629f2d79b` (`rexx`, tests, Step 1
+records), `860fff6fc` (the first A/B and this report's first version), `9994f5c1c` (the
+program-path chain as bytes, under ruling (A)), and the record commit after it.
 
 ## Status
 
-Done, with three items for the controller (Shared paths 1, Concerns 1 and 2). No `OVER` in the
-A/B. The rulings asked of main were not answered while I worked, so each default is stated
-where it applies.
+Done. Main ruled (A) on both widenings and on Concern 1's default. The A/B was re-run at
+`9994f5c1c`: no `OVER`. One expected-set test stays red, `TEST_PASSINGARGS7`, which Task 7 now
+owns (Concern 1).
 
 ## Step 1: oracle measurements
 
@@ -16,8 +17,8 @@ Transcripts are in `docs/superpowers/records/2026-10-15-phase-9c/task-5/step1/`:
 * `fixture.sh` writes the programs, `measure.sh BIN DIR` runs every shape, `run1.sh` runs one
   shape under the oracle wrapper and prints stdout, stderr and rc separately.
 * `oracle.txt` is the oracle's run from a fresh directory. `crate.txt` is the crate's `rexx`
-  over the same shapes, built before the `lossy` marking and the final refusal-constructor
-  change.
+  over the same shapes at a build before `9994f5c1c`, so its three `'ff'x` names still show
+  U+FFFD. `rexx_command.rs` is the current comparison.
 * `probes.txt` holds `.local` under a file run and under `-e`, and the `merge.rex` interleave
   probe (see Concern 1).
 
@@ -86,6 +87,19 @@ What the measurements settled (all in `oracle.txt` unless noted):
 * `run_program_named(path: &[u8], ...)`. `run_program(&str, ...)` delegates through
   `as_bytes()`, so its callers are untouched. `execute_on` takes `&[u8]`, and the five unit-test
   call sites that call it directly now pass byte literals.
+* The program-path chain is bytes (`9994f5c1c`, ruling (A)): `Interp::program_path: Vec<u8>`,
+  `required_paths: Box<[u8]>`, `Activity::requires_installing: Box<[u8]>`, `package_path -> &[u8]`,
+  `ClauseSite::path: &[u8]`, and `Raised::cyclic_inheritance`, `circular_requires` and
+  `namespace_not_found` taking bytes. `Raised::report` builds its ` running <name> line <n>` span
+  as bytes, so the old `String::from_utf8_lossy(package)` there is gone. `resolve_search`,
+  `resolve_requires`, `external_program` and `resolve_program_name` answer `Vec<u8>`, and the
+  requires load and the external call read the file through `OsStr::from_bytes`. The searching
+  program's own path reaches the `str` search through `require::widen`, now shared with
+  `launcher.rs`. The rest was what the compiler listed: `run/settings.rs`, `run.rs`,
+  `dispatch.rs`, `condition.rs`, `dispatch/package.rs`, `dispatch/library/surface.rs`,
+  `environment/identities.rs`, and test `ClauseSite` literals in `error.rs`, `builtin/word.rs`,
+  `builtin/convert/tests.rs` and `builtin/string/tests.rs`. No conversion at a Rust-side display
+  point was needed.
 
 ## Step 3: tests
 
@@ -93,7 +107,10 @@ What the measurements settled (all in `oracle.txt` unless noted):
   oracle and `CARGO_BIN_EXE_rexx` with the same words from fresh fixture directories, and the
   three descriptors must agree. The recorded block is the oracle's, with the fixture as `DIR`
   and the banner's `Build date:` and copyright year masked. The cases are the Step 1 shapes
-  plus the unreadable-file pair and `-o 'bogus 9' nonexist`.
+  plus the unreadable-file pair and `-o 'bogus 9' nonexist`. `.SYSCARGS` items and size come from
+  `showargs.rex`. `.local~items` and the sorted `.local~allIndexes` are pinned under `-e` (9
+  entries, no `SYSCARGS`), under a file run, and under `-x` with an argument (10 entries). The
+  `'ff'x` names `p'ff'x.rex`, `p'ff'x` and `q'ff'x` are byte-for-byte cases like the rest.
 * Mutation, by hand: `_ => argc_base += 0` in `parse` reddens the case set at every `-x`, `-`,
   `--` and `-?` shape. Restored by exact edit and checked with `cmp` against a copy.
 * `interpreter_bin` (`tests/support/group_runner.rs`) and `check_path` and
@@ -103,7 +120,8 @@ What the measurements settled (all in `oracle.txt` unless noted):
 ## Step 4: checks
 
 Every command from `rust/`, statuses unpiped into
-`docs/superpowers/records/2026-10-15-phase-9c/task-5/checks-statuses.txt` at `629f2d79b`:
+`docs/superpowers/records/2026-10-15-phase-9c/task-5/checks-statuses-9994f5c1c.txt` at
+`9994f5c1c`. `checks-statuses.txt` holds the same set at `629f2d79b`, with the same results.
 
 | Command | Status | Result |
 |---|---|---|
@@ -119,9 +137,9 @@ Every command from `rust/`, statuses unpiped into
 | `REXX_CORPUS_GATE=1 CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test corpus` | 0 | 1065 of 1065 matching, 29 passed |
 | `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --lib` | 101 | 1141 passed, 1 failed (Concern 2) |
 
-`corpus/refusal-sites.tsv` was re-derived with `REXX_REFUSAL_SITES_REFRESH=1` in the code commit.
-`git diff 6391ead7c 629f2d79b -- rust/corpus/refusal-sites.tsv` shows only `lib.rs:` line numbers
-moving.
+`corpus/refusal-sites.tsv` was re-derived with `REXX_REFUSAL_SITES_REFRESH=1` in both code
+commits. `git diff 6391ead7c 9994f5c1c -- rust/corpus/refusal-sites.tsv` shows only `.rs:` line
+numbers moving.
 
 Earlier in the session, before the commit, `--test suite` failed twice out of nine runs at
 `a_command_a_test_leaves_running_is_killed_with_the_run` ("the command outlived the run"). Six
@@ -137,92 +155,101 @@ REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=utilities/rexx/rexx_command \
   CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite
 ```
 
-Status 101. Expected 30, oracle 30 of 30 passed, crate 29 of 30. The one red is
-`TEST_PASSINGARGS7` (Concern 1). The table, `tests.tsv` and `verdicts.tsv` are in `task-5/suite/`.
+Status 101 at both commits. Expected 30, oracle 30 of 30 passed, crate 29 of 30. The one red is
+`TEST_PASSINGARGS7` (Concern 1). The tables are in `task-5/suite/` (`629f2d79b`) and
+`task-5/suite2/` (`9994f5c1c`, with `REXX_SUITE_TABLE` pointing there).
 Scout C measured 22 failures with `rexx` linked to `rexx-run`, so this task turns 21 of them
 green.
 
 ## Step 5: the A/B
 
-From `rust/` at `629f2d79b`, after
+From `rust/` at `9994f5c1c`, after
 `CARGO_INCREMENTAL=0 memcap 8G cargo build --release -j 4 --bin rexx --bin rexx-run` and the two
 copies:
 
 ```
-bench-programs/callgrind.sh -B 0.5 -o /home/moritz/dev/repos/ooRexx-p9-pin/cg-9c/ab \
+bench-programs/callgrind.sh -B 0.5 -o /home/moritz/dev/repos/ooRexx-p9-pin/cg-9c/ab-9994f5c1c \
   pin=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run \
-  base=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9c-629f2d79b \
-  head=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-9c-629f2d79b
+  base=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run-9c-9994f5c1c \
+  head=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-9c-9994f5c1c
 ```
 
 Exit 0, no `OVER`, no `SPREAD`. sha256s from `binaries.txt`: pin `c4b4e8c4...523c67` (the one
-the 9b1 records cite), base `f6142be3...a3aa3a`, head `a665131e...a3241c`. The table, `summary.tsv`
-and `binaries.txt` are copied to `docs/superpowers/records/2026-10-15-phase-9c/ab/`.
+the 9b1 records cite), base `05b34aba...ff4c081`, head `8b1a8346...d438c35a`. The table,
+`summary.tsv`, `binaries.txt` and `head-minus-base.tsv` are in
+`docs/superpowers/records/2026-10-15-phase-9c/ab/`. The first run, at `629f2d79b` into
+`cg-9c/ab`, is kept in `ab/629f2d79b/`, and also had no `OVER`.
 
 Whole-process Ir against the pin. `base d%` is `rexx-run` at this commit and `head d%` is
 `rexx`. `head - base` is the front end's share:
 
 | program | base d% | head d% | head - base Ir | head - base % |
 |---|---|---|---|---|
-| alloc | -0.9814 | -1.0864 | -23972196 | -0.1061 |
-| alloc4c | -0.1087 | -0.1079 | 27496 | +0.0007 |
-| arith | -0.1861 | -0.1858 | 28336 | +0.0002 |
-| assign | +0.0006 | +0.0007 | 27391 | +0.0001 |
-| churn | +0.1466 | +0.1510 | 28015 | +0.0044 |
-| compound | +0.1043 | +0.1046 | 26856 | +0.0003 |
-| decloop | +0.0633 | +0.0645 | 27842 | +0.0011 |
-| decrender | -0.2258 | -0.2252 | 28164 | +0.0006 |
-| dirread | -2.2411 | -2.2402 | 28379 | +0.0009 |
-| dispatch | -0.2935 | -0.2934 | 28478 | +0.0001 |
-| dispatchclass | -3.4680 | -3.4678 | 27386 | +0.0002 |
-| emptyloop | +0.0014 | +0.0017 | 27861 | +0.0004 |
-| extcall | -13.2007 | -13.2004 | 27580 | +0.0004 |
-| fibcall | -3.4723 | -3.4720 | 28480 | +0.0003 |
-| fibfunc | -3.4816 | -3.4813 | 27764 | +0.0003 |
-| hashnew | -0.4755 | -0.4748 | 17148 | +0.0007 |
-| heapshape | -0.6492 | -0.6481 | 27481 | +0.0011 |
-| intcall | -10.1013 | -10.0980 | 27224 | +0.0036 |
-| interpret | -0.3446 | -0.3568 | -513049 | -0.0122 |
-| nop | +0.0010 | +0.0013 | 28124 | +0.0003 |
-| parse | -0.1100 | -0.1084 | 27711 | +0.0017 |
-| pkglocal | -6.5444 | -6.5437 | 27545 | +0.0007 |
-| sayloop | +0.0481 | +0.0632 | 27119 | +0.0151 |
-| sendloop | -0.1364 | -0.1362 | 28223 | +0.0002 |
-| startup | +0.0452 | +0.0685 | 27754 | +0.0233 |
-| strings | -0.2697 | -0.2696 | 27889 | +0.0001 |
-| textnum | -0.0591 | -0.0568 | 28024 | +0.0023 |
-| varlookup | +0.0006 | +0.0008 | 27876 | +0.0002 |
-| rexxcps | -0.0777 | -0.0776 | 27681 | +0.0001 |
-| pingguard | -0.1694 | -0.1668 | 33031 | +0.0025 |
-| pingmsg | -1.0252 | -1.0289 | -273823 | -0.0036 |
-| pingsem | -0.2300 | -0.2281 | 24659 | +0.0019 |
+| alloc | -1.0868 | -1.0867 | 29339 | +0.0001 |
+| alloc4c | -0.1103 | -0.1096 | 28940 | +0.0008 |
+| arith | -0.1866 | -0.1863 | 29402 | +0.0002 |
+| assign | +0.0002 | +0.0004 | 29959 | +0.0002 |
+| churn | +0.1621 | +0.1414 | -130969 | -0.0207 |
+| compound | +0.1036 | +0.1039 | 29289 | +0.0003 |
+| decloop | +0.0609 | +0.0620 | 28889 | +0.0012 |
+| decrender | -0.2401 | -0.2394 | 30476 | +0.0007 |
+| dirread | -2.2431 | -2.2422 | 29747 | +0.0010 |
+| dispatch | -0.2938 | -0.2937 | 29394 | +0.0001 |
+| dispatchclass | -3.4683 | -3.4682 | 29939 | +0.0002 |
+| emptyloop | +0.0006 | +0.0010 | 30138 | +0.0004 |
+| extcall | -13.2014 | -13.2011 | 29764 | +0.0004 |
+| fibcall | -3.4730 | -3.4727 | 29735 | +0.0003 |
+| fibfunc | -3.4834 | -3.4831 | 29055 | +0.0003 |
+| hashnew | -0.4809 | -0.4924 | -269451 | -0.0115 |
+| heapshape | -0.6515 | -0.6506 | 22703 | +0.0009 |
+| intcall | -10.1087 | -10.1052 | 29120 | +0.0039 |
+| interpret | -2.1953 | -2.1969 | -67125 | -0.0016 |
+| nop | +0.0004 | +0.0007 | 28683 | +0.0003 |
+| parse | -0.1138 | -0.1120 | 30123 | +0.0018 |
+| pkglocal | -6.5459 | -6.5452 | 29134 | +0.0007 |
+| sayloop | +0.0132 | +0.0297 | 29672 | +0.0165 |
+| sendloop | -0.1368 | -0.1366 | 29135 | +0.0002 |
+| startup | -0.0073 | +0.0174 | 29512 | +0.0248 |
+| strings | -0.2701 | -0.2699 | 29419 | +0.0002 |
+| textnum | -0.0642 | -0.0617 | 29487 | +0.0024 |
+| varlookup | +0.0001 | +0.0003 | 30039 | +0.0002 |
+| rexxcps | -0.0918 | -0.0801 | 2269828 | +0.0118 |
+| pingguard | -0.1737 | -0.1713 | 31288 | +0.0024 |
+| pingmsg | -1.0292 | -1.0289 | 23598 | +0.0003 |
+| pingsem | -0.2351 | -0.2328 | 29401 | +0.0023 |
 
 `head - base` was derived from `table.txt` by
 `awk -F'\t' 'NR>1 && $1!~/^#/ {d=$4-$3; printf "%s\t%d\t%+.4f\t%d\t%+.4f\n", $1, d, 100*d/$3, $9-$8, 100*($9-$8)/$8}' table.txt`,
-saved with its libc-subtracted columns as `ab/head-minus-base.tsv`. The front end's cost is a
-fixed 27-28 thousand Ir per run (15-22 thousand with libc and ld subtracted). That is the
-search's `stat`s and the option scan. The largest relative share is `startup`'s +0.0233%. The
-three negative rows (`alloc`, `interpret`, `pingmsg`) are libc: their libc-subtracted
-differences are +17206, +17480 and +15886, in line with every other row. The largest head-vs-pin
-deltas are `churn` +0.1510%, `compound` +0.1046%, `startup` +0.0685%, `decloop` +0.0645% and
-`sayloop` +0.0632%. `base` carries the same deltas, so they belong to the tree since the pin and
-not to `rexx`.
+saved with its libc-subtracted columns as `ab/head-minus-base.tsv`.
+
+* The front end's cost is a fixed 28-30 thousand Ir per run (11-18 thousand with libc and ld
+  subtracted): the search's `stat`s and the option scan. The largest relative share is
+  `startup`'s +0.0248%.
+* Four rows move more than that, all in libc: `churn` -130969, `hashnew` -269451, `interpret`
+  -67125 and `rexxcps` +2269828. Their libc-subtracted differences are 17194, 17153, 17468 and
+  18036, in line with every other row.
+* The largest head-vs-pin deltas are `churn` +0.1414%, `compound` +0.1039%, `decloop` +0.0620%,
+  `sayloop` +0.0297% and `startup` +0.0174%. `base` carries the same deltas, so they come from
+  the tree since the pin and not from `rexx`.
+* Between the two runs, `interpret` moved from -0.3446% to -2.1953% on `base` (libc-subtracted
+  -0.31% to -4.66%), the one program the byte path chain changed by more than noise. I read
+  that as the lossy `String` copies of the program path that the chain no longer makes, but I
+  did not profile it.
 
 ## Shared paths
 
-1. **Not done (default (B), asked of main, no answer):** an `'ff'x` program name is found and
-   reaches `call_context.name` as bytes, but `PARSE SOURCE` and the `Error N running <path>` line
-   still go through `String`. `execute_on` converts lossily at one marked line (`lib.rs:3726`). The consumers needing a change outside `lib.rs`:
-   `Interp::program_path: String` (`lib.rs:1707`) and its readers `install.rs` (`package_path ->
-   &str`, `program_display_name`, the `cyclic_inheritance` site), `scheduler.rs:2102`,
-   `condition.rs:433`; `required_paths: Box<str>` (read at `run.rs:3129`); `error.rs`'s
-   `ClauseSite::path: &str` (`:2221`), the `String::from_utf8_lossy(package)` in `Raised::report`,
-   and `Raised::cyclic_inheritance` and `circular_requires(&str)`. `rexx_command.rs` pins the
-   divergence: its three `run lossy` cases expect the oracle's bytes with `\xFF` as U+FFFD.
-   Removing the marker is the check for whoever lands the change.
-2. **Done (default (A), told to main):** `.SYSCARGS` needed `environment.rs`. `mint_local_entries`
-   stores the words from the `Invocation`'s index with empty slots below it, or removes the
-   owed `SYSCARGS` entry for `without_syscargs`. The removal needed
+1. **Done under ruling (A):** the program-path chain, outside `lib.rs`, in the files Step 2
+   lists. Against `.superpowers/sdd/queued/2026-10-13-lossy-path-sites.md` this closes none of
+   the listed sites outright. The closest is "external file read: install.rs:1859/1866"
+   (`new_file_executable`, now `install.rs:1921`): its read still goes through
+   `String::from_utf8_lossy(name)` and `paths::normalize` and stays open, but the package name it
+   records is now the bytes as given rather than the lossy copy. DIRECTORY, SysFileTree, `.File`,
+   `.Stream`, CD, the `cwd_text` sites, and a `::REQUIRES` or external-call *name* that is not
+   UTF-8 (`resolve_search` still does `from_utf8(name).ok()?`, and `self.cwd.to_str()?`) are
+   untouched, as ruled.
+2. **Done under ruling (A):** `.SYSCARGS` needed `environment.rs`. `mint_local_entries` stores
+   the words from the `Invocation`'s index with empty slots below it, or removes the owed
+   `SYSCARGS` entry for `without_syscargs`. The removal needed
    `dispatch/hash.rs::directory_remove`, because `store_remove` reads the item it takes and the
    owed placeholder refuses that read.
 3. **Done, mechanical:** the five unit tests calling `crate::execute_on` directly
@@ -231,15 +258,21 @@ not to `rexx`.
 
 ## Concerns
 
-1. **`TEST_PASSINGARGS7` stays red, and Ruled 2 would not turn it green** (sent to main). The test
+1. **`TEST_PASSINGARGS7` stays red. Main ruled that it is reported as such here and that Task 7
+   owns it**: Task 7 Step 2 hands pending stdout over before each stderr hand-over and must
+   make it pass. The test
    merges stdout and stderr into one array through `ADDRESS WITH OUTPUT/ERROR`. With the
    descriptors separate, the crate's output equals the oracle's byte for byte. Swapping parent
    and child (`step1/probes.txt`): oracle parent with crate child fails, and crate parent with
    oracle child passes. So the cause is the crate child writing all of stdout and then all of
-   stderr at exit. Ruled 2 (stderr per line end, redirected stdout buffered) would put the six
-   trace lines before the three `SAY` lines. I did not touch buffering.
+   stderr at exit. Ruled 2 as first written (stderr per line end, redirected stdout buffered)
+   would put the six trace lines before the three `SAY` lines. I did not touch buffering.
+   `merge.rex` and the oracle-parent runs with either child in `step1/probes.txt` are the
+   evidence Task 7 can reuse. The crate-parent runs gave the same split (crate child fails,
+   oracle child passes) and were not saved.
 2. **`--lib` has one failure I believe predates this task:**
-   `tests::a_fragment_that_does_not_parse_raises_the_oracles_condition` (`src/tests.rs:409`)
+   `tests::a_fragment_that_does_not_parse_raises_the_oracles_condition` (`src/tests.rs:409`),
+   at both commits,
    expects `found "&1"` for 27.901. The crate now prints `found "THEN"`, which is the oracle's
    text (Tasks 1-4's insert work). Task 4's report ran only `--lib error::`, which does not
    reach this test. I did not run it at `6391ead7c`, so this attribution is by content.
