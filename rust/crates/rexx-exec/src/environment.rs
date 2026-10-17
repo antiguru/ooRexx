@@ -1028,6 +1028,19 @@ impl Interp {
         name: &[u8],
         value: ObjRef,
     ) -> Result<(), Failure> {
+        let handle = self.writable_directory(scope, name)?;
+        hash::directory_put(self, handle, name, value)
+    }
+
+    /// Removes `name` from `scope`'s directory, through the seam
+    /// [`Interp::set_directory_entry`] writes through.
+    fn remove_directory_entry(&mut self, scope: EnvScope, name: &[u8]) -> Result<(), Failure> {
+        let handle = self.writable_directory(scope, name)?;
+        hash::directory_remove(self, handle, name)
+    }
+
+    /// `scope`'s directory, admitted for a write of `name`.
+    fn writable_directory(&mut self, scope: EnvScope, name: &[u8]) -> Result<ObjRef, Failure> {
         // A write the manager never sees: `VALUE(name, new, 'ENVIRONMENT')`
         // puts into the directory directly (`expression/BuiltinFunctions.cpp:
         // 1848`).
@@ -1035,25 +1048,8 @@ impl Interp {
             env_seam::Admission::Permitted(admitted) => admitted,
             env_seam::Admission::Replaced(_) => unreachable!("a direct access is never replaced"),
         };
-        let handle = {
-            let model = self.environment_model();
-            env_seam::directory(&model.directories, admitted, scope)
-        };
-        hash::directory_put(self, handle, name, value)
-    }
-
-    /// Removes `name` from `scope`'s directory, through the seam
-    /// [`Interp::set_directory_entry`] writes through.
-    fn remove_directory_entry(&mut self, scope: EnvScope, name: &[u8]) -> Result<(), Failure> {
-        let admitted = match env_seam::admit(self, scope, name, &env_seam::Access::Direct)? {
-            env_seam::Admission::Permitted(admitted) => admitted,
-            env_seam::Admission::Replaced(_) => unreachable!("a direct access is never replaced"),
-        };
-        let handle = {
-            let model = self.environment_model();
-            env_seam::directory(&model.directories, admitted, scope)
-        };
-        hash::directory_remove(self, handle, name)
+        let model = self.environment_model();
+        Ok(env_seam::directory(&model.directories, admitted, scope))
     }
 
     /// `RexxActivation::rexxVariable` (`execution/RexxActivation.cpp:2842`):

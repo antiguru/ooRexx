@@ -106,3 +106,7 @@ Task 10: close run started at bf5224d2b (status close/status.txt); callgrind clo
 Final fix dispatched (resume Task 9 impl) in worktree branch fix/9c-final off bf5224d2b, since the main tree is frozen for the gates. Close gates re-run after the merge.
 Task 10: first close run (bf5224d2b) workspace exit 137: memcap 8G OOM during the fresh-target build (log ends in Compiling, no test result). Stopped the run; run.sh gains a --no-run build step under memcap 16G. Re-run after final fixes merge.
 Moritz 2026-10-17: Deviation 41 ruled, 'Record the deviation.' Exclusions entry now cites the ruling.
+Final fixes: 4a27fae3b, 320eff355, 48fb59b51 (cherry-picked from fix/9c-final d3abd106e, b5ea9d71f, bd9a00850). Entry/exit trace kept on restored programs; -o/-od skip restored programs (oracle applies them only when compiling); ParseError DerefMut removed, code/sub pub(crate) with accessors; README; helper rename. Witnesses red before fix. --lib move-across-fs test env-only in /tmp worktree.
+Task 10: close re-run at 48fb59b51; scoped re-review of final fixes (sonnet) concurrently.
+Final re-review (sonnet): approved, none open. Observation: override_package_settings reuses !is_traceable() as the restored test; fine today.
+Task 10: close at 48fb59b51: workspace exit 101, one failure environment_seam directory_lookup_passes_through_exactly_one_chokepoint (Task 5's remove_directory_entry added a third env_seam::admit). Controller fix: set/remove share writable_directory, one admit per path; seam + rexx_command green. Suite 39/402 red (9b1: 46). Close re-run.

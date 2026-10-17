@@ -1,0 +1,578 @@
+diff --git a/rust/corpus/README.md b/rust/corpus/README.md
+index f53af4c35..bf443ceb6 100644
+--- a/rust/corpus/README.md
++++ b/rust/corpus/README.md
+@@ -344,8 +344,10 @@ those is a gate-table row rather than a corpus defect.
+ ### `errors/` — Phase 3, the parse-error gate
+ 
+ Not a `rexx-diff` corpus either.
+-`parse-errors.tsv` holds one row per program with the answer `build/bin/rexxc` gave for it: the major number, sub-number and reported line when it refused, and `ok` when it translated.
+-`rexx-parse`'s `tests/errors.rs` reads it and checks both directions, so a parser that rejected nothing and one that rejected everything both fail.
++`parse-errors.tsv` holds one row per program with the answer `build/bin/rexxc` gave for it: the major number, sub-number, reported line and secondary message when it refused, and `ok` when it translated.
++The `message` column is the oracle's secondary line after `Error N.M:  `, escaped as `program` is, and `-` where the oracle printed none.
++`rexx-parse`'s `tests/errors.rs` reads it and checks both directions, so a parser that rejected nothing and one that rejected everything both fail, and it checks each secondary message.
++`rexx-exec`'s `tests/rexxc.rs` reads it too and checks this crate's `rexxc` against each row.
+ 
+ The `class` field is the one worth knowing about.
+ It says whether the oracle refused to *translate* the program or rejected it later, while installing the package, and that is recorded per row rather than derived from the error number.
+diff --git a/rust/crates/rexx-exec/src/environment/route.rs b/rust/crates/rexx-exec/src/environment/route.rs
+index 77c195d87..8d4a468b3 100644
+--- a/rust/crates/rexx-exec/src/environment/route.rs
++++ b/rust/crates/rexx-exec/src/environment/route.rs
+@@ -145,20 +145,25 @@ impl Interp {
+     /// scanning back for a newline. A route that cannot take the line leaves
+     /// it on stdout, which is `corpus/oracle-crashes.txt` entry 11's licensed
+     /// answer for a route the oracle dies on.
+-    pub(crate) fn route_trace_line(&mut self, start: usize) {
+-        self.route_trace_line_as(start, false);
+-    }
+-
+-    /// [`Interp::route_trace_line`] for a line that is `>I>` (`entry`), whose
+-    /// `TraceObject` names the caller's frame too. Standard error is handed
+-    /// over after it.
++    ///
++    /// Code that shows no source traces nothing through here
++    /// ([`Interp::untraceable_code`]).
+     // Inlined into `loop_advance`, it cost sayloop +0.31% against +0.14%.
+     #[inline(never)]
+-    pub(crate) fn route_trace_line_as(&mut self, start: usize, entry: bool) {
++    pub(crate) fn route_trace_line(&mut self, start: usize) {
+         if self.untraceable_code() {
+             self.trace.truncate(start);
+             return;
+         }
++        self.route_trace_line_as(start, false);
++    }
++
++    /// [`Interp::route_trace_line`] for a `>I>` (`entry`) or `<I<` line,
++    /// whose `TraceObject` names the caller's frame for `>I>`. Standard error
++    /// is handed over after it. Not gated on the source: the oracle's
++    /// `traceEntryOrExit` (`RexxActivation.cpp:3678`) writes these for a
++    /// restored program too (measured).
++    pub(crate) fn route_trace_line_as(&mut self, start: usize, entry: bool) {
+         self.deliver_trace_line_as(start, entry);
+         self.hand_over_stderr();
+     }
+diff --git a/rust/crates/rexx-exec/src/error.rs b/rust/crates/rexx-exec/src/error.rs
+index 1bdd4d4e3..b01b067e5 100644
+--- a/rust/crates/rexx-exec/src/error.rs
++++ b/rust/crates/rexx-exec/src/error.rs
+@@ -1996,7 +1996,7 @@ impl From<FormatError> for Raised {
+ /// ```
+ impl From<&ParseError> for Raised {
+     fn from(error: &ParseError) -> Raised {
+-        Raised::syntax(error.code, error.sub, error.inserts().to_vec())
++        Raised::syntax(error.code(), error.sub(), error.inserts().to_vec())
+     }
+ }
+ 
+diff --git a/rust/crates/rexx-exec/src/options.rs b/rust/crates/rexx-exec/src/options.rs
+index 894c9f513..ffc4905a4 100644
+--- a/rust/crates/rexx-exec/src/options.rs
++++ b/rust/crates/rexx-exec/src/options.rs
+@@ -533,9 +533,16 @@ impl Interp {
+ 
+     /// `PackageClass::overridePackageSettings`, which every compile of a
+     /// package runs (`parser/LanguageParser.cpp:658`, `:856`) and an
+-    /// `INTERPRET` does not.
++    /// `INTERPRET` does not. A restored program is not compiled, so it
++    /// neither takes the defaults nor spends a count: measured, `rexx -o
++    /// "digits 5"` on an image answers 9, and a source it requires 5.
+     pub(crate) fn override_package_settings(&mut self, id: ProgramId) -> Result<(), Failure> {
+-        if self.option_writes.count == 0 {
++        if self.option_writes.count == 0
++            || self
++                .programs
++                .get(id)
++                .is_some_and(|program| !program.source.is_traceable())
++        {
+             return Ok(());
+         }
+         // No latch to arm: the defaults are an `::OPTIONS` directive's,
+diff --git a/rust/crates/rexx-exec/tests/compiled/cases/restore b/rust/crates/rexx-exec/tests/compiled/cases/restore
+index 06c7f5226..4608fe556 100644
+--- a/rust/crates/rexx-exec/tests/compiled/cases/restore
++++ b/rust/crates/rexx-exec/tests/compiled/cases/restore
+@@ -97,6 +97,35 @@ sub/p.rxo
+ ----
+ rc> 0
+ 
++compile
++entries.rex
++entries.rxo
++-s
++----
++rc> 0
++
++compile
++options.rex
++options.rxo
++-s
++----
++rc> 0
++
++compile
++options.rex
++optionse.rxo
++-s
++-e
++----
++rc> 0
++
++compile
++optdirective.rex
++optdirective.rxo
++-s
++----
++rc> 0
++
+ # SOURCELINE, PARSE SOURCE, the package's and a routine's source, 40.34,
+ # TRACE R and TRACE I, and an error's traceback.
+ rexx
+@@ -166,6 +195,21 @@ err>      9 *-* Program in "DIR/levels.rxo" (no source available).
+ err> Error 41 running DIR/levels.rxo line 17:  Bad arithmetic conversion.
+ err> Error 41.1:  Nonnumeric value ("b") used in arithmetic operation.
+ 
++# A restored routine's and method's >I> and <I< lines still print.
++rexx
++entries.rxo
++----
++rc> 0
++out> in rt
++out> 2
++out> trapped 40.1
++err>        >I> Routine "RT" in package "DIR/entries.rxo".
++err>        <I< Routine "RT" in package "DIR/entries.rxo".
++err>        >I> Method "M" with scope "C" in package "DIR/entries.rxo".
++err>        <I< Method "M" with scope "C" in package "DIR/entries.rxo".
++err>        >I> Method "BOOM" with scope "C" in package "DIR/entries.rxo".
++err>        <I< Method "BOOM" with scope "C" in package "DIR/entries.rxo".
++
+ # Interactive trace pauses only inside an INTERPRET string.
+ rexx stdin=typed.txt
+ debug.rxo
+@@ -327,6 +371,51 @@ err>      4 *-* say .Routine~newFile('fail.rxo')~name
+ err> Error 97 running DIR/prologue.rex line 4:  Object method not found.
+ err> Error 97.1:  Object "a Routine" does not understand message "NAME".
+ 
++# rexx -o and -od reach a program only when it is compiled: an image
++# neither takes them nor spends the count, so the source it requires does.
++rexx
++-o
++digits 5
++options.rex
++----
++rc> 0
++out> main 5 SCIENTIFIC
++out> req 9 SCIENTIFIC
++
++rexx
++-o
++digits 5
++options.rxo
++----
++rc> 0
++out> main 9 SCIENTIFIC
++out> req 5 SCIENTIFIC
++
++rexx
++-o
++digits 5
++optionse.rxo
++----
++rc> 0
++out> main 9 SCIENTIFIC
++out> req 5 SCIENTIFIC
++
++rexx
++-od
++digits 7 form engineering
++optdirective.rxo
++----
++rc> 0
++out> 12 SCIENTIFIC
++
++rexx
++-od
++digits 7 form engineering
++optdirective.rex
++----
++rc> 0
++out> 12 ENGINEERING
++
+ # Review Focus 5: names resolve from the image's own directory.
+ rexx
+ sub/p.rxo
+diff --git a/rust/crates/rexx-exec/tests/compiled/programs/entries.rex b/rust/crates/rexx-exec/tests/compiled/programs/entries.rex
+new file mode 100644
+index 000000000..9370ed459
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/compiled/programs/entries.rex
+@@ -0,0 +1,19 @@
++call rt
++say .c~new~m
++signal on syntax
++say .c~new~boom
++exit
++syntax: say 'trapped' condition('o')~code
++exit
++::routine rt
++  trace r
++  say 'in rt'
++  return
++::class c
++::method m
++  trace i
++  x = 1 + 1
++  return x
++::method boom
++  trace i
++  raise syntax 40.1
+diff --git a/rust/crates/rexx-exec/tests/compiled/programs/optdirective.rex b/rust/crates/rexx-exec/tests/compiled/programs/optdirective.rex
+new file mode 100644
+index 000000000..f794fdf33
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/compiled/programs/optdirective.rex
+@@ -0,0 +1,2 @@
++say digits() form()
++::options digits 12
+diff --git a/rust/crates/rexx-exec/tests/compiled/programs/options.rex b/rust/crates/rexx-exec/tests/compiled/programs/options.rex
+new file mode 100644
+index 000000000..aed296bb9
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/compiled/programs/options.rex
+@@ -0,0 +1,3 @@
++say 'main' digits() form()
++say 'req' qd()
++::requires 'optreq.rex'
+diff --git a/rust/crates/rexx-exec/tests/compiled/programs/optreq.rex b/rust/crates/rexx-exec/tests/compiled/programs/optreq.rex
+new file mode 100644
+index 000000000..527346539
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/compiled/programs/optreq.rex
+@@ -0,0 +1,2 @@
++::routine qd public
++  return digits() form()
+diff --git a/rust/crates/rexx-exec/tests/rexxutil_process.rs b/rust/crates/rexx-exec/tests/rexxutil_process.rs
+index 6cebdde9a..feecc8ba4 100644
+--- a/rust/crates/rexx-exec/tests/rexxutil_process.rs
++++ b/rust/crates/rexx-exec/tests/rexxutil_process.rs
+@@ -21,7 +21,7 @@ const PROGRAM: &str = "a = .w~new~start('WAIT')\nb = .w~new~start('WAIT')\n\
+ 
+ /// A command that runs `program` in a directory of its own named for `name`,
+ /// answering the directory too.
+-fn rexx_run(name: &str, program: &str) -> (Command, std::path::PathBuf) {
++fn rexx(name: &str, program: &str) -> (Command, std::path::PathBuf) {
+     let dir = std::env::temp_dir().join(format!("rexx-{name}-{}", std::process::id()));
+     std::fs::create_dir_all(&dir).expect("a directory");
+     std::fs::write(dir.join("p.rex"), program).expect("the program written");
+@@ -40,7 +40,7 @@ fn rexx_run(name: &str, program: &str) -> (Command, std::path::PathBuf) {
+ #[test]
+ fn sys_wait_with_no_child_answers_minus_one() {
+     let run = |mode: Option<&str>| {
+-        let (mut command, dir) = rexx_run("sys-wait", PROGRAM);
++        let (mut command, dir) = rexx("sys-wait", PROGRAM);
+         if let Some(mode) = mode {
+             command.env("REXX_SWITCH_MODE", mode);
+         }
+@@ -73,7 +73,7 @@ fn sys_wait_with_no_child_answers_minus_one() {
+ /// group of its own answers this process's group and not its own.
+ #[test]
+ fn pgid_is_the_parents_group() {
+-    let (mut command, dir) = rexx_run(
++    let (mut command, dir) = rexx(
+         "sys-query-pgid",
+         "say SysQueryProcess('PGID') SysQueryProcess('PID')\n",
+     );
+@@ -107,7 +107,7 @@ fn a_command_whose_child_was_reaped_elsewhere_fails_with_127() {
+         failed:\n\
+         say 'failure' rc\n\
+         return\n";
+-    let (_, dir) = rexx_run("sys-wait-reaped", program);
++    let (_, dir) = rexx("sys-wait-reaped", program);
+     let output = Command::new("timeout")
+         .args(["-k", "5", "60"])
+         .arg(env!("CARGO_BIN_EXE_rexx"))
+diff --git a/rust/crates/rexx-parse/src/bin/scan-check.rs b/rust/crates/rexx-parse/src/bin/scan-check.rs
+index 9cd7945d1..58e0cc05a 100644
+--- a/rust/crates/rexx-parse/src/bin/scan-check.rs
++++ b/rust/crates/rexx-parse/src/bin/scan-check.rs
+@@ -78,8 +78,8 @@ fn main() {
+             }
+             Err(error) => println!(
+                 "{path}: E{}.{} line {}",
+-                error.code,
+-                error.sub,
++                error.code(),
++                error.sub(),
+                 source.line_of(error.byte)
+             ),
+         }
+diff --git a/rust/crates/rexx-parse/src/token.rs b/rust/crates/rexx-parse/src/token.rs
+index 808d008b5..5218de37d 100644
+--- a/rust/crates/rexx-parse/src/token.rs
++++ b/rust/crates/rexx-parse/src/token.rs
+@@ -27,7 +27,9 @@ pub use symbols::{SymbolId, SymbolTable};
+ /// A parse-time error, identified the way the interpreter identifies it: a
+ /// major number and a sub-number, as in `13.1` or `99.943`. One word, so the
+ /// parser's `Result`s stay narrow: the fields live behind the box and read
+-/// through `Deref`.
++/// through `Deref` and [`ParseError::code`] and [`ParseError::sub`]. Nothing
++/// outside this module writes them, so the pair stays the one
++/// [`ParseError::raise`] was given, with the inserts its message needs.
+ #[derive(Clone, PartialEq, Eq, Debug)]
+ pub struct ParseError(Box<ParseErrorFields>);
+ 
+@@ -36,10 +38,10 @@ pub struct ParseError(Box<ParseErrorFields>);
+ pub struct ParseErrorFields {
+     /// The major error number, e.g. 13 for `Error 13: Invalid character in
+     /// program`.
+-    pub code: u16,
++    pub(crate) code: u16,
+     /// The sub-number, e.g. 1 for `Error 13.1`. Zero means the major error
+     /// with no sub-code.
+-    pub sub: u16,
++    pub(crate) sub: u16,
+     /// Where the source the traceback line echoes ends; see [`ParseError::clause`].
+     /// Zero until the scanner or `parse` resolves it. An echo ending past
+     /// `u32::MAX` is cut there, and one starting past it is empty.
+@@ -60,12 +62,6 @@ impl std::ops::Deref for ParseError {
+     }
+ }
+ 
+-impl std::ops::DerefMut for ParseError {
+-    fn deref_mut(&mut self) -> &mut ParseErrorFields {
+-        &mut self.0
+-    }
+-}
+-
+ impl ParseError {
+     /// The error `msg` reports against the clause starting at `byte`, with
+     /// `inserts` for its `&1`, `&2`, ... in order.
+@@ -82,6 +78,18 @@ impl ParseError {
+         }))
+     }
+ 
++    /// The major error number, e.g. 13 for `Error 13: Invalid character in
++    /// program`.
++    pub fn code(&self) -> u16 {
++        self.0.code
++    }
++
++    /// The sub-number, e.g. 1 for `Error 13.1`. Zero means the major error
++    /// with no sub-code.
++    pub fn sub(&self) -> u16 {
++        self.0.sub
++    }
++
+     /// The values the secondary message substitutes, in insert order.
+     pub fn inserts(&self) -> &[Vec<u8>] {
+         &self.inserts
+@@ -98,8 +106,8 @@ impl ParseError {
+     /// echoes one.
+     pub(crate) fn echoing(mut self, clause: Range<usize>) -> Self {
+         if self.end == 0 {
+-            self.byte = clause.start;
+-            self.end = u32::try_from(clause.end).unwrap_or(u32::MAX);
++            self.0.byte = clause.start;
++            self.0.end = u32::try_from(clause.end).unwrap_or(u32::MAX);
+         }
+         self
+     }
+diff --git a/rust/crates/rexx-parse/tests/deep.rs b/rust/crates/rexx-parse/tests/deep.rs
+index f9de796ac..6bd0a4336 100644
+--- a/rust/crates/rexx-parse/tests/deep.rs
++++ b/rust/crates/rexx-parse/tests/deep.rs
+@@ -63,7 +63,7 @@ fn a_paren_nesting_past_the_native_cliff_raises_11_1_instead_of_aborting() {
+         .expect("spawns");
+     let err = handle.join().expect("the thread itself must not panic");
+     let err = err.expect_err("100,000 parens is past MAX_EXPR_DEPTH");
+-    assert_eq!((err.code, err.sub), (11, 1));
++    assert_eq!((err.code(), err.sub()), (11, 1));
+ }
+ 
+ /// Documents, rather than fixes, the gap `MAX_EXPR_DEPTH`'s own doc comment
+@@ -120,7 +120,7 @@ fn the_depth_the_oracle_still_answers_also_parses_and_drops() {
+ fn a_call_nesting_past_the_native_cliff_raises_11_1_instead_of_aborting() {
+     let err = parse_on_a_sized_thread(deep_call_program(100_000))
+         .expect_err("100,000 nested calls is past MAX_EXPR_DEPTH");
+-    assert_eq!((err.code, err.sub), (11, 1));
++    assert_eq!((err.code(), err.sub()), (11, 1));
+ }
+ 
+ /// Parentheses and calls share **one** depth budget, and this is the test that
+@@ -138,5 +138,5 @@ fn parens_and_calls_share_one_budget_rather_than_one_each() {
+ 
+     let err = parse_on_a_sized_thread(src.into_bytes())
+         .expect_err("half the budget in each construct must still exceed the shared one");
+-    assert_eq!((err.code, err.sub), (11, 1));
++    assert_eq!((err.code(), err.sub()), (11, 1));
+ }
+diff --git a/rust/crates/rexx-parse/tests/errors.rs b/rust/crates/rexx-parse/tests/errors.rs
+index 81f7a1b0c..1d833b9b6 100644
+--- a/rust/crates/rexx-parse/tests/errors.rs
++++ b/rust/crates/rexx-parse/tests/errors.rs
+@@ -267,7 +267,7 @@ fn every_program_the_oracle_refuses_to_translate_this_parser_rejects_the_same_wa
+             continue;
+         }
+         let expected = case.error.expect("a translation error has a number");
+-        let ours = parse(&case.program).err().map(|e| (e.code, e.sub));
++        let ours = parse(&case.program).err().map(|e| (e.code(), e.sub()));
+         if label_colon_deviation(ours, expected) || do_subkey_deviation(ours, expected) {
+             continue;
+         }
+@@ -309,7 +309,7 @@ fn the_reported_line_matches_the_oracles_main_message() {
+         let Err(error) = parse(&case.program) else {
+             continue;
+         };
+-        if (error.code, error.sub) != expected {
++        if (error.code(), error.sub()) != expected {
+             continue;
+         }
+         let source = ProgramSource::new(case.program.clone(), SourceKind::Program);
+@@ -433,8 +433,10 @@ fn message_mismatches() -> std::collections::BTreeMap<String, String> {
+         let pair = case.error.expect("a translation row has a number");
+         let got = match parse(&case.program) {
+             Ok(()) => b"<accepted>".to_vec(),
+-            Err(error) if do_subkey_deviation(Some((error.code, error.sub)), pair) => continue,
+-            Err(error) if label_colon_deviation(Some((error.code, error.sub)), pair) => continue,
++            Err(error) if do_subkey_deviation(Some((error.code(), error.sub())), pair) => continue,
++            Err(error) if label_colon_deviation(Some((error.code(), error.sub())), pair) => {
++                continue;
++            }
+             Err(error) => error.message(),
+         };
+         if got != want {
+@@ -481,7 +483,7 @@ fn a_then_label_is_a_missing_then_here_and_a_bad_expression_there() {
+     // clause the oracle finds an invalid expression in does not exist by the time
+     // the grammar runs. Both reject, which is the part that matters.
+     let error = parse(b"if 1 = 1\nthen: nop").expect_err("both reject it");
+-    assert_eq!((error.code, error.sub), (18, 1));
++    assert_eq!((error.code(), error.sub()), (18, 1));
+ }
+ 
+ #[test]
+@@ -489,7 +491,7 @@ fn a_when_label_is_a_missing_then_here_and_a_bad_expression_there() {
+     // The WHEN spelling, which the oracle also answers 35.1 for, measured the
+     // same way against `select` / `when 1 = 1` / `then: nop` / `end`.
+     let error = parse(b"select\nwhen 1 = 1\nthen: nop\nend").expect_err("both reject it");
+-    assert_eq!((error.code, error.sub), (18, 2));
++    assert_eq!((error.code(), error.sub()), (18, 2));
+ }
+ 
+ #[test]
+@@ -520,7 +522,7 @@ fn the_label_colon_rule_covers_exactly_the_two_corpus_rows_it_was_written_for()
+         let Err(error) = parse(&case.program) else {
+             continue;
+         };
+-        if !label_colon_deviation(Some((error.code, error.sub)), oracle) {
++        if !label_colon_deviation(Some((error.code(), error.sub())), oracle) {
+             continue;
+         }
+         // Ours names the IF or WHEN, the oracle the leftover colon.
+@@ -585,7 +587,7 @@ fn the_do_subkey_rows_differ_from_the_oracle_as_deviation_38_says() {
+         let Err(error) = parse(&case.program) else {
+             continue;
+         };
+-        if !do_subkey_deviation(Some((error.code, error.sub)), oracle) {
++        if !do_subkey_deviation(Some((error.code(), error.sub())), oracle) {
+             continue;
+         }
+         let want = if case.source.contains(" by ") {
+@@ -628,7 +630,7 @@ fn the_eager_scan_deviation_still_deviates() {
+     let source = ProgramSource::new(program.to_vec(), SourceKind::Program);
+     let error = parse_program(program.to_vec()).expect_err("both reject it");
+     assert_eq!(
+-        (error.code, error.sub),
++        (error.code(), error.sub()),
+         (6, 2),
+         "ours is the unterminated-literal scan error"
+     );
+@@ -645,11 +647,11 @@ fn the_eager_scan_deviation_needs_both_errors_to_appear() {
+     // masking and not either error. `say )` on its own is the oracle's own 37.2
+     // on line 1, and the unterminated literal on its own is 6.2 on its own line.
+     let error = parse_program(b"say )\n".to_vec()).expect_err("a stray paren is an error");
+-    assert_eq!((error.code, error.sub), (37, 2));
++    assert_eq!((error.code(), error.sub()), (37, 2));
+     let program = b"nop\n\n'unclosed\n";
+     let source = ProgramSource::new(program.to_vec(), SourceKind::Program);
+     let error = parse_program(program.to_vec()).expect_err("an open literal is an error");
+-    assert_eq!((error.code, error.sub), (6, 2));
++    assert_eq!((error.code(), error.sub()), (6, 2));
+     assert_eq!(error.line(&source), 3);
+ }
+ 
+@@ -667,7 +669,7 @@ fn no_corpus_row_holds_the_eager_scan_shape() {
+             continue;
+         };
+         let scanner_class =
+-            scanner_classes.contains(&error.code) || (error.code, error.sub) == (99, 943);
++            scanner_classes.contains(&error.code()) || (error.code(), error.sub()) == (99, 943);
+         if !scanner_class {
+             continue;
+         }
+@@ -704,7 +706,7 @@ fn the_interpret_only_errors_match_the_condition_objects_own_code() {
+     for (fragment, expected) in INTERPRET_ONLY {
+         match parse_interpret(fragment.as_bytes().to_vec()) {
+             Ok(_) => wrong.push(format!("{fragment:?} parsed, expected {expected:?}")),
+-            Err(e) if (e.code, e.sub) != *expected => {
++            Err(e) if (e.code(), e.sub()) != *expected => {
+                 wrong.push(format!("{fragment:?}: expected {expected:?}, got {e}"));
+             }
+             Err(_) => {}
+@@ -936,9 +938,9 @@ fn every_message_the_parser_names_is_raised_by_a_corpus_row_or_recorded_as_unrea
+             continue;
+         }
+         if let Err(error) = parse(&case.program)
+-            && Some((error.code, error.sub)) == case.error
++            && Some((error.code(), error.sub())) == case.error
+         {
+-            raised.insert((error.code, error.sub));
++            raised.insert((error.code(), error.sub()));
+         }
+     }
+     let mut missing = Vec::new();
+@@ -1015,7 +1017,7 @@ fn every_unreached_reason_still_holds() {
+                 for probe in *probes {
+                     if let Err(error) = parse(probe) {
+                         assert_ne!(
+-                            (error.code, error.sub),
++                            (error.code(), error.sub()),
+                             *pair,
+                             "{pair:?} is reached by {:?}",
+                             String::from_utf8_lossy(probe)
+diff --git a/rust/crates/rexx-parse/tests/program.rs b/rust/crates/rexx-parse/tests/program.rs
+index 6d3143bd8..4b392c8ed 100644
+--- a/rust/crates/rexx-parse/tests/program.rs
++++ b/rust/crates/rexx-parse/tests/program.rs
+@@ -11,7 +11,7 @@ use rexx_parse::{
+ fn err<T>(result: Result<T, ParseError>) -> (u16, u16) {
+     match result {
+         Ok(_) => panic!("expected an error, but the input parsed"),
+-        Err(e) => (e.code, e.sub),
++        Err(e) => (e.code(), e.sub()),
+     }
+ }
+ 
+diff --git a/rust/crates/rexx-parse/tests/scanner.rs b/rust/crates/rexx-parse/tests/scanner.rs
+index 6894bc677..6d951d744 100644
+--- a/rust/crates/rexx-parse/tests/scanner.rs
++++ b/rust/crates/rexx-parse/tests/scanner.rs
+@@ -59,7 +59,7 @@ fn symbols(toks: &[Token]) -> Vec<(SymbolId, SymbolClass)> {
+ fn scan_err(text: &str) -> (u16, u16, usize) {
+     let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
+     let error = scan(&source).expect_err("does not scan");
+-    (error.code, error.sub, source.line_of(error.byte))
++    (error.code(), error.sub(), source.line_of(error.byte))
+ }
+ 
+ #[test]
+@@ -570,7 +570,7 @@ fn scan_interpret(text: &str) -> Result<Vec<Token>, (u16, u16)> {
+     assert_eq!(source.line_count(), 1, "interpret text is one line");
+     match scan(&source) {
+         Ok(scanned) => Ok(scanned.tokens),
+-        Err(error) => Err((error.code, error.sub)),
++        Err(error) => Err((error.code(), error.sub())),
+     }
+ }
+ 
