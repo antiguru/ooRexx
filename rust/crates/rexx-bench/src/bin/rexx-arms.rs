@@ -12,7 +12,7 @@
 //! The in-phase measurement front end: both engine arms of one build, both
 //! instruments, two problem sizes, one sitting.
 //! ```text
-//! rexx-arms --build base=/path/to/rexx-run --build head=target/release/rexx-run \
+//! rexx-arms --build base=/path/to/rexx --build head=target/release/rexx \
 //!           --axis varlookup --axis emptyloop --rounds 5 \
 //!           --task 7-M2 --commit ced6c209 --baseline bench-baselines/phase-4e-arms.tsv
 //! ```

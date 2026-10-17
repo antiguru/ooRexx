@@ -47,7 +47,7 @@ impl Side {
         }
     }
 
-    /// This crate's `rexx-run` at `binary`, on `arm`.
+    /// This crate's `rexx` at `binary`, on `arm`.
     pub fn rust(binary: PathBuf, arm: Arm) -> Side {
         Side {
             label: match arm {
@@ -55,7 +55,7 @@ impl Side {
             },
             binary,
             // **No environment.** The arm used to be selected per child
-            // through `REXX_ENGINE`; `rexx-run` reads no such variable now,
+            // through `REXX_ENGINE`; `rexx` reads no such variable now,
             // so setting one would be a row labelled with an arm nobody
             // chose.
             env: Vec::new(),

@@ -172,7 +172,7 @@ pub(super) fn write_provenance(
     }
     let _ = writeln!(
         report,
-        "| this crate `rexx-run` | `{}` -- {} |",
+        "| this crate `rexx` | `{}` -- {} |",
         rust_binary.display(),
         fingerprint(rust_binary)
     );
@@ -182,7 +182,7 @@ pub(super) fn write_provenance(
     // longer a choice -- there is one engine and no `REXX_ENGINE` to set --
     // so the row states that rather than reporting a variable nothing reads.
     // Every figure recorded before this row existed is a tree-walker figure,
-    // because that is what `rexx-run` defaulted to at the time.
+    // because that is what `rexx` defaulted to at the time.
     let _ = writeln!(
         report,
         "| this crate's engine | the compiled stream, the only one; \

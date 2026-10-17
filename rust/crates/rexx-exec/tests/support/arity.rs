@@ -396,7 +396,7 @@ pub fn measured(layout: &Layout) -> Vec<(Row, String)> {
         fs::write(dir.join(FIXTURE), "return 1\n").expect("the fixture is writable");
     }
     let oracle = oracle::oracle_root();
-    let binary = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/release/rexx-run");
+    let binary = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/release/rexx");
     assert!(
         binary.is_file(),
         "this test compares the release binary; build it first ({})",

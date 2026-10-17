@@ -321,10 +321,10 @@ const CASES: &[Case] = &[
     },
 ];
 
-/// Runs `rexx-run` the way a shell would, with the same `argv` and the same
+/// Runs `rexx` the way a shell would, with the same `argv` and the same
 /// console the oracle gets.
 fn run_rust(path: &Path, args: &[&str], stdin: Option<&[u8]>) -> CppOutcome {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_rexx-run"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rexx"));
     command
         .arg(path)
         .args(args)
@@ -338,10 +338,10 @@ fn run_rust(path: &Path, args: &[&str], stdin: Option<&[u8]>) -> CppOutcome {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
-            .unwrap_or_else(|e| panic!("failed to spawn rexx-run for {}: {e}", path.display())),
+            .unwrap_or_else(|e| panic!("failed to spawn rexx for {}: {e}", path.display())),
         Some(bytes) => write_and_wait(&mut command, bytes, path),
     };
-    // `rexx-run` has no deadline of its own -- `write_and_wait` and
+    // `rexx` has no deadline of its own -- `write_and_wait` and
     // `Command::output` above both block without one -- so a `None` exit
     // code here can only be a signal death, never the harness's own kill.
     // See `support::oracle::write_and_wait`'s doc for why this stays the
@@ -500,12 +500,12 @@ fn an_unreadable_console_is_end_of_input() {
     };
 
     let oracle = support::oracle::locate();
-    let rust = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
+    let rust = Command::new(env!("CARGO_BIN_EXE_rexx"))
         .arg(&abs)
         .current_dir(&dir)
         .stdin(as_stdin())
         .output()
-        .expect("rexx-run starts");
+        .expect("rexx starts");
     // Through the harness, not a hand-rolled `sh -c` wrapper: the memory limit
     // and the invocation counter are exactly what `run_with_stdin` exists to
     // keep in one place, and the counter is asserted below.

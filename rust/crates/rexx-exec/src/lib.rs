@@ -2855,8 +2855,8 @@ impl Interp {
     // `fragment_plan` and `slot_of` live in `plan.rs` (Task 6), beside
     // `Plan` itself.
 
-    /// Converts `EXIT`'s result into the raw exit code, before `rexx-run`'s
-    /// own 8-bit truncation (`bin/rexx-run.rs`) narrows it to a process exit
+    /// Converts `EXIT`'s result into the raw exit code, before `rexx`'s
+    /// own 8-bit truncation (`bin/rexx.rs`) narrows it to a process exit
     /// status.
     fn exit_code_for(&mut self, value: Option<ObjRef>) -> i32 {
         let Some(value) = value else { return 0 };

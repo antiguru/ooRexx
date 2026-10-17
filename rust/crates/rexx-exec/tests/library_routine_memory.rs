@@ -70,7 +70,7 @@ fn imported_routines_sent_in_a_loop_run_under_the_oracles_memory_cap() {
         .arg(format!(
             "ulimit -v {ORACLE_MEMORY_LIMIT_KIB} && exec \"$0\" main.rex"
         ))
-        .arg(env!("CARGO_BIN_EXE_rexx-run"))
+        .arg(env!("CARGO_BIN_EXE_rexx"))
         .current_dir(&dir)
         .env("LD_LIBRARY_PATH", oracle.lib_dir())
         .stdin(Stdio::null())

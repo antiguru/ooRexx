@@ -59,7 +59,7 @@ fn a_buffer_grown_before_a_failed_insert_is_counted() {
     let output = Command::new("bash")
         .arg("-c")
         .arg(format!("ulimit -v {CAP_KIB} && exec \"$0\" main.rex"))
-        .arg(env!("CARGO_BIN_EXE_rexx-run"))
+        .arg(env!("CARGO_BIN_EXE_rexx"))
         .current_dir(&dir)
         .stdin(Stdio::null())
         .output()

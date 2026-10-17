@@ -37,7 +37,7 @@ fn probe_dir() -> PathBuf {
 
 /// This crate's three descriptors for `path` under `zone`, as a subprocess.
 fn run_crate(path: &Path, zone: &str) -> (Vec<u8>, Vec<u8>, i32) {
-    let out = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
+    let out = Command::new(env!("CARGO_BIN_EXE_rexx"))
         .arg(path)
         .env("TZ", zone)
         .output()
@@ -158,7 +158,7 @@ fn the_file_date_time_witness_reads_the_zone_the_oracle_does() {
             &empty_dir(&format!("oracle-{tag}")),
             &[("TZ", zone)],
         );
-        let out = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
+        let out = Command::new(env!("CARGO_BIN_EXE_rexx"))
             .arg(&witness)
             .current_dir(empty_dir(&format!("crate-{tag}")))
             .env("TZ", zone)

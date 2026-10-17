@@ -535,7 +535,7 @@ fn same_outcome(left: &Outcome, right: &Outcome) -> bool {
 
 /// This crate's answer to `abs` with `TZ` set, as a subprocess.
 fn run_crate_in_zone(abs: &Path, zone: &str) -> Outcome {
-    let out = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
+    let out = Command::new(env!("CARGO_BIN_EXE_rexx"))
         .arg(abs)
         .env("TZ", zone)
         .output()

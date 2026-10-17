@@ -95,10 +95,10 @@ fn fresh_root(name: &str) -> PathBuf {
     root
 }
 
-/// Runs `rexx-run` on `path` from `cwd` with `environment` set, the same three
+/// Runs `rexx` on `path` from `cwd` with `environment` set, the same three
 /// descriptors the oracle side answers with.
 fn run_rust_in(path: &Path, cwd: &Path, environment: &[(&str, &str)]) -> (Vec<u8>, Vec<u8>, i32) {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_rexx-run"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rexx"));
     command.arg(path).current_dir(cwd);
     for (name, value) in environment {
         command.env(name, value);
@@ -106,7 +106,7 @@ fn run_rust_in(path: &Path, cwd: &Path, environment: &[(&str, &str)]) -> (Vec<u8
     let output = command
         .stdin(Stdio::null())
         .output()
-        .unwrap_or_else(|e| panic!("failed to spawn rexx-run for {}: {e}", path.display()));
+        .unwrap_or_else(|e| panic!("failed to spawn rexx for {}: {e}", path.display()));
     (
         output.stdout,
         output.stderr,

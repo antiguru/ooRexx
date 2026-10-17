@@ -46,7 +46,7 @@ keep X" or a new side map keyed by an id, that is this rule being broken: stop a
   It is unavailable here: there is no user systemd manager ("offline"), no user bus, and `/sys` is a tmpfs with no cgroup filesystem mounted, so `systemd-run` cannot run and no cgroup can be created. Linux's `RLIMIT_RSS` (`ulimit -m`) is documented as having no effect.
   So `ulimit -v` stays, and any memory finding taken under it must say whether it survives the reservation being free.
 * **Read stdout, stderr and exit status as three separate descriptors.** Never capture `2>&1` as one string: the trace sink and stdout interleave undefinedly by design, and comparing them together produced two false regressions.
-* Run `rexx-run` from `rust/`.
+* Run `rexx` from `rust/`.
 
 ## Probes
 

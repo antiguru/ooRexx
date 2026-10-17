@@ -10,7 +10,7 @@
 /*----------------------------------------------------------------------------*/
 
 //! A signal halts running Rexx (spec 2026-09-29 section 4): each witness runs
-//! `rexx-run` in a subprocess with SIGINT, SIGTERM and SIGHUP at their
+//! `rexx` in a subprocess with SIGINT, SIGTERM and SIGHUP at their
 //! defaults whatever this process inherited (ruling P62), waits for its
 //! readiness line, signals that process by its PID, or its process group as
 //! a terminal's Ctrl-C does, and asserts all three descriptors. The expected
@@ -50,7 +50,7 @@ const PROMPT: Duration = Duration::from_secs(3);
 /// How long a process is given to end before it is killed.
 const END_WAIT: Duration = Duration::from_secs(20);
 
-/// How `rexx-run` is started.
+/// How `rexx` is started.
 #[derive(Clone, Copy, PartialEq)]
 enum Launch {
     Plain,
@@ -83,7 +83,7 @@ struct Ended {
     stderr: String,
 }
 
-/// Runs `source` under `rexx-run` started as `launch`, takes `steps` once
+/// Runs `source` under `rexx` started as `launch`, takes `steps` once
 /// `ready` is on its stdout, or after [`UNREADY_WAIT`] where `ready` is
 /// empty, and answers how it ended and how long after the first signal.
 fn run_steps(
@@ -115,14 +115,14 @@ fn run_steps(
     }
     let reads = matches!(launch, Launch::Group | Launch::Reading);
     let mut child = command
-        .arg(env!("CARGO_BIN_EXE_rexx-run"))
+        .arg(env!("CARGO_BIN_EXE_rexx"))
         .arg(&file)
         .current_dir(&dir)
         .stdin(if reads { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("rexx-run starts");
+        .expect("rexx starts");
     let mut stdout = child.stdout.take().expect("piped stdout");
     let mut stderr = child.stderr.take().expect("piped stderr");
     let (sender, receiver) = mpsc::channel();
@@ -1018,14 +1018,14 @@ fn a_stdin_read_waits_without_spinning() {
          ::class w\n::method w\n  address system 'sleep 1'\n",
     )
     .expect("the probe");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rexx"))
         .arg(&file)
         .current_dir(&dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .expect("rexx-run starts");
+        .expect("rexx starts");
     std::thread::sleep(Duration::from_millis(1500));
     let before = cpu_ticks(child.id());
     std::thread::sleep(Duration::from_millis(1000));
@@ -1043,11 +1043,11 @@ fn a_stdin_read_waits_without_spinning() {
     if !ended {
         let _ = child.kill();
     }
-    let output = child.wait_with_output().expect("rexx-run ends");
+    let output = child.wait_with_output().expect("rexx ends");
     std::fs::remove_dir_all(&dir).expect("the probe directory is removed");
     assert!(
         ended,
-        "rexx-run still running {END_WAIT:?} after the read's input"
+        "rexx still running {END_WAIT:?} after the read's input"
     );
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(String::from_utf8_lossy(&output.stdout), "v=[hi]\n");
@@ -1073,21 +1073,21 @@ fn no_activity_runs_while_main_reads() {
          ::class w\n::method go\n  do i = 1 to 8\n    say 'w' i\n    call SysSleep 0.1\n  end\n",
     )
     .expect("the probe");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rexx"))
         .arg(&file)
         .current_dir(&dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("rexx-run starts");
+        .expect("rexx starts");
     std::thread::sleep(Duration::from_millis(1500));
     {
         use std::io::Write;
         let mut input = child.stdin.take().expect("piped stdin");
         input.write_all(b"hi\n").expect("the write");
     }
-    let output = child.wait_with_output().expect("rexx-run ends");
+    let output = child.wait_with_output().expect("rexx ends");
     std::fs::remove_dir_all(&dir).expect("the probe directory is removed");
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
@@ -1137,14 +1137,14 @@ fn only_the_interpreter_and_its_waits_take_the_halting_signals() {
     .expect("the probe");
     let mut child = Command::new("env")
         .arg("--default-signal=INT,TERM,HUP")
-        .arg(env!("CARGO_BIN_EXE_rexx-run"))
+        .arg(env!("CARGO_BIN_EXE_rexx"))
         .arg(&file)
         .current_dir(&dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("rexx-run starts");
+        .expect("rexx starts");
     let mut seen = Vec::new();
     for _ in 0..3 {
         std::thread::sleep(Duration::from_secs(1));
@@ -1156,11 +1156,11 @@ fn only_the_interpreter_and_its_waits_take_the_halting_signals() {
         let mut input = child.stdin.take().expect("piped stdin");
         input.write_all(b"x\n").expect("the write");
     }
-    let output = child.wait_with_output().expect("rexx-run ends");
+    let output = child.wait_with_output().expect("rexx ends");
     std::fs::remove_dir_all(&dir).expect("the probe directory is removed");
     assert_eq!(String::from_utf8_lossy(&output.stdout), "x\n");
     let thread = |name: &str, blocked: bool| (name.to_string(), blocked);
-    let run = thread("rexx-run", true);
+    let run = thread("rexx", true);
     let timer = thread("rexx-timer", true);
     let interp = thread("rexx-interp", false);
     // A command's wait reads the child's error stream on a thread of its own.
@@ -1170,14 +1170,14 @@ fn only_the_interpreter_and_its_waits_take_the_halting_signals() {
         seen,
         [
             vec![
+                run.clone(),
                 interp.clone(),
                 waiting.clone(),
                 waiting.clone(),
-                run.clone(),
                 timer.clone()
             ],
-            vec![interp.clone(), idle, run.clone(), timer.clone()],
-            vec![interp, waiting, run, timer],
+            vec![run.clone(), interp.clone(), idle, timer.clone()],
+            vec![run, interp, waiting, timer],
         ]
     );
 }

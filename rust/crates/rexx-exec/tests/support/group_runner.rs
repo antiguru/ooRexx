@@ -78,7 +78,7 @@ pub enum SwitchMode {
     /// A switch at every clause boundary, as `rexx_exec::SwitchMode` names it.
     EveryOpportunity,
     /// The simulation mode, its `REXX_SWITCH_MODE` value (`sim:SEED,...`): the
-    /// run is a `rexx-run` process of its own, see [`run_crate_process`].
+    /// run is a `rexx` process of its own, see [`run_crate_process`].
     Sim(String),
 }
 
@@ -565,7 +565,7 @@ pub struct ProcessRun {
     pub took: std::time::Duration,
 }
 
-/// Runs `rexx-run` on `words` (the program, then its arguments) from `cwd`
+/// Runs `rexx` on `words` (the program, then its arguments) from `cwd`
 /// with `REXX_SWITCH_MODE` set to `mode`, in a process group of its own that
 /// is killed at `deadline`; a command a simulation run starts runs in a group
 /// of its own, which that kill does not reach. `environment`
@@ -579,7 +579,7 @@ pub fn run_crate_process(
     stdin: Option<&[u8]>,
     deadline: std::time::Duration,
 ) -> ProcessRun {
-    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_rexx-run"));
+    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_rexx"));
     if let Some(environment) = environment {
         set_environment(&mut command, environment);
     }

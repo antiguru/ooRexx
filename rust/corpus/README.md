@@ -292,7 +292,7 @@ The command line and a non-empty console are outside every corpus program's
 reach: the harness passes no arguments and an empty stdin, and a program whose
 output depended on the console could not be deterministic. Both are compared
 against the oracle in `crates/rexx-exec/tests/input_oracle.rs`, which drives
-the `rexx-run` binary with an `argv` and a fed stdin instead.
+the `rexx` binary with an `argv` and a fed stdin instead.
 
 ### `num/` — Phase 2, the numeric core
 

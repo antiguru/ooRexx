@@ -49,7 +49,7 @@ fn copies_of_a_large_string_subclass_instance_run_under_the_oracles_memory_cap()
         .arg(format!(
             "ulimit -v {ORACLE_MEMORY_LIMIT_KIB} && exec \"$0\" main.rex"
         ))
-        .arg(env!("CARGO_BIN_EXE_rexx-run"))
+        .arg(env!("CARGO_BIN_EXE_rexx"))
         .current_dir(&dir)
         .stdin(Stdio::null())
         .output()

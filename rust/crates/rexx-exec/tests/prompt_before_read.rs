@@ -16,7 +16,7 @@
 //! over, so a prompt written at exit and a prompt written before the read
 //! compare equal. What the two differ in is whether a person is looking at
 //! the question while the interpreter waits for their answer, which is a
-//! property of `rexx-run`'s own descriptors and is only observable by
+//! property of `rexx`'s own descriptors and is only observable by
 //! spawning it.
 
 #![expect(
@@ -49,20 +49,20 @@ fn probe_dir(name: &str) -> PathBuf {
     base
 }
 
-/// `rexx-run` on `source`, with all three descriptors piped and **nothing
+/// `rexx` on `source`, with all three descriptors piped and **nothing
 /// written to its standard input**.
 fn waiting_run(name: &str, source: &str) -> (Child, PathBuf) {
     let dir = probe_dir(name);
     let path = dir.join("ask.rex");
     std::fs::write(&path, source).expect("the probe program is writable");
-    let child = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
+    let child = Command::new(env!("CARGO_BIN_EXE_rexx"))
         .arg("ask.rex")
         .current_dir(&dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .unwrap_or_else(|e| panic!("failed to spawn rexx-run: {e}"));
+        .unwrap_or_else(|e| panic!("failed to spawn rexx: {e}"));
     (child, dir)
 }
 

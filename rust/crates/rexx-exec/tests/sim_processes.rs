@@ -22,12 +22,12 @@ const PROGRAM: &str = "call SysSleep 3\nsay random() time('L') date('S') time('E
      return random() time('L')\n";
 
 fn run(dir: &std::path::Path, mode: &str) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_rexx-run"))
+    Command::new(env!("CARGO_BIN_EXE_rexx"))
         .arg(dir.join("p.rex"))
         .env("REXX_SWITCH_MODE", mode)
         .stdin(std::process::Stdio::null())
         .output()
-        .expect("rexx-run runs")
+        .expect("rexx runs")
 }
 
 #[test]
@@ -76,13 +76,13 @@ fn a_seed_gives_one_trace_hash_in_two_processes() {
     std::fs::create_dir_all(&dir).expect("a directory");
     std::fs::write(dir.join("p.rex"), TIMED_NATIVE).expect("the program written");
     let run = || {
-        Command::new(env!("CARGO_BIN_EXE_rexx-run"))
+        Command::new(env!("CARGO_BIN_EXE_rexx"))
             .arg(dir.join("p.rex"))
             .env("REXX_SWITCH_MODE", "sim:1,uniform:0.3")
             .env("LD_LIBRARY_PATH", &lib)
             .stdin(std::process::Stdio::null())
             .output()
-            .expect("rexx-run runs")
+            .expect("rexx runs")
     };
     let first = run();
     let second = run();
@@ -126,7 +126,7 @@ fn a_damaged_trace_is_refused_before_the_run() {
     assert_eq!(
         String::from_utf8_lossy(&damaged.stderr),
         format!(
-            "rexx-run: REXX_SWITCH_MODE: `{}`: the decisions hash to {hash}, the header holds \
+            "rexx: REXX_SWITCH_MODE: `{}`: the decisions hash to {hash}, the header holds \
              0123456789abcdef\n",
             file.display()
         )
@@ -144,7 +144,7 @@ fn a_child_writes_no_sim_line_into_output_its_parent_captures() {
     std::fs::create_dir_all(&bin).expect("a directory");
     let link = bin.join("rexx");
     if !link.exists() {
-        std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_rexx-run"), &link).expect("the link");
+        std::os::unix::fs::symlink(env!("CARGO_BIN_EXE_rexx"), &link).expect("the link");
     }
     std::fs::write(
         dir.join("c.rex"),
@@ -162,14 +162,14 @@ fn a_child_writes_no_sim_line_into_output_its_parent_captures() {
         &std::env::var_os("PATH").expect("a PATH"),
     )))
     .expect("a PATH");
-    let ran = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
+    let ran = Command::new(env!("CARGO_BIN_EXE_rexx"))
         .arg(dir.join("p.rex"))
         .current_dir(&dir)
         .env("PATH", path)
         .env("REXX_SWITCH_MODE", "sim:5")
         .stdin(std::process::Stdio::null())
         .output()
-        .expect("rexx-run runs");
+        .expect("rexx runs");
     let _ = std::fs::remove_dir_all(&dir);
     let stderr = String::from_utf8_lossy(&ran.stderr).into_owned();
     assert!(ran.status.success(), "{stderr}");

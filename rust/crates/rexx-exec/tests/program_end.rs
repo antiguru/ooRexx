@@ -11,7 +11,7 @@
 
 //! Program end with an activity that never finishes (the Phase 6 S2-S5
 //! plan's Review Focus 2): the oracle waits for ever, and so does
-//! `rexx-run`, with main's output written and without spinning. Each test
+//! `rexx`, with main's output written and without spinning. Each test
 //! kills the process once it has seen that.
 
 #![expect(
@@ -31,7 +31,7 @@ const OUTPUT_WAIT: Duration = Duration::from_secs(30);
 /// How long the process is watched once main's output is out.
 const WATCH: Duration = Duration::from_secs(1);
 
-/// Runs `source` under `rexx-run`, waits for `main_output` on its stdout,
+/// Runs `source` under `rexx`, waits for `main_output` on its stdout,
 /// then asserts the process is still running after [`WATCH`] and, on
 /// Linux, that it spent at most a tenth of that on the CPU.
 fn stays_alive_after(name: &str, source: &str, main_output: &str) {
@@ -40,13 +40,13 @@ fn stays_alive_after(name: &str, source: &str, main_output: &str) {
     std::fs::create_dir_all(&dir).expect("the probe directory");
     let file = dir.join(format!("{name}.rex"));
     std::fs::write(&file, source).expect("the probe");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rexx-run"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_rexx"))
         .arg(&file)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("rexx-run starts");
+        .expect("rexx starts");
     let mut stdout = child.stdout.take().expect("piped stdout");
     let (sender, receiver) = mpsc::channel();
     std::thread::spawn(move || {

@@ -37,7 +37,7 @@
 #   console's contents could not be deterministic here. A command-line argument
 #   is likewise out of reach: the harness passes none, so a program here can
 #   only ever see the no-argument case. Both of those are witnessed against the
-#   oracle in crates/rexx-exec/tests/input_oracle.rs, which drives the rexx-run
+#   oracle in crates/rexx-exec/tests/input_oracle.rs, which drives the rexx
 #   binary with argv and a fed stdin rather than calling run_program in process.
 #
 #   The ADDRESS instruction's environment-naming forms (4c Task 9): the

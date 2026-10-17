@@ -10,7 +10,7 @@
 /*----------------------------------------------------------------------------*/
 
 //! Task 3b: a deep `1 + 1 + ... + 1` chain must parse and drop on a normal,
-//! default-stack test thread, not just on the wide thread `rexx-run` uses.
+//! default-stack test thread, not just on the wide thread `rexx` uses.
 
 use rexx_parse::{MAX_EXPR_DEPTH, parse_program};
 

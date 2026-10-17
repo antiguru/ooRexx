@@ -10,7 +10,7 @@
 #      ORACLE_ROOT   the oracle's build directory (default /home/moritz/dev/repos/ooRexx/build)
 #      PROGRAMS      the programs to run (default: callgrind.sh's PROGRAMS)
 #
-# Each binary is copied to OUTDIR/stage/rexx-run before each of its runs; bash's
+# Each binary is copied to OUTDIR/stage/rexx before each of its runs; bash's
 # `time` times the interpreter process.
 # Exits 1 if a run exits non-zero or its stdout differs from the first binary's
 # (except on TIMED).
@@ -61,8 +61,8 @@ run() { # arm program round
     if [ "$1" = oracle ]; then
         t=$( { cd "$d"; ( ulimit -v 1048576; export LD_LIBRARY_PATH=$lib; time "$oracle_root/bin/rexx" "$(prog "$2")" > "$f.out" 2> "$f.err"; echo $? > "$f.rc" ); } 2>&1 )
     else
-        cp "${bin[$1]}" "$out/stage/rexx-run"
-        t=$( { cd "$d"; ( export LD_LIBRARY_PATH=$lib; time "$out/stage/rexx-run" "$(prog "$2")" > "$f.out" 2> "$f.err"; echo $? > "$f.rc" ); } 2>&1 )
+        cp "${bin[$1]}" "$out/stage/rexx"
+        t=$( { cd "$d"; ( export LD_LIBRARY_PATH=$lib; time "$out/stage/rexx" "$(prog "$2")" > "$f.out" 2> "$f.err"; echo $? > "$f.rc" ); } 2>&1 )
     fi
     rmdir "$d"
     printf '%s\t%s\tr%s\t%s\n' "$1" "$2" "$3" "$t" >> "$out/wall.tsv"

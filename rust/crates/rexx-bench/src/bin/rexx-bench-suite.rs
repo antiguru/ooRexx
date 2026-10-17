@@ -198,12 +198,12 @@ fn main() -> ExitCode {
     let self_check = arguments.iter().any(|arg| arg == "--self-check");
     // Which engine "this crate" means, named rather than inherited, and
     // printed in the provenance block beside every other identity a ratio
-    // here depends on. The default is the engine `rexx-run` ships, so a run
+    // here depends on. The default is the engine `rexx` ships, so a run
     // with no arguments measures what this crate now is; `phase-4e-anchor.md`
     // and `perf-baseline.md` were taken before this choice existed and are
     // tree-walker figures, so reproducing either needs
     // `--engine tree-walker`. An unrecognised value is refused rather than
-    // defaulted, exactly as `rexx-run` refuses one.
+    // defaulted, exactly as `rexx` refuses one.
     // **No `--engine`.** It used to choose an arm; accepting `tree-walker`
     // now would set a `REXX_ENGINE` nothing reads and label the rows for an
     // engine that did not run them.
@@ -594,13 +594,10 @@ fn capture(program: &str, args: &[&str]) -> String {
         .unwrap_or_else(|| format!("<{program} failed>"))
 }
 
-/// Where `rexx-run` is built, release first.
+/// Where `rexx` is built, release first.
 fn rust_binary_candidates() -> [PathBuf; 2] {
     let target = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target");
-    [
-        target.join("release/rexx-run"),
-        target.join("debug/rexx-run"),
-    ]
+    [target.join("release/rexx"), target.join("debug/rexx")]
 }
 
 /// The ooRexx shared objects `binary` actually loads, sorted.
@@ -652,10 +649,10 @@ mod tests {
             .find(|path| path.is_file())
             .unwrap_or_else(|| {
                 panic!(
-                    "neither target/release/rexx-run nor target/debug/rexx-run exists. This \
+                    "neither target/release/rexx nor target/debug/rexx exists. This \
                      test runs the blocked axes through this crate, and skipping instead \
                      would let the roles below go unchecked while the run stayed green. \
-                     `cargo build -p rexx-exec --bin rexx-run` first."
+                     `cargo build -p rexx-exec --bin rexx` first."
                 )
             });
         let side = Side {

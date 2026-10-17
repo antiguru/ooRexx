@@ -25,7 +25,7 @@ fn rexx_run(name: &str, program: &str) -> (Command, std::path::PathBuf) {
     let dir = std::env::temp_dir().join(format!("rexx-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("a directory");
     std::fs::write(dir.join("p.rex"), program).expect("the program written");
-    let mut command = Command::new(env!("CARGO_BIN_EXE_rexx-run"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rexx"));
     command
         .arg(dir.join("p.rex"))
         .stdin(std::process::Stdio::null());
@@ -44,7 +44,7 @@ fn sys_wait_with_no_child_answers_minus_one() {
         if let Some(mode) = mode {
             command.env("REXX_SWITCH_MODE", mode);
         }
-        let output = command.output().expect("rexx-run runs");
+        let output = command.output().expect("rexx runs");
         let _ = std::fs::remove_dir_all(&dir);
         output
     };
@@ -77,7 +77,7 @@ fn pgid_is_the_parents_group() {
         "sys-query-pgid",
         "say SysQueryProcess('PGID') SysQueryProcess('PID')\n",
     );
-    let output = command.process_group(0).output().expect("rexx-run runs");
+    let output = command.process_group(0).output().expect("rexx runs");
     let _ = std::fs::remove_dir_all(&dir);
     let text = String::from_utf8_lossy(&output.stdout);
     let (group, pid) = text.trim().split_once(' ').expect("two words");
@@ -110,12 +110,12 @@ fn a_command_whose_child_was_reaped_elsewhere_fails_with_127() {
     let (_, dir) = rexx_run("sys-wait-reaped", program);
     let output = Command::new("timeout")
         .args(["-k", "5", "60"])
-        .arg(env!("CARGO_BIN_EXE_rexx-run"))
+        .arg(env!("CARGO_BIN_EXE_rexx"))
         .arg(dir.join("p.rex"))
         .current_dir(&dir)
         .stdin(std::process::Stdio::null())
         .output()
-        .expect("timeout runs rexx-run");
+        .expect("timeout runs rexx");
     let _ = std::fs::remove_dir_all(&dir);
     assert!(
         output.status.success(),

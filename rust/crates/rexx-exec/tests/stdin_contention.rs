@@ -10,7 +10,7 @@
 /*----------------------------------------------------------------------------*/
 
 //! Activities that touch standard input while another reads it: each case
-//! runs `rexx-run` with standard input a pipe, writes lines to it (and
+//! runs `rexx` with standard input a pipe, writes lines to it (and
 //! signals it) at the times its `run` line names, and compares all three
 //! descriptors with the oracle's, 30 runs each. Every case depends on a
 //! wall-clock boundary (ruling P48), so a mismatch is run again once.
@@ -69,14 +69,14 @@ fn render(label: &str, case: &datadriven::TestCase) -> String {
     std::fs::write(&file, &case.input).expect("the probe");
     let mut child = Command::new("env")
         .arg("--default-signal=INT,TERM,HUP")
-        .arg(env!("CARGO_BIN_EXE_rexx-run"))
+        .arg(env!("CARGO_BIN_EXE_rexx"))
         .arg(&file)
         .current_dir(&dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("rexx-run starts");
+        .expect("rexx starts");
     let mut stdout = child.stdout.take().expect("piped stdout");
     let mut stderr = child.stderr.take().expect("piped stderr");
     let out = std::thread::spawn(move || {

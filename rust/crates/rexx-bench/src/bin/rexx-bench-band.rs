@@ -140,7 +140,7 @@ fn collect(arguments: &[String]) -> ExitCode {
     let header = arguments.iter().any(|arg| arg == "--header");
 
     let oracle = Side::oracle();
-    let rust_binary = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/release/rexx-run");
+    let rust_binary = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/release/rexx");
     let rust_binary = rust_binary.canonicalize().unwrap_or(rust_binary);
     if !rust_binary.is_file() || !oracle.binary.is_file() {
         eprintln!(

@@ -105,7 +105,7 @@ fn peak_kib(dir: &Path, passes: u32) -> u64 {
             "-o",
         ])
         .arg(&rss)
-        .arg(env!("CARGO_BIN_EXE_rexx-run"))
+        .arg(env!("CARGO_BIN_EXE_rexx"))
         .arg(&program)
         .current_dir(dir)
         .env("LD_LIBRARY_PATH", dir)
