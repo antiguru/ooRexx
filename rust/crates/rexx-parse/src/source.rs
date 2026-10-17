@@ -45,6 +45,9 @@ pub struct ProgramSource {
     /// binary search valid.
     lines: Vec<(usize, usize)>,
     kind: SourceKind,
+    /// For an `Interpret` source, the line of the clause running it, which
+    /// the interpreter numbers the whole string with.
+    interpret_line: usize,
 }
 
 impl ProgramSource {
@@ -52,7 +55,12 @@ impl ProgramSource {
     pub fn new(mut text: Vec<u8>, kind: SourceKind) -> Self {
         if kind == SourceKind::Interpret {
             let lines = vec![(0, text.len())];
-            return ProgramSource { text, lines, kind };
+            return ProgramSource {
+                text,
+                lines,
+                kind,
+                interpret_line: 1,
+            };
         }
 
         let scan_len = text.iter().position(|&b| b == 0x1a).unwrap_or(text.len());
@@ -88,7 +96,12 @@ impl ProgramSource {
             }
         }
 
-        ProgramSource { text, lines, kind }
+        ProgramSource {
+            text,
+            lines,
+            kind,
+            interpret_line: 1,
+        }
     }
 
     /// A [`SourceKind::Lines`] source: the line index is given rather than
@@ -112,6 +125,25 @@ impl ProgramSource {
             text,
             lines: index,
             kind: SourceKind::Lines,
+            interpret_line: 1,
+        }
+    }
+
+    /// The string an `INTERPRET` on line `line` is about to run
+    /// (`LanguageParser::translateInterpret`, `LanguageParser.cpp:446`).
+    pub fn interpret(text: Vec<u8>, line: usize) -> Self {
+        let mut source = ProgramSource::new(text, SourceKind::Interpret);
+        source.interpret_line = line;
+        source
+    }
+
+    /// The line an error message's insert names for physical line `line`:
+    /// `line` itself, or for an `INTERPRET` string the line of the clause
+    /// running it (`LanguageParser.cpp:450`).
+    pub fn message_line(&self, line: usize) -> usize {
+        match self.kind {
+            SourceKind::Interpret => self.interpret_line,
+            SourceKind::Program | SourceKind::Lines => line,
         }
     }
 

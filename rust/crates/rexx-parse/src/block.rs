@@ -361,7 +361,8 @@ impl<'a> Block<'a> {
     /// The line the instruction at `index` starts on, as an insert.
     fn line_insert(&self, index: usize) -> Vec<u8> {
         let byte = self.instructions[index].clause_span.start;
-        self.source.line_of(byte).to_string().into_bytes()
+        let line = self.source.message_line(self.source.line_of(byte));
+        line.to_string().into_bytes()
     }
 
     /// `msg` reported against `byte`, naming the line the instruction at
@@ -377,7 +378,8 @@ impl<'a> Block<'a> {
     #[cold]
     #[inline(never)]
     fn then_expected(&self, which: PendingThen, opener: usize, byte: usize) -> ParseError {
-        let line = self.source.line_of(opener).to_string().into_bytes();
+        let line = self.source.message_line(self.source.line_of(opener));
+        let line = line.to_string().into_bytes();
         ParseError::raise(missing_then(which), byte, [line])
     }
 

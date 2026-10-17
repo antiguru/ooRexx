@@ -26,7 +26,7 @@ impl Interp {
     ///      2 *-*   interpret "leave outer"
     /// ```
     pub(super) fn run_fragment(&mut self, text: Vec<u8>) -> Result<Flow, Failure> {
-        let source = rexx_parse::ProgramSource::new(text, rexx_parse::SourceKind::Interpret);
+        let source = rexx_parse::ProgramSource::interpret(text, self.activity.clause_state.line());
         let fragment: Rc<Fragment> = match rexx_parse::fragment_from(source) {
             Ok(fragment) => Rc::new(fragment),
             Err(rejected) => return Err(self.raise_parse_failure(&rejected, None)),

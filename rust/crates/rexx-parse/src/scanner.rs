@@ -379,7 +379,10 @@ impl<'a> Scanner<'a> {
             if !self.more_chars() {
                 self.next_line();
                 if !self.more_lines() {
-                    return Err(unmatched_comment(start_line, self.clause_start));
+                    return Err(unmatched_comment(
+                        self.source.message_line(start_line),
+                        self.clause_start,
+                    ));
                 }
                 continue;
             }

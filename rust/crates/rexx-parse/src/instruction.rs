@@ -258,7 +258,7 @@ impl<'a> Inst<'a> {
     #[cold]
     #[inline(never)]
     fn then_expected(&self, which: PendingThen, byte: usize) -> ParseError {
-        let line = self.ctx.source.line_of(byte);
+        let line = self.ctx.source.message_line(self.ctx.source.line_of(byte));
         self.error(missing_then(which), [line.to_string().into_bytes()])
     }
 

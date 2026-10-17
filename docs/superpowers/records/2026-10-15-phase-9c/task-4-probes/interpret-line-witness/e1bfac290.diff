@@ -1,0 +1,78 @@
+1,38c1,38
+< 36.901 items 2 [5] [28]
+<     Left parenthesis "(" in position 5 on line 28 requires a corresponding right parenthesis ")".
+< 36.902 items 2 [16] [28]
+<     Square bracket "[" in position 16 on line 28 requires a corresponding right square bracket "]".
+< 6.1 items 1 [28]
+<     Unmatched comment delimiter ("/*") on line 28.
+< 18.1 items 1 [28]
+<     IF instruction on line 28 requires matching THEN clause.
+< 18.2 items 1 [28]
+<     WHEN instruction on line 28 requires matching THEN clause.
+< 18.1 items 1 [28]
+<     IF instruction on line 28 requires matching THEN clause.
+< 18.2 items 1 [28]
+<     WHEN instruction on line 28 requires matching THEN clause.
+< 14.1 items 1 [28]
+<     DO instruction on line 28 requires matching END.
+< 14.5 items 1 [28]
+<     DO or LOOP instruction on line 28 requires matching END.
+< 7.2 items 1 [28]
+<     SELECT on line 28 requires WHEN, OTHERWISE, or END.
+< 7.1 items 1 [28]
+<     SELECT on line 28 requires WHEN.
+< 10.2 items 3 [J] [I] [28]
+<     Symbol following END ("J") must match block specification name ("I") on line 28 or be omitted.
+< 10.2 items 3 [B] [A] [28]
+<     Symbol following END ("B") must match block specification name ("A") on line 28 or be omitted.
+< 10.3 items 2 [X] [28]
+<     END corresponding to block on line 28 must not have a symbol following it because there is no LABEL or control variable; found "X".
+< 10.4 items 3 [T] [S] [28]
+<     Symbol following END ("T") must match LABEL of SELECT specification ("S") on line 28 or be omitted.
+< 10.7 items 2 [T] [28]
+<     END corresponding to SELECT on line 28 must not have a symbol following it because there is no LABEL; found "T".
+< 14.3 items 1 [28]
+<     THEN on line 28 must be followed by an instruction.
+< 14.4 items 1 [28]
+<     ELSE on line 28 must be followed by an instruction.
+< 14.901 items 1 [28]
+<     OTHERWISE on line 28 requires matching END.
+---
+> 36.901 items 2 [5] [1]
+>     Left parenthesis "(" in position 5 on line 1 requires a corresponding right parenthesis ")".
+> 36.902 items 2 [16] [1]
+>     Square bracket "[" in position 16 on line 1 requires a corresponding right square bracket "]".
+> 6.1 items 1 [1]
+>     Unmatched comment delimiter ("/*") on line 1.
+> 18.1 items 1 [1]
+>     IF instruction on line 1 requires matching THEN clause.
+> 18.2 items 1 [1]
+>     WHEN instruction on line 1 requires matching THEN clause.
+> 18.1 items 1 [1]
+>     IF instruction on line 1 requires matching THEN clause.
+> 18.2 items 1 [1]
+>     WHEN instruction on line 1 requires matching THEN clause.
+> 14.1 items 1 [1]
+>     DO instruction on line 1 requires matching END.
+> 14.5 items 1 [1]
+>     DO or LOOP instruction on line 1 requires matching END.
+> 7.2 items 1 [1]
+>     SELECT on line 1 requires WHEN, OTHERWISE, or END.
+> 7.1 items 1 [1]
+>     SELECT on line 1 requires WHEN.
+> 10.2 items 3 [J] [I] [1]
+>     Symbol following END ("J") must match block specification name ("I") on line 1 or be omitted.
+> 10.2 items 3 [B] [A] [1]
+>     Symbol following END ("B") must match block specification name ("A") on line 1 or be omitted.
+> 10.3 items 2 [X] [1]
+>     END corresponding to block on line 1 must not have a symbol following it because there is no LABEL or control variable; found "X".
+> 10.4 items 3 [T] [S] [1]
+>     Symbol following END ("T") must match LABEL of SELECT specification ("S") on line 1 or be omitted.
+> 10.7 items 2 [T] [1]
+>     END corresponding to SELECT on line 1 must not have a symbol following it because there is no LABEL; found "T".
+> 14.3 items 1 [1]
+>     THEN on line 1 must be followed by an instruction.
+> 14.4 items 1 [1]
+>     ELSE on line 1 must be followed by an instruction.
+> 14.901 items 1 [1]
+>     OTHERWISE on line 1 requires matching END.

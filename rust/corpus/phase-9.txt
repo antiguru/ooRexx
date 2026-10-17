@@ -148,3 +148,6 @@ lang/parse_error_unused_insert.rex
 # 9c Task 4: the token the oracle passes to a directive error that does not
 # show it, reached through .Package~new.
 lang/parse_error_directive_insert.rex
+
+# 9c Task 4: an INTERPRET error names the INTERPRET clause's line.
+lang/parse_error_interpret_line.rex

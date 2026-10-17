@@ -396,7 +396,7 @@ impl<'a, 'c> Parser<'a, 'c> {
             (opener.span.start - line_start + 1)
                 .to_string()
                 .into_bytes(),
-            line.to_string().into_bytes(),
+            source.message_line(line).to_string().into_bytes(),
         ];
         self.raise(if bracket { E36_902 } else { E36_901 }, inserts)
     }

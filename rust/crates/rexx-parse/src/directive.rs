@@ -176,7 +176,7 @@ impl<'a> Dir<'a> {
             E36_901,
             [
                 position.to_string().into_bytes(),
-                line.to_string().into_bytes(),
+                source.message_line(line).to_string().into_bytes(),
             ],
         )
     }
