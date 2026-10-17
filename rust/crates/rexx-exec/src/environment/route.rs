@@ -155,6 +155,10 @@ impl Interp {
     // Inlined into `loop_advance`, it cost sayloop +0.31% against +0.14%.
     #[inline(never)]
     pub(crate) fn route_trace_line_as(&mut self, start: usize, entry: bool) {
+        if self.untraceable_code() {
+            self.trace.truncate(start);
+            return;
+        }
         self.deliver_trace_line_as(start, entry);
         self.hand_over_stderr();
     }

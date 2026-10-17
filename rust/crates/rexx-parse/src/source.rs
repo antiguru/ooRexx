@@ -48,6 +48,11 @@ pub struct ProgramSource {
     /// For an `Interpret` source, the line of the clause running it, which
     /// the interpreter numbers the whole string with.
     interpret_line: usize,
+    /// Whether a program may show this text (`ProgramSource::isTraceable`).
+    /// A program restored from a compiled image is parsed from the source
+    /// the image holds and shows none of it: no lines, no trace, and a
+    /// traceback line naming the program in place of the clause.
+    traceable: bool,
 }
 
 impl ProgramSource {
@@ -60,6 +65,7 @@ impl ProgramSource {
                 lines,
                 kind,
                 interpret_line: 1,
+                traceable: true,
             };
         }
 
@@ -101,7 +107,16 @@ impl ProgramSource {
             lines,
             kind,
             interpret_line: 1,
+            traceable: true,
         }
+    }
+
+    /// The source a compiled image holds: a [`SourceKind::Program`] that is
+    /// not [traceable](ProgramSource::is_traceable).
+    pub fn compiled(text: Vec<u8>) -> Self {
+        let mut source = ProgramSource::new(text, SourceKind::Program);
+        source.traceable = false;
+        source
     }
 
     /// A [`SourceKind::Lines`] source: the line index is given rather than
@@ -126,6 +141,7 @@ impl ProgramSource {
             lines: index,
             kind: SourceKind::Lines,
             interpret_line: 1,
+            traceable: true,
         }
     }
 
@@ -152,6 +168,12 @@ impl ProgramSource {
     /// `INTERPRET`.
     pub fn kind(&self) -> SourceKind {
         self.kind
+    }
+
+    /// Whether a program may show this text: false for the source a
+    /// compiled image holds ([`ProgramSource::compiled`]).
+    pub fn is_traceable(&self) -> bool {
+        self.traceable
     }
 
     /// The number of physical lines, as `SOURCELINE()` with no argument
@@ -249,6 +271,7 @@ impl std::fmt::Debug for ProgramSource {
             .field("kind", &self.kind)
             .field("lines", &self.lines.len())
             .field("bytes", &self.text.len())
+            .field("traceable", &self.traceable)
             .finish()
     }
 }

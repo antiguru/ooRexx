@@ -333,6 +333,9 @@ impl Interp {
             }
             return Ok(false);
         }
+        if self.untraceable_code() {
+            return Ok(false);
+        }
         if !self.activation().debug.prompt_issued {
             self.activation_mut().debug.prompt_issued = true;
             let line = crate::error::Raised::debug_prompt_line();

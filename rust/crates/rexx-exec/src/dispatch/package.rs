@@ -490,6 +490,9 @@ fn source_lines(interp: &Interp, program: Option<ProgramId>) -> Result<Vec<Vec<u
     let Some(source) = source else {
         return Err(Loud::unknown_receiver("a package whose program was freed").into());
     };
+    if !source.source.is_traceable() {
+        return Ok(Vec::new());
+    }
     Ok((1..=source.source.line_count())
         .filter_map(|number| source.source.line(number).map(<[u8]>::to_vec))
         .collect())

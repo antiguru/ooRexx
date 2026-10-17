@@ -3103,16 +3103,18 @@ impl Interp {
             return;
         }
         if let Some((line, text)) = self.clause_site(source, blame) {
-            self.activity.failure_site = Some(match self.sourceless_site(line, indent) {
-                Some(site) => site,
-                None => match self.compiled_method_site(line, &text, indent) {
+            let traceable = source.is_none_or(ProgramSource::is_traceable);
+            self.activity.failure_site =
+                Some(match self.sourceless_site(line, indent, traceable) {
                     Some(site) => site,
-                    None => match self.required_package_site(line, &text, indent) {
+                    None => match self.compiled_method_site(line, &text, indent) {
                         Some(site) => site,
-                        None => FailureSite::Clause { line, text, indent },
+                        None => match self.required_package_site(line, &text, indent) {
+                            Some(site) => site,
+                            None => FailureSite::Clause { line, text, indent },
+                        },
                     },
-                },
-            });
+                });
         }
     }
 
@@ -3147,38 +3149,78 @@ impl Interp {
         })
     }
 
-    /// The frame a level in the interpreter's own library contributes, or
-    /// `None` for a level in a program's own package.
-    fn sourceless_site(&mut self, line: usize, indent: usize) -> Option<FailureSite> {
+    /// The frame a level in the interpreter's own library or in code whose
+    /// source is not `traceable` contributes, or `None` for a level whose
+    /// clause the traceback shows.
+    fn sourceless_site(
+        &mut self,
+        line: usize,
+        indent: usize,
+        traceable: bool,
+    ) -> Option<FailureSite> {
         let program_id = self.running_activation()?.program_id;
-        if !self.library_programs.contains(&program_id) {
+        let library = self.library_programs.contains(&program_id);
+        if traceable && !library {
             return None;
         }
-        // Copied out rather than borrowed: the scope's `~id` is read through
-        // `self.classes()`, which takes `&mut self`.
-        let identity = self
-            .activation()
-            .method_identity
-            .as_ref()
-            .map(|identity| (identity.name.to_vec(), identity.scope));
-        let text = match identity {
-            Some((name, scope)) => {
-                let scope = self.scope_id(scope);
-                Raised::sourceless_method_line(&name, &scope, crate::LIBRARY_PACKAGE_NAME)
-            }
-            // The library's own prologue, which is a program rather than a
-            // method. Reachable only if the bootstrap itself fails, which
-            // ends the interpreter -- rendered rather than left to the
-            // clause echo so that path does not print a library source line
-            // the oracle would not.
-            None => Raised::sourceless_program_line(crate::LIBRARY_PACKAGE_NAME),
+        let package = match library {
+            true => crate::LIBRARY_PACKAGE_NAME.to_vec(),
+            false => self.program_display_name(program_id).to_vec(),
         };
+        let text = self.sourceless_line(0, &package);
         Some(FailureSite::Named {
             line,
             indent,
             text,
-            name: crate::LIBRARY_PACKAGE_NAME.to_vec(),
+            name: package,
         })
+    }
+
+    /// `RexxActivation::formatSourcelessTraceLine`
+    /// (`execution/RexxActivation.cpp:5057`) for the activation at `depth`,
+    /// in `package`: a method names itself and its scope, a routine (the
+    /// oracle's `EXTERNALCALL`: a `::ROUTINE`, a `Routine` object, an
+    /// external program and a package's prologue) its name, and the program
+    /// `rexx` started and an internal call neither.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn sourceless_line(&mut self, depth: usize, package: &[u8]) -> Vec<u8> {
+        let Some(activation) = self.frame_at(depth) else {
+            return Raised::sourceless_program_line(package);
+        };
+        // Copied out rather than borrowed: the scope's `~id` is read through
+        // `self.classes()`, which takes `&mut self`.
+        let identity = activation
+            .method_identity
+            .as_ref()
+            .map(|identity| (identity.name.to_vec(), identity.scope));
+        let routine = match activation.entry {
+            crate::activation::Entry::Routine => true,
+            crate::activation::Entry::TopLevel => {
+                activation.call_type != crate::activation::CallType::Command
+            }
+            crate::activation::Entry::InternalCall | crate::activation::Entry::Method => false,
+        };
+        // A package's prologue is named for its package, as its frame is.
+        let name = match (activation.entry, activation.call_type) {
+            (crate::activation::Entry::TopLevel, crate::activation::CallType::Requires) => {
+                self.program_display_name(activation.program_id).to_vec()
+            }
+            _ => activation.invoked_as().to_vec(),
+        };
+        match identity {
+            Some((name, scope)) => {
+                let scope = self.scope_id(scope);
+                Raised::sourceless_method_line(&name, &scope, package)
+            }
+            None if routine => Raised::sourceless_routine_line(&name, package),
+            // The library's own prologue is a program rather than a method.
+            // Reachable only if the bootstrap itself fails, which ends the
+            // interpreter -- rendered rather than left to the clause echo so
+            // that path does not print a library source line the oracle
+            // would not.
+            None => Raised::sourceless_program_line(package),
+        }
     }
 
     /// Captures a `LEAVE`/`ITERATE` instruction's own clause site and static
@@ -3298,14 +3340,14 @@ impl Interp {
         raised.into()
     }
 
-    /// `text`, a file's, parsed as a whole program, or the condition it raises
-    /// reported as `name`'s.
+    /// `text`, a file's, parsed as a whole program, or restored where it is
+    /// a compiled image, or the condition it raises reported as `name`'s.
     pub(crate) fn parse_file(
         &mut self,
         text: Vec<u8>,
         name: &[u8],
     ) -> Result<rexx_parse::Program, Failure> {
-        let source = rexx_parse::ProgramSource::new(text, rexx_parse::SourceKind::Program);
+        let source = crate::compiled::program_source(text, name)?;
         rexx_parse::program_from(source)
             .map_err(|rejected| self.raise_parse_failure(&rejected, Some(name)))
     }

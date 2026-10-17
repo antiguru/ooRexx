@@ -333,16 +333,42 @@ fn is_source_line(interp: &Interp, value: ObjRef) -> bool {
     )
 }
 
-/// `lines` parsed as a program, or the `SYNTAX` condition they raise,
-/// positioned within them (measured, oracle `1` for
-/// `.Routine~new('T', 'return arg(1')` on line 2 of its caller).
+/// `lines` parsed as a program, or restored where they are an encoded image,
+/// or the `SYNTAX` condition they raise, positioned within them (measured,
+/// oracle `1` for `.Routine~new('T', 'return arg(1')` on line 2 of its
+/// caller).
 fn parse_source_lines(
     interp: &mut Interp,
     name: &[u8],
     lines: &[&[u8]],
 ) -> Result<rexx_parse::Program, Failure> {
-    rexx_parse::program_from(rexx_parse::ProgramSource::from_lines(lines))
+    let source = match crate::compiled::lines_source(lines, name) {
+        Some(restored) => restored?,
+        None => rexx_parse::ProgramSource::from_lines(lines),
+    };
+    rexx_parse::program_from(source)
         .map_err(|rejected| interp.raise_parse_failure(&rejected, Some(name)))
+}
+
+/// The package an executable compiled from `parsed` resolves names through
+/// after its own: `parent`, or the caller's where it is `None`, and none for
+/// a restored image, which inherits no context (measured, a restored routine
+/// calling one its caller defines raises 43.1).
+fn executable_parent(
+    interp: &mut Interp,
+    parsed: &rexx_parse::Program,
+    parent: Option<ObjRef>,
+) -> Result<Option<ObjRef>, Failure> {
+    if !parsed.source.is_traceable() {
+        return Ok(None);
+    }
+    match parent {
+        Some(parent) => Ok(Some(parent)),
+        None => interp
+            .running_program()
+            .map(|program| interp.package_object(crate::plan::Package::Program(program)))
+            .transpose(),
+    }
 }
 
 /// `MethodClass::newMethodObject`'s compiling arm
@@ -371,15 +397,19 @@ pub(super) fn compile_method_source_in(
     let lines = method_source_lines(interp, source, position, taker)?;
     let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
     let parsed = parse_source_lines(interp, name, &borrowed)?;
+    method_from_program(interp, name, parsed, parent)
+}
+
+/// The `Method` a parsed or restored program becomes, carrying no scope.
+pub(crate) fn method_from_program(
+    interp: &mut Interp,
+    name: &[u8],
+    parsed: rexx_parse::Program,
+    parent: Option<ObjRef>,
+) -> Result<ObjRef, Failure> {
     // `generateMethod` installs them as `generateRoutine` does; see
     // [`compile_routine_source`].
-    let parent = match parent {
-        Some(parent) => Some(parent),
-        None => interp
-            .running_program()
-            .map(|program| interp.package_object(crate::plan::Package::Program(program)))
-            .transpose()?,
-    };
+    let parent = executable_parent(interp, &parsed, parent)?;
     if !parsed.directives.is_empty() {
         return interp.install_executable(parsed, name, false, parent, |interp, id| {
             interp.compiled_method_names.insert(id, name.into());
@@ -412,17 +442,22 @@ pub(super) fn compile_routine_source(
     let lines = method_source_lines(interp, source, position, SourceTaker::Executable)?;
     let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
     let parsed = parse_source_lines(interp, name, &borrowed)?;
+    routine_from_program(interp, name, parsed, parent)
+}
+
+/// The `Routine` a parsed or restored program becomes, its directives
+/// installed in a package of its own.
+pub(crate) fn routine_from_program(
+    interp: &mut Interp,
+    name: &[u8],
+    parsed: rexx_parse::Program,
+    parent: Option<ObjRef>,
+) -> Result<ObjRef, Failure> {
     // `generateRoutine` installs them into the routine's own package, whose
     // parent is the caller's: measured, oracle rc 0,
     // `.Routine~new('T', .array~of('::class a1'))~package~classes~hasIndex('A1')`
     // is `1`.
-    let parent = match parent {
-        Some(parent) => Some(parent),
-        None => interp
-            .running_program()
-            .map(|program| interp.package_object(crate::plan::Package::Program(program)))
-            .transpose()?,
-    };
+    let parent = executable_parent(interp, &parsed, parent)?;
     if !parsed.directives.is_empty() {
         return interp.install_executable(parsed, name, true, parent, |interp, id| {
             interp.compiled_method_names.insert(id, name.into());

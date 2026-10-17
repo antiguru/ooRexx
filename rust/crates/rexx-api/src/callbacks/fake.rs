@@ -524,6 +524,16 @@ impl Surface for FakeHost {
         None
     }
 
+    fn compile_buffer(
+        &mut self,
+        _kind: super::BufferKind,
+        _name: &[u8],
+        _data: &[u8],
+        _lines: &[Vec<u8>],
+    ) -> Option<Option<ObjRef>> {
+        None
+    }
+
     fn load_library(&mut self, _name: &[u8]) -> bool {
         false
     }

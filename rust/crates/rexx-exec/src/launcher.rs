@@ -314,7 +314,7 @@ pub fn program_unreadable(path: &[u8]) -> (Vec<u8>, i32) {
 
 /// The report `Activity::display` writes for `raised` with no program
 /// position, and the status `main` returns for it.
-fn positionless(mut raised: Raised) -> (Vec<u8>, i32) {
+pub(crate) fn positionless(mut raised: Raised) -> (Vec<u8>, i32) {
     raised.delivery.positionless = true;
     let report = raised.report(&ClauseSite {
         path: b"",

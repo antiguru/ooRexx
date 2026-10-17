@@ -13,7 +13,7 @@
 
 use std::borrow::Cow;
 
-use rexx_api::callbacks::Surface;
+use rexx_api::callbacks::{BufferKind, Surface};
 use rexx_api::layout::POINTER;
 use rexx_api::values::Numeric;
 use rexx_core::{
@@ -600,6 +600,28 @@ impl Surface for Interp {
         self.held(package)
     }
 
+    fn compile_buffer(
+        &mut self,
+        kind: BufferKind,
+        name: &[u8],
+        data: &[u8],
+        lines: &[Vec<u8>],
+    ) -> Option<Option<ObjRef>> {
+        let source = match kind {
+            BufferKind::Method => {
+                let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
+                // Lines `.Method~new` would restore are parsed as source here.
+                crate::compiled::lines_source(&borrowed, name)?.ok();
+                Ok(rexx_parse::ProgramSource::from_lines(&borrowed))
+            }
+            BufferKind::Routine | BufferKind::Package => match crate::compiled::restore(data) {
+                crate::compiled::Restore::Source => return None,
+                _ => crate::compiled::program_source(data.to_vec(), name),
+            },
+        };
+        Some(self.compile_buffer_source(kind, name, source))
+    }
+
     fn load_library(&mut self, name: &[u8]) -> bool {
         match self.resolve_library(name) {
             crate::LibraryLoad::Loaded(_) => true,
@@ -785,6 +807,35 @@ impl Interp {
 
     /// The value `result` carries, or `None` with its condition held on the
     /// running native call.
+    /// [`Surface::compile_buffer`] past its choice of source: the executable
+    /// or package `source` becomes, or `None` with the condition held.
+    #[cold]
+    #[inline(never)]
+    fn compile_buffer_source(
+        &mut self,
+        kind: BufferKind,
+        name: &[u8],
+        source: Result<rexx_parse::ProgramSource, Raised>,
+    ) -> Option<ObjRef> {
+        let parsed = match source {
+            Ok(source) => rexx_parse::program_from(source)
+                .map_err(|rejected| self.raise_parse_failure(&rejected, Some(name))),
+            Err(raised) => Err(raised.into()),
+        };
+        let built = parsed.and_then(|parsed| match kind {
+            BufferKind::Method => {
+                super::super::class_protocol::method_from_program(self, name, parsed, None)
+            }
+            BufferKind::Routine => {
+                super::super::class_protocol::routine_from_program(self, name, parsed, None)
+            }
+            BufferKind::Package => self
+                .package_from_program(name, std::rc::Rc::new(parsed), None)
+                .and_then(|program| self.package_object(Package::Program(program))),
+        });
+        self.held(built)
+    }
+
     fn held<T>(&mut self, result: Result<T, Failure>) -> Option<T> {
         match result {
             Ok(value) => Some(value),

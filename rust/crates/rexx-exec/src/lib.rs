@@ -3778,6 +3778,29 @@ fn parse_failure_outcome(path: &[u8], rejected: &rexx_parse::Rejected) -> Outcom
     }
 }
 
+/// The outcome of a program file whose image cannot be restored: the
+/// condition displayed with no position, as a failure to start.
+#[cold]
+#[inline(never)]
+fn unrestorable_outcome(raised: Raised) -> Outcome {
+    let (stderr, exit_code) = launcher::positionless(raised);
+    Outcome {
+        exit_code,
+        stdout: Vec::new(),
+        stderr,
+        stack: StackSpan::default(),
+        collections: 0,
+        #[cfg(test)]
+        peak_body_bytes: 0,
+        chunks_refused: 0,
+        sim: None,
+        #[cfg(feature = "pinning")]
+        pinning: PinReport::default(),
+        #[cfg(feature = "sharing")]
+        sharing: SharingReport::default(),
+    }
+}
+
 /// What [`execute_as`] does with the program it parses.
 #[derive(Copy, Clone, PartialEq, Eq)]
 enum Entry {
@@ -3816,7 +3839,16 @@ fn execute_as(
 ) -> Outcome {
     let probe = 0u8;
     let base = &raw const probe as usize;
-    let source = rexx_parse::ProgramSource::new(text, rexx_parse::SourceKind::Program);
+    // `rexxc` translates its input as source, an image included: measured,
+    // the oracle's `rexxc` answers 13.1 at the `@` of a `.rxo` it is given.
+    let source = if entry == Entry::Translate {
+        rexx_parse::ProgramSource::new(text, rexx_parse::SourceKind::Program)
+    } else {
+        match compiled::program_source(text, path) {
+            Ok(source) => source,
+            Err(raised) => return unrestorable_outcome(raised),
+        }
+    };
     let program = match rexx_parse::program_from(source) {
         Ok(program) => program,
         Err(rejected) => return parse_failure_outcome(path, &rejected),

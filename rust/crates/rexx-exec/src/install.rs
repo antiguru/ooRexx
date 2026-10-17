@@ -149,14 +149,14 @@ impl Interp {
             // (`parser/DirectiveParser.cpp:1926`, `:1933`), and the two part:
             // measured, `::constant c 5` then `::constant c (1+2)` with no
             // `::CLASS` in the file is 99.932 and not 99.906.
-            self.check_member_keys(program, directive, current_class, &mut claimed, index)?;
+            self.check_member_keys(id, program, directive, current_class, &mut claimed, index)?;
             match &directive.kind {
                 DirectiveKind::Class(class) => {
                     if declared_classes
                         .insert(class.name.to_ascii_uppercase(), index)
                         .is_some()
                     {
-                        self.blame_directive(program, directive);
+                        self.blame_directive(id, program, directive);
                         return Err(Raised::duplicate_class().into());
                     }
                     saw_class = true;
@@ -164,13 +164,13 @@ impl Interp {
                 }
                 DirectiveKind::Resource(resource) => {
                     if !declared_resources.insert(resource.name.to_ascii_uppercase()) {
-                        self.blame_directive(program, directive);
+                        self.blame_directive(id, program, directive);
                         return Err(Raised::duplicate_resource().into());
                     }
                 }
                 DirectiveKind::Constant(constant) => {
                     if matches!(constant.value, ConstantValue::Expression(_)) && !saw_class {
-                        self.blame_directive(program, directive);
+                        self.blame_directive(id, program, directive);
                         return Err(Raised::constant_needs_class().into());
                     }
                 }
@@ -195,7 +195,7 @@ impl Interp {
                         // directive's own clause. `rexx-parse` does not
                         // detect it, so it is detected here, where the
                         // accumulated table is what answers.
-                        self.blame_directive(program, directive);
+                        self.blame_directive(id, program, directive);
                         return Err(Raised::duplicate_routine().into());
                     }
                 }
@@ -210,7 +210,7 @@ impl Interp {
                     ) {
                         Ok(target) => target,
                         Err(missing) => {
-                            self.blame_directive(program, directive);
+                            self.blame_directive(id, program, directive);
                             return Err(Raised::missing_annotation_target(
                                 missing.kind,
                                 missing.name,
@@ -260,7 +260,7 @@ impl Interp {
                         options.iter().try_for_each(|option| package.apply(option))
                     };
                     if let Err(error) = outcome {
-                        self.blame_directive(program, directive);
+                        self.blame_directive(id, program, directive);
                         return Err(run::raised_from_settings(error).into());
                     }
                     // An arming route of the required-string protocol:
@@ -313,7 +313,7 @@ impl Interp {
             // and the same file naming `file_separator` is rc 0 printing the
             // prologue.
             if let Some(missing) = unresolved_external(&directive.kind) {
-                self.blame_directive(program, directive);
+                self.blame_directive(id, program, directive);
                 return Err(Raised::external_method_not_found(&missing).into());
             }
 
@@ -402,7 +402,7 @@ impl Interp {
         let order = match class_install_order(program, &declared) {
             Ok(order) => order,
             Err(blame) => {
-                self.blame_directive(program, &program.directives[blame]);
+                self.blame_directive(id, program, &program.directives[blame]);
                 let path = self.program_path.clone();
                 return Err(Raised::cyclic_inheritance(&path).into());
             }
@@ -984,11 +984,28 @@ impl Interp {
         parent: Option<ObjRef>,
     ) -> Result<ProgramId, Failure> {
         let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
-        let parsed =
-            match rexx_parse::program_from(rexx_parse::ProgramSource::from_lines(&borrowed)) {
-                Ok(parsed) => Rc::new(parsed),
-                Err(rejected) => return Err(self.raise_parse_failure(&rejected, Some(name))),
-            };
+        let source = match crate::compiled::lines_source(&borrowed, name) {
+            Some(restored) => restored?,
+            None => rexx_parse::ProgramSource::from_lines(&borrowed),
+        };
+        // A restored package inherits no context: measured, its routine
+        // calling one the caller defines raises 43.1.
+        let parent = parent.filter(|_| source.is_traceable());
+        let parsed = match rexx_parse::program_from(source) {
+            Ok(parsed) => Rc::new(parsed),
+            Err(rejected) => return Err(self.raise_parse_failure(&rejected, Some(name))),
+        };
+        self.package_from_program(name, parsed, parent)
+    }
+
+    /// [`Interp::package_from_source`] past its parse: `parsed` loaded as a
+    /// package, its directives installed and its prologue run.
+    pub(crate) fn package_from_program(
+        &mut self,
+        name: &[u8],
+        parsed: Rc<Program>,
+        parent: Option<ObjRef>,
+    ) -> Result<ProgramId, Failure> {
         let id = self.load_program(Rc::clone(&parsed));
         self.compiled_method_names.insert(id, name.into());
         // Recorded ahead of the prologue for the reason
@@ -1050,6 +1067,7 @@ impl Interp {
     /// to has already been given that key on that side.
     fn check_member_keys(
         &mut self,
+        id: ProgramId,
         program: &Rc<Program>,
         directive: &Directive,
         current_class: Option<usize>,
@@ -1063,7 +1081,7 @@ impl Interp {
                     continue;
                 }
                 if class_side {
-                    self.blame_directive(program, directive);
+                    self.blame_directive(id, program, directive);
                     return Err(Raised::class_keyword_needs_class().into());
                 }
             }
@@ -1071,7 +1089,7 @@ impl Interp {
                 .insert((current_class, class_side, name), index)
                 .is_some()
             {
-                self.blame_directive(program, directive);
+                self.blame_directive(id, program, directive);
                 return Err(Raised::duplicate_member(&directive.kind).into());
             }
         }
@@ -1131,11 +1149,12 @@ impl Interp {
                     //      6 *-* ::constant c (self~m)
                     //      3 *-* ::class K
                     // ```
-                    self.blame_directive(program, directive);
+                    self.blame_directive(id, program, directive);
                     // `ConstantDirective`'s method runs as `::CONSTANT`.
                     self.capture_site_frame(&failure, b"METHOD", b"::CONSTANT", &[], id);
                     self.seal_site_level();
                     self.blame_directive(
+                        id,
                         program,
                         last_class.expect(
                             "the first pass already refused an expression with no \
@@ -1205,7 +1224,7 @@ impl Interp {
             return Ok(());
         };
         self.seal_site_level();
-        self.blame_directive(program, blame);
+        self.blame_directive(id, program, blame);
         Err(failure)
     }
 
@@ -1326,7 +1345,7 @@ impl Interp {
         let metaclass = named_metaclass.unwrap_or_else(|| self.classes().metaclass(superclass));
         if !self.classes().is_metaclass(metaclass) {
             let name = self.class_default_name(metaclass).to_vec();
-            self.blame_directive(program, directive);
+            self.blame_directive(program_id, program, directive);
             return Err(Raised::bad_metaclass(&name).into());
         }
         // A metaclass `NEW` that runs is a send from the directive.
@@ -1340,7 +1359,7 @@ impl Interp {
             Ok(id) => id,
             Err(failure) => {
                 self.seal_site_level();
-                self.blame_directive(program, directive);
+                self.blame_directive(program_id, program, directive);
                 return Err(failure);
             }
         };
@@ -1370,7 +1389,7 @@ impl Interp {
                 &file_classes,
                 Raised::class_not_found,
             )?;
-            self.inherit_mixin(program, directive, id, mixin)?;
+            self.inherit_mixin(program_id, program, directive, id, mixin)?;
         }
         self.install_class_members(program_id, program, id, attached, false);
         // Charged once its own methods count toward its behaviours' weight.
@@ -1383,7 +1402,7 @@ impl Interp {
         if class.abstract_ {
             if self.classes().is_metaclass(id) {
                 let class_id = self.class_id_text(id).as_bytes().to_vec();
-                self.blame_directive(program, directive);
+                self.blame_directive(program_id, program, directive);
                 return Err(Raised::abstract_metaclass(&class_id).into());
             }
             self.classes().make_abstract(id);
@@ -1456,7 +1475,7 @@ impl Interp {
             let namespace = program.symbols.name(namespace).as_bytes().to_vec();
             let found = self.namespace_class(installing, &namespace, &target.name);
             if found.is_err() {
-                self.blame_directive(program, directive);
+                self.blame_directive(installing, program, directive);
             }
             return found;
         }
@@ -1472,11 +1491,11 @@ impl Interp {
             None => match self.directive_class(installing, &target.name) {
                 Ok(Some(id)) => Ok(id),
                 Ok(None) => {
-                    self.blame_directive(program, directive);
+                    self.blame_directive(installing, program, directive);
                     Err(not_found(&target.name).into())
                 }
                 Err(failure) => {
-                    self.blame_directive(program, directive);
+                    self.blame_directive(installing, program, directive);
                     Err(failure)
                 }
             },
@@ -1486,6 +1505,7 @@ impl Interp {
     /// One `INHERIT` entry, as the send the oracle makes for it.
     fn inherit_mixin(
         &mut self,
+        program_id: ProgramId,
         program: &Rc<Program>,
         directive: &Directive,
         class: ObjRef,
@@ -1522,7 +1542,7 @@ impl Interp {
         let scope = self.root_and_metaclass().1;
         let scope = self.classes().id_string(scope).to_string();
         self.blame_native_method(b"INHERIT", &scope, class, &[Some(mixin)]);
-        self.blame_directive(program, directive);
+        self.blame_directive(program_id, program, directive);
         Err(raised.into())
     }
 
@@ -1923,6 +1943,9 @@ impl Interp {
         };
         let parsed = self.parse_file(text, name)?;
         let parent = match parent {
+            // A restored executable inherits no context, the one given
+            // included (`LanguageParser::createRoutine(name, context)`).
+            _ if !parsed.source.is_traceable() => None,
             Some(parent) => Some(parent),
             None => self
                 .running_program()
@@ -2635,13 +2658,30 @@ impl Interp {
     /// Records `directive`'s own clause as the site a directive-time
     /// condition is reported against, so its report carries the same echo
     /// line the oracle prints above the two `Error` lines.
-    fn blame_directive(&mut self, program: &Rc<Program>, directive: &Directive) {
-        let (line, text) = directive_clause(program, directive);
+    fn blame_directive(&mut self, id: ProgramId, program: &Rc<Program>, directive: &Directive) {
+        let (line, text) = self.directive_text(id, program, directive);
         self.activity.failure_site = Some(FailureSite::Clause {
             line,
             text,
             indent: 0,
         });
+    }
+
+    /// `directive`'s line and the text its traceback line shows: its clause,
+    /// or for a restored program the line naming the program (measured, a
+    /// restored `::CLASS` naming a missing superclass).
+    fn directive_text(
+        &mut self,
+        id: ProgramId,
+        program: &Rc<Program>,
+        directive: &Directive,
+    ) -> (usize, Vec<u8>) {
+        let (line, text) = directive_clause(program, directive);
+        if program.source.is_traceable() {
+            return (line, text);
+        }
+        let package = self.program_display_name(id).to_vec();
+        (line, self.sourceless_line(0, &package))
     }
 
     /// Closes the level of package `id`, whose directives did not install, as
@@ -2656,7 +2696,7 @@ impl Interp {
     /// [`Interp::blame_directive`] for a directive in the package `id`, whose
     /// report names that package's own file when a `::REQUIRES` loaded it.
     fn blame_directive_in(&mut self, id: ProgramId, program: &Rc<Program>, directive: &Directive) {
-        let (line, text) = directive_clause(program, directive);
+        let (line, text) = self.directive_text(id, program, directive);
         self.activity.failure_site = Some(match self.required_paths.get(&id) {
             Some(path) => FailureSite::Named {
                 line,

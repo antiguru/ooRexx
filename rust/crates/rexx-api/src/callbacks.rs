@@ -218,6 +218,20 @@ pub trait Surface {
     /// `loadRequires` over source text, one line per line end.
     fn load_package_source(&mut self, name: &[u8], lines: &[Vec<u8>]) -> Option<ObjRef>;
 
+    /// What a native caller's buffer becomes where it is not handed to the
+    /// parser as source lines: `None` for source, else the `Routine` or the
+    /// package a compiled image restores to, or `Some(None)` where that
+    /// raised a condition, which the host holds. A `Method` is never
+    /// restored (`LanguageParser::createMethod(name, buffer)`), so for an
+    /// encoded image this answers the method its lines parse to as source.
+    fn compile_buffer(
+        &mut self,
+        kind: BufferKind,
+        name: &[u8],
+        data: &[u8],
+        lines: &[Vec<u8>],
+    ) -> Option<Option<ObjRef>>;
+
     /// `PackageManager::loadLibrary`: whether the library loaded.
     fn load_library(&mut self, name: &[u8]) -> bool;
 
@@ -1694,12 +1708,17 @@ impl Activation<'_> {
         })
     }
 
-    /// `LoadPackageFromData`: `source` split into lines at each line end.
+    /// `LoadPackageFromData`: the package a compiled image restores to, or
+    /// `source` split into lines at each line end.
     pub fn load_package_from_data(&self, name: &[u8], source: &[u8]) -> RexxObjectPtr {
         let lines = source_lines(source);
-        self.surface_handle("RexxThreadInterface.LoadPackageFromData", |surface| {
-            surface.load_package_source(name, &lines)
-        })
+        self.surface_handle(
+            "RexxThreadInterface.LoadPackageFromData",
+            |surface| match surface.compile_buffer(BufferKind::Package, name, source, &lines) {
+                Some(restored) => restored,
+                None => surface.load_package_source(name, &lines),
+            },
+        )
     }
 
     /// `LoadLibrary`.
@@ -1766,6 +1785,19 @@ impl Activation<'_> {
         source: &[u8],
     ) -> RexxObjectPtr {
         let lines = source_lines(source);
+        let kind = match id {
+            "Routine" => BufferKind::Routine,
+            _ => BufferKind::Method,
+        };
+        let mut compiled = false;
+        let handle = self.surface_handle(slot, |surface| {
+            let answer = surface.compile_buffer(kind, name, source, &lines)?;
+            compiled = true;
+            answer
+        });
+        if compiled {
+            return handle;
+        }
         let handles: Vec<RexxObjectPtr> =
             lines.iter().map(|line| self.string_object(line)).collect();
         let array = self.array_of(slot, &handles);
@@ -1927,6 +1959,17 @@ pub enum MethodObject {
     Receiver,
     Scope,
     Super,
+}
+
+/// Which executable a native caller's buffer is compiled into.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BufferKind {
+    /// `NewMethod`.
+    Method,
+    /// `NewRoutine`.
+    Routine,
+    /// `LoadPackageFromData`.
+    Package,
 }
 
 /// Program text as the lines `LanguageParser` reads out of a buffer: split at

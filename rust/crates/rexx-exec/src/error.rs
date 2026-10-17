@@ -119,6 +119,16 @@ pub(crate) enum Notation {
 }
 
 impl Raised {
+    /// The `SYNTAX` condition `msg` names, with exactly its catalogue's
+    /// inserts.
+    pub(crate) fn raise<const N: usize>(
+        msg: rexx_inventory::errors::Msg<N>,
+        inserts: [Substitution; N],
+    ) -> Raised {
+        let (number, sub) = msg.code();
+        Raised::syntax(number, sub, Vec::from(inserts))
+    }
+
     /// A `SYNTAX` condition with an ordinary delivery -- the shape every
     /// raiser outside `RAISE` itself has.
     pub(crate) fn syntax(number: u16, sub: u16, additional: Vec<Substitution>) -> Raised {
@@ -1757,6 +1767,15 @@ impl Raised {
         }
     }
 
+    /// The same for a routine activation -- `formatSourcelessTraceLine`'s
+    /// `isRoutine()` arm.
+    pub(crate) fn sourceless_routine_line(name: &[u8], package: &[u8]) -> Vec<u8> {
+        message_text(
+            rexx_inventory::errors::E101_25,
+            [name.to_vec(), package.to_vec()],
+        )
+    }
+
     /// The same for an activation that is a whole program rather than a
     /// method -- `formatSourcelessTraceLine`'s `else` arm.
     pub(crate) fn sourceless_program_line(package: &[u8]) -> Vec<u8> {
@@ -2367,6 +2386,18 @@ impl Raised {
             Some(entry) => substitute(entry.text, &self.additional),
             None => format!("<no message {major}.{sub} in the catalogue>").into_bytes(),
         }
+    }
+}
+
+/// The catalogue text of `msg` with exactly its inserts.
+fn message_text<const N: usize>(
+    msg: rexx_inventory::errors::Msg<N>,
+    inserts: [Substitution; N],
+) -> Vec<u8> {
+    let (major, sub) = msg.code();
+    match rexx_inventory::errors::lookup(major, sub) {
+        Some(entry) => substitute(entry.text, &inserts),
+        None => format!("<no message {major}.{sub} in the catalogue>").into_bytes(),
     }
 }
 

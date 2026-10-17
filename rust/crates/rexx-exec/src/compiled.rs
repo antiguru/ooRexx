@@ -14,7 +14,11 @@
 //! with this build's own magic number and format version, then the checked
 //! source. No compatibility is promised between versions of this crate.
 
+use rexx_inventory::errors::{E3_903, E3_905};
+use rexx_parse::{ProgramSource, SourceKind};
+
 use crate::builtin::convert::{base64_digit, encode_base64_bytes};
+use crate::error::Raised;
 
 /// The courtesy line every image starts with.
 const SHEBANG: &[u8] = b"#!/usr/bin/env rexx\n";
@@ -25,6 +29,10 @@ const TAG: &[u8] = b"/**/@REXX\0";
 
 /// What the encoded form carries in place of the header.
 const ENCODED_TAG: &[u8] = b"/**/@REXX@\n";
+
+/// The second line an array of lines holds when it is an encoded image
+/// (`LanguageParser`'s `ENCODED_NEEDLE`).
+const ENCODED_LINE: &[u8] = b"/**/@REXX@";
 
 /// `ProgramMetaData`'s 64-bit size, up to `imageData`.
 const HEADER_BYTES: usize = 48;
@@ -110,6 +118,48 @@ pub fn restore(bytes: &[u8]) -> Restore {
         };
     }
     Restore::Source
+}
+
+/// The source `text`, a program buffer's bytes, holds: its own, or the
+/// source of the image it is (`ProgramMetaData::restore`). A damaged or
+/// foreign image raises 3.903 and undecodable base64 3.905, naming `name`.
+pub(crate) fn program_source(text: Vec<u8>, name: &[u8]) -> Result<ProgramSource, Raised> {
+    match restore(&text) {
+        Restore::Source => Ok(ProgramSource::new(text, SourceKind::Program)),
+        image => restored(image, name),
+    }
+}
+
+/// The source an array of lines holds when its second line is the encoded
+/// tag, joined with line feeds and restored (`LanguageParser::
+/// createProgram(name, array, context)`), or `None` where the lines are
+/// source.
+pub(crate) fn lines_source(lines: &[&[u8]], name: &[u8]) -> Option<Result<ProgramSource, Raised>> {
+    if lines.get(1) != Some(&ENCODED_LINE) {
+        return None;
+    }
+    joined_source(lines, name)
+}
+
+#[cold]
+#[inline(never)]
+fn joined_source(lines: &[&[u8]], name: &[u8]) -> Option<Result<ProgramSource, Raised>> {
+    match restore(&lines.join(&b'\n')) {
+        Restore::Source => None,
+        image => Some(restored(image, name)),
+    }
+}
+
+/// What a buffer that is not source restores to.
+#[cold]
+#[inline(never)]
+fn restored(image: Restore, name: &[u8]) -> Result<ProgramSource, Raised> {
+    match image {
+        Restore::Compiled(source) => Ok(ProgramSource::compiled(source)),
+        Restore::Rejected => Err(Raised::raise(E3_903, [name.to_vec()])),
+        Restore::Undecodable => Err(Raised::raise(E3_905, [name.to_vec()])),
+        Restore::Source => unreachable!("both callers answer source themselves"),
+    }
 }
 
 /// The source behind a header this build writes, with its length exact.

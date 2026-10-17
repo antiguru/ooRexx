@@ -437,6 +437,9 @@ fn block_source_lines(
         return Err(Loud::unknown_receiver("an executable whose program was freed").into());
     };
     let text = &source.source;
+    if !text.is_traceable() {
+        return Ok(Vec::new());
+    }
     let (first, from) = match directive {
         None => (1, 0),
         Some(directive) => match block_start(source, directive) {

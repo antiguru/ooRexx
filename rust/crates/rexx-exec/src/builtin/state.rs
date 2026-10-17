@@ -157,7 +157,12 @@ pub(crate) fn sourceline(
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
     let source = &interp.activation().program.source;
-    let lines = source.line_count();
+    // A restored program shows no source: measured, `SOURCELINE()` answers
+    // 0 and `SOURCELINE(1)` raises 40.34 naming 0 lines.
+    let lines = match source.is_traceable() {
+        true => source.line_count(),
+        false => 0,
+    };
     let Some(number) = whole_number(interp, name, args, 1)? else {
         return Ok(interp.text(lines.to_string().as_bytes()));
     };

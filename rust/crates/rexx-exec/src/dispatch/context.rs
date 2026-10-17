@@ -684,7 +684,7 @@ pub(crate) fn build_frame_with(
         Some(id) => interp.counted(id as usize),
     };
     interp.roots.activity_mut().push_temp(invocation);
-    let trace_text = trace_line_text(interp, &snapshot);
+    let trace_text = trace_line_text(interp, depth, &snapshot);
     let trace_line = interp.text(&trace_text);
     interp.roots.activity_mut().push_temp(trace_line);
     let arguments = array_of_slots(interp, std::mem::take(&mut snapshot.arguments));
@@ -1034,20 +1034,29 @@ fn read_snapshot(interp: &Interp, depth: usize) -> Result<Snapshot, Failure> {
 /// `RexxActivation::getTraceBack`: this frame's own clause as `TRACE` prints
 /// it -- `PackageClass::traceBack` (`classes/PackageClass.cpp:561`) over the
 /// instruction's source location and the trace indent in force.
-fn trace_line_text(interp: &Interp, snapshot: &Snapshot) -> Vec<u8> {
-    let text = interp
+fn trace_line_text(interp: &mut Interp, depth: usize, snapshot: &Snapshot) -> Vec<u8> {
+    let traceable = interp
         .programs
         .get(snapshot.program)
-        .and_then(|program| {
-            let span = crate::activation::body_of(program, snapshot.body)?
-                .instructions
-                .get(snapshot.clause.index)?
-                .clause_span
-                .clone();
-            program.source.join_span(span)
-        })
-        .map(std::borrow::Cow::into_owned)
-        .unwrap_or_default();
+        .is_none_or(|program| program.source.is_traceable());
+    let text = if !traceable {
+        let package = interp.program_display_name(snapshot.program).to_vec();
+        interp.sourceless_line(depth, &package)
+    } else {
+        interp
+            .programs
+            .get(snapshot.program)
+            .and_then(|program| {
+                let span = crate::activation::body_of(program, snapshot.body)?
+                    .instructions
+                    .get(snapshot.clause.index)?
+                    .clause_span
+                    .clone();
+                program.source.join_span(span)
+            })
+            .map(std::borrow::Cow::into_owned)
+            .unwrap_or_default()
+    };
     let mut out = Vec::new();
     crate::trace::push_clause(
         &mut out,

@@ -95,6 +95,28 @@ impl Interp {
         traced
     }
 
+    /// Whether the code running now shows no source, so it traces nothing
+    /// and never pauses (`RexxActivation::noTracing`'s
+    /// `!code->isTraceable()`): a restored program's own clauses, and not
+    /// an `INTERPRET` string it runs, which shows its own text (measured).
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn untraceable_code(&self) -> bool {
+        let Some(activation) = self.running_activation() else {
+            return false;
+        };
+        if activation.program.source.is_traceable() {
+            return false;
+        }
+        !self
+            .activity
+            .fragments
+            .iter()
+            .rev()
+            .take_while(|level| level.owner == activation.id)
+            .any(|level| level.fragment.is_some())
+    }
+
     /// Appends `*-*`'s own line for a clause that is **never** a `LABEL`:
     /// the loop drivers' own re-echo of a `DO`/`LOOP`/`END`, and a
     /// `WHEN`/`OTHERWISE` header (see `run/loops.rs`'s own doc comments on those
@@ -133,7 +155,10 @@ impl Interp {
     /// Seven blanks, `+++`, a blank and the `PARSE SOURCE` string in double
     /// quotes -- measured, `       +++ "LINUX COMMAND /abs/t.rex"`.
     pub(crate) fn trace_debug_source(&mut self) {
-        if !self.traced_mode().debug || self.activation().debug.source_traced {
+        if !self.traced_mode().debug
+            || self.activation().debug.source_traced
+            || self.untraceable_code()
+        {
             return;
         }
         self.activation_mut().debug.source_traced = true;
