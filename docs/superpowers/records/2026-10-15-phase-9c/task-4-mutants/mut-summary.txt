@@ -1,0 +1,109 @@
+0 M00 14.1 src/block.rs:395 'E14_1' -> 'E7_1' RED 5
+0 M01 14.2 src/block.rs:397 'E14_2' -> 'E7_1' RED 2
+0 M02 14.3 src/block.rs:410 '.parent' -> '.index' RED 1
+0 M04 14.4 src/block.rs:415 'E14_4' -> 'E7_1' RED 1
+0 M05 14.5 src/block.rs:418 'E14_5' -> 'E7_1' RED 5
+0 M06 14.901 src/block.rs:421 'E14_901' -> 'E7_1' RED 2
+0 M07 47.3 src/block.rs:441 'E47_3' -> 'E47_2' RED 1
+0 M08 47.4 src/block.rs:446 'E47_4' -> 'E47_2' RED 3
+0 M09 47.2 src/block.rs:447 'E47_2' -> 'E47_3' RED 4
+0 M10 10.4 src/block.rs:503 '{ E10_4 }' -> '{ E10_2 }' RED 2
+0 M11 10.2 src/block.rs:503 'else { E10_2 }' -> 'else { E10_4 }' RED 4
+0 M12 10.7 src/block.rs:509 '{ E10_7 }' -> '{ E10_3 }' RED 2
+0 M13 10.3 src/block.rs:509 'else { E10_3 }' -> 'else { E10_7 }' RED 3
+0 M16 7.1 src/block.rs:549 'E7_1' -> 'E7_2' RED 2
+0 M17 10.1 src/block.rs:610 'E10_1' -> 'E8_2' RED 8
+0 M18 7.2 src/block.rs:820 'E7_2' -> 'E7_1' RED 5
+0 M19 8.2 src/block.rs:849 'E8_2' -> 'E10_1' RED 3
+0 M21 9.2 src/block.rs:867 'E9_2' -> 'E10_1' RED 2
+0 M22 18.1 src/block.rs:380 'line_of(opener)' -> 'line_of(byte)' RED 1
+0 M25 99.914 src/lib.rs:203 'E99_914' -> 'rexx_inventory::errors::E99_908' RED 1
+0 M26 36.901 src/directive.rs:175 'line_start + 1' -> 'line_start + 2' RED 1
+0 M27 24.1 src/directive.rs:191 'bad.into_iter().collect()' -> 'b"MUT".to_vec()' RED 1
+0 M28 99.925 src/directive.rs:292 'name.to_vec()' -> 'b"MUT".to_vec()' RED 19
+0 M29 99.917 src/directive.rs:694 'spec.to_vec()' -> 'b"MUT".to_vec()' RED 12
+0 M30 25.927 src/directive.rs:1008 'self.value_of(token).into_vec()' -> 'b"MUT".to_vec()' RED 6
+0 M31 20.929 src/directive.rs:996 'name()' -> 'b"MUT".to_vec()' RED 1
+0 M33 19.925 src/directive.rs:844 'target.to_vec()' -> 'b"MUT".to_vec()' RED 5
+0 M39 19.923 src/directive.rs:871 '[insert]' -> '[b"MUT".to_vec()]' RED 3
+0 M40 26.5 src/directive.rs:895 'value.to_vec()' -> 'b"MUT".to_vec()' RED 7
+0 M41 26.6 src/directive.rs:928 'value.to_vec()' -> 'b"MUT".to_vec()' RED 2
+0 M42 21.913 src/directive.rs:740 'E21_913' -> 'E21_914' RED 1
+0 M43 21.914 src/directive.rs:1068 'E21_914' -> 'E21_913' RED 1
+0 M44 25.901 src/directive.rs:406 'self.found(E25_901, Some(token))' -> 'self.error(E25_901, [b"MUT".to_vec()])' RED 15
+0 M45 25.902 src/directive.rs:518 'self.found(E25_902, Some(token))' -> 'self.error(E25_902, [b"MUT".to_vec()])' RED 13
+0 M46 25.925 src/directive.rs:625 'self.found(E25_925, Some(token))' -> 'self.error(E25_925, [b"MUT".to_vec()])' RED 11
+0 M47 25.928 src/directive.rs:827 'self.found(E25_928, Some(token))' -> 'self.error(E25_928, [b"MUT".to_vec()])' RED 2
+0 M48 20.919 src/directive.rs:857 'self.found(E20_919, token)' -> 'self.error(E20_919, [b"MUT".to_vec()])' RED 1
+0 M49 25.11 src/directive.rs:913 'self.found(E25_11, Some(token))' -> 'self.error(E25_11, [b"MUT".to_vec()])' RED 1
+0 M50 25.935 src/directive.rs:978 'self.found(E25_935, Some(token))' -> 'self.error(E25_935, [b"MUT".to_vec()])' RED 1
+0 M51 25.924 src/directive.rs:982 'self.found(E25_924, Some(token))' -> 'self.error(E25_924, [b"MUT".to_vec()])' RED 2
+0 M52 25.904 src/directive.rs:1041 'self.found(E25_904, Some(token))' -> 'self.error(E25_904, [b"MUT".to_vec()])' RED 44
+0 M53 25.926 src/directive.rs:1059 'self.found(E25_926, Some(token))' -> 'self.error(E25_926, [b"MUT".to_vec()])' RED 3
+0 M55 25.903 src/directive.rs:1129 'self.found(E25_903, Some(token))' -> 'self.error(E25_903, [b"MUT".to_vec()])' RED 5
+0 M56 99.916 src/directive.rs:325 'self.error(E99_916, [])' -> 'self.error(E20_916, [])' RED 10
+0 M57 20.916 src/directive.rs:330 'self.error(E20_916, [])' -> 'self.error(E99_916, [])' RED 1
+0 M60 19.901 src/directive.rs:359 'require_name(E19_901)' -> 'require_name(E99_916)' RED 1
+0 M61 19.906 src/directive.rs:376 'class_reference(E19_906)' -> 'class_reference(E99_916)' RED 1
+0 M62 19.907 src/directive.rs:388 'class_reference(E19_907)' -> 'class_reference(E99_916)' RED 1
+0 M63 19.913 src/directive.rs:391 'class_reference(E19_913)' -> 'class_reference(E99_916)' RED 1
+0 M64 19.908 src/directive.rs:399 'self.error(E19_908, [])' -> 'self.error(E99_916, [])' RED 1
+0 M66 20.921 src/directive.rs:439 'require_symbol(E20_921)' -> 'require_symbol(E99_916)' RED 1
+0 M67 19.902 src/directive.rs:453 'require_name(E19_902)' -> 'require_name(E99_916)' RED 1
+0 M68 19.905 src/directive.rs:482 'require_literal(E19_905)' -> 'require_literal(E99_916)' RED 1
+0 M69 20.926 src/directive.rs:516 'require_symbol(E20_926)' -> 'require_symbol(E99_916)' RED 1
+0 M70 99.946 src/directive.rs:532 'check_directive(cursor, E99_946)' -> 'check_directive(cursor, E99_916)' RED 1
+0 M71 99.934 src/directive.rs:534 'check_directive(cursor, E99_934)' -> 'check_directive(cursor, E99_916)' RED 3
+0 M72 99.933 src/directive.rs:546 'check_directive(cursor, E99_933)' -> 'check_directive(cursor, E99_916)' RED 2
+0 M73 99.936 src/directive.rs:551 'check_directive(cursor, E99_936)' -> 'check_directive(cursor, E99_916)' RED 1
+0 M74 19.914 src/directive.rs:558 'require_name(E19_914)' -> 'require_name(E99_916)' RED 1
+0 M77 99.937 src/directive.rs:643 'check_directive(cursor, E99_937)' -> 'check_directive(cursor, E99_916)' RED 3
+0 M78 99.935 src/directive.rs:655 'check_directive(cursor, E99_935)' -> 'check_directive(cursor, E99_916)' RED 2
+0 M79 99.940 src/directive.rs:657 'check_directive(cursor, E99_940)' -> 'check_directive(cursor, E99_916)' RED 1
+0 M80 99.947 src/directive.rs:660 'check_directive(cursor, E99_947)' -> 'check_directive(cursor, E99_916)' RED 1
+0 M81 19.915 src/directive.rs:720 'require_name(E19_915)' -> 'require_name(E99_916)' RED 1
+0 M82 19.916 src/directive.rs:735 'self.error(E19_916, [])' -> 'self.error(E99_916, [])' RED 6
+0 M83 99.938 src/directive.rs:742 'check_directive(cursor, E99_938)' -> 'check_directive(cursor, E99_916)' RED 2
+0 M84 20.924 src/directive.rs:805 'self.error(E20_924, [])' -> 'self.error(E99_916, [])' RED 1
+0 M86 19.924 src/directive.rs:863 'self.error(E19_924, [])' -> 'self.error(E99_916, [])' RED 1
+0 M87 19.917 src/directive.rs:891 'require_name(E19_917)' -> 'require_name(E99_916)' RED 2
+0 M88 20.925 src/directive.rs:905 'self.error(E20_925, [])' -> 'self.error(E99_916, [])' RED 1
+0 M90 19.918 src/directive.rs:922 'require_name(E19_918)' -> 'require_name(E99_916)' RED 1
+0 M91 19.919 src/directive.rs:935 'require_name(E19_919)' -> 'require_name(E99_916)' RED 2
+0 M92 20.935 src/directive.rs:970 'self.error(E20_935, [])' -> 'self.error(E99_916, [])' RED 1
+0 M94 19.904 src/directive.rs:1017 'require_name(E19_904)' -> 'require_name(E99_916)' RED 1
+0 M95 20.920 src/directive.rs:1032 'require_symbol(E20_920)' -> 'require_symbol(E99_916)' RED 1
+0 M96 99.944 src/directive.rs:1036 'self.error(E99_944, [])' -> 'self.error(E99_916, [])' RED 2
+0 M97 19.920 src/directive.rs:1051 'require_name(E19_920)' -> 'require_name(E99_916)' RED 1
+0 M98 19.921 src/directive.rs:1065 'require_name(E19_921)' -> 'require_name(E99_916)' RED 1
+0 M99 19.903 src/directive.rs:1100 'require_name(E19_903)' -> 'require_name(E99_916)' RED 1
+0 M101 99.939 src/directive.rs:1137 'check_directive(cursor, E99_939)' -> 'check_directive(cursor, E99_916)' RED 1
+batch 0 failed tests: ['the_interpret_only_errors_match_the_condition_objects_own_code', 'every_secondary_message_matches_the_oracle', 'every_message_the_parser_names_is_raised_by_a_corpus_row_or_recorded_as_unreached', 'every_program_the_oracle_refuses_to_translate_this_parser_rejects_the_same_way']
+1 M03 14.3 src/block.rs:413 'frame.index()' -> 'frame.parent.unwrap()' RED 1
+1 M14 10.2 src/block.rs:504 '[name, label, line]' -> '[label, name, line]' RED 4
+1 M15 10.3 src/block.rs:510 '[name, line]' -> '[line, name]' RED 3
+1 M20 47.3 src/block.rs:855 'b"ELSE"' -> 'b"MUT"' RED 2
+1 M23 47.2 src/block.rs:685 'name.to_vec()' -> 'b"MUT".to_vec()' RED 4
+1 M32 20.929 src/directive.rs:999 'name()' -> 'b"MUT".to_vec()' RED 1
+1 M34 19.925 src/directive.rs:812 'b"CLASS"' -> 'b"MUT"' RED 1
+1 M54 25.901 src/directive.rs:1119 'self.found(E25_901, Some(token))' -> 'self.error(E25_901, [b"MUT".to_vec()])' RED 1
+1 M58 20.916 src/directive.rs:333 'self.error(E20_916, [])' -> 'self.error(E99_916, [])' RED 1
+1 M59 99.916 src/directive.rs:339 'self.error(E99_916, [])' -> 'self.error(E20_916, [])' RED 2
+1 M65 19.908 src/directive.rs:402 'class_reference(E19_908)' -> 'class_reference(E99_916)' RED 1
+1 M75 19.905 src/directive.rs:609 'require_literal(E19_905)' -> 'require_literal(E99_916)' RED 1
+1 M76 20.926 src/directive.rs:623 'require_symbol(E20_926)' -> 'require_symbol(E99_916)' RED 1
+1 M85 20.924 src/directive.rs:825 'self.error(E20_924, [])' -> 'self.error(E99_916, [])' RED 1
+1 M89 20.925 src/directive.rs:908 'self.error(E20_925, [])' -> 'self.error(E99_916, [])' RED 1
+1 M93 20.935 src/directive.rs:973 'self.error(E20_935, [])' -> 'self.error(E99_916, [])' RED 1
+batch 1 failed tests: ['every_program_the_oracle_refuses_to_translate_this_parser_rejects_the_same_way', 'every_secondary_message_matches_the_oracle']
+2 M35 19.925 src/directive.rs:813 'b"ROUTINE"' -> 'b"MUT"' RED 1
+2 M100 19.905 src/directive.rs:1121 'require_literal(E19_905)' -> 'require_literal(E99_916)' RED 1
+batch 2 failed tests: ['every_secondary_message_matches_the_oracle', 'every_program_the_oracle_refuses_to_translate_this_parser_rejects_the_same_way']
+3 M36 19.925 src/directive.rs:814 'b"METHOD"' -> 'b"MUT"' RED 1
+batch 3 failed tests: ['every_secondary_message_matches_the_oracle']
+4 M37 19.925 src/directive.rs:816 'b"ATTRIBUTE"' -> 'b"MUT"' RED 1
+batch 4 failed tests: ['every_secondary_message_matches_the_oracle']
+5 M38 19.925 src/directive.rs:819 'b"CONSTANT"' -> 'b"MUT"' RED 1
+batch 5 failed tests: ['every_secondary_message_matches_the_oracle']
+9 M24 14.1 src/block.rs:364 'self.source.line_of(byte).to_string()' -> '(self.source.line_of(byte) + 1).to_string()' RED 5
+batch 9 failed tests: ['every_secondary_message_matches_the_oracle']

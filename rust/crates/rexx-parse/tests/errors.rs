@@ -148,8 +148,16 @@ fn cases() -> Vec<Case> {
     cases
 }
 
+/// Parses on a 512 MiB thread, as `tests/deep.rs` does, so that the nesting
+/// row reaches `MAX_EXPR_DEPTH` before the native stack ends.
 fn parse(program: &[u8]) -> Result<(), ParseError> {
-    parse_program(program.to_vec()).map(|_| ())
+    let program = program.to_vec();
+    std::thread::Builder::new()
+        .stack_size(512 * 1024 * 1024)
+        .spawn(move || parse_program(program).map(|_| ()))
+        .expect("spawns")
+        .join()
+        .expect("the parse does not panic")
 }
 
 // ---- the corpus decoder, asserted before anything relies on it ----
@@ -409,217 +417,9 @@ fn every_error_the_corpus_raises_renders_a_non_empty_message() {
     assert!(checked >= 567, "only {checked} messages were rendered");
 }
 
-/// The translation rows whose message this parser does not yet render as the
-/// oracle does, each named by its `program` field as the corpus spells it.
-const PENDING: &[&str] = &[
-    r#"::attribute a guarded unguarded\n"#,
-    r#"nop\n\nif 1 = 1 then nop\n\nlab:\n\nelse nop\n"#,
-    r#"nop\n\nnop\n\nif 1 = 1\n"#,
-    r#"::constant c 5 6\n"#,
-    r#"nop\n\nselect\n\ndo\n\nend\n\nend\n"#,
-    r#"::requires x DELEGATE\n"#,
-    r#"::attribute a class class\n"#,
-    r#"nop\n\nif 1 = 1 then nop\n\nelse\n"#,
-    r#"::requires x DIGITS\n"#,
-    r#"::requires x NOPROLOG\n"#,
-    r#"::class c LIBRARY\n"#,
-    r#"::attribute "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"\n"#,
-    r#"nop\n\nselect\n\nif 1 = 1 then nop\n\nend\n"#,
-    r#"do\n\nnop\n\nnop\n\nnop\n"#,
-    r#"::options digits "9.5"\n"#,
-    r#"nop\nnop\nif 1 = 1\n"#,
-    r#"::requires x FUZZ\n"#,
-    r#"::attribute 3\n"#,
-    r#"nop\n\nif 1 = 1 then\n"#,
-    r#"::attribute .a\n"#,
-    r#"::options numeric syntax\n"#,
-    r#"::requires x UNGUARDED\n"#,
-    r#"::method m attribute external "junk"\n"#,
-    r#"::class c junk\n"#,
-    r#"::method m protected unprotected\n"#,
-    r#"::attribute a get set\n"#,
-    r#"::requires x UNPROTECTED\n"#,
-    r#"::method m abstract abstract\n"#,
-    r#"::options lostdigits error\n"#,
-    r#"::attribute "1e+5"\n"#,
-    r#"::requires x TRACE\n"#,
-    r#"::options novalue\n"#,
-    r#"::requires x FORM\n"#,
-    r#"nop\n\nloop forever\n\nlab:\n\nnop\n\nend\n"#,
-    r#"::annotate package "a" 1\n"#,
-    r#"nop\n\ndo\n\nnop\n"#,
-    r#"::requires x PACKAGE\n"#,
-    r#"::annotate package a *\n"#,
-    r#"::resource d junk\nbody\n::END\n"#,
-    r#"::class c\n\n\n\n::method m junk\n"#,
-    r#"::routine r public private\n"#,
-    r#"nop\n\ndo\n\nnop\n\nend 1\n"#,
-    r#"::method m class class\n"#,
-    r#"::requires x CONDITION\n"#,
-    r#"::method m delegate 5\n  return 1\n"#,
-    r#"nop\n\nif 1 = 1 then\n\nlab:\n\nnop\n"#,
-    r#"::requires x namespace a namespace b\n"#,
-    r#"::attribute 3\n  return 1\n"#,
-    r#"::requires x METACLASS\n"#,
-    r#"::class c mixinclass object subclass object\n"#,
-    r#"::requires x EXTERNAL\n"#,
-    r#"nop\n\nselect\n\nwhen 1 = 1\n\n::routine r\nnop\n"#,
-    r#"::options junk\n"#,
-    r#"::options digits 1234567890123456789\n"#,
-    r#"nop\n\nselect case 1\n\nnop\n\nend\n"#,
-    r#"::attribute 3 abstract\n"#,
-    r#"::annotate class\n"#,
-    r#"::requires x library namespace ns\n"#,
-    r#"::resource d "end" x\nbody\n::END\n"#,
-    r#"::class c abstract abstract\n"#,
-    r#"::attribute a delegate 5\n"#,
-    r#"::requires x ERROR\n"#,
-    r#"::requires x METHOD\n"#,
-    r#"nop\n\nselect\n\nwhen 1 = 1 then nop\n\nend 1\n"#,
-    r#"nop\n\nselect case 1\n\notherwise nop\n\nend\n"#,
-    r#"nop\n\nselect case 1\n\nwhen 1 then nop\n"#,
-    r#"::requires x FAILURE\n"#,
-    r#"::class c public public\n"#,
-    r#"::constant c (1+2\n"#,
-    r#"::requires x CONSTANT\n"#,
-    r#"::requires x GUARDED\n"#,
-    r#"::class c NAMESPACE\n"#,
-    r#"nop\n\ndo i = 1 to 3\n\nnop\n\nend j\n"#,
-    r#"nop\n\nselect case 1\n\nwhen 1 then nop\n\nend 1\n"#,
-    r#"nop\n\ndo label a\n\nnop\n\nend b\n"#,
-    r#"nop\n\nselect\n\nend\n"#,
-    r#"::method m delegate .p\n"#,
-    r#"::attribute a get get\n"#,
-    r#"nop\n\nif 1 = 1\n\n::routine r\nnop\n"#,
-    r#"::routine r external "LIBRARY x" external "LIBRARY y"\n"#,
-    r#"::method m subclass object\n"#,
-    r#"select\nwhen 1 = 1\nthen: nop\nend"#,
-    r#"::method m external "junk"\n  return 1\n"#,
-    r#"::class c metaclass class metaclass class\n"#,
-    r#"::method .a attribute\n"#,
-    r#"nop\n\ndo i over x\n\nnop\n"#,
-    r#"::options digits "1e-2"\n"#,
-    r#"::attribute a get external "junk"\n"#,
-    r#"nop\n\nselect\n\nwhen 1 = 1 then nop\n\notherwise\n"#,
-    r#"nop\n\ndo 3\n\nnop\n"#,
-    r#"::requires x PROLOG\n"#,
-    r#"::requires x library library\n"#,
-    r#"nop\n\nselect label a\n\nwhen 1 = 1 then nop\n\notherwise nop\n\nend b\n"#,
-    r#"::attribute "a-b"\n"#,
-    r#"::options fuzz "-1"\n"#,
-    r#"::attribute "a b"\n"#,
-    r#"::attribute a inherit x\n"#,
-    r#"::routine r package\n"#,
-    r#"::requires x SUBCLASS\n"#,
-    r#"::method m guarded unguarded\n"#,
-    r#"::attribute 3 external "LIBRARY x"\n"#,
-    r#"::class c guarded\n"#,
-    r#"nop\n\nif 1 = 1 then\n\n::routine r\n"#,
-    r#"nop\n\ndo while 1\n\nnop\n"#,
-    r#"::requires x SET\n"#,
-    r#"nop\n\nloop\n\nnop\n"#,
-    r#"::class c public private\n"#,
-    r#"::routine r external "junk"\n  return 1\n"#,
-    r#"nop\nif 1 = 1,\n   1 = 1\n"#,
-    r#"::attribute 3 get\n"#,
-    r#"::method m delegate p delegate q\n"#,
-    r#"nop\n\ndo\n\n::routine r\n"#,
-    r#"nop\n\ndo\n\nlab:\n\nnop\n\nend\n"#,
-    r#"::requires x END\n"#,
-    r#"::method m junk\n"#,
-    r#"::method m abstract external "LIBRARY x"\n"#,
-    r#"::options failure error\n"#,
-    r#"::options "digits" 9\n"#,
-    r#"::requires x junk\n"#,
-    r#"::method m external "LIBRARY x" abstract\n"#,
-    r#"::options all error\n"#,
-    r#"::requires x LOSTDIGITS\n"#,
-    r#"::annotate public k 1\n"#,
-    r#"::class c private public\n"#,
-    r#"nop\n\nselect\n\nwhen 1 = 1 then nop\n\notherwise nop\n"#,
-    r#"::method m attribute attribute\n"#,
-    r#"::method m external "junk"\n"#,
-    r#"::requires x CLASS\n"#,
-    r#"::attribute a get delegate 5\n"#,
-    r#"::requires x MIXINCLASS\n"#,
-    r#"::options trace zzz\n"#,
-    r#"::resource d public x\nbody\n::END\n"#,
-    r#"::resource d end "x" extra\nbody\nx\n"#,
-    r#"::method m external "libraryx x"\n"#,
-    r#"::attribute a abstract delegate p\n"#,
-    r#"::method m external "REGISTERED x"\n"#,
-    r#"::class c subclass object mixinclass object\n"#,
-    r#"::class c subclass object subclass object\n"#,
-    r#"nop\n\nselect\n\nlab:\n\nwhen 1 = 1 then nop\n\nend\n"#,
-    r#"::requires x PRIVATE\n"#,
-    r#"nop\n\nselect\n\nnop\n\nend\n"#,
-    r#"::annotate package a -abc\n"#,
-    r#"::options error error\n"#,
-    r#"::method 3 attribute\n"#,
-    r#"::requires x ABSTRACT\n"#,
-    r#"::requires x NOSTRING\n"#,
-    r#"::method m external "LIBRARY a b c"\n"#,
-    r#"nop\n\nselect label a\n\nwhen 1 = 1 then nop\n\nend b\n"#,
-    r#"::requires x INHERIT\n"#,
-    r#"::class c, public\n"#,
-    r#"::requires x ALL\n"#,
-    r#"nop\n\ndo label a\n\nnop\n"#,
-    r#"if 1 = 1\nthen: nop"#,
-    r#"::method m external "LIBRARY"\n"#,
-    r#"::class c package\n"#,
-    r#"::requires x SYNTAX\n"#,
-    r#"::requires x NOVALUE\n"#,
-    r#"::method m external ""\n"#,
-    r#"::annotate package a -5x\n"#,
-    r#"::requires x PUBLIC\n"#,
-    r#"::routine r junk\n"#,
-    r#"nop\n\nselect\n\nwhen 1 = 1 then nop\n\notherwise\n\nlab:\n\nnop\n\nend\n"#,
-    r#"nop\n\nselect\n\nelse nop\n\nend\n"#,
-    r#"::method m delegate p abstract\n"#,
-    r#"::options novalue "syntax"\n"#,
-    r#"::options digits abc\n"#,
-    r#"::method m delegate 5\n"#,
-    r#"::options fuzz abc\n"#,
-    r#"::attribute a junk\n"#,
-    r#"::requires x PROTECTED\n"#,
-    r#"nop\n\nloop forever\n\nnop\n\nend 1\n"#,
-    r#"::options digits 0\n"#,
-    r#"::requires x namespace ns library\n"#,
-    r#"::requires x ROUTINE\n"#,
-    r#"::attribute a set get\n"#,
-    r#"::requires x NOTREADY\n"#,
-    r#"::routine r external "REGISTERED a b c"\n"#,
-    r#"::options nostring error\n"#,
-    r#"::requires x ATTRIBUTE\n"#,
-    r#"::options form value\n"#,
-    r#"do\nnop\n::routine r\nend\n"#,
-    r#"::options digits 1E18\n"#,
-    r#"nop\n\nselect\n\nwhen 1 = 1 then nop\n"#,
-    r#"::options digits ""\n"#,
-    r#"::options notready error\n"#,
-    r#"::annotate junk k 1\n"#,
-    r#"::attribute a public private\n"#,
-    r#"::routine r external "REGISTERED"\n"#,
-    r#"::attribute a protected unprotected\n"#,
-    r#"::requires x GET\n"#,
-    r#"::requires x NUMERIC\n"#,
-    r#"nop\n\ndo 3\n\nnop\n\nend 1\n"#,
-    r#"::attribute a get delegate 5\n  return 1\n"#,
-    r#"::routine r public public\n"#,
-    r#"::routine r class\n"#,
-    r#"::attribute a abstract abstract\n"#,
-    r#"if 1 = 1"#,
-    r#"nop\n\nselect\n\nwhen 1 = 1 then\n"#,
-    r#"nop\n\nif 1 = 1\n\nthen\n"#,
-    r#"::attribute "3"\n"#,
-    r#"nop\n\nloop forever\n\nnop\n"#,
-    r#"::method m public private\n"#,
-    r#"nop\n\nselect\n\nwhen 1 = 1 then nop\n\nlab:\n\nwhen 2 = 2 then nop\n\nend\n"#,
-    r#"say "main"\n::routine r\nif 1 = 1\n"#,
-];
-
 /// The translation rows whose rendered message is not the oracle's, keyed by
-/// their `program` field, each with what it renders.
+/// their `program` field, each with what it renders. The recorded deviations
+/// are left out, and their own tests pin what they render.
 fn message_mismatches() -> std::collections::BTreeMap<String, String> {
     let mut wrong = std::collections::BTreeMap::new();
     for case in cases() {
@@ -634,6 +434,7 @@ fn message_mismatches() -> std::collections::BTreeMap<String, String> {
         let got = match parse(&case.program) {
             Ok(()) => b"<accepted>".to_vec(),
             Err(error) if do_subkey_deviation(Some((error.code, error.sub)), pair) => continue,
+            Err(error) if label_colon_deviation(Some((error.code, error.sub)), pair) => continue,
             Err(error) => error.message(),
         };
         if got != want {
@@ -655,32 +456,14 @@ fn message_mismatches() -> std::collections::BTreeMap<String, String> {
 #[test]
 fn every_secondary_message_matches_the_oracle() {
     let wrong = message_mismatches();
-    let unexpected: Vec<&String> = wrong
-        .iter()
-        .filter(|(source, _)| !PENDING.contains(&source.as_str()))
-        .map(|(_, shown)| shown)
-        .collect();
     assert!(
-        unexpected.is_empty(),
+        wrong.is_empty(),
         "{}",
-        unexpected
-            .iter()
-            .map(|shown| shown.as_str())
+        wrong
+            .values()
+            .map(String::as_str)
             .collect::<Vec<_>>()
             .join("\n")
-    );
-}
-
-#[test]
-fn every_pending_message_row_still_differs_from_the_oracle() {
-    let wrong = message_mismatches();
-    let stale: Vec<&&str> = PENDING
-        .iter()
-        .filter(|source| !wrong.contains_key(**source))
-        .collect();
-    assert!(
-        stale.is_empty(),
-        "PENDING entries that now match: {stale:?}"
     );
 }
 
@@ -726,18 +509,47 @@ fn the_label_colon_rule_does_not_fire_for_a_near_miss() {
 
 #[test]
 fn the_label_colon_rule_covers_exactly_the_two_corpus_rows_it_was_written_for() {
-    let cases = cases();
-    let count = cases
-        .iter()
-        .filter(|case| {
-            case.class == Class::Translation
-                && label_colon_deviation(
-                    parse(&case.program).err().map(|e| (e.code, e.sub)),
-                    case.error.expect("a translation error has a number"),
-                )
-        })
-        .count();
-    assert_eq!(count, 2, "the label-colon deviation grew");
+    let mut covered = Vec::new();
+    for case in cases() {
+        if case.class != Class::Translation {
+            continue;
+        }
+        let oracle = case.error.expect("a translation error has a number");
+        let Err(error) = parse(&case.program) else {
+            continue;
+        };
+        if !label_colon_deviation(Some((error.code, error.sub)), oracle) {
+            continue;
+        }
+        // Ours names the IF or WHEN, the oracle the leftover colon.
+        assert_ne!(
+            Some(error.message()),
+            case.message,
+            "row {}: the oracle now agrees",
+            case.row
+        );
+        assert_eq!(
+            case.message.as_deref(),
+            Some(&br#"Incorrect expression detected at ":"."#[..]),
+            "row {}",
+            case.row
+        );
+        covered.push((case.source, error.message()));
+    }
+    assert_eq!(
+        covered,
+        [
+            (
+                r#"select\nwhen 1 = 1\nthen: nop\nend"#.to_string(),
+                b"WHEN instruction on line 2 requires matching THEN clause.".to_vec()
+            ),
+            (
+                r#"if 1 = 1\nthen: nop"#.to_string(),
+                b"IF instruction on line 1 requires matching THEN clause.".to_vec()
+            ),
+        ],
+        "the label-colon deviation changed"
+    );
 }
 
 /// Whether `(ours, oracle)` is Deviation 38: a `TO` or `BY` after a `DO OVER`
@@ -869,23 +681,25 @@ fn no_corpus_row_holds_the_eager_scan_shape() {
 
 // ---- INTERPRET, which the corpus structurally cannot hold ----
 
+/// The errors only `INTERPRET` text raises, each with a fragment that raises
+/// it. `rexxc` compiles a FILE, so there is no way to point it at an
+/// `INTERPRET` string. A `signal on syntax` trap around an `interpret` is what
+/// exposes these, and `condition('o')~code` is the number. Measured under
+/// `build/bin/rexx`, one file each.
+const INTERPRET_ONLY: &[(&str, (u16, u16))] = &[
+    ("expose a", (99, 908)),
+    ("guard on", (99, 912)),
+    ("use local a", (99, 915)),
+    ("forward to 1", (99, 923)),
+    ("reply 1", (99, 924)),
+    ("::routine r", (99, 914)),
+    ("x: nop", (47, 1)),
+];
+
 #[test]
 fn the_interpret_only_errors_match_the_condition_objects_own_code() {
-    // `rexxc` compiles a FILE, so there is no way to point it at an `INTERPRET`
-    // string. A `signal on syntax` trap around an `interpret` is what exposes
-    // these, and `condition('o')~code` is the number. Measured under
-    // `build/bin/rexx`, all seven, one file each:
-    let cases: &[(&str, (u16, u16))] = &[
-        ("expose a", (99, 908)),
-        ("guard on", (99, 912)),
-        ("use local a", (99, 915)),
-        ("forward to 1", (99, 923)),
-        ("reply 1", (99, 924)),
-        ("::routine r", (99, 914)),
-        ("x: nop", (47, 1)),
-    ];
     let mut wrong = Vec::new();
-    for (fragment, expected) in cases {
+    for (fragment, expected) in INTERPRET_ONLY {
         match parse_interpret(fragment.as_bytes().to_vec()) {
             Ok(_) => wrong.push(format!("{fragment:?} parsed, expected {expected:?}")),
             Err(e) if (e.code, e.sub) != *expected => {
@@ -925,6 +739,288 @@ fn an_interpret_fragment_that_is_legal_is_still_accepted() {
     // being INTERPRET-specific rather than for being unparseable.
     parse_interpret(b"say 1".to_vec()).expect("a plain SAY interprets");
     parse_interpret(b"a = 1; say a".to_vec()).expect("two clauses interpret");
+}
+
+// ---- every message the parser raises, reached ----
+
+/// Why no corpus row reaches a message the parser names.
+#[derive(Debug)]
+enum Unreached {
+    /// Only `INTERPRET` text raises it, so it is in [`INTERPRET_ONLY`].
+    InterpretOnly,
+    /// No program reaches it. `oracle_site` is the oracle's raise site as
+    /// `path:line` under `interpreter/`, and `probes` the programs tried.
+    NoProgram {
+        oracle_site: &'static str,
+        probes: &'static [&'static [u8]],
+    },
+}
+
+/// The messages the parser names that no corpus row raises, with why.
+const UNREACHED_BY_FILE: &[((u16, u16), Unreached)] = &[
+    ((47, 1), Unreached::InterpretOnly),
+    ((99, 908), Unreached::InterpretOnly),
+    ((99, 912), Unreached::InterpretOnly),
+    ((99, 914), Unreached::InterpretOnly),
+    ((99, 915), Unreached::InterpretOnly),
+    ((99, 923), Unreached::InterpretOnly),
+    ((99, 924), Unreached::InterpretOnly),
+    (
+        (27, 903),
+        Unreached::NoProgram {
+            oracle_site: "parser/InstructionParser.cpp:1650",
+            probes: &[
+                b"do with\nend\n",
+                b"do with index\nend\n",
+                b"do with item i\nend\n",
+                b"do with over x\nend\n",
+                b"do with x over y\nend\n",
+            ],
+        },
+    ),
+    (
+        (37, 1),
+        Unreached::NoProgram {
+            oracle_site: "parser/LanguageParser.cpp:3882",
+            probes: &[
+                b"x = ,\n",
+                b"x = 1 + ,\n",
+                b"x = (1,)\n",
+                b"x = (,1)\n",
+                b"say f(1,,2)\n",
+                b"x = a[,]\n",
+            ],
+        },
+    ),
+    (
+        (49, 2),
+        Unreached::NoProgram {
+            oracle_site: "parser/InstructionParser.cpp:453",
+            probes: &[
+                b"do i = 1 to 2 by 1 to 3\nend\n",
+                b"do i = 1 for 2 while 1 until 2\nend\n",
+                b"do i over x for 1 to 2\nend\n",
+                b"do with index i over x for 1 by 2\nend\n",
+                b"do forever while 1 until 2\nend\n",
+                b"loop 3 while 1 until 2\nend\n",
+            ],
+        },
+    ),
+    (
+        (89, 2),
+        Unreached::NoProgram {
+            oracle_site: "parser/InstructionParser.cpp:3421",
+            probes: &[
+                b"parse arg .a\n",
+                b"parse arg 5\n",
+                b"parse var x .a\n",
+                b"parse value 1 with .\n",
+                b"parse arg a.b. c\n",
+            ],
+        },
+    ),
+];
+
+/// Every `E{major}_{sub}` constant the parser's own source names, outside its
+/// tests, with the first file naming it.
+fn messages_named_by_the_parser() -> std::collections::BTreeMap<(u16, u16), PathBuf> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut files = Vec::new();
+    let mut test_modules = Vec::new();
+    let mut stack = vec![root];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).expect("src/ is readable") {
+            let path = entry.expect("a readable directory entry").path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+                files.push(path);
+            }
+        }
+    }
+    files.sort();
+    // A `#[cfg(test)] mod name;` makes `name.rs` beside its parent's stem a
+    // test file, whatever it is called.
+    for path in &files {
+        let text = std::fs::read_to_string(path).expect("a readable source file");
+        let lines: Vec<&str> = text.lines().collect();
+        for pair in lines.windows(2) {
+            if pair[0].trim() == "#[cfg(test)]"
+                && let Some(name) = pair[1]
+                    .trim()
+                    .strip_prefix("mod ")
+                    .and_then(|rest| rest.strip_suffix(';'))
+            {
+                test_modules.push(path.with_extension("").join(format!("{name}.rs")));
+            }
+        }
+    }
+    let mut named = std::collections::BTreeMap::new();
+    for path in &files {
+        if path.file_name().and_then(|n| n.to_str()) == Some("tests.rs")
+            || test_modules.contains(path)
+        {
+            continue;
+        }
+        let text = std::fs::read_to_string(path).expect("a readable source file");
+        let mut skip_until: Option<String> = None;
+        let mut after_cfg_test = false;
+        for line in text.lines() {
+            if let Some(close) = &skip_until {
+                if line == close {
+                    skip_until = None;
+                }
+                continue;
+            }
+            // An inline `#[cfg(test)] mod name {` runs to the `}` at its own
+            // indentation.
+            if after_cfg_test && line.trim_start().starts_with("mod ") && line.ends_with('{') {
+                let indent = line.len() - line.trim_start().len();
+                skip_until = Some(format!("{}}}", " ".repeat(indent)));
+                after_cfg_test = false;
+                continue;
+            }
+            after_cfg_test = line.trim() == "#[cfg(test)]";
+            let code = line.split("//").next().unwrap_or("");
+            let bytes = code.as_bytes();
+            for (at, _) in code.match_indices('E') {
+                if at > 0 && (bytes[at - 1].is_ascii_alphanumeric() || bytes[at - 1] == b'_') {
+                    continue;
+                }
+                let rest = &code[at + 1..];
+                let major_len = rest.bytes().take_while(u8::is_ascii_digit).count();
+                if major_len == 0 || rest.as_bytes().get(major_len) != Some(&b'_') {
+                    continue;
+                }
+                let tail = &rest[major_len + 1..];
+                let sub_len = tail.bytes().take_while(u8::is_ascii_digit).count();
+                let follows = tail.as_bytes().get(sub_len);
+                if sub_len == 0 || follows.is_some_and(|b| b.is_ascii_alphanumeric() || *b == b'_')
+                {
+                    continue;
+                }
+                let pair = (
+                    rest[..major_len].parse().expect("a major number"),
+                    tail[..sub_len].parse().expect("a sub-number"),
+                );
+                named.entry(pair).or_insert_with(|| path.clone());
+            }
+        }
+    }
+    named
+}
+
+#[test]
+fn the_scan_finds_the_messages_it_was_written_against() {
+    let named = messages_named_by_the_parser();
+    // One from each raising file, and none from a test file only.
+    for pair in [(13, 1), (35, 1), (14, 3), (25, 901), (99, 914), (36, 902)] {
+        assert!(named.contains_key(&pair), "{pair:?} not found");
+    }
+    assert!(
+        !named.contains_key(&(99, 943)) || named[&(99, 943)].ends_with("scanner.rs"),
+        "a constant is attributed to a test file"
+    );
+}
+
+#[test]
+fn every_message_the_parser_names_is_raised_by_a_corpus_row_or_recorded_as_unreached() {
+    let named = messages_named_by_the_parser();
+    let mut raised = std::collections::BTreeSet::new();
+    for case in cases() {
+        if case.class != Class::Translation {
+            continue;
+        }
+        if let Err(error) = parse(&case.program)
+            && Some((error.code, error.sub)) == case.error
+        {
+            raised.insert((error.code, error.sub));
+        }
+    }
+    let mut missing = Vec::new();
+    for (pair, path) in &named {
+        let recorded = UNREACHED_BY_FILE.iter().any(|(p, _)| p == pair);
+        if raised.contains(pair) {
+            assert!(
+                !recorded,
+                "{pair:?} is raised by a corpus row and also recorded"
+            );
+        } else if !recorded {
+            missing.push(format!("{}.{} ({})", pair.0, pair.1, path.display()));
+        }
+    }
+    assert!(
+        missing.is_empty(),
+        "named by the parser, raised by no corpus row, and not recorded:\n{}",
+        missing.join("\n")
+    );
+    for (pair, _) in UNREACHED_BY_FILE {
+        assert!(
+            named.contains_key(pair),
+            "{pair:?} is recorded but the parser no longer names it"
+        );
+    }
+}
+
+/// The oracle's symbolic name for `pair`, from `RexxErrorCodes.h`.
+fn oracle_name(pair: (u16, u16)) -> String {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../interpreter/messages/RexxErrorCodes.h");
+    let text = std::fs::read_to_string(&path).expect("RexxErrorCodes.h is readable");
+    let number = format!("= {},", u32::from(pair.0) * 1000 + u32::from(pair.1));
+    text.lines()
+        .find(|line| line.trim_start().starts_with("Error_") && line.contains(&number))
+        .and_then(|line| line.split_whitespace().next())
+        .unwrap_or_else(|| panic!("{pair:?} has no symbolic name"))
+        .to_string()
+}
+
+#[test]
+fn every_unreached_reason_still_holds() {
+    let interpreter = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../interpreter");
+    let mut seen = std::collections::BTreeSet::new();
+    for (pair, reason) in UNREACHED_BY_FILE {
+        assert!(seen.insert(*pair), "{pair:?} is recorded twice");
+        match reason {
+            Unreached::InterpretOnly => assert!(
+                INTERPRET_ONLY.iter().any(|(_, p)| p == pair),
+                "{pair:?} is recorded as INTERPRET-only but INTERPRET_ONLY does not hold it"
+            ),
+            Unreached::NoProgram {
+                oracle_site,
+                probes,
+            } => {
+                let (file, line) = oracle_site
+                    .rsplit_once(':')
+                    .unwrap_or_else(|| panic!("{pair:?}: {oracle_site:?} is not path:line"));
+                let line: usize = line
+                    .parse()
+                    .unwrap_or_else(|e| panic!("{pair:?}: {oracle_site:?}: {e}"));
+                let text = std::fs::read_to_string(interpreter.join(file))
+                    .unwrap_or_else(|e| panic!("{pair:?}: {file}: {e}"));
+                let cited = text
+                    .lines()
+                    .nth(line - 1)
+                    .unwrap_or_else(|| panic!("{pair:?}: {file} has no line {line}"));
+                let name = oracle_name(*pair);
+                assert!(
+                    cited.contains(&name),
+                    "{pair:?}: {oracle_site} does not raise {name}: {cited:?}"
+                );
+                assert!(!probes.is_empty(), "{pair:?}: no probe was recorded");
+                for probe in *probes {
+                    if let Err(error) = parse(probe) {
+                        assert_ne!(
+                            (error.code, error.sub),
+                            *pair,
+                            "{pair:?} is reached by {:?}",
+                            String::from_utf8_lossy(probe)
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
 
 // ---- completeness over the files that are in the tree already ----

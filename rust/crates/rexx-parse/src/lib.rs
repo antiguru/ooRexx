@@ -52,6 +52,8 @@ pub use token::{
     TokenKind,
 };
 
+use rexx_inventory::errors::E99_914;
+
 use crate::block::translate_block;
 use crate::clause::{ClauseCursor, split_clauses};
 use crate::directive::parse_directive;
@@ -198,7 +200,7 @@ fn translate(
     if let Some(clause) = cursor.peek()
         && ctx.source.kind() == SourceKind::Interpret
     {
-        return Err(ParseError::new(99, 914, clause.span.start));
+        return Err(ParseError::raise(E99_914, clause.span.start, []));
     }
 
     let mut directives = Vec::new();

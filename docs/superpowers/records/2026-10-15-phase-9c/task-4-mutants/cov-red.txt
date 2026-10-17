@@ -1,0 +1,23 @@
+   Compiling rexx-parse v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse)
+    Finished `test` profile [optimized + debuginfo] target(s) in 4.20s
+     Running tests/errors.rs (target/debug/deps/errors-161d3c3d5f1157ff)
+
+running 1 test
+test every_message_the_parser_names_is_raised_by_a_corpus_row_or_recorded_as_unreached ... FAILED
+
+failures:
+
+---- every_message_the_parser_names_is_raised_by_a_corpus_row_or_recorded_as_unreached stdout ----
+
+thread 'every_message_the_parser_names_is_raised_by_a_corpus_row_or_recorded_as_unreached' (2037842) panicked at crates/rexx-parse/tests/errors.rs:951:5:
+named by the parser, raised by no corpus row, and not recorded:
+25.2 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/src/instruction.rs)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    every_message_the_parser_names_is_raised_by_a_corpus_row_or_recorded_as_unreached
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 34 filtered out; finished in 0.05s
+
+error: test failed, to rerun pass `-p rexx-parse --test errors`

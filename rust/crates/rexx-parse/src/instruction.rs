@@ -173,11 +173,6 @@ pub(crate) fn missing_then(which: PendingThen) -> Msg<1> {
     }
 }
 
-/// The sub-number of [`missing_then`].
-pub(crate) fn missing_then_sub(which: PendingThen) -> u16 {
-    missing_then(which).code().1
-}
-
 /// Parses the clause the cursor is sitting on, advancing it.
 pub(crate) fn parse_instruction(
     ctx: &ParseCtx,

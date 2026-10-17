@@ -2669,9 +2669,21 @@ mod tests {
     /// exit code.
     #[test]
     fn a_parse_error_becomes_the_condition_the_oracle_raises() {
-        for (code, sub, rc) in [(27u16, 901u16, 229i32), (35, 929, 221)] {
-            let raised: Raised = (&ParseError::new(code, sub, 0)).into();
-            assert_eq!((raised.number, raised.sub), (code, sub));
+        let cases = [
+            (
+                ParseError::raise(rexx_inventory::errors::E27_901, 0, [b"TO".to_vec()]),
+                (27, 901),
+                229,
+            ),
+            (
+                ParseError::raise(rexx_inventory::errors::E35_929, 0, []),
+                (35, 929),
+                221,
+            ),
+        ];
+        for (error, code, rc) in cases {
+            let raised: Raised = (&error).into();
+            assert_eq!((raised.number, raised.sub), code);
             assert_eq!(raised.exit_code(), rc);
         }
     }

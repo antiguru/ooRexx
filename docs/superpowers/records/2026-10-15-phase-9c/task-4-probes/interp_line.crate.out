@@ -1,0 +1,7 @@
+36.901 12 | Left parenthesis "(" in position 5 on line 1 requires a corresponding right parenthesis ")".
+36.901 12 | Left parenthesis "(" in position 15 on line 1 requires a corresponding right parenthesis ")".
+18.1 12 | IF instruction on line 1 requires matching THEN clause.
+13.1 12 | Incorrect character in program "
+" ('0A'X).
+13.1 12 | Incorrect character in program "
+" ('0A'X).

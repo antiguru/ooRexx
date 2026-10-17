@@ -13,9 +13,15 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use rexx_inventory::errors::{
+    E7_1, E7_2, E8_2, E9_2, E10_1, E10_2, E10_3, E10_4, E10_7, E14_1, E14_2, E14_3, E14_4, E14_5,
+    E14_901, E47_2, E47_3, E47_4, Msg,
+};
+
+use crate::ProgramSource;
 use crate::ast::{CodeBody, EndStyle, EndTarget, Instruction, InstructionKind, LoopKind};
-use crate::clause::ClauseCursor;
-use crate::instruction::{missing_then_sub, parse_instruction};
+use crate::clause::{ClauseCursor, PendingThen};
+use crate::instruction::{missing_then, parse_instruction};
 use crate::token::{ParseCtx, ParseError, SymbolId, SymbolTable, Tag};
 
 mod references;
@@ -107,6 +113,8 @@ pub(crate) struct Block<'a> {
     /// Held so that a variable slot's `SymbolId` can be resolved to the name
     /// `referenced` is keyed by.
     symbols: &'a SymbolTable,
+    /// Held so that an error can name the line an instruction starts on.
+    source: &'a ProgramSource,
     /// The chain, in `addClause` order, which is why index order is the chain.
     instructions: Vec<Instruction>,
     labels: BTreeMap<Box<[u8]>, usize>,
@@ -128,9 +136,10 @@ pub(crate) struct Block<'a> {
 }
 
 impl<'a> Block<'a> {
-    fn new(symbols: &'a SymbolTable) -> Self {
+    fn new(symbols: &'a SymbolTable, source: &'a ProgramSource) -> Self {
         Block {
             symbols,
+            source,
             instructions: Vec::new(),
             labels: BTreeMap::new(),
             // `pushDo(instruction)` on the dummy first instruction, which is
@@ -349,41 +358,75 @@ impl<'a> Block<'a> {
             .expect("an unclosed block was itself added, so the chain is not empty")
     }
 
+    /// The line the instruction at `index` starts on, as an insert.
+    fn line_insert(&self, index: usize) -> Vec<u8> {
+        let byte = self.instructions[index].clause_span.start;
+        self.source.line_of(byte).to_string().into_bytes()
+    }
+
+    /// `msg` reported against `byte`, naming the line the instruction at
+    /// `index` starts on (`errorLine`, `LanguageParser.cpp:4101`).
+    #[cold]
+    #[inline(never)]
+    fn error_line(&self, msg: Msg<1>, byte: usize, index: usize) -> ParseError {
+        ParseError::raise(msg, byte, [self.line_insert(index)])
+    }
+
+    /// The missing-`THEN` error at the end of the body, reported against
+    /// `byte` and naming the line of the `IF` or `WHEN` starting at `opener`.
+    #[cold]
+    #[inline(never)]
+    fn then_expected(&self, which: PendingThen, opener: usize, byte: usize) -> ParseError {
+        let line = self.source.line_of(opener).to_string().into_bytes();
+        ParseError::raise(missing_then(which), byte, [line])
+    }
+
     /// `blockError` (`LanguageParser.cpp:4180`): an unclosed block at the end of
-    /// the body, with one number per block kind, echoing the last instruction.
-    /// A label echoes its whole clause, and so does a THEN the source ends
-    /// after, whose error is the one `nextClause` raises there.
-    fn block_error(&self, kind: Control, at_end: bool) -> ParseError {
-        let sub = match kind {
+    /// the body, with one number per block kind, echoing the last instruction
+    /// and naming the line of the unclosed one. A label echoes its whole
+    /// clause, and so does a THEN the source ends after, whose error is the one
+    /// `nextClause` raises there.
+    #[cold]
+    #[inline(never)]
+    fn block_error(&self, frame: Frame, at_end: bool) -> ParseError {
+        let (msg, named) = match frame.kind {
             // `Error_Incomplete_do_do`. Measured: `do label a` / `nop` is 14.1
             // too, so a LABEL does not move it to the loop number.
-            Control::Do => 1,
+            Control::Do => (E14_1, frame.index()),
             // `Error_Incomplete_do_select`, for both SELECT spellings.
-            Control::Select | Control::SelectCase => 2,
-            // `Error_Incomplete_do_then`. Reached here rather than at the C++'s
-            // own check, which fires from the failed `nextClause()` right after
-            // the THEN (`LanguageParser.cpp:1370`). The reported line comes out
-            // the same either way, because that check reports against the clause
-            // holding the THEN and this reports against the THEN instruction,
-            // whose span is that keyword: measured, `if 1 = 1` / blank / `then`
-            // at end of file reports line 5 and substitutes line 3.
-            Control::IfThen | Control::WhenThen => 3,
+            Control::Select | Control::SelectCase => (E14_2, frame.index()),
+            // `Error_Incomplete_do_then`. A THEN the source ends after is the
+            // C++'s own check, which fires from the failed `nextClause()` right
+            // after the THEN (`LanguageParser.cpp:1371`, `:1396`) and names the
+            // IF or WHEN. It reports against the clause holding the THEN, and
+            // this against the THEN instruction, whose span is that keyword, so
+            // the reported line is the same: measured, `if 1 = 1` / blank /
+            // `then` at end of file reports line 5 and names line 3. Anything
+            // else after the THEN, a directive, reaches `blockError`, which
+            // names the THEN.
+            Control::IfThen | Control::WhenThen if at_end => (
+                E14_3,
+                frame
+                    .parent
+                    .expect("a THEN frame carries the IF or WHEN it belongs to"),
+            ),
+            Control::IfThen | Control::WhenThen => (E14_3, frame.index()),
             // `Error_Incomplete_do_else`.
-            Control::Else => 4,
+            Control::Else => (E14_4, frame.index()),
             // `Error_Incomplete_do_loop`. Measured for `do while 1`, `do 3`,
             // `loop`, `loop forever` and `do i over x`.
-            Control::Loop => 5,
+            Control::Loop => (E14_5, frame.index()),
             // `Error_Incomplete_do_otherwise`, whose sub-number is 901 and not
             // 6. Measured, not derived from the position in the table.
-            Control::Otherwise => 901,
+            Control::Otherwise => (E14_901, frame.index()),
             Control::First | Control::EndThen | Control::EndWhen => {
                 unreachable!("neither First nor a branch end is an unclosed block")
             }
         };
         let last = self.last_instruction();
-        let error = ParseError::new(14, sub, last.clause_span.start);
+        let error = self.error_line(msg, last.clause_span.start, named);
         let whole = matches!(last.kind, InstructionKind::Label { .. })
-            || (at_end && matches!(kind, Control::IfThen | Control::WhenThen));
+            || (at_end && matches!(frame.kind, Control::IfThen | Control::WhenThen));
         if whole {
             error
         } else {
@@ -391,19 +434,20 @@ impl<'a> Block<'a> {
         }
     }
 
-    /// The misplaced-label check (`LanguageParser.cpp:1224`-`1244`).
-    fn label_error(&self, byte: usize) -> Option<ParseError> {
-        let sub = match self.top().kind {
-            Control::IfThen | Control::Else => 3,
+    /// The misplaced-label check (`LanguageParser.cpp:1224`-`1244`), naming
+    /// the label.
+    fn label_error(&self, label: &Instruction) -> Option<ParseError> {
+        let msg = match self.top().kind {
+            Control::IfThen | Control::Else => E47_3,
             Control::Select
             | Control::SelectCase
             | Control::WhenThen
             | Control::EndWhen
-            | Control::Otherwise => 4,
-            Control::Do | Control::Loop => 2,
+            | Control::Otherwise => E47_4,
+            Control::Do | Control::Loop => E47_2,
             Control::First | Control::EndThen => return None,
         };
-        Some(ParseError::new(47, sub, byte))
+        Some(misplaced_label(msg, label))
     }
 
     // ---- matching an END ----
@@ -417,8 +461,11 @@ impl<'a> Block<'a> {
     }
 
     /// `matchLabel` (`BaseDoInstruction.cpp:172`) and the name half of
-    /// `RexxInstructionSelect::matchEnd` (`SelectInstruction.cpp:181`).
+    /// `RexxInstructionSelect::matchEnd` (`SelectInstruction.cpp:181`), for the
+    /// block at `block`.
     fn match_label(
+        &self,
+        block: usize,
         block_label: Option<SymbolId>,
         end_name: Option<SymbolId>,
         is_select: bool,
@@ -429,17 +476,40 @@ impl<'a> Block<'a> {
         let Some(end_name) = end_name else {
             return Ok(());
         };
-        let sub = match (block_label, is_select) {
-            (Some(label), _) if label == end_name => return Ok(()),
+        if block_label == Some(end_name) {
+            return Ok(());
+        }
+        Err(self.end_mismatch(block, block_label, end_name, is_select, end_byte))
+    }
+
+    /// The END's name, the block's label, and the block's line, as
+    /// `matchLabel` and `matchEnd` insert them.
+    #[cold]
+    #[inline(never)]
+    fn end_mismatch(
+        &self,
+        block: usize,
+        block_label: Option<SymbolId>,
+        end_name: SymbolId,
+        is_select: bool,
+        end_byte: usize,
+    ) -> ParseError {
+        let name = self.symbols.name(end_name).as_bytes().to_vec();
+        let line = self.line_insert(block);
+        match (block_label, is_select) {
             // `Error_Unexpected_end_control` / `Error_Unexpected_end_select`.
-            (Some(_), false) => 2,
-            (Some(_), true) => 4,
+            (Some(label), select) => {
+                let label = self.symbols.name(label).as_bytes().to_vec();
+                let msg = if select { E10_4 } else { E10_2 };
+                ParseError::raise(msg, end_byte, [name, label, line])
+            }
             // `Error_Unexpected_end_nocontrol` /
             // `Error_Unexpected_end_select_nolabel`.
-            (None, false) => 3,
-            (None, true) => 7,
-        };
-        Err(ParseError::new(10, sub, end_byte))
+            (None, select) => {
+                let msg = if select { E10_7 } else { E10_3 };
+                ParseError::raise(msg, end_byte, [name, line])
+            }
+        }
     }
 
     /// `RexxInstructionSelect::matchEnd`: the name check, the `WHEN`-count
@@ -468,7 +538,7 @@ impl<'a> Block<'a> {
             }
             other => panic!("match_select_end on {other:?}"),
         };
-        Self::match_label(label, self.end_name(end), true, end_byte)?;
+        self.match_label(select, label, self.end_name(end), true, end_byte)?;
 
         // `Error_When_expected_when`, reported against the SELECT's OWN location
         // and not the END's, which is the one place in this family where that is
@@ -476,7 +546,7 @@ impl<'a> Block<'a> {
         // 3, the SELECT, with the END on line 5.
         if whens.is_empty() {
             let byte = self.instructions[select].clause_span.start;
-            return Err(ParseError::new(7, 1, byte));
+            return Err(self.error_line(E7_1, byte, select));
         }
 
         // `fixWhen` (`SelectInstruction.cpp:222`): one true WHEN ends the whole
@@ -510,7 +580,7 @@ impl<'a> Block<'a> {
             }
             other => panic!("match_do_end on {other:?}"),
         };
-        Self::match_label(label, self.end_name(end), false, end_byte)?;
+        self.match_label(block, label, self.end_name(end), false, end_byte)?;
         match &mut self.instructions[block].kind {
             InstructionKind::Do(body) | InstructionKind::Loop(body) => body.end = Some(end),
             other => panic!("match_do_end on {other:?}"),
@@ -537,7 +607,7 @@ impl<'a> Block<'a> {
             // `IFTHEN` or `WHENTHEN` on top -- it pops an ELSE outright and
             // rewrites a THEN into a branch-end marker. The type this arm tests
             // for therefore cannot be present.
-            return Err(ParseError::new(10, 1, end_byte));
+            return Err(ParseError::raise(E10_1, end_byte, []));
         }
         // An END on an OTHERWISE really closes the SELECT behind it.
         let frame = match frame.kind {
@@ -605,6 +675,16 @@ impl<'a> Block<'a> {
     }
 }
 
+/// `msg` naming the label `label` (`LanguageParser.cpp:1237`-`1242`).
+#[cold]
+#[inline(never)]
+fn misplaced_label(msg: Msg<1>, label: &Instruction) -> ParseError {
+    let InstructionKind::Label { name } = &label.kind else {
+        panic!("a misplaced label is a label, not {:?}", label.kind);
+    };
+    ParseError::raise(msg, label.clause_span.start, [name.to_vec()])
+}
+
 /// Which stack frame a block instruction opens.
 fn opens(kind: &InstructionKind) -> Option<Control> {
     match kind {
@@ -630,7 +710,7 @@ pub(crate) fn translate_block(
     ctx: &ParseCtx,
     cursor: &mut ClauseCursor,
 ) -> Result<CodeBody, ParseError> {
-    let mut block = Block::new(ctx.symbols);
+    let mut block = Block::new(ctx.symbols, ctx.source);
 
     loop {
         // Consume label clauses, which are not instructions and take no part in
@@ -647,7 +727,7 @@ pub(crate) fn translate_block(
                 pending = Some(instruction);
                 break;
             }
-            if let Some(error) = block.label_error(instruction.clause_span.start) {
+            if let Some(error) = block.label_error(&instruction) {
                 return Err(error);
             }
             block.add_clause(instruction);
@@ -655,9 +735,9 @@ pub(crate) fn translate_block(
 
         let Some(instruction) = pending else {
             // End of the body with an IF or WHEN whose THEN never arrived.
-            if let Some((which, byte)) = cursor.take_expected_then() {
-                let byte = cursor.peek().map_or(byte, |clause| clause.span.start);
-                return Err(ParseError::new(18, missing_then_sub(which), byte));
+            if let Some((which, opener)) = cursor.take_expected_then() {
+                let byte = cursor.peek().map_or(opener, |clause| clause.span.start);
+                return Err(block.then_expected(which, opener, byte));
             }
             // Close out any finished branch, then everything opened must be
             // closed.
@@ -665,8 +745,8 @@ pub(crate) fn translate_block(
                 block.pop();
                 block.flush_control(None);
             }
-            let top = block.top().kind;
-            if top != Control::First {
+            let top = block.top();
+            if top.kind != Control::First {
                 return Err(block.block_error(top, cursor.peek().is_none()));
             }
             block.pop();
@@ -735,8 +815,9 @@ pub(crate) fn translate_block(
         // `else nop` / `end` is 8.2, because the WHEN's branch end is on top by
         // then. `Error_When_expected_whenotherwise`, reported against the
         // offending clause with the SELECT's line as a substitution.
-        if block.top().kind.is_select() && !(is_when || is_otherwise || is_end) {
-            return Err(ParseError::new(7, 2, byte));
+        let top = block.top();
+        if top.kind.is_select() && !(is_when || is_otherwise || is_end) {
+            return Err(block.error_line(E7_2, byte, top.index()));
         }
 
         if is_if || is_when {
@@ -765,13 +846,13 @@ pub(crate) fn translate_block(
             // than assumed: `select` / `when 1 = 1 then nop` / `else nop` is
             // 8.2.
             if block.top().kind != Control::EndThen {
-                return Err(ParseError::new(8, 2, byte));
+                return Err(ParseError::raise(E8_2, byte, []));
             }
             // No label may sit immediately in front of an ELSE. The C++ has no
             // label name to hand here and substitutes the string "ELSE", which
             // is why the measured message reads `found "ELSE"`.
             if block.last_is_label() {
-                return Err(ParseError::new(47, 3, byte));
+                return Err(ParseError::raise(E47_3, byte, [b"ELSE".to_vec()]));
             }
             let index = block.add_clause(held.take().expect("an ELSE is added here"));
             block.pop();
@@ -783,7 +864,7 @@ pub(crate) fn translate_block(
             // `Error_Unexpected_when_otherwise`.
             let frame = block.top();
             if !frame.kind.is_select() {
-                return Err(ParseError::new(9, 2, byte));
+                return Err(ParseError::raise(E9_2, byte, []));
             }
             let otherwise = index.expect("the OTHERWISE was just added");
             match &mut block.instructions[frame.index()].kind {

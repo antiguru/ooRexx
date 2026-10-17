@@ -1,0 +1,32 @@
+x=1; y=(; z=2 -> 35.1 items 1  [(]
+   Incorrect expression detected at "(".
+do forever then -> 27.901 items 1  [THEN]
+   Incorrect data following FOREVER keyword on the loop; found "THEN".
+do; nop -> 14.1 items 1  [1]
+   DO instruction on line 1 requires matching END.
+select; nop; end -> 7.2 items 1  [1]
+   SELECT on line 1 requires WHEN, OTHERWISE, or END.
+do i = 1; end j -> 10.2 items 3  [J] [I] [1]
+   Symbol following END ("J") must match block specification name ("I") on line 1 or be omitted.
+if 1 = 1 then -> 14.3 items 1  [1]
+   THEN on line 1 must be followed by an instruction.
+do; x: nop; end -> 47.1 items 1  [X]
+   INTERPRET data must not contain labels; found "X".
+if 1 = 1 then nop; else -> 14.4 items 1  [1]
+   ELSE on line 1 must be followed by an instruction.
+select; when 1 then nop; otherwise -> 14.901 items 1  [1]
+   OTHERWISE on line 1 requires matching END.
+do label a; end b -> 10.2 items 3  [B] [A] [1]
+   Symbol following END ("B") must match block specification name ("A") on line 1 or be omitted.
+end -> 10.1 items 0 
+   END has no corresponding DO, LOOP, or SELECT.
+select; end -> 7.1 items 1  [1]
+   SELECT on line 1 requires WHEN.
+select label s; when 1 then nop; end t -> 10.4 items 3  [T] [S] [1]
+   Symbol following END ("T") must match LABEL of SELECT specification ("S") on line 1 or be omitted.
+if 1 = 1 then nop; x: else nop -> 47.1 items 1  [X]
+   INTERPRET data must not contain labels; found "X".
+::routine r -> 99.914 items 0 
+   INTERPRET data must not contain directive instructions.
+x: nop -> 47.1 items 1  [X]
+   INTERPRET data must not contain labels; found "X".

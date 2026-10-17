@@ -67,19 +67,6 @@ impl std::ops::DerefMut for ParseError {
 }
 
 impl ParseError {
-    /// An error reported against the clause starting at `byte`.
-    #[cold]
-    #[inline(never)]
-    pub fn new(code: u16, sub: u16, byte: usize) -> Self {
-        ParseError(Box::new(ParseErrorFields {
-            code,
-            sub,
-            end: 0,
-            byte,
-            inserts: Vec::new(),
-        }))
-    }
-
     /// The error `msg` reports against the clause starting at `byte`, with
     /// `inserts` for its `&1`, `&2`, ... in order.
     #[cold]

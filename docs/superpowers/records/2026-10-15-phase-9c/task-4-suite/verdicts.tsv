@@ -1,0 +1,3 @@
+# ootest revision 13178
+group	verdict	crate	oracle denominator
+base/source.file/incorrectCharacters	green		equal

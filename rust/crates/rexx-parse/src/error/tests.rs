@@ -11,7 +11,7 @@
 
 //! `message`, `line`, and how the inserts reach the message.
 
-use rexx_inventory::errors::{E7_1, E8_2, E13_1, E25_901, E36_901, E99_943};
+use rexx_inventory::errors::{E7_1, E8_2, E10_1, E13_1, E25_901, E36_901, E99_943};
 
 use crate::token::ParseError;
 use crate::{ProgramSource, SourceKind};
@@ -23,7 +23,7 @@ fn a_sub_message_that_needs_no_substitution_is_the_message() {
     //     Error 8 running <file> line 2:  Unexpected THEN or ELSE.
     //     Error 8.2:  ELSE has no corresponding THEN clause.
     assert_eq!(
-        ParseError::new(8, 2, 0).message(),
+        ParseError::raise(E8_2, 0, []).message(),
         b"ELSE has no corresponding THEN clause."
     );
 }
@@ -31,7 +31,7 @@ fn a_sub_message_that_needs_no_substitution_is_the_message() {
 #[test]
 fn a_second_sub_message_that_needs_no_substitution_is_also_the_message() {
     assert_eq!(
-        ParseError::new(10, 1, 0).message(),
+        ParseError::raise(E10_1, 0, []).message(),
         b"END has no corresponding DO, LOOP, or SELECT."
     );
 }
@@ -72,15 +72,6 @@ fn two_inserts_fill_in_order() {
 }
 
 #[test]
-fn a_message_raised_with_no_inserts_never_falls_back_to_the_major() {
-    // The oracle's `messageSubstitution` leaves a marker it has no value for.
-    assert_eq!(
-        ParseError::new(25, 901, 0).message(),
-        br#"Unknown keyword on ::CLASS directive; found "&1"."#
-    );
-}
-
-#[test]
 fn an_insert_is_not_substituted_again() {
     assert_eq!(
         ParseError::raise(E99_943, 0, [b"&2".to_vec(), b"&1".to_vec()]).message(),
@@ -101,7 +92,7 @@ fn an_insert_reaches_the_message_unconverted() {
 fn a_message_with_no_inserts_carries_none() {
     let error = ParseError::raise(E8_2, 4, []);
     assert!(error.inserts().is_empty());
-    assert_eq!(error, ParseError::new(8, 2, 4));
+    assert_eq!((error.code, error.sub, error.byte), (8, 2, 4));
 }
 
 #[test]
@@ -124,12 +115,17 @@ fn three_lines() -> ProgramSource {
     ProgramSource::new(b"say 1\nsay 2\nsay 3\n".to_vec(), SourceKind::Program)
 }
 
+/// An error reported against `byte`.
+fn at(byte: usize) -> ParseError {
+    ParseError::raise(E8_2, byte, [])
+}
+
 #[test]
 fn the_reported_line_is_the_line_the_clause_byte_sits_on() {
     let source = three_lines();
-    assert_eq!(ParseError::new(35, 1, 0).line(&source), 1);
-    assert_eq!(ParseError::new(35, 1, 6).line(&source), 2);
-    assert_eq!(ParseError::new(35, 1, 12).line(&source), 3);
+    assert_eq!(at(0).line(&source), 1);
+    assert_eq!(at(6).line(&source), 2);
+    assert_eq!(at(12).line(&source), 3);
 }
 
 #[test]
@@ -138,8 +134,8 @@ fn a_byte_on_a_terminator_belongs_to_the_line_that_terminator_ends() {
     // cannot also satisfy: every byte in the test above sits well inside its
     // line, so `line_of(byte + 1)` answers all three of them correctly.
     let source = three_lines();
-    assert_eq!(ParseError::new(35, 1, 5).line(&source), 1);
-    assert_eq!(ParseError::new(35, 1, 11).line(&source), 2);
+    assert_eq!(at(5).line(&source), 1);
+    assert_eq!(at(11).line(&source), 2);
 }
 
 #[test]
@@ -147,14 +143,14 @@ fn a_byte_past_the_end_clamps_to_the_last_line() {
     // `line_of`'s contract, restated here because a diagnostic must never be the
     // thing that crashes.
     let source = three_lines();
-    assert_eq!(ParseError::new(35, 1, 17).line(&source), 3);
-    assert_eq!(ParseError::new(35, 1, 999).line(&source), 3);
+    assert_eq!(at(17).line(&source), 3);
+    assert_eq!(at(999).line(&source), 3);
 }
 
 #[test]
 fn display_names_the_number_the_sub_number_and_the_message() {
     assert_eq!(
-        ParseError::new(8, 2, 0).to_string(),
+        ParseError::raise(E8_2, 0, []).to_string(),
         "8.2: ELSE has no corresponding THEN clause."
     );
 }

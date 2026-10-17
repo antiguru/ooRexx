@@ -1,0 +1,4 @@
+# ootest revision 13178
+group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
+base/source.file/incorrectCharacters	oracle	1	1	1			-	-	1	yes	ulimit -v 1048576	1
+base/source.file/incorrectCharacters	crate	1	1	1			-	-	1	yes	memcap 2G	1

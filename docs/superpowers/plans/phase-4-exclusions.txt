@@ -5270,16 +5270,6 @@ WHY IT IS NOT A ROW. Both halves are already decided and recorded.
     with the same major, sub and line) and completeness (everything rexxc
     translates, this parser accepts).
 
-  * The message text, the substitutions, the clause echo and the exit
-    status are a deliberate deferral. lib.rs's parse-error arm says so in
-    place -- "Parse errors remain deliberately not reproduced byte for byte
-    ... wrong in the details on purpose and right in never being mistaken
-    for success" -- and the EXCLUSIONS section above has the reason it
-    cannot be closed yet: rexx-parse's ParseError carries the clause's
-    START byte with no end, so there is no span to echo, and parse_program
-    takes the text by value and returns no ProgramSource, so execute cannot
-    resolve the line.
-
   * The exit code is deliberate too. NOT_IMPLEMENTED_EXIT is chosen to sit
     outside 157..253, where 256 minus major lives, precisely so a
     not-implemented failure cannot be mistaken for a raised condition.

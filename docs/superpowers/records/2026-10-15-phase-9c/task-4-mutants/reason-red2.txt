@@ -1,0 +1,24 @@
+   Compiling rexx-parse v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse)
+    Finished `test` profile [optimized + debuginfo] target(s) in 1.80s
+     Running tests/errors.rs (target/debug/deps/errors-161d3c3d5f1157ff)
+
+running 1 test
+test every_unreached_reason_still_holds ... FAILED
+
+failures:
+
+---- every_unreached_reason_still_holds stdout ----
+
+thread 'every_unreached_reason_still_holds' (2038030) panicked at crates/rexx-parse/tests/errors.rs:1016:25:
+assertion `left != right` failed: (25, 2) is reached by "call off junk\n"
+  left: (25, 2)
+ right: (25, 2)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    every_unreached_reason_still_holds
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 34 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p rexx-parse --test errors`

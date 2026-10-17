@@ -1,0 +1,102 @@
+{"file": "src/block.rs", "line": 395, "old": "E14_1", "new": "E7_1", "pair": "14.1", "id": "M00", "batch": 0}
+{"file": "src/block.rs", "line": 397, "old": "E14_2", "new": "E7_1", "pair": "14.2", "id": "M01", "batch": 0}
+{"file": "src/block.rs", "line": 410, "old": ".parent", "new": ".index", "pair": "14.3", "id": "M02", "batch": 0}
+{"file": "src/block.rs", "line": 413, "old": "frame.index()", "new": "frame.parent.unwrap()", "pair": "14.3", "id": "M03", "batch": 1}
+{"file": "src/block.rs", "line": 415, "old": "E14_4", "new": "E7_1", "pair": "14.4", "id": "M04", "batch": 0}
+{"file": "src/block.rs", "line": 418, "old": "E14_5", "new": "E7_1", "pair": "14.5", "id": "M05", "batch": 0}
+{"file": "src/block.rs", "line": 421, "old": "E14_901", "new": "E7_1", "pair": "14.901", "id": "M06", "batch": 0}
+{"file": "src/block.rs", "line": 441, "old": "E47_3", "new": "E47_2", "pair": "47.3", "id": "M07", "batch": 0}
+{"file": "src/block.rs", "line": 446, "old": "E47_4", "new": "E47_2", "pair": "47.4", "id": "M08", "batch": 0}
+{"file": "src/block.rs", "line": 447, "old": "E47_2", "new": "E47_3", "pair": "47.2", "id": "M09", "batch": 0}
+{"file": "src/block.rs", "line": 503, "old": "{ E10_4 }", "new": "{ E10_2 }", "pair": "10.4", "id": "M10", "batch": 0}
+{"file": "src/block.rs", "line": 503, "old": "else { E10_2 }", "new": "else { E10_4 }", "pair": "10.2", "id": "M11", "batch": 0}
+{"file": "src/block.rs", "line": 509, "old": "{ E10_7 }", "new": "{ E10_3 }", "pair": "10.7", "id": "M12", "batch": 0}
+{"file": "src/block.rs", "line": 509, "old": "else { E10_3 }", "new": "else { E10_7 }", "pair": "10.3", "id": "M13", "batch": 0}
+{"file": "src/block.rs", "line": 504, "old": "[name, label, line]", "new": "[label, name, line]", "pair": "10.2", "id": "M14", "batch": 1}
+{"file": "src/block.rs", "line": 510, "old": "[name, line]", "new": "[line, name]", "pair": "10.3", "id": "M15", "batch": 1}
+{"file": "src/block.rs", "line": 549, "old": "E7_1", "new": "E7_2", "pair": "7.1", "id": "M16", "batch": 0}
+{"file": "src/block.rs", "line": 610, "old": "E10_1", "new": "E8_2", "pair": "10.1", "id": "M17", "batch": 0}
+{"file": "src/block.rs", "line": 820, "old": "E7_2", "new": "E7_1", "pair": "7.2", "id": "M18", "batch": 0}
+{"file": "src/block.rs", "line": 849, "old": "E8_2", "new": "E10_1", "pair": "8.2", "id": "M19", "batch": 0}
+{"file": "src/block.rs", "line": 855, "old": "b\"ELSE\"", "new": "b\"MUT\"", "pair": "47.3", "id": "M20", "batch": 1}
+{"file": "src/block.rs", "line": 867, "old": "E9_2", "new": "E10_1", "pair": "9.2", "id": "M21", "batch": 0}
+{"file": "src/block.rs", "line": 380, "old": "line_of(opener)", "new": "line_of(byte)", "pair": "18.1", "id": "M22", "batch": 0}
+{"file": "src/block.rs", "line": 685, "old": "name.to_vec()", "new": "b\"MUT\".to_vec()", "pair": "47.2", "id": "M23", "batch": 1}
+{"file": "src/block.rs", "line": 364, "old": "self.source.line_of(byte).to_string()", "new": "(self.source.line_of(byte) + 1).to_string()", "pair": "14.1", "id": "M24", "batch": 9}
+{"file": "src/lib.rs", "line": 203, "old": "E99_914", "new": "rexx_inventory::errors::E99_908", "pair": "99.914", "id": "M25", "batch": 0}
+{"file": "src/directive.rs", "line": 175, "old": "line_start + 1", "new": "line_start + 2", "pair": "36.901", "id": "M26", "batch": 0}
+{"file": "src/directive.rs", "line": 191, "old": "bad.into_iter().collect()", "new": "b\"MUT\".to_vec()", "pair": "24.1", "id": "M27", "batch": 0}
+{"file": "src/directive.rs", "line": 292, "old": "name.to_vec()", "new": "b\"MUT\".to_vec()", "pair": "99.925", "id": "M28", "batch": 0}
+{"file": "src/directive.rs", "line": 694, "old": "spec.to_vec()", "new": "b\"MUT\".to_vec()", "pair": "99.917", "id": "M29", "batch": 0}
+{"file": "src/directive.rs", "line": 1008, "old": "self.value_of(token).into_vec()", "new": "b\"MUT\".to_vec()", "pair": "25.927", "id": "M30", "batch": 0}
+{"file": "src/directive.rs", "line": 996, "old": "name()", "new": "b\"MUT\".to_vec()", "pair": "20.929", "id": "M31", "batch": 0}
+{"file": "src/directive.rs", "line": 999, "old": "name()", "new": "b\"MUT\".to_vec()", "pair": "20.929", "id": "M32", "batch": 1}
+{"file": "src/directive.rs", "line": 844, "old": "target.to_vec()", "new": "b\"MUT\".to_vec()", "pair": "19.925", "id": "M33", "batch": 0}
+{"file": "src/directive.rs", "line": 812, "old": "b\"CLASS\"", "new": "b\"MUT\"", "pair": "19.925", "id": "M34", "batch": 1}
+{"file": "src/directive.rs", "line": 813, "old": "b\"ROUTINE\"", "new": "b\"MUT\"", "pair": "19.925", "id": "M35", "batch": 2}
+{"file": "src/directive.rs", "line": 814, "old": "b\"METHOD\"", "new": "b\"MUT\"", "pair": "19.925", "id": "M36", "batch": 3}
+{"file": "src/directive.rs", "line": 816, "old": "b\"ATTRIBUTE\"", "new": "b\"MUT\"", "pair": "19.925", "id": "M37", "batch": 4}
+{"file": "src/directive.rs", "line": 819, "old": "b\"CONSTANT\"", "new": "b\"MUT\"", "pair": "19.925", "id": "M38", "batch": 5}
+{"file": "src/directive.rs", "line": 871, "old": "[insert]", "new": "[b\"MUT\".to_vec()]", "pair": "19.923", "id": "M39", "batch": 0}
+{"file": "src/directive.rs", "line": 895, "old": "value.to_vec()", "new": "b\"MUT\".to_vec()", "pair": "26.5", "id": "M40", "batch": 0}
+{"file": "src/directive.rs", "line": 928, "old": "value.to_vec()", "new": "b\"MUT\".to_vec()", "pair": "26.6", "id": "M41", "batch": 0}
+{"file": "src/directive.rs", "line": 740, "old": "E21_913", "new": "E21_914", "pair": "21.913", "id": "M42", "batch": 0}
+{"file": "src/directive.rs", "line": 1068, "old": "E21_914", "new": "E21_913", "pair": "21.914", "id": "M43", "batch": 0}
+{"file": "src/directive.rs", "line": 406, "old": "self.found(E25_901, Some(token))", "new": "self.error(E25_901, [b\"MUT\".to_vec()])", "pair": "25.901", "id": "M44", "batch": 0}
+{"file": "src/directive.rs", "line": 518, "old": "self.found(E25_902, Some(token))", "new": "self.error(E25_902, [b\"MUT\".to_vec()])", "pair": "25.902", "id": "M45", "batch": 0}
+{"file": "src/directive.rs", "line": 625, "old": "self.found(E25_925, Some(token))", "new": "self.error(E25_925, [b\"MUT\".to_vec()])", "pair": "25.925", "id": "M46", "batch": 0}
+{"file": "src/directive.rs", "line": 827, "old": "self.found(E25_928, Some(token))", "new": "self.error(E25_928, [b\"MUT\".to_vec()])", "pair": "25.928", "id": "M47", "batch": 0}
+{"file": "src/directive.rs", "line": 857, "old": "self.found(E20_919, token)", "new": "self.error(E20_919, [b\"MUT\".to_vec()])", "pair": "20.919", "id": "M48", "batch": 0}
+{"file": "src/directive.rs", "line": 913, "old": "self.found(E25_11, Some(token))", "new": "self.error(E25_11, [b\"MUT\".to_vec()])", "pair": "25.11", "id": "M49", "batch": 0}
+{"file": "src/directive.rs", "line": 978, "old": "self.found(E25_935, Some(token))", "new": "self.error(E25_935, [b\"MUT\".to_vec()])", "pair": "25.935", "id": "M50", "batch": 0}
+{"file": "src/directive.rs", "line": 982, "old": "self.found(E25_924, Some(token))", "new": "self.error(E25_924, [b\"MUT\".to_vec()])", "pair": "25.924", "id": "M51", "batch": 0}
+{"file": "src/directive.rs", "line": 1041, "old": "self.found(E25_904, Some(token))", "new": "self.error(E25_904, [b\"MUT\".to_vec()])", "pair": "25.904", "id": "M52", "batch": 0}
+{"file": "src/directive.rs", "line": 1059, "old": "self.found(E25_926, Some(token))", "new": "self.error(E25_926, [b\"MUT\".to_vec()])", "pair": "25.926", "id": "M53", "batch": 0}
+{"file": "src/directive.rs", "line": 1119, "old": "self.found(E25_901, Some(token))", "new": "self.error(E25_901, [b\"MUT\".to_vec()])", "pair": "25.901", "id": "M54", "batch": 1}
+{"file": "src/directive.rs", "line": 1129, "old": "self.found(E25_903, Some(token))", "new": "self.error(E25_903, [b\"MUT\".to_vec()])", "pair": "25.903", "id": "M55", "batch": 0}
+{"file": "src/directive.rs", "line": 325, "old": "self.error(E99_916, [])", "new": "self.error(E20_916, [])", "pair": "99.916", "id": "M56", "batch": 0}
+{"file": "src/directive.rs", "line": 330, "old": "self.error(E20_916, [])", "new": "self.error(E99_916, [])", "pair": "20.916", "id": "M57", "batch": 0}
+{"file": "src/directive.rs", "line": 333, "old": "self.error(E20_916, [])", "new": "self.error(E99_916, [])", "pair": "20.916", "id": "M58", "batch": 1}
+{"file": "src/directive.rs", "line": 339, "old": "self.error(E99_916, [])", "new": "self.error(E20_916, [])", "pair": "99.916", "id": "M59", "batch": 1}
+{"file": "src/directive.rs", "line": 359, "old": "require_name(E19_901)", "new": "require_name(E99_916)", "pair": "19.901", "id": "M60", "batch": 0}
+{"file": "src/directive.rs", "line": 376, "old": "class_reference(E19_906)", "new": "class_reference(E99_916)", "pair": "19.906", "id": "M61", "batch": 0}
+{"file": "src/directive.rs", "line": 388, "old": "class_reference(E19_907)", "new": "class_reference(E99_916)", "pair": "19.907", "id": "M62", "batch": 0}
+{"file": "src/directive.rs", "line": 391, "old": "class_reference(E19_913)", "new": "class_reference(E99_916)", "pair": "19.913", "id": "M63", "batch": 0}
+{"file": "src/directive.rs", "line": 399, "old": "self.error(E19_908, [])", "new": "self.error(E99_916, [])", "pair": "19.908", "id": "M64", "batch": 0}
+{"file": "src/directive.rs", "line": 402, "old": "class_reference(E19_908)", "new": "class_reference(E99_916)", "pair": "19.908", "id": "M65", "batch": 1}
+{"file": "src/directive.rs", "line": 439, "old": "require_symbol(E20_921)", "new": "require_symbol(E99_916)", "pair": "20.921", "id": "M66", "batch": 0}
+{"file": "src/directive.rs", "line": 453, "old": "require_name(E19_902)", "new": "require_name(E99_916)", "pair": "19.902", "id": "M67", "batch": 0}
+{"file": "src/directive.rs", "line": 482, "old": "require_literal(E19_905)", "new": "require_literal(E99_916)", "pair": "19.905", "id": "M68", "batch": 0}
+{"file": "src/directive.rs", "line": 516, "old": "require_symbol(E20_926)", "new": "require_symbol(E99_916)", "pair": "20.926", "id": "M69", "batch": 0}
+{"file": "src/directive.rs", "line": 532, "old": "check_directive(cursor, E99_946)", "new": "check_directive(cursor, E99_916)", "pair": "99.946", "id": "M70", "batch": 0}
+{"file": "src/directive.rs", "line": 534, "old": "check_directive(cursor, E99_934)", "new": "check_directive(cursor, E99_916)", "pair": "99.934", "id": "M71", "batch": 0}
+{"file": "src/directive.rs", "line": 546, "old": "check_directive(cursor, E99_933)", "new": "check_directive(cursor, E99_916)", "pair": "99.933", "id": "M72", "batch": 0}
+{"file": "src/directive.rs", "line": 551, "old": "check_directive(cursor, E99_936)", "new": "check_directive(cursor, E99_916)", "pair": "99.936", "id": "M73", "batch": 0}
+{"file": "src/directive.rs", "line": 558, "old": "require_name(E19_914)", "new": "require_name(E99_916)", "pair": "19.914", "id": "M74", "batch": 0}
+{"file": "src/directive.rs", "line": 609, "old": "require_literal(E19_905)", "new": "require_literal(E99_916)", "pair": "19.905", "id": "M75", "batch": 1}
+{"file": "src/directive.rs", "line": 623, "old": "require_symbol(E20_926)", "new": "require_symbol(E99_916)", "pair": "20.926", "id": "M76", "batch": 1}
+{"file": "src/directive.rs", "line": 643, "old": "check_directive(cursor, E99_937)", "new": "check_directive(cursor, E99_916)", "pair": "99.937", "id": "M77", "batch": 0}
+{"file": "src/directive.rs", "line": 655, "old": "check_directive(cursor, E99_935)", "new": "check_directive(cursor, E99_916)", "pair": "99.935", "id": "M78", "batch": 0}
+{"file": "src/directive.rs", "line": 657, "old": "check_directive(cursor, E99_940)", "new": "check_directive(cursor, E99_916)", "pair": "99.940", "id": "M79", "batch": 0}
+{"file": "src/directive.rs", "line": 660, "old": "check_directive(cursor, E99_947)", "new": "check_directive(cursor, E99_916)", "pair": "99.947", "id": "M80", "batch": 0}
+{"file": "src/directive.rs", "line": 720, "old": "require_name(E19_915)", "new": "require_name(E99_916)", "pair": "19.915", "id": "M81", "batch": 0}
+{"file": "src/directive.rs", "line": 735, "old": "self.error(E19_916, [])", "new": "self.error(E99_916, [])", "pair": "19.916", "id": "M82", "batch": 0}
+{"file": "src/directive.rs", "line": 742, "old": "check_directive(cursor, E99_938)", "new": "check_directive(cursor, E99_916)", "pair": "99.938", "id": "M83", "batch": 0}
+{"file": "src/directive.rs", "line": 805, "old": "self.error(E20_924, [])", "new": "self.error(E99_916, [])", "pair": "20.924", "id": "M84", "batch": 0}
+{"file": "src/directive.rs", "line": 825, "old": "self.error(E20_924, [])", "new": "self.error(E99_916, [])", "pair": "20.924", "id": "M85", "batch": 1}
+{"file": "src/directive.rs", "line": 863, "old": "self.error(E19_924, [])", "new": "self.error(E99_916, [])", "pair": "19.924", "id": "M86", "batch": 0}
+{"file": "src/directive.rs", "line": 891, "old": "require_name(E19_917)", "new": "require_name(E99_916)", "pair": "19.917", "id": "M87", "batch": 0}
+{"file": "src/directive.rs", "line": 905, "old": "self.error(E20_925, [])", "new": "self.error(E99_916, [])", "pair": "20.925", "id": "M88", "batch": 0}
+{"file": "src/directive.rs", "line": 908, "old": "self.error(E20_925, [])", "new": "self.error(E99_916, [])", "pair": "20.925", "id": "M89", "batch": 1}
+{"file": "src/directive.rs", "line": 922, "old": "require_name(E19_918)", "new": "require_name(E99_916)", "pair": "19.918", "id": "M90", "batch": 0}
+{"file": "src/directive.rs", "line": 935, "old": "require_name(E19_919)", "new": "require_name(E99_916)", "pair": "19.919", "id": "M91", "batch": 0}
+{"file": "src/directive.rs", "line": 970, "old": "self.error(E20_935, [])", "new": "self.error(E99_916, [])", "pair": "20.935", "id": "M92", "batch": 0}
+{"file": "src/directive.rs", "line": 973, "old": "self.error(E20_935, [])", "new": "self.error(E99_916, [])", "pair": "20.935", "id": "M93", "batch": 1}
+{"file": "src/directive.rs", "line": 1017, "old": "require_name(E19_904)", "new": "require_name(E99_916)", "pair": "19.904", "id": "M94", "batch": 0}
+{"file": "src/directive.rs", "line": 1032, "old": "require_symbol(E20_920)", "new": "require_symbol(E99_916)", "pair": "20.920", "id": "M95", "batch": 0}
+{"file": "src/directive.rs", "line": 1036, "old": "self.error(E99_944, [])", "new": "self.error(E99_916, [])", "pair": "99.944", "id": "M96", "batch": 0}
+{"file": "src/directive.rs", "line": 1051, "old": "require_name(E19_920)", "new": "require_name(E99_916)", "pair": "19.920", "id": "M97", "batch": 0}
+{"file": "src/directive.rs", "line": 1065, "old": "require_name(E19_921)", "new": "require_name(E99_916)", "pair": "19.921", "id": "M98", "batch": 0}
+{"file": "src/directive.rs", "line": 1100, "old": "require_name(E19_903)", "new": "require_name(E99_916)", "pair": "19.903", "id": "M99", "batch": 0}
+{"file": "src/directive.rs", "line": 1121, "old": "require_literal(E19_905)", "new": "require_literal(E99_916)", "pair": "19.905", "id": "M100", "batch": 2}
+{"file": "src/directive.rs", "line": 1137, "old": "check_directive(cursor, E99_939)", "new": "check_directive(cursor, E99_916)", "pair": "99.939", "id": "M101", "batch": 0}

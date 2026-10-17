@@ -14,6 +14,8 @@
 # Removed after the derivation, each once it passed under the harness (Phase
 # 9b Task 4): base/rexxutil/SysFileXXX TEST_FILEEXISTS_NIL_INVALID and
 # samples/samples TEST_MAKESTRING.
+# Phase 9c Task 4: base/source.file/incorrectCharacters
+# TEST_INCORRECT_CHARACTERS.
 base/bif/ARG	TEST_EXTERNAL_CALLS
 base/bif/CHAROUT	TEST_POSITIONING_1_BIN
 base/bif/CHARS	TEST_CHARS_NOTREADY_DIRECTORY
@@ -205,6 +207,5 @@ base/security.manager/SecurityManager	TEST_METHOD_HANDLE_NO_RESULT
 base/security.manager/SecurityManager	TEST_METHOD_HANDLE_RESULT
 base/security.manager/SecurityManager	TEST_METHOD_PASS
 base/security.manager/SecurityManager	TEST_STREAM_PASS_BIF_STREAM_OPEN
-base/source.file/incorrectCharacters	TEST_INCORRECT_CHARACTERS
 samples/scclient	TEST_04_SCCLIENT.REX
 samples/sfclient	TEST_04_SFCLIENT.REX

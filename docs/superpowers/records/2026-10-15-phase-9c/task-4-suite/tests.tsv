@@ -1,0 +1,4 @@
+# ootest revision 13178
+# groups base/source.file/incorrectCharacters
+group	test	row	oracle	crate
+base/source.file/incorrectCharacters	TEST_INCORRECT_CHARACTERS	-	passed	passed
