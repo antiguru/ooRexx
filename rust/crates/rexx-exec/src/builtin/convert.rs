@@ -308,7 +308,7 @@ const BASE64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
 /// The value `byte` stands for in [`BASE64`], or `None` if it stands for
 /// nothing. `=` is not a digit and answers `None` here; only
 /// [`decode_base64_bytes`] knows where it is allowed.
-fn base64_digit(byte: u8) -> Option<u8> {
+pub(crate) fn base64_digit(byte: u8) -> Option<u8> {
     match byte {
         b'A'..=b'Z' => Some(byte - b'A'),
         b'a'..=b'z' => Some(byte - b'a' + 26),

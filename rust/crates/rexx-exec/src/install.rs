@@ -375,6 +375,11 @@ impl Interp {
         // Where the translation ends and before any `::REQUIRES` loads, which
         // is where `generateProgram` and `installPackage` run it.
         self.override_package_settings(id)?;
+        // `rexxc` stops here. Measured, oracle `rexxc -s`: a `::REQUIRES` of a
+        // missing file and a `::CLASS` subclassing an unknown name are rc 0.
+        if self.translate_only {
+            return Ok(());
+        }
 
         // **A second pass, because the oracle's own translation-time
         // refusals above happen before every install-time one below**

@@ -173,8 +173,11 @@ mod environment;
 mod options;
 use options::PackageOptions;
 
-// The `rexx` command line's library half.
+// The `rexx` and `rexxc` command lines' library half.
 pub mod launcher;
+
+// The compiled program image `rexxc` writes.
+pub mod compiled;
 
 // `::REQUIRES` (Phase 5d): the routes a required file's name is searched over
 // and the extensions appended to it.
@@ -1737,6 +1740,9 @@ struct Interp {
     /// the package of a translation that raised no routine, method or resource
     /// table (`parser/LanguageParser.cpp:1893-1908`) and no prolog (`:656-665`).
     untranslated: rustc_hash::FxHashSet<ProgramId>,
+    /// Whether [`Interp::install_directives`] stops after its first walk:
+    /// a translation that runs nothing, as `rexxc` makes.
+    translate_only: bool,
     /// The threads native calls and blocking operations run on; last, so
     /// that every island value is dropped before its threads end.
     pool: crate::scheduler::Pool,
@@ -2306,6 +2312,7 @@ impl Interp {
             required_paths: FxHashMap::default(),
             required_packages: FxHashMap::default(),
             untranslated: rustc_hash::FxHashSet::default(),
+            translate_only: false,
             pool: new_pool(),
         }
     }
@@ -2318,6 +2325,16 @@ impl Interp {
         let program = Rc::new(program);
         let program_id = self.load_program(Rc::clone(&program));
         self.run_loaded(program, program_id, CallType::Command, None, None)
+    }
+
+    /// Loads `program` and translates its directives, running none of its
+    /// code: `TranslateDispatcher::run`'s `LanguageParser::createProgram`.
+    fn translate(&mut self, program: Program) -> Result<Option<ObjRef>, Failure> {
+        let program = Rc::new(program);
+        let program_id = self.load_program(Rc::clone(&program));
+        self.translate_only = true;
+        self.install_directives(program_id, &program)?;
+        Ok(None)
     }
 
     /// Runs the interpreter's own Rexx-written library -- `Setup.cpp:1786`'s
@@ -2914,7 +2931,7 @@ impl Interp {
     }
 
     /// Turns on Task 16's collect-on-every-allocation stress mode. Only
-    /// `execute`'s `collect_every_alloc` arm calls this, right after
+    /// `execute_as`'s `Entry::CollectEveryAlloc` arm calls this, right after
     /// construction and before `run`; nothing else needs to flip it, and
     /// nothing can un-flip it once a run has started.
     fn enable_stress_collect(&mut self) {
@@ -3174,6 +3191,7 @@ impl Interp {
             // Weak: pruned in `Interp::collect_now`.
             required_packages: _,
             untranslated: _,
+            translate_only: _,
             // Bytes and paths, no `ObjRef` in any of them: the interpreter's
             // own environment, current directory and `SETLOCAL` snapshots are
             // not the collector's.
@@ -3521,6 +3539,22 @@ pub fn run_program_named(path: &[u8], text: Vec<u8>, invocation: Invocation) -> 
     })
 }
 
+/// Translates the program `text` names `path` without running any of it,
+/// and reports a refusal as [`run_program_named`] would. The translation
+/// binds each `EXTERNAL` library name as the run does.
+pub fn translate_program(path: &[u8], text: Vec<u8>) -> Outcome {
+    let path = path.to_vec();
+    on_interpreter_thread(move || {
+        execute_as(
+            &path,
+            text,
+            Entry::Translate,
+            Invocation::none(),
+            Some(INTERPRETER_STACK_BYTES),
+        )
+    })
+}
+
 /// [`run_program`] on an interpreter thread of `stack` bytes.
 #[cfg(test)]
 pub(crate) fn run_program_on_stack(
@@ -3744,12 +3778,39 @@ fn parse_failure_outcome(path: &[u8], rejected: &rexx_parse::Rejected) -> Outcom
     }
 }
 
+/// What [`execute_as`] does with the program it parses.
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum Entry {
+    /// Runs it.
+    Run,
+    /// Runs it with `Heap::collect` after every allocation.
+    CollectEveryAlloc,
+    /// Translates it and runs none of it.
+    Translate,
+}
+
 /// Everything that happens on the interpreter thread: parse, run, report.
 /// `stack` is the thread's stack size, where known.
 fn execute_on(
     path: &[u8],
     text: Vec<u8>,
     collect_every_alloc: bool,
+    invocation: Invocation,
+    stack: Option<usize>,
+) -> Outcome {
+    let entry = if collect_every_alloc {
+        Entry::CollectEveryAlloc
+    } else {
+        Entry::Run
+    };
+    execute_as(path, text, entry, invocation, stack)
+}
+
+/// [`execute_on`] for any [`Entry`].
+fn execute_as(
+    path: &[u8],
+    text: Vec<u8>,
+    entry: Entry,
     invocation: Invocation,
     stack: Option<usize>,
 ) -> Outcome {
@@ -3766,7 +3827,7 @@ fn execute_on(
         interp.measure_stack(base, stack);
     }
     interp.program_path = path.to_vec();
-    if collect_every_alloc {
+    if entry == Entry::CollectEveryAlloc {
         interp.enable_stress_collect();
     }
     // The command line is the top-level program's caller, so what it supplied
@@ -3839,7 +3900,10 @@ fn execute_on(
         if let Some(mode) = switch_mode {
             interp.set_switch_mode(mode);
         }
-        interp.run(program)
+        match entry {
+            Entry::Translate => interp.translate(program),
+            Entry::Run | Entry::CollectEveryAlloc => interp.run(program),
+        }
     });
     // The whole echo stack, innermost first: the levels `seal_site_level`
     // already closed, then the level that was still unwinding when the

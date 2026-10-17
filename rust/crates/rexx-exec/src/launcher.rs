@@ -9,9 +9,10 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! The `rexx` command line's library half: option scanning, the program
-//! search, and the texts the launcher prints itself
-//! (`utilities/rexx/platform/unix/rexx.cpp`).
+//! The `rexx` and `rexxc` command lines' library half: option scanning, the
+//! program search, and the texts the launchers print themselves
+//! (`utilities/rexx/platform/unix/rexx.cpp`,
+//! `utilities/rexxc/platform/unix/RexxCompiler.cpp`).
 
 use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
@@ -20,7 +21,7 @@ use std::path::{Path, PathBuf};
 use rexx_core::ObjRef;
 
 use crate::error::{ClauseSite, Raised};
-use crate::{Failure, Interp, require, version};
+use crate::{Failure, Interp, Outcome, require, version};
 
 /// What a command line asks for.
 #[derive(Debug, PartialEq, Eq)]
@@ -171,6 +172,105 @@ pub fn resolve_program(
         false,
     )
     .map(|found| PathBuf::from(OsString::from_vec(found)))
+}
+
+/// The program `name` names and its text, or the report and status for one
+/// that cannot be found or read.
+pub fn load(name: &[u8]) -> Result<(PathBuf, Vec<u8>), (Vec<u8>, i32)> {
+    let found = std::env::current_dir().ok().and_then(|cwd| {
+        resolve_program(
+            OsStr::from_bytes(name),
+            &cwd,
+            std::env::var_os("REXX_PATH").as_deref(),
+            std::env::var_os("PATH").as_deref(),
+        )
+    });
+    let Some(found) = found else {
+        return Err(program_not_found(name));
+    };
+    match std::fs::read(&found) {
+        Ok(text) => Ok((found, text)),
+        Err(_) => Err(program_unreadable(found.as_os_str().as_bytes())),
+    }
+}
+
+/// Translates the program at `path` without running it, reporting a refusal
+/// exactly as `rexx` would.
+pub fn translate(path: &Path, text: Vec<u8>) -> Outcome {
+    crate::translate_program(path.as_os_str().as_bytes(), text)
+}
+
+/// What a `rexxc` command line asks for.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Compile {
+    /// The program's name.
+    pub input: Vec<u8>,
+    /// The image's file name, `None` for a syntax check.
+    pub output: Option<Vec<u8>>,
+    /// `-s`: no banner.
+    pub silent: bool,
+    /// `-e`: the encoded image.
+    pub encode: bool,
+}
+
+/// The status `rexxc` exits with after its usage text: `exit(-1)`.
+pub const COMPILE_USAGE_STATUS: u8 = 255;
+
+/// The status `rexxc` exits with when the output names the input: `exit(-2)`.
+pub const COMPILE_SAME_FILE_STATUS: u8 = 254;
+
+/// A `rexxc` message by its catalogue code, as `displayError` prints it to
+/// standard output.
+fn rexxc_message(sub: u16) -> Vec<u8> {
+    let message = rexx_inventory::errors::lookup(999, sub).expect("a catalogued rexxc message");
+    format!("{}\n", message.text).into_bytes()
+}
+
+/// `RexxCompiler.cpp`'s `main` scan of `args`, the words after the binary's
+/// own name: the command, or the usage text for standard output.
+pub fn parse_compile(args: &[Vec<u8>]) -> Result<Compile, Vec<u8>> {
+    let usage = |incorrect: bool| {
+        let mut text = if incorrect {
+            rexxc_message(12)
+        } else {
+            Vec::new()
+        };
+        text.extend(rexxc_message(14));
+        text.extend(rexxc_message(15));
+        text
+    };
+    let Some((input, rest)) = args.split_first() else {
+        return Err(usage(false));
+    };
+    let (output, flags) = match rest.split_first() {
+        Some((output, flags)) if output.first() != Some(&b'-') => (Some(output.clone()), flags),
+        _ => (None, rest),
+    };
+    let mut compile = Compile {
+        input: input.clone(),
+        output,
+        silent: false,
+        encode: false,
+    };
+    for flag in flags {
+        match (flag.first(), flag.get(1)) {
+            (Some(b'-'), Some(b's' | b'S')) => compile.silent = true,
+            (Some(b'-'), Some(b'e' | b'E')) => compile.encode = true,
+            _ => return Err(usage(true)),
+        }
+    }
+    Ok(compile)
+}
+
+/// `rexxc`'s refusal when the output and input names are the same bytes.
+pub fn same_file_message() -> Vec<u8> {
+    rexxc_message(13)
+}
+
+/// The report and status for an image that cannot be written to `name`:
+/// 3.902, displayed with no position.
+pub fn output_unwritable(name: &[u8]) -> (Vec<u8>, i32) {
+    positionless(Raised::syntax(3, 902, vec![name.to_vec()]))
 }
 
 /// `RexxGetVersionInformation`'s text (`api/InterpreterAPI.cpp:250-278`),
@@ -341,6 +441,43 @@ mod tests {
         let banner = String::from_utf8(version_banner()).expect("ASCII");
         assert!(banner.starts_with("Open Object Rexx Version 5.3.0 r0\nBuild date: Jul 30 2026\n"));
         assert!(!banner.ends_with('\n'));
+    }
+
+    #[test]
+    fn rexxc_reads_an_output_then_flags_by_their_second_byte() {
+        let compile = |args: &[&str]| parse_compile(&words(args));
+        assert_eq!(
+            compile(&["a", "b", "-Sx", "-e"]),
+            Ok(Compile {
+                input: b"a".to_vec(),
+                output: Some(b"b".to_vec()),
+                silent: true,
+                encode: true,
+            })
+        );
+        assert_eq!(
+            compile(&["-x"]).map(|compile| compile.input),
+            Ok(b"-x".to_vec())
+        );
+        assert_eq!(
+            compile(&["a", "-s"]).map(|compile| compile.output),
+            Ok(None)
+        );
+        let usage = b"SYNTAX: rexxc inputfile [outputfile] [-s] [-e]\n\
+                      Without outputfile rexxc only performs a syntax check.\n";
+        assert_eq!(compile(&[]), Err(usage.to_vec()));
+        for args in [
+            &["a", "-x"][..],
+            &["a", "-"],
+            &["a", "b", "c"],
+            &["a", "-s", "b"],
+        ] {
+            assert_eq!(
+                compile(args),
+                Err([&b"The rexxc command parameters are incorrect.\n"[..], usage].concat()),
+                "{args:?}"
+            );
+        }
     }
 
     #[test]

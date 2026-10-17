@@ -11,10 +11,8 @@
 
 //! `rexx`, the command line `utilities/rexx/platform/unix/rexx.cpp` reads.
 
-use std::ffi::OsStr;
 use std::io::{IsTerminal, Write};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
-use std::path::PathBuf;
 use std::process::ExitCode;
 
 use rexx_exec::launcher::{self, Command, Program};
@@ -103,7 +101,7 @@ fn main() -> ExitCode {
             if let Some((directive, count)) = run.default_options {
                 invocation = invocation.with_default_options(directive, count);
             }
-            match load(&name) {
+            match launcher::load(&name) {
                 Ok((found, text)) => (
                     rexx_exec::run_program_named(found.as_os_str().as_bytes(), text, invocation),
                     false,
@@ -159,26 +157,6 @@ fn main() -> ExitCode {
     };
     // A process exit status is one byte.
     ExitCode::from(status as u8)
-}
-
-/// The program `name` names and its text, or the report and status for one
-/// that cannot be found or read.
-fn load(name: &[u8]) -> Result<(PathBuf, Vec<u8>), (Vec<u8>, i32)> {
-    let found = std::env::current_dir().ok().and_then(|cwd| {
-        launcher::resolve_program(
-            OsStr::from_bytes(name),
-            &cwd,
-            std::env::var_os("REXX_PATH").as_deref(),
-            std::env::var_os("PATH").as_deref(),
-        )
-    });
-    let Some(found) = found else {
-        return Err(launcher::program_not_found(name));
-    };
-    match std::fs::read(&found) {
-        Ok(text) => Ok((found, text)),
-        Err(_) => Err(launcher::program_unreadable(found.as_os_str().as_bytes())),
-    }
 }
 
 /// Writes a report the launcher makes itself and exits with its status.
