@@ -1,0 +1,432 @@
+# no arguments: the usage text on stdout
+run
+----
+rc> 255
+out> SYNTAX: rexxc inputfile [outputfile] [-s] [-e]
+out> Without outputfile rexxc only performs a syntax check.
+
+# the first word is the input whatever it looks like
+run
+-x
+----
+rc> 253
+out> Open Object Rexx Version 5.3.0 r0
+out> Build date: <date>
+out> Addressing mode: 64
+out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
+out> This program and the accompanying materials are made available under the terms
+out> of the Common Public License v1.0 which accompanies this distribution or at
+out> https://www.oorexx.org/license.html
+err> Error 3:  Failure during initialization.
+err> Error 3.901:  Failure during initialization: Program "-x" was not found.
+
+# an unknown flag
+run
+ok.rex
+-x
+----
+rc> 255
+out> The rexxc command parameters are incorrect.
+out> SYNTAX: rexxc inputfile [outputfile] [-s] [-e]
+out> Without outputfile rexxc only performs a syntax check.
+
+run
+ok.rex
+o.rxo
+-x
+----
+rc> 255
+out> The rexxc command parameters are incorrect.
+out> SYNTAX: rexxc inputfile [outputfile] [-s] [-e]
+out> Without outputfile rexxc only performs a syntax check.
+
+# a third word that is not a flag
+run
+ok.rex
+o.rxo
+extra
+----
+rc> 255
+out> The rexxc command parameters are incorrect.
+out> SYNTAX: rexxc inputfile [outputfile] [-s] [-e]
+out> Without outputfile rexxc only performs a syntax check.
+
+# a bare dash is an unknown flag
+run
+ok.rex
+-
+----
+rc> 255
+out> The rexxc command parameters are incorrect.
+out> SYNTAX: rexxc inputfile [outputfile] [-s] [-e]
+out> Without outputfile rexxc only performs a syntax check.
+
+run
+ok.rex
+o.rxo
+-s
+-
+----
+rc> 255
+out> The rexxc command parameters are incorrect.
+out> SYNTAX: rexxc inputfile [outputfile] [-s] [-e]
+out> Without outputfile rexxc only performs a syntax check.
+
+# output equal to input, after the banner
+run
+ok.rex
+ok.rex
+----
+rc> 254
+out> Open Object Rexx Version 5.3.0 r0
+out> Build date: <date>
+out> Addressing mode: 64
+out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
+out> This program and the accompanying materials are made available under the terms
+out> of the Common Public License v1.0 which accompanies this distribution or at
+out> https://www.oorexx.org/license.html
+out> Output file name must be different from input file name.
+
+run
+ok.rex
+ok.rex
+-s
+----
+rc> 254
+out> Output file name must be different from input file name.
+
+# not found
+run
+nope
+----
+rc> 253
+out> Open Object Rexx Version 5.3.0 r0
+out> Build date: <date>
+out> Addressing mode: 64
+out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
+out> This program and the accompanying materials are made available under the terms
+out> of the Common Public License v1.0 which accompanies this distribution or at
+out> https://www.oorexx.org/license.html
+err> Error 3:  Failure during initialization.
+err> Error 3.901:  Failure during initialization: Program "nope" was not found.
+
+run
+nope
+-s
+----
+rc> 253
+err> Error 3:  Failure during initialization.
+err> Error 3.901:  Failure during initialization: Program "nope" was not found.
+
+run
+nope
+nodir/x.rxo
+-s
+----
+rc> 253
+err> Error 3:  Failure during initialization.
+err> Error 3.901:  Failure during initialization: Program "nope" was not found.
+
+# a syntax error, with and without the banner
+run
+bad.rex
+----
+rc> 221
+out> Open Object Rexx Version 5.3.0 r0
+out> Build date: <date>
+out> Addressing mode: 64
+out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
+out> This program and the accompanying materials are made available under the terms
+out> of the Common Public License v1.0 which accompanies this distribution or at
+out> https://www.oorexx.org/license.html
+err>      1 *-* say (
+err> Error 35 running DIR/bad.rex line 1:  Invalid expression.
+err> Error 35.1:  Incorrect expression detected at "(".
+
+run out=o.rxo
+bad.rex
+o.rxo
+-s
+----
+rc> 221
+err>      1 *-* say (
+err> Error 35 running DIR/bad.rex line 1:  Invalid expression.
+err> Error 35.1:  Incorrect expression detected at "(".
+file> absent
+
+run
+bad.rex
+-s
+----
+rc> 221
+err>      1 *-* say (
+err> Error 35 running DIR/bad.rex line 1:  Invalid expression.
+err> Error 35.1:  Incorrect expression detected at "(".
+
+# a syntax check
+run
+ok.rex
+----
+rc> 0
+out> Open Object Rexx Version 5.3.0 r0
+out> Build date: <date>
+out> Addressing mode: 64
+out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
+out> This program and the accompanying materials are made available under the terms
+out> of the Common Public License v1.0 which accompanies this distribution or at
+out> https://www.oorexx.org/license.html
+
+run
+ok.rex
+-s
+----
+rc> 0
+
+run
+ok.rex
+-e
+----
+rc> 0
+out> Open Object Rexx Version 5.3.0 r0
+out> Build date: <date>
+out> Addressing mode: 64
+out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
+out> This program and the accompanying materials are made available under the terms
+out> of the Common Public License v1.0 which accompanies this distribution or at
+out> https://www.oorexx.org/license.html
+
+run
+ok.rex
+-s
+-e
+----
+rc> 0
+
+run
+ok.rex
+-e
+-s
+----
+rc> 0
+
+# an image, binary and encoded, flags in either order and by their second byte
+run out=o.rxo
+ok.rex
+o.rxo
+----
+rc> 0
+out> Open Object Rexx Version 5.3.0 r0
+out> Build date: <date>
+out> Addressing mode: 64
+out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
+out> This program and the accompanying materials are made available under the terms
+out> of the Common Public License v1.0 which accompanies this distribution or at
+out> https://www.oorexx.org/license.html
+file> #!/usr/bin/env rexx\n/**/@REXX\x00\x00
+
+run out=o.rxo
+ok.rex
+o.rxo
+-s
+----
+rc> 0
+file> #!/usr/bin/env rexx\n/**/@REXX\x00\x00
+
+run out=o.rxo
+ok.rex
+o.rxo
+-e
+----
+rc> 0
+out> Open Object Rexx Version 5.3.0 r0
+out> Build date: <date>
+out> Addressing mode: 64
+out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
+out> This program and the accompanying materials are made available under the terms
+out> of the Common Public License v1.0 which accompanies this distribution or at
+out> https://www.oorexx.org/license.html
+file> #!/usr/bin/env rexx\n/**/@REXX@\n
+
+run out=o.rxo
+ok.rex
+o.rxo
+-s
+-e
+----
+rc> 0
+file> #!/usr/bin/env rexx\n/**/@REXX@\n
+
+run out=o.rxo
+ok.rex
+o.rxo
+-E
+-S
+----
+rc> 0
+file> #!/usr/bin/env rexx\n/**/@REXX@\n
+
+run out=o.rxo
+ok.rex
+o.rxo
+-sx
+-Exyz
+----
+rc> 0
+file> #!/usr/bin/env rexx\n/**/@REXX@\n
+
+# the input is found by the program search
+run out=o.rxo
+ok
+o.rxo
+-s
+----
+rc> 0
+file> #!/usr/bin/env rexx\n/**/@REXX\x00\x00
+
+# an output that cannot be written
+run
+ok.rex
+nodir/o.rxo
+-s
+----
+rc> 253
+err> Error 3:  Failure during initialization.
+err> Error 3.902:  Error writing output file "nodir/o.rxo".
+
+run out=ro.rxo
+ok.rex
+ro.rxo
+-s
+----
+rc> 253
+err> Error 3:  Failure during initialization.
+err> Error 3.902:  Error writing output file "ro.rxo".
+file> 
+
+run
+ok.rex
+nodir/o.rxo
+----
+rc> 253
+out> Open Object Rexx Version 5.3.0 r0
+out> Build date: <date>
+out> Addressing mode: 64
+out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
+out> This program and the accompanying materials are made available under the terms
+out> of the Common Public License v1.0 which accompanies this distribution or at
+out> https://www.oorexx.org/license.html
+err> Error 3:  Failure during initialization.
+err> Error 3.902:  Error writing output file "nodir/o.rxo".
+
+# names that are not plain ASCII
+run
+a b
+-s
+----
+rc> 0
+
+run out=blank_rxo
+a b.rex
+o p.rxo
+-s
+----
+rc> 0
+file> #!/usr/bin/env rexx\n/**/@REXX\x00\x00
+
+run
+c\xFFd
+-s
+----
+rc> 0
+
+run out=ff_rxo
+c\xFFd.rex
+q\xFFr.rxo
+-s
+----
+rc> 0
+file> #!/usr/bin/env rexx\n/**/@REXX\x00\x00
+
+run
+e f
+-s
+----
+rc> 221
+err>      1 *-* say (
+err> Error 35 running DIR/e f.rex line 1:  Invalid expression.
+err> Error 35.1:  Incorrect expression detected at "(".
+
+run
+e f.rex
+----
+rc> 221
+out> Open Object Rexx Version 5.3.0 r0
+out> Build date: <date>
+out> Addressing mode: 64
+out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
+out> This program and the accompanying materials are made available under the terms
+out> of the Common Public License v1.0 which accompanies this distribution or at
+out> https://www.oorexx.org/license.html
+err>      1 *-* say (
+err> Error 35 running DIR/e f.rex line 1:  Invalid expression.
+err> Error 35.1:  Incorrect expression detected at "(".
+
+run
+z\xFFz
+-s
+----
+rc> 253
+err> Error 3:  Failure during initialization.
+err> Error 3.901:  Failure during initialization: Program "z\xFFz" was not found.
+
+run
+a b
+n\xFF/x.rxo
+-s
+----
+rc> 253
+err> Error 3:  Failure during initialization.
+err> Error 3.902:  Error writing output file "n\xFF/x.rxo".
+
+# translation binds an EXTERNAL library and resolves nothing else
+run out=o.rxo
+lib.rex
+o.rxo
+-s
+----
+rc> 158
+err>      2 *-* ::routine r external "LIBRARY x"
+err> Error 98 running DIR/lib.rex line 2:  Execution error.
+err> Error 98.903:  Unable to load library "x".
+file> absent
+
+run
+cls.rex
+-s
+----
+rc> 0
+
+run
+req.rex
+-s
+----
+rc> 0
+
+run
+rexxent.rex
+-s
+----
+rc> 166
+err>      1 *-* ::method m external "LIBRARY REXX nosuchentry"
+err> Error 90 running DIR/rexxent.rex line 1:  External name not found.
+err> Error 90.998:  Unable to find external method "nosuchentry".

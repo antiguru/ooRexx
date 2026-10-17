@@ -13,5 +13,5 @@ return testResult
 ::class "ChildPath.testGroup" subclass ooTestCase public
 
 ::method test_a
-  address system 'command -v rexx > ../rexx-path.txt; command -v rexxc > ../rexxc-path.txt; echo $? >> ../rexxc-path.txt'
+  address system 'command -v rexx > ../rexx-path.txt; command -v rexxc > ../rexxc-path.txt'
   self~assertSame(0, rc)

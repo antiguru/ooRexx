@@ -703,11 +703,11 @@ pub fn run_process(
     }
 }
 
-/// A directory beside `run` holding `rexx`, this crate's own, so a
-/// test running `rexx` as a command runs the side under test; the oracle's
-/// side gets its own `bin` directory instead.
+/// A directory beside `run` holding `rexx` and `rexxc`, this crate's own, so
+/// a test running either as a command runs the side under test; the
+/// oracle's side gets its own `bin` directory instead.
 ///
-/// `rexx` is a hard link (a copy where one cannot be made), not a symlink,
+/// Each is a hard link (a copy where one cannot be made), not a symlink,
 /// because `.RexxInfo~executable` resolves links: the test framework finds
 /// the samples at `../samples` from the executable's own directory, which
 /// is the oracle's install layout, and a `samples` link beside this
@@ -715,42 +715,8 @@ pub fn run_process(
 pub fn interpreter_bin(run: &Path) -> PathBuf {
     let bin = run.parent().expect("a parent").join("bin-rexx");
     fs::create_dir_all(&bin).expect("the interpreter bin directory");
-    let rexx = bin.join("rexx");
-    let ours = env!("CARGO_BIN_EXE_rexx");
-    let current = || {
-        fs::metadata(&rexx)
-            .ok()
-            .zip(fs::metadata(ours).ok())
-            .is_some_and(|(theirs, ours)| {
-                use std::os::unix::fs::MetadataExt as _;
-                (theirs.dev(), theirs.ino()) == (ours.dev(), ours.ino())
-            })
-    };
-    if !current() {
-        // A copy or an older link left by an earlier build is replaced, and
-        // the copy below never writes onto an existing file, which could be
-        // a link to `ours` itself.
-        match fs::remove_file(&rexx) {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
-                panic!("cannot replace {}: {e}", rexx.display())
-            }
-            _ => {}
-        }
-        // A run sharing this directory may link it between the removal and
-        // the link, which leaves the file this one would have made.
-        if let Err(link) = fs::hard_link(ours, &rexx)
-            && !current()
-        {
-            assert!(
-                !rexx.exists(),
-                "{} appeared while it was replaced",
-                rexx.display()
-            );
-            fs::copy(ours, &rexx).unwrap_or_else(|copy| {
-                panic!("cannot link ({link}) or copy ({copy}) {}", rexx.display())
-            });
-        }
-    }
+    place(&bin.join("rexx"), env!("CARGO_BIN_EXE_rexx"));
+    place(&bin.join("rexxc"), env!("CARGO_BIN_EXE_rexxc"));
     let samples = bin.parent().expect("a parent").join("samples");
     match std::os::unix::fs::symlink(oracle::oracle_root().join("samples"), &samples) {
         Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => {
@@ -759,6 +725,45 @@ pub fn interpreter_bin(run: &Path) -> PathBuf {
         _ => {}
     }
     bin
+}
+
+/// Makes `at` a hard link to `ours`, or a copy where one cannot be made.
+fn place(at: &Path, ours: &str) {
+    let current = || {
+        fs::metadata(at)
+            .ok()
+            .zip(fs::metadata(ours).ok())
+            .is_some_and(|(theirs, ours)| {
+                use std::os::unix::fs::MetadataExt as _;
+                (theirs.dev(), theirs.ino()) == (ours.dev(), ours.ino())
+            })
+    };
+    if current() {
+        return;
+    }
+    // A copy or an older link left by an earlier build is replaced, and
+    // the copy below never writes onto an existing file, which could be
+    // a link to `ours` itself.
+    match fs::remove_file(at) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+            panic!("cannot replace {}: {e}", at.display())
+        }
+        _ => {}
+    }
+    // A run sharing this directory may link it between the removal and
+    // the link, which leaves the file this one would have made.
+    if let Err(link) = fs::hard_link(ours, at)
+        && !current()
+    {
+        assert!(
+            !at.exists(),
+            "{} appeared while it was replaced",
+            at.display()
+        );
+        fs::copy(ours, at).unwrap_or_else(|copy| {
+            panic!("cannot link ({link}) or copy ({copy}) {}", at.display())
+        });
+    }
 }
 
 /// Renames each test of `group` that `left_out` names in the copy's group

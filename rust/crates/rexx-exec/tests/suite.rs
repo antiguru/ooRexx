@@ -295,37 +295,46 @@ pub fn resolve(name: &str, path: &str) -> Option<PathBuf> {
         .find(|candidate| executable(candidate))
 }
 
-/// Whether the crate side's `path` resolves `rexx` inside `bin` and `rexxc`
-/// nowhere, and `bin` holds no ELF file but copies of this crate's `rexx`.
+/// Whether the crate side's `path` resolves `rexx` and `rexxc` inside `bin`,
+/// and `bin` holds no ELF file but copies of this crate's `rexx` and `rexxc`.
 pub fn check_path(path: &str, bin: &Path) -> Result<(), String> {
     use std::os::unix::fs::MetadataExt as _;
     let identity = |path: &Path| fs::metadata(path).ok().map(|meta| (meta.dev(), meta.ino()));
-    let ours_path = Path::new(env!("CARGO_BIN_EXE_rexx"));
-    let ours_identity = identity(ours_path);
+    let ours = [
+        Path::new(env!("CARGO_BIN_EXE_rexx")),
+        Path::new(env!("CARGO_BIN_EXE_rexxc")),
+    ];
     for entry in fs::read_dir(bin).map_err(|e| format!("cannot read {}: {e}", bin.display()))? {
         let file = entry.map_err(|e| e.to_string())?.path();
-        if identity(&file).is_some() && identity(&file) == ours_identity {
+        if identity(&file).is_some()
+            && ours
+                .iter()
+                .any(|binary| identity(&file) == identity(binary))
+        {
             continue;
         }
         let bytes = fs::read(&file).unwrap_or_default();
-        if bytes.starts_with(b"\x7fELF") && bytes != fs::read(ours_path).unwrap_or_default() {
+        if bytes.starts_with(b"\x7fELF")
+            && !ours
+                .iter()
+                .any(|binary| bytes == fs::read(binary).unwrap_or_default())
+        {
             return Err(format!(
                 "{} is a binary other than this crate's",
                 file.display()
             ));
         }
     }
-    let rexx = resolve("rexx", path);
-    if rexx.as_deref() != Some(bin.join("rexx").as_path()) {
-        return Err(format!(
-            "rexx resolves to {rexx:?} on {path}, not inside {}",
-            bin.display()
-        ));
+    for name in ["rexx", "rexxc"] {
+        let found = resolve(name, path);
+        if found.as_deref() != Some(bin.join(name).as_path()) {
+            return Err(format!(
+                "{name} resolves to {found:?} on {path}, not inside {}",
+                bin.display()
+            ));
+        }
     }
-    match resolve("rexxc", path) {
-        Some(rexxc) => Err(format!("rexxc resolves to {} on {path}", rexxc.display())),
-        None => Ok(()),
-    }
+    Ok(())
 }
 
 /// Copies the oracle `bin`'s Rexx class files (`*.cls`) into the crate
@@ -1880,7 +1889,7 @@ mod fixtures {
     }
 
     #[test]
-    fn the_crate_side_finds_its_own_rexx_and_no_rexxc() {
+    fn the_crate_side_finds_its_own_rexx_and_rexxc() {
         let run = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
             .join(format!("suite-path-{}", std::process::id()))
             .join("run");
@@ -1910,10 +1919,14 @@ mod fixtures {
             bin.join("../samples/factor.rex").is_file(),
             "the samples beside the bin"
         );
-        assert_eq!(resolve("rexxc", &path), None);
+        assert_eq!(resolve("rexxc", &path), Some(bin.join("rexxc")));
+        assert_eq!(
+            fs::read(bin.join("rexxc")).expect("the crate's rexxc"),
+            fs::read(env!("CARGO_BIN_EXE_rexxc")).expect("rexxc")
+        );
         assert!(check_path("/usr/bin:/bin", &bin).is_err());
-        fs::copy(env!("CARGO_BIN_EXE_rexx"), bin.join("rexxc")).expect("a rexxc");
-        assert!(check_path(&path, &bin).is_err());
+        fs::remove_file(bin.join("rexxc")).expect("the crate's rexxc");
+        assert!(check_path(&path, &bin).is_err(), "no rexxc in the bin");
         fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
     }
 
@@ -1986,7 +1999,7 @@ mod fixtures {
     }
 
     #[test]
-    fn a_command_the_crate_side_runs_finds_its_rexx_and_no_rexxc() {
+    fn a_command_the_crate_side_runs_finds_its_rexx_and_rexxc() {
         let run = scratch_run("child-path");
         let (_, tests) = crate_run_once(
             &root(),
@@ -2005,7 +2018,7 @@ mod fixtures {
         );
         assert_eq!(
             fs::read_to_string(beside.join("rexxc-path.txt")).expect("rexxc's path"),
-            "127\n"
+            format!("{}\n", interpreter_bin(&run).join("rexxc").display())
         );
         fs::remove_dir_all(beside).expect("cannot remove the run");
     }
