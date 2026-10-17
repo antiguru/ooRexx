@@ -3931,7 +3931,7 @@ impl Interp {
         program: Option<ProgramId>,
         arguments: &[Option<ObjRef>],
     ) {
-        let package = program.map(|program| self.package_path(program).as_bytes().to_vec());
+        let package = program.map(|program| self.package_path(program).to_vec());
         let level = NativeLevel {
             method: false,
             name,

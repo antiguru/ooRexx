@@ -16,10 +16,7 @@
 //!
 //! A case's input is its words, one per line: `\xHH` is a byte, and a line
 //! `<empty>` is the empty word. `rexx_path=DIR` sets `REXX_PATH` to the
-//! fixture's `DIR`, and `path=DIR` puts it in front of `PATH`. `lossy` marks a
-//! case whose program name holds `'ff'x`: `PARSE SOURCE` and the error report
-//! carry `Interp::program_path`, a `String`, so the crate answers U+FFFD
-//! there.
+//! fixture's `DIR`, and `path=DIR` puts it in front of `PATH`.
 
 use std::ffi::OsString;
 use std::os::unix::ffi::OsStringExt;
@@ -100,6 +97,10 @@ fn lay_fixture(dir: &Path) {
     file(b"my prog.rex", failing);
     file(b"p\xff.rex", failing);
     file(b"q\xff", failing);
+    file(
+        b"local.rex",
+        "say .local~items\nsay .local~allIndexes~sort~makeString('L', ', ')\n",
+    );
     file(b"bytes.rex", "say c2x(arg(1))\nsay c2x(.syscargs[1])\n");
     file(b"locked.rex", "say 'read'\n");
     use std::os::unix::fs::PermissionsExt as _;
@@ -199,9 +200,6 @@ fn run(
         .env_remove("REXX_PATH")
         .stdin(Stdio::null());
     for (key, values) in &case.args {
-        if key == "lossy" {
-            continue;
-        }
         let entry = dir.join(values.first().expect("a directory"));
         match key.as_str() {
             "rexx_path" => command.env("REXX_PATH", entry),
@@ -263,12 +261,7 @@ fn the_command_line_answers_as_the_oracles_does() {
             let args = words(&case.input);
             let theirs = run(&oracle, &args, &theirs_dir, case, true);
             let crate_side = run(ours, &args, &ours_dir, case, false);
-            let expected = if case.args.contains_key("lossy") {
-                theirs.replace("\\xFF", "\\xEF\\xBF\\xBD")
-            } else {
-                theirs.clone()
-            };
-            if crate_side != expected {
+            if crate_side != theirs {
                 diverged.push(format!(
                     "{}:\n--- oracle\n{theirs}--- crate\n{crate_side}",
                     case.input.replace('\n', " ")

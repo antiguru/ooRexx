@@ -1240,7 +1240,7 @@ impl Interp {
         package: Option<ProgramId>,
         name: &[u8],
         requires: bool,
-    ) -> Option<String> {
+    ) -> Option<Vec<u8>> {
         let program = package
             .filter(|program| !self.compiled_method_names.contains_key(program))
             .map(|program| self.package_path(program));

@@ -3126,7 +3126,7 @@ impl Interp {
         indent: usize,
     ) -> Option<FailureSite> {
         let program_id = self.running_activation()?.program_id;
-        let name = self.required_paths.get(&program_id)?.as_bytes().to_vec();
+        let name = self.required_paths.get(&program_id)?.to_vec();
         Some(FailureSite::Named {
             line,
             indent,

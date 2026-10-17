@@ -161,14 +161,16 @@ pub fn resolve_program(
 ) -> Option<PathBuf> {
     let entries = require::search_entries(
         None,
-        rexx_path.map(widen).as_deref(),
-        path.map(widen).as_deref(),
+        rexx_path
+            .map(|path| require::widen(path.as_bytes()))
+            .as_deref(),
+        path.map(|path| require::widen(path.as_bytes())).as_deref(),
     );
     let cwd = cwd.as_os_str().as_bytes();
-    let groups = require::candidates(&widen(name), &entries, None, false);
+    let groups = require::candidates(&require::widen(name.as_bytes()), &entries, None, false);
     let located = |candidate: &str| {
         PathBuf::from(OsString::from_vec(crate::paths::normalize_bytes(
-            &narrow(candidate),
+            &require::narrow(candidate),
             cwd,
         )))
     };
@@ -180,19 +182,6 @@ pub fn resolve_program(
         }
     })?;
     Some(located(&hit))
-}
-
-/// `bytes` with each byte as the `char` of the same value, so the `str`
-/// search in `require.rs` carries a name that is not UTF-8 without loss.
-fn widen(bytes: &OsStr) -> String {
-    bytes.as_bytes().iter().copied().map(char::from).collect()
-}
-
-/// [`widen`]'s inverse.
-fn narrow(text: &str) -> Vec<u8> {
-    text.chars()
-        .map(|c| u8::try_from(c).expect("a widened name holds only chars below 256"))
-        .collect()
 }
 
 /// `RexxGetVersionInformation`'s text (`api/InterpreterAPI.cpp:250-278`),
@@ -239,7 +228,7 @@ pub fn program_unreadable(path: &[u8]) -> (Vec<u8>, i32) {
 fn positionless(mut raised: Raised) -> (Vec<u8>, i32) {
     raised.delivery.positionless = true;
     let report = raised.report(&ClauseSite {
-        path: "",
+        path: b"",
         sites: &[],
     });
     (report, raised.exit_code())
@@ -367,7 +356,7 @@ mod tests {
     #[test]
     fn widening_a_name_round_trips_every_byte() {
         let all: Vec<u8> = (0..=255).collect();
-        assert_eq!(narrow(&widen(OsStr::from_bytes(&all))), all);
+        assert_eq!(require::narrow(&require::widen(&all)), all);
     }
 
     #[test]

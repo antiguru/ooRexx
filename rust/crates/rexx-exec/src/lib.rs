@@ -1704,11 +1704,11 @@ struct Interp {
     /// write; the gate on [`Interp::lostdigits_check`].
     lostdigits_armed: bool,
     /// The running program's own location, as `PARSE SOURCE`'s third word.
-    program_path: String,
+    program_path: Vec<u8>,
     /// The resolved location of each program a `::REQUIRES` loaded, which is
     /// what that program's own `PARSE SOURCE`, `~package~name` and traceback
     /// report in place of [`Interp::program_path`].
-    required_paths: FxHashMap<ProgramId, Box<str>>,
+    required_paths: FxHashMap<ProgramId, Box<[u8]>>,
     /// The package each `::REQUIRES` name has already loaded, keyed both by
     /// the name as written and by the file it resolved to. An entry goes when
     /// its package object is collected.
@@ -2280,7 +2280,7 @@ impl Interp {
             command_words_base: Some(1),
             reqstr_armed: false,
             lostdigits_armed: false,
-            program_path: String::new(),
+            program_path: Vec::new(),
             required_paths: FxHashMap::default(),
             required_packages: FxHashMap::default(),
             untranslated: rustc_hash::FxHashSet::default(),
@@ -2343,7 +2343,7 @@ impl Interp {
 
     /// The file the external search resolves `name` to, or `None` when no
     /// route holds one. `&self`, which is what lets the call resolver use it.
-    pub(crate) fn external_program(&self, name: &[u8]) -> Option<String> {
+    pub(crate) fn external_program(&self, name: &[u8]) -> Option<Vec<u8>> {
         let program = self.running_activation()?.program_id;
         self.resolve_search(Some(self.package_path(program)), name, false)
     }
@@ -2366,10 +2366,12 @@ impl Interp {
         };
         // Resolved and then unreadable is 3.1 naming the file, not the 43.1
         // of a name that resolved to nothing -- measured on a mode-000 file.
-        let Ok(text) = std::fs::read(&resolved) else {
-            return Err(Raised::executable_file_unreadable(resolved.as_bytes()).into());
+        let Ok(text) =
+            std::fs::read(<std::ffi::OsStr as std::os::unix::ffi::OsStrExt>::from_bytes(&resolved))
+        else {
+            return Err(Raised::executable_file_unreadable(&resolved).into());
         };
-        let parsed = Rc::new(self.parse_file(text, resolved.as_bytes())?);
+        let parsed = Rc::new(self.parse_file(text, &resolved)?);
         let caller = self
             .running_activation()
             .map(|activation| activation.program_id);
@@ -2377,7 +2379,7 @@ impl Interp {
         // Its own path, so the callee's `PARSE SOURCE`, `~package~name` and
         // traceback name the file rather than the program that called it.
         self.required_paths
-            .insert(program_id, resolved.as_str().into());
+            .insert(program_id, resolved.as_slice().into());
         let address = self.activation().address.clone();
         let settings = self.activation().settings.clone();
         let saved = std::mem::replace(
@@ -3606,7 +3608,7 @@ fn ir_bodies(program: &rexx_parse::Program) -> Vec<(&rexx_parse::CodeBody, Strin
 fn report_late_failures(
     interp: &mut Interp,
     failures: Vec<(Failure, Vec<FailureSite>)>,
-    path: &str,
+    path: &[u8],
     exit_code: &mut i32,
 ) {
     for (failure, mut sites) in failures {
@@ -3683,7 +3685,7 @@ fn execute(
 
 /// What a program that does not parse produces: the standard error report,
 /// its clause the only traceback line, and nothing else runs.
-fn parse_failure_outcome(path: &str, rejected: &rexx_parse::Rejected) -> Outcome {
+fn parse_failure_outcome(path: &[u8], rejected: &rexx_parse::Rejected) -> Outcome {
     let line = rejected.error.line(&rejected.source);
     let (raised, text) = Raised::parse_failure(&rejected.error, &rejected.source, line);
     let sites = [FailureSite::Clause {
@@ -3722,9 +3724,6 @@ fn execute_on(
 ) -> Outcome {
     let probe = 0u8;
     let base = &raw const probe as usize;
-    let name = path;
-    // `PARSE SOURCE` and the error reports read the name as `str`.
-    let path = &*String::from_utf8_lossy(name);
     let source = rexx_parse::ProgramSource::new(text, rexx_parse::SourceKind::Program);
     let program = match rexx_parse::program_from(source) {
         Ok(program) => program,
@@ -3735,7 +3734,7 @@ fn execute_on(
     if let Some(stack) = stack {
         interp.measure_stack(base, stack);
     }
-    interp.program_path = path.to_string();
+    interp.program_path = path.to_vec();
     if collect_every_alloc {
         interp.enable_stress_collect();
     }
@@ -3743,7 +3742,7 @@ fn execute_on(
     // goes into the same `call_context` a `CALL` fills -- see that field's own
     // doc for what reads it and for the three measured invocations that tell
     // "no argument" from "one empty argument" apart.
-    interp.activity.call_context.name = Rc::from(name);
+    interp.activity.call_context.name = Rc::from(path);
     let parts = invocation.into_parts();
     interp
         .roots

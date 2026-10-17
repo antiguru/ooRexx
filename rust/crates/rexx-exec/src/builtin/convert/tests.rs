@@ -950,7 +950,7 @@ fn a_substitution_carries_bytes_and_the_report_makes_them_displayable() {
 
     let site = crate::error::ClauseSite {
         sites: &[],
-        path: "/p.rex",
+        path: b"/p.rex",
     };
     let control = Raised::invalid_digit(crate::error::Notation::Hex, 0x01);
     assert!(

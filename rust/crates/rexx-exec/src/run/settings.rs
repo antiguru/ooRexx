@@ -144,10 +144,7 @@ impl Interp {
         }
         self.activation_mut().trace_entry = TraceEntry::Done;
         self.activation_mut().debug.source_traced = true;
-        let package = self
-            .package_path(self.activation().program_id)
-            .as_bytes()
-            .to_vec();
+        let package = self.package_path(self.activation().program_id).to_vec();
         self.trace_invocation(">I>", &subject, &package);
     }
 
@@ -162,10 +159,7 @@ impl Interp {
         };
         self.activation_mut().trace_entry = TraceEntry::Done;
         self.activation_mut().debug.source_traced = true;
-        let package = self
-            .package_path(self.activation().program_id)
-            .as_bytes()
-            .to_vec();
+        let package = self.package_path(self.activation().program_id).to_vec();
         self.trace_invocation(">I>", &subject, &package);
     }
 
@@ -183,10 +177,7 @@ impl Interp {
         if !self.trace_mode().labels {
             return;
         }
-        let package = self
-            .package_path(self.activation().program_id)
-            .as_bytes()
-            .to_vec();
+        let package = self.package_path(self.activation().program_id).to_vec();
         self.trace_invocation("<I<", &subject, &package);
     }
 
@@ -209,7 +200,7 @@ impl Interp {
         {
             let path = self.package_path(self.activation().program_id);
             return Some(Announced::Routine {
-                name: path.as_bytes().to_vec(),
+                name: path.to_vec(),
             });
         }
         let index = self.activation().body?;

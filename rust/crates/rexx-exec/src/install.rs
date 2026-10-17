@@ -36,6 +36,8 @@ use rexx_parse::{
 };
 use rustc_hash::FxHashMap;
 use std::collections::BTreeMap;
+use std::ffi::OsStr;
+use std::os::unix::ffi::OsStrExt;
 use std::rc::Rc;
 
 impl Interp {
@@ -514,7 +516,7 @@ impl Interp {
 
     /// The file a package was loaded from: the program's own path, or the
     /// resolved name a `::REQUIRES` found it under.
-    pub(crate) fn package_path(&self, id: ProgramId) -> &str {
+    pub(crate) fn package_path(&self, id: ProgramId) -> &[u8] {
         match self.required_paths.get(&id) {
             Some(path) => path,
             None => &self.program_path,
@@ -527,7 +529,7 @@ impl Interp {
     /// bound the same code. `None` where there is neither.
     pub(crate) fn external_package_path(&self, method: MethodId) -> Option<Vec<u8>> {
         let program = self.external_package_program(method)?;
-        Some(self.package_path(program).as_bytes().to_vec())
+        Some(self.package_path(program).to_vec())
     }
 
     /// The package [`Interp::external_package_path`] names.
@@ -669,7 +671,7 @@ impl Interp {
             None => self.resolve_search(None, original, true),
         };
         if let Some(found) = &found
-            && let Some(&loaded) = self.required_packages.get(found.as_bytes())
+            && let Some(&loaded) = self.required_packages.get(&found[..])
         {
             self.check_not_installing(loaded)?;
             self.required_packages.insert(original.into(), loaded);
@@ -686,17 +688,15 @@ impl Interp {
         }
         let resolved = match found.clone() {
             Some(resolved) => {
-                let Some(checked) =
-                    self.check_requires_access(resolved.as_bytes(), &mut inherited)?
-                else {
+                let Some(checked) = self.check_requires_access(&resolved, &mut inherited)? else {
                     return Err(Raised::requires_file_not_found(original).into());
                 };
-                Some(String::from_utf8_lossy(&checked).into_owned())
+                Some(checked.to_vec())
             }
             None => None,
         };
         if let Some(resolved) = &resolved
-            && let Some(&loaded) = self.required_packages.get(resolved.as_bytes())
+            && let Some(&loaded) = self.required_packages.get(&resolved[..])
         {
             self.check_not_installing(loaded)?;
             self.required_packages.insert(original.into(), loaded);
@@ -709,13 +709,13 @@ impl Interp {
         // read failing here is a permission or a race rather than a miss --
         // and the oracle reports the same 43.901 for it, since
         // `PackageManager::loadRequires` answers `OREF_NULL` either way.
-        let Ok(text) = std::fs::read(&resolved) else {
+        let Ok(text) = std::fs::read(OsStr::from_bytes(&resolved)) else {
             return Err(Raised::requires_file_not_found(original).into());
         };
-        let parsed = Rc::new(self.parse_file(text, resolved.as_bytes())?);
+        let parsed = Rc::new(self.parse_file(text, &resolved)?);
         let required = self.load_program(Rc::clone(&parsed));
         self.required_paths
-            .insert(required, resolved.as_str().into());
+            .insert(required, resolved.as_slice().into());
         // Built before it is cached: the cache holds the package object
         // weakly (`PackageManager::addToRequiresCache`,
         // `package/PackageManager.cpp:921`), so an entry lives exactly as long
@@ -733,10 +733,10 @@ impl Interp {
         // nothing to fire on.
         self.required_packages.insert(original.into(), required);
         self.required_packages
-            .insert(resolved.as_bytes().into(), required);
+            .insert(resolved.as_slice().into(), required);
         if let Some(found) = &found {
             self.required_packages
-                .insert(found.as_bytes().into(), required);
+                .insert(found.as_slice().into(), required);
         }
         if let Err(failure) = self.run_loaded(parsed, required, CallType::Requires, None, None) {
             // `getRequiresFile` caches a package only once it has translated
@@ -745,9 +745,9 @@ impl Interp {
             // failed to install or in its prologue stays cached.
             if self.untranslated.contains(&required) {
                 self.required_packages.remove(original);
-                self.required_packages.remove(resolved.as_bytes());
+                self.required_packages.remove(&resolved[..]);
                 if let Some(found) = &found {
-                    self.required_packages.remove(found.as_bytes());
+                    self.required_packages.remove(&found[..]);
                 }
             }
             return Err(failure);
@@ -797,7 +797,7 @@ impl Interp {
             .activity
             .requires_installing
             .iter()
-            .any(|open| &**open == path)
+            .any(|open| **open == *path)
         {
             return Err(Raised::circular_requires(path).into());
         }
@@ -869,7 +869,7 @@ impl Interp {
         name: &[u8],
     ) -> Result<ObjRef, Failure> {
         let Some(target) = self.find_namespace(package, namespace) else {
-            let path = self.package_path(package).to_owned();
+            let path = self.package_path(package).to_vec();
             return Err(Raised::namespace_not_found(namespace, &path).into());
         };
         let found = match target {
@@ -900,7 +900,7 @@ impl Interp {
         name: &[u8],
     ) -> Result<run::Resolved, Failure> {
         let Some(target) = self.find_namespace(package, namespace) else {
-            let path = self.package_path(package).to_owned();
+            let path = self.package_path(package).to_vec();
             return Err(Raised::namespace_not_found(namespace, &path).into());
         };
         let found = match target {
@@ -917,7 +917,7 @@ impl Interp {
 
     /// The file a `::REQUIRES` of `name` in package `id` resolves to, or
     /// `None` when no route holds one.
-    fn resolve_requires(&self, id: ProgramId, name: &[u8]) -> Option<String> {
+    fn resolve_requires(&self, id: ProgramId, name: &[u8]) -> Option<Vec<u8>> {
         self.resolve_search(Some(self.package_path(id)), name, true)
     }
 
@@ -925,11 +925,13 @@ impl Interp {
     /// package's path itself and chooses the resolve type.
     pub(crate) fn resolve_search(
         &self,
-        program: Option<&str>,
+        program: Option<&[u8]>,
         name: &[u8],
         requires: bool,
-    ) -> Option<String> {
+    ) -> Option<Vec<u8>> {
         let name = std::str::from_utf8(name).ok()?;
+        let program = program.map(require::widen);
+        let program = program.as_deref();
         // The interpreter's own environment and directory, never the process's
         // (`Interp::env`, `Interp::cwd`): the harnesses run interpreters on
         // threads, and `ootest/testOORexx.rex` sets `PATH` through `VALUE` and
@@ -955,7 +957,7 @@ impl Interp {
                 Err(_) => require::Found::Missing,
             }
         })?;
-        Some(require::normalize(&hit, cwd))
+        Some(require::narrow(&require::normalize(&hit, cwd)))
     }
 
     /// `PackageClass::loadPackageRexx`'s load: the same
@@ -1934,7 +1936,7 @@ impl Interp {
                 .transpose()?,
         };
         self.install_executable(parsed, name, routine, parent, |interp, id| {
-            interp.required_paths.insert(id, path.into());
+            interp.required_paths.insert(id, name.into());
         })
     }
 
@@ -2469,7 +2471,7 @@ impl Interp {
     /// while no directive has bound it.
     pub(crate) fn library_code_package_path(&self, code: usize) -> Option<Vec<u8>> {
         let program = self.library_code_program(code)?;
-        Some(self.package_path(program).as_bytes().to_vec())
+        Some(self.package_path(program).to_vec())
     }
 
     /// The package [`Interp::library_code_package_path`] names.
@@ -2564,7 +2566,7 @@ impl Interp {
     pub(crate) fn program_display_name(&self, program: ProgramId) -> &[u8] {
         match self.compiled_method_names.get(&program) {
             Some(name) => name,
-            None => self.package_path(program).as_bytes(),
+            None => self.package_path(program),
         }
     }
 
@@ -2666,7 +2668,7 @@ impl Interp {
                 line,
                 indent: 0,
                 text,
-                name: path.as_bytes().to_vec(),
+                name: path.to_vec(),
             },
             None => FailureSite::Clause {
                 line,

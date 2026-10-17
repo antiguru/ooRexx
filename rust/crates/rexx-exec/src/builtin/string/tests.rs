@@ -746,7 +746,7 @@ fn a_substitution_carries_bytes_and_the_report_makes_them_displayable() {
     // rendered line rather than on the stored substitution.
     let site = crate::error::ClauseSite {
         sites: &[],
-        path: "/p.rex",
+        path: b"/p.rex",
     };
     let high = Raised::argument_not_whole(b"COPIES", 2, &[0xff]);
     assert!(
@@ -837,7 +837,7 @@ fn the_new_raisers_render_the_oracles_own_message_text() {
     for (raised, expected) in cases {
         let rendered = String::from_utf8(raised.report(&crate::error::ClauseSite {
             sites: &[],
-            path: "/p.rex",
+            path: b"/p.rex",
         }))
         .expect("the catalogue is UTF-8");
         assert!(

@@ -782,7 +782,7 @@ mod tests {
 
         let site = crate::error::ClauseSite {
             sites: &[],
-            path: "/p.rex",
+            path: b"/p.rex",
         };
         let control = Raised::argument_not_whole(b"WORD", 2, &[0x01, b'q']);
         assert!(

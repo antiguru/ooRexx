@@ -624,7 +624,7 @@ impl Surface for Interp {
             self.hold_native_condition(raised.into());
             return None;
         };
-        let routine = self.new_file_executable(path.as_bytes(), true, None);
+        let routine = self.new_file_executable(&path, true, None);
         let routine = self.held(routine)?;
         self.roots.activity_mut().push_temp(routine);
         let (program, directive) = self.executable_sources.get(&routine)?.routine?;

@@ -177,6 +177,21 @@ fn has_directory(name: &str) -> bool {
 
 pub(crate) use crate::paths::normalize;
 
+/// `bytes` with each byte as the `char` of the same value, so the `str`
+/// search above carries a path that is not UTF-8 without loss.
+/// `to_ascii_lowercase` leaves the chars above 127 alone, which is
+/// `strlower`'s rule.
+pub(crate) fn widen(bytes: &[u8]) -> String {
+    bytes.iter().copied().map(char::from).collect()
+}
+
+/// [`widen`]'s inverse.
+pub(crate) fn narrow(text: &str) -> Vec<u8> {
+    text.chars()
+        .map(|c| u8::try_from(c).expect("a widened path holds only chars below 256"))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

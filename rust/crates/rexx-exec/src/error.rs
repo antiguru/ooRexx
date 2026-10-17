@@ -266,12 +266,8 @@ impl Raised {
     /// 98.987: a namespace qualifier no `::REQUIRES ... NAMESPACE` of the
     /// running package registered. Two substitutions, the namespace and the
     /// **package's own path**.
-    pub(crate) fn namespace_not_found(namespace: &[u8], package: &str) -> Raised {
-        Raised::syntax(
-            98,
-            987,
-            vec![namespace.to_vec(), package.as_bytes().to_vec()],
-        )
+    pub(crate) fn namespace_not_found(namespace: &[u8], package: &[u8]) -> Raised {
+        Raised::syntax(98, 987, vec![namespace.to_vec(), package.to_vec()])
     }
 
     /// 98.905: a wait for a guard lock or a message whose chain of waits
@@ -531,8 +527,8 @@ impl Raised {
 
     /// 98.911: `::CLASS` directives whose declared targets cannot be put in
     /// an order. One substitution, the program's own path.
-    pub(crate) fn cyclic_inheritance(path: &str) -> Raised {
-        Raised::syntax(98, 911, vec![path.as_bytes().to_vec()])
+    pub(crate) fn cyclic_inheritance(path: &[u8]) -> Raised {
+        Raised::syntax(98, 911, vec![path.to_vec()])
     }
 
     /// 43.901: a `::REQUIRES` whose name the four-route search did not find.
@@ -562,8 +558,8 @@ impl Raised {
 
     /// 98.952: a `::REQUIRES` naming a package whose own directives are still
     /// installing. One substitution, the **resolved** path.
-    pub(crate) fn circular_requires(path: &str) -> Raised {
-        Raised::syntax(98, 952, vec![path.as_bytes().to_vec()])
+    pub(crate) fn circular_requires(path: &[u8]) -> Raised {
+        Raised::syntax(98, 952, vec![path.to_vec()])
     }
 
     /// 99.906: a `::CONSTANT` directive's parenthesised expression form with
@@ -2218,7 +2214,7 @@ pub(crate) struct ClauseSite<'a> {
     /// The program's path **as the oracle prints it**, absolute. Measured:
     /// the major line carries the full path, and `rexx-oracle`'s `normalize`
     /// masks the cwd, so an absolute path is comparable across machines.
-    pub(crate) path: &'a str,
+    pub(crate) path: &'a [u8],
     /// One entry per activation-like level the condition escaped through,
     /// **innermost first** -- 4b's Task 2, and the whole reason this is a
     /// slice rather than the single site 4a carried.
@@ -2318,31 +2314,29 @@ impl Raised {
         } else {
             None
         };
-        let named = if self.delivery.internal_package {
-            "REXX".to_string()
+        let named: &[u8] = if self.delivery.internal_package {
+            b"REXX"
         } else {
-            match boundary.or_else(|| innermost.and_then(FailureSite::reported_name)) {
-                Some(package) => String::from_utf8_lossy(package).into_owned(),
-                None => site.path.to_string(),
-            }
-        };
-        let site = &ClauseSite {
-            path: &named,
-            sites: site.sites,
+            boundary
+                .or_else(|| innermost.and_then(FailureSite::reported_name))
+                .unwrap_or(site.path)
         };
         // `RAISE PROPAGATE` drops the position span and nothing else
         // (`Delivery::positionless`). Measured against the same program with
         // and without the `raise propagate`: the echo lines, the sub line and
         // the exit code are identical, and only ` running <path> line <n>`
         // goes.
-        let position = if self.delivery.positionless {
-            String::new()
-        } else if self.delivery.lineless {
-            format!(" running {}", site.path)
-        } else {
-            format!(" running {} line {line}", site.path)
-        };
-        out.extend_from_slice(format!("Error {}{}:  ", self.number, position).as_bytes());
+        let mut position = Vec::new();
+        if !self.delivery.positionless {
+            position.extend_from_slice(b" running ");
+            position.extend_from_slice(named);
+            if !self.delivery.lineless {
+                position.extend_from_slice(format!(" line {line}").as_bytes());
+            }
+        }
+        out.extend_from_slice(format!("Error {}", self.number).as_bytes());
+        out.extend_from_slice(&position);
+        out.extend_from_slice(b":  ");
         out.extend_from_slice(&self.message(self.number, 0));
         out.push(b'\n');
         // **Sub `0` prints no second line at all**, measured: `raise syntax
@@ -2444,7 +2438,7 @@ mod tests {
         let raised = Raised::syntax(7, 3, vec![]);
         let sites = one(4, b"end", 0);
         let site = ClauseSite {
-            path: "/abs/path/f.rex",
+            path: b"/abs/path/f.rex",
             sites: &sites,
         };
         assert_eq!(
@@ -2462,7 +2456,7 @@ mod tests {
         let raised = Raised::not_logical(b"x");
         let sites = one(12, b"if 'x' ", 0);
         let site = ClauseSite {
-            path: "/abs/w.rex",
+            path: b"/abs/w.rex",
             sites: &sites,
         };
         let report = String::from_utf8(raised.report(&site)).unwrap();
@@ -2483,7 +2477,7 @@ mod tests {
         for (line, expected) in [(4usize, "     4"), (12, "    12"), (105, "   105")] {
             let sites = one(line, b"nop", 0);
             let site = ClauseSite {
-                path: "/p",
+                path: b"/p",
                 sites: &sites,
             };
             let report = Raised::syntax(7, 3, vec![]).report(&site);
@@ -2595,7 +2589,7 @@ mod tests {
         let raised = Raised::syntax(42, 3, vec![]);
         let sites = one(2, b"say 1/0", 2);
         let site = ClauseSite {
-            path: "/abs/do1.rex",
+            path: b"/abs/do1.rex",
             sites: &sites,
         };
         let report = String::from_utf8(raised.report(&site)).unwrap();
@@ -2625,7 +2619,7 @@ mod tests {
             },
         ];
         let site = ClauseSite {
-            path: "/abs/c2.rex",
+            path: b"/abs/c2.rex",
             sites: &sites,
         };
         assert_eq!(
@@ -2646,7 +2640,7 @@ mod tests {
         for (indent, expected) in [(36usize, 36usize), (38, 38), (40, 40), (42, 40), (50, 40)] {
             let sites = one(9, b"say 1/0", indent);
             let site = ClauseSite {
-                path: "/p",
+                path: b"/p",
                 sites: &sites,
             };
             let report = String::from_utf8(Raised::syntax(42, 3, vec![]).report(&site)).unwrap();

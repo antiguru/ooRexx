@@ -430,7 +430,7 @@ impl Interp {
             Package::Program(id) if !self.library_programs.contains(&id) => {
                 self.program_display_name(id).to_vec()
             }
-            Package::Program(_) => self.program_path.clone().into_bytes(),
+            Package::Program(_) => self.program_path.clone(),
             Package::Rexx => crate::LIBRARY_PACKAGE_NAME.to_vec(),
         };
         let program = self.text_built(program);

@@ -225,6 +225,30 @@ err>      1 *-* say .syscargs~items
 err> Error 97 running INSTORE line 1:  Object method not found.
 err> Error 97.1:  Object ".SYSCARGS" does not understand message "ITEMS".
 
+run
+-e
+say .local~items; say .local~allIndexes~sort~makeString('L', ', ')
+----
+rc> 0
+out> 9
+out> DEBUGINPUT, ERROR, INPUT, OUTPUT, STDERR, STDIN, STDOUT, STDQUE, TRACEOUTPUT
+
+run
+local.rex
+----
+rc> 0
+out> 10
+out> DEBUGINPUT, ERROR, INPUT, OUTPUT, STDERR, STDIN, STDOUT, STDQUE, SYSCARGS, TRACEOUTPUT
+
+run
+-x
+local.rex
+a
+----
+rc> 0
+out> 10
+out> DEBUGINPUT, ERROR, INPUT, OUTPUT, STDERR, STDIN, STDOUT, STDQUE, SYSCARGS, TRACEOUTPUT
+
 # -e: the status is RexxStart's short return code
 run
 -e
@@ -968,7 +992,7 @@ err>      2 *-* say 1/0
 err> Error 42 running DIR/my prog.rex line 2:  Arithmetic overflow/underflow.
 err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
 
-run lossy
+run
 p\xff.rex
 ----
 rc> 214
@@ -977,7 +1001,7 @@ err>      2 *-* say 1/0
 err> Error 42 running DIR/p\xFF.rex line 2:  Arithmetic overflow/underflow.
 err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
 
-run lossy
+run
 p\xff
 ----
 rc> 214
@@ -986,7 +1010,7 @@ err>      2 *-* say 1/0
 err> Error 42 running DIR/p\xFF.rex line 2:  Arithmetic overflow/underflow.
 err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
 
-run lossy
+run
 q\xff
 ----
 rc> 214

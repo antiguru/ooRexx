@@ -855,7 +855,7 @@ fn find_program(
     let name = interp.to_text(name).to_vec();
     Ok(Some(
         match interp.resolve_program_name(program, &name, false) {
-            Some(path) => interp.text(path.as_bytes()),
+            Some(path) => interp.text(&path),
             None => ObjRef::NIL,
         },
     ))
