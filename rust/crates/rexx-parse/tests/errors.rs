@@ -469,10 +469,7 @@ fn every_secondary_message_matches_the_oracle() {
 
 // ---- the recorded deviations, each pinned in both directions ----
 
-/// Whether `(ours, oracle)` is the label-colon deviation recorded in the Phase 3
-/// plan (`docs/superpowers/plans/2026-07-28-phase-3-parser.md`, "A named
-/// deviation, of the same class as the accepted eager-scan one", and its exit
-/// criterion's "Recorded exceptions"). It has no number in
+/// Whether `(ours, oracle)` is the label-colon deviation, Deviation 39 in
 /// `phase-4-exclusions.txt`.
 fn label_colon_deviation(ours: Option<(u16, u16)>, oracle: (u16, u16)) -> bool {
     matches!((ours, oracle), (Some((18, 1 | 2)), (35, 1)))
@@ -513,7 +510,7 @@ fn the_label_colon_rule_does_not_fire_for_a_near_miss() {
 
 #[test]
 fn the_label_colon_rule_covers_exactly_the_two_corpus_rows_it_was_written_for() {
-    // The Phase 3 plan's named deviation; see `label_colon_deviation`.
+    // Deviation 39; see `label_colon_deviation`.
     let mut covered = Vec::new();
     for case in cases() {
         if case.class != Class::Translation {

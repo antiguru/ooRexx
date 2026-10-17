@@ -2180,6 +2180,32 @@ DEVIATIONS -- permanent, chosen
      `the_do_subkey_rows_differ_from_the_oracle_as_deviation_38_says` pins
      to those rows and this crate's message.
 
+ 39. A LABEL SPELLED THEN AFTER IF OR WHEN RAISES 18.1 OR 18.2, WHERE THE
+     ORACLE RAISES 35.1 (Phase 3). OWNER: none.
+
+     Ruled in the Phase 3 plan (docs/superpowers/plans/2026-07-28-phase-3-
+     parser.md:1169, "A named deviation", and :2557, "Recorded exceptions")
+     and numbered by Moritz 2026-10-17: "Our error message is clearer." The
+     oracle still holds a label and its colon in one clause there, so a
+     label spelled `THEN` becomes the `THEN` and the leftover `:` fails as an
+     expression. This crate splits the colon off first and reports the
+     missing THEN. Both reject the program. Measured, fresh empty directory,
+     1 run a side, oracle then this crate:
+
+       `if 1 = 1` / `then: nop`          rc 221, 35.1 "Incorrect expression
+                                          detected at ":"" (line 2)
+                                          rc 238, 18.1 "IF instruction on
+                                          line 1 requires matching THEN
+                                          clause." (line 2)
+       `select` / `when 1 = 1` /         rc 221, 35.1, line 3
+       `then: nop` / `end`               rc 238, 18.2 "WHEN instruction on
+                                          line 2 requires matching THEN
+                                          clause." (line 3)
+
+     The corpus/errors/parse-errors.tsv rows for these shapes keep the
+     oracle's answer and are exempted by `label_colon_deviation`
+     (rust/crates/rexx-parse/tests/errors.rs), pinned in both directions.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
