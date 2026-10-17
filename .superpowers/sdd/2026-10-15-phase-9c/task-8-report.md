@@ -73,3 +73,12 @@ Taken by me, for the controller to confirm:
 * Files outside the task's list: `install.rs` (ruled), `bin/rexx.rs` (ruled), `builtin/convert.rs` (`base64_digit` made `pub(crate)` so the file decoder reuses it).
 * `rexxc` on an existing `.rxo` input translates its bytes as source. Task 9's restore is what decides that path.
 * `.superpowers/sdd/2026-10-15-phase-9c/progress.md` was modified in the working tree by someone else and is untouched by these commits.
+
+## Fix round 1
+
+Ruling (controller, from `task-8-review.md`): the `REGISTERED` exemption covers only rows whose class is `install` and whose decoded program names `REGISTERED` in any case. `exempt(row)` in `tests/rexxc.rs` is that predicate. It selects lines 551 and 959, derived by `awk -F'\t' '$1=="install" && toupper($5) ~ /REGISTERED/ {print NR}' corpus/errors/parse-errors.tsv` from `rust/`.
+
+* `rexxc_agrees_with_every_recorded_parse_error_row` now also asserts that some checked row names `REGISTERED`, and that this crate refuses every exempt row with `(Phase 10 Rxapi)` in stderr. An exemption wider than the refusal goes red.
+* Widened back to `names_registered(&row.program)` alone: red on "a translation row naming REGISTERED is checked". With that guard also disabled: red with `exempt rows not refused with the Rxapi reason, at lines [697, 928, 971]`. Both mutants were reversed by exact edits, and `grep -n 'row.class == "install"'` confirmed the restored line.
+* Lines 697, 928 and 971 now run and agree. Run by hand through this crate's `rexxc FILE -s` from a fresh directory, each gives `Error 99.917:  Incorrect external name specification "..."` with the recorded insert, line 1, rc 157.
+* `--release --test rexxc`: 4 passed. `cargo fmt --all --check`: 0. `cargo clippy -p rexx-exec --tests -- -D warnings`: 0.
