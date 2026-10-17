@@ -1,0 +1,4 @@
+# ootest revision 13178
+group	verdict	crate	oracle denominator
+utilities/rexx/rexx_command	green		equal
+utilities/rexxc/rexxc	red	not passed: TEST_REXXC_ENCODING TEST_REXXC_TWO_ARGS	equal
