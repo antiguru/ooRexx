@@ -1,0 +1,10 @@
+fix round 1 tree (uncommitted, on cc306292f)
+cargo fmt --all --check: 0
+cargo clippy -p rexx-exec --all-targets -- -D warnings: 0
+cargo test -p rexx-exec --test program_end: 0
+cargo test -p rexx-exec --test rexx_command: 0
+refusal tables (owners closed_phases phase_ten_reasons representation_refusals refusal_sites refusal_dispositions): 0
+cargo test -p rexx-exec --lib: 0
+cargo test --release -p rexx-exec --test suite: 0
+REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=utilities/rexx/rexx_command REXX_SUITE_TABLE=t7/suite-fix1/table.tsv cargo test --release -p rexx-exec --test suite l3_core_suite: 0
+REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus: 0

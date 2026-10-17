@@ -152,6 +152,7 @@ impl Interp {
     /// [`Interp::route_trace_line`] for a line that is `>I>` (`entry`), whose
     /// `TraceObject` names the caller's frame too. Standard error is handed
     /// over after it.
+    // Inlined into `loop_advance`, it cost sayloop +0.31% against +0.14%.
     #[inline(never)]
     pub(crate) fn route_trace_line_as(&mut self, start: usize, entry: bool) {
         self.deliver_trace_line_as(start, entry);

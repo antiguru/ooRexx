@@ -142,3 +142,49 @@ Deviation 40's.
    rather than hang.
 3. `a_command_starts_after_what_came_before` leaves its `sleep 4` running for up to 2 s after the
    kill (memcap reports the leftover cgroup).
+
+## Fix round 1
+
+Review: `task-7-review.md` (approved, minors). Each minor fixed:
+
+1. **No fixed waits.** `killed` in `tests/program_end.rs` now polls one descriptor for a marker and
+   kills once it is there, panicking with "never wrote" after 30 s. The negative shapes end with
+   `.error~say('ready')`, which hands nothing on standard output over. The positive shapes poll for
+   their own expected bytes. The terminal `""` case sends its marker to a stderr pipe. The module ran
+   in 1.02 s, where it took 8.01 s before. To show the "loses" test is no longer vacuous, a scratch
+   edit made its first program `do forever; end; say 'started X'; .error~say('ready')`. The test
+   then failed after 30.01 s with `held never wrote "ready"` instead of passing. The file was
+   restored from a copy (`cmp` identical).
+2. **Both remaining bounds witnessed.** `a_redirected_standard_output_keeps_what_it_handed_over`
+   gains `call charout 'STDOUT'` and `call charout 'STDERR'`, each writing 9 bytes 20000 times with
+   no newline. The STDERR shape's marker is a `say 'ready'` on a terminal standard output. Mutants,
+   each reversed from a copy and checked with `git diff --stat`:
+   * `out_bound = usize::MAX` (`lib.rs:3787`): red, `0 bytes kept: do 20000; call charout
+     'STDOUT', ...`.
+   * The stderr bound dropped (`lib.rs:2824`, `if ends_a_line(bytes)`): red, `0 bytes kept: do
+     20000; call charout 'STDERR', ...`.
+3. **No `sleep 4` left behind.** The command shapes run `while :; do echo; sleep 0.1; done`, which
+   dies of SIGPIPE once `rexx` is gone. The command test polls standard output for `started X\n`.
+   With the hand-over before `start` removed it fails, `slow-command never wrote "started X\n"`
+   after 30.03 s, on the `with output stem` shape. The full module run printed no memcap leftover
+   line. The mutant run printed one, from the mutant's own 30 s run. `pgrep -af "while :; do echo"`
+   afterwards found only its own shell.
+4. **Deviation 40** gives the `address system 'sleep 4' with output stem lines.` shape on its own
+   row, as the records hold it.
+5. **`route.rs`**: one comment line beside `#[inline(never)]` with the measured reason (sayloop
+   +0.31% inlined, +0.14% out of line).
+6. **Queued item closed** in the file, with a `**CLOSED 2026-10-17 by Phase 9c Task 7 (e4bbcbba4).**`
+   head as `2026-10-13-class-side-string-method-not-sent.md` has.
+
+Checks, unpiped (`docs/superpowers/records/2026-10-15-phase-9c/t7/checks-statuses-fix1.txt`):
+* `cargo fmt --all --check`: 0
+* `cargo clippy -p rexx-exec --all-targets -- -D warnings`: 0
+* `program_end`: 0, 8 passed
+* `rexx_command`: 0
+* refusal tables: 0
+* `--lib`: 0, 1142 passed
+* `--release --test suite`: 0, 52 passed
+* the rexx_command group through the harness: 0, verdict green
+* `REXX_CORPUS_GATE=1 --release --test corpus`: 0, 29 passed, 1 ignored
+
+No code outside tests changed except a comment, so the callgrind figures stand.

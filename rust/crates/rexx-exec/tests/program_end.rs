@@ -123,16 +123,119 @@ mod buffering {
     use std::os::fd::OwnedFd;
     use std::path::PathBuf;
     use std::process::{Command, Stdio};
-    use std::time::Duration;
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
 
-    /// How long a program runs before it is killed.
-    const RUN: Duration = Duration::from_secs(2);
+    /// How long a program may take to show it is ready to be killed.
+    const READY_WAIT: Duration = Duration::from_secs(30);
 
     /// Where a descriptor of the child goes.
     #[derive(Clone, Copy)]
     enum Target {
         Pipe,
         File,
+        Terminal,
+    }
+
+    /// One of the child's two output descriptors.
+    #[derive(Clone, Copy)]
+    enum Stream {
+        Out,
+        Err,
+    }
+
+    /// What reached one descriptor so far.
+    enum Reading {
+        Pipe(Arc<Mutex<Vec<u8>>>, std::thread::JoinHandle<()>),
+        File(PathBuf),
+        Terminal(OwnedFd, Vec<u8>),
+    }
+
+    impl Reading {
+        fn open(target: Target, path: PathBuf) -> (Stdio, Reading) {
+            match target {
+                Target::Pipe => {
+                    let (mut reader, writer) = std::io::pipe().expect("a pipe");
+                    let seen = Arc::new(Mutex::new(Vec::new()));
+                    let filled = Arc::clone(&seen);
+                    let read = std::thread::spawn(move || {
+                        let mut buffer = [0u8; 4096];
+                        while let Ok(read) = reader.read(&mut buffer) {
+                            if read == 0 {
+                                break;
+                            }
+                            filled.lock().expect("the bytes").extend(&buffer[..read]);
+                        }
+                    });
+                    (Stdio::from(writer), Reading::Pipe(seen, read))
+                }
+                Target::File => (
+                    Stdio::from(File::create(&path).expect("the output file")),
+                    Reading::File(path),
+                ),
+                Target::Terminal => {
+                    let (controller, terminal) = pseudo_terminal();
+                    (
+                        Stdio::from(terminal),
+                        Reading::Terminal(controller, Vec::new()),
+                    )
+                }
+            }
+        }
+
+        /// The bytes so far, without waiting for more.
+        fn seen(&mut self) -> Vec<u8> {
+            match self {
+                Reading::Pipe(seen, _) => seen.lock().expect("the bytes").clone(),
+                Reading::File(path) => std::fs::read(path).expect("the output file"),
+                Reading::Terminal(controller, seen) => {
+                    use rustix::event::{PollFd, PollFlags, Timespec};
+                    let wait = Timespec {
+                        tv_sec: 0,
+                        tv_nsec: 0,
+                    };
+                    let mut buffer = [0u8; 4096];
+                    loop {
+                        let mut fds = [PollFd::new(&*controller, PollFlags::IN)];
+                        if rustix::event::poll(&mut fds, Some(&wait)).unwrap_or(0) == 0 {
+                            break;
+                        }
+                        match rustix::io::read(&*controller, &mut buffer) {
+                            Ok(read) if read > 0 => seen.extend_from_slice(&buffer[..read]),
+                            _ => break,
+                        }
+                    }
+                    seen.clone()
+                }
+            }
+        }
+
+        /// Every byte, once the child is gone.
+        fn finish(mut self) -> Vec<u8> {
+            if let Reading::Pipe(seen, read) = self {
+                read.join().expect("the reader");
+                return std::mem::take(&mut *seen.lock().expect("the bytes"));
+            }
+            self.seen()
+        }
+    }
+
+    /// A pseudo-terminal: its controlling side and the terminal side.
+    fn pseudo_terminal() -> (OwnedFd, OwnedFd) {
+        use rustix::fs::{Mode, OFlags};
+        use rustix::pty::OpenptFlags;
+        let controller = rustix::pty::openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY)
+            .expect("a pseudo-terminal");
+        rustix::pty::grantpt(&controller).expect("grantpt");
+        rustix::pty::unlockpt(&controller).expect("unlockpt");
+        let name = rustix::pty::ptsname(&controller, Vec::new()).expect("ptsname");
+        let terminal = rustix::fs::open(
+            name.as_c_str(),
+            OFlags::RDWR | OFlags::NOCTTY,
+            Mode::empty(),
+        )
+        .expect("the terminal side");
+        (controller, terminal)
     }
 
     fn probe(name: &str, source: &str) -> (PathBuf, PathBuf) {
@@ -144,46 +247,48 @@ mod buffering {
         (dir, file)
     }
 
-    /// One descriptor's target, and how to read what reached it.
-    fn open(target: Target, path: PathBuf) -> (Stdio, Box<dyn FnOnce() -> Vec<u8> + Send>) {
-        match target {
-            Target::Pipe => {
-                let (mut reader, writer) = std::io::pipe().expect("a pipe");
-                let read = std::thread::spawn(move || {
-                    let mut bytes = Vec::new();
-                    let _ = reader.read_to_end(&mut bytes);
-                    bytes
-                });
-                (
-                    Stdio::from(writer),
-                    Box::new(move || read.join().expect("the reader")),
-                )
-            }
-            Target::File => (
-                Stdio::from(File::create(&path).expect("the output file")),
-                Box::new(move || std::fs::read(&path).expect("the output file")),
-            ),
-        }
-    }
-
     /// What reached stdout and stderr when `source`, run under `rexx` with
-    /// each on its target, was killed after [`RUN`].
-    fn killed(name: &str, source: &str, out: Target, err: Target) -> (Vec<u8>, Vec<u8>) {
+    /// each on its target, was killed once `ready` reached the descriptor it
+    /// names. Panics if it did not within [`READY_WAIT`], or if the program
+    /// ended first.
+    fn killed(
+        name: &str,
+        source: &str,
+        out: Target,
+        err: Target,
+        ready: (Stream, &str),
+    ) -> (Vec<u8>, Vec<u8>) {
         let (dir, file) = probe(name, source);
-        let (stdout, read_out) = open(out, dir.join("stdout"));
-        let (stderr, read_err) = open(err, dir.join("stderr"));
+        let (stdout, mut read_out) = Reading::open(out, dir.join("stdout"));
+        let (stderr, mut read_err) = Reading::open(err, dir.join("stderr"));
         let mut child = Command::new(env!("CARGO_BIN_EXE_rexx"))
             .arg(&file)
+            .current_dir(&dir)
             .stdin(Stdio::null())
             .stdout(stdout)
             .stderr(stderr)
             .spawn()
             .expect("rexx starts");
-        std::thread::sleep(RUN);
+        let (stream, marker) = ready;
+        let began = Instant::now();
+        let mut was_ready = false;
+        while !was_ready && began.elapsed() < READY_WAIT {
+            let seen = match stream {
+                Stream::Out => read_out.seen(),
+                Stream::Err => read_err.seen(),
+            };
+            was_ready = seen
+                .windows(marker.len())
+                .any(|window| window == marker.as_bytes());
+            if !was_ready {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
         let running = child.try_wait().expect("the child's status").is_none();
         super::kill(&mut child);
-        let seen = (read_out(), read_err());
+        let seen = (read_out.finish(), read_err.finish());
         std::fs::remove_dir_all(&dir).expect("the probe directory is removed");
+        assert!(was_ready, "{name} never wrote {marker:?}");
         assert!(running, "{name} ended before the kill");
         seen
     }
@@ -220,58 +325,107 @@ mod buffering {
                     "     1 *-* x = 1;\n       >>>   \"1\"\n     1 *-* trace o;\n",
                 ),
             ] {
-                let (out, err) = killed("error", source, Target::Pipe, target);
+                let (out, err) = killed("error", source, Target::Pipe, target, (Stream::Err, seen));
                 assert_eq!(String::from_utf8_lossy(&err), seen);
                 assert!(out.is_empty());
             }
         }
     }
 
+    /// A standard error line hands nothing on standard output over, so the
+    /// `ready` after the `SAY`s does not disturb what they left buffered.
     #[test]
     fn a_redirected_standard_output_loses_what_it_still_holds() {
         for target in TARGETS {
             for source in [
-                "say 'started X'; do forever; end\n",
-                "do i = 1 to 300; say 'line' i; end; do forever; end\n",
+                "say 'started X'; .error~say('ready'); do forever; end\n",
+                "do i = 1 to 300; say 'line' i; end; .error~say('ready'); do forever; end\n",
             ] {
-                let (out, _) = killed("held", source, target, Target::Pipe);
+                let (out, _) = killed("held", source, target, Target::Pipe, (Stream::Err, "ready"));
                 assert_eq!(String::from_utf8_lossy(&out), "");
             }
         }
     }
 
+    /// The command writes until its reader is gone, so it dies of `SIGPIPE`
+    /// with `rexx`.
     #[test]
     fn a_command_starts_after_what_came_before() {
         for target in TARGETS {
             for source in [
-                "say 'started X'; 'sleep 4'\n",
-                "say 'started X'; address system 'sleep 4' with output stem lines.\n",
+                "say 'started X'; 'while :; do echo; sleep 0.1; done'\n",
+                "say 'started X'; address system 'while :; do echo; sleep 0.1; done' \
+                 with output stem lines.\n",
             ] {
-                let (out, _) = killed("slow-command", source, target, Target::Pipe);
-                assert_eq!(String::from_utf8_lossy(&out), "started X\n");
+                let (out, _) = killed(
+                    "slow-command",
+                    source,
+                    target,
+                    Target::Pipe,
+                    (Stream::Out, "started X\n"),
+                );
+                assert!(out.starts_with(b"started X\n"));
             }
         }
     }
 
     /// Past 64 KiB the buffer is handed over whole, so what survives is a
-    /// prefix of whole lines, and the tail is not.
+    /// prefix of whole hand-overs, and the tail is not. A `SAY`, a `CHAROUT`
+    /// to standard output and a `CHAROUT` to standard error each pass it; the
+    /// last ends no line, and its `ready` is a line on a terminal standard
+    /// output.
     #[test]
     fn a_redirected_standard_output_keeps_what_it_handed_over() {
-        let mut all = Vec::new();
-        for i in 1..=20000 {
-            all.extend(format!("line {i}\n").bytes());
-        }
+        let lines: Vec<u8> = (1..=20000)
+            .flat_map(|i| format!("line {i}\n").into_bytes())
+            .collect();
+        let pieces = b"abcdefgh.".repeat(20000);
         for target in TARGETS {
-            let (out, err) = killed(
-                "bound",
-                "do i = 1 to 20000; say 'line' i; end; .error~say('done'); do forever; end\n",
-                target,
-                Target::Pipe,
-            );
-            assert_eq!(String::from_utf8_lossy(&err), "done\n");
-            assert!(out.len() > 64 << 10, "{} bytes kept", out.len());
-            assert!(out.len() < all.len(), "{} bytes kept", out.len());
-            assert!(all.starts_with(&out) && out.ends_with(b"\n"));
+            let cases = [
+                (
+                    "do i = 1 to 20000; say 'line' i; end; .error~say('ready'); do forever; end\n",
+                    Stream::Out,
+                    &lines,
+                ),
+                (
+                    "do 20000; call charout 'STDOUT', 'abcdefgh.'; end; .error~say('ready'); \
+                     do forever; end\n",
+                    Stream::Out,
+                    &pieces,
+                ),
+                (
+                    "do 20000; call charout 'STDERR', 'abcdefgh.'; end; say 'ready'; \
+                     do forever; end\n",
+                    Stream::Err,
+                    &pieces,
+                ),
+            ];
+            for (source, stream, all) in cases {
+                let (kept, ready) = match stream {
+                    Stream::Out => (target, Target::Pipe),
+                    Stream::Err => (Target::Terminal, target),
+                };
+                let (out, err) = match stream {
+                    Stream::Out => killed("bound", source, kept, ready, (Stream::Err, "ready\n")),
+                    Stream::Err => killed("bound", source, kept, ready, (Stream::Out, "ready\r\n")),
+                };
+                let (subject, marker) = match stream {
+                    Stream::Out => (out, err),
+                    Stream::Err => (err, out),
+                };
+                assert!(String::from_utf8_lossy(&marker).starts_with("ready"));
+                assert!(
+                    subject.len() > 64 << 10,
+                    "{} bytes kept: {source}",
+                    subject.len()
+                );
+                assert!(
+                    subject.len() < all.len(),
+                    "{} bytes kept: {source}",
+                    subject.len()
+                );
+                assert!(all.starts_with(&subject));
+            }
         }
     }
 
@@ -293,82 +447,36 @@ mod buffering {
         );
     }
 
-    /// A pseudo-terminal: its controlling side and the terminal side.
-    fn pseudo_terminal() -> (OwnedFd, OwnedFd) {
-        use rustix::fs::{Mode, OFlags};
-        use rustix::pty::OpenptFlags;
-        let controller = rustix::pty::openpt(OpenptFlags::RDWR | OpenptFlags::NOCTTY)
-            .expect("a pseudo-terminal");
-        rustix::pty::grantpt(&controller).expect("grantpt");
-        rustix::pty::unlockpt(&controller).expect("unlockpt");
-        let name = rustix::pty::ptsname(&controller, Vec::new()).expect("ptsname");
-        let terminal = rustix::fs::open(
-            name.as_c_str(),
-            OFlags::RDWR | OFlags::NOCTTY,
-            Mode::empty(),
-        )
-        .expect("the terminal side");
-        (controller, terminal)
-    }
-
-    /// What reached a terminal standard output in [`RUN`].
-    fn on_a_terminal(name: &str, source: &str) -> Vec<u8> {
-        use rustix::event::{PollFd, PollFlags, Timespec};
-        let (dir, file) = probe(name, source);
-        let (controller, terminal) = pseudo_terminal();
-        let mut child = Command::new(env!("CARGO_BIN_EXE_rexx"))
-            .arg(&file)
-            .stdin(Stdio::null())
-            .stdout(Stdio::from(terminal))
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("rexx starts");
-        std::thread::sleep(RUN);
-        let mut seen = Vec::new();
-        let mut buffer = [0u8; 256];
-        let wait = Timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        };
-        loop {
-            let mut fds = [PollFd::new(&controller, PollFlags::IN)];
-            if rustix::event::poll(&mut fds, Some(&wait)).unwrap_or(0) == 0 {
-                break;
-            }
-            match rustix::io::read(&controller, &mut buffer) {
-                Ok(read) if read > 0 => seen.extend_from_slice(&buffer[..read]),
-                _ => break,
-            }
-        }
-        let running = child.try_wait().expect("the child's status").is_none();
-        super::kill(&mut child);
-        std::fs::remove_dir_all(&dir).expect("the probe directory is removed");
-        assert!(running, "{name} ended before the kill");
-        seen
-    }
-
     /// A write that ends a line hands over the whole buffer, the line not yet
     /// ended after it too, and a write that ends none waits, as Python's
     /// line buffering does, which counts a carriage return as a line end too.
     /// The terminal turns `\n` into `\r\n`.
     #[test]
     fn a_terminal_standard_output_takes_each_line() {
-        for (source, seen) in [
-            ("say 'started X'; do forever; end\n", "started X\r\n"),
-            ("call charout , 'a'; do forever; end\n", ""),
+        for (source, seen, ready) in [
+            (
+                "say 'started X'; do forever; end\n",
+                "started X\r\n",
+                (Stream::Out, "started X\r\n"),
+            ),
+            (
+                "call charout , 'a'; .error~say('ready'); do forever; end\n",
+                "",
+                (Stream::Err, "ready"),
+            ),
             (
                 "call charout , 'a'; call charout , 'b' || '0a'x || 'c'; do forever; end\n",
                 "ab\r\nc",
+                (Stream::Out, "ab\r\nc"),
             ),
             (
                 "call charout , 'a' || '0d'x || 'b'; do forever; end\n",
                 "a\rb",
+                (Stream::Out, "a\rb"),
             ),
         ] {
-            assert_eq!(
-                String::from_utf8_lossy(&on_a_terminal("terminal", source)),
-                seen
-            );
+            let (out, _) = killed("terminal", source, Target::Terminal, Target::Pipe, ready);
+            assert_eq!(String::from_utf8_lossy(&out), seen);
         }
     }
 }

@@ -2244,8 +2244,9 @@ DEVIATIONS -- permanent, chosen
                                         208894 bytes, to "line 20000"
                                         196618 bytes, a prefix ending at
                                         "line 18884"
-       `say 'started X'; 'sleep 4'`, and the same with `address system`
-       and `with output stem lines.`
+       `say 'started X'; 'sleep 4'`     "started X\n"
+                                        "started X\n"
+       `say 'started X'; address system 'sleep 4' with output stem lines.`
                                         "started X\n"
                                         "started X\n"
 
