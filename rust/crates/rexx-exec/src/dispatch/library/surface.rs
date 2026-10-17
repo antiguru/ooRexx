@@ -611,7 +611,9 @@ impl Surface for Interp {
             BufferKind::Method => {
                 let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
                 // Lines `.Method~new` would restore are parsed as source here.
-                crate::compiled::lines_source(&borrowed, name)?.ok();
+                if !crate::compiled::encoded_lines(&borrowed) {
+                    return None;
+                }
                 Ok(rexx_parse::ProgramSource::from_lines(&borrowed))
             }
             BufferKind::Routine | BufferKind::Package => match crate::compiled::restore(data) {
@@ -805,8 +807,6 @@ impl Interp {
         self.native_state_mut(buffer)?.data_address()
     }
 
-    /// The value `result` carries, or `None` with its condition held on the
-    /// running native call.
     /// [`Surface::compile_buffer`] past its choice of source: the executable
     /// or package `source` becomes, or `None` with the condition held.
     #[cold]
@@ -836,6 +836,8 @@ impl Interp {
         self.held(built)
     }
 
+    /// The value `result` carries, or `None` with its condition held on the
+    /// running native call.
     fn held<T>(&mut self, result: Result<T, Failure>) -> Option<T> {
         match result {
             Ok(value) => Some(value),

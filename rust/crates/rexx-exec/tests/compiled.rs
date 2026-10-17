@@ -276,6 +276,8 @@ fn a_foreign_or_damaged_image_is_refused() {
         ("source.rxo", binary[..binary.len() - 3].to_vec(), 903),
         // Line ends between quartets: a whole line cut away.
         ("line.rxo", encoded[..body + 73].to_vec(), 903),
+        // Inside a line, on a quartet boundary.
+        ("boundary.rxo", encoded[..body + 8].to_vec(), 903),
         // Inside a quartet.
         ("quartet.rxo", encoded[..body + 6].to_vec(), 903),
     ];

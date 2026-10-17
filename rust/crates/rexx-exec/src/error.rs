@@ -1767,7 +1767,7 @@ impl Raised {
         }
     }
 
-    /// The same for a routine activation -- `formatSourcelessTraceLine`'s
+    /// The same for a routine activation: `formatSourcelessTraceLine`'s
     /// `isRoutine()` arm.
     pub(crate) fn sourceless_routine_line(name: &[u8], package: &[u8]) -> Vec<u8> {
         message_text(

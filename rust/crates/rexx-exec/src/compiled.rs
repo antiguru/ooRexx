@@ -135,10 +135,16 @@ pub(crate) fn program_source(text: Vec<u8>, name: &[u8]) -> Result<ProgramSource
 /// createProgram(name, array, context)`), or `None` where the lines are
 /// source.
 pub(crate) fn lines_source(lines: &[&[u8]], name: &[u8]) -> Option<Result<ProgramSource, Raised>> {
-    if lines.get(1) != Some(&ENCODED_LINE) {
+    if !encoded_lines(lines) {
         return None;
     }
     joined_source(lines, name)
+}
+
+/// Whether the second of `lines` is the encoded tag, which is what makes
+/// the oracle try to restore an array of lines.
+pub(crate) fn encoded_lines(lines: &[&[u8]]) -> bool {
+    lines.get(1) == Some(&ENCODED_LINE)
 }
 
 #[cold]

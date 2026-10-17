@@ -2291,6 +2291,24 @@ DEVIATIONS -- permanent, chosen
      rust/crates/rexx-exec/tests/compiled.rs
      `a_foreign_or_damaged_image_is_refused` pins this crate's 3.903.
 
+KNOWN GAP BESIDE DEVIATION 41, not a deviation: AN ACTIVATION ENTERED
+THROUGH `Routine~call` IS NAMED `CALL` (Phase 9c Task 9, queued).
+     The oracle names it for the routine (`RoutineClass::callRexx`,
+     interpreter/classes/RoutineClass.cpp:209), so `StackFrame~name` answers
+     `ROUTINE MYNAME` for `.Routine~new('MYNAME', ...)~call` where this crate
+     answers `ROUTINE CALL`, measured 2026-10-17 by the Task 9 review. A
+     restored routine's traceback line shows it: the oracle prints
+     `Routine <the path rexxc translated>`, because the name is flattened
+     with the routine (RoutineClass.cpp:148) and restore renames only the
+     package (interpreter/classes/support/ProgramMetaData.cpp:190-191), and
+     this crate prints `Routine CALL`
+     (docs/superpowers/records/2026-10-15-phase-9c/task-9-step1/routine-object/).
+     A fix names the activation for the routine, and then the image must
+     carry the routine's name.
+     .superpowers/sdd/queued/2026-10-17-routine-call-frame-name.md has the
+     witnesses and the oracle sites.
+     OWNER: none.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 

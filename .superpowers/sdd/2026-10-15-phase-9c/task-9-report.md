@@ -70,3 +70,15 @@ Taken by me, for the controller to confirm:
 * Files outside the brief's list: `rexx-api/src/callbacks.rs` and `callbacks/fake.rs` (the `compile_buffer` trait member), `tests/api_group_tests.rs` (`RECORDED` loses the delivered test, without which its gate goes red), `environment/route.rs`, `trace.rs`, `run/interpret.rs`, `dispatch/{context,executable,package,library/surface}.rs`, `builtin/state.rs`, `error.rs`, `launcher.rs` (`positionless` made `pub(crate)`).
 * Two of my builds ran without `CARGO_TARGET_DIR` and wrote `rust/target/` (debug check, then `release/rexx` and `release/rexxc` at 19:27 from the uncommitted tree). Anything reading `rust/target/release` should rebuild.
 * `.superpowers/sdd/2026-10-15-phase-9c/progress.md` is modified in the working tree by someone else and untouched by these commits.
+
+## Fix round 1
+
+From `task-9-review.md`, with the three rulings confirmed.
+
+1. `surface.rs`: `held`'s doc is back on `fn held`, and `compile_buffer_source` has its own.
+2. `surface.rs` `compile_buffer`'s `Method` arm tests the second line directly through the new `compiled::encoded_lines`, which `lines_source` uses too. It no longer decodes an image to throw it away. One narrow difference from before: lines whose second line is the tag but whose joined text is source to `restore` (a first line that is neither `#!` nor a tag) now parse as source directly instead of going through the `.Method~new` send. Both parse them as source, and the direct path takes no context, as the oracle's `createMethod(name, buffer)` does.
+3. `error.rs`: `sourceless_routine_line`'s doc uses a colon in place of ` -- `.
+4. `tests/compiled.rs`: `boundary.rxo`, the encoded image cut 8 digits into its first line, answers 3.903. Mutation: in `compiled::decode`, `if digit == 0 && !text.is_empty() && text.last() != Some(&b'\n') && index == text.len() { return None; }` before the tail check. `a_foreign_or_damaged_image_is_refused` went red on `boundary.rxo` (3.905 for 3.903), and `line.rxo` and `quartet.rxo` stayed green. Reversed by an exact edit, and `git diff --stat crates/rexx-exec/src/compiled.rs` showed only the `encoded_lines` change.
+5. The `CALL` naming, ruled (c): `.superpowers/sdd/queued/2026-10-17-routine-call-frame-name.md` (the source-routine witness, the missing `METHOD CALL` frame, the restored-routine traceback, `RoutineClass.cpp:209`, `:148`, `ProgramMetaData.cpp:190-191`, and that the image must then carry the routine's name), and a KNOWN GAP row with `OWNER: none.` after Deviation 41 in `phase-4-exclusions.txt`.
+
+Checks, all with `CARGO_TARGET_DIR=.../scratchpad/target-impl-9`: `cargo fmt --all --check` 0; `cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` 0; `--release --test compiled --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions --test licensed_divergences --test api_group_tests` all ok; `-p rexx-exec --lib compiled` 15 passed.
