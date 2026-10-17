@@ -102,3 +102,7 @@ Task 9: fix round 1 dispatched (resume impl): minors + queued item + exclusions 
 Task 9: fix round 1 240508580 (minors, boundary.rxo shown red, queued routine-call-frame-name, gap row after Deviation 41; NewMethod second-line check direct). Scoped re-review dispatched (sonnet).
 Task 9 re-review (sonnet): approved. Minor trait doc on compile_buffer fixed by controller; NewMethod-on-source parent package queued (2026-10-17-newmethod-parent-package.md).
 Task 9: complete (230b59655, ec20c18b3, caa9de0f7, 06c5cc082, 2056d8812, 240508580 + controller doc).
+Task 10: close run started at bf5224d2b (status close/status.txt); callgrind close running; final review (opus) done: approve with fixes -- Important: restored program drops >I>/<I< method trace lines (route.rs:158); rexx -o/-od reach a restored program (oracle ignores). Minors: token.rs pub fields/DerefMut, corpus/README.md:347, rexxutil_process.rs helper name; scanner later-clause error pre-existing -> queued 2026-10-17-scanner-reports-later-clause-error.md.
+Final fix dispatched (resume Task 9 impl) in worktree branch fix/9c-final off bf5224d2b, since the main tree is frozen for the gates. Close gates re-run after the merge.
+Task 10: first close run (bf5224d2b) workspace exit 137: memcap 8G OOM during the fresh-target build (log ends in Compiling, no test result). Stopped the run; run.sh gains a --no-run build step under memcap 16G. Re-run after final fixes merge.
+Moritz 2026-10-17: Deviation 41 ruled, 'Record the deviation.' Exclusions entry now cites the ruling.

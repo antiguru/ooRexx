@@ -9,6 +9,10 @@ cargo fmt --all --check > $D/fmt.log 2>&1
 echo "fmt exit $? at $(date -u +%FT%TZ)" >> $D/status.txt
 CARGO_INCREMENTAL=0 memcap 8G cargo clippy -j 4 --workspace --all-targets -- -D warnings > $D/clippy.log 2>&1
 echo "clippy exit $? at $(date -u +%FT%TZ)" >> $D/status.txt
+# The build gets its own cap: linking release test binaries with debug info on a fresh target
+# directory peaks past 8G, which is a build cost, not a test result.
+CARGO_INCREMENTAL=0 memcap 16G cargo test -j 4 --workspace --release --no-run > $D/build.log 2>&1
+echo "build exit $? at $(date -u +%FT%TZ)" >> $D/status.txt
 REXX_CORPUS_GATE=1 CARGO_INCREMENTAL=0 timeout 2400 memcap 8G cargo test -j 4 --workspace --release --no-fail-fast > $D/workspace.log 2>&1
 echo "workspace exit $? at $(date -u +%FT%TZ)" >> $D/status.txt
 REXX_SUITE_GATE=1 REXX_SUITE_TABLE=$D/suite/table.tsv CARGO_INCREMENTAL=0 \

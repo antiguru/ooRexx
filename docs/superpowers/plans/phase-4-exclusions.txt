@@ -2266,8 +2266,9 @@ DEVIATIONS -- permanent, chosen
  41. AN ENCODED IMAGE WHOSE DECODED BYTES LACK THE TAG ANSWERS 3.903
      (Phase 9c). OWNER: none.
 
-     Ruled in the Phase 9c plan (Task 9) from the Task 8 review's Minor 2,
-     as an oracle defect that is not copied. The oracle's
+     Ruled by Moritz 2026-10-17: "Record the deviation." Raised by the
+     Phase 9c Task 8 review's Minor 2, as an oracle defect that is not
+     copied. The oracle's
      `ProgramMetaData::processRestoreData`
      (interpreter/classes/support/ProgramMetaData.cpp:331-349) decodes an
      encoded image in place over the start of its buffer. When the decoded
