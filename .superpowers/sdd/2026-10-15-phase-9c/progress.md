@@ -38,3 +38,17 @@ Task 3b (ruling follow-up): dispatched (implementer opus, BASE d88044e92).
 Ruling (3b): 25.927 'Unknown keyword following "FOR"; found "TO".' -- only DO-header keyword error is 27.901 whose text names FOREVER (false here); 25.927's text is true -- if wrong, one constant changes.
 Task 3b: DONE 90b1412ae (25.927, Deviation 38, do_subkey_deviation exemption pinned to its rows), da84dcc0d report. Mutation (49.2 arm back) reddens 3 tests; corpus gate green; derive reproduces. Controller read the loops.rs diff (error arm only, cold self.error); accepted without separate review (small, ruled, mutation-shown).
 Task 3b: complete. Stopped per Moritz.
+Pre-dispatch check Task 4: block.rs/directive.rs/lib.rs cites resolve; exclusions note 2026-08-20 has moved from :5205 -> implementer locates by text.
+Task 4: dispatched (implementer opus, BASE d5ea1577b).
+Ruling (Task 4): 11.1 MAX_EXPR_DEPTH gets a TSV row (50,001 parens); errors.rs parse() runs every program on a sized thread as deep.rs does, no length threshold -- keeps Unreached closed, oracle's answer in the corpus -- if wrong, one long TSV line.
+Ruling (Task 4): INTERPRET line inserts fixed here (oracle numbers the string as the clause's line, LanguageParser.cpp:450; crate used line 1) -- widened to run/interpret.rs and source.rs; message line inserts only, other line observables reported not changed -- if wrong, revert one parameter.
+Task 4: implementer DONE (dbbcdafb0, e1bfac290 directive ARITY_OVERRIDES, 16e89ac59 INTERPRET line, fb69dafb0 report). corpus 1065/1065; 102 site mutants red; deltas startup -0.0225%, interpret -0.5470% (libc; -libc +0.0197%), parse -0.0015%. Concerns: stale R6 prose at exclusions :2292 KNOWN GAPS row, :2485, NOT_IMPLEMENTED_EXIT bullet; rexx-exec error.rs test change; REPLY half of 2026-10-07 item unprobed.
+Task 4: review dispatched (opus).
+Task 4 review (opus): spec OK except I1; quality needs fixes. I1: 49.2 UNREACHED NoProgram false (two probes are Deviation 38 shapes, oracle raises 49.2). Minors M1 label-colon exemption names no Deviation; M2 false comment; M3 stale exclusions prose (+ :2463-2483); M4 refusal tables unreported; M5 duplication. Perf: interpret -0.55% is heap-state cost per malloc; read -libc +0.0197%.
+Ruling: I1 (b) -- 49.2 entry targets only :453; Deviation 38 shapes stay under do_subkey_deviation -- if wrong, a variant added later.
+Task 4: fix round 1 dispatched (resume c9c-impl-4).
+Task 4: fix round 1 338e8f5dc, 15b29ae3a (I1 per ruling; M2-M5 done). M1: label-colon divergence ruled in Phase 3 plan :1169/:2557, no Deviation number -> Moritz's call.
+Task 4: scoped re-review dispatched (sonnet).
+Moritz 2026-10-17: label-colon -> Deviation 39 ('Our error message is clearer'), written by controller 395f39e00; buffering renumbered Deviation 40 in plan.
+Task 4 re-review (sonnet): approved, none open (49.2 probes clean on both sides; M3 deletions false-only; coverage red with a row removed).
+Task 4: complete (dbbcdafb0, e1bfac290, 16e89ac59, fb69dafb0, 338e8f5dc, 15b29ae3a; Deviation 39 at 395f39e00). Paused per Moritz.
