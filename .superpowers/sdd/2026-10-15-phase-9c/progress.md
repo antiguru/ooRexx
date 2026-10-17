@@ -81,3 +81,11 @@ Task 7 review (opus): spec OK, quality approved; minors: fixed 2 s waits (one te
 Task 7: fix round 1 dispatched (resume c9c-impl-7) for all minors (vacuous test is a defect).
 Task 7: fix round 1 a89351111 (readiness markers, vacuous test now fails when SAY unreached; both bounds witnessed red; no leftover child; Deviation 40 row; inline reason; queued item CLOSED). Accepted without re-review (tests + one comment, each shown red).
 Task 7: complete (e4bbcbba4, e95e41416, cc306292f, a89351111). Paused per Moritz.
+Moritz 2026-10-17: goal 'Finish 9c' -- Tasks 8-10 run without pauses.
+Pre-dispatch check Task 8: suite.rs:300 check_path, :1883 test, ChildPath.testGroup:16, group_runner.rs:715 interpreter_bin, directives.rs:79-82 gap resolve. REGISTERED rows now TSV lines 551/697/928/971 (brief's numbers stale; predicate unaffected), told implementer.
+Task 8: dispatched (implementer opus, BASE 6b10e78ef).
+Ruling (Task 8): Restore gains Undecodable (encoded tag, base64 refused: oracle 3.905 'Encoded compiled program ... cannot be decoded'); Rejected stays 3.903 (header decodes, validate fails) -- measured on the oracle by the implementer -- if wrong, one variant merges. Task 9 text and Review Focus 2 amended after Task 8. Also approved: narrow translate-only early return in install.rs; rexx.rs load moved to launcher.
+Task 8: implementer DONE_WITH_CONCERNS (9622c9e89, 7de9e8cc2, 483679f2c, 3db140a2a). rexxc harness 9/11 (ENCODING, TWO_ARGS await Task 9). lib 1150.
+Ruling (Task 8): REGISTERED predicate case-insensitive (TSV row 959 lower-case 'registered x', crate refuses with the same Rxapi reason) -- EXTERNAL spec words are case-insensitive -- if wrong, one row moves to disagreements.
+Ruling (Task 8): TSV agreement test licenses Deviations 38/39 rows by exact pinned program set, as errors.rs does -- they are licensed deviations -- if wrong, test narrows.
+Task 8: review dispatched (opus).
