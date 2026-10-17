@@ -469,7 +469,11 @@ fn every_secondary_message_matches_the_oracle() {
 
 // ---- the recorded deviations, each pinned in both directions ----
 
-/// Whether `(ours, oracle)` is the recorded label-colon deviation.
+/// Whether `(ours, oracle)` is the label-colon deviation recorded in the Phase 3
+/// plan (`docs/superpowers/plans/2026-07-28-phase-3-parser.md`, "A named
+/// deviation, of the same class as the accepted eager-scan one", and its exit
+/// criterion's "Recorded exceptions"). It has no number in
+/// `phase-4-exclusions.txt`.
 fn label_colon_deviation(ours: Option<(u16, u16)>, oracle: (u16, u16)) -> bool {
     matches!((ours, oracle), (Some((18, 1 | 2)), (35, 1)))
 }
@@ -509,6 +513,7 @@ fn the_label_colon_rule_does_not_fire_for_a_near_miss() {
 
 #[test]
 fn the_label_colon_rule_covers_exactly_the_two_corpus_rows_it_was_written_for() {
+    // The Phase 3 plan's named deviation; see `label_colon_deviation`.
     let mut covered = Vec::new();
     for case in cases() {
         if case.class != Class::Translation {
@@ -799,10 +804,13 @@ const UNREACHED_BY_FILE: &[((u16, u16), Unreached)] = &[
             probes: &[
                 b"do i = 1 to 2 by 1 to 3\nend\n",
                 b"do i = 1 for 2 while 1 until 2\nend\n",
-                b"do i over x for 1 to 2\nend\n",
-                b"do with index i over x for 1 by 2\nend\n",
                 b"do forever while 1 until 2\nend\n",
                 b"loop 3 while 1 until 2\nend\n",
+                b"then nop\n",
+                b"else nop\n",
+                b"otherwise nop\n",
+                b"when 1 then nop\n",
+                b"end\n",
             ],
         },
     ),
@@ -913,7 +921,6 @@ fn messages_named_by_the_parser() -> std::collections::BTreeMap<(u16, u16), Path
 #[test]
 fn the_scan_finds_the_messages_it_was_written_against() {
     let named = messages_named_by_the_parser();
-    // One from each raising file, and none from a test file only.
     for pair in [(13, 1), (35, 1), (14, 3), (25, 901), (99, 914), (36, 902)] {
         assert!(named.contains_key(&pair), "{pair:?} not found");
     }

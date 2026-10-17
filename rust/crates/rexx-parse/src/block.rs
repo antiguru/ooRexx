@@ -358,9 +358,8 @@ impl<'a> Block<'a> {
             .expect("an unclosed block was itself added, so the chain is not empty")
     }
 
-    /// The line the instruction at `index` starts on, as an insert.
-    fn line_insert(&self, index: usize) -> Vec<u8> {
-        let byte = self.instructions[index].clause_span.start;
+    /// The line an error message names for `byte`, as an insert.
+    fn line_insert(&self, byte: usize) -> Vec<u8> {
         let line = self.source.message_line(self.source.line_of(byte));
         line.to_string().into_bytes()
     }
@@ -370,7 +369,8 @@ impl<'a> Block<'a> {
     #[cold]
     #[inline(never)]
     fn error_line(&self, msg: Msg<1>, byte: usize, index: usize) -> ParseError {
-        ParseError::raise(msg, byte, [self.line_insert(index)])
+        let start = self.instructions[index].clause_span.start;
+        ParseError::raise(msg, byte, [self.line_insert(start)])
     }
 
     /// The missing-`THEN` error at the end of the body, reported against
@@ -378,9 +378,7 @@ impl<'a> Block<'a> {
     #[cold]
     #[inline(never)]
     fn then_expected(&self, which: PendingThen, opener: usize, byte: usize) -> ParseError {
-        let line = self.source.message_line(self.source.line_of(opener));
-        let line = line.to_string().into_bytes();
-        ParseError::raise(missing_then(which), byte, [line])
+        ParseError::raise(missing_then(which), byte, [self.line_insert(opener)])
     }
 
     /// `blockError` (`LanguageParser.cpp:4180`): an unclosed block at the end of
@@ -497,7 +495,7 @@ impl<'a> Block<'a> {
         end_byte: usize,
     ) -> ParseError {
         let name = self.symbols.name(end_name).as_bytes().to_vec();
-        let line = self.line_insert(block);
+        let line = self.line_insert(self.instructions[block].clause_span.start);
         match (block_label, is_select) {
             // `Error_Unexpected_end_control` / `Error_Unexpected_end_select`.
             (Some(label), select) => {

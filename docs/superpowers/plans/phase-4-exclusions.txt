@@ -2289,22 +2289,6 @@ showing the divergence is gone. Deleting a row because it is inconvenient is
 the failure the set assertion exists to prevent, and it applies here as much as
 above.
 
-  A SOURCE THAT DOES NOT PARSE RENDERS ITS MESSAGE'S PLACEHOLDERS LITERALLY.
-  `impl From<&ParseError> for Raised` passes no substitutions, so
-  `interpret "do forever then"` reports `found "&1"` where the oracle reports
-  `found "THEN"`. Ruling R3 (`specs/2026-10-07-phase-6-1-loose-ends.md`
-  section 6) keeps the 2026-07-28 decision not to reproduce them. Measured
-  2026-10-08, Phase 6.1 Task 5: rc, code, position and the traceback, whose
-  first line is the failing clause in the failing source at its line, agree
-  for a program, a ::REQUIRES file, an external call, Method~newFile,
-  Routine~newFile, Package~new, Method~new, Routine~new and an INTERPRET
-  string (`corpus/phase-6-1.txt`'s Task 5 rows and
-  `crates/rexx-exec/tests/ir_recorded_cases/parse-errors-main`). Measured
-  2026-10-08, Task 5 fix round 1: the same, `STACKFRAMES` included, for a
-  ::REQUIRES file reached from a file Routine~newFile, Method~newFile,
-  Package~new or loadPackage loads, and for such a file whose prologue
-  raises (`parse_error_nested_requires*.rex`).
-
   A LOADED SOURCE THAT DOES NOT PARSE IS NOT THE CONDITION'S PROGRAM OR
   PACKAGE. The oracle compiles it into a package of its own before it fails,
   so `condition('O')~program` and `~package~name` name it: `x` for
@@ -2460,33 +2444,6 @@ above.
   run_program does not expose. TASK 10 FALSIFIED THAT REASON (commit addf89b1):
   IF and SELECT resolve their whole construct inside their own step arm through
   a nested bounded loop, so nesting is ordinary rather than exotic.
-
-  A fragment that fails to PARSE is the one piece of the INTERPRET half still
-  open, and it is one line. 4b Task 2 made such a fragment raise the oracle's
-  own condition (interpret "do forever then" is 27.901 at rc 229, where it used
-  to be a loud rc 120), and the enclosing echoes match, but the oracle ALSO
-  echoes the failing fragment clause -- at indent 0 whatever the enclosing
-  indent, since a parse-time echo carries no indent at all:
-
-         2 *-* do forever then
-         2 *-*   interpret "do forever then"      (enclosing DO: indent 2)
-
-  We emit the second line only. Reproducing the first needs the failing
-  clause's TEXT, and rexx-parse's ParseError carries the clause's START byte
-  with no end, so there is no span to cut; guessing one is right for a
-  single-clause fragment and silently wrong for interpret "do jj = 1 to 1; do
-  forever then; end", whose echo is "do forever then;" and not the rest of the
-  text. Closing it means a clause span on ParseError. The same missing span is
-  why a TOP-LEVEL syntax error still emits no echo either, and a second
-  obstacle applies only there: parse_program takes the text by value and
-  returns no ProgramSource on the failure path, so execute cannot even resolve
-  the LINE for the major line without a rexx-parse signature change.
-
-  Also still unsubstituted: a parse error's sub-message renders its catalogue
-  template with &1 in it (found "&1" rather than found "THEN"), because
-  ParseError deliberately carries no substitution values. rexx-parse's own
-  error.rs module note has the measurement behind that decision and records
-  that Phase 4 owes them for condition('o')~additional regardless.
 
   A Controlled loop's control variable is now traced on every re-tested pass.
   *** THIS ROW IS CLOSED (4b Task 9). *** Its measured record is in CLOSED
@@ -5254,25 +5211,20 @@ Status: NOT a defect and NOT a new row. Written down because it was
 rediscovered from scratch and the next person to notice it should find this
 instead of measuring it again.
 
-WHAT WAS SEEN. Every syntax error diverges at the rexx-run level. Measured
+WHAT WAS SEEN. Measured
 2026-08-20 on seven shapes -- bad hex string, unmatched paren, THEN with no
 instruction, END with a stray name, a misspelt PARSE keyword, an unclosed
 quote, an assignment to a literal. The oracle exits 256 minus the major
 (241, 220, 242, 246, 231, 250, 225) and prints the clause echo, an
-`Error N running <path> line L:` line and an `Error N.M:` line. This crate
-exits NOT_IMPLEMENTED_EXIT and prints one line, `rexx-exec: N.M: <text>`.
+`Error N running <path> line L:` line and an `Error N.M:` line.
 
-WHY IT IS NOT A ROW. Both halves are already decided and recorded.
+WHY IT IS NOT A ROW.
 
   * The number, the sub-number and the line ARE gated, in both directions,
     by crates/rexx-parse/tests/errors.rs against build/bin/rexxc:
     soundness (everything rexxc refuses to translate, this parser rejects
     with the same major, sub and line) and completeness (everything rexxc
     translates, this parser accepts).
-
-  * The exit code is deliberate too. NOT_IMPLEMENTED_EXIT is chosen to sit
-    outside 157..253, where 256 minus major lives, precisely so a
-    not-implemented failure cannot be mistaken for a raised condition.
 
 WHAT WAS WORTH CHECKING, AND THE RESULT. corpus/errors/parse-errors.tsv
 bakes rexxc's answers rather than recomputing them, so that cargo test
