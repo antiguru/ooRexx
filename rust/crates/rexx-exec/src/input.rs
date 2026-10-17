@@ -416,27 +416,31 @@ impl Interp {
     }
 
     /// Hands the two output buffers to the embedding's [`crate::Sinks`], if
-    /// it installed any: before a read, and before this thread idles.
+    /// it installed any: before a read, before this thread idles and before
+    /// a command starts.
     pub(crate) fn hand_over_output(&mut self) {
-        if self.sinks.is_none() {
-            return;
+        self.hand_over_stdout();
+        self.hand_over_stderr();
+    }
+
+    /// [`Interp::hand_over_output`] for standard output alone.
+    pub(crate) fn hand_over_stdout(&mut self) {
+        if let Some(sinks) = &mut self.sinks
+            && !self.out.is_empty()
+        {
+            (sinks.stdout)(&self.out);
+            self.out.clear();
         }
-        let mut out = std::mem::take(&mut self.out);
-        let mut err = std::mem::take(&mut self.trace);
-        let mut sinks = self.sinks.take().expect("a sink set that is present");
-        if !out.is_empty() {
-            (sinks.stdout)(&out);
+    }
+
+    /// [`Interp::hand_over_output`] for standard error alone.
+    pub(crate) fn hand_over_stderr(&mut self) {
+        if let Some(sinks) = &mut self.sinks
+            && !self.trace.is_empty()
+        {
+            (sinks.stderr)(&self.trace);
+            self.trace.clear();
         }
-        if !err.is_empty() {
-            (sinks.stderr)(&err);
-        }
-        self.sinks = Some(sinks);
-        // The buffers themselves go back, emptied: their capacity is worth
-        // keeping and everything in them has been handed over.
-        out.clear();
-        err.clear();
-        self.out = out;
-        self.trace = err;
     }
 
     /// What `.STDIN~CHARS` answers: the bytes left, or `None` when the source

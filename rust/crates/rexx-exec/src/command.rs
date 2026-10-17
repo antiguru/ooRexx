@@ -762,6 +762,7 @@ impl Interp {
         {
             return Ok(Commanded::Done(outcome));
         }
+        self.hand_over_output();
         let switch_mode = self.child_switch_mode();
         let spawned = match start(self, &handler, command, io, switch_mode)? {
             Child::Ran(spawned) => spawned,

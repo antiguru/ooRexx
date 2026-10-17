@@ -150,8 +150,14 @@ impl Interp {
     }
 
     /// [`Interp::route_trace_line`] for a line that is `>I>` (`entry`), whose
-    /// `TraceObject` names the caller's frame too.
+    /// `TraceObject` names the caller's frame too. Standard error is handed
+    /// over after it.
     pub(crate) fn route_trace_line_as(&mut self, start: usize, entry: bool) {
+        self.deliver_trace_line_as(start, entry);
+        self.hand_over_stderr();
+    }
+
+    fn deliver_trace_line_as(&mut self, start: usize, entry: bool) {
         if self.activity.routing_trace {
             return;
         }
@@ -185,8 +191,7 @@ impl Interp {
         self.give_value_buffer(values, mark);
         self.activity.routing_trace = false;
         if delivered.is_err() {
-            self.out.extend_from_slice(&line);
-            self.out.push(b'\n');
+            self.write_out_line(&line);
         }
     }
 

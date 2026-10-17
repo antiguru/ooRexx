@@ -346,6 +346,16 @@ const PROGRAM_BYTES_PER_SOURCE_BYTE: usize = 40;
 /// collection. Measured on `Package~copy` before any collection: about 3 kB.
 pub(crate) const PACKAGE_BYTES: usize = 3 << 10;
 
+/// The buffered output past which a sink takes it whatever it ends with, so
+/// a long-running program's output stays bounded and reaches its reader.
+const OUTPUT_BOUND: usize = 64 << 10;
+
+/// Whether a write ends a line for a line-buffered sink: it holds a newline
+/// or a carriage return, Python's own test.
+fn ends_a_line(bytes: &[u8]) -> bool {
+    bytes.iter().any(|&byte| byte == b'\n' || byte == b'\r')
+}
+
 /// The globals entry [`Interp::root_exit_value`] writes. A name rather than an
 /// index because `RootSet::add_global` is keyed by name and replaces in place,
 /// which is the behaviour wanted here.
@@ -1622,6 +1632,15 @@ struct Interp {
     out: Vec<u8>,
     /// The trace sink, which becomes `Outcome::stderr`.
     trace: Vec<u8>,
+    /// The length past which `out` is handed to the stdout sink after a
+    /// `SAY`: `0` for a terminal, which takes each line, [`OUTPUT_BOUND`] for
+    /// a redirected standard output, and never without sinks.
+    say_bound: usize,
+    /// The same for any other write to `out`, which a terminal also takes at
+    /// a line end.
+    out_bound: usize,
+    /// Whether standard output is a terminal.
+    out_lines: bool,
     /// Task 16's collect-on-every-allocation gate criterion (4a exit gate,
     /// criterion 4): when true, [`Interp::alloc_with`] collects before every
     /// allocation. Off by default. The allocation path reads `collect_due`,
@@ -2251,6 +2270,9 @@ impl Interp {
             special_methods: method_rows::MethodRows::new(),
             out: Vec::new(),
             trace: Vec::new(),
+            say_bound: usize::MAX,
+            out_bound: usize::MAX,
+            out_lines: false,
             next_activation_id: 0,
             next_invocation: 0,
             stress_collect: false,
@@ -2779,6 +2801,19 @@ impl Interp {
     /// with it in program order.
     pub(crate) fn write_out(&mut self, bytes: &[u8]) {
         self.out.extend_from_slice(bytes);
+        if self.out.len() > self.out_bound || (self.out_lines && ends_a_line(bytes)) {
+            self.hand_over_stdout();
+        }
+    }
+
+    /// What `SAY` writes: `line` and its newline.
+    #[inline(always)]
+    pub(crate) fn write_out_line(&mut self, line: &[u8]) {
+        self.out.extend_from_slice(line);
+        self.out.push(b'\n');
+        if self.out.len() > self.say_bound {
+            self.hand_over_stdout();
+        }
     }
 
     /// [`Interp::write_out`] for the other descriptor: the trace sink, which
@@ -2786,6 +2821,9 @@ impl Interp {
     /// interleave with trace output and never with `SAY`'s.
     pub(crate) fn write_err(&mut self, bytes: &[u8]) {
         self.trace.extend_from_slice(bytes);
+        if ends_a_line(bytes) || self.trace.len() > OUTPUT_BOUND {
+            self.hand_over_stderr();
+        }
     }
 
     /// `SETLOCAL`: saves the directory and the whole environment on the
@@ -3106,6 +3144,9 @@ impl Interp {
             special_methods: _,
             out: _,
             trace: _,
+            say_bound: _,
+            out_bound: _,
+            out_lines: _,
             stress_collect: _,
             collect_due: _,
             // The collector's own resurrection flag holds each object until
@@ -3741,6 +3782,15 @@ fn execute_on(
     let (argument, deadline, switch_mode) = (parts.argument, parts.deadline, parts.switch_mode);
     interp.input = Input::new(parts.input);
     interp.standard_transient = parts.standard_transient;
+    if let Some(sinks) = &parts.sinks {
+        interp.out_lines = sinks.stdout_terminal;
+        interp.out_bound = OUTPUT_BOUND;
+        interp.say_bound = if sinks.stdout_terminal {
+            0
+        } else {
+            OUTPUT_BOUND
+        };
+    }
     interp.sinks = parts.sinks;
     interp.command_words = parts.words;
     interp.command_words_base = parts.words_base;

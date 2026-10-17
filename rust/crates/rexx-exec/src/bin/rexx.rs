@@ -12,7 +12,7 @@
 //! `rexx`, the command line `utilities/rexx/platform/unix/rexx.cpp` reads.
 
 use std::ffi::OsStr;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -47,8 +47,6 @@ fn main() -> ExitCode {
             std::fs::metadata(format!("/proc/self/fd/{fd}"))
                 .is_ok_and(|meta| meta.file_type().is_char_device() || meta.file_type().is_fifo())
         }))
-        // A prompt has to be written before the read that waits for its
-        // answer, and the interpreter only appends to a buffer.
         .with_sinks(rexx_exec::Sinks {
             stdout: Box::new(|bytes| {
                 let _ = std::io::stdout().write_all(bytes);
@@ -58,6 +56,7 @@ fn main() -> ExitCode {
                 let _ = std::io::stderr().write_all(bytes);
                 let _ = std::io::stderr().flush();
             }),
+            stdout_terminal: std::io::stdout().is_terminal(),
         });
 
     // `REXX_SWITCH_MODE` is the deterministic switch mode, for tests:

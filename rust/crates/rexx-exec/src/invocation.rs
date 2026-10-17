@@ -104,17 +104,15 @@ pub enum SwitchMode {
     Sim(crate::SimConfig),
 }
 
-/// What an embedding that owns real descriptors hands the interpreter so that
-/// a prompt is visible before the read that waits for its answer.
+/// What an embedding that owns real descriptors hands the interpreter's two
+/// output buffers to as the program runs.
 ///
 /// **The interpreter never writes to a descriptor**: it appends to two
 /// buffers, and without sinks nothing is written until the caller drains
-/// [`Outcome`](crate::Outcome). That is invisible to a program whose output is
-/// compared at the end and wrong for one that asks a question -- an
-/// interactive `TRACE` pause prints its prompt and then reads, and a buffered
-/// prompt arrives after the answer it asked for. A caller that installs these
-/// gets each buffer handed over just before such a read, and the rest at the
-/// end as before.
+/// [`Outcome`](crate::Outcome). With them, each buffer is handed over before
+/// a read, before the thread idles, before a command starts, and as
+/// [`Sinks::stdout_terminal`] says between those, which is the buffering of C
+/// stdio and Python 3 (Deviation 40). The rest stays for the `Outcome`.
 pub struct Sinks {
     /// Takes what `SAY` and `.STDOUT` have written since the last handover.
     ///
@@ -124,6 +122,10 @@ pub struct Sinks {
     pub stdout: Box<dyn FnMut(&[u8]) + Send>,
     /// The same for the trace sink, which is `.STDERR`'s descriptor too.
     pub stderr: Box<dyn FnMut(&[u8]) + Send>,
+    /// Whether `stdout` writes to a terminal, which is handed each line as it
+    /// ends. Any other `stdout` is handed its buffer once it passes 64 KiB,
+    /// and `stderr` is handed each line whatever it writes to.
+    pub stdout_terminal: bool,
 }
 
 /// Where `.input` -- the position `PULL`, `PARSE PULL` and `PARSE LINEIN` all
@@ -199,8 +201,8 @@ impl Invocation {
         Invocation { input, ..self }
     }
 
-    /// The same invocation, handing the buffered output to `sinks` before a
-    /// read that would wait on a live standard input.
+    /// The same invocation, handing the buffered output to `sinks` as it
+    /// runs.
     pub fn with_sinks(self, sinks: Sinks) -> Invocation {
         Invocation {
             sinks: Some(sinks),

@@ -2002,8 +2002,7 @@ impl Interp {
                 )?;
             }
             _ => {
-                self.out.extend_from_slice(&line);
-                self.out.push(b'\n');
+                self.write_out_line(&line);
                 // The write the `Stream` native method's return would have
                 // ended with (`NativeActivation.cpp:1361`).
                 if !self.uninit_ready.is_empty() {

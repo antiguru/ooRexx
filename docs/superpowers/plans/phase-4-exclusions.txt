@@ -2206,6 +2206,62 @@ DEVIATIONS -- permanent, chosen
      oracle's answer and are exempted by `label_colon_deviation`
      (rust/crates/rexx-parse/tests/errors.rs), pinned in both directions.
 
+ 40. A REDIRECTED STANDARD OUTPUT IS BUFFERED (Phase 9c). OWNER: none.
+
+     Ruled by Moritz 2026-10-16. The oracle writes each SAY's text and
+     its newline with a write(2) of its own, whatever the descriptor.
+     This crate hands standard error, and a standard output that is a
+     terminal, to the descriptor at each line end. A standard output
+     that is a pipe or a file is buffered, and handed over before a
+     read, before the thread idles, before an ADDRESS command, when the
+     buffer passes 64 KiB, and at exit. That is the convention of C
+     stdio and Python 3 (Python 3.14.8 measured: print to a pipe or a
+     file is lost under SIGKILL, stderr is kept).
+     What a program can see: output that a SIGKILL, a crash or the OOM
+     killer finds still buffered is lost, and standard output and
+     standard error sharing one pipe or file interleave by hand-over
+     rather than by write (ooTest rexx_command TEST_PASSINGARGS7). A
+     program that ends normally writes the same bytes to each
+     descriptor as the oracle.
+     Measured 2026-10-17, fresh empty directory, 1 run a side, killed by
+     `timeout -s KILL 2` with the descriptor on a pipe and on a file
+     (the same on both), oracle then this crate
+     (docs/superpowers/records/2026-10-15-phase-9c/t7/step1/):
+
+       `.error~say('started X'); do forever; end`, standard error
+                                        "started X\n"
+                                        "started X\n"
+       `trace r; x = 1; trace o; do forever; end`, standard error
+                                        the three trace lines, 55 bytes
+                                        the same bytes
+       `say 'started X'; do forever; end`
+                                        "started X\n"
+                                        nothing
+       `do i = 1 to 300; say 'line' i; end; do forever; end`
+                                        2592 bytes, to "line 300"
+                                        nothing
+       the same to 20000, then `.error~say('done')`
+                                        208894 bytes, to "line 20000"
+                                        196618 bytes, a prefix ending at
+                                        "line 18884"
+       `say 'started X'; 'sleep 4'`, and the same with `address system`
+       and `with output stem lines.`
+                                        "started X\n"
+                                        "started X\n"
+
+     Standard output and standard error on one pipe (`2>&1 | cat`), run
+     to their end:
+
+       `say 'a'; 'echo b'; say 'c'`     "a\nb\nc\n"
+                                        "a\nb\nc\n"
+       `say 'a'; call lineout 'STDERR', 'b'; say 'c'`
+                                        "a\nb\nc\n"
+                                        "b\na\nc\n", which Python's
+                                        `print`, `sys.stderr.write` and
+                                        `print` give too
+
+     rust/crates/rexx-exec/tests/program_end.rs `buffering` pins each.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
