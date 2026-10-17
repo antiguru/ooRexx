@@ -1,0 +1,1005 @@
+# no arguments: the usage text
+run
+----
+rc> 255
+err> 
+err> Syntax is "rexx [-o[d] "options"] filename [arguments]"
+err> or        "rexx -e program_string [arguments]"
+err> or        "rexx -v".
+
+# -v and -V print the banner
+run
+-v
+----
+rc> 0
+out> Open Object Rexx Version 5.3.0 r0
+out> Build date: <date>
+out> Addressing mode: 64
+out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
+out> This program and the accompanying materials are made available under the terms
+out> of the Common Public License v1.0 which accompanies this distribution or at
+out> https://www.oorexx.org/license.html
+
+run
+-V
+----
+rc> 0
+out> Open Object Rexx Version 5.3.0 r0
+out> Build date: <date>
+out> Addressing mode: 64
+out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
+out> This program and the accompanying materials are made available under the terms
+out> of the Common Public License v1.0 which accompanies this distribution or at
+out> https://www.oorexx.org/license.html
+
+# -v is honoured before and after other options, and after -o's string
+run
+-v
+-?
+----
+rc> 0
+out> Open Object Rexx Version 5.3.0 r0
+out> Build date: <date>
+out> Addressing mode: 64
+out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
+out> This program and the accompanying materials are made available under the terms
+out> of the Common Public License v1.0 which accompanies this distribution or at
+out> https://www.oorexx.org/license.html
+
+run
+-?
+-v
+----
+rc> 0
+out> Open Object Rexx Version 5.3.0 r0
+out> Build date: <date>
+out> Addressing mode: 64
+out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
+out> This program and the accompanying materials are made available under the terms
+out> of the Common Public License v1.0 which accompanies this distribution or at
+out> https://www.oorexx.org/license.html
+
+run
+-o
+digits 12
+-v
+----
+rc> 0
+out> Open Object Rexx Version 5.3.0 r0
+out> Build date: <date>
+out> Addressing mode: 64
+out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
+out> This program and the accompanying materials are made available under the terms
+out> of the Common Public License v1.0 which accompanies this distribution or at
+out> https://www.oorexx.org/license.html
+
+run
+-vx
+----
+rc> 0
+out> Open Object Rexx Version 5.3.0 r0
+out> Build date: <date>
+out> Addressing mode: 64
+out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
+out> This program and the accompanying materials are made available under the terms
+out> of the Common Public License v1.0 which accompanies this distribution or at
+out> https://www.oorexx.org/license.html
+
+# -v after the program name is the program's argument
+run
+t.rex
+-v
+----
+rc> 0
+out> hi from t
+
+run
+-e
+say 1
+-v
+----
+rc> 0
+out> 1
+
+# -e runs its text as INSTORE
+run
+-e
+say 1
+----
+rc> 0
+out> 1
+
+run
+-E
+say 2
+----
+rc> 0
+out> 2
+
+run
+-ev
+say 3
+----
+rc> 0
+out> 3
+
+run
+-x
+-e
+say 4
+----
+rc> 0
+out> 4
+
+# -e with no text is the usage text, an empty text an empty program
+run
+-e
+----
+rc> 255
+err> 
+err> Syntax is "rexx [-o[d] "options"] filename [arguments]"
+err> or        "rexx -e program_string [arguments]"
+err> or        "rexx -v".
+
+run
+-e
+<empty>
+----
+rc> 0
+
+# -e with arguments: the text is not one of them
+run
+-e
+say arg() '['arg(1)']'
+a
+b c
+d
+----
+rc> 0
+out> 1 [a b c d]
+
+run
+-e
+say arg() '['arg(1)']'
+----
+rc> 0
+out> 0 []
+
+run
+-e
+say 1
+-e
+say 2
+----
+rc> 0
+out> 1
+
+# -e: errors name INSTORE
+run
+-e
+say (
+----
+rc> 221
+err>      1 *-* say (
+err> Error 35 running INSTORE line 1:  Invalid expression.
+err> Error 35.1:  Incorrect expression detected at "(".
+
+run
+-e
+say 1/0
+----
+rc> 214
+err>      1 *-* say 1/0
+err> Error 42 running INSTORE line 1:  Arithmetic overflow/underflow.
+err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
+
+run
+-e
+parse source s; say s
+----
+rc> 0
+out> LINUX COMMAND INSTORE
+
+# -e: .local has no SYSCARGS
+run
+-e
+say .syscargs; say .local~syscargs; say .local~items
+----
+rc> 0
+out> .SYSCARGS
+out> The NIL object
+out> 9
+
+run
+-e
+say .syscargs~items
+----
+rc> 159
+err>      1 *-* say .syscargs~items
+err> Error 97 running INSTORE line 1:  Object method not found.
+err> Error 97.1:  Object ".SYSCARGS" does not understand message "ITEMS".
+
+# -e: the status is RexxStart's short return code
+run
+-e
+exit 7
+----
+rc> 7
+
+run
+-e
+return 300
+----
+rc> 44
+
+run
+-e
+return 'abc'
+----
+rc> 0
+
+run
+-e
+return -3
+----
+rc> 253
+
+run
+-e
+return 70000
+----
+rc> 0
+
+run
+-e
+return 1.5
+----
+rc> 0
+
+run
+-e
+return 2147483648
+----
+rc> 0
+
+run
+-e
+return ' 4 '
+----
+rc> 4
+
+run
+-e
+return 1e1
+----
+rc> 10
+
+# -e ignores -o, before or after it
+run
+-e
+say digits()
+-o
+digits 12
+----
+rc> 0
+out> 9
+
+run
+-o
+digits 12
+-e
+say digits()
+----
+rc> 0
+out> 9
+
+# -o and -od, any case
+run
+-o
+digits 12
+opts.rex
+----
+rc> 0
+out> digits=12 form=SCIENTIFIC
+out> trace=N
+
+run
+-od
+digits 12
+opts.rex
+----
+rc> 0
+out> digits=12 form=SCIENTIFIC
+out> trace=N
+
+run
+-O
+digits 12
+opts.rex
+----
+rc> 0
+out> digits=12 form=SCIENTIFIC
+out> trace=N
+
+run
+-OD
+digits 12
+opts.rex
+----
+rc> 0
+out> digits=12 form=SCIENTIFIC
+out> trace=N
+
+run
+-o
+trace all
+opts.rex
+----
+rc> 0
+out> digits=9 form=SCIENTIFIC
+out> trace=A
+err>      1 *-* say 'digits='digits() 'form='form()
+err>      2 *-* say 'trace='trace()
+
+run
+-o
+digits 12
+-o
+form engineering
+opts.rex
+----
+rc> 0
+out> digits=9 form=ENGINEERING
+out> trace=N
+
+# -o's string is a directive when the byte after its first non-blank is a colon
+run
+-o
+::options digits 12
+opts.rex
+----
+rc> 0
+out> digits=12 form=SCIENTIFIC
+out> trace=N
+
+run
+-o
+:options digits 12
+opts.rex
+----
+rc> 231
+err>      1 *-* ::OPTIONS :options digits 12
+err>        *-* Compiled method "DEFAULTOPTIONS" with scope "Package".
+err> Error 25 running PackageSettingsFromOptionsDirectiveString line 1:  Invalid subkeyword found.
+err> Error 25.924:  Unknown keyword on ::OPTIONS directive; found ":".
+
+run
+-o
+x:options digits 12
+opts.rex
+----
+rc> 163
+err>        *-* Compiled method "DEFAULTOPTIONS" with scope "Package".
+err> Error 93:  Incorrect call to method.
+err> Error 93.900:  argument is not an ::OPTIONS directive.
+
+run
+-o
+\x20::options digits 12
+opts.rex
+----
+rc> 0
+out> digits=12 form=SCIENTIFIC
+out> trace=N
+
+run
+-o
+\x20\x20::options digits 12
+opts.rex
+----
+rc> 0
+out> digits=12 form=SCIENTIFIC
+out> trace=N
+
+# that byte can be the next word's
+run
+-o
+<empty>
+:x
+----
+rc> 163
+err>        *-* Compiled method "DEFAULTOPTIONS" with scope "Package".
+err> Error 93:  Incorrect call to method.
+err> Error 93.900:  argument 2 must not be empty.
+
+run
+-o
+<empty>
+opts.rex
+----
+rc> 0
+out> digits=9 form=SCIENTIFIC
+out> trace=N
+
+run
+-o
+\x20\x20
+:x
+----
+rc> 253
+err> Error 3:  Failure during initialization.
+err> Error 3.901:  Failure during initialization: Program ":x" was not found.
+
+# -o's directive is cut to 511 bytes
+run
+-o
+digits 12                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        form engineering
+opts.rex
+----
+rc> 0
+out> digits=12 form=SCIENTIFIC
+out> trace=N
+
+# a malformed -o string fails before the program is looked for
+run
+-o
+bogus 9
+opts.rex
+----
+rc> 231
+err>      1 *-* ::OPTIONS bogus 9
+err>        *-* Compiled method "DEFAULTOPTIONS" with scope "Package".
+err> Error 25 running PackageSettingsFromOptionsDirectiveString line 1:  Invalid subkeyword found.
+err> Error 25.924:  Unknown keyword on ::OPTIONS directive; found "BOGUS".
+
+run
+-o
+digits x
+opts.rex
+----
+rc> 230
+err>      1 *-* ::OPTIONS digits x
+err>        *-* Compiled method "DEFAULTOPTIONS" with scope "Package".
+err> Error 26 running PackageSettingsFromOptionsDirectiveString line 1:  Invalid whole number.
+err> Error 26.5:  DIGITS value must be a positive whole number; found "X".
+
+run
+-o
+bogus 9
+nonexist
+----
+rc> 231
+err>      1 *-* ::OPTIONS bogus 9
+err>        *-* Compiled method "DEFAULTOPTIONS" with scope "Package".
+err> Error 25 running PackageSettingsFromOptionsDirectiveString line 1:  Invalid subkeyword found.
+err> Error 25.924:  Unknown keyword on ::OPTIONS directive; found "BOGUS".
+
+# -o yields to the program's own ::OPTIONS, and only -od reaches a ::REQUIRES
+run
+-o
+digits 12
+ownopts.rex
+----
+rc> 0
+out> digits=5
+
+run
+-od
+digits 12
+ownopts.rex
+----
+rc> 0
+out> digits=5
+
+run
+-o
+digits 12
+req.rex
+----
+rc> 0
+out> main digits=12
+out> lib digits=9
+
+run
+-od
+digits 12
+req.rex
+----
+rc> 0
+out> main digits=12
+out> lib digits=12
+
+run
+-ox
+digits 12
+req.rex
+----
+rc> 0
+out> main digits=12
+out> lib digits=9
+
+run
+-oD
+digits 12
+req.rex
+----
+rc> 0
+out> main digits=12
+out> lib digits=12
+
+run
+-Od
+digits 12
+req.rex
+----
+rc> 0
+out> main digits=12
+out> lib digits=12
+
+# -o with no string is the usage text
+run
+-o
+----
+rc> 255
+err> 
+err> Syntax is "rexx [-o[d] "options"] filename [arguments]"
+err> or        "rexx -e program_string [arguments]"
+err> or        "rexx -v".
+
+run
+-od
+----
+rc> 255
+err> 
+err> Syntax is "rexx [-o[d] "options"] filename [arguments]"
+err> or        "rexx -e program_string [arguments]"
+err> or        "rexx -v".
+
+run
+-o
+digits 12
+-o
+----
+rc> 255
+err> 
+err> Syntax is "rexx [-o[d] "options"] filename [arguments]"
+err> or        "rexx -e program_string [arguments]"
+err> or        "rexx -v".
+
+# arguments, and .SYSCARGS from argc_base - 1
+run
+showargs.rex
+a
+b c
+d
+----
+rc> 0
+out> arg()=1 arg(1)=[a b c d]
+out> items=3 size=3 last=3
+out> 1=[a]
+out> 2=[b c]
+out> 3=[d]
+out> [a, b c, d]
+
+run
+showargs.rex
+----
+rc> 0
+out> arg()=0 arg(1)=[]
+out> items=0 size=0 last=The NIL object
+out> []
+
+run
+showargs.rex
+<empty>
+----
+rc> 0
+out> arg()=1 arg(1)=[]
+out> items=1 size=1 last=1
+out> 1=[]
+out> []
+
+run
+showargs.rex
+-o
+my output file
+----
+rc> 0
+out> arg()=1 arg(1)=[-o my output file]
+out> items=2 size=2 last=2
+out> 1=[-o]
+out> 2=[my output file]
+out> [-o, my output file]
+
+run
+-x
+showargs.rex
+a
+b
+----
+rc> 0
+out> arg()=1 arg(1)=[a b]
+out> items=2 size=3 last=3
+out> 1 empty
+out> 2=[a]
+out> 3=[b]
+out> [a, b]
+
+run
+-x
+-y
+showargs.rex
+a
+b
+----
+rc> 0
+out> arg()=1 arg(1)=[a b]
+out> items=2 size=4 last=4
+out> 1 empty
+out> 2 empty
+out> 3=[a]
+out> 4=[b]
+out> [a, b]
+
+run
+-x
+showargs.rex
+----
+rc> 0
+out> arg()=0 arg(1)=[]
+out> items=0 size=0 last=The NIL object
+out> []
+
+run
+-o
+digits 12
+showargs.rex
+a
+b
+----
+rc> 0
+out> arg()=1 arg(1)=[a b]
+out> items=2 size=4 last=4
+out> 1 empty
+out> 2 empty
+out> 3=[a]
+out> 4=[b]
+out> [a, b]
+
+run
+-od
+digits 12
+showargs.rex
+a
+b
+----
+rc> 0
+out> arg()=1 arg(1)=[a b]
+out> items=2 size=4 last=4
+out> 1 empty
+out> 2 empty
+out> 3=[a]
+out> 4=[b]
+out> [a, b]
+
+run
+-
+showargs.rex
+a
+----
+rc> 0
+out> arg()=1 arg(1)=[a]
+out> items=1 size=2 last=2
+out> 1 empty
+out> 2=[a]
+out> [a]
+
+run
+--
+showargs.rex
+a
+----
+rc> 0
+out> arg()=1 arg(1)=[a]
+out> items=1 size=2 last=2
+out> 1 empty
+out> 2=[a]
+out> [a]
+
+run
+-?
+showargs.rex
+Ho
+Ho
+----
+rc> 0
+out> arg()=1 arg(1)=[Ho Ho]
+out> items=2 size=3 last=3
+out> 1 empty
+out> 2=[Ho]
+out> 3=[Ho]
+out> [Ho, Ho]
+
+# an ignored option or a bare - with no program is the usage text
+run
+-x
+----
+rc> 255
+err> 
+err> Syntax is "rexx [-o[d] "options"] filename [arguments]"
+err> or        "rexx -e program_string [arguments]"
+err> or        "rexx -v".
+
+run
+-
+----
+rc> 255
+err> 
+err> Syntax is "rexx [-o[d] "options"] filename [arguments]"
+err> or        "rexx -e program_string [arguments]"
+err> or        "rexx -v".
+
+# the program search
+run
+t
+----
+rc> 0
+out> hi from t
+
+run
+UP
+----
+rc> 0
+out> upper UP.REX
+
+run
+sub/t
+----
+rc> 0
+out> hi from sub/t
+
+run
+./sub/t
+----
+rc> 0
+out> hi from sub/t
+
+run
+noext
+----
+rc> 0
+out> noext file
+out> LINUX COMMAND DIR/noext
+
+run
+dironly
+----
+rc> 253
+err> Error 3:  Failure during initialization.
+err> Error 3.901:  Failure during initialization: Program "dironly" was not found.
+
+run
+dironly.rex
+----
+rc> 253
+err> Error 3:  Failure during initialization.
+err> Error 3.901:  Failure during initialization: Program "dironly.rex" was not found.
+
+run rexx_path=rp
+viarp
+----
+rc> 0
+out> hi from rp
+out> LINUX COMMAND DIR/rp/viarp.rex
+
+run path=pp
+viapp
+----
+rc> 0
+out> hi from pp
+out> LINUX COMMAND DIR/pp/viapp.rex
+
+run
+viarp
+----
+rc> 253
+err> Error 3:  Failure during initialization.
+err> Error 3.901:  Failure during initialization: Program "viarp" was not found.
+
+# not found: 3.901 with no position
+run
+nonexist
+----
+rc> 253
+err> Error 3:  Failure during initialization.
+err> Error 3.901:  Failure during initialization: Program "nonexist" was not found.
+
+run
+nonexist.rex
+----
+rc> 253
+err> Error 3:  Failure during initialization.
+err> Error 3.901:  Failure during initialization: Program "nonexist.rex" was not found.
+
+run
+sub/nonexist
+----
+rc> 253
+err> Error 3:  Failure during initialization.
+err> Error 3.901:  Failure during initialization: Program "sub/nonexist" was not found.
+
+# unreadable: 3.1 naming the file found
+run
+locked.rex
+----
+rc> 253
+err> Error 3:  Failure during initialization.
+err> Error 3.1:  Failure during initialization: File "DIR/locked.rex" is unreadable.
+
+run
+locked
+----
+rc> 253
+err> Error 3:  Failure during initialization.
+err> Error 3.1:  Failure during initialization: File "DIR/locked.rex" is unreadable.
+
+# PARSE SOURCE and error reports name the absolute normalised path
+run
+src.rex
+----
+rc> 0
+out> LINUX COMMAND DIR/src.rex
+
+run
+./sub/../src.rex
+----
+rc> 0
+out> LINUX COMMAND DIR/src.rex
+
+run
+err42.rex
+----
+rc> 214
+err>      1 *-* say 1/0
+err> Error 42 running DIR/err42.rex line 1:  Arithmetic overflow/underflow.
+err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
+
+run
+err35.rex
+----
+rc> 221
+err>      1 *-* say 'x' +
+err> Error 35 running DIR/err35.rex line 1:  Invalid expression.
+err> Error 35.1:  Incorrect expression detected at "+".
+
+# the exit status
+run
+ret_abc.rex
+----
+rc> 0
+
+run
+ret_neg3.rex
+----
+rc> 253
+
+run
+ret_e300.rex
+----
+rc> 44
+
+run
+ret_f15.rex
+----
+rc> 0
+
+run
+ret_big.rex
+----
+rc> 0
+
+run
+ret_nbig.rex
+----
+rc> 0
+
+run
+ret_null.rex
+----
+rc> 0
+
+run
+ret_none.rex
+----
+rc> 0
+
+run
+ret_bare.rex
+----
+rc> 0
+
+run
+ret_r255.rex
+----
+rc> 255
+
+run
+ret_r256.rex
+----
+rc> 0
+
+run
+ret_sp.rex
+----
+rc> 4
+
+run
+ret_e1.rex
+----
+rc> 10
+
+run
+ret_obj.rex
+----
+rc> 0
+
+# names that are not plain ASCII
+run
+my prog.rex
+----
+rc> 214
+out> LINUX COMMAND DIR/my prog.rex
+err>      2 *-* say 1/0
+err> Error 42 running DIR/my prog.rex line 2:  Arithmetic overflow/underflow.
+err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
+
+run
+my prog
+----
+rc> 214
+out> LINUX COMMAND DIR/my prog.rex
+err>      2 *-* say 1/0
+err> Error 42 running DIR/my prog.rex line 2:  Arithmetic overflow/underflow.
+err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
+
+run lossy
+p\xff.rex
+----
+rc> 214
+out> LINUX COMMAND DIR/p\xFF.rex
+err>      2 *-* say 1/0
+err> Error 42 running DIR/p\xFF.rex line 2:  Arithmetic overflow/underflow.
+err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
+
+run lossy
+p\xff
+----
+rc> 214
+out> LINUX COMMAND DIR/p\xFF.rex
+err>      2 *-* say 1/0
+err> Error 42 running DIR/p\xFF.rex line 2:  Arithmetic overflow/underflow.
+err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
+
+run lossy
+q\xff
+----
+rc> 214
+out> LINUX COMMAND DIR/q\xFF
+err>      2 *-* say 1/0
+err> Error 42 running DIR/q\xFF line 2:  Arithmetic overflow/underflow.
+err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
+
+# arguments are bytes
+run
+bytes.rex
+a\xffb
+----
+rc> 0
+out> 61FF62
+out> 61FF62

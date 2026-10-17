@@ -348,7 +348,7 @@ fn appends_and_reads_copy_slots_linearly() {
             .stack_size(crate::INTERPRETER_STACK_BYTES)
             .spawn(move || {
                 let outcome = crate::execute_on(
-                    "/t.rex",
+                    b"/t.rex",
                     program.into_bytes(),
                     false,
                     crate::Invocation::none(),

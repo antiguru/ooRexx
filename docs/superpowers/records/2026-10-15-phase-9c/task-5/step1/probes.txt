@@ -1,0 +1,36 @@
+=== local-file
+--- argv: [li.rex]
+--- stdout
+DEBUGINPUT, ERROR, INPUT, OUTPUT, STDERR, STDIN, STDOUT, STDQUE, SYSCARGS, TRACEOUTPUT
+10
+--- stderr
+--- rc 0
+
+=== local-e
+--- argv: [-e] [say .local~allIndexes~sort~makeString('L', ', '); say .local~items]
+--- stdout
+DEBUGINPUT, ERROR, INPUT, OUTPUT, STDERR, STDIN, STDOUT, STDQUE, TRACEOUTPUT
+9
+--- stderr
+--- rc 0
+
+## merge.rex, oracle parent, child=obin
+1      2 *-* say 'The arguments string is ['arg(1)']'
+2 The arguments string is [-o my output file]
+3      3 *-* argcnt = .syscargs~items
+4      4 *-* if argcnt = 1 
+5      6 *-*   else
+6      7 *-*     say 'There are' argcnt 'entries in .SYSCARGS:'
+7 There are 2 entries in .SYSCARGS:
+8      8 *-* say '['.syscargs~toString(, ", ")']'
+9 [-o, my output file]
+## merge.rex, oracle parent, child=cbin
+1 The arguments string is [-o my output file]
+2 There are 2 entries in .SYSCARGS:
+3 [-o, my output file]
+4      2 *-* say 'The arguments string is ['arg(1)']'
+5      3 *-* argcnt = .syscargs~items
+6      4 *-* if argcnt = 1 
+7      6 *-*   else
+8      7 *-*     say 'There are' argcnt 'entries in .SYSCARGS:'
+9      8 *-* say '['.syscargs~toString(, ", ")']'

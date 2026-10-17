@@ -703,7 +703,7 @@ pub fn run_process(
     }
 }
 
-/// A directory beside `run` holding `rexx`, this crate's `rexx-run`, so a
+/// A directory beside `run` holding `rexx`, this crate's own, so a
 /// test running `rexx` as a command runs the side under test; the oracle's
 /// side gets its own `bin` directory instead.
 ///
@@ -716,7 +716,7 @@ pub fn interpreter_bin(run: &Path) -> PathBuf {
     let bin = run.parent().expect("a parent").join("bin-rexx");
     fs::create_dir_all(&bin).expect("the interpreter bin directory");
     let rexx = bin.join("rexx");
-    let ours = env!("CARGO_BIN_EXE_rexx-run");
+    let ours = env!("CARGO_BIN_EXE_rexx");
     let current = || {
         fs::metadata(&rexx)
             .ok()

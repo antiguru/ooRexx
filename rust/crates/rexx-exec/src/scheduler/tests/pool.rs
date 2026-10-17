@@ -272,7 +272,7 @@ pub(super) fn run_shaped(source: &str, shape: Shape) -> std::thread::Result<Ran>
                 crate::set_fail_native_wait();
             }
             let outcome = crate::execute_on(
-                "/tmp/pool.rex",
+                b"/tmp/pool.rex",
                 text,
                 false,
                 invocation,

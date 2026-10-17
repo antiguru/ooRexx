@@ -917,20 +917,26 @@ impl Interp {
         // **`Body::array`, not `.Array~of`'s shape** -- measured, a
         // `.SYSCARGS` built from no words answers `~dimension` `0` as
         // `.array~new` does, where `.array~of()` answers `1`.
-        let mut slots: Vec<Option<ObjRef>> = Vec::with_capacity(self.command_words.len());
-        for at in 0..self.command_words.len() {
-            let word = std::mem::take(&mut self.command_words[at]);
-            let text = self.text(&word);
-            self.roots.activity_mut().push_temp(text);
-            slots.push(Some(text));
-            self.command_words[at] = word;
-        }
-        let arguments = self.alloc_charged(BehaviourId::ARRAY, Body::array(slots));
-        self.roots.activity_mut().push_temp(arguments);
-        if self
-            .set_directory_entry(EnvScope::Local, b"SYSCARGS", arguments)
-            .is_err()
-        {
+        let stored = match self.command_words_base {
+            Some(base) => {
+                let mut slots: Vec<Option<ObjRef>> = Vec::with_capacity(self.command_words.len());
+                if !self.command_words.is_empty() {
+                    slots.resize(base.saturating_sub(1), None);
+                }
+                for at in 0..self.command_words.len() {
+                    let word = std::mem::take(&mut self.command_words[at]);
+                    let text = self.text(&word);
+                    self.roots.activity_mut().push_temp(text);
+                    slots.push(Some(text));
+                    self.command_words[at] = word;
+                }
+                let arguments = self.alloc_charged(BehaviourId::ARRAY, Body::array(slots));
+                self.roots.activity_mut().push_temp(arguments);
+                self.set_directory_entry(EnvScope::Local, b"SYSCARGS", arguments)
+            }
+            None => self.remove_directory_entry(EnvScope::Local, b"SYSCARGS"),
+        };
+        if stored.is_err() {
             return;
         }
         let Some(stream_class) = self.rexx_package_class(b"STREAM") else {
@@ -1034,6 +1040,20 @@ impl Interp {
             env_seam::directory(&model.directories, admitted, scope)
         };
         hash::directory_put(self, handle, name, value)
+    }
+
+    /// Removes `name` from `scope`'s directory, through the seam
+    /// [`Interp::set_directory_entry`] writes through.
+    fn remove_directory_entry(&mut self, scope: EnvScope, name: &[u8]) -> Result<(), Failure> {
+        let admitted = match env_seam::admit(self, scope, name, &env_seam::Access::Direct)? {
+            env_seam::Admission::Permitted(admitted) => admitted,
+            env_seam::Admission::Replaced(_) => unreachable!("a direct access is never replaced"),
+        };
+        let handle = {
+            let model = self.environment_model();
+            env_seam::directory(&model.directories, admitted, scope)
+        };
+        hash::directory_remove(self, handle, name)
     }
 
     /// `RexxActivation::rexxVariable` (`execution/RexxActivation.cpp:2842`):

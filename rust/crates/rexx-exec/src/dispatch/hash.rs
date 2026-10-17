@@ -1627,6 +1627,17 @@ pub(crate) fn directory_put(
     insert(interp, directory, index, Some(item))
 }
 
+/// Removes `name`'s entry from `directory` without reading the item it held.
+pub(crate) fn directory_remove(
+    interp: &mut Interp,
+    directory: ObjRef,
+    name: &[u8],
+) -> Result<(), Failure> {
+    let index = interp.text(name);
+    interp.roots.activity_mut().push_temp(index);
+    take_merged(interp, directory, index, Removal::Discarded).map(|_| ())
+}
+
 /// `HashCollection::put` of `item` under the string `name`, run for the
 /// native API's `DirectoryPut` and `StringTablePut` on any collection this
 /// file owns (`interpreter/api/ThreadContextStubs.cpp:1205-1216`): a

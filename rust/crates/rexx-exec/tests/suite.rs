@@ -300,7 +300,7 @@ pub fn resolve(name: &str, path: &str) -> Option<PathBuf> {
 pub fn check_path(path: &str, bin: &Path) -> Result<(), String> {
     use std::os::unix::fs::MetadataExt as _;
     let identity = |path: &Path| fs::metadata(path).ok().map(|meta| (meta.dev(), meta.ino()));
-    let ours_path = Path::new(env!("CARGO_BIN_EXE_rexx-run"));
+    let ours_path = Path::new(env!("CARGO_BIN_EXE_rexx"));
     let ours_identity = identity(ours_path);
     for entry in fs::read_dir(bin).map_err(|e| format!("cannot read {}: {e}", bin.display()))? {
         let file = entry.map_err(|e| e.to_string())?.path();
@@ -1899,7 +1899,7 @@ mod fixtures {
         assert_eq!(resolve("rexx", &path), Some(bin.join("rexx")));
         assert_eq!(
             fs::read(bin.join("rexx")).expect("the crate's rexx"),
-            fs::read(env!("CARGO_BIN_EXE_rexx-run")).expect("rexx-run")
+            fs::read(env!("CARGO_BIN_EXE_rexx")).expect("rexx")
         );
         assert_eq!(
             fs::canonicalize(bin.join("rexx")).expect("the crate's rexx"),
@@ -1912,7 +1912,7 @@ mod fixtures {
         );
         assert_eq!(resolve("rexxc", &path), None);
         assert!(check_path("/usr/bin:/bin", &bin).is_err());
-        fs::copy(env!("CARGO_BIN_EXE_rexx-run"), bin.join("rexxc")).expect("a rexxc");
+        fs::copy(env!("CARGO_BIN_EXE_rexx"), bin.join("rexxc")).expect("a rexxc");
         assert!(check_path(&path, &bin).is_err());
         fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
     }

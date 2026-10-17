@@ -689,7 +689,7 @@ fn corrupted(
     crate::on_interpreter_thread(move || {
         crate::scheduler::CORRUPTION.with(|asked| asked.set(corruption));
         crate::execute_on(
-            "/tmp/sim.rex",
+            b"/tmp/sim.rex",
             source.as_bytes().to_vec(),
             false,
             invocation,

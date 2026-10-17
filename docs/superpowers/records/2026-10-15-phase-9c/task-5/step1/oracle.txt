@@ -1,0 +1,952 @@
+=== no-arguments
+--- argv:
+--- stdout
+--- stderr
+
+Syntax is "rexx [-o[d] "options"] filename [arguments]"
+or        "rexx -e program_string [arguments]"
+or        "rexx -v".
+--- rc 255
+
+=== v
+--- argv: [-v]
+--- stdout
+Open Object Rexx Version 5.3.0 r0
+Build date: Jul 30 2026
+Addressing mode: 64
+Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.
+This program and the accompanying materials are made available under the terms
+of the Common Public License v1.0 which accompanies this distribution or at
+https://www.oorexx.org/license.html
+--- stderr
+--- rc 0
+
+=== V
+--- argv: [-V]
+--- stdout
+Open Object Rexx Version 5.3.0 r0
+Build date: Jul 30 2026
+Addressing mode: 64
+Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.
+This program and the accompanying materials are made available under the terms
+of the Common Public License v1.0 which accompanies this distribution or at
+https://www.oorexx.org/license.html
+--- stderr
+--- rc 0
+
+=== v-then-unknown
+--- argv: [-v] [-?]
+--- stdout
+Open Object Rexx Version 5.3.0 r0
+Build date: Jul 30 2026
+Addressing mode: 64
+Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.
+This program and the accompanying materials are made available under the terms
+of the Common Public License v1.0 which accompanies this distribution or at
+https://www.oorexx.org/license.html
+--- stderr
+--- rc 0
+
+=== unknown-then-v
+--- argv: [-?] [-v]
+--- stdout
+Open Object Rexx Version 5.3.0 r0
+Build date: Jul 30 2026
+Addressing mode: 64
+Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.
+This program and the accompanying materials are made available under the terms
+of the Common Public License v1.0 which accompanies this distribution or at
+https://www.oorexx.org/license.html
+--- stderr
+--- rc 0
+
+=== o-then-v
+--- argv: [-o] [digits 12] [-v]
+--- stdout
+Open Object Rexx Version 5.3.0 r0
+Build date: Jul 30 2026
+Addressing mode: 64
+Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.
+This program and the accompanying materials are made available under the terms
+of the Common Public License v1.0 which accompanies this distribution or at
+https://www.oorexx.org/license.html
+--- stderr
+--- rc 0
+
+=== v-after-program
+--- argv: [t.rex] [-v]
+--- stdout
+hi from t
+--- stderr
+--- rc 0
+
+=== v-after-e
+--- argv: [-e] [say 1] [-v]
+--- stdout
+1
+--- stderr
+--- rc 0
+
+=== e-code
+--- argv: [-e] [say 1]
+--- stdout
+1
+--- stderr
+--- rc 0
+
+=== E-code
+--- argv: [-E] [say 2]
+--- stdout
+2
+--- stderr
+--- rc 0
+
+=== e-no-code
+--- argv: [-e]
+--- stdout
+--- stderr
+
+Syntax is "rexx [-o[d] "options"] filename [arguments]"
+or        "rexx -e program_string [arguments]"
+or        "rexx -v".
+--- rc 255
+
+=== e-empty
+--- argv: [-e] []
+--- stdout
+--- stderr
+--- rc 0
+
+=== e-args
+--- argv: [-e] [say arg() '['arg(1)']'] [a] [b c] [d]
+--- stdout
+1 [a b c d]
+--- stderr
+--- rc 0
+
+=== e-no-args
+--- argv: [-e] [say arg() '['arg(1)']']
+--- stdout
+0 []
+--- stderr
+--- rc 0
+
+=== e-syntax-error
+--- argv: [-e] [say (]
+--- stdout
+--- stderr
+     1 *-* say (
+Error 35 running INSTORE line 1:  Invalid expression.
+Error 35.1:  Incorrect expression detected at "(".
+--- rc 221
+
+=== e-exit-7
+--- argv: [-e] [exit 7]
+--- stdout
+--- stderr
+--- rc 7
+
+=== e-return-300
+--- argv: [-e] [return 300]
+--- stdout
+--- stderr
+--- rc 44
+
+=== e-raise-42
+--- argv: [-e] [say 1/0]
+--- stdout
+--- stderr
+     1 *-* say 1/0
+Error 42 running INSTORE line 1:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+--- rc 214
+
+=== e-parse-source
+--- argv: [-e] [parse source s; say s]
+--- stdout
+LINUX COMMAND INSTORE
+--- stderr
+--- rc 0
+
+=== e-syscargs
+--- argv: [-e] [say .syscargs; say .local~syscargs]
+--- stdout
+.SYSCARGS
+The NIL object
+--- stderr
+--- rc 0
+
+=== e-twice
+--- argv: [-e] [say 1] [-e] [say 2]
+--- stdout
+1
+--- stderr
+--- rc 0
+
+=== e-then-o
+--- argv: [-e] [say digits()] [-o] [digits 12]
+--- stdout
+9
+--- stderr
+--- rc 0
+
+=== o-then-e
+--- argv: [-o] [digits 12] [-e] [say digits()]
+--- stdout
+9
+--- stderr
+--- rc 0
+
+=== o-digits
+--- argv: [-o] [digits 12] [opts.rex]
+--- stdout
+digits=12 form=SCIENTIFIC
+trace=N
+--- stderr
+--- rc 0
+
+=== od-digits
+--- argv: [-od] [digits 12] [opts.rex]
+--- stdout
+digits=12 form=SCIENTIFIC
+trace=N
+--- stderr
+--- rc 0
+
+=== O-digits
+--- argv: [-O] [digits 12] [opts.rex]
+--- stdout
+digits=12 form=SCIENTIFIC
+trace=N
+--- stderr
+--- rc 0
+
+=== OD-digits
+--- argv: [-OD] [digits 12] [opts.rex]
+--- stdout
+digits=12 form=SCIENTIFIC
+trace=N
+--- stderr
+--- rc 0
+
+=== o-colon
+--- argv: [-o] [::options digits 12] [opts.rex]
+--- stdout
+digits=12 form=SCIENTIFIC
+trace=N
+--- stderr
+--- rc 0
+
+=== o-single-colon
+--- argv: [-o] [:options digits 12] [opts.rex]
+--- stdout
+--- stderr
+     1 *-* ::OPTIONS :options digits 12
+       *-* Compiled method "DEFAULTOPTIONS" with scope "Package".
+Error 25 running PackageSettingsFromOptionsDirectiveString line 1:  Invalid subkeyword found.
+Error 25.924:  Unknown keyword on ::OPTIONS directive; found ":".
+--- rc 231
+
+=== o-second-colon
+--- argv: [-o] [x:options digits 12] [opts.rex]
+--- stdout
+--- stderr
+       *-* Compiled method "DEFAULTOPTIONS" with scope "Package".
+Error 93:  Incorrect call to method.
+Error 93.900:  argument is not an ::OPTIONS directive.
+--- rc 163
+
+=== o-leading-blank-colon
+--- argv: [-o] [ ::options digits 12] [opts.rex]
+--- stdout
+digits=12 form=SCIENTIFIC
+trace=N
+--- stderr
+--- rc 0
+
+=== o-two-blanks-colon
+--- argv: [-o] [  ::options digits 12] [opts.rex]
+--- stdout
+digits=12 form=SCIENTIFIC
+trace=N
+--- stderr
+--- rc 0
+
+=== o-trace
+--- argv: [-o] [trace all] [opts.rex]
+--- stdout
+digits=9 form=SCIENTIFIC
+trace=A
+--- stderr
+     1 *-* say 'digits='digits() 'form='form()
+     2 *-* say 'trace='trace()
+--- rc 0
+
+=== o-own-options
+--- argv: [-o] [digits 12] [ownopts.rex]
+--- stdout
+digits=5
+--- stderr
+--- rc 0
+
+=== od-own-options
+--- argv: [-od] [digits 12] [ownopts.rex]
+--- stdout
+digits=5
+--- stderr
+--- rc 0
+
+=== o-requires
+--- argv: [-o] [digits 12] [req.rex]
+--- stdout
+main digits=12
+lib digits=9
+--- stderr
+--- rc 0
+
+=== od-requires
+--- argv: [-od] [digits 12] [req.rex]
+--- stdout
+main digits=12
+lib digits=12
+--- stderr
+--- rc 0
+
+=== o-last
+--- argv: [-o]
+--- stdout
+--- stderr
+
+Syntax is "rexx [-o[d] "options"] filename [arguments]"
+or        "rexx -e program_string [arguments]"
+or        "rexx -v".
+--- rc 255
+
+=== od-last
+--- argv: [-od]
+--- stdout
+--- stderr
+
+Syntax is "rexx [-o[d] "options"] filename [arguments]"
+or        "rexx -e program_string [arguments]"
+or        "rexx -v".
+--- rc 255
+
+=== o-malformed
+--- argv: [-o] [bogus 9] [opts.rex]
+--- stdout
+--- stderr
+     1 *-* ::OPTIONS bogus 9
+       *-* Compiled method "DEFAULTOPTIONS" with scope "Package".
+Error 25 running PackageSettingsFromOptionsDirectiveString line 1:  Invalid subkeyword found.
+Error 25.924:  Unknown keyword on ::OPTIONS directive; found "BOGUS".
+--- rc 231
+
+=== o-malformed-value
+--- argv: [-o] [digits x] [opts.rex]
+--- stdout
+--- stderr
+     1 *-* ::OPTIONS digits x
+       *-* Compiled method "DEFAULTOPTIONS" with scope "Package".
+Error 26 running PackageSettingsFromOptionsDirectiveString line 1:  Invalid whole number.
+Error 26.5:  DIGITS value must be a positive whole number; found "X".
+--- rc 230
+
+=== o-empty
+--- argv: [-o] [] [opts.rex]
+--- stdout
+digits=9 form=SCIENTIFIC
+trace=N
+--- stderr
+--- rc 0
+
+=== o-twice
+--- argv: [-o] [digits 12] [-o] [form engineering] [opts.rex]
+--- stdout
+digits=9 form=ENGINEERING
+trace=N
+--- stderr
+--- rc 0
+
+=== o-syscargs
+--- argv: [-o] [digits 12] [showargs.rex] [a] [b]
+--- stdout
+arg()=1 arg(1)=[a b]
+items=2 size=4 last=4
+1 empty
+2 empty
+3=[a]
+4=[b]
+[a, b]
+--- stderr
+--- rc 0
+
+=== od-syscargs
+--- argv: [-od] [digits 12] [showargs.rex] [a] [b]
+--- stdout
+arg()=1 arg(1)=[a b]
+items=2 size=4 last=4
+1 empty
+2 empty
+3=[a]
+4=[b]
+[a, b]
+--- stderr
+--- rc 0
+
+=== unknown-x
+--- argv: [-x] [showargs.rex] [a] [b]
+--- stdout
+arg()=1 arg(1)=[a b]
+items=2 size=3 last=3
+1 empty
+2=[a]
+3=[b]
+[a, b]
+--- stderr
+--- rc 0
+
+=== unknown-x-y
+--- argv: [-x] [-y] [showargs.rex] [a] [b]
+--- stdout
+arg()=1 arg(1)=[a b]
+items=2 size=4 last=4
+1 empty
+2 empty
+3=[a]
+4=[b]
+[a, b]
+--- stderr
+--- rc 0
+
+=== unknown-x-no-args
+--- argv: [-x] [showargs.rex]
+--- stdout
+arg()=0 arg(1)=[]
+items=0 size=0 last=The NIL object
+--- stderr
+     4 *-* do i = 1 to s~last
+Error 97 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/showargs.rex line 4:  Object method not found.
+Error 97.1:  Object "The NIL object" does not understand message "+".
+--- rc 159
+
+=== unknown-only
+--- argv: [-x]
+--- stdout
+--- stderr
+
+Syntax is "rexx [-o[d] "options"] filename [arguments]"
+or        "rexx -e program_string [arguments]"
+or        "rexx -v".
+--- rc 255
+
+=== bare-dash
+--- argv: [-] [showargs.rex] [a]
+--- stdout
+arg()=1 arg(1)=[a]
+items=1 size=2 last=2
+1 empty
+2=[a]
+[a]
+--- stderr
+--- rc 0
+
+=== bare-dash-only
+--- argv: [-]
+--- stdout
+--- stderr
+
+Syntax is "rexx [-o[d] "options"] filename [arguments]"
+or        "rexx -e program_string [arguments]"
+or        "rexx -v".
+--- rc 255
+
+=== plain-args
+--- argv: [showargs.rex] [a] [b c] [d]
+--- stdout
+arg()=1 arg(1)=[a b c d]
+items=3 size=3 last=3
+1=[a]
+2=[b c]
+3=[d]
+[a, b c, d]
+--- stderr
+--- rc 0
+
+=== plain-no-args
+--- argv: [showargs.rex]
+--- stdout
+arg()=0 arg(1)=[]
+items=0 size=0 last=The NIL object
+--- stderr
+     4 *-* do i = 1 to s~last
+Error 97 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/showargs.rex line 4:  Object method not found.
+Error 97.1:  Object "The NIL object" does not understand message "+".
+--- rc 159
+
+=== plain-empty-arg
+--- argv: [showargs.rex] []
+--- stdout
+arg()=1 arg(1)=[]
+items=1 size=1 last=1
+1=[]
+[]
+--- stderr
+--- rc 0
+
+=== dash-args-after-program
+--- argv: [showargs.rex] [-o] [my output file]
+--- stdout
+arg()=1 arg(1)=[-o my output file]
+items=2 size=2 last=2
+1=[-o]
+2=[my output file]
+[-o, my output file]
+--- stderr
+--- rc 0
+
+=== find-rex-extension
+--- argv: [t]
+--- stdout
+hi from t
+--- stderr
+--- rc 0
+
+=== find-upper
+--- argv: [UP]
+--- stdout
+upper T.REX
+--- stderr
+--- rc 0
+
+=== find-sub
+--- argv: [sub/t]
+--- stdout
+hi from sub/t
+--- stderr
+--- rc 0
+
+=== find-dot-sub
+--- argv: [./sub/t]
+--- stdout
+hi from sub/t
+--- stderr
+--- rc 0
+
+=== find-noext
+--- argv: [noext]
+--- stdout
+noext file
+LINUX COMMAND /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/noext
+--- stderr
+--- rc 0
+
+=== find-directory
+--- argv: [dironly]
+--- stdout
+--- stderr
+Error 3:  Failure during initialization.
+Error 3.901:  Failure during initialization: Program "dironly" was not found.
+--- rc 253
+
+=== find-directory-ext
+--- argv: [dironly.rex]
+--- stdout
+--- stderr
+Error 3:  Failure during initialization.
+Error 3.901:  Failure during initialization: Program "dironly.rex" was not found.
+--- rc 253
+
+=== find-rexx-path
+--- argv: [viarp]
+--- stdout
+hi from rp
+LINUX COMMAND /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/rp/viarp.rex
+--- stderr
+--- rc 0
+
+=== find-path
+--- argv: [viapp]
+--- stdout
+hi from pp
+LINUX COMMAND /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/pp/viapp.rex
+--- stderr
+--- rc 0
+
+=== not-found
+--- argv: [nonexist]
+--- stdout
+--- stderr
+Error 3:  Failure during initialization.
+Error 3.901:  Failure during initialization: Program "nonexist" was not found.
+--- rc 253
+
+=== not-found-ext
+--- argv: [nonexist.rex]
+--- stdout
+--- stderr
+Error 3:  Failure during initialization.
+Error 3.901:  Failure during initialization: Program "nonexist.rex" was not found.
+--- rc 253
+
+=== not-found-dir
+--- argv: [sub/nonexist]
+--- stdout
+--- stderr
+Error 3:  Failure during initialization.
+Error 3.901:  Failure during initialization: Program "sub/nonexist" was not found.
+--- rc 253
+
+=== parse-source
+--- argv: [src.rex]
+--- stdout
+LINUX COMMAND /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/src.rex
+--- stderr
+--- rc 0
+
+=== parse-source-dot
+--- argv: [./sub/../src.rex]
+--- stdout
+LINUX COMMAND /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/src.rex
+--- stderr
+--- rc 0
+
+=== error-42
+--- argv: [err42.rex]
+--- stdout
+--- stderr
+     1 *-* say 1/0
+Error 42 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/err42.rex line 1:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+--- rc 214
+
+=== error-35
+--- argv: [err35.rex]
+--- stdout
+--- stderr
+     1 *-* say 'x' +
+Error 35 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/err35.rex line 1:  Invalid expression.
+Error 35.1:  Incorrect expression detected at "+".
+--- rc 221
+
+=== return-abc
+--- argv: [ret_abc.rex]
+--- stdout
+--- stderr
+--- rc 0
+
+=== return-neg3
+--- argv: [ret_neg3.rex]
+--- stdout
+--- stderr
+--- rc 253
+
+=== return-e300
+--- argv: [ret_e300.rex]
+--- stdout
+--- stderr
+--- rc 44
+
+=== return-f15
+--- argv: [ret_f15.rex]
+--- stdout
+--- stderr
+--- rc 0
+
+=== return-big
+--- argv: [ret_big.rex]
+--- stdout
+--- stderr
+--- rc 0
+
+=== return-nbig
+--- argv: [ret_nbig.rex]
+--- stdout
+--- stderr
+--- rc 0
+
+=== return-null
+--- argv: [ret_null.rex]
+--- stdout
+--- stderr
+--- rc 0
+
+=== return-none
+--- argv: [ret_none.rex]
+--- stdout
+--- stderr
+--- rc 0
+
+=== return-bare
+--- argv: [ret_bare.rex]
+--- stdout
+--- stderr
+--- rc 0
+
+=== return-r255
+--- argv: [ret_r255.rex]
+--- stdout
+--- stderr
+--- rc 255
+
+=== return-r256
+--- argv: [ret_r256.rex]
+--- stdout
+--- stderr
+--- rc 0
+
+=== return-sp
+--- argv: [ret_sp.rex]
+--- stdout
+--- stderr
+--- rc 4
+
+=== return-e1
+--- argv: [ret_e1.rex]
+--- stdout
+--- stderr
+--- rc 10
+
+=== return-obj
+--- argv: [ret_obj.rex]
+--- stdout
+--- stderr
+--- rc 0
+
+=== name-blank
+--- argv: [my prog.rex]
+--- stdout
+LINUX COMMAND /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/my prog.rex
+--- stderr
+     2 *-* say 1/0
+Error 42 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/my prog.rex line 2:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+--- rc 214
+
+=== name-blank-noext
+--- argv: [my prog]
+--- stdout
+LINUX COMMAND /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/my prog.rex
+--- stderr
+     2 *-* say 1/0
+Error 42 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/my prog.rex line 2:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+--- rc 214
+
+=== name-ff
+--- argv: [pÿ.rex]
+--- stdout
+LINUX COMMAND /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/pM-^?.rex
+--- stderr
+     2 *-* say 1/0
+Error 42 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/pM-^?.rex line 2:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+--- rc 214
+
+=== name-ff-noext
+--- argv: [pÿ]
+--- stdout
+LINUX COMMAND /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/pM-^?.rex
+--- stderr
+     2 *-* say 1/0
+Error 42 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/pM-^?.rex line 2:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+--- rc 214
+
+=== name-ff-file-noext
+--- argv: [qÿ]
+--- stdout
+LINUX COMMAND /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/qM-^?
+--- stderr
+     2 *-* say 1/0
+Error 42 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/9c-t5/o3/qM-^? line 2:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+--- rc 214
+
+=== arg-ff
+--- argv: [bytes.rex] [aÿb]
+--- stdout
+61FF62
+61FF62
+--- stderr
+--- rc 0
+
+=== o-empty-then-colon-name
+--- argv: [-o] [] [:x]
+--- stdout
+--- stderr
+       *-* Compiled method "DEFAULTOPTIONS" with scope "Package".
+Error 93:  Incorrect call to method.
+Error 93.900:  argument 2 must not be empty.
+--- rc 163
+
+=== o-blank-then-colon-name
+--- argv: [-o] [  ] [:x]
+--- stdout
+--- stderr
+Error 3:  Failure during initialization.
+Error 3.901:  Failure during initialization: Program ":x" was not found.
+--- rc 253
+
+=== o-long
+--- argv: [-o] [digits 12                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         form engineering] [opts.rex]
+--- stdout
+digits=12 form=SCIENTIFIC
+trace=N
+--- stderr
+--- rc 0
+
+=== o-then-o-last
+--- argv: [-o] [digits 12] [-o]
+--- stdout
+--- stderr
+
+Syntax is "rexx [-o[d] "options"] filename [arguments]"
+or        "rexx -e program_string [arguments]"
+or        "rexx -v".
+--- rc 255
+
+=== o-suffix-x
+--- argv: [-ox] [digits 12] [req.rex]
+--- stdout
+main digits=12
+lib digits=9
+--- stderr
+--- rc 0
+
+=== o-suffix-D
+--- argv: [-oD] [digits 12] [req.rex]
+--- stdout
+main digits=12
+lib digits=12
+--- stderr
+--- rc 0
+
+=== O-suffix-d
+--- argv: [-Od] [digits 12] [req.rex]
+--- stdout
+main digits=12
+lib digits=12
+--- stderr
+--- rc 0
+
+=== e-suffix
+--- argv: [-ev] [say 3]
+--- stdout
+3
+--- stderr
+--- rc 0
+
+=== v-suffix
+--- argv: [-vx]
+--- stdout
+Open Object Rexx Version 5.3.0 r0
+Build date: Jul 30 2026
+Addressing mode: 64
+Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
+Copyright (c) 2005-2026 Rexx Language Association. All rights reserved.
+This program and the accompanying materials are made available under the terms
+of the Common Public License v1.0 which accompanies this distribution or at
+https://www.oorexx.org/license.html
+--- stderr
+--- rc 0
+
+=== double-dash
+--- argv: [--] [showargs.rex] [a]
+--- stdout
+arg()=1 arg(1)=[a]
+items=1 size=2 last=2
+1 empty
+2=[a]
+[a]
+--- stderr
+--- rc 0
+
+=== unknown-then-e
+--- argv: [-x] [-e] [say 4]
+--- stdout
+4
+--- stderr
+--- rc 0
+
+=== e-syscargs-items
+--- argv: [-e] [say .syscargs~items]
+--- stdout
+--- stderr
+     1 *-* say .syscargs~items
+Error 97 running INSTORE line 1:  Object method not found.
+Error 97.1:  Object ".SYSCARGS" does not understand message "ITEMS".
+--- rc 159
+
+=== e-return-abc
+--- argv: [-e] [return 'abc']
+--- stdout
+--- stderr
+--- rc 0
+
+=== e-return-neg3
+--- argv: [-e] [return -3]
+--- stdout
+--- stderr
+--- rc 253
+
+=== e-return-big16
+--- argv: [-e] [return 70000]
+--- stdout
+--- stderr
+--- rc 0
+
+=== e-return-f15
+--- argv: [-e] [return 1.5]
+--- stdout
+--- stderr
+--- rc 0
+
+=== e-return-big
+--- argv: [-e] [return 2147483648]
+--- stdout
+--- stderr
+--- rc 0
+
+=== e-return-none
+--- argv: [-e] [nop]
+--- stdout
+--- stderr
+--- rc 0
+
+=== e-return-r256
+--- argv: [-e] [return 256]
+--- stdout
+--- stderr
+--- rc 0
+
+=== e-return-sp
+--- argv: [-e] [return ' 4 ']
+--- stdout
+--- stderr
+--- rc 4
+
+=== e-return-e1
+--- argv: [-e] [return 1e1]
+--- stdout
+--- stderr
+--- rc 10
+
+=== e-name-in-error
+--- argv: [-e] [say 1] [x] [y z]
+--- stdout
+1
+--- stderr
+--- rc 0
+
+=== e-with-o-own
+--- argv: [-o] [digits 12] [-e] [::options digits 5]
+--- stdout
+--- stderr
+--- rc 0
+

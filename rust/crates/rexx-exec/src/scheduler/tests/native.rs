@@ -52,7 +52,7 @@ fn counted(source: &str, stress: bool, invocation: Invocation) -> Counted {
         .stack_size(crate::INTERPRETER_STACK_BYTES)
         .spawn(move || {
             let outcome = crate::execute_on(
-                "/tmp/native.rex",
+                b"/tmp/native.rex",
                 text,
                 stress,
                 invocation,

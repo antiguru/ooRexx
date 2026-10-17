@@ -81,6 +81,12 @@ pub struct Invocation {
     /// string says where the second word ended. The two are independent
     /// afterwards -- appending to `.SYSCARGS` leaves `ARG(1)` unchanged.
     words: Vec<Vec<u8>>,
+    /// The index `.SYSCARGS` holds its first word at, or `None` for a run
+    /// whose `.local` has no `SYSCARGS` entry.
+    words_base: Option<usize>,
+    /// The `::OPTIONS` directive `.Package~defaultOptions` is sent before the
+    /// program is installed, and the override count sent after it.
+    default_options: Option<(Vec<u8>, i64)>,
     /// The register frame arena's block size.
     frame_block: FrameBlock,
     switch_mode: Option<SwitchMode>,
@@ -145,6 +151,8 @@ impl Invocation {
             standard_transient: [true; 3],
             sinks: None,
             words: Vec::new(),
+            words_base: Some(1),
+            default_options: None,
             frame_block: FrameBlock::DEFAULT,
             switch_mode: None,
         }
@@ -227,6 +235,33 @@ impl Invocation {
         }
     }
 
+    /// The same invocation, with `.SYSCARGS` holding `words` from `index` on
+    /// and the slots below it empty.
+    pub fn with_syscargs(self, words: Vec<Vec<u8>>, index: usize) -> Invocation {
+        Invocation {
+            words,
+            words_base: Some(index),
+            ..self
+        }
+    }
+
+    /// The same invocation, with no `SYSCARGS` entry in `.local`.
+    pub fn without_syscargs(self) -> Invocation {
+        Invocation {
+            words_base: None,
+            ..self
+        }
+    }
+
+    /// The same invocation, sending `.Package~defaultOptions('D', directive)`
+    /// and then `('C', count)` before the program is installed.
+    pub fn with_default_options(self, directive: Vec<u8>, count: i64) -> Invocation {
+        Invocation {
+            default_options: Some((directive, count)),
+            ..self
+        }
+    }
+
     /// The argument string, if there is one, where `.input` reads from, how
     /// long the run may take, and the directory and environment it runs
     /// against -- each `None` when the process's own is to be taken.
@@ -240,6 +275,8 @@ impl Invocation {
             standard_transient: self.standard_transient,
             sinks: self.sinks,
             words: self.words,
+            words_base: self.words_base,
+            default_options: self.default_options,
             frame_block: self.frame_block,
             switch_mode: self.switch_mode,
         }
@@ -257,6 +294,8 @@ pub(crate) struct InvocationParts {
     pub(crate) standard_transient: [bool; 3],
     pub(crate) sinks: Option<Sinks>,
     pub(crate) words: Vec<Vec<u8>>,
+    pub(crate) words_base: Option<usize>,
+    pub(crate) default_options: Option<(Vec<u8>, i64)>,
     pub(crate) frame_block: FrameBlock,
     pub(crate) switch_mode: Option<SwitchMode>,
 }

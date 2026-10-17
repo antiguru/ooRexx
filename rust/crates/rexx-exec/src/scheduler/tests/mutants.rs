@@ -46,7 +46,7 @@ fn counted(source: &str, spec: &str) -> Counted {
         .stack_size(crate::INTERPRETER_STACK_BYTES)
         .spawn(move || {
             let outcome = crate::execute_on(
-                "/tmp/mutants.rex",
+                b"/tmp/mutants.rex",
                 text,
                 false,
                 invocation,

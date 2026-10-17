@@ -173,6 +173,9 @@ mod environment;
 mod options;
 use options::PackageOptions;
 
+// The `rexx` command line's library half.
+pub mod launcher;
+
 // `::REQUIRES` (Phase 5d): the routes a required file's name is searched over
 // and the extensions appended to it.
 mod require;
@@ -1690,6 +1693,9 @@ struct Interp {
     /// `Array` `.local` holds -- see `Invocation::words` for why the joined
     /// argument string cannot supply them.
     command_words: Vec<Vec<u8>>,
+    /// The index `.SYSCARGS` holds [`Interp::command_words`]' first word at, or
+    /// `None` for a run whose `.local` has no `SYSCARGS` entry.
+    command_words_base: Option<usize>,
     /// Whether the required-string protocol can answer anything other than
     /// the value it was handed -- `Interp::required_string_value`'s gate.
     reqstr_armed: bool,
@@ -2271,6 +2277,7 @@ impl Interp {
             standard_transient: [true; 3],
             sinks: None,
             command_words: Vec::new(),
+            command_words_base: Some(1),
             reqstr_armed: false,
             lostdigits_armed: false,
             program_path: String::new(),
@@ -3148,6 +3155,7 @@ impl Interp {
             // here is reachable from the collector.
             standard_transient: _,
             command_words: _,
+            command_words_base: _,
         } = self;
         activity.object_roots(out);
         activities.object_roots(out);
@@ -3463,7 +3471,12 @@ pub fn install_signal_handlers() {
 
 /// Runs a Rexx program and returns what it produced.
 pub fn run_program(path: &str, text: Vec<u8>, invocation: Invocation) -> Outcome {
-    let path = path.to_string();
+    run_program_named(path.as_bytes(), text, invocation)
+}
+
+/// [`run_program`] for a program whose name is any bytes.
+pub fn run_program_named(path: &[u8], text: Vec<u8>, invocation: Invocation) -> Outcome {
+    let path = path.to_vec();
     on_interpreter_thread(move || {
         execute_on(
             &path,
@@ -3483,7 +3496,7 @@ pub(crate) fn run_program_on_stack(
     invocation: Invocation,
     stack: usize,
 ) -> Outcome {
-    let path = path.to_string();
+    let path = path.as_bytes().to_vec();
     on_thread_of(stack, move || {
         execute_on(&path, text, false, invocation, Some(stack))
     })
@@ -3500,7 +3513,7 @@ pub fn run_program_collect_every_alloc(
     text: Vec<u8>,
     invocation: Invocation,
 ) -> Outcome {
-    let path = path.to_string();
+    let path = path.as_bytes().to_vec();
     on_interpreter_thread(move || {
         execute_on(&path, text, true, invocation, Some(INTERPRETER_STACK_BYTES))
     })
@@ -3665,7 +3678,7 @@ fn execute(
     collect_every_alloc: bool,
     invocation: Invocation,
 ) -> Outcome {
-    execute_on(path, text, collect_every_alloc, invocation, None)
+    execute_on(path.as_bytes(), text, collect_every_alloc, invocation, None)
 }
 
 /// What a program that does not parse produces: the standard error report,
@@ -3701,7 +3714,7 @@ fn parse_failure_outcome(path: &str, rejected: &rexx_parse::Rejected) -> Outcome
 /// Everything that happens on the interpreter thread: parse, run, report.
 /// `stack` is the thread's stack size, where known.
 fn execute_on(
-    path: &str,
+    path: &[u8],
     text: Vec<u8>,
     collect_every_alloc: bool,
     invocation: Invocation,
@@ -3709,6 +3722,9 @@ fn execute_on(
 ) -> Outcome {
     let probe = 0u8;
     let base = &raw const probe as usize;
+    let name = path;
+    // `PARSE SOURCE` and the error reports read the name as `str`.
+    let path = &*String::from_utf8_lossy(name);
     let source = rexx_parse::ProgramSource::new(text, rexx_parse::SourceKind::Program);
     let program = match rexx_parse::program_from(source) {
         Ok(program) => program,
@@ -3727,7 +3743,7 @@ fn execute_on(
     // goes into the same `call_context` a `CALL` fills -- see that field's own
     // doc for what reads it and for the three measured invocations that tell
     // "no argument" from "one empty argument" apart.
-    interp.activity.call_context.name = Rc::from(path.as_bytes());
+    interp.activity.call_context.name = Rc::from(name);
     let parts = invocation.into_parts();
     interp
         .roots
@@ -3738,6 +3754,8 @@ fn execute_on(
     interp.standard_transient = parts.standard_transient;
     interp.sinks = parts.sinks;
     interp.command_words = parts.words;
+    interp.command_words_base = parts.words_base;
+    let default_options = parts.default_options;
     if let Some(directory) = parts.directory {
         interp.cwd = directory;
     }
@@ -3773,6 +3791,9 @@ fn execute_on(
             // anything allocates.
             interp.roots.activity_mut().push_temp(value);
             interp.activity.call_context.arguments = Rc::from(&[Some(value)][..]);
+        }
+        if let Some((directive, count)) = default_options {
+            interp.send_default_options(&directive, count)?;
         }
         // After the bootstrap, so `SwitchMode::AtClause` counts this program's
         // clauses alone.
