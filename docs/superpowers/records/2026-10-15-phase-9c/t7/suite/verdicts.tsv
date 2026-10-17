@@ -1,0 +1,3 @@
+# ootest revision 13178
+group	verdict	crate	oracle denominator
+utilities/rexx/rexx_command	green		equal

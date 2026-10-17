@@ -1,0 +1,16 @@
+e95e41416, plus the re-derived rust/corpus/refusal-sites.tsv
+cargo fmt --all --check: 0
+cargo clippy -p rexx-exec --all-targets -- -D warnings: 0
+cargo test -p rexx-exec --test program_end: 0
+cargo test -p rexx-exec --test rexx_command: 0
+cargo test -p rexx-exec --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions: 101 (refusal_sites: the table's lib.rs line numbers had moved)
+REXX_REFUSAL_SITES_REFRESH=1 cargo test -p rexx-exec --test refusal_sites: 0 (re-derived: only lib.rs line numbers moved)
+cargo test -p rexx-exec --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions: 0
+cargo test -p rexx-exec --lib: 0 (1142 passed)
+cargo test --release -p rexx-exec --test suite: 0 (52 passed)
+REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=utilities/rexx/rexx_command REXX_SUITE_TABLE=docs/superpowers/records/2026-10-15-phase-9c/t7/suite/table.tsv cargo test --release -p rexx-exec --test suite l3_core_suite: 0 (verdict green)
+  same with the TEST_PASSINGARGS7 licence row removed: 101 (verdict red, not passed: TEST_PASSINGARGS7)
+REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus: 0 (29 passed, 1 ignored)
+cargo test --release -p rexx-exec --no-fail-fast (each test binary that spawns rexx, listed in task-7-report.md): 0
+callgrind.sh -B 0.5 -p 'sayloop startup' at e4bbcbba4: 0
+callgrind.sh -B 0.5 -p 'sayloop startup' at e95e41416: 0

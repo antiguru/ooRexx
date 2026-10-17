@@ -1,0 +1,4 @@
+program	pin	t6	head	t6 d%	head d%	pin -libc	t6 -libc	head -libc	t6 -libc d%	head -libc d%	pin spread%	t6 spread%	head spread%
+sayloop	179667649	179718921	180219592	+0.0285	+0.3072	107724363	107627770	108128037	-0.0897	+0.3747	0.0000	0.0000	0.0001
+startup	119095681	119114621	119113927	+0.0159	+0.0153	57373104	57276808	57276472	-0.1678	-0.1684	0.0000	0.0035	0.0002
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9c/t7
