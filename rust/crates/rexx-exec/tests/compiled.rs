@@ -109,7 +109,12 @@ impl Side {
             command.stdin(file);
         }
         let output = command.output().expect("the binary starts");
-        let rendered = render(&self.dir, &output.stdout, &output.stderr, output.status.code());
+        let rendered = render(
+            &self.dir,
+            &output.stdout,
+            &output.stderr,
+            output.status.code(),
+        );
         if case.directive == "compile" {
             assert_eq!(output.status.code(), Some(0), "{words:?}: {rendered}");
             let image = std::fs::read(self.dir.join(words[1])).expect("the image");
@@ -217,7 +222,12 @@ fn ours_on(side: &Side, image: &str, bytes: &[u8]) -> String {
         .arg(image)
         .output()
         .expect("rexx starts");
-    render(&side.dir, &output.stdout, &output.stderr, output.status.code())
+    render(
+        &side.dir,
+        &output.stdout,
+        &output.stderr,
+        output.status.code(),
+    )
 }
 
 /// The report for an image refused with `sub`: 3.903 or 3.905.
@@ -278,7 +288,11 @@ fn a_foreign_or_damaged_image_is_refused() {
     untagged.extend_from_slice(b"c2F5ICdkZWNvZGVkJwo=\n");
     damaged.push(("untagged.rxo", untagged, 903));
     for (image, bytes, sub) in damaged {
-        assert_eq!(ours_on(&side, image, &bytes), refused(image, sub), "{image}");
+        assert_eq!(
+            ours_on(&side, image, &bytes),
+            refused(image, sub),
+            "{image}"
+        );
     }
     std::fs::remove_dir_all(&side.dir).expect("the directory is removed");
 }

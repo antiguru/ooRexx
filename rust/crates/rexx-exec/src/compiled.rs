@@ -327,4 +327,38 @@ mod tests {
         assert_eq!(decode(b"QU\nJD"), None);
         assert_eq!(decode(b""), Some(Vec::new()));
     }
+
+    #[test]
+    fn a_restored_source_is_not_traceable() {
+        let source = program_source(write_image(SOURCE, false), b"p").expect("restored");
+        assert!(!source.is_traceable());
+        assert_eq!(source.line(1), Some(&b"say 'hello'"[..]));
+        let plain = program_source(SOURCE.to_vec(), b"p").expect("source");
+        assert!(plain.is_traceable());
+        let refused = program_source(b"/**/@REXX@\n!!!!\n".to_vec(), b"p").err();
+        assert_eq!(
+            refused.map(|raised| (raised.number, raised.sub)),
+            Some((3, 905))
+        );
+    }
+
+    #[test]
+    fn only_lines_whose_second_is_the_encoded_tag_are_restored() {
+        let image = write_image(SOURCE, true);
+        let lines: Vec<&[u8]> = image.split(|&byte| byte == b'\n').collect();
+        let restored = lines_source(&lines, b"p")
+            .expect("an image")
+            .expect("restored");
+        assert!(!restored.is_traceable());
+        assert!(lines_source(&[b"say 1".as_slice(), b"say 2"], b"p").is_none());
+        // The tag as the second line of what is not an image: source.
+        assert!(lines_source(&[b"say 1".as_slice(), ENCODED_LINE, b"QUJD"], b"p").is_none());
+        let refused = lines_source(&[b"#!x".as_slice(), ENCODED_LINE, b"QUJD"], b"p")
+            .expect("an image")
+            .err();
+        assert_eq!(
+            refused.map(|raised| (raised.number, raised.sub)),
+            Some((3, 903))
+        );
+    }
 }
