@@ -414,7 +414,7 @@ fn a_fragment_that_does_not_parse_raises_the_oracles_condition() {
                 "     2 *-* interpret \"do forever then\"\n",
                 "Error 27 running {path} line 2:  Invalid DO or LOOP syntax.\n",
                 "Error 27.901:  Incorrect data following FOREVER keyword on the loop; \
-                 found \"&1\".\n",
+                 found \"THEN\".\n",
             ),
             path = TEST_PATH
         )
