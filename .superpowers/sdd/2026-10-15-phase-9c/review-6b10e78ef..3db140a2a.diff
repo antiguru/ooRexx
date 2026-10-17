@@ -1,0 +1,2806 @@
+# Review package: 6b10e78ef..HEAD
+
+## Commits
+3db140a2a Phase 9c Task 8: report and suite records
+483679f2c Phase 9c Task 8: refusal-sites re-derived for lib.rs's shifted lines
+7de9e8cc2 Phase 9c Task 8: rexxc against the oracle and parse-errors.tsv; the harness bin holds rexxc
+9622c9e89 Phase 9c Task 8: rexxc and the .rxo writer
+
+## Files changed
+ .../sdd/2026-10-15-phase-9c/task-8-report.md       |  75 +++
+ .../task-8-suite/oracle-differences.tsv            |   5 +
+ .../2026-10-15-phase-9c/task-8-suite/table.tsv     |   6 +
+ .../2026-10-15-phase-9c/task-8-suite/tests.tsv     |  44 ++
+ .../2026-10-15-phase-9c/task-8-suite/verdicts.tsv  |   4 +
+ rust/corpus/refusal-sites.tsv                      |  96 ++--
+ rust/crates/rexx-exec/src/bin/rexx.rs              |  24 +-
+ rust/crates/rexx-exec/src/bin/rexxc.rs             |  85 ++++
+ rust/crates/rexx-exec/src/builtin/convert.rs       |   2 +-
+ rust/crates/rexx-exec/src/compiled.rs              | 280 ++++++++++++
+ rust/crates/rexx-exec/src/install.rs               |   5 +
+ rust/crates/rexx-exec/src/launcher.rs              | 145 +++++-
+ rust/crates/rexx-exec/src/lib.rs                   |  72 ++-
+ rust/crates/rexx-exec/tests/rexxc.rs               | 509 +++++++++++++++++++++
+ rust/crates/rexx-exec/tests/rexxc/cases            | 432 +++++++++++++++++
+ rust/crates/rexx-exec/tests/suite.rs               |  57 ++-
+ .../tests/suite/fixtures/ChildPath.testGroup       |   2 +-
+ .../crates/rexx-exec/tests/support/group_runner.rs |  85 ++--
+ 18 files changed, 1785 insertions(+), 143 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/2026-10-15-phase-9c/task-8-report.md b/.superpowers/sdd/2026-10-15-phase-9c/task-8-report.md
+new file mode 100644
+index 000000000..e191d9b76
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-15-phase-9c/task-8-report.md
+@@ -0,0 +1,75 @@
++# Task 8 report: `rexxc` and the `.rxo` writer
++
++Status: DONE_WITH_CONCERNS.
++
++## Commits
++
++* `9622c9e89` rexxc and the .rxo writer: `src/compiled.rs`, `src/bin/rexxc.rs`, `launcher::{load, translate, parse_compile, same_file_message, output_unwritable}`, `lib.rs`'s `translate_program` on `Entry::Translate`, the early return in `install.rs`, `rexx.rs` moved onto `launcher::load`, `builtin/convert.rs`'s `base64_digit` made `pub(crate)`.
++* `7de9e8cc2` `tests/rexxc.rs` and `tests/rexxc/cases`, `group_runner.rs`'s `interpreter_bin` places `rexxc`, `suite.rs`'s `check_path` and its two tests turned around, `ChildPath.testGroup:16`.
++* `483679f2c` `corpus/refusal-sites.tsv` re-derived (`REXX_REFUSAL_SITES_REFRESH=1 ... --test refusal_sites`): `lib.rs` line numbers only. It should have been in `9622c9e89` and was caught by the per-task check.
++
++## Step 1: oracle measurements
++
++Every run from a fresh directory under the scratchpad (`t8/probe1`, `probe2`, `probe3`), through
++`( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib timeout -k 5 20 /home/moritz/dev/repos/ooRexx/build/bin/rexxc ARGS )`,
++stdout, stderr and status read separately. Every shape below is now a case in `tests/rexxc/cases`, recorded from the oracle by `REWRITE=1` and compared against the crate.
++
++* No arguments: `SYNTAX: rexxc inputfile [outputfile] [-s] [-e]` and `Without outputfile rexxc only performs a syntax check.` on stdout, rc 255.
++* Unknown flag (`ok.rex -x`, `ok.rex o.rxo -x`, `ok.rex -`, a third non-flag word): `The rexxc command parameters are incorrect.` first, then the two lines, stdout, rc 255, no banner.
++* The first word is always the input: `rexxc -x` prints the banner, then 3.901 for `"-x"`, rc 253.
++* Output equal to input: banner (unless `-s`), then `Output file name must be different from input file name.` on stdout, rc 254. Compared as bytes (`strcmp`).
++* Not found: banner, then `Error 3:  Failure during initialization.` / `Error 3.901: ... Program "nope" was not found.` on stderr, rc 253.
++* Syntax error: clause, `Error 35 running <abs path> line 1:`, `Error 35.1: ...` on stderr, rc 221 (`256 - major`), with and without `-s`. No output file is created.
++* `-s`, `-e`, both, either order, and by second byte only (`-sx -Exyz`): all rc 0. `-e` without an output is a plain check.
++* Review Focus 3: an output in a missing directory and a read-only output both answer `Error 3.902:  Error writing output file "<name as given>".`, rc 253, after a successful translation. The read-only file stays 0 bytes. A syntax error wins over an unwritable output, and 3.901 wins over both.
++* Review Focus 4: `a b`, `a b.rex`, `c\xffd`, `c\xffd.rex` found with and without `.rex`, outputs `o p.rxo` and `q\xffr.rxo` written. Messages carry the bytes as given (`"z\xFFz"`, `"n\xFF/x.rxo"`).
++* Translation binds libraries and resolves nothing else: `::routine r external "LIBRARY x"` is 98.903 rc 158 (line 2 after a `say`), `::method m external "LIBRARY REXX nosuchentry"` is 90.998 rc 166, while `::class a subclass zzz` and `::requires 'nosuch.rex'` are rc 0.
++* `::routine r external "REGISTERED x y"`: oracle 90.999 rc 166. Crate: `rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)`, rc 120.
++* The oracle image layout: `#!/usr/bin/env rexx\n`, then 48 bytes (`/**/@REXX` NUL-padded to 16, magic 11111, version 43, word size 64, big-endian 0, level 60600, reserved, pad, image size), then the image. `-e` writes `/**/@REXX@\n` and 72-column base64 with a final line end.
++* Restore probes for Task 9, with oracle `rexx`: `/**/@REXX say 1` and `#!/x\n/**/@REXX say 1` are source (13.1 on the `@`, rc 243). `/**/@REXX@\nsay 1\n`, `#!..\n/**/@REXX@\n!!!!\n` and an oracle `-e` image with one base64 digit changed to `!` are **3.905** (`Encoded compiled program "<abs path>" cannot be decoded.`), rc 253, not 3.903.
++
++## What landed
++
++* `compiled::write_image(source, encode)`: the oracle's `#!` line and header layout with magic `0x7273` and format version 1, the source length in `imageSize`, then the source. `-e` is the encoded tag and the base64 of header and source in 72-column lines. The encoder is `builtin/convert.rs`'s `encode_base64_bytes`, already in the crate.
++* `compiled::restore(bytes) -> Restore { Source, Compiled(Vec<u8>), Rejected, Undecodable }`, following `processRestoreData`: the binary tag is compared with its NUL as `strcmp` does, the encoded tag is decoded by the rules of `StringUtil::decodeBase64` (line ends only between quartets, `=` only in the last two digits, only line ends after it). `Rejected` is any header other than this build's or a source length not equal to what follows it. `Undecodable` is refused base64.
++* `launcher::translate(path, text) -> Outcome`: `translate_program` runs `execute_as` with `Entry::Translate`, which bootstraps, loads the program and runs `install_directives` with `translate_only` set. `install_directives` returns after `override_package_settings`, the end of the translation walk. Witnessed: with the return disabled, `cls.rex -s` answers 98.909 and `req.rex -s` 43.901, and `the_command_line_answers_as_the_oracles_does` goes red. The run path pays one `bool` read per `install_directives` call.
++* `rexxc`: `RexxCompiler.cpp`'s scan, banner unless `-s`, the same-name check, `launcher::load`, `translate`, then the image. A failed write removes the partial file and answers 3.902.
++
++## Tests
++
++* `cargo test -p rexx-exec --lib` (debug, `memcap 8G`): 1150 passed, 0 failed, including the `compiled::tests` and `launcher::tests` added.
++* `--release --test rexxc`: 4 passed.
++  * `the_command_line_answers_as_the_oracles_does`: every case in `tests/rexxc/cases` agrees on all three descriptors and on the first 31 bytes of each output.
++  * `rexxc_agrees_with_every_recorded_parse_error_row`: every TSV row agrees except the exempt and the licensed ones (below), rows run in parallel, about 1 s.
++  * `registered_is_refused_with_the_rxapi_reason`: the line-551 program fails and its stderr carries `(Phase 10 Rxapi)`.
++  * `the_oracle_refuses_this_crates_images_as_another_versions`: the oracle's `rexx` answers 3.903, rc 253, on both the binary and the encoded image.
++* Harness: `REXX_SUITE_GATE=1 REXX_SUITE_GROUPS=utilities/rexxc/rexxc,utilities/rexx/rexx_command REXX_SUITE_TABLE=docs/superpowers/records/2026-10-15-phase-9c/task-8-suite/table.tsv ... --test suite l3_core_suite`, exit 101. `rexx_command` is green. `utilities/rexxc/rexxc`: 9 of 11 pass, and `TEST_REXXC_ENCODING` and `TEST_REXXC_TWO_ARGS` fail, which await Task 9 (the brief names them). The oracle passes 11. Table and verdicts in `docs/superpowers/records/2026-10-15-phase-9c/task-8-suite/`.
++* `--release --test suite -- rexxc the_crate_side_bin_holds`: 3 passed (`the_crate_side_finds_its_own_rexx_and_rexxc`, `a_command_the_crate_side_runs_finds_its_rexx_and_rexxc`, the class-files test).
++* `--release --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test rexx_command`: all pass after the re-derivation.
++* `REXX_CORPUS_GATE=1 --release --test corpus --test sim_processes`: 29 passed 1 ignored, and 4 passed.
++* `cargo fmt --all --check`: 0. `cargo clippy -p rexx-exec --all-targets -- -D warnings`: 0.
++
++## TSV agreement
++
++The exempt predicate matches `REGISTERED` **case-insensitively** in the decoded program. The brief's byte match misses row 959, `::routine r external "registered x"` (install, 90.999), which this crate refuses with the same `Rxapi` reason. The spec's wording is "whose program names `REGISTERED`", which that row does.
++
++Deviations 38 and 39 (`phase-4-exclusions.txt`, pinned in `rexx-parse/tests/errors.rs`) show up here too: three `DO OVER`/`DO WITH ... FOR n TO|BY` rows (ours 25.927, oracle 49.2) and the two `then: nop` rows (ours 18.1/18.2, oracle 35.1). The test licenses exactly those code pairs and asserts the deviating programs are exactly those, so a new deviation or a fixed one goes red. Every other row agrees, including every `LIBRARY` install row (98.903, 90.998, 90.999 through `LIBRARY REXX`).
++
++## Rulings
++
++Ruled by the controller during the task:
++
++1. `Restore` has a fourth variant, `Undecodable`, for the 3.905 the oracle answers on refused base64. `Rejected` stays 3.903. The controller amends Task 9 and Review Focus 2.
++2. A narrow early return in `install.rs` for `translate`, witnessed above, with no change to the run path but one `bool` read.
++3. `rexx.rs`'s `load` moves into `launcher::load`, and both binaries use it.
++
++Taken by me, for the controller to confirm:
++
++4. The `REGISTERED` predicate is case-insensitive (see TSV agreement).
++5. Deviations 38 and 39 are licensed in the TSV agreement, as `rexx-parse/tests/errors.rs` already does. Spec criterion 4 names only the `REGISTERED` exemption.
++
++## Concerns
++
++* Files outside the task's list: `install.rs` (ruled), `bin/rexx.rs` (ruled), `builtin/convert.rs` (`base64_digit` made `pub(crate)` so the file decoder reuses it).
++* `rexxc` on an existing `.rxo` input translates its bytes as source. Task 9's restore is what decides that path.
++* `.superpowers/sdd/2026-10-15-phase-9c/progress.md` was modified in the working tree by someone else and is untouched by these commits.
+diff --git a/docs/superpowers/records/2026-10-15-phase-9c/task-8-suite/oracle-differences.tsv b/docs/superpowers/records/2026-10-15-phase-9c/task-8-suite/oracle-differences.tsv
+new file mode 100644
+index 000000000..8be51446a
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-15-phase-9c/task-8-suite/oracle-differences.tsv
+@@ -0,0 +1,5 @@
++# ootest revision 13178
++group	test	oracle	crate
++utilities/rexx/rexx_command	TEST_PASSINGARGS7	passed	failed
++utilities/rexxc/rexxc	TEST_REXXC_ENCODING	passed	failed
++utilities/rexxc/rexxc	TEST_REXXC_TWO_ARGS	passed	failed
+diff --git a/docs/superpowers/records/2026-10-15-phase-9c/task-8-suite/table.tsv b/docs/superpowers/records/2026-10-15-phase-9c/task-8-suite/table.tsv
+new file mode 100644
+index 000000000..6466dc4a3
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-15-phase-9c/task-8-suite/table.tsv
+@@ -0,0 +1,6 @@
++# ootest revision 13178
++group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
++utilities/rexx/rexx_command	oracle	29	30	30			-	-	1	yes	ulimit -v 1048576	30
++utilities/rexx/rexx_command	crate	29	30	29	TEST_PASSINGARGS7		-	-	1	yes	memcap 2G	30
++utilities/rexxc/rexxc	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
++utilities/rexxc/rexxc	crate	11	11	9	TEST_REXXC_ENCODING TEST_REXXC_TWO_ARGS		-	-	1	yes	memcap 2G	11
+diff --git a/docs/superpowers/records/2026-10-15-phase-9c/task-8-suite/tests.tsv b/docs/superpowers/records/2026-10-15-phase-9c/task-8-suite/tests.tsv
+new file mode 100644
+index 000000000..944f43e64
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-15-phase-9c/task-8-suite/tests.tsv
+@@ -0,0 +1,44 @@
++# ootest revision 13178
++# groups utilities/rexxc/rexxc,utilities/rexx/rexx_command
++group	test	row	oracle	crate
++utilities/rexx/rexx_command	TEST_NOARGS	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTE1	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTE10	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTE11	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTE2	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTE3	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTE4	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTE5	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTE6	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTE7	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTE8	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTE9	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTENOCODE	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTONOSTRING1	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTONOSTRING2	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTV1	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTV2	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTV3	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTV4	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTV5	-	passed	passed
++utilities/rexx/rexx_command	TEST_OPTV6	-	passed	passed
++utilities/rexx/rexx_command	TEST_PASSINGARGS0	-	passed	passed
++utilities/rexx/rexx_command	TEST_PASSINGARGS1	-	passed	passed
++utilities/rexx/rexx_command	TEST_PASSINGARGS2	-	passed	passed
++utilities/rexx/rexx_command	TEST_PASSINGARGS3	-	passed	passed
++utilities/rexx/rexx_command	TEST_PASSINGARGS4	-	passed	passed
++utilities/rexx/rexx_command	TEST_PASSINGARGS5	-	passed	passed
++utilities/rexx/rexx_command	TEST_PASSINGARGS6	-	passed	passed
++utilities/rexx/rexx_command	TEST_PASSINGARGS7	Deviation(40)	passed	failed
++utilities/rexx/rexx_command	TEST_UNKNOWNSW	-	passed	passed
++utilities/rexxc/rexxc	TESTCOMPILED	-	passed	passed
++utilities/rexxc/rexxc	TESTSOURCE	-	passed	passed
++utilities/rexxc/rexxc	TESTSOURCENOTEXIST	-	passed	passed
++utilities/rexxc/rexxc	TEST_REXXC_ENCODING	-	passed	failed
++utilities/rexxc/rexxc	TEST_REXXC_NO_ARG	-	passed	passed
++utilities/rexxc/rexxc	TEST_REXXC_ONE_ARG	-	passed	passed
++utilities/rexxc/rexxc	TEST_REXXC_ONE_ARG_NOT_FOUND	-	passed	passed
++utilities/rexxc/rexxc	TEST_REXXC_ONE_ARG_OPTION_S	-	passed	passed
++utilities/rexxc/rexxc	TEST_REXXC_ONE_ARG_SYNTAX	-	passed	passed
++utilities/rexxc/rexxc	TEST_REXXC_THREE_ARGS	-	passed	passed
++utilities/rexxc/rexxc	TEST_REXXC_TWO_ARGS	-	passed	failed
+diff --git a/docs/superpowers/records/2026-10-15-phase-9c/task-8-suite/verdicts.tsv b/docs/superpowers/records/2026-10-15-phase-9c/task-8-suite/verdicts.tsv
+new file mode 100644
+index 000000000..581cfdc36
+--- /dev/null
++++ b/docs/superpowers/records/2026-10-15-phase-9c/task-8-suite/verdicts.tsv
+@@ -0,0 +1,4 @@
++# ootest revision 13178
++group	verdict	crate	oracle denominator
++utilities/rexx/rexx_command	green		equal
++utilities/rexxc/rexxc	red	not passed: TEST_REXXC_ENCODING TEST_REXXC_TWO_ARGS	equal
+diff --git a/rust/corpus/refusal-sites.tsv b/rust/corpus/refusal-sites.tsv
+index 3fd54a9c5..44611d832 100644
+--- a/rust/corpus/refusal-sites.tsv
++++ b/rust/corpus/refusal-sites.tsv
+@@ -82,152 +82,152 @@ Raised	argument_not_a_symbol	body	crates/rexx-exec/src/error.rs:675	off-send-sur
+ Raised	argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1246	agrees	yes	88.914	p~addRoutine('X', 5) over p = .context~package -- the pair with argument_not_a_class is the class name substituted, and Routine is the one this row raises
+ Raised	argument_not_convertible	send	crates/rexx-exec/src/error.rs:1101	agrees	yes	93.953	.Package~new('X', 'Y', 'Z') -- the third argument is a parent context and anything that is not a Method, a Routine or a Package reaches this
+ Raised	argument_not_in_list	body+send	crates/rexx-exec/src/error.rs:731	agrees	yes	40.904	say .Method~newFile('nofile.rex', 5)
+ Raised	argument_not_non_negative	body+send	crates/rexx-exec/src/error.rs:904	agrees	yes	93.906	.array~new(-1)
+ Raised	argument_not_non_negative_call	body	crates/rexx-exec/src/error.rs:1017	off-send-surface	-	-	-
+ Raised	argument_not_positive	body	crates/rexx-exec/src/error.rs:690	off-send-surface	-	-	-
+ Raised	argument_not_single_dimensional	send	crates/rexx-exec/src/error.rs:1937	agrees	yes	88.913	o~sendWith('M', .array~new(2,2)) -- ~run's A style is the same raise under the name "argument array", and .array~new(2) answers on both sides
+ Raised	argument_not_whole	body	crates/rexx-exec/src/error.rs:639	off-send-surface	-	-	-
+ Raised	argument_out_of_range	body	crates/rexx-exec/src/error.rs:716	off-send-surface	-	-	-
+ Raised	arguments_out_of_order	body	crates/rexx-exec/src/error.rs:1559	off-send-surface	-	-	-
+-Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:693	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
++Loud	array_index_hole	send	crates/rexx-exec/src/lib.rs:696	not-run	no	oracle-crashes.txt entry 6 (SF 2085): never run	-
+ Raised	array_too_big	send	crates/rexx-exec/src/error.rs:1207	agrees	yes	93.959	.array~new(100000000000000001)
+ Raised	authorization_not_logical	body	crates/rexx-exec/src/error.rs:208	off-send-surface	-	-	-
+ Raised	bad_external_specification	send	crates/rexx-exec/src/error.rs:555	agrees	yes	99.917	say .Method~loadExternalMethod('M9', 'garbage') -- and the same for a one-word descriptor and for the empty string; oracle rc 157
+ Raised	bad_metaclass	body+send	crates/rexx-exec/src/error.rs:428	agrees	yes	99.927	.Object~subclass('K', 5)
+-Loud	binary_operator	body	crates/rexx-exec/src/lib.rs:501	off-send-surface	-	-	-
++Loud	binary_operator	body	crates/rexx-exec/src/lib.rs:504	off-send-surface	-	-	-
+ Raised	c2d_result_too_large	body	crates/rexx-exec/src/error.rs:978	off-send-surface	-	-	-
+-Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:932	off-send-surface	-	-	-
+-Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:856	off-send-surface	-	-	-
+-Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:865	off-send-surface	-	-	-
++Loud	call_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:935	off-send-surface	-	-	-
++Loud	chunk_map_too_short	ir	crates/rexx-exec/src/lib.rs:859	off-send-surface	-	-	-
++Loud	chunk_refused	body	crates/rexx-exec/src/lib.rs:868	off-send-surface	-	-	-
+ Raised	circular_requires	body	crates/rexx-exec/src/error.rs:561	off-send-surface	-	-	-
+ Raised	class_keyword_needs_class	body	crates/rexx-exec/src/error.rs:401	off-send-surface	-	-	-
+ Raised	class_not_found	body	crates/rexx-exec/src/error.rs:408	off-send-surface	-	-	-
+-Loud	classic_style_routine	send	crates/rexx-exec/src/lib.rs:808	agrees	no	no route: no routine table this crate loads on Linux has a ROUTINE_CLASSIC_STYLE row; git grep --no-index over ootest, testbinaries, extensions and samples finds one only in the Windows rxwinsys	say RxCalcSqrt(4) over ::requires 'rxmath' library, a typed row: 2, rc 0 on both
++Loud	classic_style_routine	send	crates/rexx-exec/src/lib.rs:811	agrees	no	no route: no routine table this crate loads on Linux has a ROUTINE_CLASSIC_STYLE row; git grep --no-index over ootest, testbinaries, extensions and samples finds one only in the Windows rxwinsys	say RxCalcSqrt(4) over ::requires 'rxmath' library, a typed row: 2, rc 0 on both
+ Raised	compare_result_not_whole	send	crates/rexx-exec/src/error.rs:1179	agrees	yes	26.903	.Array~of('b','a')~sortWith(c) over a Comparator whose compare returns 'abc' -- a comparator answering '1.0' also sorts, so the refusal needs a result that is not a number at all
+ Raised	compare_to_result_not_whole	send	crates/rexx-exec/src/error.rs:1185	agrees	yes	26.902	.Array~of(.K~new,.K~new)~sort over ::method compareTo returning 'zzz' -- sortWith on the same objects reaches 26.903 instead, so the default order is the only route
+ Raised	condition	body+send	crates/rexx-exec/src/error.rs:139	agrees	yes	from_utf8_lossy(name)	t~rc('USER BAZ', , .array~of('a'), 'r3') under signal on user baz, over ::method rc external "LIBRARY orxmethod TestRaiseCondition" -- the name is the one the extension passed RaiseCondition
+ Raised	constant_needs_class	body	crates/rexx-exec/src/error.rs:568	off-send-surface	-	-	-
+ Raised	constant_not_initialized	send	crates/rexx-exec/src/error.rs:1666	agrees	yes	97.4	a class-side INIT reading ::constant c (2+3)
+-Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:940	off-send-surface	-	-	-
++Loud	constant_out_of_range	ir	crates/rexx-exec/src/lib.rs:943	off-send-surface	-	-	-
+ Raised	context_not_active	send	crates/rexx-exec/src/error.rs:518	agrees	yes	98.981	a `.context` returned out of a ::routine and read after the return
+-Loud	conversion_raised	send	crates/rexx-exec/src/lib.rs:788	agrees	no	no route: both callers of Interp::refusal answer a conversion that raised before reaching it, so the callee's condition is what a program sees	RxCalcSqrt(o) with o an object whose STRING raises 93.900 (scout A c_native_raised): rc 163 on both engines
++Loud	conversion_raised	send	crates/rexx-exec/src/lib.rs:791	agrees	no	no route: both callers of Interp::refusal answer a conversion that raised before reaching it, so the callee's condition is what a program sees	RxCalcSqrt(o) with o an object whose STRING raises 93.900 (scout A c_native_raised): rc 163 on both engines
+ Raised	copy_not_supported	send	crates/rexx-exec/src/error.rs:1627	agrees	yes	93.970	.K~copy
+ Raised	cyclic_inheritance	body	crates/rexx-exec/src/error.rs:530	off-send-surface	-	-	-
+ Raised	d2c_value_not_whole	body	crates/rexx-exec/src/error.rs:967	off-send-surface	-	-	-
+ Raised	d2x_value_not_whole	body	crates/rexx-exec/src/error.rs:960	off-send-surface	-	-	-
+ Raised	date_format_invalid	body	crates/rexx-exec/src/error.rs:818	off-send-surface	-	-	-
+ Raised	deadlock	body+send	crates/rexx-exec/src/error.rs:275	agrees	yes	98.905	m~wait inside a guarded method whose started send m waits for that method's lock (message_wait_deadlock.rex); two activities each holding a lock and sending to the other's (guard_deadlock_two_activities.rex)
+ Loud	deferred_send	send	crates/rexx-exec/src/dispatch/native.rs:799	diverges	yes	the LIBRARY REXX entry point	.Stream~new('x')~lineIn(1,2,3,4,5)
+ Raised	duplicate_class	body	crates/rexx-exec/src/error.rs:377	off-send-surface	-	-	-
+ Raised	duplicate_member	body	crates/rexx-exec/src/error.rs:390	off-send-surface	-	-	-
+ Raised	duplicate_resource	body	crates/rexx-exec/src/error.rs:383	off-send-surface	-	-	-
+ Raised	duplicate_routine	body	crates/rexx-exec/src/error.rs:370	off-send-surface	-	-	-
+-Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:702	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
+-Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:672	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
++Loud	entry_method_without_a_value	send	crates/rexx-exec/src/lib.rs:705	recorded	yes	an entry-method assignment to	.local~sendWith('ZZZ=', .array~new(1))
++Loud	environment_entry	body+send	crates/rexx-exec/src/lib.rs:675	diverges	yes	directory entry	.local['STDQUE'] or .context~package~findClass('STDQUE'), before STDQUE is replaced
+ Raised	environment_name_too_long	body	crates/rexx-exec/src/error.rs:1931	off-send-surface	-	-	-
+-Loud	environment_symbol	body+send	crates/rexx-exec/src/lib.rs:661	agrees	no	no route: the send sites ask for .MESSAGENOTIFICATION and .FILE, REXX package classes the library bootstrap installs before any program runs	m~notify(.w~new) over ::class w inherit MessageNotification, after .environment~remove('MESSAGENOTIFICATION') and .local~remove('MESSAGENOTIFICATION') (Phase 9a Task 5 probe nt1), and .rexxinfo~executable (probe info): rc 0 on both
++Loud	environment_symbol	body+send	crates/rexx-exec/src/lib.rs:664	agrees	no	no route: the send sites ask for .MESSAGENOTIFICATION and .FILE, REXX package classes the library bootstrap installs before any program runs	m~notify(.w~new) over ::class w inherit MessageNotification, after .environment~remove('MESSAGENOTIFICATION') and .local~remove('MESSAGENOTIFICATION') (Phase 9a Task 5 probe nt1), and .rexxinfo~executable (probe info): rc 0 on both
+ Raised	error_syntax	body	crates/rexx-exec/src/error.rs:1707	off-send-surface	-	-	-
+ Raised	escalated	body	crates/rexx-exec/src/command.rs:463	off-send-surface	-	-	-
+ Raised	executable_file_unreadable	body	crates/rexx-exec/src/error.rs:548	off-send-surface	-	-	-
+ Raised	exit_after_reply	body	crates/rexx-exec/src/error.rs:1914	off-send-surface	-	-	-
+ Raised	expose_outside_method	body	crates/rexx-exec/src/error.rs:1872	off-send-surface	-	-	-
+-Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:770	off-send-surface	-	-	-
+-Loud	expression	body	crates/rexx-exec/src/lib.rs:493	off-send-surface	-	-	-
++Loud	expose_receiver	body	crates/rexx-exec/src/lib.rs:773	off-send-surface	-	-	-
++Loud	expression	body	crates/rexx-exec/src/lib.rs:496	off-send-surface	-	-	-
+ Raised	external_method_not_found	body	crates/rexx-exec/src/error.rs:289	off-send-surface	-	-	-
+ Raised	external_routine_not_found	body	crates/rexx-exec/src/error.rs:295	off-send-surface	-	-	-
+ Raised	failure_syntax	body	crates/rexx-exec/src/error.rs:1713	off-send-surface	-	-	-
+-Loud	fork_child	body	crates/rexx-exec/src/lib.rs:554	off-send-surface	-	-	-
++Loud	fork_child	body	crates/rexx-exec/src/lib.rs:557	off-send-surface	-	-	-
+ Raised	format_incompatible_separator	body	crates/rexx-exec/src/error.rs:854	off-send-surface	-	-	-
+ Raised	forward_arguments	body	crates/rexx-exec/src/error.rs:1893	off-send-surface	-	-	-
+ Raised	forward_outside_method	body	crates/rexx-exec/src/error.rs:1887	off-send-surface	-	-	-
+ Raised	from	body	crates/rexx-exec/src/error.rs:1979	off-send-surface	-	-	-
+ Raised	guard_outside_method	body	crates/rexx-exec/src/error.rs:1877	off-send-surface	-	-	-
+ Raised	halt	body	crates/rexx-exec/src/error.rs:164	off-send-surface	-	-	-
+-Loud	handle_descriptor	send	crates/rexx-exec/src/lib.rs:816	recorded	yes	a HANDLE: stream on descriptor	.Stream~new('HANDLE:7'), recorded as Deviation 35: the oracle makes an inert stream (stream_handle.rs pins this side; HANDLE:2 beside it is made on both)
+-Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:976	off-send-surface	-	-	-
++Loud	handle_descriptor	send	crates/rexx-exec/src/lib.rs:819	recorded	yes	a HANDLE: stream on descriptor	.Stream~new('HANDLE:7'), recorded as Deviation 35: the oracle makes an inert stream (stream_handle.rs pins this side; HANDLE:2 beside it is made on both)
++Loud	immovable_reply	body	crates/rexx-exec/src/lib.rs:979	off-send-surface	-	-	-
+ Raised	incorrect_list_index	send	crates/rexx-exec/src/error.rs:1157	agrees	yes	93.918	q=.Queue~new;q~queue('a');q~put('Y',99)
+ Raised	incorrect_native_signature	send	crates/rexx-exec/src/error.rs:332	agrees	yes	40.918	ForgeSelf() over ::requires 'forgesig' LIBRARY in a required package, a forged routine library declaring CSELF; a method over a forged procedure declaring parameter code 9 is 93.968 -- no oracle-built extension declares either, so neither program can be a corpus witness
+ Raised	incorrect_pad	send	crates/rexx-exec/src/error.rs:893	agrees	yes	93.922	.MutableBuffer~new('abcabc')~substr(1, 2, 'xx')
+ Raised	incorrect_queue_index	send	crates/rexx-exec/src/error.rs:1146	agrees	yes	93.966	q=.Queue~new;q~queue('a');q~queue('b');q~put('n',4)
+ Raised	index_does_not_match	send	crates/rexx-exec/src/error.rs:1173	agrees	yes	93.949	.Set~new~put('c','d') -- put with one argument is accepted and put('b','b') is too, so the refusal needs an index that is not the value
+ Raised	inherit_base_class	body+send	crates/rexx-exec/src/error.rs:486	agrees	yes	98.943	.K~inherit(.M) with M a mixin of an unrelated base
+ Raised	inherit_needs_a_mixinclass	body+send	crates/rexx-exec/src/error.rs:479	agrees	yes	98.942	.K~inherit(.Array)
+-Loud	instruction	body+ir	crates/rexx-exec/src/lib.rs:440	off-send-surface	-	-	-
++Loud	instruction	body+ir	crates/rexx-exec/src/lib.rs:443	off-send-surface	-	-	-
+ Raised	insufficient_stack	body+send	crates/rexx-exec/src/error.rs:217	recorded	no	the self-forward family is in oracle-crashes.txt: never run	-
+-Loud	internal_routine	body	crates/rexx-exec/src/lib.rs:527	off-send-surface	-	-	-
++Loud	internal_routine	body	crates/rexx-exec/src/lib.rs:530	off-send-surface	-	-	-
+ Raised	invalid_base64	send	crates/rexx-exec/src/error.rs:1824	agrees	yes	93.962	'YW==YWJj'~decodeBase64
+ Raised	invalid_conversion	body	crates/rexx-exec/src/error.rs:824	off-send-surface	-	-	-
+ Raised	invalid_digit	body	crates/rexx-exec/src/error.rs:996	off-send-surface	-	-	-
+ Raised	invalid_grouping	body	crates/rexx-exec/src/error.rs:1006	off-send-surface	-	-	-
+ Raised	invalid_length	body+send	crates/rexx-exec/src/error.rs:875	agrees	yes	93.923	.stringtable~new('abc')
+ Raised	invalid_option	body	crates/rexx-exec/src/error.rs:916	off-send-surface	-	-	-
+ Raised	invalid_position	body+send	crates/rexx-exec/src/error.rs:883	agrees	yes	93.924	m = .array~new(2,3) then m[1.5,1]
+ Raised	invalid_routine_option	body	crates/rexx-exec/src/error.rs:1495	off-send-surface	-	-	-
+ Raised	invalid_stream_name	body	crates/rexx-exec/src/error.rs:805	off-send-surface	-	-	-
+-Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:964	off-send-surface	-	-	-
+-Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:882	off-send-surface	-	-	-
++Loud	inverted_wait	body	crates/rexx-exec/src/lib.rs:967	off-send-surface	-	-	-
++Loud	jump_out_of_range	ir	crates/rexx-exec/src/lib.rs:885	off-send-surface	-	-	-
+ Raised	label_not_found	body	crates/rexx-exec/src/error.rs:589	off-send-surface	-	-	-
+ Raised	length_required_for_negative	body	crates/rexx-exec/src/error.rs:951	off-send-surface	-	-	-
+ Raised	library_not_loaded	body	crates/rexx-exec/src/error.rs:303	off-send-surface	-	-	-
+-Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:726	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
+-Loud	library_source	body	crates/rexx-exec/src/lib.rs:749	off-send-surface	-	-	-
++Loud	library_procedure_gone	send	crates/rexx-exec/src/lib.rs:729	agrees	no	no route: Libraries holds every library that loaded until the interpreter ends, so a row found at binding is found at every call	r~doparse() over a ::method doparse external in re.cls (library_method_package_blame.rex), and RxCalcSqrt(1, 2, 3) over a required package's ::routine sq external (library_routine_package_blame.rex)
++Loud	library_source	body	crates/rexx-exec/src/lib.rs:752	off-send-surface	-	-	-
+ Raised	library_version	body+send	crates/rexx-exec/src/error.rs:309	agrees	yes	98.982	.context~package~loadLibrary('forgever') over a forged extension whose package entry asks for 6.0.0 -- no oracle-built extension asks for a newer interpreter, so the program cannot be a corpus witness
+ Raised	logical_list_element	body	crates/rexx-exec/src/error.rs:234	off-send-surface	-	-	-
+-Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:906	off-send-surface	-	-	-
++Loud	loop_op_off_its_node	body+ir	crates/rexx-exec/src/lib.rs:909	off-send-surface	-	-	-
+ Raised	lostdigits	body	crates/rexx-exec/src/error.rs:473	off-send-surface	-	-	-
+ Raised	message_array_shape	send	crates/rexx-exec/src/error.rs:1640	agrees	yes	93.946	say o~sendWith(.array~new(2,2)) -- the message-NAME array; the argument array's own multidimensional case is a separate silent divergence
+ Raised	message_name_shape	send	crates/rexx-exec/src/error.rs:1633	agrees	yes	93.972	o~sendWith(o, (1))
+ Raised	message_reuse	send	crates/rexx-exec/src/error.rs:513	agrees	yes	98.915	m~send over m = .message~new(o, 'N'); m~start -- corpus/lang/message_reuse.rex, which also sends ~start and ~sendWith to started messages
+-Loud	metaclass_new_reused_class	send	crates/rexx-exec/src/lib.rs:583	recorded	yes	a metaclass NEW answering a class	say 'id' .object~subclass("k", .MyMeta)~id over ::CLASS MyMeta SUBCLASS Class / ::METHOD new CLASS / return .array (Phase 9a Task 8b review probe metaarr): the oracle id Array, recorded as Deviation 32
++Loud	metaclass_new_reused_class	send	crates/rexx-exec/src/lib.rs:586	recorded	yes	a metaclass NEW answering a class	say 'id' .object~subclass("k", .MyMeta)~id over ::CLASS MyMeta SUBCLASS Class / ::METHOD new CLASS / return .array (Phase 9a Task 8b review probe metaarr): the oracle id Array, recorded as Deviation 32
+ Raised	metaclass_not_found	body	crates/rexx-exec/src/error.rs:422	off-send-surface	-	-	-
+ Raised	method_argument_not_a_number	body	crates/rexx-exec/src/error.rs:1802	off-send-surface	-	-	-
+ Raised	method_argument_not_in_list	send	crates/rexx-exec/src/error.rs:1258	agrees	yes	93.914	.Package~defaultOptions('FORM')
+ Raised	method_argument_not_positive	send	crates/rexx-exec/src/error.rs:1213	agrees	yes	93.907	(1,2,3)~at(0)
+ Raised	method_argument_not_whole	send	crates/rexx-exec/src/error.rs:1125	agrees	yes	93.905	.Package~defaultOptions('C', 'x')
+ Raised	method_option_not_recognised	send	crates/rexx-exec/src/error.rs:1621	agrees	yes	93.915	(1,2)~makeString('X')
+ Raised	method_source_not_all_strings	send	crates/rexx-exec/src/error.rs:1075	agrees	yes	93.952	self~setMethod('Z', (1, .nil))
+ Raised	method_target_not_a_number	body+send	crates/rexx-exec/src/error.rs:1813	agrees	yes	93.943	'abc'~sign
+ Raised	method_target_not_whole	send	crates/rexx-exec/src/error.rs:1818	agrees	yes	93.940	'1.5'~modulo(3)
+ Raised	method_user_defined	body+send	crates/rexx-exec/src/error.rs:1114	agrees	yes	argument 2 must not be empty	.context~package~options('DIGITS', '') -- the message is the whole of what this raise substitutes, so the row's answer is that text rather than an M.N
+ Raised	misplaced_whitespace	body	crates/rexx-exec/src/error.rs:985	off-send-surface	-	-	-
+ Raised	missing_annotation_target	body	crates/rexx-exec/src/error.rs:581	off-send-surface	-	-	-
+ Raised	missing_argument	body	crates/rexx-exec/src/error.rs:623	off-send-surface	-	-	-
+ Raised	missing_argument_named	send	crates/rexx-exec/src/error.rs:1063	agrees	yes	93.903	s~seek('write') over a stream opened read
+ Raised	missing_array_element	send	crates/rexx-exec/src/error.rs:1162	agrees	yes	98.975	a=.Array~new;a[1]='c';a[3]='a';a~sort
+-Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:837	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
++Loud	missing_body	body+ir+send	crates/rexx-exec/src/lib.rs:840	agrees	no	no route: every arm guards a directive index the parser fills	an instance reading a generated accessor
+ Raised	missing_internal_argument	body+send	crates/rexx-exec/src/error.rs:361	agrees	yes	88.901	say .Stream~new('/dev/null')~position
+ Raised	missing_method_argument	body+send	crates/rexx-exec/src/error.rs:1053	agrees	yes	93.903	o~hasMethod
+ Raised	missing_named_argument	body+send	crates/rexx-exec/src/error.rs:1272	agrees	yes	88.901	self~setMethod with no arguments
+ Raised	missing_native_argument	send	crates/rexx-exec/src/error.rs:316	agrees	yes	88.901	r~parse() over ::requires rxregexp.cls
+ Raised	named_argument_invalid_length	send	crates/rexx-exec/src/error.rs:1607	agrees	yes	88.911	.MutableBuffer~new('abcdef')~replaceAt('a', 1, -1) -- ~'[]='('a', 1, -1) is the same message
+ Raised	named_argument_invalid_pad	send	crates/rexx-exec/src/error.rs:1600	agrees	yes	88.910	.MutableBuffer~new('abcdef')~replaceAt('a', 1, 3, 'xx') -- []= passes no pad and cannot reach it
+ Raised	named_argument_invalid_position	send	crates/rexx-exec/src/error.rs:1614	agrees	yes	88.912	.MutableBuffer~new('abcdef')~replaceAt('a', 0) -- buf['x'] = 'a' is the same message
+ Raised	named_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1593	agrees	yes	88.909	self~setMethod('Z', "return 1", self)
+-Loud	named_semaphore	body	crates/rexx-exec/src/lib.rs:537	off-send-surface	-	-	-
++Loud	named_semaphore	body	crates/rexx-exec/src/lib.rs:540	off-send-surface	-	-	-
+ Raised	namespace_class_not_found	body	crates/rexx-exec/src/error.rs:281	off-send-surface	-	-	-
+ Raised	namespace_not_found	body	crates/rexx-exec/src/error.rs:269	off-send-surface	-	-	-
+ Raised	namespace_routine_not_found	body	crates/rexx-exec/src/error.rs:262	off-send-surface	-	-	-
+ Raised	native_argument_needs_a_string_value	send	crates/rexx-exec/src/error.rs:1337	agrees	yes	88.909	r~does(.object~new) over ::requires 're.cls' declaring does external "LIBRARY rxregexp RegExp_Match" (library_method_no_string_value.rex)
+ Raised	native_argument_not_a_double	send	crates/rexx-exec/src/error.rs:1347	agrees	yes	88.921	RxCalcSqrt('abc') over ::requires 'rxmath' LIBRARY in a required package (library_routine_argument_errors.rex)
+ Raised	native_argument_not_a_number	body+send	crates/rexx-exec/src/error.rs:1285	agrees	yes	88.902	e~wait('abc') over e = .EventSemaphore~new (event_semaphore_wait_not_a_number.rex); m~acquire('x') is the same raise from ACQUIRE
+ Raised	native_argument_not_a_pointer	send	crates/rexx-exec/src/error.rs:1445	agrees	yes	88.919	t~pointerstring('zz') over a required pk.cls declaring pointerstring external "LIBRARY orxmethod TestPointerStringArg" (library_native_refusal_pointer_string.rex)
+ Raised	native_argument_not_a_stem	body+send	crates/rexx-exec/src/error.rs:1463	agrees	yes	93.969	t~stem('zz') over a required pk.cls declaring stem external "LIBRARY orxmethod TestStemArg" (library_native_refusal_stem.rex); the routine form, st('a.b') over ::routine st external "LIBRARY orxfunction TestStemArg", is 40.919 (library_native_refusal_stem_routine.rex)
+ Raised	native_argument_not_an_array	body+send	crates/rexx-exec/src/error.rs:1422	agrees	yes	98.913	t~array(.object~new) over a required pk.cls declaring array external "LIBRARY orxmethod TestArrayArg" (library_native_refusal_array.rex)
+ Raised	native_argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1431	agrees	yes	88.914	t~classarg(1) over a required pk.cls declaring classarg external "LIBRARY orxmethod TestClassArg" (library_native_refusal_instance.rex) -- the Pointer, MutableBuffer and VariableReference rows are the same raise naming their class
+ Raised	native_argument_not_logical	send	crates/rexx-exec/src/error.rs:1412	agrees	yes	34.901	t~logical(3) over a required pk.cls declaring logical external "LIBRARY orxmethod TestLogicalArg" (library_native_refusal_logical.rex)
+ Raised	native_argument_not_nonnegative	body+send	crates/rexx-exec/src/error.rs:1374	agrees	yes	88.904	t~nonneg(-1) over a required pk.cls declaring nonneg external "LIBRARY orxmethod TestNonnegativeWholeNumberArg" (library_native_refusal_nonnegative.rex)
+ Raised	native_argument_not_positive	body+send	crates/rexx-exec/src/error.rs:1360	agrees	yes	88.905	RxCalcSqrt(2, 'x') inside a required package's routine (library_routine_caller_blame.rex)
+ Raised	native_argument_out_of_range	body	crates/rexx-exec/src/error.rs:1289	off-send-surface	-	-	-
+ Raised	native_argument_out_of_range_unsigned	send	crates/rexx-exec/src/error.rs:1310	diverges	yes	88.907	s = .Stream~new('f.txt'); s~charin(1, -1) -- the 88.907 sub line agrees byte for byte; the major line does not, because a native activation's argument-marshalling error names its own declaring package (REXX) and this crate names the program. Recorded in the Phase 7 ledger; the fix needs native entry points to carry a declaring package and is not this task's
+ Raised	native_argument_outside_range	body+send	crates/rexx-exec/src/error.rs:1388	agrees	yes	88.907	t~int8(128) over a required pk.cls declaring int8 external "LIBRARY orxmethod TestInt8Arg" (library_native_refusal_range.rex)
+-Loud	native_method	send	crates/rexx-exec/src/lib.rs:681	diverges	yes	of class	m~dimensions, .Message~new
++Loud	native_method	send	crates/rexx-exec/src/lib.rs:684	diverges	yes	of class	m~dimensions, .Message~new
+ Raised	no_data_returned	body+ir	crates/rexx-exec/src/error.rs:247	off-send-surface	-	-	-
+ Raised	no_method	body+send	crates/rexx-exec/src/error.rs:1647	diverges	yes	97.1	.DN~new~zzz under a ::method defaultName
+ Raised	no_more_supplier_items	send	crates/rexx-exec/src/error.rs:1190	agrees	yes	93.937	.Supplier~new(.Array~new,.Array~new)~item
+ Raised	no_result	body+ir+send	crates/rexx-exec/src/error.rs:1743	agrees	yes	91.999	.Array~of(2,1)~sortWith(a Comparator whose compare returns nothing)
+ Raised	nomethod	send	crates/rexx-exec/src/error.rs:1677	agrees	yes	NOMETHOD	signal on nomethod over o~zzz
+ Raised	nonnumeric	body	crates/rexx-exec/src/error.rs:176	off-send-surface	-	-	-
+ Raised	nostring	send	crates/rexx-exec/src/error.rs:1688	agrees	yes	NOSTRING	substr('abcdef', o)
+ Raised	nostring_syntax	body+send	crates/rexx-exec/src/error.rs:1697	agrees	yes	98.973	say .array over ::options nostring syntax -- the same program without the directive is rc 0 printing the rendering
+ Raised	not_a_method_or_source	send	crates/rexx-exec/src/error.rs:1087	agrees	yes	93.974	self~setMethod('m', .object~new) inside a ::METHOD (corpus/lang/setmethod_object_source.rex); run and define the same
+ Raised	not_a_simple_variable_reference	body	crates/rexx-exec/src/error.rs:1857	off-send-surface	-	-	-
+@@ -235,28 +235,28 @@ Raised	not_a_stem_variable_reference	body	crates/rexx-exec/src/error.rs:1847	off
+ Raised	not_a_valid_class	body	crates/rexx-exec/src/error.rs:416	off-send-surface	-	-	-
+ Raised	not_a_variable_reference	body	crates/rexx-exec/src/error.rs:1831	off-send-surface	-	-	-
+ Raised	not_an_array_or_stem	body	crates/rexx-exec/src/error.rs:1554	off-send-surface	-	-	-
+ Raised	not_enough_arguments	body	crates/rexx-exec/src/error.rs:602	off-send-surface	-	-	-
+ Raised	not_enough_method_arguments	body+send	crates/rexx-exec/src/error.rs:1140	agrees	yes	93.901	(1,2,3)~at()
+ Raised	not_enough_subscripts	send	crates/rexx-exec/src/error.rs:1200	agrees	yes	93.925	.array~new(2,2)~at(1)
+ Raised	not_inherited	body+send	crates/rexx-exec/src/error.rs:500	agrees	yes	98.945	.K~uninherit(.Comparable)
+ Raised	not_logical	body+send	crates/rexx-exec/src/error.rs:201	agrees	yes	34.901	.String~new("abc")~"?"("y", "n") -- it has to be the ? method: say \'abc' is the identical 34.901 from the body site in eval.rs and reaches nothing here
+ Raised	not_one_of	send	crates/rexx-exec/src/error.rs:443	agrees	yes	88.916	self~setMethod('Z', "return 1", 'BOGUS')
+ Raised	notready_syntax	body	crates/rexx-exec/src/error.rs:1730	off-send-surface	-	-	-
+-Loud	numeric_form_without_expression	body	crates/rexx-exec/src/lib.rs:778	off-send-surface	-	-	-
+-Loud	object_method	send	crates/rexx-exec/src/lib.rs:740	agrees	no	no route: SETMETHOD and UNSETMETHOD are private, so a receiver sends them to itself from one of its own methods, and every receiver a program's method runs on is an instance or a class object, which hold methods of their own	'abc'~setMethod('m', 'return 1') is 97.2 on both engines; a class method's self~setMethod('m2', 'return 42') answers 42 (corpus/lang/class_setmethod.rex)
+-Loud	object_name_of_a_value	send	crates/rexx-exec/src/lib.rs:595	recorded	yes	OBJECTNAME= on a String	longs = 'a longer string than seven' / longs~objectName = 'long' (Phase 9a Task 8b probe objname4), recorded as Deviation 36
++Loud	numeric_form_without_expression	body	crates/rexx-exec/src/lib.rs:781	off-send-surface	-	-	-
++Loud	object_method	send	crates/rexx-exec/src/lib.rs:743	agrees	no	no route: SETMETHOD and UNSETMETHOD are private, so a receiver sends them to itself from one of its own methods, and every receiver a program's method runs on is an instance or a class object, which hold methods of their own	'abc'~setMethod('m', 'return 1') is 97.2 on both engines; a class method's self~setMethod('m2', 'return 42') answers 42 (corpus/lang/class_setmethod.rex)
++Loud	object_name_of_a_value	send	crates/rexx-exec/src/lib.rs:598	recorded	yes	OBJECTNAME= on a String	longs = 'a longer string than seven' / longs~objectName = 'long' (Phase 9a Task 8b probe objname4), recorded as Deviation 36
+ Raised	object_not_single_dimensional	body+send	crates/rexx-exec/src/error.rs:1944	agrees	yes	98.913	o~startWith('M', .array~new(2,2)) -- the same call shape ~sendWith reports 88.913 for
+-Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:874	off-send-surface	-	-	-
+-Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:646	off-send-surface	-	-	-
++Loud	op_not_driven	body+ir	crates/rexx-exec/src/lib.rs:877	off-send-surface	-	-	-
++Loud	operator_operand	body	crates/rexx-exec/src/lib.rs:649	off-send-surface	-	-	-
+ Raised	package_scope_method	send	crates/rexx-exec/src/error.rs:1659	agrees	yes	97.3	o~m over a ::method m package in a required file, whose ::REQUIRES this phase built
+-Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:827	off-send-surface	-	-	-
++Loud	parse_trigger_operand	body	crates/rexx-exec/src/lib.rs:830	off-send-surface	-	-	-
+ Raised	power_exponent_not_whole	body	crates/rexx-exec/src/error.rs:191	off-send-surface	-	-	-
+ Raised	private_method	send	crates/rexx-exec/src/error.rs:1653	agrees	yes	97.2	.K~new~p over ::method p private
+ Raised	procedure_out_of_place	body	crates/rexx-exec/src/error.rs:595	off-send-surface	-	-	-
+ Raised	queue_target_option	body	crates/rexx-exec/src/error.rs:772	off-send-surface	-	-	-
+ Raised	raise_syntax_condition	body	crates/rexx-exec/src/run/raised.rs:95	off-send-surface	-	-	-
+ Raised	raised_available_not_logical	body	crates/rexx-exec/src/run/raised.rs:70	off-send-surface	-	-	-
+ Raised	raised_digit_led	body	crates/rexx-exec/src/run/raised.rs:24	off-send-surface	-	-	-
+ Raised	raised_dot_led	body	crates/rexx-exec/src/run/raised.rs:29	off-send-surface	-	-	-
+ Raised	raised_for_code	body	crates/rexx-exec/src/run/raised.rs:126	off-send-surface	-	-	-
+ Raised	raised_for_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:193	off-send-surface	-	-	-
+@@ -273,78 +273,78 @@ Raised	raised_naming_the_operand	body	crates/rexx-exec/src/run/raised.rs:145	off
+ Raised	raised_numeric_trace_interactive_only	body	crates/rexx-exec/src/trace/format.rs:506	off-send-surface	-	-	-
+ Raised	raised_repetition_count_not_whole	body	crates/rexx-exec/src/run/raised.rs:187	off-send-surface	-	-	-
+ Raised	raised_select_no_when	body	crates/rexx-exec/src/run/raised.rs:79	off-send-surface	-	-	-
+ Raised	raised_symbol_expected	body	crates/rexx-exec/src/run/raised.rs:19	off-send-surface	-	-	-
+ Raised	raised_until_not_logical	body	crates/rexx-exec/src/run/raised.rs:179	off-send-surface	-	-	-
+ Raised	raised_when_case_not_logical	body	crates/rexx-exec/src/run/raised.rs:64	off-send-surface	-	-	-
+ Raised	raised_when_not_logical	body+ir	crates/rexx-exec/src/run/raised.rs:58	off-send-surface	-	-	-
+ Raised	raised_while_not_logical	body	crates/rexx-exec/src/run/raised.rs:174	off-send-surface	-	-	-
+ Raised	random_bounds_reversed	body	crates/rexx-exec/src/error.rs:1044	off-send-surface	-	-	-
+ Raised	random_range_too_wide	body	crates/rexx-exec/src/error.rs:1036	off-send-surface	-	-	-
+-Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:573	diverges	yes	a message send to	say .t~new~go(.array~method('ITEMS')) over ::class t / ::method go / use arg m / return self~run(m): ours rc 120, the oracle a different number each run (Deviation 28)
++Loud	receiver_class	body+send	crates/rexx-exec/src/lib.rs:576	diverges	yes	a message send to	say .t~new~go(.array~method('ITEMS')) over ::class t / ::method go / use arg m / return self~run(m): ours rc 120, the oracle a different number each run (Deviation 28)
+ Raised	recursive_inherit	body+send	crates/rexx-exec/src/error.rs:493	agrees	yes	98.944	.M~inherit(.M) with M a mixinclass
+-Loud	redirection	body	crates/rexx-exec/src/lib.rs:635	off-send-surface	-	-	-
++Loud	redirection	body	crates/rexx-exec/src/lib.rs:638	off-send-surface	-	-	-
+ Raised	redirection_failed	body	crates/rexx-exec/src/error.rs:778	off-send-surface	-	-	-
+ Raised	redirection_not_supported	body	crates/rexx-exec/src/error.rs:1720	off-send-surface	-	-	-
+-Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:890	off-send-surface	-	-	-
++Loud	register_not_logical	ir	crates/rexx-exec/src/lib.rs:893	off-send-surface	-	-	-
+ Raised	reply_outside_method	body	crates/rexx-exec/src/error.rs:1882	off-send-surface	-	-	-
+ Raised	reply_twice	body	crates/rexx-exec/src/error.rs:1904	off-send-surface	-	-	-
+ Raised	requires_file_not_found	body	crates/rexx-exec/src/error.rs:537	off-send-surface	-	-	-
+ Raised	restricted_method	send	crates/rexx-exec/src/error.rs:458	agrees	yes	98.991	'abc'~setMethod('Z', "return 1") from a ::method body
+ Raised	return_after_reply	body	crates/rexx-exec/src/error.rs:1909	off-send-surface	-	-	-
+ Raised	rexx_defined_class	send	crates/rexx-exec/src/error.rs:507	agrees	yes	98.985	.Array~define('ZZZ', "return 1")
+ Raised	rexx_package_addition	send	crates/rexx-exec/src/error.rs:524	agrees	yes	98.984	.Array~package~addClass('ZZZ', .Object)
+ Raised	routine_argument_not_a_character	body	crates/rexx-exec/src/error.rs:1516	off-send-surface	-	-	-
+ Raised	routine_failed	body	crates/rexx-exec/src/error.rs:1480	off-send-surface	-	-	-
+ Raised	routine_not_found	body	crates/rexx-exec/src/error.rs:255	off-send-surface	-	-	-
+ Raised	routine_null_argument	body	crates/rexx-exec/src/error.rs:1534	off-send-surface	-	-	-
+ Raised	routine_user_defined	body	crates/rexx-exec/src/error.rs:1547	off-send-surface	-	-	-
+-Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:956	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
++Loud	scheduler_inconsistency	body+ir+send	crates/rexx-exec/src/lib.rs:959	agrees	no	no route: a guard wait's send is kept until its resume takes it, and a guarded method whose body parks is unguarded in the library	t~v over ::attribute v while a REPLY continuation holds the lock (guarded_getter_waits_for_reply.rex)
+ Raised	scope_override_not_a_class	body+send	crates/rexx-exec/src/error.rs:1223	agrees	yes	88.914	o~m:v with v holding 5
+ Raised	scope_override_not_a_scope	send	crates/rexx-exec/src/error.rs:1229	agrees	yes	93.957	o~m:.Array
+-Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:898	off-send-surface	-	-	-
++Loud	select_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:901	off-send-surface	-	-	-
+ Raised	separator_not_a_char	body	crates/rexx-exec/src/error.rs:830	off-send-surface	-	-	-
+-Loud	setup_method	send	crates/rexx-exec/src/lib.rs:759	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
+-Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:915	off-send-surface	-	-	-
++Loud	setup_method	send	crates/rexx-exec/src/lib.rs:762	agrees	no	no route: Setup.cpp removes both before an image ships	.Class~defineClassMethod('Z', .nil)
++Loud	signal_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:918	off-send-surface	-	-	-
+ Loud	sim_blocked_command	body	crates/rexx-exec/src/sim.rs:1383	off-send-surface	-	-	-
+ Loud	sim_blocked_native	body	crates/rexx-exec/src/sim.rs:1394	off-send-surface	-	-	-
+ Loud	sim_endless_wait	body	crates/rexx-exec/src/sim.rs:1420	off-send-surface	-	-	-
+ Loud	sim_foreign_post	body	crates/rexx-exec/src/sim.rs:1372	off-send-surface	-	-	-
+ Loud	sim_replay_diverged	body	crates/rexx-exec/src/sim.rs:1405	off-send-surface	-	-	-
+ Loud	sim_trace_unwritten	body	crates/rexx-exec/src/sim.rs:1410	off-send-surface	-	-	-
+ Raised	single_dimension_only	send	crates/rexx-exec/src/error.rs:1168	agrees	yes	93.954	.Array~new(2,3)~delete(1)
+ Raised	source_not_string_or_array	send	crates/rexx-exec/src/error.rs:1081	agrees	yes	93.961	.method~new('m', .object~new) (corpus/lang/method_new_object_source.rex); Routine~new the same
+ Raised	sourceline_out_of_range	body	crates/rexx-exec/src/error.rs:705	off-send-surface	-	-	-
+-Loud	stale_handle	send	crates/rexx-exec/src/lib.rs:797	recorded	yes	the handle is no longer held by this activation	the forge's StashLocal then UseStashed (stash.rex), recorded as the exclusions row A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED
++Loud	stale_handle	send	crates/rexx-exec/src/lib.rs:800	recorded	yes	the handle is no longer held by this activation	the forge's StashLocal then UseStashed (stash.rex), recorded as the exclusions row A LOCAL HANDLE KEPT FROM AN EARLIER CALL IS STILL REFUSED
+ Raised	stem_argument_unresolved	body	crates/rexx-exec/src/error.rs:1486	off-send-surface	-	-	-
+ Raised	stem_count_invalid	body	crates/rexx-exec/src/error.rs:1578	off-send-surface	-	-	-
+ Raised	stem_element_unset	body	crates/rexx-exec/src/error.rs:1588	off-send-surface	-	-	-
+ Raised	stem_range	body	crates/rexx-exec/src/error.rs:1583	off-send-surface	-	-	-
+ Raised	stem_size_not_whole	body	crates/rexx-exec/src/error.rs:789	off-send-surface	-	-	-
+ Raised	stem_without_a_size	body	crates/rexx-exec/src/error.rs:784	off-send-surface	-	-	-
+-Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:924	off-send-surface	-	-	-
++Loud	store_op_off_its_node	ir	crates/rexx-exec/src/lib.rs:927	off-send-surface	-	-	-
+ Raised	stream_not_readable	body	crates/rexx-exec/src/error.rs:756	off-send-surface	-	-	-
+ Raised	stream_not_writeable	body	crates/rexx-exec/src/error.rs:761	off-send-surface	-	-	-
+ Raised	stream_target_option	body	crates/rexx-exec/src/error.rs:767	off-send-surface	-	-	-
+-Loud	string_answer_not_a_string	send	crates/rexx-exec/src/lib.rs:608	recorded	yes	a STRING method answering	o = .k~new / say length(o) over ::class k / ::method string / return .directory~new: ours rc 120, the oracle a pointer-sized number (Deviation 30); an Array answer joins and agrees
++Loud	string_answer_not_a_string	send	crates/rexx-exec/src/lib.rs:611	recorded	yes	a STRING method answering	o = .k~new / say length(o) over ::class k / ::method string / return .directory~new: ours rc 120, the oracle a pointer-sized number (Deviation 30); an Array answer joins and agrees
+ Raised	syntax	body+send	crates/rexx-exec/src/error.rs:124	agrees	yes	Stream not initialized	s = .Stream~new('t.txt'); s~uninit; s~flush -- flush is the guarded half of oracle-crashes.txt entry 12b, so both sides raise 48.1 at rc 208 rather than the segfault the unguarded half gives
+ Raised	syntax_additional	body	crates/rexx-exec/src/error.rs:1899	off-send-surface	-	-	-
+ Raised	system_resources	body+send	crates/rexx-exec/src/error.rs:927	agrees	yes	5.0	.array~new(999999999999999)
+ Raised	too_many_arguments	body	crates/rexx-exec/src/error.rs:612	off-send-surface	-	-	-
+ Raised	too_many_external_arguments	body+send	crates/rexx-exec/src/error.rs:345	agrees	yes	88.922	.K~sep(1) on a class method bound to file_separator
+ Raised	too_many_internal_arguments	body	crates/rexx-exec/src/error.rs:353	off-send-surface	-	-	-
+ Raised	too_many_method_arguments	body+send	crates/rexx-exec/src/error.rs:1095	agrees	yes	93.902	o~hasMethod('M', 1, 2, 3)
+ Raised	too_many_subscripts	send	crates/rexx-exec/src/error.rs:1195	agrees	yes	93.926	.array~new(2,2)~at(1,2,3)
+ Raised	transient_positioning	send	crates/rexx-exec/src/error.rs:1070	agrees	yes	93.958	.Stream~new('/dev/null')~open('write') then ~seek('=1')
+ Raised	unassigned_variable	body	crates/rexx-exec/src/error.rs:1737	off-send-surface	-	-	-
+-Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:625	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
+-Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:717	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
+-Loud	unrecorded_executable	send	crates/rexx-exec/src/lib.rs:848	agrees	no	no route: every Method and Routine object is recorded where it is built, and its record is dropped only with the object	m~copy~isGuarded, a Method subclass instance's isPrivate and copy, a Routine subclass instance's call and copy~call, setMethod and define with a method object, define and defineMethods with .object~method(...) (Phase 9b1 Task 7 probes executable_a.rex, executable_b.rex): identical on both, the subclass instances refused with 93.974 by both
+-Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:510	off-send-surface	-	-	-
+-Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:948	off-send-surface	-	-	-
++Loud	unknown_receiver	body+send	crates/rexx-exec/src/lib.rs:628	agrees	no	no route: every receiver a send reaches is live and of a kind receiver_kind answers	w = .WeakReference~new(.object~new) then w~hasMethod('VALUE'), w~isA(.WeakReference), w~defaultName, w~objectName and w~instanceMethods (scout A b2_run_hasmethod_on_weakref), identical on both engines
++Loud	unreadable_collection	send	crates/rexx-exec/src/lib.rs:720	diverges	yes	a directory whose entries this crate does not fill	.K~defineMethods(.local) from a method body
++Loud	unrecorded_executable	send	crates/rexx-exec/src/lib.rs:851	agrees	no	no route: every Method and Routine object is recorded where it is built, and its record is dropped only with the object	m~copy~isGuarded, a Method subclass instance's isPrivate and copy, a Routine subclass instance's call and copy~call, setMethod and define with a method object, define and defineMethods with .object~method(...) (Phase 9b1 Task 7 probes executable_a.rex, executable_b.rex): identical on both, the subclass instances refused with 93.974 by both
++Loud	unresolved_call	body	crates/rexx-exec/src/lib.rs:513	off-send-surface	-	-	-
++Loud	unsatisfiable_wait	body	crates/rexx-exec/src/lib.rs:951	off-send-surface	-	-	-
+ Raised	unsupported_new_method	send	crates/rexx-exec/src/error.rs:1152	agrees	yes	93.967	.Pointer~new
+ Raised	use_local_not_first	body	crates/rexx-exec/src/error.rs:1926	off-send-surface	-	-	-
+ Raised	use_local_outside_method	body	crates/rexx-exec/src/error.rs:1920	off-send-surface	-	-	-
+ Raised	variable_reference_not_uninitialised	body	crates/rexx-exec/src/error.rs:1867	off-send-surface	-	-	-
+ Raised	variable_reference_omitted	body	crates/rexx-exec/src/error.rs:1841	off-send-surface	-	-	-
+ Raised	whole_number_user_defined	send	crates/rexx-exec/src/error.rs:1120	agrees	yes	26.900	.context~package~options('FUZZ', 9) at DIGITS 9 (lang/package_option_writes.rex)
+ Raised	x2d_result_too_large	body	crates/rexx-exec/src/error.rs:973	off-send-surface	-	-	-
+diff --git a/rust/crates/rexx-exec/src/bin/rexx.rs b/rust/crates/rexx-exec/src/bin/rexx.rs
+index cb1104700..3c7086ea6 100644
+--- a/rust/crates/rexx-exec/src/bin/rexx.rs
++++ b/rust/crates/rexx-exec/src/bin/rexx.rs
+@@ -4,24 +4,22 @@
+ /*                                                                            */
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! `rexx`, the command line `utilities/rexx/platform/unix/rexx.cpp` reads.
+ 
+-use std::ffi::OsStr;
+ use std::io::{IsTerminal, Write};
+ use std::os::unix::ffi::{OsStrExt, OsStringExt};
+-use std::path::PathBuf;
+ use std::process::ExitCode;
+ 
+ use rexx_exec::launcher::{self, Command, Program};
+ 
+ fn main() -> ExitCode {
+     rexx_exec::install_signal_handlers();
+     let args: Vec<Vec<u8>> = std::env::args_os()
+         .skip(1)
+         .map(OsStringExt::into_vec)
+         .collect();
+@@ -96,21 +94,21 @@ fn main() -> ExitCode {
+         Program::Instore(text) => (
+             rexx_exec::run_program_named(b"INSTORE", text, invocation.without_syscargs()),
+             true,
+         ),
+         Program::File(name) => {
+             invocation = invocation.with_syscargs(run.syscargs, run.syscargs_base);
+             let options = run.default_options.is_some();
+             if let Some((directive, count)) = run.default_options {
+                 invocation = invocation.with_default_options(directive, count);
+             }
+-            match load(&name) {
++            match launcher::load(&name) {
+                 Ok((found, text)) => (
+                     rexx_exec::run_program_named(found.as_os_str().as_bytes(), text, invocation),
+                     false,
+                 ),
+                 // The oracle sends `-o`'s options before it looks for the
+                 // program, so their failure is the one reported. An empty
+                 // program runs nothing but that send.
+                 Err(failure) if options => {
+                     let outcome = rexx_exec::run_program_named(b"", Vec::new(), invocation);
+                     if outcome.exit_code == 0 {
+@@ -154,35 +152,15 @@ fn main() -> ExitCode {
+ 
+     let status = if instore {
+         launcher::instore_status(outcome.exit_code)
+     } else {
+         outcome.exit_code
+     };
+     // A process exit status is one byte.
+     ExitCode::from(status as u8)
+ }
+ 
+-/// The program `name` names and its text, or the report and status for one
+-/// that cannot be found or read.
+-fn load(name: &[u8]) -> Result<(PathBuf, Vec<u8>), (Vec<u8>, i32)> {
+-    let found = std::env::current_dir().ok().and_then(|cwd| {
+-        launcher::resolve_program(
+-            OsStr::from_bytes(name),
+-            &cwd,
+-            std::env::var_os("REXX_PATH").as_deref(),
+-            std::env::var_os("PATH").as_deref(),
+-        )
+-    });
+-    let Some(found) = found else {
+-        return Err(launcher::program_not_found(name));
+-    };
+-    match std::fs::read(&found) {
+-        Ok(text) => Ok((found, text)),
+-        Err(_) => Err(launcher::program_unreadable(found.as_os_str().as_bytes())),
+-    }
+-}
+-
+ /// Writes a report the launcher makes itself and exits with its status.
+ fn report((text, status): (Vec<u8>, i32)) -> ExitCode {
+     let _ = std::io::stderr().write_all(&text);
+     ExitCode::from(status as u8)
+ }
+diff --git a/rust/crates/rexx-exec/src/bin/rexxc.rs b/rust/crates/rexx-exec/src/bin/rexxc.rs
+new file mode 100644
+index 000000000..cd559e106
+--- /dev/null
++++ b/rust/crates/rexx-exec/src/bin/rexxc.rs
+@@ -0,0 +1,85 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! `rexxc`, the command line `utilities/rexxc/platform/unix/RexxCompiler.cpp`
++//! reads.
++
++use std::ffi::OsStr;
++use std::io::Write;
++use std::os::unix::ffi::{OsStrExt, OsStringExt};
++use std::process::ExitCode;
++
++use rexx_exec::compiled;
++use rexx_exec::launcher;
++
++fn main() -> ExitCode {
++    rexx_exec::install_signal_handlers();
++    let args: Vec<Vec<u8>> = std::env::args_os()
++        .skip(1)
++        .map(OsStringExt::into_vec)
++        .collect();
++    let compile = match launcher::parse_compile(&args) {
++        Ok(compile) => compile,
++        Err(usage) => {
++            let _ = std::io::stdout().write_all(&usage);
++            let _ = std::io::stdout().flush();
++            return ExitCode::from(launcher::COMPILE_USAGE_STATUS);
++        }
++    };
++    if !compile.silent {
++        let mut banner = launcher::version_banner();
++        banner.push(b'\n');
++        let _ = std::io::stdout().write_all(&banner);
++    }
++    if compile.output.as_ref() == Some(&compile.input) {
++        let _ = std::io::stdout().write_all(&launcher::same_file_message());
++        let _ = std::io::stdout().flush();
++        return ExitCode::from(launcher::COMPILE_SAME_FILE_STATUS);
++    }
++    let _ = std::io::stdout().flush();
++    let (found, text) = match launcher::load(&compile.input) {
++        Ok(loaded) => loaded,
++        Err(failure) => return report(failure),
++    };
++    let image = compile
++        .output
++        .as_ref()
++        .map(|_| compiled::write_image(&text, compile.encode));
++    let outcome = launcher::translate(&found, text);
++    let _ = std::io::stdout().write_all(&outcome.stdout);
++    let _ = std::io::stdout().flush();
++    let _ = std::io::stderr().write_all(&outcome.stderr);
++    if outcome.exit_code != 0 {
++        // A process exit status is one byte.
++        return ExitCode::from(outcome.exit_code as u8);
++    }
++    if let (Some(output), Some(image)) = (&compile.output, image)
++        && write(output, &image).is_err()
++    {
++        return report(launcher::output_unwritable(output));
++    }
++    ExitCode::SUCCESS
++}
++
++/// Writes `image` to the file `name`, removing what a failed write left.
++fn write(name: &[u8], image: &[u8]) -> std::io::Result<()> {
++    let path = OsStr::from_bytes(name);
++    let mut file = std::fs::File::create(path)?;
++    file.write_all(image).inspect_err(|_| {
++        let _ = std::fs::remove_file(path);
++    })
++}
++
++/// Writes a report the launcher makes itself and exits with its status.
++fn report((text, status): (Vec<u8>, i32)) -> ExitCode {
++    let _ = std::io::stderr().write_all(&text);
++    ExitCode::from(status as u8)
++}
+diff --git a/rust/crates/rexx-exec/src/builtin/convert.rs b/rust/crates/rexx-exec/src/builtin/convert.rs
+index c3a29aa06..c700b1844 100644
+--- a/rust/crates/rexx-exec/src/builtin/convert.rs
++++ b/rust/crates/rexx-exec/src/builtin/convert.rs
+@@ -301,21 +301,21 @@ pub(crate) fn b2x(
+     Ok(interp.text_built(out))
+ }
+ /// RFC 2045's alphabet, which is the one with `+` and `/` rather than the
+ /// URL-safe pair: measured, `'-w=='~decodeBase64` is 93.962 and `'+w=='` is
+ /// not.
+ const BASE64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+ 
+ /// The value `byte` stands for in [`BASE64`], or `None` if it stands for
+ /// nothing. `=` is not a digit and answers `None` here; only
+ /// [`decode_base64_bytes`] knows where it is allowed.
+-fn base64_digit(byte: u8) -> Option<u8> {
++pub(crate) fn base64_digit(byte: u8) -> Option<u8> {
+     match byte {
+         b'A'..=b'Z' => Some(byte - b'A'),
+         b'a'..=b'z' => Some(byte - b'a' + 26),
+         b'0'..=b'9' => Some(byte - b'0' + 52),
+         b'+' => Some(62),
+         b'/' => Some(63),
+         _ => None,
+     }
+ }
+ 
+diff --git a/rust/crates/rexx-exec/src/compiled.rs b/rust/crates/rexx-exec/src/compiled.rs
+new file mode 100644
+index 000000000..bb2ce20f4
+--- /dev/null
++++ b/rust/crates/rexx-exec/src/compiled.rs
+@@ -0,0 +1,280 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! The compiled program image `rexxc` writes: the oracle's `#!` line and
++//! `ProgramMetaData` header layout (`classes/support/ProgramMetaData.cpp`),
++//! with this build's own magic number and format version, then the checked
++//! source. No compatibility is promised between versions of this crate.
++
++use crate::builtin::convert::{base64_digit, encode_base64_bytes};
++
++/// The courtesy line every image starts with.
++const SHEBANG: &[u8] = b"#!/usr/bin/env rexx\n";
++
++/// The `fileTag` the binary form carries, compared as `strcmp` does: up to
++/// and including its terminator.
++const TAG: &[u8] = b"/**/@REXX\0";
++
++/// What the encoded form carries in place of the header.
++const ENCODED_TAG: &[u8] = b"/**/@REXX@\n";
++
++/// `ProgramMetaData`'s 64-bit size, up to `imageData`.
++const HEADER_BYTES: usize = 48;
++
++/// Where the source length sits in the header.
++const LENGTH_AT: usize = 40;
++
++/// The oracle's is 11111, so the oracle's `validate` refuses every image
++/// this crate writes with 3.903 rather than reading the source as its own
++/// flattened heap.
++const MAGIC: u16 = 0x7273;
++
++/// This crate's image format.
++const FORMAT_VERSION: u16 = 1;
++
++/// The base64 line length, `ProgramMetaData::encodingChunkLength`.
++const CHUNK: usize = 72;
++
++/// What a program file's bytes turn out to hold.
++#[derive(Debug, PartialEq, Eq)]
++pub enum Restore {
++    /// Program source: after an optional `#!` line, neither tag.
++    Source,
++    /// An image this build writes, and the source it holds.
++    Compiled(Vec<u8>),
++    /// A header this build does not write, or a damaged image: 3.903.
++    Rejected,
++    /// The encoded tag over text the oracle's base64 decoder refuses: 3.905.
++    Undecodable,
++}
++
++/// The header this build writes, up to its source length field.
++fn header_prefix() -> [u8; LENGTH_AT] {
++    let mut header = [0u8; LENGTH_AT];
++    header[..TAG.len()].copy_from_slice(TAG);
++    header[16..18].copy_from_slice(&MAGIC.to_le_bytes());
++    header[18..20].copy_from_slice(&FORMAT_VERSION.to_le_bytes());
++    // `wordSize`, then `bigEndian` left 0.
++    header[20..22].copy_from_slice(&64u16.to_le_bytes());
++    // `requiredLevel`, the oracle's language level 6.06.
++    header[24..28].copy_from_slice(&60600u32.to_le_bytes());
++    header
++}
++
++/// The image of `source`: binary, or with `encode` the encoded tag and the
++/// base64 of header and source in lines of [`CHUNK`] digits.
++pub fn write_image(source: &[u8], encode: bool) -> Vec<u8> {
++    let mut image = Vec::with_capacity(HEADER_BYTES + source.len());
++    image.extend_from_slice(&header_prefix());
++    let length = u64::try_from(source.len()).expect("a source length fits a u64");
++    image.extend_from_slice(&length.to_le_bytes());
++    image.extend_from_slice(source);
++    let mut out = SHEBANG.to_vec();
++    if encode {
++        out.extend_from_slice(ENCODED_TAG);
++        for line in encode_base64_bytes(&image).chunks(CHUNK) {
++            out.extend_from_slice(line);
++            out.push(b'\n');
++        }
++    } else {
++        out.extend_from_slice(&image);
++    }
++    out
++}
++
++/// What `bytes` hold, decided as `ProgramMetaData::processRestoreData` and
++/// `validate` decide it.
++pub fn restore(bytes: &[u8]) -> Restore {
++    let mut rest = bytes;
++    if rest.starts_with(b"#!") {
++        let Some(end) = rest.iter().position(|&byte| byte == b'\n') else {
++            return Restore::Source;
++        };
++        rest = &rest[end + 1..];
++    }
++    if rest.starts_with(TAG) {
++        return image_source(rest);
++    }
++    if rest.len() > ENCODED_TAG.len() && rest.starts_with(ENCODED_TAG) {
++        return match decode(&rest[ENCODED_TAG.len()..]) {
++            Some(image) => image_source(&image),
++            None => Restore::Undecodable,
++        };
++    }
++    Restore::Source
++}
++
++/// The source behind a header this build writes, with its length exact.
++fn image_source(image: &[u8]) -> Restore {
++    let Some((header, source)) = image.split_at_checked(HEADER_BYTES) else {
++        return Restore::Rejected;
++    };
++    let (prefix, length) = header.split_at(LENGTH_AT);
++    let length = u64::from_le_bytes(length.try_into().expect("an 8-byte length field"));
++    if prefix != header_prefix() || u64::try_from(source.len()).ok() != Some(length) {
++        return Restore::Rejected;
++    }
++    Restore::Compiled(source.to_vec())
++}
++
++/// `StringUtil::decodeBase64` (`classes/support/StringUtil.cpp:1743`): line
++/// ends only between quartets, `=` only in a quartet's last two digits, and
++/// anything after the padding a line end. `None` is its refusal.
++fn decode(text: &[u8]) -> Option<Vec<u8>> {
++    let mut out = Vec::with_capacity(text.len() / 4 * 3);
++    let mut digit = 0;
++    let mut held = 0u8;
++    let mut index = 0;
++    while index < text.len() {
++        let byte = text[index];
++        index += 1;
++        let Some(value) = base64_digit(byte) else {
++            match (byte, digit) {
++                (b'=', 2) => {
++                    if text.get(index) != Some(&b'=') {
++                        return None;
++                    }
++                    index += 1;
++                    break;
++                }
++                (b'=', 3) => break,
++                (b'\n' | b'\r', 0) => continue,
++                _ => return None,
++            }
++        };
++        match digit {
++            0 => held = value << 2,
++            1 => {
++                out.push(held | value >> 4);
++                held = value << 4;
++            }
++            2 => {
++                out.push(held | value >> 2);
++                held = value << 6;
++            }
++            _ => out.push(held | value),
++        }
++        digit = (digit + 1) % 4;
++    }
++    text[index..]
++        .iter()
++        .all(|byte| matches!(byte, b'\n' | b'\r'))
++        .then_some(out)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    const SOURCE: &[u8] = b"say 'hello'\n::routine r\nreturn 1\n";
++
++    #[test]
++    fn both_forms_round_trip() {
++        for encode in [false, true] {
++            let image = write_image(SOURCE, encode);
++            assert!(image.starts_with(b"#!/usr/bin/env rexx\n/**/@REXX"));
++            assert_eq!(restore(&image), Restore::Compiled(SOURCE.to_vec()));
++        }
++        assert_eq!(
++            restore(&write_image(b"", true)),
++            Restore::Compiled(Vec::new())
++        );
++    }
++
++    #[test]
++    fn the_binary_form_is_the_oracle_layout() {
++        let image = write_image(SOURCE, false);
++        assert_eq!(image.len(), SHEBANG.len() + HEADER_BYTES + SOURCE.len());
++        assert_eq!(&image[20..36], b"/**/@REXX\0\0\0\0\0\0\0");
++        assert_ne!(u16::from_le_bytes([image[36], image[37]]), 11111);
++        assert_eq!(&image[SHEBANG.len() + HEADER_BYTES..], SOURCE);
++    }
++
++    #[test]
++    fn the_encoded_form_has_full_lines_and_ends_in_a_line_end() {
++        let image = write_image(&[b'x'; 500], true);
++        let body = &image[SHEBANG.len() + ENCODED_TAG.len()..];
++        let lines: Vec<&[u8]> = body.split(|&byte| byte == b'\n').collect();
++        assert_eq!(lines.last(), Some(&&b""[..]));
++        let lines = &lines[..lines.len() - 1];
++        assert!(
++            lines[..lines.len() - 1]
++                .iter()
++                .all(|line| line.len() == CHUNK)
++        );
++        assert!(lines[lines.len() - 1].len() <= CHUNK);
++    }
++
++    #[test]
++    fn a_foreign_or_damaged_header_is_rejected() {
++        let image = write_image(SOURCE, false);
++        let mut oracle = image.clone();
++        oracle[36..38].copy_from_slice(&11111u16.to_le_bytes());
++        let mut version = image.clone();
++        version[38] = version[38].wrapping_add(1);
++        let mut past = image.clone();
++        past[SHEBANG.len() + LENGTH_AT] += 1;
++        let mut short = image.clone();
++        short[SHEBANG.len() + LENGTH_AT] -= 1;
++        for damaged in [oracle, version, past, short] {
++            assert_eq!(restore(&damaged), Restore::Rejected);
++        }
++        for cut in [SHEBANG.len() + 10, SHEBANG.len() + 30, image.len() - 1] {
++            assert_eq!(restore(&image[..cut]), Restore::Rejected, "cut at {cut}");
++        }
++        let encoded = write_image(SOURCE, true);
++        let mut foreign = b"#!/usr/bin/env rexx\n/**/@REXX@\n".to_vec();
++        foreign.extend_from_slice(b"QUJD\n");
++        assert_eq!(restore(&foreign), Restore::Rejected);
++        assert!(matches!(restore(&encoded), Restore::Compiled(_)));
++    }
++
++    #[test]
++    fn broken_base64_is_undecodable() {
++        let encoded = write_image(SOURCE, true);
++        let at = SHEBANG.len() + ENCODED_TAG.len() + 5;
++        let mut broken = encoded.clone();
++        broken[at] = b'!';
++        assert_eq!(restore(&broken), Restore::Undecodable);
++        // Measured, oracle `rexx`: each of these is 3.905.
++        assert_eq!(restore(b"/**/@REXX@\nsay 1\n"), Restore::Undecodable);
++        assert_eq!(
++            restore(b"#!/usr/bin/env rexx\n/**/@REXX@\n!!!!\n"),
++            Restore::Undecodable
++        );
++        // A line end inside a quartet.
++        let mut split = encoded.clone();
++        split.insert(at, b'\n');
++        assert_eq!(restore(&split), Restore::Undecodable);
++    }
++
++    #[test]
++    fn source_that_merely_starts_like_a_tag_is_source() {
++        // Measured, oracle `rexx`: both are parsed, 13.1 on the `@`.
++        assert_eq!(restore(b"/**/@REXX say 1\n"), Restore::Source);
++        assert_eq!(restore(b"#!/x\n/**/@REXX say 1\n"), Restore::Source);
++        assert_eq!(restore(b"#!/usr/bin/env rexx"), Restore::Source);
++        assert_eq!(restore(b"/**/@REXX"), Restore::Source);
++        assert_eq!(restore(SOURCE), Restore::Source);
++    }
++
++    #[test]
++    fn the_decoder_follows_the_oracle_rules() {
++        assert_eq!(decode(b"QUJD\nREVG\r\n"), Some(b"ABCDEF".to_vec()));
++        assert_eq!(decode(b"QQ==\n"), Some(b"A".to_vec()));
++        assert_eq!(decode(b"QUI=\n\n"), Some(b"AB".to_vec()));
++        assert_eq!(decode(b"QQ=x"), None);
++        assert_eq!(decode(b"QQ==x"), None);
++        assert_eq!(decode(b"Q==="), None);
++        assert_eq!(decode(b"QU\nJD"), None);
++        assert_eq!(decode(b""), Some(Vec::new()));
++    }
++}
+diff --git a/rust/crates/rexx-exec/src/install.rs b/rust/crates/rexx-exec/src/install.rs
+index 5daad2568..eed23226e 100644
+--- a/rust/crates/rexx-exec/src/install.rs
++++ b/rust/crates/rexx-exec/src/install.rs
+@@ -368,20 +368,25 @@ impl Interp {
+                     .into_iter()
+                     .map(|(name, installed)| (name, MergedRoutine::Installed(installed, package))),
+             );
+         }
+         self.library_routine_codes.extend(routine_codes);
+         self.rexx_routine_rows.extend(rexx_routines);
+         self.untranslated.remove(&id);
+         // Where the translation ends and before any `::REQUIRES` loads, which
+         // is where `generateProgram` and `installPackage` run it.
+         self.override_package_settings(id)?;
++        // `rexxc` stops here. Measured, oracle `rexxc -s`: a `::REQUIRES` of a
++        // missing file and a `::CLASS` subclassing an unknown name are rc 0.
++        if self.translate_only {
++            return Ok(());
++        }
+ 
+         // **A second pass, because the oracle's own translation-time
+         // refusals above happen before every install-time one below**
+         // (98.9xx/43.901/the `::CONSTANT` expression evaluation), so a
+         // program with both gets the translation error -- which is what
+         // running the whole first pass before any of this reproduces.
+         let mut declared: FxHashMap<Box<[u8]>, usize> = FxHashMap::default();
+         for (index, directive) in program.directives.iter().enumerate() {
+             if let DirectiveKind::Class(class) = &directive.kind {
+                 declared
+diff --git a/rust/crates/rexx-exec/src/launcher.rs b/rust/crates/rexx-exec/src/launcher.rs
+index ffea19c50..faf0b345a 100644
+--- a/rust/crates/rexx-exec/src/launcher.rs
++++ b/rust/crates/rexx-exec/src/launcher.rs
+@@ -2,32 +2,33 @@
+ /*                                                                            */
+ /* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
+ /*                                                                            */
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+-//! The `rexx` command line's library half: option scanning, the program
+-//! search, and the texts the launcher prints itself
+-//! (`utilities/rexx/platform/unix/rexx.cpp`).
++//! The `rexx` and `rexxc` command lines' library half: option scanning, the
++//! program search, and the texts the launchers print themselves
++//! (`utilities/rexx/platform/unix/rexx.cpp`,
++//! `utilities/rexxc/platform/unix/RexxCompiler.cpp`).
+ 
+ use std::ffi::{OsStr, OsString};
+ use std::os::unix::ffi::{OsStrExt, OsStringExt};
+ use std::path::{Path, PathBuf};
+ 
+ use rexx_core::ObjRef;
+ 
+ use crate::error::{ClauseSite, Raised};
+-use crate::{Failure, Interp, require, version};
++use crate::{Failure, Interp, Outcome, require, version};
+ 
+ /// What a command line asks for.
+ #[derive(Debug, PartialEq, Eq)]
+ pub enum Command {
+     /// The usage text on standard error, status 255.
+     Usage,
+     /// The version banner on standard output, status 0.
+     Version,
+     /// A program to run.
+     Run(Run),
+@@ -166,20 +167,119 @@ pub fn resolve_program(
+         None,
+         name.as_bytes(),
+         rexx_path.map(OsStr::as_bytes),
+         path.map(OsStr::as_bytes),
+         cwd.as_os_str().as_bytes(),
+         false,
+     )
+     .map(|found| PathBuf::from(OsString::from_vec(found)))
+ }
+ 
++/// The program `name` names and its text, or the report and status for one
++/// that cannot be found or read.
++pub fn load(name: &[u8]) -> Result<(PathBuf, Vec<u8>), (Vec<u8>, i32)> {
++    let found = std::env::current_dir().ok().and_then(|cwd| {
++        resolve_program(
++            OsStr::from_bytes(name),
++            &cwd,
++            std::env::var_os("REXX_PATH").as_deref(),
++            std::env::var_os("PATH").as_deref(),
++        )
++    });
++    let Some(found) = found else {
++        return Err(program_not_found(name));
++    };
++    match std::fs::read(&found) {
++        Ok(text) => Ok((found, text)),
++        Err(_) => Err(program_unreadable(found.as_os_str().as_bytes())),
++    }
++}
++
++/// Translates the program at `path` without running it, reporting a refusal
++/// exactly as `rexx` would.
++pub fn translate(path: &Path, text: Vec<u8>) -> Outcome {
++    crate::translate_program(path.as_os_str().as_bytes(), text)
++}
++
++/// What a `rexxc` command line asks for.
++#[derive(Debug, PartialEq, Eq)]
++pub struct Compile {
++    /// The program's name.
++    pub input: Vec<u8>,
++    /// The image's file name, `None` for a syntax check.
++    pub output: Option<Vec<u8>>,
++    /// `-s`: no banner.
++    pub silent: bool,
++    /// `-e`: the encoded image.
++    pub encode: bool,
++}
++
++/// The status `rexxc` exits with after its usage text: `exit(-1)`.
++pub const COMPILE_USAGE_STATUS: u8 = 255;
++
++/// The status `rexxc` exits with when the output names the input: `exit(-2)`.
++pub const COMPILE_SAME_FILE_STATUS: u8 = 254;
++
++/// A `rexxc` message by its catalogue code, as `displayError` prints it to
++/// standard output.
++fn rexxc_message(sub: u16) -> Vec<u8> {
++    let message = rexx_inventory::errors::lookup(999, sub).expect("a catalogued rexxc message");
++    format!("{}\n", message.text).into_bytes()
++}
++
++/// `RexxCompiler.cpp`'s `main` scan of `args`, the words after the binary's
++/// own name: the command, or the usage text for standard output.
++pub fn parse_compile(args: &[Vec<u8>]) -> Result<Compile, Vec<u8>> {
++    let usage = |incorrect: bool| {
++        let mut text = if incorrect {
++            rexxc_message(12)
++        } else {
++            Vec::new()
++        };
++        text.extend(rexxc_message(14));
++        text.extend(rexxc_message(15));
++        text
++    };
++    let Some((input, rest)) = args.split_first() else {
++        return Err(usage(false));
++    };
++    let (output, flags) = match rest.split_first() {
++        Some((output, flags)) if output.first() != Some(&b'-') => (Some(output.clone()), flags),
++        _ => (None, rest),
++    };
++    let mut compile = Compile {
++        input: input.clone(),
++        output,
++        silent: false,
++        encode: false,
++    };
++    for flag in flags {
++        match (flag.first(), flag.get(1)) {
++            (Some(b'-'), Some(b's' | b'S')) => compile.silent = true,
++            (Some(b'-'), Some(b'e' | b'E')) => compile.encode = true,
++            _ => return Err(usage(true)),
++        }
++    }
++    Ok(compile)
++}
++
++/// `rexxc`'s refusal when the output and input names are the same bytes.
++pub fn same_file_message() -> Vec<u8> {
++    rexxc_message(13)
++}
++
++/// The report and status for an image that cannot be written to `name`:
++/// 3.902, displayed with no position.
++pub fn output_unwritable(name: &[u8]) -> (Vec<u8>, i32) {
++    positionless(Raised::syntax(3, 902, vec![name.to_vec()]))
++}
++
+ /// `RexxGetVersionInformation`'s text (`api/InterpreterAPI.cpp:250-278`),
+ /// without the line end `rexx -v` writes after it.
+ pub fn version_banner() -> Vec<u8> {
+     let date = std::str::from_utf8(version::BUILD_DATE).expect("an ASCII build date");
+     let mut fields = date.split(' ');
+     let (day, month, year) = match (fields.next(), fields.next(), fields.next()) {
+         (Some(day), Some(month), Some(year)) => (day, month, year),
+         _ => unreachable!("BUILD_DATE is day, month and year"),
+     };
+     let text = std::str::from_utf8(version::VERSION).expect("an ASCII version");
+@@ -336,17 +436,54 @@ mod tests {
+         assert_eq!(parse(&words(&["-vx"])), Command::Version);
+     }
+ 
+     #[test]
+     fn the_banner_carries_the_parse_version_date() {
+         let banner = String::from_utf8(version_banner()).expect("ASCII");
+         assert!(banner.starts_with("Open Object Rexx Version 5.3.0 r0\nBuild date: Jul 30 2026\n"));
+         assert!(!banner.ends_with('\n'));
+     }
+ 
++    #[test]
++    fn rexxc_reads_an_output_then_flags_by_their_second_byte() {
++        let compile = |args: &[&str]| parse_compile(&words(args));
++        assert_eq!(
++            compile(&["a", "b", "-Sx", "-e"]),
++            Ok(Compile {
++                input: b"a".to_vec(),
++                output: Some(b"b".to_vec()),
++                silent: true,
++                encode: true,
++            })
++        );
++        assert_eq!(
++            compile(&["-x"]).map(|compile| compile.input),
++            Ok(b"-x".to_vec())
++        );
++        assert_eq!(
++            compile(&["a", "-s"]).map(|compile| compile.output),
++            Ok(None)
++        );
++        let usage = b"SYNTAX: rexxc inputfile [outputfile] [-s] [-e]\n\
++                      Without outputfile rexxc only performs a syntax check.\n";
++        assert_eq!(compile(&[]), Err(usage.to_vec()));
++        for args in [
++            &["a", "-x"][..],
++            &["a", "-"],
++            &["a", "b", "c"],
++            &["a", "-s", "b"],
++        ] {
++            assert_eq!(
++                compile(args),
++                Err([&b"The rexxc command parameters are incorrect.\n"[..], usage].concat()),
++                "{args:?}"
++            );
++        }
++    }
++
+     #[test]
+     fn an_instore_status_outside_a_short_is_zero() {
+         assert_eq!(instore_status(-3), -3);
+         assert_eq!(instore_status(70000), 0);
+         assert_eq!(instore_status(32767), 32767);
+     }
+ }
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index 347725d1a..858bf93a5 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -166,23 +166,26 @@ mod dispatch;
+ // order `PackageClass::findClass` resolves a `.NAME` in, and the one directory
+ // chokepoint D45 asks for.
+ mod environment;
+ 
+ // `::OPTIONS` (Phase 5c): the numeric, trace and condition settings a file's
+ // directives leave on its own package, and which every activation of that
+ // package's code starts from.
+ mod options;
+ use options::PackageOptions;
+ 
+-// The `rexx` command line's library half.
++// The `rexx` and `rexxc` command lines' library half.
+ pub mod launcher;
+ 
++// The compiled program image `rexxc` writes.
++pub mod compiled;
++
+ // `::REQUIRES` (Phase 5d): the routes a required file's name is searched over
+ // and the extensions appended to it.
+ mod require;
+ 
+ // Command clauses: the handler an `ADDRESS` environment names, the
+ // child it runs, and the return code that becomes `RC`, `.RS` and a
+ // condition.
+ mod command;
+ 
+ // The condition object `CONDITION('O')` answers: the Directory a
+@@ -1730,20 +1733,23 @@ struct Interp {
+     required_paths: FxHashMap<ProgramId, Box<[u8]>>,
+     /// The package each `::REQUIRES` name has already loaded, keyed both by
+     /// the name as written and by the file it resolved to. An entry goes when
+     /// its package object is collected.
+     required_packages: FxHashMap<Box<[u8]>, ProgramId>,
+     /// The programs whose first walk of [`Interp::install_directives`], which is
+     /// this crate's translation, started and did not finish. The oracle gives
+     /// the package of a translation that raised no routine, method or resource
+     /// table (`parser/LanguageParser.cpp:1893-1908`) and no prolog (`:656-665`).
+     untranslated: rustc_hash::FxHashSet<ProgramId>,
++    /// Whether [`Interp::install_directives`] stops after its first walk:
++    /// a translation that runs nothing, as `rexxc` makes.
++    translate_only: bool,
+     /// The threads native calls and blocking operations run on; last, so
+     /// that every island value is dropped before its threads end.
+     pool: crate::scheduler::Pool,
+ }
+ 
+ /// Where one installed `::ROUTINE` lives: which loaded program, and which of
+ /// its directives.
+ #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+ struct InstalledRoutine {
+     program: ProgramId,
+@@ -2299,34 +2305,45 @@ impl Interp {
+             standard_transient: [true; 3],
+             sinks: None,
+             command_words: Vec::new(),
+             command_words_base: Some(1),
+             reqstr_armed: false,
+             lostdigits_armed: false,
+             program_path: Vec::new(),
+             required_paths: FxHashMap::default(),
+             required_packages: FxHashMap::default(),
+             untranslated: rustc_hash::FxHashSet::default(),
++            translate_only: false,
+             pool: new_pool(),
+         }
+     }
+ 
+     // ---- loading and the activation stack ----
+ 
+     /// Loads `program`, runs its main body in a fresh activation, and tears
+     /// the activation down again.
+     fn run(&mut self, program: Program) -> Result<Option<ObjRef>, Failure> {
+         let program = Rc::new(program);
+         let program_id = self.load_program(Rc::clone(&program));
+         self.run_loaded(program, program_id, CallType::Command, None, None)
+     }
+ 
++    /// Loads `program` and translates its directives, running none of its
++    /// code: `TranslateDispatcher::run`'s `LanguageParser::createProgram`.
++    fn translate(&mut self, program: Program) -> Result<Option<ObjRef>, Failure> {
++        let program = Rc::new(program);
++        let program_id = self.load_program(Rc::clone(&program));
++        self.translate_only = true;
++        self.install_directives(program_id, &program)?;
++        Ok(None)
++    }
++
+     /// Runs the interpreter's own Rexx-written library -- `Setup.cpp:1786`'s
+     /// `resolveProgramName(BASEIMAGELOAD)` and the `runProgram` at `:1795`,
+     /// which hands the entry program `TheRexxPackage` as its one argument.
+     pub(crate) fn bootstrap_library(&mut self) -> Result<(), Failure> {
+         debug_assert!(
+             self.object_model.is_none(),
+             "the library bootstrap must build the object model, so nothing may have forced \
+              the shipped one before it runs"
+         );
+         let model = dispatch::ObjectModel::bootstrap_for_library(&mut || self.heap.mint_class());
+@@ -2907,21 +2924,21 @@ impl Interp {
+         }
+     }
+ 
+     /// Roots a value that has to outlive the clause that produced it, all the
+     /// way to [`Interp::exit_code_for`].
+     fn root_exit_value(&mut self, value: ObjRef) {
+         self.roots.add_global(EXIT_VALUE_ROOT, value);
+     }
+ 
+     /// Turns on Task 16's collect-on-every-allocation stress mode. Only
+-    /// `execute`'s `collect_every_alloc` arm calls this, right after
++    /// `execute_as`'s `Entry::CollectEveryAlloc` arm calls this, right after
+     /// construction and before `run`; nothing else needs to flip it, and
+     /// nothing can un-flip it once a run has started.
+     fn enable_stress_collect(&mut self) {
+         self.stress_collect = true;
+         self.collect_due = true;
+     }
+ 
+     /// The one allocation entry point every value/stem constructor in this
+     /// crate goes through, so that Task 16's stress mode has exactly one
+     /// place to hook rather than one per call site.
+@@ -3167,20 +3184,21 @@ impl Interp {
+             bytes_due: _,
+             queue: _,
+             input: _,
+             reqstr_armed: _,
+             lostdigits_armed: _,
+             program_path: _,
+             required_paths: _,
+             // Weak: pruned in `Interp::collect_now`.
+             required_packages: _,
+             untranslated: _,
++            translate_only: _,
+             // Bytes and paths, no `ObjRef` in any of them: the interpreter's
+             // own environment, current directory and `SETLOCAL` snapshots are
+             // not the collector's.
+             env: _,
+             library_search: _,
+             cwd: _,
+             // The embedding's own writers, which take bytes and hold nothing
+             // of this interpreter's.
+             sinks: _,
+             // Three flags describing the embedding's descriptors, and the
+@@ -3514,20 +3532,36 @@ pub fn run_program_named(path: &[u8], text: Vec<u8>, invocation: Invocation) ->
+         execute_on(
+             &path,
+             text,
+             false,
+             invocation,
+             Some(INTERPRETER_STACK_BYTES),
+         )
+     })
+ }
+ 
++/// Translates the program `text` names `path` without running any of it,
++/// and reports a refusal as [`run_program_named`] would. The translation
++/// binds each `EXTERNAL` library name as the run does.
++pub fn translate_program(path: &[u8], text: Vec<u8>) -> Outcome {
++    let path = path.to_vec();
++    on_interpreter_thread(move || {
++        execute_as(
++            &path,
++            text,
++            Entry::Translate,
++            Invocation::none(),
++            Some(INTERPRETER_STACK_BYTES),
++        )
++    })
++}
++
+ /// [`run_program`] on an interpreter thread of `stack` bytes.
+ #[cfg(test)]
+ pub(crate) fn run_program_on_stack(
+     path: &str,
+     text: Vec<u8>,
+     invocation: Invocation,
+     stack: usize,
+ ) -> Outcome {
+     let path = path.as_bytes().to_vec();
+     on_thread_of(stack, move || {
+@@ -3737,43 +3771,70 @@ fn parse_failure_outcome(path: &[u8], rejected: &rexx_parse::Rejected) -> Outcom
+         peak_body_bytes: 0,
+         chunks_refused: 0,
+         sim: None,
+         #[cfg(feature = "pinning")]
+         pinning: PinReport::default(),
+         #[cfg(feature = "sharing")]
+         sharing: SharingReport::default(),
+     }
+ }
+ 
++/// What [`execute_as`] does with the program it parses.
++#[derive(Copy, Clone, PartialEq, Eq)]
++enum Entry {
++    /// Runs it.
++    Run,
++    /// Runs it with `Heap::collect` after every allocation.
++    CollectEveryAlloc,
++    /// Translates it and runs none of it.
++    Translate,
++}
++
+ /// Everything that happens on the interpreter thread: parse, run, report.
+ /// `stack` is the thread's stack size, where known.
+ fn execute_on(
+     path: &[u8],
+     text: Vec<u8>,
+     collect_every_alloc: bool,
+     invocation: Invocation,
+     stack: Option<usize>,
++) -> Outcome {
++    let entry = if collect_every_alloc {
++        Entry::CollectEveryAlloc
++    } else {
++        Entry::Run
++    };
++    execute_as(path, text, entry, invocation, stack)
++}
++
++/// [`execute_on`] for any [`Entry`].
++fn execute_as(
++    path: &[u8],
++    text: Vec<u8>,
++    entry: Entry,
++    invocation: Invocation,
++    stack: Option<usize>,
+ ) -> Outcome {
+     let probe = 0u8;
+     let base = &raw const probe as usize;
+     let source = rexx_parse::ProgramSource::new(text, rexx_parse::SourceKind::Program);
+     let program = match rexx_parse::program_from(source) {
+         Ok(program) => program,
+         Err(rejected) => return parse_failure_outcome(path, &rejected),
+     };
+ 
+     let mut interp = Interp::new();
+     if let Some(stack) = stack {
+         interp.measure_stack(base, stack);
+     }
+     interp.program_path = path.to_vec();
+-    if collect_every_alloc {
++    if entry == Entry::CollectEveryAlloc {
+         interp.enable_stress_collect();
+     }
+     // The command line is the top-level program's caller, so what it supplied
+     // goes into the same `call_context` a `CALL` fills -- see that field's own
+     // doc for what reads it and for the three measured invocations that tell
+     // "no argument" from "one empty argument" apart.
+     interp.activity.call_context.name = Rc::from(path);
+     let parts = invocation.into_parts();
+     interp
+         .roots
+@@ -3832,21 +3893,24 @@ fn execute_on(
+             interp.activity.call_context.arguments = Rc::from(&[Some(value)][..]);
+         }
+         if let Some((directive, count)) = default_options {
+             interp.send_default_options(&directive, count)?;
+         }
+         // After the bootstrap, so `SwitchMode::AtClause` counts this program's
+         // clauses alone.
+         if let Some(mode) = switch_mode {
+             interp.set_switch_mode(mode);
+         }
+-        interp.run(program)
++        match entry {
++            Entry::Translate => interp.translate(program),
++            Entry::Run | Entry::CollectEveryAlloc => interp.run(program),
++        }
+     });
+     // The whole echo stack, innermost first: the levels `seal_site_level`
+     // already closed, then the level that was still unwinding when the
+     // condition reached the top. See `Activity::failure_sites` for why the two
+     // are separate fields, and `Raised::report` for what the order means.
+     let mut failure_sites = std::mem::take(&mut interp.activity.failure_sites);
+     failure_sites.extend(interp.activity.failure_site.take());
+     // `exit_code_for` needs `&mut interp` (`to_number` fills a lazy cache),
+     // so this has to run before `interp.trace`/`interp.out` move out of
+     // `interp` below -- a partial move of one field ends `interp`'s usability
+diff --git a/rust/crates/rexx-exec/tests/rexxc.rs b/rust/crates/rexx-exec/tests/rexxc.rs
+new file mode 100644
+index 000000000..c9e3ca129
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/rexxc.rs
+@@ -0,0 +1,509 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! `rexxc` against the oracle's, and against `corpus/errors/parse-errors.tsv`.
++//!
++//! Each case of `tests/rexxc/cases` runs both binaries with the same words
++//! from a directory of the same programs, and the three descriptors must
++//! agree. The recorded block is the oracle's, normalised. A case's input is
++//! its words, one per line: `\xHH` is a byte. `out=NAME` reports the first
++//! bytes of the file [`output_name`] spells after the run, the part of an
++//! image both sides write alike, and removes it.
++
++use std::ffi::OsString;
++use std::os::unix::ffi::OsStringExt;
++use std::path::{Path, PathBuf};
++use std::process::{Command, Stdio};
++
++use rayon::prelude::*;
++
++const CASE_DIR: &str = "tests/rexxc";
++
++/// The oracle's address-space cap, in KiB.
++const ORACLE_MEMORY_LIMIT_KIB: u64 = 1_048_576;
++
++const ORACLE_ROOT: &str = "/home/moritz/dev/repos/ooRexx/build";
++
++/// How much of an output file a case reports: the `#!` line and the binary
++/// tag with two of its pad bytes, or the encoded tag.
++const IMAGE_PREFIX: usize = 31;
++
++/// The programs every case runs among.
++fn lay_fixture(dir: &Path) {
++    let file = |name: &[u8], text: &str| {
++        let path = dir.join(PathBuf::from(OsString::from_vec(name.to_vec())));
++        std::fs::write(path, text).expect("a fixture file");
++    };
++    file(b"ok.rex", "say 1\n");
++    file(b"bad.rex", "say (\n");
++    file(b"a b.rex", "say 1\n");
++    file(b"c\xffd.rex", "say 2\n");
++    file(b"e f.rex", "say (\n");
++    file(
++        b"lib.rex",
++        "say 'prolog'\n::routine r external \"LIBRARY x\"\n",
++    );
++    file(b"cls.rex", "::class a subclass zzz\n");
++    file(b"req.rex", "::requires 'nosuch.rex'\n");
++    file(
++        b"rexxent.rex",
++        "::method m external \"LIBRARY REXX nosuchentry\"\n",
++    );
++    file(b"ro.rxo", "");
++    use std::os::unix::fs::PermissionsExt as _;
++    std::fs::set_permissions(dir.join("ro.rxo"), std::fs::Permissions::from_mode(0o444))
++        .expect("the read-only output");
++}
++
++/// The output file a case's `out` argument names: one of the names
++/// `datadriven` cannot carry in an argument, or the name itself.
++fn output_name(name: &str) -> PathBuf {
++    let bytes: &[u8] = match name {
++        "blank_rxo" => b"o p.rxo",
++        "ff_rxo" => b"q\xffr.rxo",
++        other => other.as_bytes(),
++    };
++    PathBuf::from(OsString::from_vec(bytes.to_vec()))
++}
++
++/// `line` with each `\xHH` as its byte.
++fn unescape(line: &str) -> Vec<u8> {
++    let mut bytes = Vec::new();
++    let mut rest = line.as_bytes();
++    while let Some((&byte, tail)) = rest.split_first() {
++        if let Some(hex) = rest.strip_prefix(b"\\x").filter(|hex| hex.len() >= 2) {
++            let digits = std::str::from_utf8(&hex[..2]).expect("hex digits");
++            bytes.push(u8::from_str_radix(digits, 16).expect("a hex byte"));
++            rest = &hex[2..];
++        } else {
++            bytes.push(byte);
++            rest = tail;
++        }
++    }
++    bytes
++}
++
++/// `bytes` with every byte outside printable ASCII as `\xHH`.
++fn escaped(bytes: &[u8]) -> String {
++    let mut out = String::new();
++    for &byte in bytes {
++        if byte == b'\n' || (0x20..0x7f).contains(&byte) && byte != b'\\' {
++            out.push(char::from(byte));
++        } else {
++            out.push_str(&format!("\\x{byte:02X}"));
++        }
++    }
++    out
++}
++
++/// The three descriptors as the case file records them, with the fixture's
++/// directory as `DIR` and the banner's compile-time stamps masked.
++fn render(dir: &Path, stdout: &[u8], stderr: &[u8], status: Option<i32>) -> String {
++    let dir = escaped(dir.as_os_str().as_encoded_bytes());
++    let mut rendered = match status {
++        Some(code) => format!("rc> {code}\n"),
++        None => "rc> none\n".to_string(),
++    };
++    for (tag, bytes) in [("out", stdout), ("err", stderr)] {
++        for line in escaped(bytes).replace(&dir, "DIR").lines() {
++            let line = match line.strip_prefix("Build date: ") {
++                Some(_) => "Build date: <date>".to_string(),
++                None => match line.strip_prefix("Copyright (c) 2005-") {
++                    Some(rest) => {
++                        format!("Copyright (c) 2005-<year>{}", &rest[4.min(rest.len())..])
++                    }
++                    None => line.to_string(),
++                },
++            };
++            rendered.push_str(&format!("{tag}> {line}\n"));
++        }
++    }
++    rendered
++}
++
++/// A command running `program` from `dir` under `timeout`, the oracle's
++/// under its address-space cap.
++fn command(program: &Path, dir: &Path, oracle: bool) -> Command {
++    let mut command = Command::new("timeout");
++    command.args(["-k", "5", "20"]);
++    if oracle {
++        command
++            .arg("sh")
++            .arg("-c")
++            .arg(format!(
++                "ulimit -v {ORACLE_MEMORY_LIMIT_KIB} && exec \"$0\" \"$@\""
++            ))
++            .env("LD_LIBRARY_PATH", Path::new(ORACLE_ROOT).join("lib"));
++    }
++    command
++        .arg(program)
++        .current_dir(dir)
++        .env_remove("REXX_PATH")
++        .stdin(Stdio::null());
++    command
++}
++
++/// Runs `program` with the case's words from `dir`, and reports and removes
++/// the output file the case names.
++fn run(program: &Path, dir: &Path, case: &datadriven::TestCase, oracle: bool) -> String {
++    let args: Vec<OsString> = case
++        .input
++        .lines()
++        .map(|line| OsString::from_vec(unescape(line)))
++        .collect();
++    let output = command(program, dir, oracle)
++        .args(&args)
++        .output()
++        .expect("the binary starts");
++    let mut rendered = render(dir, &output.stdout, &output.stderr, output.status.code());
++    for (key, values) in &case.args {
++        assert_eq!(key, "out", "unknown argument {key}");
++        let name = values.first().expect("a file name");
++        let file = dir.join(output_name(name));
++        match std::fs::read(&file) {
++            Ok(bytes) => {
++                let prefix = &bytes[..bytes.len().min(IMAGE_PREFIX)];
++                rendered.push_str(&format!("file> {}\n", escaped(prefix).replace('\n', "\\n")));
++                if name != "ro.rxo" {
++                    std::fs::remove_file(&file).expect("the output is removed");
++                }
++            }
++            Err(_) => rendered.push_str("file> absent\n"),
++        }
++    }
++    rendered
++}
++
++/// A fresh directory below the target's temporary directory.
++fn scratch(name: &str) -> PathBuf {
++    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
++        .join(format!("rexxc-{name}-{}", std::process::id()));
++    if dir.exists() {
++        std::fs::remove_dir_all(&dir).expect("an old scratch directory");
++    }
++    std::fs::create_dir_all(&dir).expect("the scratch directory");
++    dir
++}
++
++/// A fresh fixture directory for one side.
++fn fixture(side: &str) -> PathBuf {
++    let dir = scratch(side);
++    lay_fixture(&dir);
++    dir
++}
++
++fn oracle_bin(name: &str) -> PathBuf {
++    let binary = Path::new(ORACLE_ROOT).join("bin").join(name);
++    assert!(
++        binary.is_file(),
++        "the oracle is missing at {}",
++        binary.display()
++    );
++    binary
++}
++
++#[test]
++fn the_command_line_answers_as_the_oracles_does() {
++    let oracle = oracle_bin("rexxc");
++    let ours = Path::new(env!("CARGO_BIN_EXE_rexxc"));
++    let (theirs_dir, ours_dir) = (fixture("oracle"), fixture("crate"));
++    let mut cases = 0usize;
++    let mut diverged = Vec::new();
++    datadriven::walk(CASE_DIR, |file| {
++        file.run(|case| {
++            assert_eq!(
++                case.directive, "run",
++                "unknown directive {:?}",
++                case.directive
++            );
++            cases += 1;
++            let theirs = run(&oracle, &theirs_dir, case, true);
++            let crate_side = run(ours, &ours_dir, case, false);
++            if crate_side != theirs {
++                diverged.push(format!(
++                    "{}:\n--- oracle\n{theirs}--- crate\n{crate_side}",
++                    case.input.replace('\n', " ")
++                ));
++            }
++            theirs
++        });
++    });
++    std::fs::remove_dir_all(&theirs_dir).expect("the oracle fixture is removed");
++    std::fs::remove_dir_all(&ours_dir).expect("the crate fixture is removed");
++    assert!(cases > 0, "{CASE_DIR} produced no cases");
++    assert!(diverged.is_empty(), "{}", diverged.join("\n"));
++}
++
++/// One row of `parse-errors.tsv`.
++struct Row {
++    line: usize,
++    expect: String,
++    main_line: String,
++    message: Vec<u8>,
++    program: Vec<u8>,
++}
++
++/// A field with the file's escapes decoded: `\\`, `\t`, `\n`, `\r`, `\xNN`.
++fn decode(field: &str) -> Vec<u8> {
++    let mut out = Vec::new();
++    let mut bytes = field.bytes();
++    while let Some(byte) = bytes.next() {
++        if byte != b'\\' {
++            out.push(byte);
++            continue;
++        }
++        match bytes.next() {
++            Some(b'\\') => out.push(b'\\'),
++            Some(b't') => out.push(b'\t'),
++            Some(b'n') => out.push(b'\n'),
++            Some(b'r') => out.push(b'\r'),
++            Some(b'x') => {
++                let digits: Vec<u8> = bytes.by_ref().take(2).collect();
++                let digits = std::str::from_utf8(&digits).expect("hex digits");
++                out.push(u8::from_str_radix(digits, 16).expect("a hex byte"));
++            }
++            other => panic!("unknown escape {other:?} in {field:?}"),
++        }
++    }
++    out
++}
++
++fn rows() -> Vec<Row> {
++    let text = std::fs::read_to_string(concat!(
++        env!("CARGO_MANIFEST_DIR"),
++        "/../../corpus/errors/parse-errors.tsv"
++    ))
++    .expect("parse-errors.tsv");
++    let mut rows = Vec::new();
++    let mut header = true;
++    for (index, line) in text.lines().enumerate() {
++        if line.starts_with('#') {
++            continue;
++        }
++        if header {
++            header = false;
++            continue;
++        }
++        let fields: Vec<&str> = line.splitn(5, '\t').collect();
++        let [_, expect, main_line, message, program] = fields[..] else {
++            panic!("line {}: five fields", index + 1);
++        };
++        rows.push(Row {
++            line: index + 1,
++            expect: expect.to_string(),
++            main_line: main_line.to_string(),
++            message: if message == "-" {
++                Vec::new()
++            } else {
++                decode(message)
++            },
++            program: decode(program),
++        });
++    }
++    rows
++}
++
++/// Whether `program` names `REGISTERED`, in any case: this crate refuses
++/// `EXTERNAL "REGISTERED"` with the `Rxapi` reason where the oracle's parser
++/// answers through rxapi.
++fn names_registered(program: &[u8]) -> bool {
++    program
++        .windows(b"REGISTERED".len())
++        .any(|window| window.eq_ignore_ascii_case(b"REGISTERED"))
++}
++
++/// Runs this crate's `rexxc FILE -s` on `program`, from a fresh directory
++/// below `root`.
++fn compile(root: &Path, name: &str, program: &[u8]) -> std::process::Output {
++    let dir = root.join(name);
++    std::fs::create_dir_all(&dir).expect("a row directory");
++    std::fs::write(dir.join("p.rex"), program).expect("the program");
++    command(Path::new(env!("CARGO_BIN_EXE_rexxc")), &dir, false)
++        .args(["p.rex", "-s"])
++        .output()
++        .expect("rexxc starts")
++}
++
++/// How this crate's `rexxc` answer for a row stands against the recorded one.
++enum Answer {
++    Agrees,
++    /// A licensed Deviation: this crate's error number and the oracle's.
++    Deviation(String, String),
++    Disagrees(String),
++}
++
++/// The `major.sub` of the `Error major.sub:` line in `stderr`.
++fn secondary_code(stderr: &[u8]) -> Option<String> {
++    String::from_utf8_lossy(stderr).lines().find_map(|line| {
++        let code = line.strip_prefix("Error ")?.split_once(':')?.0;
++        (code.contains('.')
++            && code
++                .bytes()
++                .all(|byte| byte == b'.' || byte.is_ascii_digit()))
++        .then(|| code.to_string())
++    })
++}
++
++/// Whether this crate answering `ours` where the oracle answers `oracle` is
++/// a licensed Deviation: 38, a `TO` or `BY` after a `DO OVER` or `DO WITH`
++/// header's `FOR` count, and 39, a `THEN` followed by a colon
++/// (`phase-4-exclusions.txt`, pinned by `rexx-parse/tests/errors.rs`).
++fn licensed(ours: &str, oracle: &str) -> bool {
++    matches!(
++        (ours, oracle),
++        ("25.927", "49.2") | ("18.1" | "18.2", "35.1")
++    )
++}
++
++/// What this crate's `rexxc` answers for `row`, against the recorded answer.
++fn answer(root: &Path, row: &Row) -> Answer {
++    let output = compile(root, &row.line.to_string(), &row.program);
++    let status = output.status.code();
++    let agrees = if row.expect == "ok" {
++        status == Some(0) && output.stderr.is_empty()
++    } else {
++        let (major, _) = row.expect.split_once('.').expect("major.sub");
++        let major: i32 = major.parse().expect("a major number");
++        let secondary = [format!("Error {}:  ", row.expect).as_bytes(), &row.message].concat();
++        let main = format!(" line {}:  ", row.main_line);
++        let stderr = &output.stderr;
++        status == Some(256 - major)
++            && stderr
++                .split(|&byte| byte == b'\n')
++                .any(|line| line == secondary.as_slice())
++            && stderr
++                .windows(main.len())
++                .any(|window| window == main.as_bytes())
++    };
++    if agrees {
++        return Answer::Agrees;
++    }
++    if let Some(ours) = secondary_code(&output.stderr)
++        && licensed(&ours, &row.expect)
++    {
++        return Answer::Deviation(ours, row.expect.clone());
++    }
++    Answer::Disagrees(format!(
++        "line {}: expected {} at {}, got rc {status:?}, stderr {:?}",
++        row.line,
++        row.expect,
++        row.main_line,
++        String::from_utf8_lossy(&output.stderr)
++    ))
++}
++
++#[test]
++fn rexxc_agrees_with_every_recorded_parse_error_row() {
++    let rows = rows();
++    let checked: Vec<&Row> = rows
++        .iter()
++        .filter(|row| !names_registered(&row.program))
++        .collect();
++    assert!(checked.len() < rows.len(), "the exempt rows are found");
++    assert!(
++        checked
++            .iter()
++            .any(|row| row.message.starts_with(b"Unable to load library")),
++        "the library-binding rows are checked"
++    );
++    let root = scratch("tsv");
++    let answers: Vec<(&Row, Answer)> = checked
++        .par_iter()
++        .map(|row| (*row, answer(&root, row)))
++        .collect();
++    std::fs::remove_dir_all(&root).expect("the row directories are removed");
++    let mut deviations = Vec::new();
++    let mut disagreements = Vec::new();
++    for (row, answer) in answers {
++        match answer {
++            Answer::Agrees => {}
++            Answer::Deviation(ours, oracle) => {
++                deviations.push((
++                    String::from_utf8_lossy(&row.program).into_owned(),
++                    ours,
++                    oracle,
++                ));
++            }
++            Answer::Disagrees(text) => disagreements.push(text),
++        }
++    }
++    deviations.sort();
++    let deviation = |program: &str, ours: &str, oracle: &str| {
++        (program.to_string(), ours.to_string(), oracle.to_string())
++    };
++    assert_eq!(
++        deviations,
++        [
++            deviation("do i over x for 1 by 2\nend\n", "25.927", "49.2"),
++            deviation("do i over x for 1 to 2\nend", "25.927", "49.2"),
++            deviation("do with index i over x for 1 to 2\nend\n", "25.927", "49.2"),
++            deviation("if 1 = 1\nthen: nop", "18.1", "35.1"),
++            deviation("select\nwhen 1 = 1\nthen: nop\nend", "18.2", "35.1"),
++        ],
++        "the licensed deviations changed"
++    );
++    assert!(
++        disagreements.is_empty(),
++        "{} of {} rows disagree:\n{}",
++        disagreements.len(),
++        checked.len(),
++        disagreements.join("\n")
++    );
++}
++
++#[test]
++fn registered_is_refused_with_the_rxapi_reason() {
++    let program = b"::routine r external \"REGISTERED x y\"\n";
++    let recorded = rows();
++    assert!(
++        recorded
++            .iter()
++            .any(|row| row.program == program && names_registered(&row.program)),
++        "the witness is a recorded, exempt row"
++    );
++    let root = scratch("registered");
++    let output = compile(&root, "witness", program);
++    std::fs::remove_dir_all(&root).expect("the witness directory is removed");
++    let stderr = String::from_utf8_lossy(&output.stderr);
++    assert_ne!(output.status.code(), Some(0), "{stderr}");
++    assert!(stderr.contains("(Phase 10 Rxapi)"), "{stderr}");
++}
++
++#[test]
++fn the_oracle_refuses_this_crates_images_as_another_versions() {
++    let dir = scratch("oracle-reads");
++    std::fs::write(dir.join("p.rex"), "say 'compiled'\n").expect("the program");
++    for (image, flags) in [("b.rxo", &[][..]), ("e.rxo", &["-e"][..])] {
++        let written = command(Path::new(env!("CARGO_BIN_EXE_rexxc")), &dir, false)
++            .args(["p.rex", image, "-s"])
++            .args(flags)
++            .output()
++            .expect("rexxc starts");
++        assert_eq!(written.status.code(), Some(0), "{image}");
++        let bytes = std::fs::read(dir.join(image)).expect("the image");
++        assert!(bytes.starts_with(b"#!/usr/bin/env rexx\n/**/@REXX"));
++        let ran = command(&oracle_bin("rexx"), &dir, true)
++            .arg(image)
++            .output()
++            .expect("the oracle starts");
++        assert_eq!(
++            render(&dir, &ran.stdout, &ran.stderr, ran.status.code()),
++            format!(
++                "rc> 253\n\
++                 err> Error 3:  Failure during initialization.\n\
++                 err> Error 3.903:  Program \"DIR/{image}\" cannot be run by this version of \
++                 the REXX interpreter.\n"
++            ),
++            "{image}"
++        );
++    }
++    std::fs::remove_dir_all(&dir).expect("the directory is removed");
++}
+diff --git a/rust/crates/rexx-exec/tests/rexxc/cases b/rust/crates/rexx-exec/tests/rexxc/cases
+new file mode 100644
+index 000000000..9814f9876
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/rexxc/cases
+@@ -0,0 +1,432 @@
++# no arguments: the usage text on stdout
++run
++----
++rc> 255
++out> SYNTAX: rexxc inputfile [outputfile] [-s] [-e]
++out> Without outputfile rexxc only performs a syntax check.
++
++# the first word is the input whatever it looks like
++run
++-x
++----
++rc> 253
++out> Open Object Rexx Version 5.3.0 r0
++out> Build date: <date>
++out> Addressing mode: 64
++out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
++out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
++out> This program and the accompanying materials are made available under the terms
++out> of the Common Public License v1.0 which accompanies this distribution or at
++out> https://www.oorexx.org/license.html
++err> Error 3:  Failure during initialization.
++err> Error 3.901:  Failure during initialization: Program "-x" was not found.
++
++# an unknown flag
++run
++ok.rex
++-x
++----
++rc> 255
++out> The rexxc command parameters are incorrect.
++out> SYNTAX: rexxc inputfile [outputfile] [-s] [-e]
++out> Without outputfile rexxc only performs a syntax check.
++
++run
++ok.rex
++o.rxo
++-x
++----
++rc> 255
++out> The rexxc command parameters are incorrect.
++out> SYNTAX: rexxc inputfile [outputfile] [-s] [-e]
++out> Without outputfile rexxc only performs a syntax check.
++
++# a third word that is not a flag
++run
++ok.rex
++o.rxo
++extra
++----
++rc> 255
++out> The rexxc command parameters are incorrect.
++out> SYNTAX: rexxc inputfile [outputfile] [-s] [-e]
++out> Without outputfile rexxc only performs a syntax check.
++
++# a bare dash is an unknown flag
++run
++ok.rex
++-
++----
++rc> 255
++out> The rexxc command parameters are incorrect.
++out> SYNTAX: rexxc inputfile [outputfile] [-s] [-e]
++out> Without outputfile rexxc only performs a syntax check.
++
++run
++ok.rex
++o.rxo
++-s
++-
++----
++rc> 255
++out> The rexxc command parameters are incorrect.
++out> SYNTAX: rexxc inputfile [outputfile] [-s] [-e]
++out> Without outputfile rexxc only performs a syntax check.
++
++# output equal to input, after the banner
++run
++ok.rex
++ok.rex
++----
++rc> 254
++out> Open Object Rexx Version 5.3.0 r0
++out> Build date: <date>
++out> Addressing mode: 64
++out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
++out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
++out> This program and the accompanying materials are made available under the terms
++out> of the Common Public License v1.0 which accompanies this distribution or at
++out> https://www.oorexx.org/license.html
++out> Output file name must be different from input file name.
++
++run
++ok.rex
++ok.rex
++-s
++----
++rc> 254
++out> Output file name must be different from input file name.
++
++# not found
++run
++nope
++----
++rc> 253
++out> Open Object Rexx Version 5.3.0 r0
++out> Build date: <date>
++out> Addressing mode: 64
++out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
++out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
++out> This program and the accompanying materials are made available under the terms
++out> of the Common Public License v1.0 which accompanies this distribution or at
++out> https://www.oorexx.org/license.html
++err> Error 3:  Failure during initialization.
++err> Error 3.901:  Failure during initialization: Program "nope" was not found.
++
++run
++nope
++-s
++----
++rc> 253
++err> Error 3:  Failure during initialization.
++err> Error 3.901:  Failure during initialization: Program "nope" was not found.
++
++run
++nope
++nodir/x.rxo
++-s
++----
++rc> 253
++err> Error 3:  Failure during initialization.
++err> Error 3.901:  Failure during initialization: Program "nope" was not found.
++
++# a syntax error, with and without the banner
++run
++bad.rex
++----
++rc> 221
++out> Open Object Rexx Version 5.3.0 r0
++out> Build date: <date>
++out> Addressing mode: 64
++out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
++out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
++out> This program and the accompanying materials are made available under the terms
++out> of the Common Public License v1.0 which accompanies this distribution or at
++out> https://www.oorexx.org/license.html
++err>      1 *-* say (
++err> Error 35 running DIR/bad.rex line 1:  Invalid expression.
++err> Error 35.1:  Incorrect expression detected at "(".
++
++run out=o.rxo
++bad.rex
++o.rxo
++-s
++----
++rc> 221
++err>      1 *-* say (
++err> Error 35 running DIR/bad.rex line 1:  Invalid expression.
++err> Error 35.1:  Incorrect expression detected at "(".
++file> absent
++
++run
++bad.rex
++-s
++----
++rc> 221
++err>      1 *-* say (
++err> Error 35 running DIR/bad.rex line 1:  Invalid expression.
++err> Error 35.1:  Incorrect expression detected at "(".
++
++# a syntax check
++run
++ok.rex
++----
++rc> 0
++out> Open Object Rexx Version 5.3.0 r0
++out> Build date: <date>
++out> Addressing mode: 64
++out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
++out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
++out> This program and the accompanying materials are made available under the terms
++out> of the Common Public License v1.0 which accompanies this distribution or at
++out> https://www.oorexx.org/license.html
++
++run
++ok.rex
++-s
++----
++rc> 0
++
++run
++ok.rex
++-e
++----
++rc> 0
++out> Open Object Rexx Version 5.3.0 r0
++out> Build date: <date>
++out> Addressing mode: 64
++out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
++out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
++out> This program and the accompanying materials are made available under the terms
++out> of the Common Public License v1.0 which accompanies this distribution or at
++out> https://www.oorexx.org/license.html
++
++run
++ok.rex
++-s
++-e
++----
++rc> 0
++
++run
++ok.rex
++-e
++-s
++----
++rc> 0
++
++# an image, binary and encoded, flags in either order and by their second byte
++run out=o.rxo
++ok.rex
++o.rxo
++----
++rc> 0
++out> Open Object Rexx Version 5.3.0 r0
++out> Build date: <date>
++out> Addressing mode: 64
++out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
++out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
++out> This program and the accompanying materials are made available under the terms
++out> of the Common Public License v1.0 which accompanies this distribution or at
++out> https://www.oorexx.org/license.html
++file> #!/usr/bin/env rexx\n/**/@REXX\x00\x00
++
++run out=o.rxo
++ok.rex
++o.rxo
++-s
++----
++rc> 0
++file> #!/usr/bin/env rexx\n/**/@REXX\x00\x00
++
++run out=o.rxo
++ok.rex
++o.rxo
++-e
++----
++rc> 0
++out> Open Object Rexx Version 5.3.0 r0
++out> Build date: <date>
++out> Addressing mode: 64
++out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
++out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
++out> This program and the accompanying materials are made available under the terms
++out> of the Common Public License v1.0 which accompanies this distribution or at
++out> https://www.oorexx.org/license.html
++file> #!/usr/bin/env rexx\n/**/@REXX@\n
++
++run out=o.rxo
++ok.rex
++o.rxo
++-s
++-e
++----
++rc> 0
++file> #!/usr/bin/env rexx\n/**/@REXX@\n
++
++run out=o.rxo
++ok.rex
++o.rxo
++-E
++-S
++----
++rc> 0
++file> #!/usr/bin/env rexx\n/**/@REXX@\n
++
++run out=o.rxo
++ok.rex
++o.rxo
++-sx
++-Exyz
++----
++rc> 0
++file> #!/usr/bin/env rexx\n/**/@REXX@\n
++
++# the input is found by the program search
++run out=o.rxo
++ok
++o.rxo
++-s
++----
++rc> 0
++file> #!/usr/bin/env rexx\n/**/@REXX\x00\x00
++
++# an output that cannot be written
++run
++ok.rex
++nodir/o.rxo
++-s
++----
++rc> 253
++err> Error 3:  Failure during initialization.
++err> Error 3.902:  Error writing output file "nodir/o.rxo".
++
++run out=ro.rxo
++ok.rex
++ro.rxo
++-s
++----
++rc> 253
++err> Error 3:  Failure during initialization.
++err> Error 3.902:  Error writing output file "ro.rxo".
++file> 
++
++run
++ok.rex
++nodir/o.rxo
++----
++rc> 253
++out> Open Object Rexx Version 5.3.0 r0
++out> Build date: <date>
++out> Addressing mode: 64
++out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
++out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
++out> This program and the accompanying materials are made available under the terms
++out> of the Common Public License v1.0 which accompanies this distribution or at
++out> https://www.oorexx.org/license.html
++err> Error 3:  Failure during initialization.
++err> Error 3.902:  Error writing output file "nodir/o.rxo".
++
++# names that are not plain ASCII
++run
++a b
++-s
++----
++rc> 0
++
++run out=blank_rxo
++a b.rex
++o p.rxo
++-s
++----
++rc> 0
++file> #!/usr/bin/env rexx\n/**/@REXX\x00\x00
++
++run
++c\xFFd
++-s
++----
++rc> 0
++
++run out=ff_rxo
++c\xFFd.rex
++q\xFFr.rxo
++-s
++----
++rc> 0
++file> #!/usr/bin/env rexx\n/**/@REXX\x00\x00
++
++run
++e f
++-s
++----
++rc> 221
++err>      1 *-* say (
++err> Error 35 running DIR/e f.rex line 1:  Invalid expression.
++err> Error 35.1:  Incorrect expression detected at "(".
++
++run
++e f.rex
++----
++rc> 221
++out> Open Object Rexx Version 5.3.0 r0
++out> Build date: <date>
++out> Addressing mode: 64
++out> Copyright (c) 1995, 2004 IBM Corporation. All rights reserved.
++out> Copyright (c) 2005-<year> Rexx Language Association. All rights reserved.
++out> This program and the accompanying materials are made available under the terms
++out> of the Common Public License v1.0 which accompanies this distribution or at
++out> https://www.oorexx.org/license.html
++err>      1 *-* say (
++err> Error 35 running DIR/e f.rex line 1:  Invalid expression.
++err> Error 35.1:  Incorrect expression detected at "(".
++
++run
++z\xFFz
++-s
++----
++rc> 253
++err> Error 3:  Failure during initialization.
++err> Error 3.901:  Failure during initialization: Program "z\xFFz" was not found.
++
++run
++a b
++n\xFF/x.rxo
++-s
++----
++rc> 253
++err> Error 3:  Failure during initialization.
++err> Error 3.902:  Error writing output file "n\xFF/x.rxo".
++
++# translation binds an EXTERNAL library and resolves nothing else
++run out=o.rxo
++lib.rex
++o.rxo
++-s
++----
++rc> 158
++err>      2 *-* ::routine r external "LIBRARY x"
++err> Error 98 running DIR/lib.rex line 2:  Execution error.
++err> Error 98.903:  Unable to load library "x".
++file> absent
++
++run
++cls.rex
++-s
++----
++rc> 0
++
++run
++req.rex
++-s
++----
++rc> 0
++
++run
++rexxent.rex
++-s
++----
++rc> 166
++err>      1 *-* ::method m external "LIBRARY REXX nosuchentry"
++err> Error 90 running DIR/rexxent.rex line 1:  External name not found.
++err> Error 90.998:  Unable to find external method "nosuchentry".
+diff --git a/rust/crates/rexx-exec/tests/suite.rs b/rust/crates/rexx-exec/tests/suite.rs
+index d71e5cd91..e4fa8dfef 100644
+--- a/rust/crates/rexx-exec/tests/suite.rs
++++ b/rust/crates/rexx-exec/tests/suite.rs
+@@ -288,51 +288,60 @@ pub fn resolve(name: &str, path: &str) -> Option<PathBuf> {
+     };
+     if name.contains('/') {
+         return Some(PathBuf::from(name)).filter(|candidate| executable(candidate));
+     }
+     path.split(':')
+         .filter(|dir| !dir.is_empty())
+         .map(|dir| Path::new(dir).join(name))
+         .find(|candidate| executable(candidate))
+ }
+ 
+-/// Whether the crate side's `path` resolves `rexx` inside `bin` and `rexxc`
+-/// nowhere, and `bin` holds no ELF file but copies of this crate's `rexx`.
++/// Whether the crate side's `path` resolves `rexx` and `rexxc` inside `bin`,
++/// and `bin` holds no ELF file but copies of this crate's `rexx` and `rexxc`.
+ pub fn check_path(path: &str, bin: &Path) -> Result<(), String> {
+     use std::os::unix::fs::MetadataExt as _;
+     let identity = |path: &Path| fs::metadata(path).ok().map(|meta| (meta.dev(), meta.ino()));
+-    let ours_path = Path::new(env!("CARGO_BIN_EXE_rexx"));
+-    let ours_identity = identity(ours_path);
++    let ours = [
++        Path::new(env!("CARGO_BIN_EXE_rexx")),
++        Path::new(env!("CARGO_BIN_EXE_rexxc")),
++    ];
+     for entry in fs::read_dir(bin).map_err(|e| format!("cannot read {}: {e}", bin.display()))? {
+         let file = entry.map_err(|e| e.to_string())?.path();
+-        if identity(&file).is_some() && identity(&file) == ours_identity {
++        if identity(&file).is_some()
++            && ours
++                .iter()
++                .any(|binary| identity(&file) == identity(binary))
++        {
+             continue;
+         }
+         let bytes = fs::read(&file).unwrap_or_default();
+-        if bytes.starts_with(b"\x7fELF") && bytes != fs::read(ours_path).unwrap_or_default() {
++        if bytes.starts_with(b"\x7fELF")
++            && !ours
++                .iter()
++                .any(|binary| bytes == fs::read(binary).unwrap_or_default())
++        {
+             return Err(format!(
+                 "{} is a binary other than this crate's",
+                 file.display()
+             ));
+         }
+     }
+-    let rexx = resolve("rexx", path);
+-    if rexx.as_deref() != Some(bin.join("rexx").as_path()) {
+-        return Err(format!(
+-            "rexx resolves to {rexx:?} on {path}, not inside {}",
+-            bin.display()
+-        ));
+-    }
+-    match resolve("rexxc", path) {
+-        Some(rexxc) => Err(format!("rexxc resolves to {} on {path}", rexxc.display())),
+-        None => Ok(()),
++    for name in ["rexx", "rexxc"] {
++        let found = resolve(name, path);
++        if found.as_deref() != Some(bin.join(name).as_path()) {
++            return Err(format!(
++                "{name} resolves to {found:?} on {path}, not inside {}",
++                bin.display()
++            ));
++        }
+     }
++    Ok(())
+ }
+ 
+ /// Copies the oracle `bin`'s Rexx class files (`*.cls`) into the crate
+ /// side's `bin`, so a program searching `PATH` for one finds it on both sides.
+ fn lay_class_files(bin: &Path) {
+     let from = oracle_root().join("bin");
+     for entry in
+         fs::read_dir(&from).unwrap_or_else(|e| panic!("cannot read {}: {e}", from.display()))
+     {
+         let file = entry.expect("a directory entry").path();
+@@ -1873,21 +1882,21 @@ mod fixtures {
+         assert_eq!(run.cap, CapKind::UlimitFallback);
+         assert_eq!(run.passed, names(&["TEST_LIMIT"]));
+         if resolve("memcap", &path_of(std::env::var_os("PATH"))).is_some() {
+             let run = crate_run(&settings(), "AddressSpace");
+             assert_eq!(run.cap, CapKind::Memcap);
+             assert_eq!(run.failed, names(&["TEST_LIMIT"]));
+         }
+     }
+ 
+     #[test]
+-    fn the_crate_side_finds_its_own_rexx_and_no_rexxc() {
++    fn the_crate_side_finds_its_own_rexx_and_rexxc() {
+         let run = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+             .join(format!("suite-path-{}", std::process::id()))
+             .join("run");
+         fs::create_dir_all(&run).expect("the run directory");
+         let bin = interpreter_bin(&run);
+         let path = crate_side_environment(&run)
+             .into_iter()
+             .find(|(name, _)| name == b"PATH")
+             .map(|(_, value)| String::from_utf8(value).expect("a UTF-8 PATH"))
+             .expect("a PATH");
+@@ -1903,24 +1912,28 @@ mod fixtures {
+         );
+         assert_eq!(
+             fs::canonicalize(bin.join("rexx")).expect("the crate's rexx"),
+             bin.canonicalize().expect("the bin").join("rexx"),
+             "a symlink resolves to the target directory, where no samples are"
+         );
+         assert!(
+             bin.join("../samples/factor.rex").is_file(),
+             "the samples beside the bin"
+         );
+-        assert_eq!(resolve("rexxc", &path), None);
++        assert_eq!(resolve("rexxc", &path), Some(bin.join("rexxc")));
++        assert_eq!(
++            fs::read(bin.join("rexxc")).expect("the crate's rexxc"),
++            fs::read(env!("CARGO_BIN_EXE_rexxc")).expect("rexxc")
++        );
+         assert!(check_path("/usr/bin:/bin", &bin).is_err());
+-        fs::copy(env!("CARGO_BIN_EXE_rexx"), bin.join("rexxc")).expect("a rexxc");
+-        assert!(check_path(&path, &bin).is_err());
++        fs::remove_file(bin.join("rexxc")).expect("the crate's rexxc");
++        assert!(check_path(&path, &bin).is_err(), "no rexxc in the bin");
+         fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
+     }
+ 
+     /// A fresh `run` directory below the target's temporary directory.
+     fn scratch_run(name: &str) -> PathBuf {
+         PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+             .join(format!("suite-{name}-{}", std::process::id()))
+             .join("run")
+     }
+ 
+@@ -1979,40 +1992,40 @@ mod fixtures {
+             memcap().as_deref(),
+             Duration::from_secs(60),
+         );
+         assert_eq!(tests, ["TEST_A"]);
+         assert_eq!(end_reason(&process, Duration::from_secs(60)), None);
+         assert!(!grandchild_sleeps(), "the command outlived the run");
+         fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
+     }
+ 
+     #[test]
+-    fn a_command_the_crate_side_runs_finds_its_rexx_and_no_rexxc() {
++    fn a_command_the_crate_side_runs_finds_its_rexx_and_rexxc() {
+         let run = scratch_run("child-path");
+         let (_, tests) = crate_run_once(
+             &root(),
+             &run,
+             "",
+             "ChildPath",
+             &BTreeSet::new(),
+             memcap().as_deref(),
+             Duration::from_secs(60),
+         );
+         assert_eq!(tests, ["TEST_A"]);
+         let beside = run.parent().expect("a parent");
+         assert_eq!(
+             fs::read_to_string(beside.join("rexx-path.txt")).expect("rexx's path"),
+             format!("{}\n", interpreter_bin(&run).join("rexx").display())
+         );
+         assert_eq!(
+             fs::read_to_string(beside.join("rexxc-path.txt")).expect("rexxc's path"),
+-            "127\n"
++            format!("{}\n", interpreter_bin(&run).join("rexxc").display())
+         );
+         fs::remove_dir_all(beside).expect("cannot remove the run");
+     }
+ 
+     #[test]
+     fn a_run_that_starts_no_test_after_an_earlier_one_did_is_not_blocked_at_load() {
+         let run = crate_run(&settings(), "RefusedAfterFirst");
+         assert_eq!(run.iterations, 2);
+         assert_eq!(
+             run.blocked,
+diff --git a/rust/crates/rexx-exec/tests/suite/fixtures/ChildPath.testGroup b/rust/crates/rexx-exec/tests/suite/fixtures/ChildPath.testGroup
+index 4c5f2e016..6089d6734 100644
+--- a/rust/crates/rexx-exec/tests/suite/fixtures/ChildPath.testGroup
++++ b/rust/crates/rexx-exec/tests/suite/fixtures/ChildPath.testGroup
+@@ -6,12 +6,12 @@
+   group~add(.ChildPath.testGroup)
+   if group~isAutomatedTest then return group
+   testResult = group~suite~execute~~print
+ return testResult
+ 
+ ::requires 'ooTest.frm'
+ 
+ ::class "ChildPath.testGroup" subclass ooTestCase public
+ 
+ ::method test_a
+-  address system 'command -v rexx > ../rexx-path.txt; command -v rexxc > ../rexxc-path.txt; echo $? >> ../rexxc-path.txt'
++  address system 'command -v rexx > ../rexx-path.txt; command -v rexxc > ../rexxc-path.txt'
+   self~assertSame(0, rc)
+diff --git a/rust/crates/rexx-exec/tests/support/group_runner.rs b/rust/crates/rexx-exec/tests/support/group_runner.rs
+index 071a3bef8..fd4b65e1e 100644
+--- a/rust/crates/rexx-exec/tests/support/group_runner.rs
++++ b/rust/crates/rexx-exec/tests/support/group_runner.rs
+@@ -696,78 +696,83 @@ pub fn run_process(
+             status: match ended {
+                 Ended::Exited(code) => Some(code),
+                 Ended::Signaled(_) | Ended::Killed => None,
+             },
+         },
+         ended,
+         took,
+     }
+ }
+ 
+-/// A directory beside `run` holding `rexx`, this crate's own, so a
+-/// test running `rexx` as a command runs the side under test; the oracle's
+-/// side gets its own `bin` directory instead.
++/// A directory beside `run` holding `rexx` and `rexxc`, this crate's own, so
++/// a test running either as a command runs the side under test; the
++/// oracle's side gets its own `bin` directory instead.
+ ///
+-/// `rexx` is a hard link (a copy where one cannot be made), not a symlink,
++/// Each is a hard link (a copy where one cannot be made), not a symlink,
+ /// because `.RexxInfo~executable` resolves links: the test framework finds
+ /// the samples at `../samples` from the executable's own directory, which
+ /// is the oracle's install layout, and a `samples` link beside this
+ /// directory names the oracle's.
+ pub fn interpreter_bin(run: &Path) -> PathBuf {
+     let bin = run.parent().expect("a parent").join("bin-rexx");
+     fs::create_dir_all(&bin).expect("the interpreter bin directory");
+-    let rexx = bin.join("rexx");
+-    let ours = env!("CARGO_BIN_EXE_rexx");
+-    let current = || {
+-        fs::metadata(&rexx)
+-            .ok()
+-            .zip(fs::metadata(ours).ok())
+-            .is_some_and(|(theirs, ours)| {
+-                use std::os::unix::fs::MetadataExt as _;
+-                (theirs.dev(), theirs.ino()) == (ours.dev(), ours.ino())
+-            })
+-    };
+-    if !current() {
+-        // A copy or an older link left by an earlier build is replaced, and
+-        // the copy below never writes onto an existing file, which could be
+-        // a link to `ours` itself.
+-        match fs::remove_file(&rexx) {
+-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+-                panic!("cannot replace {}: {e}", rexx.display())
+-            }
+-            _ => {}
+-        }
+-        // A run sharing this directory may link it between the removal and
+-        // the link, which leaves the file this one would have made.
+-        if let Err(link) = fs::hard_link(ours, &rexx)
+-            && !current()
+-        {
+-            assert!(
+-                !rexx.exists(),
+-                "{} appeared while it was replaced",
+-                rexx.display()
+-            );
+-            fs::copy(ours, &rexx).unwrap_or_else(|copy| {
+-                panic!("cannot link ({link}) or copy ({copy}) {}", rexx.display())
+-            });
+-        }
+-    }
++    place(&bin.join("rexx"), env!("CARGO_BIN_EXE_rexx"));
++    place(&bin.join("rexxc"), env!("CARGO_BIN_EXE_rexxc"));
+     let samples = bin.parent().expect("a parent").join("samples");
+     match std::os::unix::fs::symlink(oracle::oracle_root().join("samples"), &samples) {
+         Err(e) if e.kind() != std::io::ErrorKind::AlreadyExists => {
+             panic!("cannot link {}: {e}", samples.display())
+         }
+         _ => {}
+     }
+     bin
+ }
+ 
++/// Makes `at` a hard link to `ours`, or a copy where one cannot be made.
++fn place(at: &Path, ours: &str) {
++    let current = || {
++        fs::metadata(at)
++            .ok()
++            .zip(fs::metadata(ours).ok())
++            .is_some_and(|(theirs, ours)| {
++                use std::os::unix::fs::MetadataExt as _;
++                (theirs.dev(), theirs.ino()) == (ours.dev(), ours.ino())
++            })
++    };
++    if current() {
++        return;
++    }
++    // A copy or an older link left by an earlier build is replaced, and
++    // the copy below never writes onto an existing file, which could be
++    // a link to `ours` itself.
++    match fs::remove_file(at) {
++        Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
++            panic!("cannot replace {}: {e}", at.display())
++        }
++        _ => {}
++    }
++    // A run sharing this directory may link it between the removal and
++    // the link, which leaves the file this one would have made.
++    if let Err(link) = fs::hard_link(ours, at)
++        && !current()
++    {
++        assert!(
++            !at.exists(),
++            "{} appeared while it was replaced",
++            at.display()
++        );
++        fs::copy(ours, at).unwrap_or_else(|copy| {
++            panic!("cannot link ({link}) or copy ({copy}) {}", at.display())
++        });
++    }
++}
++
+ /// Renames each test of `group` that `left_out` names in the copy's group
+ /// file, so the framework no longer counts it a test; each must be found.
+ /// The file is matched and rewritten as bytes: only the renamed methods'
+ /// lines change, whatever bytes the rest holds.
+ pub fn skip<S: AsRef<str> + Ord>(group_file: &Path, group: &str, left_out: &BTreeSet<S>) {
+     let (text, skipped) = renamed(&read_bytes(group_file), group, left_out);
+     let wanted: BTreeSet<String> = left_out
+         .iter()
+         .map(AsRef::as_ref)
+         .filter(|name| name.starts_with(&format!("{group}.")))

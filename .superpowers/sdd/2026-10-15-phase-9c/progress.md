@@ -89,3 +89,7 @@ Task 8: implementer DONE_WITH_CONCERNS (9622c9e89, 7de9e8cc2, 483679f2c, 3db140a
 Ruling (Task 8): REGISTERED predicate case-insensitive (TSV row 959 lower-case 'registered x', crate refuses with the same Rxapi reason) -- EXTERNAL spec words are case-insensitive -- if wrong, one row moves to disagreements.
 Ruling (Task 8): TSV agreement test licenses Deviations 38/39 rows by exact pinned program set, as errors.rs does -- they are licensed deviations -- if wrong, test narrows.
 Task 8: review dispatched (opus).
+Task 8 review (opus): spec compliant, quality approved. Minors: (1) LIBRARY bind before ::OPTIONS pre-existing divergence -> queued 2026-10-17-library-bind-before-options.md; (2) encoded image without tag after decode: crate 3.903, oracle runs half-decoded buffer -> Task 9 records a Deviation (oracle bug not copied), plan amended; (3) REGISTERED exemption too wide (99.917 rows 697/928/971 correct in crate) -> fix round 1; (4) truncated encoded form unpinned -> Task 9 (plan amended).
+Task 8: fix round 1 dispatched (resume impl): predicate = names REGISTERED (any case) AND class install.
+Task 8: fix round 1 5c2f3b7fe, 93531f2a3 (predicate install+REGISTERED; two guards; widening shown red; 697/928/971 agree). Accepted without re-review (test-only, shown red).
+Task 8: complete (9622c9e89, 7de9e8cc2, 483679f2c, 3db140a2a, 5c2f3b7fe, 93531f2a3).
