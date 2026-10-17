@@ -2310,6 +2310,34 @@ THROUGH `Routine~call` IS NAMED `CALL` (Phase 9c Task 9, queued).
      witnesses and the oracle sites.
      OWNER: none.
 
+ 42. SYSFORK IS REFUSED (Phase 9). OWNER: none.
+
+     Ruled by Moritz 2026-10-17: "we can chose not to support SysFork, at
+     least not for oo programs for now." The oracle's SysFork forks the
+     process and both copies continue the Rexx program. This crate runs a
+     timer thread and a joining main thread beside the interpreter thread,
+     so a forked child that continued the program would need an atfork
+     discipline for the timer and an end path of its own
+     (.superpowers/sdd/queued/2026-10-13-sysfork-design.md). A call to
+     SysFork raises this crate's refusal and forks nothing. Measured on
+     the oracle 2026-10-13: a plain fork works (3/3), and with a second
+     activity the child hangs (5/5, oracle-crashes entry 46). No ooTest
+     file calls SysFork.
+
+ 43. NAMED REXXUTIL SEMAPHORES ARE REFUSED (Phase 9). OWNER: none.
+
+     Ruled by Moritz 2026-10-17: "Treat them like SysFork for now." The
+     oracle backs a named event or mutex semaphore with a POSIX sem_open
+     semaphore shared between processes
+     (interpreter/platform/unix/SysRexxUtil.cpp:668 and :893 create,
+     :698 and :925 open), and never unlinks the name, so it persists in
+     /dev/shm after the process ends. This crate refuses SysCreateEventSem
+     and SysCreateMutexSem given a name, and SysOpenEventSem and
+     SysOpenMutexSem. Unnamed semaphores work as on the oracle. Measured
+     2026-10-13: a second oracle process opening the name sees the first
+     one's post (5/5). No ooTest test uses a named semaphore
+     (.superpowers/sdd/queued/2026-10-13-named-semaphores-design.md).
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
