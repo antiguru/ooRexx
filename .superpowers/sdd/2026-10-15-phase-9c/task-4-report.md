@@ -279,3 +279,50 @@ the parser's own cost. What moved libc was not investigated. Earlier heads, same
 3. `rexx-exec/src/error.rs`'s test changed (forced by deleting `ParseError::new`), outside the
    brief's files.
 4. `interpret`'s whole-process callgrind figure moved -0.55% through libc, unexplained (above).
+
+## Fix round 1
+
+Review: `task-4-review.md`.
+
+* **I1** (ruling (b)): the 49.2 `NoProgram` record keeps its `InstructionParser.cpp:453` site and
+  drops `do i over x for 1 to 2` and `do with index i over x for 1 by 2`, which are Deviation 38's
+  shapes. It gains probes aimed at the keyword switch: `then nop`, `else nop`, `otherwise nop`,
+  `when 1 then nop`, `end`. Every remaining probe went through the oracle with
+  `corpus/errors/derive.sh` (`rexxc -s`, one run each): `do i = 1 to 2 by 1 to 3` 27.902,
+  `do i = 1 for 2 while 1 until 2` / `do forever while 1 until 2` / `loop 3 while 1 until 2` 27.1,
+  `then nop` 8.1, `else nop` 8.2, `otherwise nop` 9.2, `when 1 then nop` 9.1, `end` 10.1. None is
+  49.2.
+* **M1, the finding.** No numbered Deviation exists. The label-colon divergence is ruled in the
+  Phase 3 plan, `docs/superpowers/plans/2026-07-28-phase-3-parser.md`: the paragraph headed "A named
+  deviation, of the same class as the accepted eager-scan one" (`:1169`), and the exit criterion's
+  "Recorded exceptions" (`:2557`), with the reason in Task 3.6's report
+  (`records/2026-07-28-phase-3-parser/task-3.6-report.md:117`). `grep -n "Deviation [0-9]"
+  phase-4-exclusions.txt` finds none for 18.x against 35.1. `label_colon_deviation`'s doc and the
+  test now cite the Phase 3 plan and say there is no number. Measured shape (corpus rows): oracle
+  `if 1 = 1` / `then: nop` 35.1 line 2 `Incorrect expression detected at ":".`, crate 18.1 `IF
+  instruction on line 1 requires matching THEN clause.`; oracle `select` / `when 1 = 1` /
+  `then: nop` / `end` 35.1 line 3, crate 18.2 `WHEN instruction on line 2 ...`. Both reject. If a
+  numbered Deviation is wanted, that is for Moritz.
+* **M2**: the "One from each raising file" comment is deleted.
+* **M3**: deleted from `phase-4-exclusions.txt`: the KNOWN GAPS row "A SOURCE THAT DOES NOT PARSE
+  RENDERS ITS MESSAGE'S PLACEHOLDERS LITERALLY", the paragraph "A fragment that fails to PARSE ...
+  without a rexx-parse signature change" (with "We emit the second line only"), the paragraph "Also
+  still unsubstituted ...", and in the 2026-08-20 note "Every syntax error diverges at the rexx-run
+  level.", "This crate exits NOT_IMPLEMENTED_EXIT and prints one line ...", "Both halves are
+  already decided and recorded." and the NOT_IMPLEMENTED_EXIT bullet. The tests that read the file
+  (`coverage`, `loud`, `owners`) pass.
+* **M5**: `Block::line_insert` takes a byte. `error_line`, `then_expected` and `end_mismatch` all
+  build their insert through it.
+
+### Checks, from `rust/`, exit statuses unpiped
+
+| Command | Exit |
+|---|---|
+| `cargo fmt --all --check` | 0 |
+| `CARGO_INCREMENTAL=0 memcap 8G cargo clippy -j 4 -p rexx-inventory -p rexx-parse -p rexx-exec --all-targets -- -D warnings` | 0 |
+| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-parse -p rexx-inventory --no-fail-fast` | 0, 424 passed, 0 failed |
+| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-exec --lib error::` | 0, 13 passed |
+| `CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 -p rexx-exec --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions --test coverage --test loud --no-fail-fast` | 0 (closed_phases 8, coverage 21, loud 9, owners 6, phase_ten_reasons 5, refusal_dispositions 3, refusal_sites 5, representation_refusals 3 passed) |
+| `REXX_CORPUS_GATE=1 CARGO_INCREMENTAL=0 memcap 8G cargo test -j 4 --release -p rexx-exec --test corpus` | 0, `1065 of 1065 matching` (`Compiling rexx-parse` printed) |
+
+The `line_insert` change is on cold error paths only. Callgrind was not re-run.
