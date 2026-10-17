@@ -1,0 +1,13 @@
+--- stdout
+in fail
+     2 *-* Routine fail.rxo in package "DIR/fail.rxo" (no source available).
+     2 *-* call 'fail.rxo'
+in fail
+     2 *-* Routine CALL in package "fail.rxo" (no source available).
+       *-* Compiled method "CALL" with scope "Routine".
+     6 *-* r~call
+in fail
+     2 *-* Routine FAIL.RXO in package "DIR/fail.rxo" (no source available).
+     9 *-* x = fail.rxo()
+--- stderr
+--- rc 0

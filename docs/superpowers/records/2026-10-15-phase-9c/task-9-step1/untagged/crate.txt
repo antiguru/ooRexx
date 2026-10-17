@@ -1,0 +1,5 @@
+--- stdout
+--- stderr
+Error 3:  Failure during initialization.
+Error 3.903:  Program "DIR/notag.rxo" cannot be run by this version of the REXX interpreter.
+--- rc 253

@@ -1,0 +1,6 @@
+--- stdout
+--- stderr
+     2 *-* ?
+Error 13 running DIR/notag.rxo line 2:  Invalid character in program.
+Error 13.1:  Incorrect character in program "" ('00'X).
+--- rc 243

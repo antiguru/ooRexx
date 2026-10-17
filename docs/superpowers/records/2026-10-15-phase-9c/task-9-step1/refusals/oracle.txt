@@ -1,0 +1,183 @@
+=== rej rexx
+--- stdout
+--- stderr
+Error 3:  Failure during initialization.
+Error 3.903:  Program "<D>/rej.rxo" cannot be run by this version of the REXX interpreter.
+--- rc 253
+=== r1_rej
+--- stdout
+--- stderr
+     1 *-* call 'rej.rxo'
+Error 3 running <D>/r1_rej.rex line 1:  Failure during initialization.
+Error 3.903:  Program "<D>/rej.rxo" cannot be run by this version of the REXX interpreter.
+--- rc 253
+=== r2_rej
+--- stdout
+--- stderr
+     2 *-* ::requires 'rej.rxo'
+Error 3 running <D>/r2_rej.rex line 2:  Failure during initialization.
+Error 3.903:  Program "<D>/rej.rxo" cannot be run by this version of the REXX interpreter.
+--- rc 253
+=== r3_rej
+--- stdout
+--- stderr
+       *-* Compiled method "NEWFILE" with scope "Routine".
+     1 *-* r = .Routine~newFile('rej.rxo')
+Error 3 running <D>/r3_rej.rex line 1:  Failure during initialization.
+Error 3.903:  Program "rej.rxo" cannot be run by this version of the REXX interpreter.
+--- rc 253
+=== r4_rej
+--- stdout
+--- stderr
+       *-* Compiled method "NEWFILE" with scope "Method".
+     1 *-* m = .Method~newFile('rej.rxo')
+Error 3 running <D>/r4_rej.rex line 1:  Failure during initialization.
+Error 3.903:  Program "rej.rxo" cannot be run by this version of the REXX interpreter.
+--- rc 253
+=== r5_rej
+--- stdout
+--- stderr
+     2 *-* /**/@
+       *-* Compiled method "NEW" with scope "Routine".
+     1 *-* r = .Routine~new('rn', .stream~new('rej.rxo')~arrayin)
+Error 13 running rn line 2:  Invalid character in program.
+Error 13.1:  Incorrect character in program "@" ('40'X).
+--- rc 243
+=== r6_rej
+--- stdout
+--- stderr
+     2 *-* /**/@
+       *-* Compiled method "NEW" with scope "Package".
+     1 *-* p = .Package~new('pa', .stream~new('rej.rxo')~arrayin)
+Error 13 running pa line 2:  Invalid character in program.
+Error 13.1:  Incorrect character in program "@" ('40'X).
+--- rc 243
+=== r7_rej
+--- stdout
+--- stderr
+     2 *-* /**/@
+       *-* Compiled method "NEW" with scope "Method".
+     1 *-* m = .Method~new('mn', .stream~new('rej.rxo')~arrayin)
+Error 13 running mn line 2:  Invalid character in program.
+Error 13.1:  Incorrect character in program "@" ('40'X).
+--- rc 243
+=== reje rexx
+--- stdout
+--- stderr
+Error 3:  Failure during initialization.
+Error 3.903:  Program "<D>/reje.rxo" cannot be run by this version of the REXX interpreter.
+--- rc 253
+=== r1_reje
+--- stdout
+--- stderr
+     1 *-* call 'reje.rxo'
+Error 3 running <D>/r1_reje.rex line 1:  Failure during initialization.
+Error 3.903:  Program "<D>/reje.rxo" cannot be run by this version of the REXX interpreter.
+--- rc 253
+=== r2_reje
+--- stdout
+--- stderr
+     2 *-* ::requires 'reje.rxo'
+Error 3 running <D>/r2_reje.rex line 2:  Failure during initialization.
+Error 3.903:  Program "<D>/reje.rxo" cannot be run by this version of the REXX interpreter.
+--- rc 253
+=== r3_reje
+--- stdout
+--- stderr
+       *-* Compiled method "NEWFILE" with scope "Routine".
+     1 *-* r = .Routine~newFile('reje.rxo')
+Error 3 running <D>/r3_reje.rex line 1:  Failure during initialization.
+Error 3.903:  Program "reje.rxo" cannot be run by this version of the REXX interpreter.
+--- rc 253
+=== r4_reje
+--- stdout
+--- stderr
+       *-* Compiled method "NEWFILE" with scope "Method".
+     1 *-* m = .Method~newFile('reje.rxo')
+Error 3 running <D>/r4_reje.rex line 1:  Failure during initialization.
+Error 3.903:  Program "reje.rxo" cannot be run by this version of the REXX interpreter.
+--- rc 253
+=== r5_reje
+--- stdout
+--- stderr
+       *-* Compiled method "NEW" with scope "Routine".
+     1 *-* r = .Routine~new('rn', .stream~new('reje.rxo')~arrayin)
+Error 3 running <D>/r5_reje.rex line 1:  Failure during initialization.
+Error 3.903:  Program "rn" cannot be run by this version of the REXX interpreter.
+--- rc 253
+=== r6_reje
+--- stdout
+--- stderr
+       *-* Compiled method "NEW" with scope "Package".
+     1 *-* p = .Package~new('pa', .stream~new('reje.rxo')~arrayin)
+Error 3 running <D>/r6_reje.rex line 1:  Failure during initialization.
+Error 3.903:  Program "pa" cannot be run by this version of the REXX interpreter.
+--- rc 253
+=== r7_reje
+--- stdout
+--- stderr
+       *-* Compiled method "NEW" with scope "Method".
+     1 *-* m = .Method~new('mn', .stream~new('reje.rxo')~arrayin)
+Error 3 running <D>/r7_reje.rex line 1:  Failure during initialization.
+Error 3.903:  Program "mn" cannot be run by this version of the REXX interpreter.
+--- rc 253
+=== bad rexx
+--- stdout
+--- stderr
+Error 3:  Failure during initialization.
+Error 3.905:  Encoded compiled program "<D>/bad.rxo" cannot be decoded.
+--- rc 253
+=== r1_bad
+--- stdout
+--- stderr
+     1 *-* call 'bad.rxo'
+Error 3 running <D>/r1_bad.rex line 1:  Failure during initialization.
+Error 3.905:  Encoded compiled program "<D>/bad.rxo" cannot be decoded.
+--- rc 253
+=== r2_bad
+--- stdout
+--- stderr
+     2 *-* ::requires 'bad.rxo'
+Error 3 running <D>/r2_bad.rex line 2:  Failure during initialization.
+Error 3.905:  Encoded compiled program "<D>/bad.rxo" cannot be decoded.
+--- rc 253
+=== r3_bad
+--- stdout
+--- stderr
+       *-* Compiled method "NEWFILE" with scope "Routine".
+     1 *-* r = .Routine~newFile('bad.rxo')
+Error 3 running <D>/r3_bad.rex line 1:  Failure during initialization.
+Error 3.905:  Encoded compiled program "bad.rxo" cannot be decoded.
+--- rc 253
+=== r4_bad
+--- stdout
+--- stderr
+       *-* Compiled method "NEWFILE" with scope "Method".
+     1 *-* m = .Method~newFile('bad.rxo')
+Error 3 running <D>/r4_bad.rex line 1:  Failure during initialization.
+Error 3.905:  Encoded compiled program "bad.rxo" cannot be decoded.
+--- rc 253
+=== r5_bad
+--- stdout
+--- stderr
+       *-* Compiled method "NEW" with scope "Routine".
+     1 *-* r = .Routine~new('rn', .stream~new('bad.rxo')~arrayin)
+Error 3 running <D>/r5_bad.rex line 1:  Failure during initialization.
+Error 3.905:  Encoded compiled program "rn" cannot be decoded.
+--- rc 253
+=== r6_bad
+--- stdout
+--- stderr
+       *-* Compiled method "NEW" with scope "Package".
+     1 *-* p = .Package~new('pa', .stream~new('bad.rxo')~arrayin)
+Error 3 running <D>/r6_bad.rex line 1:  Failure during initialization.
+Error 3.905:  Encoded compiled program "pa" cannot be decoded.
+--- rc 253
+=== r7_bad
+--- stdout
+--- stderr
+       *-* Compiled method "NEW" with scope "Method".
+     1 *-* m = .Method~new('mn', .stream~new('bad.rxo')~arrayin)
+Error 3 running <D>/r7_bad.rex line 1:  Failure during initialization.
+Error 3.905:  Encoded compiled program "mn" cannot be decoded.
+--- rc 253
