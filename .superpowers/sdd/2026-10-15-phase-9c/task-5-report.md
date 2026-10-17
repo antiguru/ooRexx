@@ -71,13 +71,12 @@ What the measurements settled (all in `oracle.txt` unless noted):
   `Interp::send_default_options`, which sends `DEFAULTOPTIONS` `('D', ...)` then `('C', count)`
   to `.PACKAGE` through `send_message`, so the crate's own `default_options` method does the
   checking.
-* `resolve_program` widens each byte to the `char` of the same value before calling the `str`
-  functions in `require.rs` and narrows the hit back, so a non-UTF-8 name is searched without
-  loss and `require.rs` is unchanged. `to_ascii_lowercase` leaves chars above 127 alone, which
-  is `strlower`'s rule.
+* `resolve_program` is `require::search` with no caller (fix round 2): every input is bytes and
+  every candidate is `stat`ed as bytes.
 * `src/bin/rexx.rs` keeps `rexx-run.rs`'s `main` (signal handlers, `ProgramInput::Stdin`, the
   transient flags, the sinks, `REXX_SWITCH_MODE` with its `rexx-sim:` lines and status 2, the
-  canonical reported path, the 8-bit truncation). Arguments stay bytes (`OsStringExt::into_vec`)
+  8-bit truncation). It reports the path the search found, not its canonical form (fix
+  round 2). Arguments stay bytes (`OsStringExt::into_vec`)
   and the program runs through `run_program_named`. When `-o` is given and the program is not
   found or not readable, an empty program runs first so that the options' failure is the one
   reported, as on the oracle.
@@ -93,9 +92,8 @@ What the measurements settled (all in `oracle.txt` unless noted):
   `namespace_not_found` taking bytes. `Raised::report` builds its ` running <name> line <n>` span
   as bytes, so the old `String::from_utf8_lossy(package)` there is gone. `resolve_search`,
   `resolve_requires`, `external_program` and `resolve_program_name` answer `Vec<u8>`, and the
-  requires load and the external call read the file through `OsStr::from_bytes`. The searching
-  program's own path reaches the `str` search through `require::widen`, now shared with
-  `launcher.rs`. The rest was what the compiler listed: `run/settings.rs`, `run.rs`,
+  requires load and the external call read the file through `OsStr::from_bytes`. The search
+  itself is `require::search` since fix round 2. The rest was what the compiler listed: `run/settings.rs`, `run.rs`,
   `dispatch.rs`, `condition.rs`, `dispatch/package.rs`, `dispatch/library/surface.rs`,
   `environment/identities.rs`, and test `ClauseSite` literals in `error.rs`, `builtin/word.rs`,
   `builtin/convert/tests.rs` and `builtin/string/tests.rs`. No conversion at a Rust-side display
@@ -231,10 +229,6 @@ saved with its libc-subtracted columns as `ab/head-minus-base.tsv`.
 * The largest head-vs-pin deltas are `churn` +0.1414%, `compound` +0.1039%, `decloop` +0.0620%,
   `sayloop` +0.0297% and `startup` +0.0174%. `base` carries the same deltas, so they come from
   the tree since the pin and not from `rexx`.
-* Between the two runs, `interpret` moved from -0.3446% to -2.1953% on `base` (libc-subtracted
-  -0.31% to -4.66%), the one program the byte path chain changed by more than noise. I read
-  that as the lossy `String` copies of the program path that the chain no longer makes, but I
-  did not profile it.
 
 ## Shared paths
 
@@ -279,6 +273,66 @@ saved with its libc-subtracted columns as `ab/head-minus-base.tsv`.
 3. The empty-program run for "`-o` given and the program missing" is a second interpreter
    start on a failure path only. It is the smallest way I found to keep the oracle's order, the
    options before the search, when the search lives in the binary.
-4. `resolve_program` returns the normalised path and the binary canonicalises it for the report,
-   as `rexx-run` did, so a program reached through a symlink would be reported by its target.
-   That is unmeasured on the oracle, as before.
+4. Closed in fix round 2: the binary canonicalised the reported path, and the oracle reports
+   the path that reached the program.
+
+## Fix round 2
+
+Review: `task-5-review.md`. Code commit `1acd33e22`.
+
+* **Critical 1.** `resolve_search` widened the searching program's path but kept the name, `cwd`
+  (`to_str`) and `REXX_PATH`/`PATH` (`shadow_var`) as UTF-8, and `stat`ed each candidate as UTF-8.
+  `require::search` now takes every input as bytes, widens each one, narrows and normalises each
+  candidate before its `stat`, and answers bytes. `launcher::resolve_program` and
+  `Interp::resolve_search` both call it, so there is one representation. `narrow` maps a char
+  above 255 to `?` rather than panicking. No such char can arise, because every candidate is
+  widened bytes plus ASCII. `shadow_var` had no other caller and is deleted. A side effect is
+  that a `::REQUIRES` or external-call name that is not UTF-8 is now searched too, where
+  `from_utf8(name).ok()?` used to answer not found. This is the "external call, REXX_PATH" half
+  of the review's fix, not one of the queue's listed sites.
+* **New cases, against the oracle:** `d<é>/req.rex` and `d<é>/ext.rex` (`::REQUIRES` and `CALL` of
+  a sibling), the same in `d'ff'x/`, `ext.rex` and `req.rex` from a cwd `d<€>`, and `call
+  farcall` through `REXX_PATH` set to `rp<é>` and to `rp'ff'x`. All agree on the three
+  descriptors. The 9994f5c1c binary gives 43.901 rc 213 on `d<é>/req.rex`, where this commit
+  gives the oracle's rc 0 (checked by hand from a scratch copy of the shape).
+* **Important 1.** `rexx.rs` reports `found` as the search returns it, and the comment is gone.
+  New cases `link.rex -> sub/ps.rex`, `link` (found through `.rex`) and `lsub/ps.rex` with
+  `lsub -> sub` report `DIR/link.rex` and `DIR/lsub/ps.rex`, as the oracle does.
+* **Minors.** The `interpret` explanation in Step 5 is deleted, and the reviewer's measurement
+  stands in for it: the move is codegen inside an unchanged `SymbolTable::intern`. `rexx.rs`'s
+  interleaving sentence is deleted. `Run.syscargs` is now two named fields, `syscargs` and
+  `syscargs_base`.
+
+Checks at `1acd33e22`, statuses unpiped in
+`docs/superpowers/records/2026-10-15-phase-9c/task-5/checks-statuses-1acd33e22.txt`:
+
+| Command | Status | Result |
+|---|---|---|
+| `cargo fmt --all --check` | 0 | |
+| `CARGO_INCREMENTAL=0 memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` | 0 | |
+| `... --test rexx_command` | 0 | 1 passed |
+| `... --test suite` | 0 | 52 passed |
+| `... --test refusal_sites`, `owners`, `closed_phases`, `phase_ten_reasons`, `representation_refusals` | 0 each | 5, 6, 8, 5, 3 passed |
+| `REXX_CORPUS_GATE=1 ... --test corpus` | 0 | 1065 of 1065 matching |
+| `... --lib` | 0 | 1141 passed (`dc16e526e` fixed the 27.901 test) |
+| the rexx_command group (command as in Step 4, table in `task-5/suite3/`) | 101 | oracle 30/30, crate 29/30, `TEST_PASSINGARGS7` only |
+
+`REXX_REFUSAL_SITES_REFRESH=1` left `corpus/refusal-sites.tsv` unchanged.
+
+`resolve_search` is reachable from the call resolver (`run/call.rs:302`, `external_program`) in a
+program that raises nothing, so it is not only an error path, and the A/B was re-run at
+`1acd33e22` (below).
+
+The A/B at `1acd33e22`, from `rust/`: the same `callgrind.sh -B 0.5` command as Step 5, with
+`-o .../cg-9c/ab-1acd33e22`, `base=.../rexx-run-9c-1acd33e22` and `head=.../rexx-9c-1acd33e22`.
+It exited 0 with no `OVER` and no `SPREAD`. The table now in `ab/` is this run, and the
+`9994f5c1c` run moves to `ab/9994f5c1c/`.
+
+* Largest head-vs-pin deltas: `churn` +0.1411%, `compound` +0.1039%, `decloop` +0.0620%.
+* `head - base` per program is in `ab/head-minus-base.tsv`. It is 22-24 thousand Ir per run (17-18
+  thousand with libc subtracted). Four rows differ on whole-process only, by moves in libc:
+  `alloc` -20976962, `hashnew` +74795, `interpret` -328568 and `pingmsg` -15598. Their
+  libc-subtracted values are 17167, 17120, 17426 and 18215.
+* This `head` against `9994f5c1c`'s `head`, per program: whole-process between -0.0116%
+  (`rexxcps`, -2.24M Ir) and +0.0001%. Libc-subtracted, every program moves by 42 Ir or fewer.
+  The search change costs nothing measurable.
