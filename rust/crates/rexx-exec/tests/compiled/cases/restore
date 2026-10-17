@@ -1,0 +1,374 @@
+# Each side's rexxc compiles the fixture's programs, and each side's rexx
+# then runs its own images. The recorded block is the oracle's, with the
+# side's directory as DIR.
+
+compile
+observe.rex
+observe.rxo
+-s
+----
+rc> 0
+
+compile
+observe.rex
+observee.rxo
+-s
+-e
+----
+rc> 0
+
+compile
+levels.rex
+levels.rxo
+-s
+----
+rc> 0
+
+compile
+debug.rex
+debug.rxo
+-s
+----
+rc> 0
+
+compile
+interpret.rex
+interpret.rxo
+-s
+----
+rc> 0
+
+compile
+lib.rex
+lib.rxo
+-s
+----
+rc> 0
+
+compile
+lib.rex
+libe.rxo
+-s
+-e
+----
+rc> 0
+
+compile
+uses.rex
+usese.rxo
+-s
+-e
+----
+rc> 0
+
+compile
+install.rex
+install.rxo
+-s
+----
+rc> 0
+
+compile
+frames.rex
+frames.rxo
+-s
+----
+rc> 0
+
+compile
+fail.rex
+fail.rxo
+-s
+----
+rc> 0
+
+compile
+fail.rex
+faile.rxo
+-s
+-e
+----
+rc> 0
+
+compile
+sub/p.rex
+sub/p.rxo
+-s
+----
+rc> 0
+
+# SOURCELINE, PARSE SOURCE, the package's and a routine's source, 40.34,
+# TRACE R and TRACE I, and an error's traceback.
+rexx
+observe.rxo
+----
+rc> 215
+out> sl() 0
+out> ps LINUX COMMAND DIR/observe.rxo
+out> pkgsrc 0
+out> ctxsrc 0
+out> rsrc 0
+out> in r
+out> cond 40.34
+out> msg SOURCELINE argument 1 ("1") must be less than or equal to the number of lines in the program (0).
+out> tb 1
+out> [     10 *-* Program in "DIR/observe.rxo" (no source available). ]
+out> 3
+out> raise
+err>     27 *-*   Program in "DIR/observe.rxo" (no source available).
+err>     17 *-* Program in "DIR/observe.rxo" (no source available).
+err> Error 41 running DIR/observe.rxo line 27:  Bad arithmetic conversion.
+err> Error 41.1:  Nonnumeric value ("a") used in arithmetic operation.
+
+rexx
+observee.rxo
+----
+rc> 215
+out> sl() 0
+out> ps LINUX COMMAND DIR/observee.rxo
+out> pkgsrc 0
+out> ctxsrc 0
+out> rsrc 0
+out> in r
+out> cond 40.34
+out> msg SOURCELINE argument 1 ("1") must be less than or equal to the number of lines in the program (0).
+out> tb 1
+out> [     10 *-* Program in "DIR/observee.rxo" (no source available). ]
+out> 3
+out> raise
+err>     27 *-*   Program in "DIR/observee.rxo" (no source available).
+err>     17 *-* Program in "DIR/observee.rxo" (no source available).
+err> Error 41 running DIR/observee.rxo line 27:  Bad arithmetic conversion.
+err> Error 41.1:  Nonnumeric value ("a") used in arithmetic operation.
+
+# A method's, a routine's and the program's traceback lines, and an
+# INTERPRET string, which shows its own text.
+rexx
+levels.rxo
+----
+rc> 215
+out> R
+out> 2
+out> sub
+out> |
+out> DIR/levels.rxo
+out> 0
+out> 0
+out> 0
+out> rt
+err>      3 *-* say 1+1
+err>        >>>   "2"
+err>     17 *-* Method BOOM with scope "C" in package "DIR/levels.rxo" (no source available).
+err>     20 *-* Routine RT in package "DIR/levels.rxo" (no source available).
+err>     25 *-* call rt
+err>     25 *-* Routine RR in package "DIR/levels.rxo" (no source available).
+err>      9 *-* Program in "DIR/levels.rxo" (no source available).
+err> Error 41 running DIR/levels.rxo line 17:  Bad arithmetic conversion.
+err> Error 41.1:  Nonnumeric value ("b") used in arithmetic operation.
+
+# Interactive trace pauses only inside an INTERPRET string.
+rexx stdin=typed.txt
+debug.rxo
+----
+rc> 0
+out> a
+out> b
+out> x
+out> c
+out> typed
+out> d
+out> ?R
+err>        +++ "LINUX COMMAND DIR/debug.rxo"
+err>      5 *-* say "c";
+err>        >>>   "c"
+err> +++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+err>      5 *-* say "d"
+err>        >>>   "d"
+
+rexx
+interpret.rxo
+----
+rc> 0
+out> 0
+out> 0
+out> lab
+out> back
+out> 3
+out>      5 *-* x = 1 + "z"
+out>      5 *-* Program in "DIR/interpret.rxo" (no source available).
+out> 5
+err>      2 *-* say sourceline();
+err>        >>>   "0"
+err>      2 *-* say .context~package~sourceSize;
+err>        >>>   "0"
+err>      2 *-* call lab;
+err>      2 *-* say "back"
+err>        >>>   "back"
+err>      3 *-* interpret "say 1+2"
+err>        >>>   "say 1+2"
+err>      3 *-* say 1+2
+err>        >>>   "3"
+err>      5 *-* x = 1 + "z"
+
+# The command line, an external CALL, ::REQUIRES, newFile, the array forms
+# of .Routine~new, .Method~new, .Package~new and loadPackage, and the string
+# form of .Package~new, which is source.
+rexx
+routes.rex
+----
+rc> 0
+out> lib main 0
+out> 1 call
+out> lib main 0
+out> libret
+out> 2 req
+out> pub 0
+out> 3 rnf
+out> lib main 0
+out> libret
+out> 0 0
+out> 4 mnf
+out> 0
+out> 5 rnew
+out> lib main 0
+out> libret
+out> rn
+out> 6 mnew
+out> 0 mn
+out> 7 pnew
+out> lib main 0
+out> 1 0 pa
+out> 8 lp
+out> lib main 0
+out> 1 0
+out> 9 pstr
+out> 0 1
+out> 10 fn
+out> pub 0
+out> 11 cls
+out> hi
+
+# A binary image given as an array of lines is source.
+rexx
+binary.rex
+----
+rc> 243
+err>      2 *-* /**/@
+err>        *-* Compiled method "NEW" with scope "Routine".
+err>      1 *-* r = .Routine~new('rb', .stream~new('lib.rxo')~arrayin)
+err> Error 13 running rb line 2:  Invalid character in program.
+err> Error 13.1:  Incorrect character in program "@" ('40'X).
+
+# A restored executable inherits no context.
+rexx
+context.rex
+----
+rc> 0
+out> routine src callerfn
+out> method src 1
+out> trap1 43.1 Could not find routine "CALLERFN".
+out> trap2 98.985 User additions are not allowed to the REXX language classes.
+
+rexx
+method.rex
+----
+rc> 0
+out> d 0
+out> trap2 43.1 Could not find routine "CALLERFN".
+out> [     1 *-* Method ZZ with scope "K" in package "d" (no source available).]
+out> [     6 *-* say 'method rxo' .k~new~zz]
+
+rexx
+install.rxo
+----
+rc> 158
+err>      2 *-* Program in "DIR/install.rxo" (no source available).
+err> Error 98 running DIR/install.rxo line 2:  Execution error.
+err> Error 98.909:  Class "ZZZ" not found.
+
+rexx
+frames.rxo
+----
+rc> 0
+out> [     1 *-* Program in "DIR/frames.rxo" (no source available).] 1
+out> [     4 *-*   Program in "DIR/frames.rxo" (no source available).]
+out> [     2 *-* Program in "DIR/frames.rxo" (no source available).]
+
+rexx
+external.rex
+----
+rc> 0
+out> in fail
+out>      2 *-* Routine fail.rxo in package "DIR/fail.rxo" (no source available).
+out>      2 *-* call 'fail.rxo'
+out> in fail
+out>      2 *-* Routine FAIL.RXO in package "DIR/fail.rxo" (no source available).
+out>      5 *-* x = fail.rxo()
+
+rexx
+requires.rex
+----
+rc> 215
+out> in fail
+err>      2 *-* Routine DIR/fail.rxo in package "DIR/fail.rxo" (no source available).
+err>      2 *-* ::requires 'fail.rxo'
+err> Error 41 running DIR/fail.rxo line 2:  Bad arithmetic conversion.
+err> Error 41.1:  Nonnumeric value ("q") used in arithmetic operation.
+
+rexx
+prologue.rex
+----
+rc> 159
+out> in fail
+out>      2 *-* Routine pk in package "pk" (no source available).
+out>        *-* Compiled method "NEW" with scope "Package".
+out>      2 *-* p = .Package~new('pk', .stream~new('faile.rxo')~arrayin)
+err>      4 *-* say .Routine~newFile('fail.rxo')~name
+err> Error 97 running DIR/prologue.rex line 4:  Object method not found.
+err> Error 97.1:  Object "a Routine" does not understand message "NAME".
+
+# Review Focus 5: names resolve from the image's own directory.
+rexx
+sub/p.rxo
+----
+rc> 0
+out> p helper
+out> in ext
+out> extret
+
+rexx
+relative.rex
+----
+rc> 0
+out> p helper
+out> in ext
+out> extret
+
+# Review Focus 2: source whose first line starts with the tag.
+rexx
+tagline.rex
+----
+rc> 243
+err>      1 *-* /**/@
+err> Error 13 running DIR/tagline.rex line 1:  Invalid character in program.
+err> Error 13.1:  Incorrect character in program "@" ('40'X).
+
+# rexxc translates an image it is given as source.
+rexxc
+lib.rxo
+copy.rxo
+-s
+----
+rc> 243
+err>      2 *-* /**/@
+err> Error 13 running DIR/lib.rxo line 2:  Invalid character in program.
+err> Error 13.1:  Incorrect character in program "@" ('40'X).
+
+rexxc
+libe.rxo
+-s
+----
+rc> 243
+err>      2 *-* /**/@
+err> Error 13 running DIR/libe.rxo line 2:  Invalid character in program.
+err> Error 13.1:  Incorrect character in program "@" ('40'X).
