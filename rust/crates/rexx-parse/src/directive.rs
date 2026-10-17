@@ -252,33 +252,45 @@ impl<'a> Dir<'a> {
         value.into_boxed_slice()
     }
 
-    /// The next real token when it is a symbol or a literal.
-    fn next_name(&mut self) -> Option<&'a Token> {
-        self.next_real()
-            .filter(|token| matches!(token.kind.tag(), Tag::Symbol | Tag::Literal))
+    /// The next real token when it is a symbol or a literal, or the token
+    /// found instead.
+    fn next_name(&mut self) -> Result<&'a Token, Option<&'a Token>> {
+        match self.next_real() {
+            Some(token) if matches!(token.kind.tag(), Tag::Symbol | Tag::Literal) => Ok(token),
+            found => Err(found),
+        }
     }
 
-    /// A required `isSymbolOrLiteral()` name, taken as written.
-    fn require_name(&mut self, msg: Msg<0>) -> Result<Box<[u8]>, ParseError> {
+    /// A required `isSymbolOrLiteral()` name, taken as written, `msg` naming
+    /// the token found instead.
+    fn require_name(&mut self, msg: Msg<1>) -> Result<Box<[u8]>, ParseError> {
         match self.next_name() {
-            Some(token) => Ok(self.value_of(token)),
-            None => Err(self.error(msg, [])),
+            Ok(token) => Ok(self.value_of(token)),
+            Err(found) => Err(self.found(msg, found)),
         }
     }
 
-    /// A required `isSymbol()` token, yielding its interned id.
-    fn require_symbol(&mut self, msg: Msg<0>) -> Result<SymbolId, ParseError> {
-        match self.next_real().map(|token| &token.kind) {
-            Some(TokenKind::Symbol { id, .. }) => Ok(*id),
-            _ => Err(self.error(msg, [])),
+    /// The next real token's interned id when it is a symbol, or the token
+    /// found instead.
+    fn next_symbol(&mut self) -> Result<SymbolId, Option<&'a Token>> {
+        match self.next_real() {
+            Some(Token {
+                kind: TokenKind::Symbol { id, .. },
+                ..
+            }) => Ok(*id),
+            found => Err(found),
         }
     }
 
-    /// A required `isLiteral()` token, yielding its decoded bytes.
-    fn require_literal(&mut self, msg: Msg<0>) -> Result<Box<[u8]>, ParseError> {
-        match self.next_real().map(|token| &token.kind) {
-            Some(TokenKind::Literal { value }) => Ok(value.clone()),
-            _ => Err(self.error(msg, [])),
+    /// A required `isLiteral()` token, yielding its decoded bytes, `msg`
+    /// naming the token found instead.
+    fn require_literal(&mut self, msg: Msg<1>) -> Result<Box<[u8]>, ParseError> {
+        match self.next_real() {
+            Some(Token {
+                kind: TokenKind::Literal { value },
+                ..
+            }) => Ok(value.clone()),
+            found => Err(self.found(msg, found)),
         }
     }
 
@@ -355,7 +367,12 @@ impl<'a> Dir<'a> {
 
     /// `classDirective` (`DirectiveParser.cpp:334`).
     fn class(&mut self) -> Result<DirectiveKind, ParseError> {
-        let name = self.require_name(E19_901)?;
+        // `Error_Symbol_or_string_class`, raised with no insert
+        // (`DirectiveParser.cpp:340`).
+        let name = match self.next_name() {
+            Ok(token) => self.value_of(token),
+            Err(_) => return Err(self.error(E19_901, [])),
+        };
         let mut class = ClassDirective {
             name,
             access: Access::Default,
@@ -395,7 +412,7 @@ impl<'a> Dir<'a> {
                     // and requires at least one: measured, `::class c inherit`
                     // is 19.908.
                     if self.at_end() {
-                        return Err(self.error(E19_908, []));
+                        return Err(self.found(E19_908, None));
                     }
                     while !self.at_end() {
                         class.inherit.push(self.class_reference(E19_908)?);
@@ -409,9 +426,9 @@ impl<'a> Dir<'a> {
     }
 
     /// `parseClassReference` (`DirectiveParser.cpp:287`).
-    fn class_reference(&mut self, msg: Msg<0>) -> Result<ClassRef, ParseError> {
+    fn class_reference(&mut self, msg: Msg<1>) -> Result<ClassRef, ParseError> {
         let Some(token) = self.next_real() else {
-            return Err(self.error(msg, []));
+            return Err(self.found(msg, None));
         };
         match &token.kind {
             // A literal is the whole reference: `parseClassReference` returns
@@ -435,13 +452,13 @@ impl<'a> Dir<'a> {
                 self.next_real();
                 // `Error_Symbol_expected_namespace_class`. Measured:
                 // `::class c subclass rexx:` is 20.921.
-                let qualified = self.require_symbol(E20_921)?;
+                let qualified = self.next_symbol().map_err(|_| self.error(E20_921, []))?;
                 Ok(ClassRef {
                     namespace: Some(first),
                     name: Box::from(self.ctx.symbols.name(qualified).as_bytes()),
                 })
             }
-            _ => Err(self.error(msg, [])),
+            _ => Err(self.found(msg, Some(token))),
         }
     }
 
@@ -512,7 +529,10 @@ impl<'a> Dir<'a> {
                 {
                     // `Error_Symbol_expected_delegate`. Measured:
                     // `::method m delegate "p"` is 20.926.
-                    method.delegate = Some(self.require_symbol(E20_926)?);
+                    method.delegate = Some(
+                        self.next_symbol()
+                            .map_err(|found| self.found(E20_926, found))?,
+                    );
                 }
                 _ => return Err(self.found(E25_902, Some(token))),
             }
@@ -619,7 +639,10 @@ impl<'a> Dir<'a> {
                         && attribute.delegate.is_none()
                         && !attribute.abstract_ =>
                 {
-                    attribute.delegate = Some(self.require_symbol(E20_926)?);
+                    attribute.delegate = Some(
+                        self.next_symbol()
+                            .map_err(|found| self.found(E20_926, found))?,
+                    );
                 }
                 _ => return Err(self.found(E25_925, Some(token))),
             }
@@ -731,7 +754,7 @@ impl<'a> Dir<'a> {
             }
             Some(_) => ConstantValue::Text(
                 self.signed_constant()
-                    .map_err(|_| self.error(E19_916, []))?,
+                    .map_err(|refused| self.error(E19_916, [refused.token]))?,
             ),
         };
         // `Error_Invalid_data_constant_dir`. Measured: `::constant c 5 6` is
@@ -761,16 +784,22 @@ impl<'a> Dir<'a> {
     }
 
     /// The signed-number value form that `::CONSTANT` and `::ANNOTATE` share
-    /// (`DirectiveParser.cpp:1886`-`1907` and `2230`-`2251`). A refusal
-    /// carries what `::ANNOTATE`'s 19.923 inserts: the token where a sign was
-    /// wanted, the sign where a constant symbol was wanted, and the signed
-    /// value where a number was wanted.
-    fn signed_constant(&mut self) -> Result<Box<[u8]>, Vec<u8>> {
+    /// (`DirectiveParser.cpp:1886`-`1907` and `2230`-`2251`).
+    fn signed_constant(&mut self) -> Result<Box<[u8]>, NotSigned> {
         let token = self.next_real();
         let sign: &[u8] = match token.map(|token| &token.kind) {
             Some(TokenKind::Operator(Operator::Plus)) => b"+",
             Some(TokenKind::Operator(Operator::Subtract)) => b"-",
-            _ => return Err(display_value(self.ctx, token)),
+            _ => {
+                return Err(NotSigned {
+                    token: display_value(self.ctx, token),
+                    value: None,
+                });
+            }
+        };
+        let refused = |value| NotSigned {
+            token: sign.to_vec(),
+            value,
         };
         let second = match self.next_real() {
             Some(second)
@@ -784,12 +813,12 @@ impl<'a> Dir<'a> {
             {
                 second
             }
-            _ => return Err(sign.to_vec()),
+            _ => return Err(refused(None)),
         };
         let mut value = sign.to_vec();
         value.extend_from_slice(&self.value_of(second));
         if !is_number(&value) {
-            return Err(value);
+            return Err(refused(Some(value)));
         }
         Ok(value.into_boxed_slice())
     }
@@ -801,7 +830,7 @@ impl<'a> Dir<'a> {
         // `Error_Symbol_expected_annotation_type`, and a literal is not enough:
         // measured, `::annotate "package"` is 20.924.
         let Some(token) = self.next_real() else {
-            return Err(self.error(E20_924, []));
+            return Err(self.found(E20_924, None));
         };
         // `Error_Symbol_or_string_directive_option`, one error for every named
         // target, naming the directive and the target. Measured:
@@ -819,7 +848,7 @@ impl<'a> Dir<'a> {
             // not one of the six. Measured: `::annotate junk k 1` is 25.928.
             _ => {
                 if token.kind.tag() != Tag::Symbol {
-                    return Err(self.error(E20_924, []));
+                    return Err(self.found(E20_924, Some(token)));
                 }
                 return Err(self.found(E25_928, Some(token)));
             }
@@ -837,8 +866,8 @@ impl<'a> Dir<'a> {
     /// The upcased name an `::ANNOTATE` of the `target` kind requires.
     fn annotated_name(&mut self, target: &'static [u8]) -> Result<Box<[u8]>, ParseError> {
         match self.next_name() {
-            Some(token) => Ok(self.upper_value_of(token)),
-            None => Err(self.error(E19_925, [b"::ANNOTATE".to_vec(), target.to_vec()])),
+            Ok(token) => Ok(self.upper_value_of(token)),
+            Err(_) => Err(self.error(E19_925, [b"::ANNOTATE".to_vec(), target.to_vec()])),
         }
     }
 
@@ -846,13 +875,9 @@ impl<'a> Dir<'a> {
     fn annotation(&mut self) -> Result<Annotation, ParseError> {
         // `Error_Symbol_expected_annotation_attribute`. Measured:
         // `::annotate package "a" 1` is 20.919.
-        let name = match self.next_real() {
-            Some(Token {
-                kind: TokenKind::Symbol { id, .. },
-                ..
-            }) => *id,
-            token => return Err(self.found(E20_919, token)),
-        };
+        let name = self
+            .next_symbol()
+            .map_err(|found| self.found(E20_919, found))?;
         let value = match self.peek_real() {
             // `Error_Symbol_or_string_package_attribute_missing`, a DIFFERENT
             // number from the bad-value one. Measured: `::annotate package a`
@@ -865,7 +890,7 @@ impl<'a> Dir<'a> {
             // No parenthesised form here, unlike `::CONSTANT`.
             Some(_) => self
                 .signed_constant()
-                .map_err(|insert| self.error(E19_923, [insert]))?,
+                .map_err(|refused| self.error(E19_923, [refused.value.unwrap_or(refused.token)]))?,
         };
         Ok(Annotation { name, value })
     }
@@ -898,12 +923,10 @@ impl<'a> Dir<'a> {
                     // against `subKeywords[]`: measured, `::options form value`
                     // is 25.11 where `VALUE` is a row of that table, and
                     // `::options form "scientific"` is 20.925.
-                    let Some(token) = self.next_real() else {
-                        return Err(self.error(E20_925, []));
+                    let token = match self.next_real() {
+                        Some(token) if token.kind.tag() == Tag::Symbol => token,
+                        found => return Err(self.found(E20_925, found)),
                     };
-                    if token.kind.tag() != Tag::Symbol {
-                        return Err(self.error(E20_925, []));
-                    }
                     let form = match self.sub_keyword(token) {
                         Some(SUBKEY_SCIENTIFIC) => OptionsForm::Scientific,
                         Some(SUBKEY_ENGINEERING) => OptionsForm::Engineering,
@@ -963,12 +986,10 @@ impl<'a> Dir<'a> {
                     // is rc 0 even though NOINHERIT is not a sub-directive at
                     // all, and `::options numeric syntax` is 25.935 even
                     // though SYNTAX is.
-                    let Some(token) = self.next_real() else {
-                        return Err(self.error(E20_935, []));
+                    let token = match self.next_real() {
+                        Some(token) if token.kind.tag() == Tag::Symbol => token,
+                        found => return Err(self.found(E20_935, found)),
                     };
-                    if token.kind.tag() != Tag::Symbol {
-                        return Err(self.error(E20_935, []));
-                    }
                     let inherit = match self.sub_keyword(token) {
                         Some(SUBKEY_INHERIT) => true,
                         Some(SUBKEY_NOINHERIT) => false,
@@ -1026,7 +1047,7 @@ impl<'a> Dir<'a> {
                 Some(SUBDIR_NAMESPACE) if !taken => {
                     // `Error_Symbol_expected_namespace`. Measured:
                     // `::requires "x" namespace "ns"` is 20.920.
-                    let namespace = self.require_symbol(E20_920)?;
+                    let namespace = self.next_symbol().map_err(|_| self.error(E20_920, []))?;
                     // `Error_Translation_reserved_namespace`. The symbol is
                     // already upcased, so this catches every spelling of REXX.
                     if self.ctx.symbols.name(namespace) == "REXX" {
@@ -1137,6 +1158,15 @@ impl<'a> Dir<'a> {
         }
         Ok(DirectiveKind::Routine(Box::new(routine)))
     }
+}
+
+/// What `signed_constant` names when it refuses: `token`, the token the
+/// oracle's own `token` points at there (the one found where a sign was
+/// wanted, otherwise the sign), and `value`, the signed value when only the
+/// number test failed.
+struct NotSigned {
+    token: Vec<u8>,
+    value: Option<Vec<u8>>,
 }
 
 /// The keyword a condition option is spelled with, as 20.929 and 25.927 name it.

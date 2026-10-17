@@ -1,0 +1,5 @@
+::options digits -1 -> 19.917 items 0 
+::method -> 19.902 items 0 
+::class c inherit -> 19.908 items 0 
+::requires -> 19.904 items 0 
+::class c junk -> 25.901 items 1  [JUNK]

@@ -1,0 +1,78 @@
+::method -> 19.902 items 1 []
+    String or symbol expected after ::METHOD keyword.
+::routine -> 19.903 items 1 []
+    String or symbol expected after ::ROUTINE keyword.
+::requires -> 19.904 items 1 []
+    String or symbol expected after ::REQUIRES keyword.
+::method m external nostring -> 19.905 items 1 []
+    String expected after EXTERNAL keyword.
+::attribute a external nostring -> 19.905 items 1 []
+    String expected after EXTERNAL keyword.
+::routine r external nostring -> 19.905 items 1 []
+    String expected after EXTERNAL keyword.
+::class c metaclass -> 19.906 items 1 []
+    String or symbol expected after METACLASS keyword.
+::class c subclass + -> 19.907 items 1 []
+    String or symbol expected after SUBCLASS keyword.
+::class c inherit -> 19.908 items 1 []
+    String or symbol expected after INHERIT keyword.
+::class c inherit a + -> 19.908 items 1 []
+    String or symbol expected after INHERIT keyword.
+::class c mixinclass -> 19.913 items 1 []
+    String or symbol expected after MIXINCLASS keyword.
+::attribute -> 19.914 items 1 []
+    String or symbol expected as ::ATTRIBUTE directive name.
+::constant -> 19.915 items 1 []
+    String or symbol expected as ::CONSTANT directive name.
+::constant c * -> 19.916 items 1 []
+    String or symbol expected as ::CONSTANT value.
+::constant c -abc -> 19.916 items 1 []
+    String or symbol expected as ::CONSTANT value.
+::constant c -5x -> 19.916 items 1 []
+    String or symbol expected as ::CONSTANT value.
+::options digits -1 -> 19.917 items 1 []
+    String or symbol expected as DIGITS value.
+::options fuzz -1 -> 19.918 items 1 []
+    String or symbol expected as FUZZ value.
+::options trace + -> 19.919 items 1 []
+    String or symbol expected as TRACE value.
+::resource -> 19.920 items 1 []
+    String or symbol expected as ::RESOURCE directive name.
+::resource r end -> 19.921 items 1 []
+    String or symbol expected after ::RESOURCE END keyword.
+::annotate -> 20.924 items 1 []
+    Symbol expected for the ::ANNOTATE type.
+::annotate "package" -> 20.924 items 1 []
+    Symbol expected for the ::ANNOTATE type.
+::options form -> 20.925 items 1 []
+    Symbol expected after the FORM keyword.
+::options form "x" -> 20.925 items 1 []
+    Symbol expected after the FORM keyword.
+::method m delegate "p" -> 20.926 items 1 []
+    Symbol expected after the DELEGATE keyword.
+::attribute a delegate -> 20.926 items 1 []
+    Symbol expected after the DELEGATE keyword.
+::options numeric -> 20.935 items 1 []
+    Symbol expected after the NUMERIC subdirective keyword.
+::options numeric 5 -> 25.935 items 1 [5]
+    Subdirective NUMERIC must be followed by one of the keywords INHERIT or NOINHERIT; found "5".
+::annotate package a * -> 19.923 items 1 [*]
+    Symbol or string expected as ::ANNOTATE attribute value; found "*".
+::annotate package a -abc -> 19.923 items 1 [-]
+    Symbol or string expected as ::ANNOTATE attribute value; found "-".
+::annotate package a -5x -> 19.923 items 1 [-5X]
+    Symbol or string expected as ::ANNOTATE attribute value; found "-5X".
+::class -> 19.901 items 0
+    String or symbol expected after ::CLASS keyword.
+::class c subclass rexx: -> 20.921 items 0
+    Symbol expected as a class name of qualified class name.
+::requires x namespace "n" -> 20.920 items 0
+    Symbol expected after NAMESPACE keyword.
+::junk -> 99.916 items 0
+    Unrecognized directive instruction.
+::annotate package a -> 19.924 items 0
+    Symbol or string expected as ::ANNOTATE attribute value.
+::requires x namespace rexx -> 99.944 items 0
+    The REXX name is reserved for the language-provided namespace.
+::class c junk -> 25.901 items 1 [JUNK]
+    Unknown keyword on ::CLASS directive; found "JUNK".

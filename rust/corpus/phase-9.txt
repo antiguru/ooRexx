@@ -144,3 +144,7 @@ lang/package_external_merge_class_held.rex
 
 # 9c Task 3 fix round 1: inserts the oracle passes beyond its message text.
 lang/parse_error_unused_insert.rex
+
+# 9c Task 4: the token the oracle passes to a directive error that does not
+# show it, reached through .Package~new.
+lang/parse_error_directive_insert.rex

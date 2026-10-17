@@ -1,0 +1,112 @@
+1c1
+< ::method -> 19.902 items 1 [;]
+---
+> ::method -> 19.902 items 1 []
+3c3
+< ::routine -> 19.903 items 1 [;]
+---
+> ::routine -> 19.903 items 1 []
+5c5
+< ::requires -> 19.904 items 1 [;]
+---
+> ::requires -> 19.904 items 1 []
+7c7
+< ::method m external nostring -> 19.905 items 1 [NOSTRING]
+---
+> ::method m external nostring -> 19.905 items 1 []
+9c9
+< ::attribute a external nostring -> 19.905 items 1 [NOSTRING]
+---
+> ::attribute a external nostring -> 19.905 items 1 []
+11c11
+< ::routine r external nostring -> 19.905 items 1 [NOSTRING]
+---
+> ::routine r external nostring -> 19.905 items 1 []
+13c13
+< ::class c metaclass -> 19.906 items 1 [;]
+---
+> ::class c metaclass -> 19.906 items 1 []
+15c15
+< ::class c subclass + -> 19.907 items 1 [+]
+---
+> ::class c subclass + -> 19.907 items 1 []
+17c17
+< ::class c inherit -> 19.908 items 1 [;]
+---
+> ::class c inherit -> 19.908 items 1 []
+19c19
+< ::class c inherit a + -> 19.908 items 1 [+]
+---
+> ::class c inherit a + -> 19.908 items 1 []
+21c21
+< ::class c mixinclass -> 19.913 items 1 [;]
+---
+> ::class c mixinclass -> 19.913 items 1 []
+23c23
+< ::attribute -> 19.914 items 1 [;]
+---
+> ::attribute -> 19.914 items 1 []
+25c25
+< ::constant -> 19.915 items 1 [;]
+---
+> ::constant -> 19.915 items 1 []
+27c27
+< ::constant c * -> 19.916 items 1 [*]
+---
+> ::constant c * -> 19.916 items 1 []
+29c29
+< ::constant c -abc -> 19.916 items 1 [-]
+---
+> ::constant c -abc -> 19.916 items 1 []
+31c31
+< ::constant c -5x -> 19.916 items 1 [-]
+---
+> ::constant c -5x -> 19.916 items 1 []
+33c33
+< ::options digits -1 -> 19.917 items 1 [-]
+---
+> ::options digits -1 -> 19.917 items 1 []
+35c35
+< ::options fuzz -1 -> 19.918 items 1 [-]
+---
+> ::options fuzz -1 -> 19.918 items 1 []
+37c37
+< ::options trace + -> 19.919 items 1 [+]
+---
+> ::options trace + -> 19.919 items 1 []
+39c39
+< ::resource -> 19.920 items 1 [;]
+---
+> ::resource -> 19.920 items 1 []
+41c41
+< ::resource r end -> 19.921 items 1 [;]
+---
+> ::resource r end -> 19.921 items 1 []
+43c43
+< ::annotate -> 20.924 items 1 [;]
+---
+> ::annotate -> 20.924 items 1 []
+45c45
+< ::annotate "package" -> 20.924 items 1 [package]
+---
+> ::annotate "package" -> 20.924 items 1 []
+47c47
+< ::options form -> 20.925 items 1 [;]
+---
+> ::options form -> 20.925 items 1 []
+49c49
+< ::options form "x" -> 20.925 items 1 [x]
+---
+> ::options form "x" -> 20.925 items 1 []
+51c51
+< ::method m delegate "p" -> 20.926 items 1 [p]
+---
+> ::method m delegate "p" -> 20.926 items 1 []
+53c53
+< ::attribute a delegate -> 20.926 items 1 [;]
+---
+> ::attribute a delegate -> 20.926 items 1 []
+55c55
+< ::options numeric -> 20.935 items 1 [;]
+---
+> ::options numeric -> 20.935 items 1 []
