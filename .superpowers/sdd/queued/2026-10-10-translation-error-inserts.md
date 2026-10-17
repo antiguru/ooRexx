@@ -1,3 +1,5 @@
+**CLOSED 2026-10-17 by Phase 9c (Tasks 3 and 4).** `trace ?s` and `e103` answer the oracle's inserts, identical stdout, stderr and rc (`.superpowers/sdd/2026-10-15-phase-9c/task-4-report.md`, "Queued items closed").
+
 # Translation errors print their message inserts unsubstituted
 
 Found by the Phase 6.1 Task 6 review (M5, `l1`, `cs`). Queued by Phase 6.1 Task 12 fix round 1 (2026-10-10). Same rc and code; the message line differs. Ruling R3 keeps parse-error inserts out of 6.1 (roadmap row 3, the 2026-07-28 scope decision), so this is the work R3 defers: "a later reversal goes through a raising API that cannot be called without the inserts its message needs". A run-time error with inserts (`trace value x`, `x = 's'`) substitutes them on both engines (Task 12 review).

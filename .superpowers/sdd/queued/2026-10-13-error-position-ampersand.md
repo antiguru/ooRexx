@@ -1,3 +1,5 @@
+**INSERTS CLOSED 2026-10-17 by Phase 9c (Tasks 2 and 4):** 35.1 at `"~"` and 47.2 `"S1"` match the oracle (`.superpowers/sdd/2026-10-15-phase-9c/task-4-report.md`). The `instanceMethod` item stays open.
+
 # Error message position prints "&1" where the oracle prints "~"
 
 Source: Phase 9b Task 7 report (.superpowers/sdd/2026-10-13-phase-9b/task-7-report.md), pre-existing.

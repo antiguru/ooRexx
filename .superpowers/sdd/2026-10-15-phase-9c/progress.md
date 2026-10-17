@@ -110,3 +110,4 @@ Final fixes: 4a27fae3b, 320eff355, 48fb59b51 (cherry-picked from fix/9c-final d3
 Task 10: close re-run at 48fb59b51; scoped re-review of final fixes (sonnet) concurrently.
 Final re-review (sonnet): approved, none open. Observation: override_package_settings reuses !is_traceable() as the restored test; fine today.
 Task 10: close at 48fb59b51: workspace exit 101, one failure environment_seam directory_lookup_passes_through_exactly_one_chokepoint (Task 5's remove_directory_entry added a third env_seam::admit). Controller fix: set/remove share writable_directory, one admit per path; seam + rexx_command green. Suite 39/402 red (9b1: 46). Close re-run.
+Task 10: close at 25197002a: fmt 0, clippy 0, build 0, workspace 0 (3381 passed, 0 failed), suite 38/402 red (9b1 46); join vs 9b1: 50 rows failed->passed, none worse. Callgrind max +0.165% (churn). Gate record phase-9c-gate.md. Task 10: complete. Phase 9c CLOSED.
