@@ -344,8 +344,10 @@ those is a gate-table row rather than a corpus defect.
 ### `errors/` — Phase 3, the parse-error gate
 
 Not a `rexx-diff` corpus either.
-`parse-errors.tsv` holds one row per program with the answer `build/bin/rexxc` gave for it: the major number, sub-number and reported line when it refused, and `ok` when it translated.
-`rexx-parse`'s `tests/errors.rs` reads it and checks both directions, so a parser that rejected nothing and one that rejected everything both fail.
+`parse-errors.tsv` holds one row per program with the answer `build/bin/rexxc` gave for it: the major number, sub-number, reported line and secondary message when it refused, and `ok` when it translated.
+The `message` column is the oracle's secondary line after `Error N.M:  `, escaped as `program` is, and `-` where the oracle printed none.
+`rexx-parse`'s `tests/errors.rs` reads it and checks both directions, so a parser that rejected nothing and one that rejected everything both fail, and it checks each secondary message.
+`rexx-exec`'s `tests/rexxc.rs` reads it too and checks this crate's `rexxc` against each row.
 
 The `class` field is the one worth knowing about.
 It says whether the oracle refused to *translate* the program or rejected it later, while installing the package, and that is recorded per row rather than derived from the error number.

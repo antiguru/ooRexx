@@ -11,7 +11,7 @@ use rexx_parse::{
 fn err<T>(result: Result<T, ParseError>) -> (u16, u16) {
     match result {
         Ok(_) => panic!("expected an error, but the input parsed"),
-        Err(e) => (e.code, e.sub),
+        Err(e) => (e.code(), e.sub()),
     }
 }
 

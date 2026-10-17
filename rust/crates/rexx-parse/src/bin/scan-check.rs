@@ -78,8 +78,8 @@ fn main() {
             }
             Err(error) => println!(
                 "{path}: E{}.{} line {}",
-                error.code,
-                error.sub,
+                error.code(),
+                error.sub(),
                 source.line_of(error.byte)
             ),
         }

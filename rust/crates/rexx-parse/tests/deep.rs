@@ -63,7 +63,7 @@ fn a_paren_nesting_past_the_native_cliff_raises_11_1_instead_of_aborting() {
         .expect("spawns");
     let err = handle.join().expect("the thread itself must not panic");
     let err = err.expect_err("100,000 parens is past MAX_EXPR_DEPTH");
-    assert_eq!((err.code, err.sub), (11, 1));
+    assert_eq!((err.code(), err.sub()), (11, 1));
 }
 
 /// Documents, rather than fixes, the gap `MAX_EXPR_DEPTH`'s own doc comment
@@ -120,7 +120,7 @@ fn the_depth_the_oracle_still_answers_also_parses_and_drops() {
 fn a_call_nesting_past_the_native_cliff_raises_11_1_instead_of_aborting() {
     let err = parse_on_a_sized_thread(deep_call_program(100_000))
         .expect_err("100,000 nested calls is past MAX_EXPR_DEPTH");
-    assert_eq!((err.code, err.sub), (11, 1));
+    assert_eq!((err.code(), err.sub()), (11, 1));
 }
 
 /// Parentheses and calls share **one** depth budget, and this is the test that
@@ -138,5 +138,5 @@ fn parens_and_calls_share_one_budget_rather_than_one_each() {
 
     let err = parse_on_a_sized_thread(src.into_bytes())
         .expect_err("half the budget in each construct must still exceed the shared one");
-    assert_eq!((err.code, err.sub), (11, 1));
+    assert_eq!((err.code(), err.sub()), (11, 1));
 }

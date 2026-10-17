@@ -27,7 +27,9 @@ pub use symbols::{SymbolId, SymbolTable};
 /// A parse-time error, identified the way the interpreter identifies it: a
 /// major number and a sub-number, as in `13.1` or `99.943`. One word, so the
 /// parser's `Result`s stay narrow: the fields live behind the box and read
-/// through `Deref`.
+/// through `Deref` and [`ParseError::code`] and [`ParseError::sub`]. Nothing
+/// outside this module writes them, so the pair stays the one
+/// [`ParseError::raise`] was given, with the inserts its message needs.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ParseError(Box<ParseErrorFields>);
 
@@ -36,10 +38,10 @@ pub struct ParseError(Box<ParseErrorFields>);
 pub struct ParseErrorFields {
     /// The major error number, e.g. 13 for `Error 13: Invalid character in
     /// program`.
-    pub code: u16,
+    pub(crate) code: u16,
     /// The sub-number, e.g. 1 for `Error 13.1`. Zero means the major error
     /// with no sub-code.
-    pub sub: u16,
+    pub(crate) sub: u16,
     /// Where the source the traceback line echoes ends; see [`ParseError::clause`].
     /// Zero until the scanner or `parse` resolves it. An echo ending past
     /// `u32::MAX` is cut there, and one starting past it is empty.
@@ -60,12 +62,6 @@ impl std::ops::Deref for ParseError {
     }
 }
 
-impl std::ops::DerefMut for ParseError {
-    fn deref_mut(&mut self) -> &mut ParseErrorFields {
-        &mut self.0
-    }
-}
-
 impl ParseError {
     /// The error `msg` reports against the clause starting at `byte`, with
     /// `inserts` for its `&1`, `&2`, ... in order.
@@ -80,6 +76,18 @@ impl ParseError {
             byte,
             inserts: Vec::from(inserts),
         }))
+    }
+
+    /// The major error number, e.g. 13 for `Error 13: Invalid character in
+    /// program`.
+    pub fn code(&self) -> u16 {
+        self.0.code
+    }
+
+    /// The sub-number, e.g. 1 for `Error 13.1`. Zero means the major error
+    /// with no sub-code.
+    pub fn sub(&self) -> u16 {
+        self.0.sub
     }
 
     /// The values the secondary message substitutes, in insert order.
@@ -98,8 +106,8 @@ impl ParseError {
     /// echoes one.
     pub(crate) fn echoing(mut self, clause: Range<usize>) -> Self {
         if self.end == 0 {
-            self.byte = clause.start;
-            self.end = u32::try_from(clause.end).unwrap_or(u32::MAX);
+            self.0.byte = clause.start;
+            self.0.end = u32::try_from(clause.end).unwrap_or(u32::MAX);
         }
         self
     }

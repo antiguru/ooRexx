@@ -59,7 +59,7 @@ fn symbols(toks: &[Token]) -> Vec<(SymbolId, SymbolClass)> {
 fn scan_err(text: &str) -> (u16, u16, usize) {
     let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
     let error = scan(&source).expect_err("does not scan");
-    (error.code, error.sub, source.line_of(error.byte))
+    (error.code(), error.sub(), source.line_of(error.byte))
 }
 
 #[test]
@@ -570,7 +570,7 @@ fn scan_interpret(text: &str) -> Result<Vec<Token>, (u16, u16)> {
     assert_eq!(source.line_count(), 1, "interpret text is one line");
     match scan(&source) {
         Ok(scanned) => Ok(scanned.tokens),
-        Err(error) => Err((error.code, error.sub)),
+        Err(error) => Err((error.code(), error.sub())),
     }
 }
 

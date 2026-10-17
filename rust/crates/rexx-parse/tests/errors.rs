@@ -267,7 +267,7 @@ fn every_program_the_oracle_refuses_to_translate_this_parser_rejects_the_same_wa
             continue;
         }
         let expected = case.error.expect("a translation error has a number");
-        let ours = parse(&case.program).err().map(|e| (e.code, e.sub));
+        let ours = parse(&case.program).err().map(|e| (e.code(), e.sub()));
         if label_colon_deviation(ours, expected) || do_subkey_deviation(ours, expected) {
             continue;
         }
@@ -309,7 +309,7 @@ fn the_reported_line_matches_the_oracles_main_message() {
         let Err(error) = parse(&case.program) else {
             continue;
         };
-        if (error.code, error.sub) != expected {
+        if (error.code(), error.sub()) != expected {
             continue;
         }
         let source = ProgramSource::new(case.program.clone(), SourceKind::Program);
@@ -433,8 +433,10 @@ fn message_mismatches() -> std::collections::BTreeMap<String, String> {
         let pair = case.error.expect("a translation row has a number");
         let got = match parse(&case.program) {
             Ok(()) => b"<accepted>".to_vec(),
-            Err(error) if do_subkey_deviation(Some((error.code, error.sub)), pair) => continue,
-            Err(error) if label_colon_deviation(Some((error.code, error.sub)), pair) => continue,
+            Err(error) if do_subkey_deviation(Some((error.code(), error.sub())), pair) => continue,
+            Err(error) if label_colon_deviation(Some((error.code(), error.sub())), pair) => {
+                continue;
+            }
             Err(error) => error.message(),
         };
         if got != want {
@@ -481,7 +483,7 @@ fn a_then_label_is_a_missing_then_here_and_a_bad_expression_there() {
     // clause the oracle finds an invalid expression in does not exist by the time
     // the grammar runs. Both reject, which is the part that matters.
     let error = parse(b"if 1 = 1\nthen: nop").expect_err("both reject it");
-    assert_eq!((error.code, error.sub), (18, 1));
+    assert_eq!((error.code(), error.sub()), (18, 1));
 }
 
 #[test]
@@ -489,7 +491,7 @@ fn a_when_label_is_a_missing_then_here_and_a_bad_expression_there() {
     // The WHEN spelling, which the oracle also answers 35.1 for, measured the
     // same way against `select` / `when 1 = 1` / `then: nop` / `end`.
     let error = parse(b"select\nwhen 1 = 1\nthen: nop\nend").expect_err("both reject it");
-    assert_eq!((error.code, error.sub), (18, 2));
+    assert_eq!((error.code(), error.sub()), (18, 2));
 }
 
 #[test]
@@ -520,7 +522,7 @@ fn the_label_colon_rule_covers_exactly_the_two_corpus_rows_it_was_written_for() 
         let Err(error) = parse(&case.program) else {
             continue;
         };
-        if !label_colon_deviation(Some((error.code, error.sub)), oracle) {
+        if !label_colon_deviation(Some((error.code(), error.sub())), oracle) {
             continue;
         }
         // Ours names the IF or WHEN, the oracle the leftover colon.
@@ -585,7 +587,7 @@ fn the_do_subkey_rows_differ_from_the_oracle_as_deviation_38_says() {
         let Err(error) = parse(&case.program) else {
             continue;
         };
-        if !do_subkey_deviation(Some((error.code, error.sub)), oracle) {
+        if !do_subkey_deviation(Some((error.code(), error.sub())), oracle) {
             continue;
         }
         let want = if case.source.contains(" by ") {
@@ -628,7 +630,7 @@ fn the_eager_scan_deviation_still_deviates() {
     let source = ProgramSource::new(program.to_vec(), SourceKind::Program);
     let error = parse_program(program.to_vec()).expect_err("both reject it");
     assert_eq!(
-        (error.code, error.sub),
+        (error.code(), error.sub()),
         (6, 2),
         "ours is the unterminated-literal scan error"
     );
@@ -645,11 +647,11 @@ fn the_eager_scan_deviation_needs_both_errors_to_appear() {
     // masking and not either error. `say )` on its own is the oracle's own 37.2
     // on line 1, and the unterminated literal on its own is 6.2 on its own line.
     let error = parse_program(b"say )\n".to_vec()).expect_err("a stray paren is an error");
-    assert_eq!((error.code, error.sub), (37, 2));
+    assert_eq!((error.code(), error.sub()), (37, 2));
     let program = b"nop\n\n'unclosed\n";
     let source = ProgramSource::new(program.to_vec(), SourceKind::Program);
     let error = parse_program(program.to_vec()).expect_err("an open literal is an error");
-    assert_eq!((error.code, error.sub), (6, 2));
+    assert_eq!((error.code(), error.sub()), (6, 2));
     assert_eq!(error.line(&source), 3);
 }
 
@@ -667,7 +669,7 @@ fn no_corpus_row_holds_the_eager_scan_shape() {
             continue;
         };
         let scanner_class =
-            scanner_classes.contains(&error.code) || (error.code, error.sub) == (99, 943);
+            scanner_classes.contains(&error.code()) || (error.code(), error.sub()) == (99, 943);
         if !scanner_class {
             continue;
         }
@@ -704,7 +706,7 @@ fn the_interpret_only_errors_match_the_condition_objects_own_code() {
     for (fragment, expected) in INTERPRET_ONLY {
         match parse_interpret(fragment.as_bytes().to_vec()) {
             Ok(_) => wrong.push(format!("{fragment:?} parsed, expected {expected:?}")),
-            Err(e) if (e.code, e.sub) != *expected => {
+            Err(e) if (e.code(), e.sub()) != *expected => {
                 wrong.push(format!("{fragment:?}: expected {expected:?}, got {e}"));
             }
             Err(_) => {}
@@ -936,9 +938,9 @@ fn every_message_the_parser_names_is_raised_by_a_corpus_row_or_recorded_as_unrea
             continue;
         }
         if let Err(error) = parse(&case.program)
-            && Some((error.code, error.sub)) == case.error
+            && Some((error.code(), error.sub())) == case.error
         {
-            raised.insert((error.code, error.sub));
+            raised.insert((error.code(), error.sub()));
         }
     }
     let mut missing = Vec::new();
@@ -1015,7 +1017,7 @@ fn every_unreached_reason_still_holds() {
                 for probe in *probes {
                     if let Err(error) = parse(probe) {
                         assert_ne!(
-                            (error.code, error.sub),
+                            (error.code(), error.sub()),
                             *pair,
                             "{pair:?} is reached by {:?}",
                             String::from_utf8_lossy(probe)

@@ -1996,7 +1996,7 @@ impl From<FormatError> for Raised {
 /// ```
 impl From<&ParseError> for Raised {
     fn from(error: &ParseError) -> Raised {
-        Raised::syntax(error.code, error.sub, error.inserts().to_vec())
+        Raised::syntax(error.code(), error.sub(), error.inserts().to_vec())
     }
 }
 

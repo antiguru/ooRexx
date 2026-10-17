@@ -21,7 +21,7 @@ const PROGRAM: &str = "a = .w~new~start('WAIT')\nb = .w~new~start('WAIT')\n\
 
 /// A command that runs `program` in a directory of its own named for `name`,
 /// answering the directory too.
-fn rexx_run(name: &str, program: &str) -> (Command, std::path::PathBuf) {
+fn rexx(name: &str, program: &str) -> (Command, std::path::PathBuf) {
     let dir = std::env::temp_dir().join(format!("rexx-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("a directory");
     std::fs::write(dir.join("p.rex"), program).expect("the program written");
@@ -40,7 +40,7 @@ fn rexx_run(name: &str, program: &str) -> (Command, std::path::PathBuf) {
 #[test]
 fn sys_wait_with_no_child_answers_minus_one() {
     let run = |mode: Option<&str>| {
-        let (mut command, dir) = rexx_run("sys-wait", PROGRAM);
+        let (mut command, dir) = rexx("sys-wait", PROGRAM);
         if let Some(mode) = mode {
             command.env("REXX_SWITCH_MODE", mode);
         }
@@ -73,7 +73,7 @@ fn sys_wait_with_no_child_answers_minus_one() {
 /// group of its own answers this process's group and not its own.
 #[test]
 fn pgid_is_the_parents_group() {
-    let (mut command, dir) = rexx_run(
+    let (mut command, dir) = rexx(
         "sys-query-pgid",
         "say SysQueryProcess('PGID') SysQueryProcess('PID')\n",
     );
@@ -107,7 +107,7 @@ fn a_command_whose_child_was_reaped_elsewhere_fails_with_127() {
         failed:\n\
         say 'failure' rc\n\
         return\n";
-    let (_, dir) = rexx_run("sys-wait-reaped", program);
+    let (_, dir) = rexx("sys-wait-reaped", program);
     let output = Command::new("timeout")
         .args(["-k", "5", "60"])
         .arg(env!("CARGO_BIN_EXE_rexx"))
