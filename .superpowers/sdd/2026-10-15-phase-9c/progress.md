@@ -73,3 +73,11 @@ Task 6: dispatched (implementer sonnet, BASE c8f0420c4).
 Task 6: implementer DONE 257a88fd8 (rexx-run deleted; grep only PINNED.md historical lines; signals thread-name order fixed; scserver/sfserver pass, scclient/sfclient stay: rxsock 98.903). Review dispatched (sonnet).
 Task 6 review (sonnet): spec PASS, quality PASS; minors (two false sentences after the rename) fixed by controller (deleted, plus the stale --engine paragraph).
 Task 6: complete (257a88fd8 + controller minors). Stopped per Moritz.
+Pre-dispatch check Task 7: input.rs:420 hand_over_output, clause.rs:325 idle_until, tests/program_end.rs exist; rexx.rs from Task 5; suite-licences.txt exists. Brief reflects Moritz's Python ruling (c8f0420c4).
+Task 7: dispatched (implementer opus, BASE 6116a18f9).
+Task 7: implementer DONE (e4bbcbba4, e95e41416 inline(never) trace wrapper, cc306292f). sayloop +0.1386% vs pin (+2 Ir/SAY bound check), startup +0.0142%. PASSINGARGS7 licensed. Concerns: fixed 2 s waits in kill tests; leftover sleep child. global-constraints.md regenerated from plan (Deviation 40).
+Task 7: review dispatched (opus).
+Task 7 review (opus): spec OK, quality approved; minors: fixed 2 s waits (one test vacuous on slow machine), non-SAY stdout and stderr bounds unwitnessed, leftover sleep child, Deviation 40 shape count, inline(never) reason, queued item not closed. Behaviour matches oracle/Python on every probed exit route.
+Task 7: fix round 1 dispatched (resume c9c-impl-7) for all minors (vacuous test is a defect).
+Task 7: fix round 1 a89351111 (readiness markers, vacuous test now fails when SAY unreached; both bounds witnessed red; no leftover child; Deviation 40 row; inline reason; queued item CLOSED). Accepted without re-review (tests + one comment, each shown red).
+Task 7: complete (e4bbcbba4, e95e41416, cc306292f, a89351111). Paused per Moritz.

@@ -12,7 +12,7 @@ follow the revised spec.
    `write(1, ...)` calls) and keeps its output under SIGKILL. A write per `say` does not fit
    `sayloop`'s budget. Ruled: the convention of C stdio and Python. Standard error and a terminal
    standard output are handed over at each line end, a redirected standard output stays buffered,
-   and Deviation 38 licenses what a kill loses from it. Task 7 implements it.
+   and Deviation 40 licenses what a kill loses from it. Task 7 implements it.
 
 ## Rulings made in this plan
 
@@ -22,9 +22,9 @@ follow the revised spec.
   the counts. If wrong (a site needs an arity the catalogue does not give), the site's report names
   the oracle's raise site and the controller rules.
 * Ruling: the old `ParseError::new(code, sub, byte)` survives Tasks 2 and 3 for the files not yet
-  converted, and Task 4 deletes it. The reader's `PENDING` list of unconverted (major, sub) pairs
-  shrinks per task and is empty at Task 4. A test that stays red until the last conversion cannot
-  gate a task.
+  converted, and Task 4 deletes it. The reader's `PENDING` list of rows still raised by unconverted
+  sites (keyed per row since Task 2) shrinks per task and is empty at Task 4. A test that stays red
+  until the last conversion cannot gate a task.
 * Ruling: the harness's `interpreter_bin` points at `rexx` in Task 5, so the task that builds
   `rexx` is witnessed by `rexx_command`. Every other caller moves in Task 6.
 * Ruling: `.rxo` header. Bytes 0-19 are `#!/usr/bin/env rexx\n`. The 48-byte header that follows has
@@ -105,6 +105,4 @@ follow the revised spec.
 5. **A restored package's relative names.** A `.rxo` in another directory whose source has
    `::REQUIRES 'helper.rex'` and calls an external routine by bare name. Expected: both resolve from
    the `.rxo`'s own directory, as on the oracle (measure). Task 9 pins it.
-
----
 
