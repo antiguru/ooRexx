@@ -175,20 +175,55 @@ fn has_directory(name: &str) -> bool {
         || name.starts_with("../")
 }
 
-pub(crate) use crate::paths::normalize;
-
-/// `bytes` with each byte as the `char` of the same value, so the `str`
-/// search above carries a path that is not UTF-8 without loss.
+/// The file a search for `name` finds, normalised against `cwd`, or `None`
+/// when no route holds one. `program` is the searching program's path, `None`
+/// for a program with no caller.
+///
+/// **Every input is bytes and every candidate is `stat`ed as bytes.** Each
+/// byte is carried through the `str` functions above as the `char` of the
+/// same value, so a path that is not ASCII is never re-encoded:
 /// `to_ascii_lowercase` leaves the chars above 127 alone, which is
 /// `strlower`'s rule.
-pub(crate) fn widen(bytes: &[u8]) -> String {
+pub(crate) fn search(
+    program: Option<&[u8]>,
+    name: &[u8],
+    rexx_path: Option<&[u8]>,
+    sys_path: Option<&[u8]>,
+    cwd: &[u8],
+    requires: bool,
+) -> Option<Vec<u8>> {
+    use std::os::unix::ffi::OsStrExt as _;
+    let program = program.map(widen);
+    let program = program.as_deref();
+    let entries = search_entries(
+        program.and_then(program_directory),
+        rexx_path.map(widen).as_deref(),
+        sys_path.map(widen).as_deref(),
+    );
+    let extension = program.and_then(program_extension);
+    let groups = candidates(&widen(name), &entries, extension, requires);
+    let located = |candidate: &str| crate::paths::normalize_bytes(&narrow(candidate), cwd);
+    let hit = first_regular(&groups, |candidate| {
+        match std::fs::metadata(std::ffi::OsStr::from_bytes(&located(candidate))) {
+            Ok(meta) if meta.is_file() => Found::Regular,
+            Ok(_) => Found::Other,
+            Err(_) => Found::Missing,
+        }
+    })?;
+    Some(located(&hit))
+}
+
+/// `bytes` with each byte as the `char` of the same value.
+fn widen(bytes: &[u8]) -> String {
     bytes.iter().copied().map(char::from).collect()
 }
 
-/// [`widen`]'s inverse.
-pub(crate) fn narrow(text: &str) -> Vec<u8> {
+/// [`widen`]'s inverse. Every candidate [`search`] builds is widened bytes
+/// and ASCII, so no char is above 255; one that were would become `?` and
+/// name a file the search does not find.
+fn narrow(text: &str) -> Vec<u8> {
     text.chars()
-        .map(|c| u8::try_from(c).expect("a widened path holds only chars below 256"))
+        .map(|c| u8::try_from(c).unwrap_or(b'?'))
         .collect()
 }
 

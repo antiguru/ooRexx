@@ -99,27 +99,16 @@ fn main() -> ExitCode {
             true,
         ),
         Program::File(name) => {
-            let (syscargs, base) = run.syscargs;
-            invocation = invocation.with_syscargs(syscargs, base);
+            invocation = invocation.with_syscargs(run.syscargs, run.syscargs_base);
             let options = run.default_options.is_some();
             if let Some((directive, count)) = run.default_options {
                 invocation = invocation.with_default_options(directive, count);
             }
             match load(&name) {
-                Ok((found, text)) => {
-                    // The oracle reports the absolute, dot-normalised path.
-                    // `canonicalize` also resolves symlinks, one step further
-                    // than the oracle has been measured to go.
-                    let reported = std::fs::canonicalize(&found).unwrap_or(found);
-                    (
-                        rexx_exec::run_program_named(
-                            reported.as_os_str().as_bytes(),
-                            text,
-                            invocation,
-                        ),
-                        false,
-                    )
-                }
+                Ok((found, text)) => (
+                    rexx_exec::run_program_named(found.as_os_str().as_bytes(), text, invocation),
+                    false,
+                ),
                 // The oracle sends `-o`'s options before it looks for the
                 // program, so their failure is the one reported. An empty
                 // program runs nothing but that send.
@@ -135,8 +124,7 @@ fn main() -> ExitCode {
         }
     };
 
-    // What the sinks did not already take. The two descriptors' interleaving
-    // is not observable (D17).
+    // What the sinks did not already take.
     let _ = std::io::stdout().write_all(&outcome.stdout);
     let _ = std::io::stdout().flush();
     let _ = std::io::stderr().write_all(&outcome.stderr);

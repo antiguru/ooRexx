@@ -40,8 +40,10 @@ pub struct Run {
     pub program: Program,
     /// The words joined into the argument string.
     pub words: Vec<Vec<u8>>,
-    /// `.SYSCARGS`' words, and the index the first is stored at.
-    pub syscargs: (Vec<Vec<u8>>, usize),
+    /// `.SYSCARGS`' words.
+    pub syscargs: Vec<Vec<u8>>,
+    /// The index `.SYSCARGS` stores its first word at.
+    pub syscargs_base: usize,
     /// The `::OPTIONS` directive and override count `-o` and `-od` give.
     pub default_options: Option<(Vec<u8>, i64)>,
 }
@@ -118,7 +120,8 @@ pub fn parse(args: &[Vec<u8>]) -> Command {
     Command::Run(Run {
         program,
         words,
-        syscargs: (syscargs, argc_base - 1),
+        syscargs,
+        syscargs_base: argc_base - 1,
         default_options,
     })
 }
@@ -159,29 +162,15 @@ pub fn resolve_program(
     rexx_path: Option<&OsStr>,
     path: Option<&OsStr>,
 ) -> Option<PathBuf> {
-    let entries = require::search_entries(
+    require::search(
         None,
-        rexx_path
-            .map(|path| require::widen(path.as_bytes()))
-            .as_deref(),
-        path.map(|path| require::widen(path.as_bytes())).as_deref(),
-    );
-    let cwd = cwd.as_os_str().as_bytes();
-    let groups = require::candidates(&require::widen(name.as_bytes()), &entries, None, false);
-    let located = |candidate: &str| {
-        PathBuf::from(OsString::from_vec(crate::paths::normalize_bytes(
-            &require::narrow(candidate),
-            cwd,
-        )))
-    };
-    let hit = require::first_regular(&groups, |candidate| {
-        match std::fs::metadata(located(candidate)) {
-            Ok(meta) if meta.is_file() => require::Found::Regular,
-            Ok(_) => require::Found::Other,
-            Err(_) => require::Found::Missing,
-        }
-    })?;
-    Some(located(&hit))
+        name.as_bytes(),
+        rexx_path.map(OsStr::as_bytes),
+        path.map(OsStr::as_bytes),
+        cwd.as_os_str().as_bytes(),
+        false,
+    )
+    .map(|found| PathBuf::from(OsString::from_vec(found)))
 }
 
 /// `RexxGetVersionInformation`'s text (`api/InterpreterAPI.cpp:250-278`),
@@ -312,7 +301,8 @@ mod tests {
         };
         assert_eq!(run.program, Program::File(b"p".to_vec()));
         assert_eq!(run.words, words(&["a", "b"]));
-        assert_eq!(run.syscargs, (words(&["a", "b"]), 4));
+        assert_eq!(run.syscargs, words(&["a", "b"]));
+        assert_eq!(run.syscargs_base, 4);
         assert_eq!(
             run.default_options,
             Some((b"::OPTIONS digits 12".to_vec(), 1))
@@ -351,12 +341,6 @@ mod tests {
         let banner = String::from_utf8(version_banner()).expect("ASCII");
         assert!(banner.starts_with("Open Object Rexx Version 5.3.0 r0\nBuild date: Jul 30 2026\n"));
         assert!(!banner.ends_with('\n'));
-    }
-
-    #[test]
-    fn widening_a_name_round_trips_every_byte() {
-        let all: Vec<u8> = (0..=255).collect();
-        assert_eq!(require::narrow(&require::widen(&all)), all);
     }
 
     #[test]

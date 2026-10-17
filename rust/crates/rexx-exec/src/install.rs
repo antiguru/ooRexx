@@ -929,35 +929,24 @@ impl Interp {
         name: &[u8],
         requires: bool,
     ) -> Option<Vec<u8>> {
-        let name = std::str::from_utf8(name).ok()?;
-        let program = program.map(require::widen);
-        let program = program.as_deref();
         // The interpreter's own environment and directory, never the process's
         // (`Interp::env`, `Interp::cwd`): the harnesses run interpreters on
         // threads, and `ootest/testOORexx.rex` sets `PATH` through `VALUE` and
         // changes directory before calling the program it then has to find.
-        let rexx_path = self.shadow_var(b"REXX_PATH");
-        let sys_path = self.shadow_var(b"PATH");
-        let entries = require::search_entries(
-            program.and_then(require::program_directory),
-            rexx_path.as_deref(),
-            sys_path.as_deref(),
-        );
-        let cwd = self.cwd.to_str()?;
-        let extension = program.and_then(require::program_extension);
-        let groups = require::candidates(name, &entries, extension, requires);
-        // A path that exists and is not a regular file abandons the rest of
-        // its spelling and extension rather than the search -- see
-        // [`require::first_regular`], which is where that rule lives so it can
-        // be tested without a file system.
-        let hit = require::first_regular(&groups, |candidate| {
-            match std::fs::metadata(require::normalize(candidate, cwd)) {
-                Ok(meta) if meta.is_file() => require::Found::Regular,
-                Ok(_) => require::Found::Other,
-                Err(_) => require::Found::Missing,
-            }
-        })?;
-        Some(require::narrow(&require::normalize(&hit, cwd)))
+        let variable = |wanted: &[u8]| {
+            self.env
+                .iter()
+                .find(|(held, _)| held == wanted)
+                .map(|(_, value)| value.as_slice())
+        };
+        require::search(
+            program,
+            name,
+            variable(b"REXX_PATH"),
+            variable(b"PATH"),
+            self.cwd_bytes(),
+            requires,
+        )
     }
 
     /// `PackageClass::loadPackageRexx`'s load: the same

@@ -16,7 +16,8 @@
 //!
 //! A case's input is its words, one per line: `\xHH` is a byte, and a line
 //! `<empty>` is the empty word. `rexx_path=DIR` sets `REXX_PATH` to the
-//! fixture's `DIR`, and `path=DIR` puts it in front of `PATH`.
+//! fixture's `DIR`, `path=DIR` puts it in front of `PATH`, and `cwd=DIR` runs
+//! from it. `DIR` is a name [`directory`] spells.
 
 use std::ffi::OsString;
 use std::os::unix::ffi::OsStringExt;
@@ -101,6 +102,33 @@ fn lay_fixture(dir: &Path) {
         b"local.rex",
         "say .local~items\nsay .local~allIndexes~sort~makeString('L', ', ')\n",
     );
+    for sub in [&b"d\xc3\xa9"[..], b"d\xff", "d\u{20ac}".as_bytes()] {
+        let dir_name = PathBuf::from(OsString::from_vec(sub.to_vec()));
+        std::fs::create_dir_all(dir.join(&dir_name)).expect("a fixture directory");
+        let inside = |name: &str| [sub, b"/", name.as_bytes()].concat();
+        file(
+            &inside("req.rex"),
+            "say 'main'\ncall rqr\n::requires \"rq.rex\"\n",
+        );
+        file(
+            &inside("rq.rex"),
+            "::routine rqr public\nparse source s; say s\n",
+        );
+        file(&inside("ext.rex"), "say 'main'\ncall other\n");
+        file(&inside("other.rex"), "parse source s; say s\n");
+    }
+    for sub in [&b"rp\xc3\xa9"[..], b"rp\xff"] {
+        let dir_name = PathBuf::from(OsString::from_vec(sub.to_vec()));
+        std::fs::create_dir_all(dir.join(&dir_name)).expect("a fixture directory");
+        file(
+            &[sub, b"/farcall.rex"].concat(),
+            "say 'far'\nparse source s; say s\nsay 1/0\n",
+        );
+    }
+    file(b"farmain.rex", "call farcall\n");
+    file(b"sub/ps.rex", "parse source s; say s\nsay 1/0\n");
+    std::os::unix::fs::symlink("sub/ps.rex", dir.join("link.rex")).expect("a link");
+    std::os::unix::fs::symlink("sub", dir.join("lsub")).expect("a directory link");
     file(b"bytes.rex", "say c2x(arg(1))\nsay c2x(.syscargs[1])\n");
     file(b"locked.rex", "say 'read'\n");
     use std::os::unix::fs::PermissionsExt as _;
@@ -109,6 +137,18 @@ fn lay_fixture(dir: &Path) {
         std::fs::Permissions::from_mode(0o000),
     )
     .expect("the unreadable program");
+}
+
+/// The fixture directory an argument names: one of the non-ASCII names
+/// `datadriven` cannot carry in an argument, or the name itself.
+fn directory(name: &str) -> PathBuf {
+    let bytes: &[u8] = match name {
+        "d_euro" => "d\u{20ac}".as_bytes(),
+        "rp_e_acute" => b"rp\xc3\xa9",
+        "rp_ff" => b"rp\xff",
+        other => other.as_bytes(),
+    };
+    PathBuf::from(OsString::from_vec(bytes.to_vec()))
 }
 
 /// A case's words.
@@ -200,8 +240,9 @@ fn run(
         .env_remove("REXX_PATH")
         .stdin(Stdio::null());
     for (key, values) in &case.args {
-        let entry = dir.join(values.first().expect("a directory"));
+        let entry = dir.join(directory(values.first().expect("a directory")));
         match key.as_str() {
+            "cwd" => command.current_dir(entry),
             "rexx_path" => command.env("REXX_PATH", entry),
             "path" => {
                 let mut path = entry.into_os_string();

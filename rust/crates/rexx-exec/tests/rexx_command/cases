@@ -836,6 +836,99 @@ rc> 253
 err> Error 3:  Failure during initialization.
 err> Error 3.901:  Failure during initialization: Program "viarp" was not found.
 
+# a program in a directory that is not ASCII finds its neighbours
+run
+d\xc3\xa9/req.rex
+----
+rc> 0
+out> main
+out> LINUX SUBROUTINE DIR/d\xC3\xA9/rq.rex
+
+run
+d\xc3\xa9/ext.rex
+----
+rc> 0
+out> main
+out> LINUX SUBROUTINE DIR/d\xC3\xA9/other.rex
+
+run
+d\xff/req.rex
+----
+rc> 0
+out> main
+out> LINUX SUBROUTINE DIR/d\xFF/rq.rex
+
+run
+d\xff/ext.rex
+----
+rc> 0
+out> main
+out> LINUX SUBROUTINE DIR/d\xFF/other.rex
+
+run cwd=d_euro
+ext.rex
+----
+rc> 0
+out> main
+out> LINUX SUBROUTINE DIR/d\xE2\x82\xAC/other.rex
+
+run cwd=d_euro
+req.rex
+----
+rc> 0
+out> main
+out> LINUX SUBROUTINE DIR/d\xE2\x82\xAC/rq.rex
+
+run rexx_path=rp_e_acute
+farmain.rex
+----
+rc> 214
+out> far
+out> LINUX SUBROUTINE DIR/rp\xC3\xA9/farcall.rex
+err>      3 *-* say 1/0
+err>      1 *-* call farcall
+err> Error 42 running DIR/rp\xC3\xA9/farcall.rex line 3:  Arithmetic overflow/underflow.
+err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
+
+run rexx_path=rp_ff
+farmain.rex
+----
+rc> 214
+out> far
+out> LINUX SUBROUTINE DIR/rp\xFF/farcall.rex
+err>      3 *-* say 1/0
+err>      1 *-* call farcall
+err> Error 42 running DIR/rp\xFF/farcall.rex line 3:  Arithmetic overflow/underflow.
+err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
+
+# a program reached through a link is reported by the path that reached it
+run
+link.rex
+----
+rc> 214
+out> LINUX COMMAND DIR/link.rex
+err>      2 *-* say 1/0
+err> Error 42 running DIR/link.rex line 2:  Arithmetic overflow/underflow.
+err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
+
+run
+link
+----
+rc> 214
+out> LINUX COMMAND DIR/link.rex
+err>      2 *-* say 1/0
+err> Error 42 running DIR/link.rex line 2:  Arithmetic overflow/underflow.
+err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
+
+run
+lsub/ps.rex
+----
+rc> 214
+out> LINUX COMMAND DIR/lsub/ps.rex
+err>      2 *-* say 1/0
+err> Error 42 running DIR/lsub/ps.rex line 2:  Arithmetic overflow/underflow.
+err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
+
 # not found: 3.901 with no position
 run
 nonexist

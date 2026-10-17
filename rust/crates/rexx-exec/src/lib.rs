@@ -2849,16 +2849,6 @@ impl Interp {
             .is_some_and(|(_, value)| value.eq_ignore_ascii_case(b"ON"))
     }
 
-    /// One variable of the interpreter's own environment, as text. `None` for
-    /// a name it does not hold or a value that is not UTF-8 -- a path this
-    /// crate cannot spell is a path it cannot search.
-    fn shadow_var(&self, name: &[u8]) -> Option<String> {
-        self.env
-            .iter()
-            .find(|(held, _)| held == name)
-            .and_then(|(_, value)| String::from_utf8(value.clone()).ok())
-    }
-
     // `plan_for` and `activation`/`activation_mut` live in `plan.rs`/
     // `activation.rs` (Task 6), beside the types they operate on.
 
