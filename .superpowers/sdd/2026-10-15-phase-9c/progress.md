@@ -93,3 +93,12 @@ Task 8 review (opus): spec compliant, quality approved. Minors: (1) LIBRARY bind
 Task 8: fix round 1 dispatched (resume impl): predicate = names REGISTERED (any case) AND class install.
 Task 8: fix round 1 5c2f3b7fe, 93531f2a3 (predicate install+REGISTERED; two guards; widening shown red; 697/928/971 agree). Accepted without re-review (test-only, shown red).
 Task 8: complete (9622c9e89, 7de9e8cc2, 483679f2c, 3db140a2a, 5c2f3b7fe, 93531f2a3).
+Pre-dispatch check Task 9: execute_on ProgramSource::new now lib.rs:3819, package_from_source install.rs:980, parse_file run.rs:3303, class_protocol.rs:339, callbacks.rs:1697/1759 resolve; exclusions row near :5747, reference near :5459; next Deviation 41. Told implementer.
+Task 9: dispatched (implementer opus, BASE ebb5e8a42).
+Task 9: implementer DONE_WITH_CONCERNS (230b59655, ec20c18b3, caa9de0f7, 06c5cc082, 2056d8812). METHOD 320/320, Method 56/56, Routine 60/60, rexxc 11/11. Concern: restored routine via ~call traceback names 'Routine CALL in package' vs oracle's compiled source path (pre-existing CALL naming + image lacks program name). Implementer rulings: no parent package for restored executables (measured 43.1), NewMethod never restores, traceback kind follows ROUTINE frame. rust/target binaries stale (built from uncommitted tree) -- Task 10 rebuilds.
+Task 9: review dispatched (opus).
+Task 9 review (opus): spec pass, quality approved. Concern 1 ruled (c): queue CALL naming (pre-existing: Routine~call frame named CALL, oracle executableName) plus image name together. Concerns 2-4 confirmed. Minors: orphaned doc surface.rs:808, lines_source decode-and-discard, ' -- ' in error.rs doc, cut inside line unpinned, process widening.
+Task 9: fix round 1 dispatched (resume impl): minors + queued item + exclusions gap row.
+Task 9: fix round 1 240508580 (minors, boundary.rxo shown red, queued routine-call-frame-name, gap row after Deviation 41; NewMethod second-line check direct). Scoped re-review dispatched (sonnet).
+Task 9 re-review (sonnet): approved. Minor trait doc on compile_buffer fixed by controller; NewMethod-on-source parent package queued (2026-10-17-newmethod-parent-package.md).
+Task 9: complete (230b59655, ec20c18b3, caa9de0f7, 06c5cc082, 2056d8812, 240508580 + controller doc).

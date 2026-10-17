@@ -1,0 +1,201 @@
+diff --git a/.superpowers/sdd/2026-10-15-phase-9c/task-9-report.md b/.superpowers/sdd/2026-10-15-phase-9c/task-9-report.md
+index 39b84026e..602d013a0 100644
+--- a/.superpowers/sdd/2026-10-15-phase-9c/task-9-report.md
++++ b/.superpowers/sdd/2026-10-15-phase-9c/task-9-report.md
+@@ -70,3 +70,15 @@ Taken by me, for the controller to confirm:
+ * Files outside the brief's list: `rexx-api/src/callbacks.rs` and `callbacks/fake.rs` (the `compile_buffer` trait member), `tests/api_group_tests.rs` (`RECORDED` loses the delivered test, without which its gate goes red), `environment/route.rs`, `trace.rs`, `run/interpret.rs`, `dispatch/{context,executable,package,library/surface}.rs`, `builtin/state.rs`, `error.rs`, `launcher.rs` (`positionless` made `pub(crate)`).
+ * Two of my builds ran without `CARGO_TARGET_DIR` and wrote `rust/target/` (debug check, then `release/rexx` and `release/rexxc` at 19:27 from the uncommitted tree). Anything reading `rust/target/release` should rebuild.
+ * `.superpowers/sdd/2026-10-15-phase-9c/progress.md` is modified in the working tree by someone else and untouched by these commits.
++
++## Fix round 1
++
++From `task-9-review.md`, with the three rulings confirmed.
++
++1. `surface.rs`: `held`'s doc is back on `fn held`, and `compile_buffer_source` has its own.
++2. `surface.rs` `compile_buffer`'s `Method` arm tests the second line directly through the new `compiled::encoded_lines`, which `lines_source` uses too. It no longer decodes an image to throw it away. One narrow difference from before: lines whose second line is the tag but whose joined text is source to `restore` (a first line that is neither `#!` nor a tag) now parse as source directly instead of going through the `.Method~new` send. Both parse them as source, and the direct path takes no context, as the oracle's `createMethod(name, buffer)` does.
++3. `error.rs`: `sourceless_routine_line`'s doc uses a colon in place of ` -- `.
++4. `tests/compiled.rs`: `boundary.rxo`, the encoded image cut 8 digits into its first line, answers 3.903. Mutation: in `compiled::decode`, `if digit == 0 && !text.is_empty() && text.last() != Some(&b'\n') && index == text.len() { return None; }` before the tail check. `a_foreign_or_damaged_image_is_refused` went red on `boundary.rxo` (3.905 for 3.903), and `line.rxo` and `quartet.rxo` stayed green. Reversed by an exact edit, and `git diff --stat crates/rexx-exec/src/compiled.rs` showed only the `encoded_lines` change.
++5. The `CALL` naming, ruled (c): `.superpowers/sdd/queued/2026-10-17-routine-call-frame-name.md` (the source-routine witness, the missing `METHOD CALL` frame, the restored-routine traceback, `RoutineClass.cpp:209`, `:148`, `ProgramMetaData.cpp:190-191`, and that the image must then carry the routine's name), and a KNOWN GAP row with `OWNER: none.` after Deviation 41 in `phase-4-exclusions.txt`.
++
++Checks, all with `CARGO_TARGET_DIR=.../scratchpad/target-impl-9`: `cargo fmt --all --check` 0; `cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` 0; `--release --test compiled --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions --test licensed_divergences --test api_group_tests` all ok; `-p rexx-exec --lib compiled` 15 passed.
+diff --git a/.superpowers/sdd/queued/2026-10-17-routine-call-frame-name.md b/.superpowers/sdd/queued/2026-10-17-routine-call-frame-name.md
+new file mode 100644
+index 000000000..61c10ab1b
+--- /dev/null
++++ b/.superpowers/sdd/queued/2026-10-17-routine-call-frame-name.md
+@@ -0,0 +1,63 @@
++# Divergence: an activation entered through `Routine~call` is named `CALL`
++
++Found 2026-10-17 by Phase 9c Task 9 and its review. Ruled by the controller in
++Task 9's fix round 1: queued, not fixed in the restore task.
++
++## The witness, from source
++
++    r = .Routine~new('MYNAME', .array~of("f = .context~stackframes[1]", "return f~type f~name"))
++    say r~call
++    say .Routine~newFile('sf.rex')~call
++
++where `sf.rex` holds the same two lines. Fresh empty directory, 1 run a side:
++
++| side | rc | stdout |
++|---|---|---|
++| oracle | 0 | `ROUTINE MYNAME`, `ROUTINE sf.rex` |
++| here | 0 | `ROUTINE CALL`, `ROUTINE CALL` |
++
++The review's transcripts are in the Task 9 review's probe directory
++(`rev9probe/oracle.txt` and `crate.txt`, `sfname.rex`). A traceback does not show
++it for a source routine, because the clause is shown in place of the name. Task 9
++also measured the frames of `x = .Routine~newFile('sfn.rex')~call`, where `sfn.rex`
++prints each frame's type and name: the oracle lists `ROUTINE sfn.rex`,
++`METHOD CALL`, `PROGRAM <path>`, and this crate lists `ROUTINE CALL`,
++`PROGRAM <path>`, so the native `CALL` method's own frame is missing too.
++
++## The restored-routine case
++
++A restored routine has no source, so its traceback line names the routine.
++`.Routine~newFile('fail.rxo')~call`, where `fail.rxo` is a `rexxc` image of a
++program that raises 41.1 on its line 2:
++
++    oracle:     2 *-* Routine DIR/fail.rex in package "fail.rxo" (no source available).
++    here:       2 *-* Routine CALL in package "fail.rxo" (no source available).
++
++Transcripts: `docs/superpowers/records/2026-10-15-phase-9c/task-9-step1/routine-object/`.
++It is left out of `rust/crates/rexx-exec/tests/compiled.rs`, which asserts
++identity with the oracle.
++
++## The oracle's sites
++
++* `RoutineClass::callRexx` runs the code under `executableName`
++  (`interpreter/classes/RoutineClass.cpp:209`, also `:227` and `:248`), so the
++  activation's message name is the routine's own name, not the message `CALL`.
++* `executableName` is flattened with the routine (`RoutineClass.cpp:148`,
++  `flattenRef(executableName)`), so a restored routine keeps the name `rexxc`
++  gave it: the full path of the source it translated.
++* `ProgramMetaData::restore` renames only the package (`ProgramMetaData.cpp:190-191`,
++  `setProgramName`), never the routine.
++
++## What a fix needs
++
++* The activation a `Routine` object's `~call` (and `~callWith`) enters takes the
++  routine's name, which `Activation::invoked_as` then answers for `StackFrame~name`
++  and for the sourceless traceback line (`Interp::sourceless_line`).
++* The native `CALL` method's frame, if the frame list is to match.
++* Then the image must carry the routine's name: this crate's `.rxo` holds only
++  the header and the source (`rust/crates/rexx-exec/src/compiled.rs`), so a
++  restored routine has no name of its own to show until `rexxc` writes one, and
++  that is a format version bump.
++
++Owner: none yet. Phase 9c records it as a known gap in
++`docs/superpowers/plans/phase-4-exclusions.txt`, beside Deviation 41.
+diff --git a/docs/superpowers/plans/phase-4-exclusions.txt b/docs/superpowers/plans/phase-4-exclusions.txt
+index 1c63d8e85..b3652b6fb 100644
+--- a/docs/superpowers/plans/phase-4-exclusions.txt
++++ b/docs/superpowers/plans/phase-4-exclusions.txt
+@@ -2291,6 +2291,24 @@ DEVIATIONS -- permanent, chosen
+      rust/crates/rexx-exec/tests/compiled.rs
+      `a_foreign_or_damaged_image_is_refused` pins this crate's 3.903.
+ 
++KNOWN GAP BESIDE DEVIATION 41, not a deviation: AN ACTIVATION ENTERED
++THROUGH `Routine~call` IS NAMED `CALL` (Phase 9c Task 9, queued).
++     The oracle names it for the routine (`RoutineClass::callRexx`,
++     interpreter/classes/RoutineClass.cpp:209), so `StackFrame~name` answers
++     `ROUTINE MYNAME` for `.Routine~new('MYNAME', ...)~call` where this crate
++     answers `ROUTINE CALL`, measured 2026-10-17 by the Task 9 review. A
++     restored routine's traceback line shows it: the oracle prints
++     `Routine <the path rexxc translated>`, because the name is flattened
++     with the routine (RoutineClass.cpp:148) and restore renames only the
++     package (interpreter/classes/support/ProgramMetaData.cpp:190-191), and
++     this crate prints `Routine CALL`
++     (docs/superpowers/records/2026-10-15-phase-9c/task-9-step1/routine-object/).
++     A fix names the activation for the routine, and then the image must
++     carry the routine's name.
++     .superpowers/sdd/queued/2026-10-17-routine-call-frame-name.md has the
++     witnesses and the oracle sites.
++     OWNER: none.
++
+ EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
+ ---------------------------------------------------------------------
+ 
+diff --git a/rust/crates/rexx-exec/src/compiled.rs b/rust/crates/rexx-exec/src/compiled.rs
+index 7db4bcff1..6118e5dcb 100644
+--- a/rust/crates/rexx-exec/src/compiled.rs
++++ b/rust/crates/rexx-exec/src/compiled.rs
+@@ -135,12 +135,18 @@ pub(crate) fn program_source(text: Vec<u8>, name: &[u8]) -> Result<ProgramSource
+ /// createProgram(name, array, context)`), or `None` where the lines are
+ /// source.
+ pub(crate) fn lines_source(lines: &[&[u8]], name: &[u8]) -> Option<Result<ProgramSource, Raised>> {
+-    if lines.get(1) != Some(&ENCODED_LINE) {
++    if !encoded_lines(lines) {
+         return None;
+     }
+     joined_source(lines, name)
+ }
+ 
++/// Whether the second of `lines` is the encoded tag, which is what makes
++/// the oracle try to restore an array of lines.
++pub(crate) fn encoded_lines(lines: &[&[u8]]) -> bool {
++    lines.get(1) == Some(&ENCODED_LINE)
++}
++
+ #[cold]
+ #[inline(never)]
+ fn joined_source(lines: &[&[u8]], name: &[u8]) -> Option<Result<ProgramSource, Raised>> {
+diff --git a/rust/crates/rexx-exec/src/dispatch/library/surface.rs b/rust/crates/rexx-exec/src/dispatch/library/surface.rs
+index 6640f4b9a..5f7bdf205 100644
+--- a/rust/crates/rexx-exec/src/dispatch/library/surface.rs
++++ b/rust/crates/rexx-exec/src/dispatch/library/surface.rs
+@@ -611,7 +611,9 @@ impl Surface for Interp {
+             BufferKind::Method => {
+                 let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
+                 // Lines `.Method~new` would restore are parsed as source here.
+-                crate::compiled::lines_source(&borrowed, name)?.ok();
++                if !crate::compiled::encoded_lines(&borrowed) {
++                    return None;
++                }
+                 Ok(rexx_parse::ProgramSource::from_lines(&borrowed))
+             }
+             BufferKind::Routine | BufferKind::Package => match crate::compiled::restore(data) {
+@@ -805,8 +807,6 @@ impl Interp {
+         self.native_state_mut(buffer)?.data_address()
+     }
+ 
+-    /// The value `result` carries, or `None` with its condition held on the
+-    /// running native call.
+     /// [`Surface::compile_buffer`] past its choice of source: the executable
+     /// or package `source` becomes, or `None` with the condition held.
+     #[cold]
+@@ -836,6 +836,8 @@ impl Interp {
+         self.held(built)
+     }
+ 
++    /// The value `result` carries, or `None` with its condition held on the
++    /// running native call.
+     fn held<T>(&mut self, result: Result<T, Failure>) -> Option<T> {
+         match result {
+             Ok(value) => Some(value),
+diff --git a/rust/crates/rexx-exec/src/error.rs b/rust/crates/rexx-exec/src/error.rs
+index 2e49399f4..1bdd4d4e3 100644
+--- a/rust/crates/rexx-exec/src/error.rs
++++ b/rust/crates/rexx-exec/src/error.rs
+@@ -1767,7 +1767,7 @@ impl Raised {
+         }
+     }
+ 
+-    /// The same for a routine activation -- `formatSourcelessTraceLine`'s
++    /// The same for a routine activation: `formatSourcelessTraceLine`'s
+     /// `isRoutine()` arm.
+     pub(crate) fn sourceless_routine_line(name: &[u8], package: &[u8]) -> Vec<u8> {
+         message_text(
+diff --git a/rust/crates/rexx-exec/tests/compiled.rs b/rust/crates/rexx-exec/tests/compiled.rs
+index 7e7074a8c..38833feb6 100644
+--- a/rust/crates/rexx-exec/tests/compiled.rs
++++ b/rust/crates/rexx-exec/tests/compiled.rs
+@@ -276,6 +276,8 @@ fn a_foreign_or_damaged_image_is_refused() {
+         ("source.rxo", binary[..binary.len() - 3].to_vec(), 903),
+         // Line ends between quartets: a whole line cut away.
+         ("line.rxo", encoded[..body + 73].to_vec(), 903),
++        // Inside a line, on a quartet boundary.
++        ("boundary.rxo", encoded[..body + 8].to_vec(), 903),
+         // Inside a quartet.
+         ("quartet.rxo", encoded[..body + 6].to_vec(), 903),
+     ];

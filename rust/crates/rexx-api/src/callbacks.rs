@@ -222,8 +222,9 @@ pub trait Surface {
     /// parser as source lines: `None` for source, else the `Routine` or the
     /// package a compiled image restores to, or `Some(None)` where that
     /// raised a condition, which the host holds. A `Method` is never
-    /// restored (`LanguageParser::createMethod(name, buffer)`), so for an
-    /// encoded image this answers the method its lines parse to as source.
+    /// restored (`LanguageParser::createMethod(name, buffer)`): for lines whose
+    /// second line is the encoded tag this answers the method those lines parse
+    /// to as source, and for any other `Method` input `None`.
     fn compile_buffer(
         &mut self,
         kind: BufferKind,
