@@ -533,9 +533,16 @@ impl Interp {
 
     /// `PackageClass::overridePackageSettings`, which every compile of a
     /// package runs (`parser/LanguageParser.cpp:658`, `:856`) and an
-    /// `INTERPRET` does not.
+    /// `INTERPRET` does not. A restored program is not compiled, so it
+    /// neither takes the defaults nor spends a count: measured, `rexx -o
+    /// "digits 5"` on an image answers 9, and a source it requires 5.
     pub(crate) fn override_package_settings(&mut self, id: ProgramId) -> Result<(), Failure> {
-        if self.option_writes.count == 0 {
+        if self.option_writes.count == 0
+            || self
+                .programs
+                .get(id)
+                .is_some_and(|program| !program.source.is_traceable())
+        {
             return Ok(());
         }
         // No latch to arm: the defaults are an `::OPTIONS` directive's,

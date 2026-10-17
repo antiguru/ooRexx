@@ -145,20 +145,25 @@ impl Interp {
     /// scanning back for a newline. A route that cannot take the line leaves
     /// it on stdout, which is `corpus/oracle-crashes.txt` entry 11's licensed
     /// answer for a route the oracle dies on.
-    pub(crate) fn route_trace_line(&mut self, start: usize) {
-        self.route_trace_line_as(start, false);
-    }
-
-    /// [`Interp::route_trace_line`] for a line that is `>I>` (`entry`), whose
-    /// `TraceObject` names the caller's frame too. Standard error is handed
-    /// over after it.
+    ///
+    /// Code that shows no source traces nothing through here
+    /// ([`Interp::untraceable_code`]).
     // Inlined into `loop_advance`, it cost sayloop +0.31% against +0.14%.
     #[inline(never)]
-    pub(crate) fn route_trace_line_as(&mut self, start: usize, entry: bool) {
+    pub(crate) fn route_trace_line(&mut self, start: usize) {
         if self.untraceable_code() {
             self.trace.truncate(start);
             return;
         }
+        self.route_trace_line_as(start, false);
+    }
+
+    /// [`Interp::route_trace_line`] for a `>I>` (`entry`) or `<I<` line,
+    /// whose `TraceObject` names the caller's frame for `>I>`. Standard error
+    /// is handed over after it. Not gated on the source: the oracle's
+    /// `traceEntryOrExit` (`RexxActivation.cpp:3678`) writes these for a
+    /// restored program too (measured).
+    pub(crate) fn route_trace_line_as(&mut self, start: usize, entry: bool) {
         self.deliver_trace_line_as(start, entry);
         self.hand_over_stderr();
     }

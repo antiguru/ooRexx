@@ -97,6 +97,35 @@ sub/p.rxo
 ----
 rc> 0
 
+compile
+entries.rex
+entries.rxo
+-s
+----
+rc> 0
+
+compile
+options.rex
+options.rxo
+-s
+----
+rc> 0
+
+compile
+options.rex
+optionse.rxo
+-s
+-e
+----
+rc> 0
+
+compile
+optdirective.rex
+optdirective.rxo
+-s
+----
+rc> 0
+
 # SOURCELINE, PARSE SOURCE, the package's and a routine's source, 40.34,
 # TRACE R and TRACE I, and an error's traceback.
 rexx
@@ -165,6 +194,21 @@ err>     25 *-* Routine RR in package "DIR/levels.rxo" (no source available).
 err>      9 *-* Program in "DIR/levels.rxo" (no source available).
 err> Error 41 running DIR/levels.rxo line 17:  Bad arithmetic conversion.
 err> Error 41.1:  Nonnumeric value ("b") used in arithmetic operation.
+
+# A restored routine's and method's >I> and <I< lines still print.
+rexx
+entries.rxo
+----
+rc> 0
+out> in rt
+out> 2
+out> trapped 40.1
+err>        >I> Routine "RT" in package "DIR/entries.rxo".
+err>        <I< Routine "RT" in package "DIR/entries.rxo".
+err>        >I> Method "M" with scope "C" in package "DIR/entries.rxo".
+err>        <I< Method "M" with scope "C" in package "DIR/entries.rxo".
+err>        >I> Method "BOOM" with scope "C" in package "DIR/entries.rxo".
+err>        <I< Method "BOOM" with scope "C" in package "DIR/entries.rxo".
 
 # Interactive trace pauses only inside an INTERPRET string.
 rexx stdin=typed.txt
@@ -326,6 +370,51 @@ out>      2 *-* p = .Package~new('pk', .stream~new('faile.rxo')~arrayin)
 err>      4 *-* say .Routine~newFile('fail.rxo')~name
 err> Error 97 running DIR/prologue.rex line 4:  Object method not found.
 err> Error 97.1:  Object "a Routine" does not understand message "NAME".
+
+# rexx -o and -od reach a program only when it is compiled: an image
+# neither takes them nor spends the count, so the source it requires does.
+rexx
+-o
+digits 5
+options.rex
+----
+rc> 0
+out> main 5 SCIENTIFIC
+out> req 9 SCIENTIFIC
+
+rexx
+-o
+digits 5
+options.rxo
+----
+rc> 0
+out> main 9 SCIENTIFIC
+out> req 5 SCIENTIFIC
+
+rexx
+-o
+digits 5
+optionse.rxo
+----
+rc> 0
+out> main 9 SCIENTIFIC
+out> req 5 SCIENTIFIC
+
+rexx
+-od
+digits 7 form engineering
+optdirective.rxo
+----
+rc> 0
+out> 12 SCIENTIFIC
+
+rexx
+-od
+digits 7 form engineering
+optdirective.rex
+----
+rc> 0
+out> 12 ENGINEERING
 
 # Review Focus 5: names resolve from the image's own directory.
 rexx
