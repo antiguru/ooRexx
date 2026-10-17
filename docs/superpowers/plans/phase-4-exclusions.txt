@@ -2263,6 +2263,34 @@ DEVIATIONS -- permanent, chosen
 
      rust/crates/rexx-exec/tests/program_end.rs `buffering` pins each.
 
+ 41. AN ENCODED IMAGE WHOSE DECODED BYTES LACK THE TAG ANSWERS 3.903
+     (Phase 9c). OWNER: none.
+
+     Ruled in the Phase 9c plan (Task 9) from the Task 8 review's Minor 2,
+     as an oracle defect that is not copied. The oracle's
+     `ProgramMetaData::processRestoreData`
+     (interpreter/classes/support/ProgramMetaData.cpp:331-349) decodes an
+     encoded image in place over the start of its buffer. When the decoded
+     bytes do not start with the binary tag, `validate` (:204) answers false,
+     and the caller translates the buffer as source: part decoded bytes and
+     part the base64 text that followed them. What a program then sees
+     depends on those bytes. This crate answers 3.903 for such an image, as
+     it does for every image it does not write. Measured 2026-10-17, fresh
+     empty directory, 1 run a side, an image of `#!/usr/bin/env rexx`,
+     `/**/@REXX@` and the base64 of `say 'decoded'` with its line end,
+     oracle then this crate:
+
+                                        rc 243, 13.1 "Incorrect character
+                                        in program "" ('00'X)", line 2
+                                        rc 253, 3.903 "Program "<path>"
+                                        cannot be run by this version of the
+                                        REXX interpreter."
+
+     The Task 8 review measured another such image on the oracle: the
+     decoded bytes ran, then the base64 text as commands, rc 0.
+     rust/crates/rexx-exec/tests/compiled.rs
+     `a_foreign_or_damaged_image_is_refused` pins this crate's 3.903.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
@@ -5456,7 +5484,7 @@ rexx-exec/tests/api_group_partition.rs derives the partition from the
 groups and the oracle's build/lib and asserts it (phase-8-gate.md section
 9). METHOD, CONVERSION and FUNCTION stayed Phase 8's, and pass at its close
 but for FUNCTION's TEST_REXXQUEUE (Phase 10, below) and METHOD's
-TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA (Phase 9, below). Loading orxinvocation from this
+TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA (Phase 9, below, delivered by Phase 9c Task 9). Loading orxinvocation from this
 crate would dlopen the oracle's own librexx.so.4 into the process, and a
 green result would be the oracle's. The spec and the roadmap's row 8 first
 read the partition as two embedding groups and six extension-only, from
@@ -5753,6 +5781,13 @@ crate passes every test RECORDED does not name, in the whole-group run
   the tokenized file it wrote, naming Phase 5 (final re-review N3).
   Roadmap row 9: "`rexx`, `rexxc`, `rxqueue`, `rxsubcom` ship".
   OWNER: Phase 9.
+  DELIVERED by Phase 9c Task 9, 2026-10-17. The harness puts this crate's
+  rexx and rexxc on the crate side's PATH (Task 8), and NewRoutine and
+  LoadPackageFromData restore the image this crate's rexxc writes. The
+  suite harness run of API/oo/METHOD passes it on both sides, 320 of 320
+  each (docs/superpowers/records/2026-10-15-phase-9c/task-9-suite/), and
+  rust/crates/rexx-exec/tests/compiled.rs runs every other restore route
+  against the oracle's. It is gone from api_group_tests.rs's RECORDED.
   NOT MEMBERS, AND WHY THE INSTRUMENT PASSES -U AND PATCHES ooTest.frm. The
   framework's ticker (ooTest.frm, PhaseReport~tickTock and ~stopTicking)
   prints a number of dots that depends on wall time; -U starts no ticker.

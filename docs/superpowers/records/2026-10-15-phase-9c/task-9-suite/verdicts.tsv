@@ -1,0 +1,6 @@
+# ootest revision 13178
+group	verdict	crate	oracle denominator
+API/oo/METHOD	green		equal
+base/class/Method	green		equal
+base/class/Routine	green		equal
+utilities/rexxc/rexxc	green		equal

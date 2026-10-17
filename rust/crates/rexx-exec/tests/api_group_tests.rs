@@ -53,13 +53,7 @@ const GROUPS: &[&str] = &["CONVERSION", "FUNCTION", "METHOD"];
 /// cause and the phase that owns it in
 /// `docs/superpowers/plans/phase-4-exclusions.txt`; `false` for one that runs
 /// on neither side, which must be exactly the ones [`reaching_rxapi`] derives.
-const RECORDED: &[(&str, bool)] = &[
-    ("FUNCTION.TEST_REXXQUEUE", false),
-    (
-        "METHOD.TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA",
-        true,
-    ),
-];
+const RECORDED: &[(&str, bool)] = &[("FUNCTION.TEST_REXXQUEUE", false)];
 
 /// The tests whose outcome, assertion count, stderr and exit status agree while
 /// a failure's or an error's detail differs, as `GROUP.TEST`, each recorded as

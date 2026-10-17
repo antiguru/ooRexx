@@ -1,0 +1,10 @@
+# ootest revision 13178
+group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
+API/oo/METHOD	oracle	320	320	320			-	-	1	yes	ulimit -v 1048576	320
+API/oo/METHOD	crate	320	320	320			-	-	1	yes	memcap 2G	320
+base/class/Method	oracle	56	56	56			-	-	1	yes	ulimit -v 1048576	56
+base/class/Method	crate	56	56	56			-	-	1	yes	memcap 2G	56
+base/class/Routine	oracle	60	60	60			-	-	1	yes	ulimit -v 1048576	60
+base/class/Routine	crate	60	60	60			-	-	1	yes	memcap 2G	60
+utilities/rexxc/rexxc	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
+utilities/rexxc/rexxc	crate	11	11	11			-	-	1	yes	memcap 2G	11
