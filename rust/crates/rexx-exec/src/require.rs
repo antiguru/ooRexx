@@ -145,18 +145,22 @@ pub(crate) fn first_regular(
 /// The directory `path` names, trailing separator included, or `None` for a
 /// name with no directory part -- `SysFileSystem::extractDirectory`.
 pub(crate) fn program_directory(path: &str) -> Option<&str> {
-    path.rfind('/').map(|at| &path[..=at])
+    let first = first_char_len(path)?;
+    path[first..].rfind('/').map(|at| &path[..=first + at])
 }
 
 /// The extension `path` ends with, leading dot included, or `None` for a name
 /// whose last component carries none -- `SysFileSystem::extractExtension`.
 pub(crate) fn program_extension(path: &str) -> Option<&str> {
-    let last = path.rfind('/').map_or(path, |at| &path[at + 1..]);
-    // **The first byte of the component is never examined.**
-    // `SysFileSystem::hasExtension` scans backwards while `name < endPtr`, so
-    // a name that is nothing but a dotted suffix has no extension: `.hid` is
-    // extensionless where `a.b` is qualified.
-    last.rfind('.').filter(|at| *at > 0).map(|at| &last[at..])
+    let first = first_char_len(path)?;
+    let at = first + path[first..].rfind(['/', '.'])?;
+    path[at..].starts_with('.').then(|| &path[at..])
+}
+
+/// The length of `path`'s first char, the byte the oracle's backwards scans
+/// stop before (`while (pathName < endPtr)`), or `None` for an empty path.
+fn first_char_len(path: &str) -> Option<usize> {
+    path.chars().next().map(char::len_utf8)
 }
 
 /// Whether `name`'s last component carries an extension --
@@ -434,18 +438,34 @@ mod tests {
         assert_eq!(program_directory("main.rex"), None);
     }
 
-    /// A leading dot is not an extension: the backwards scan never reaches
-    /// the component's first byte, so a dotfile is extensionless and takes
-    /// the whole extension list, where `a.b` is qualified and takes none.
+    /// Only the name's first byte is exempt from the backwards scan, so a
+    /// dotfile named alone is extensionless and one after a directory is its
+    /// own extension. Measured, the oracle answers 43.901 for
+    /// `::requires 'sub/.hid'` with only `sub/.hid.cls` present.
     #[test]
-    fn a_leading_dot_is_not_an_extension() {
+    fn only_the_names_first_byte_is_exempt_from_the_extension_scan() {
         assert!(!has_extension(".hid"));
-        assert!(!has_extension("/a/b/.hid"));
-        assert!(!has_extension("./.hid"));
         assert_eq!(program_extension(".hid"), None);
-        assert_eq!(program_extension("/a/b/.hid"), None);
+        assert_eq!(program_extension("."), None);
+        assert!(has_extension("/a/b/.hid"));
+        assert!(has_extension("./.hid"));
+        assert_eq!(program_extension("/a/b/.hid"), Some(".hid"));
+        assert_eq!(program_extension("own/.zzz"), Some(".zzz"));
         assert!(has_extension("a.b"));
         assert_eq!(program_extension("a.b"), Some(".b"));
         assert_eq!(program_extension(".hid.rex"), Some(".rex"));
+        // A first byte above 127 is one widened char of two UTF-8 bytes.
+        assert_eq!(program_extension("\u{e9}.x"), Some(".x"));
+    }
+
+    /// `extractDirectory` never examines the first byte either, so `/x` has
+    /// no directory.
+    #[test]
+    fn the_first_byte_is_never_a_directory_separator() {
+        assert_eq!(program_directory("/x"), None);
+        assert_eq!(program_directory("/"), None);
+        assert_eq!(program_directory("//x"), Some("//"));
+        assert_eq!(program_directory("a/x"), Some("a/"));
+        assert_eq!(program_directory("\u{e9}/x"), Some("\u{e9}/"));
     }
 }

@@ -6,6 +6,7 @@ ok = .File~new(dir)~makeDir
 call write dir'/ext_own.rex', 'own'
 call write dir'/ext_ext.zzz', 'ext'
 call write dir'/ext_par.rex', 'parent'
+call write dir'/ext_dot.zzz', 'dot'
 f = .stream~new(dir'/lib.cls')
 f~open('write replace')
 f~lineout('::routine go public')
@@ -23,6 +24,10 @@ say r~call (r~package~findProgram('ext_ext') \== .nil)
 -- A bare name has no directory, so the parent package's is searched.
 r = go~call(("call ext_par", "return result"))
 say r~call (r~package~findProgram('ext_par') \== .nil)
+-- A name whose last component starts with a dot after a directory has that
+-- component as its extension.
+r = .routine~new(dir'/.zzz', ("call ext_dot", "return result"))
+say r~call (r~package~findProgram('ext_dot') \== .nil)
 -- Neither holds the file.
 r = .routine~new(dir'/any.zzz', ("call ext_none", "return result"))
 say 'findProgram' (r~package~findProgram('ext_none') == .nil)
@@ -31,7 +36,8 @@ say r~call
 exit
 syntax:
 say 'syntax' condition('o')~code
-do name over .array~of('ext_own.rex', 'ext_ext.zzz', 'ext_par.rex', 'lib.cls')
+do name over .array~of('ext_own.rex', 'ext_ext.zzz', 'ext_par.rex', 'ext_dot.zzz', -
+    'lib.cls')
   ok = .File~new(dir'/'name)~delete
 end
 ok = .File~new(dir)~delete
