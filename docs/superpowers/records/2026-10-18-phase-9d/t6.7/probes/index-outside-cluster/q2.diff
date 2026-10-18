@@ -1,0 +1,18 @@
+6,10c6,10
+<    .Queue~of(1,2)~put('a', .array~of(9)) 93.966 Incorrect queue index "9".
+<    .Queue~of(1,2)~put('a', .array~of(20)) 93.918 Incorrect list index "an Array".
+<    .Queue~of(1,2)~at(.array~of(1,2)) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+<    .Queue~of(1,2)~at(.array~new) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+<    .Queue~of(1,2)~delete(.array~of(1,2)) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+---
+>    .Queue~of(1,2)~put('a', .array~of(9)) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+>    .Queue~of(1,2)~put('a', .array~of(20)) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+>    .Queue~of(1,2)~at(.array~of(1,2)) 93.926 Too many subscripts for array; 1 expected.
+>    .Queue~of(1,2)~at(.array~new) 93.901 Not enough arguments for method; 1 expected.
+>    .Queue~of(1,2)~delete(.array~of(1,2)) 93.926 Too many subscripts for array; 1 expected.
+15,16c15,16
+<    .Array~new~insert('a', .array~of(1,2)) -> String
+<    .Array~new~section(.array~of(1,2)) -> Array
+---
+>    .Array~new~insert('a', .array~of(1,2)) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+>    .Array~new~section(.array~of(1,2)) 93.907 Method argument 1 must be a positive whole number; found "an Array".

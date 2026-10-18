@@ -1,0 +1,30 @@
+insert after .array~of(2) 3 1 2 x 3
+insert after 2 3 1 2 x 3
+insert past the end 5 5 1
+section .array~of(2) 2 3
+section .array~of(2), 1 2
+section past the end 0
+queue insert after .array~of(1) 2 p r q
+   a~insert('x', .array~of(2, 3)) 93.926 Too many subscripts for array; 1 expected.
+   a~insert('x', .array~new) 93.901 Not enough arguments for method; 2 expected.
+   a~insert('x', .array~of('two')) 93.907 Method argument 2 must be a positive whole number; found "two".
+   a~section(.array~of(1, 2)) 93.926 Too many subscripts for array; 1 expected.
+   a~section(.array~new) 93.901 Not enough arguments for method; 1 expected.
+   a~section(.array~of(0)) 93.907 Method argument 1 must be a positive whole number; found "0".
+   a~section(1, .nil) 93.923 Invalid length argument specified; found "The NIL object".
+   a~section(1, .string) 93.923 Invalid length argument specified; found "The String class".
+   a~section(1, -1) 93.923 Invalid length argument specified; found "-1".
+   a~section(1, 1.5) 93.923 Invalid length argument specified; found "1.5".
+   a~section(1, 'x') 93.923 Invalid length argument specified; found "x".
+   .Queue~new~insert('a', 99) 93.966 Incorrect queue index "99".
+   .Queue~new~insert('a', 17) 93.966 Incorrect queue index "17".
+   .Queue~of(1, 2)~insert('a', 3) 93.966 Incorrect queue index "3".
+   .Queue~of(1, 2)~insert('a', .array~of(5)) 93.966 Incorrect queue index "5".
+   .Queue~new(50)~insert('a', 20) 93.966 Incorrect queue index "20".
+   .Queue~of(1, 2)~insert('a', .array~of(1, 2)) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+   .Queue~of(1, 2)~insert('a', .array~new) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+   .Queue~of(1, 2)~insert('a', .array~of('x')) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+Queue
+   .Queue~of(1, 2)~section(.array~of(2)) raised nothing
+   .Queue~of(1, 2)~section(.array~of(1, 2)) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+   .Queue~of(1, 2)~section(1, .nil) 93.923 Invalid length argument specified; found "The NIL object".

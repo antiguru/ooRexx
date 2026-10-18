@@ -1,0 +1,7 @@
+at, [] and hasIndex of each held index 1
+at(.object~new) is .nil 1
+[.object~new] is .nil 1
+Deviation 4, unasserted: at("2"||"2") is .nil 0
+Deviation 4, unasserted: ["2"||"2"] is .nil 0
+Deviation 4, unasserted: hasIndex(substr) is 0 0
+rc 0

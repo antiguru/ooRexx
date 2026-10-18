@@ -1,0 +1,9 @@
+# /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t67-run3.sh: oracle, parent 01db1850f (git archive build) and task 599f663ae, one fresh directory per run
+collection_identity_table_items	parent	rc 0/0	stdout differs	stderr same
+collection_identity_table_items	task	rc 0/0	stdout same	stderr same
+collection_queue_remove_item	parent	rc 0/0	stdout differs	stderr same
+collection_queue_remove_item	task	rc 0/0	stdout same	stderr same
+collection_array_index_argument	parent	rc 0/163	stdout differs	stderr differs
+collection_array_index_argument	task	rc 0/0	stdout same	stderr same
+string_compare_nil	parent	rc 0/0	stdout differs	stderr same
+string_compare_nil	task	rc 0/0	stdout same	stderr same

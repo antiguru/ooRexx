@@ -1,0 +1,17 @@
+   .Queue~of(1,2)~insert('a', .array~new) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+   .Queue~of(1,2)~insert('a', .array~of('x')) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+   .Queue~of(1,2)~insert('a', .array~of(1,2,3)) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+   .Queue~of(1,2)~put('a', .array~new) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+   .Queue~of(1,2)~put('a', .array~of(1,2)) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+   .Queue~of(1,2)~put('a', .array~of(9)) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+   .Queue~of(1,2)~put('a', .array~of(20)) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+   .Queue~of(1,2)~at(.array~of(1,2)) 93.926 Too many subscripts for array; 1 expected.
+   .Queue~of(1,2)~at(.array~new) 93.901 Not enough arguments for method; 1 expected.
+   .Queue~of(1,2)~delete(.array~of(1,2)) 93.926 Too many subscripts for array; 1 expected.
+   .Queue~of(1,2)~section(.array~of(1,2)) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+   .Queue~of(1,2)~section(.array~of(2)) -> Queue
+   .Queue~of(1,2)~section(1, .nil) 93.923 Invalid length argument specified; found "The NIL object".
+   .Queue~new~insert('a', .array~of(1,2)) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+   .Array~new~insert('a', .array~of(1,2)) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+   .Array~new~section(.array~of(1,2)) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+   .Array~new(0)~section(.array~of(1,2)) 93.926 Too many subscripts for array; 1 expected.

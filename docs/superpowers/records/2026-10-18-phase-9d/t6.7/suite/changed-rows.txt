@@ -1,0 +1,63 @@
+# diff <(grep -v '^#' t6.6/r2/suite/tests.tsv | sort) <(grep -v '^#' t6.7/suite/tests.tsv | sort)
+6311c6311
+< base/class/Array	TESTINSERT	-	passed	failed
+---
+> base/class/Array	TESTINSERT	-	passed	passed
+6334c6334
+< base/class/Array	TESTMULTIINDEXINSERT	-	passed	failed
+---
+> base/class/Array	TESTMULTIINDEXINSERT	-	passed	passed
+6359c6359
+< base/class/Array	TEST_SECTION	-	passed	failed
+---
+> base/class/Array	TEST_SECTION	-	passed	passed
+6364,6365c6364,6365
+< base/class/Array	TEST_SECTION_SYNTAX5	-	passed	failed
+< base/class/Array	TEST_SECTION_SYNTAX6	-	passed	failed
+---
+> base/class/Array	TEST_SECTION_SYNTAX5	-	passed	passed
+> base/class/Array	TEST_SECTION_SYNTAX6	-	passed	passed
+6387c6387
+< base/class/Bag	TEST_HASITEM_VALUE_NOTEQUAL_INDEX	-	passed	failed
+---
+> base/class/Bag	TEST_HASITEM_VALUE_NOTEQUAL_INDEX	Deviation(45)	passed	failed
+6426c6426
+< base/class/CircularQueue	TEST_DIFFERENCE	-	passed	failed
+---
+> base/class/CircularQueue	TEST_DIFFERENCE	-	passed	passed
+6716c6716
+< base/class/collections/queue	TEST_16	-	passed	failed
+---
+> base/class/collections/queue	TEST_16	-	passed	passed
+6981c6981
+< base/class/IdentityTable	TEST_BUG_1468	-	passed	failed
+---
+> base/class/IdentityTable	TEST_BUG_1468	-	passed	passed
+6990,6991c6990,6991
+< base/class/IdentityTable	TEST_HASITEM	-	passed	failed
+< base/class/IdentityTable	TEST_INDEX	-	passed	failed
+---
+> base/class/IdentityTable	TEST_HASITEM	-	passed	passed
+> base/class/IdentityTable	TEST_INDEX	-	passed	passed
+10224c10224
+< base/class/QueueRGF	TEST_DIFFERENCE	-	passed	failed
+---
+> base/class/QueueRGF	TEST_DIFFERENCE	-	passed	passed
+10234c10234
+< base/class/QueueRGF	TEST_INSERT_ERROR2	-	passed	failed
+---
+> base/class/QueueRGF	TEST_INSERT_ERROR2	-	passed	passed
+10263,10264c10263,10264
+< base/class/QueueRGF	TEST_XOR	-	passed	failed
+< base/class/Queue	TEST_DIFFERENCE	-	passed	failed
+---
+> base/class/QueueRGF	TEST_XOR	-	passed	passed
+> base/class/Queue	TEST_DIFFERENCE	-	passed	passed
+10306c10306
+< base/class/Queue	TEST_XOR	-	passed	failed
+---
+> base/class/Queue	TEST_XOR	-	passed	passed
+13172c13172
+< base/class/String/comparisonOperators	TEST_NIL	-	passed	failed
+---
+> base/class/String/comparisonOperators	TEST_NIL	-	passed	passed
