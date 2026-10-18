@@ -178,3 +178,93 @@ Every Task 6, 7 and 8 instance writes `rust/corpus/refusal-dispositions.tsv`, `r
 * `Owner::Phase9` at `owner.rs:57,67,80,98-102`; `OPEN` at `native/tests.rs:150`; `PHASES` at `internal_routines.rs:107`; `CLOSED` at `closed_phases.rs:37`; `OPEN_PHASES` at `refusal_dispositions.rs:60`; the open `OWNER: Phase 9` row at `phase-4-exclusions.txt:6390-6391` (`:5830` and `:6454` are DELIVERED); roadmap row 9 at `2026-07-27-rust-rewrite.md:661`, rows 6 to 8 carry `**CLOSED <date>**`.
 * `hash.rs:214` passes `method` with the receiver's class id; `queued/2026-10-01-condition-object-directory-methods.md` exists.
 * `p61-gates/bggates.sh` and `tsan.sh` exist; `rust/tsan.supp` exists; nightly is installed.
+
+## Re-review
+
+Revision `3abf2e2ef` (2026-10-18), scoped to B1, B2, M1-M7 and m1-m9. Every new citation was checked against the tree at `3abf2e2ef`.
+
+### Verdict
+
+**Ready with fixes.** Both blocking findings are resolved. Three new citations point at the wrong lines or a wrong file and would send an implementer astray; five minor residues. No finding needs Moritz.
+
+### First-round findings
+
+| # | State | Where |
+|---|---|---|
+| B1 enumeration | Resolved. Seeded from the five `Loud::native_method(` sites (`grep` prints 5), each known receiver its own row, a `disposition` column, the fallthrough's reach by probe. Two citation errors, R1. | :212-235 |
+| B2 one constructor, three fates | Resolved. The last Task 7 instance splits by disposition into separate constructors, citing `refusal_dispositions.rs:642-650`; the `:783-788` assertion moves with it. | :314-323 |
+| M1 yaml witness | Resolved. Pure-Rexx witnesses with no `::requires`, one per refusal text; `src/ir/` listed. One wrong path, R2; one unmechanised step, R5. | :245-265 |
+| M2 cause column | Resolved. By-hand runs as `suite.rs:574` and `:639` do (both build a `work_dir`), stdout and stderr kept under `causes/<group>/`. | :150-155 |
+| M3 group map | Resolved. Every task runs the whole suite and reports changed rows. Bound residue, R4. | :82-87, :117-118 |
+| M4 perf baseline | Resolved. `-o cg-9d/<task>`, delta against the previous perf-checked task, table copied to records. Residue, R8. | :90-99 |
+| M5 fixtures | Resolved. `refusal_dispositions.rs:783-793` in Task 5, `:783-788` in Task 7's last instance, `:843`, `:864`, `:945` in Task 9. One wrong file, R3. | :272-276, :322-323, :348-349 |
+| M6 templates | Resolved. Task 6 carries Review Focus 3 and 4 as steps; `clusters.md` marks which cluster they belong to; Task 8 writes a witness where the item has no probe and runs the whole suite. | :164-165, :288-301, :330-336 |
+| M7 serial instances | Resolved. | :100-102 |
+| m1 inverted exclusion sentence | Resolved. | :145-149 |
+| m2 9b carried list, markers | Resolved. | :183-185, :193-196 |
+| m3 `fork_child` line | Resolved (`:557`, owner `:565`). | :270-271 |
+| m4 `names()` and the test named | Resolved. | :344-347, :355-360 |
+| m5 bggates cost, caps, tsan | Resolved in substance (G5-G9 only, builds under 16G, tsan's invocation and `phase-6-1-gate.md:1266`). Mechanism residue, R6. | :382-389 |
+| m6 header derivation at the close | Resolved. | :396-397 |
+| m7 INTERPRET row's disposition | Resolved. | :361-363 |
+| m8 `enhanced` | Resolved. | :131-132, :232-233 |
+| m9 semicolon and `--` bans | Resolved (only "No em-dashes" remains). | :67 |
+
+### Open findings
+
+#### R1. Task 3's seed list swaps two 9a-gate citations (Major)
+
+* :216-219, `OBJECTNAME=`: "`phase-9a-gate.md:291` has the history". `:291` is the `Object~copy` on Package row. The `OBJECTNAME=` row is `:292` ("on a String or a SmallInt it stays refused, Deviation 31").
+* :220-221, `COPY`: "including the REXX package's copy (`phase-9a-gate.md:287`)". `:287` is the `StackFrame~executable` row. The REXX package's copy is `:291`.
+* :214-215 (`:287` for `StackFrame~executable`) is right.
+
+Fix: `:292` for `OBJECTNAME=`, `:291` for `COPY`.
+
+#### R2. Task 4 names a file that does not exist (Major)
+
+:246: "`src/drive.rs:3782`". `ls rust/crates/rexx-exec/src/drive.rs` fails; the site is `src/ir/drive.rs:3782`. Fix the path.
+
+#### R3. Task 5 names a real file that is the wrong one (Major)
+
+:275: "The texts pinned at `rust/crates/rexx-exec/src/directives.rs:321-355`". That file exists and holds directive handling; the pins are at `rust/crates/rexx-exec/src/run/tests/directives.rs:321-355`. The grep beside it (`grep -rn 'named semaphore\|forked child' rust/crates`) finds the right file, which is why this is not blocking, but an implementer who reads the cited lines first reads unrelated code. Fix the path.
+
+#### R4. The per-task bound no longer holds (Minor)
+
+:76 "at most 5 minutes in all" now contains the whole suite at 4m38s (:82) plus fmt, clippy, the touched binaries, the refusal tables and the corpus gate. Either raise the per-task bound (the foreground bound at :75 is 10 minutes) or name the suite as a second exception beside the perf check.
+
+#### R5. The repository-copy yaml run has no mechanism (Minor)
+
+:264-265: "Run the yaml group once more with `extensions/yaml/yaml.cls` in place of the oracle's copy." `lay_class_files` (`suite.rs:342-353`) copies every `.cls` from `oracle_root()/bin` on every run and takes no override. Say how: a by-hand run per Task 1 Step 2 with the repository's file laid in the crate side's `bin` directory, or drop the step and keep Review Focus 2 to the harness's copy, which is what spec 2.2 :58-60 requires.
+
+#### R6. "The gates of `bggates.sh` that `run.sh` does not already cover" cannot be invoked as such (Minor)
+
+:382-383 and :388. `bggates.sh` takes one argument, a sha, and runs G1-G9 over an archived tree; it has no switch for G5-G9. "Both gate scripts' status files" presumes it ran. Say that `run.sh` carries the G5-G9 commands copied from `bggates.sh` (its G5, G6, G7, G8 and G9 lines) under its own status file, and that only `tsan.sh`'s output is copied in beside it.
+
+#### R7. Task 3 Step 2 re-measures `method-bodies.txt` and misses the class arm (Minor)
+
+:228-231: "For every method in `class-methods.txt`, send it once to an instance of its class with no arguments." That is `method_bodies.rs` (D76), whose committed output `rust/corpus/method-bodies.txt` already holds that send per row and shows no `native_method` hit. `class-methods.txt` has class-arm rows (`awk -F'\t' '$3=="class"'` prints 134), which an instance send does not reach. Say: cite `method-bodies.txt` as the no-argument measurement, send per arm, and probe only the rows its header says it cannot see (classes whose zero-argument constructor raises).
+
+#### R8. The first perf baseline is still ambiguous (Minor)
+
+:95-96: "The 9c close's figures ... are the first baseline." `close/callgrind.txt` has two blocks: `startup` +0.0181 at `48fb59b51` and +0.0162 at `25197002a`; `churn` and `parse` exist only in the first block. Name the `25197002a` block for `startup`, `sayloop`, `interpret` and the `48fb59b51` block for `churn`, `parse`.
+
+### New claims checked, true
+
+* :82 "4m38s at the 9c close": `close/status.txt`, workspace exit 19:55:57Z, suite exit 20:00:35Z.
+* :152 `suite.rs:574` and `:639` each build a `work_dir` for the run.
+* :212-213 the grep prints five sites; `lib.rs:1132` is a comment without `(`.
+* :224-225 `dispatch.rs:2472-2500` is `invocable` with its four maps and the refusal.
+* :240-242 `phase_10_group` `:278-289`, `PASSING` `:1516`, `FAILING` `:1544`.
+* :270-271 `named_semaphore` `:540`/`:548`, `fork_child` `:557`/`:565`.
+* :272 `the_scanner_reads_each_owner_form` at `:783`, `named_semaphore` asserted at `:789-793`, `native_method` at `:785-788`.
+* :315 `:642-650` is the `seen` map keyed by constructor.
+* :341-351 every Task 9 line reference matches.
+* :384-386 `tsan.sh` runs `cargo +nightly` itself; nightly is installed; `phase-6-1-gate.md:1266` gives the quoted invocation.
+
+### Summary for Moritz
+
+1. Both blocking findings are resolved: the refusal table is now seeded from the five actual `native_method` sites with their known receivers, and the last Task 7 instance splits each site by its fate so no constructor carries a false GUARD.
+2. All seven major and nine minor findings are resolved in substance.
+3. Three of the revision's new citations are wrong and would send an implementer to the wrong lines: two 9a-gate line numbers are swapped in Task 3, Task 4 names `src/drive.rs` (it is `src/ir/drive.rs`), and Task 5 names `src/directives.rs` where the pins are in `src/run/tests/directives.rs`.
+4. Five minor residues: the 5-minute per-task bound now contains a 4m38s suite run, the repository-copy yaml run has no mechanism, `bggates.sh` cannot run G5-G9 alone, Task 3's probe duplicates `method-bodies.txt` and skips class methods, and the first perf baseline block is unnamed.
+5. With R1-R3 fixed in text, ready to dispatch; R4-R8 can be fixed in the same edit.
