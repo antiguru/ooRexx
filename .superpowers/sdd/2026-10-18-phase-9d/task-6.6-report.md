@@ -321,7 +321,7 @@ The re-review's one-arm fix, `start_settings(from, running)` for `(Some(from), N
 caught `loadPackage`. I tried it first, and round 1's C34 (`loadPackage` under `NUMERIC DIGITS 4`)
 moved to `prolog 9` where the oracle prints 4. The fix that landed puts the rule where the
 executable installs instead:
-* `Interp::new_executable`'s `install_directives` runs with `install_caller` set to the running
+* `Interp::install_executable`'s `install_directives` runs with `install_caller` set to the running
   activation's settings, as `run_loaded` sets its caller's.
 * So its `::REQUIRES` take `start_settings(executable package, running)`, and its own constants
   inherit under INHERIT.
