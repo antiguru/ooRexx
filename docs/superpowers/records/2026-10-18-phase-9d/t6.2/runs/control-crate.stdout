@@ -1,0 +1,36 @@
+Searching for test containers
+Executing automated test suite
+ISINT-WHOLE 256 1000 1 0
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          20
+Assertions:         29079
+Failures:           0
+Errors:             1
+
+[error] 20261018 16:27:31.397990
+  Test:   TEST_INTEGER_POWER
+  Class:  RexxInteger.testGroup
+  File:   .../ooRexx/base/class/RexxInteger.testGroup
+  Event:  SYNTAX 97.1 raised unexpectedly.
+    Object "The NIL object" does not understand message "\".
+    Line:    256
+   256 *-*     end
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+File search:        00:00:00.001891
+Suite construction: 00:00:00.001583
+Test execution:     00:00:00.395694
+Total time:         00:00:00.400501
+

@@ -1,0 +1,55 @@
+--- ootest/ooRexx/base/class/RexxInteger.testGroup
++++ patched/RexxInteger.testGroup
+@@ -395,8 +395,51 @@
+ 
+ 
+ 
+--- returns true if the argument is a RexxInteger instance
++-- Task 6.2 patch: isInteger answers what the oracle's original routine
++-- answered. ISINT_MODE=log runs the original and appends one line per call to
++-- ISINT_FILE: the caller's line, the argument, its dataType("W") under
++-- NUMERIC DIGITS 18, and the answer. Otherwise the answer is replayed from
++-- ISINT_FILE, which holds lines "key<tab>whole<tab>answer"; the key is
++-- "line|argument", or "line" for a call site where every oracle call
++-- answered alike. A missing key or a dataType("W") unlike the oracle's
++-- answers .nil, which no assertion accepts.
+ ::routine isInteger
++  use strict arg number
++  site = .context~stackFrames[2]~line
++  numeric digits 18
++  whole = number~dataType("W")
++  file = value("ISINT_FILE", , "ENVIRONMENT")
++  if value("ISINT_MODE", , "ENVIRONMENT") == "log" then do
++    answer = isIntegerOriginal(number)
++    call lineout file, site || "09"x || number || "09"x || whole || "09"x || answer
++    return answer
++  end
++  table = .local~isint.table
++  if table == .nil then do
++    table = .directory~new
++    do while lines(file) > 0
++      parse value linein(file) with key "09"x w "09"x a
++      table[key] = .array~of(w, a)
++    end
++    call stream file, "c", "close"
++    .local~isint.table = table
++  end
++  entry = table[site"|"number]
++  if entry == .nil then
++    entry = table[site]
++  if entry == .nil then do
++    say "ISINT-MISSING" site number
++    return .nil
++  end
++  if entry[1] \== whole then do
++    say "ISINT-WHOLE" site number whole entry[1]
++    return .nil
++  end
++  return entry[2]
++
++
++-- returns true if the argument is a RexxInteger instance
++::routine isIntegerOriginal
+   -- RexxInteger will claim to be a String in every aspect, so we are
+   -- exploiting an (intentional) bug in the RexxInteger min() method,
+   -- which immediately returns the first arg without considering whether

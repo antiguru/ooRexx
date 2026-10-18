@@ -4,6 +4,25 @@
 # ootest revision 13178
 base/bif/CHAROUT	TEST_STDOUT_START	Flaky	common.txt: CHAROUT.testGroup/TEST_STDOUT_START
 base/bif/LINEOUT	TEST_LINE_TRANSIENT	Flaky	common.txt: LINEOUT.testGroup/TEST_LINE_TRANSIENT
+base/class/RexxInteger	TEST_INTEGER_ADDITION	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_INTEGER_CONSTANT	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_INTEGER_D2X	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_INTEGER_DATE	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_INTEGER_DIVISION	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_INTEGER_INTEGERDIVIDE	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_INTEGER_MODULO	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_INTEGER_MULTIPLICATION	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_INTEGER_POWER	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_INTEGER_REMAINDER	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_INTEGER_REXXINFO	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_INTEGER_SUBTRACTION	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_INTEGER_TIME	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_INTEGER_UNARY_MINUS	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_INTEGER_UNARY_PLUS	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_NUMBERSTRING_CEIL_FLOOR_ROUND_TRUNC	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_NUMBERSTRING_INTEGERDIVIDE	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_STRING_C2D	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
+base/class/RexxInteger	TEST_STRING_X2D	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
 base/rexxutil/SysSleep	TEST_SLEEP_CONCURRENT	Flaky	common.txt: SYSSLEEP.testGroup/TEST_SLEEP_CONCURRENT
 base/rexxutil/SysSleep	TEST_SLEEP_DURATION	Flaky	common.txt: SYSSLEEP.testGroup/TEST_SLEEP_DURATION
 utilities/rexx/rexx_command	TEST_PASSINGARGS7	Deviation 40	a child rexx's OUTPUT and ERROR merged into one array interleave by hand-over
