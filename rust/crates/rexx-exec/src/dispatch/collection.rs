@@ -458,7 +458,7 @@ pub(super) fn array_grow(
             // `ArrayClass::extend` raises, and not an abort.
             if let Some(extra) = length.checked_sub(slots.len()) {
                 slots
-                    .try_reserve_exact(extra)
+                    .try_reserve(extra)
                     .map_err(|_| Failure::from(Raised::system_resources()))?;
             }
             slots.resize(length);

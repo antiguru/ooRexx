@@ -163,6 +163,12 @@ impl ArraySlots {
         self.items.try_reserve_exact(additional)
     }
 
+    /// `Vec::try_reserve` over the slots: room for `additional` more, grown
+    /// by the same amortised rule `resize` uses.
+    pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
+        self.items.try_reserve(additional)
+    }
+
     /// How many slots the allocation holds.
     pub fn capacity(&self) -> usize {
         self.items.capacity()
