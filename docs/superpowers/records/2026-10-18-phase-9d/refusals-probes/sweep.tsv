@@ -1,0 +1,3565 @@
+class	method	arm	variant	args	rc	fallthrough	loud	stdout	stderr
+Class	=	instance	plain	1	0	no	no	sent	
+Class	==	instance	plain	1	0	no	no	sent	
+Class	<>	instance	plain	1	0	no	no	sent	
+Class	><	instance	plain	1	0	no	no	sent	
+Class	\=	instance	plain	1	0	no	no	sent	
+Class	\==	instance	plain	1	0	no	no	sent	
+Class	activate	instance	plain		0	no	no	sent	
+Class	annotation	instance	plain	1	0	no	no	sent	
+Class	annotations	instance	plain		0	no	no	sent	
+Class	baseClass	instance	plain		0	no	no	sent	
+Class	defaultName	instance	plain		0	no	no	sent	
+Class	define	instance	plain	'x'	0	no	no	sent	
+Class	defineMethods	instance	plain	.table~new	0	no	no	sent	
+Class	delete	instance	plain	'x'	0	no	no	sent	
+Class	enhanced	instance	plain	.table~new	0	no	no	sent	
+Class	id	instance	plain		0	no	no	sent	
+Class	inherit	instance	plain	.Object	0	no	no	syntax 98.942	
+Class	isAbstract	instance	plain		0	no	no	sent	
+Class	isMetaclass	instance	plain		0	no	no	sent	
+Class	isSubclassOf	instance	plain	.Object	0	no	no	sent	
+Class	metaClass	instance	plain		0	no	no	sent	
+Class	method	instance	plain	'x'	0	no	no	syntax 97.1	
+Class	methods	instance	plain		0	no	no	sent	
+Class	mixinClass	instance	plain	'x'	0	no	no	sent	
+Class	new	class	plain		0	no	no	syntax 93.901	
+Class	new	class	subclass		0	no	no	syntax 93.901	
+Class	package	instance	plain		0	no	no	sent	
+Class	queryMixinClass	instance	plain		0	no	no	sent	
+Class	subclass	instance	plain	'x'	0	no	no	sent	
+Class	subclasses	instance	plain		0	no	no	sent	
+Class	superClass	instance	plain		0	no	no	sent	
+Class	superClasses	instance	plain		0	no	no	sent	
+Class	uninherit	instance	plain	.Object	0	no	no	syntax 98.942	
+Message	new	class	plain	'v','STRING'	0	no	no	sent	
+Message	new	class	subclass	'v','STRING'	0	no	no	sent	
+Message	arguments	instance	plain		0	no	no	sent	
+Message	arguments	instance	subclass		0	no	no	sent	
+Message	arguments	instance	enhanced		0	no	no	sent	
+Message	completed	instance	plain		0	no	no	sent	
+Message	completed	instance	subclass		0	no	no	sent	
+Message	completed	instance	enhanced		0	no	no	sent	
+Message	errorCondition	instance	plain		0	no	no	sent	
+Message	errorCondition	instance	subclass		0	no	no	sent	
+Message	errorCondition	instance	enhanced		0	no	no	sent	
+Message	halt	instance	plain		0	no	no	sent	
+Message	halt	instance	subclass		0	no	no	sent	
+Message	halt	instance	enhanced		0	no	no	sent	
+Message	hasError	instance	plain		0	no	no	sent	
+Message	hasError	instance	subclass		0	no	no	sent	
+Message	hasError	instance	enhanced		0	no	no	sent	
+Message	hasResult	instance	plain		0	no	no	sent	
+Message	hasResult	instance	subclass		0	no	no	sent	
+Message	hasResult	instance	enhanced		0	no	no	sent	
+Message	messageComplete	instance	plain		0	no	no	sent	
+Message	messageComplete	instance	subclass		0	no	no	sent	
+Message	messageComplete	instance	enhanced		0	no	no	sent	
+Message	messageName	instance	plain		0	no	no	sent	
+Message	messageName	instance	subclass		0	no	no	sent	
+Message	messageName	instance	enhanced		0	no	no	sent	
+Message	notify	instance	plain	'v'	0	no	no	syntax 88.914	
+Message	notify	instance	subclass	'v'	0	no	no	syntax 88.914	
+Message	notify	instance	enhanced	'v'	0	no	no	syntax 88.914	
+Message	reply	instance	plain		0	no	no	sent	
+Message	reply	instance	subclass		0	no	no	sent	
+Message	reply	instance	enhanced		0	no	no	sent	
+Message	replyWith	instance	plain	.array~new	0	no	no	syntax 88.901	
+Message	replyWith	instance	subclass	.array~new	0	no	no	syntax 88.901	
+Message	replyWith	instance	enhanced	.array~new	0	no	no	syntax 88.901	
+Message	result	instance	plain		120	no	yes		rexx-exec: a wait that nothing left to run can end is not implemented
+Message	result	instance	subclass		120	no	yes		rexx-exec: a wait that nothing left to run can end is not implemented
+Message	result	instance	enhanced		120	no	yes		rexx-exec: a wait that nothing left to run can end is not implemented
+Message	send	instance	plain		0	no	no	sent	
+Message	send	instance	subclass		0	no	no	sent	
+Message	send	instance	enhanced		0	no	no	sent	
+Message	sendWith	instance	plain	.array~new	0	no	no	syntax 88.901	
+Message	sendWith	instance	subclass	.array~new	0	no	no	syntax 88.901	
+Message	sendWith	instance	enhanced	.array~new	0	no	no	syntax 88.901	
+Message	start	instance	plain		0	no	no	sent	
+Message	start	instance	subclass		0	no	no	sent	
+Message	start	instance	enhanced		0	no	no	sent	
+Message	startWith	instance	plain	.array~new	0	no	no	syntax 88.901	
+Message	startWith	instance	subclass	.array~new	0	no	no	syntax 88.901	
+Message	startWith	instance	enhanced	.array~new	0	no	no	syntax 88.901	
+Message	target	instance	plain		0	no	no	sent	
+Message	target	instance	subclass		0	no	no	sent	
+Message	target	instance	enhanced		0	no	no	sent	
+Message	triggered	instance	plain		0	no	no	sent	
+Message	triggered	instance	subclass		0	no	no	sent	
+Message	triggered	instance	enhanced		0	no	no	sent	
+Message	wait	instance	plain		120	no	yes		rexx-exec: a wait that nothing left to run can end is not implemented
+Message	wait	instance	subclass		120	no	yes		rexx-exec: a wait that nothing left to run can end is not implemented
+Message	wait	instance	enhanced		120	no	yes		rexx-exec: a wait that nothing left to run can end is not implemented
+Message	cancel	instance	plain	.array~of('v')	0	no	no	sent	
+Message	cancel	instance	subclass	.array~of('v')	0	no	no	sent	
+Message	cancel	instance	enhanced	.array~of('v')	0	no	no	sent	
+Method	new	class	plain	1,.array~of('v')	0	no	no	sent	
+Method	new	class	subclass	1,.array~of('v')	0	no	no	sent	
+Method	loadExternalMethod	class	plain	1,'x'	0	no	no	syntax 99.917	
+Method	loadExternalMethod	class	subclass	1,'x'	0	no	no	syntax 99.917	
+Method	newFile	class	plain	'zzfile'	0	no	no	syntax 3.1	
+Method	newFile	class	subclass	'zzfile'	0	no	no	syntax 3.1	
+Method	annotation	instance	plain	1	0	no	no	sent	
+Method	annotations	instance	plain		0	no	no	sent	
+Method	isAbstract	instance	plain		0	no	no	sent	
+Method	isAttribute	instance	plain		0	no	no	sent	
+Method	isConstant	instance	plain		0	no	no	sent	
+Method	isGuarded	instance	plain		0	no	no	sent	
+Method	isPackage	instance	plain		0	no	no	sent	
+Method	isPrivate	instance	plain		0	no	no	sent	
+Method	isProtected	instance	plain		0	no	no	sent	
+Method	package	instance	plain		0	no	no	sent	
+Method	scope	instance	plain		0	no	no	sent	
+Method	setGuarded	instance	plain		0	no	no	sent	
+Method	setPrivate	instance	plain		0	no	no	sent	
+Method	setProtected	instance	plain		0	no	no	sent	
+Method	setSecurityManager	instance	plain		0	no	no	sent	
+Method	setUnguarded	instance	plain		0	no	no	sent	
+Method	source	instance	plain		0	no	no	sent	
+Object	new	class	plain		0	no	no	sent	
+Object	new	class	subclass		0	no	no	sent	
+Object	=	instance	plain	1	0	no	no	sent	
+Object	=	instance	subclass	1	0	no	no	sent	
+Object	=	instance	enhanced	1	0	no	no	sent	
+Object	==	instance	plain	1	0	no	no	sent	
+Object	==	instance	subclass	1	0	no	no	sent	
+Object	==	instance	enhanced	1	0	no	no	sent	
+Object	<>	instance	plain	1	0	no	no	sent	
+Object	<>	instance	subclass	1	0	no	no	sent	
+Object	<>	instance	enhanced	1	0	no	no	sent	
+Object	><	instance	plain	1	0	no	no	sent	
+Object	><	instance	subclass	1	0	no	no	sent	
+Object	><	instance	enhanced	1	0	no	no	sent	
+Object	\=	instance	plain	1	0	no	no	sent	
+Object	\=	instance	subclass	1	0	no	no	sent	
+Object	\=	instance	enhanced	1	0	no	no	sent	
+Object	\==	instance	plain	1	0	no	no	sent	
+Object	\==	instance	subclass	1	0	no	no	sent	
+Object	\==	instance	enhanced	1	0	no	no	sent	
+Object	(abuttal)	instance	plain	1	0	no	no	syntax 97.1	
+Object	(abuttal)	instance	subclass	1	0	no	no	syntax 97.1	
+Object	(abuttal)	instance	enhanced	1	0	no	no	syntax 97.1	
+Object	||	instance	plain	1	0	no	no	sent	
+Object	||	instance	subclass	1	0	no	no	sent	
+Object	||	instance	enhanced	1	0	no	no	sent	
+Object	(blank)	instance	plain	1	0	no	no	syntax 97.1	
+Object	(blank)	instance	subclass	1	0	no	no	syntax 97.1	
+Object	(blank)	instance	enhanced	1	0	no	no	syntax 97.1	
+Object	class	instance	plain		0	no	no	sent	
+Object	class	instance	subclass		0	no	no	sent	
+Object	class	instance	enhanced		0	no	no	sent	
+Object	copy	instance	plain		0	no	no	sent	
+Object	copy	instance	subclass		0	no	no	sent	
+Object	copy	instance	enhanced		0	no	no	sent	
+Object	defaultName	instance	plain		0	no	no	sent	
+Object	defaultName	instance	subclass		0	no	no	sent	
+Object	defaultName	instance	enhanced		0	no	no	sent	
+Object	hashCode	instance	plain		0	no	no	sent	
+Object	hashCode	instance	subclass		0	no	no	sent	
+Object	hashCode	instance	enhanced		0	no	no	sent	
+Object	hasMethod	instance	plain	'x'	0	no	no	sent	
+Object	hasMethod	instance	subclass	'x'	0	no	no	sent	
+Object	hasMethod	instance	enhanced	'x'	0	no	no	sent	
+Object	identityHash	instance	plain		0	no	no	sent	
+Object	identityHash	instance	subclass		0	no	no	sent	
+Object	identityHash	instance	enhanced		0	no	no	sent	
+Object	instanceMethod	instance	plain	'x'	0	no	no	sent	
+Object	instanceMethod	instance	subclass	'x'	0	no	no	sent	
+Object	instanceMethod	instance	enhanced	'x'	0	no	no	sent	
+Object	instanceMethods	instance	plain		0	no	no	sent	
+Object	instanceMethods	instance	subclass		0	no	no	sent	
+Object	instanceMethods	instance	enhanced		0	no	no	sent	
+Object	isA	instance	plain	.Object	0	no	no	sent	
+Object	isA	instance	subclass	.Object	0	no	no	sent	
+Object	isA	instance	enhanced	.Object	0	no	no	sent	
+Object	isInstanceOf	instance	plain	.Object	0	no	no	sent	
+Object	isInstanceOf	instance	subclass	.Object	0	no	no	sent	
+Object	isInstanceOf	instance	enhanced	.Object	0	no	no	sent	
+Object	isNil	instance	plain		0	no	no	sent	
+Object	isNil	instance	subclass		0	no	no	sent	
+Object	isNil	instance	enhanced		0	no	no	sent	
+Object	objectName	instance	plain		0	no	no	sent	
+Object	objectName	instance	subclass		0	no	no	sent	
+Object	objectName	instance	enhanced		0	no	no	sent	
+Object	objectName=	instance	plain	1	0	no	no	sent	
+Object	objectName=	instance	subclass	1	0	no	no	sent	
+Object	objectName=	instance	enhanced	1	0	no	no	sent	
+Object	request	instance	plain	'x'	0	no	no	sent	
+Object	request	instance	subclass	'x'	0	no	no	sent	
+Object	request	instance	enhanced	'x'	0	no	no	sent	
+Object	run	instance	plain	.Object~method('STRING')	0	no	no	syntax 97.2	
+Object	run	instance	subclass	.Object~method('STRING')	0	no	no	syntax 97.2	
+Object	run	instance	enhanced	.Object~method('STRING')	0	no	no	syntax 97.2	
+Object	send	instance	plain	'STRING'	0	no	no	sent	
+Object	send	instance	subclass	'STRING'	0	no	no	sent	
+Object	send	instance	enhanced	'STRING'	0	no	no	sent	
+Object	sendWith	instance	plain	'STRING',.array~new	0	no	no	sent	
+Object	sendWith	instance	subclass	'STRING',.array~new	0	no	no	sent	
+Object	sendWith	instance	enhanced	'STRING',.array~new	0	no	no	sent	
+Object	setMethod	instance	plain	'x'	0	no	no	syntax 97.2	
+Object	setMethod	instance	subclass	'x'	0	no	no	syntax 97.2	
+Object	setMethod	instance	enhanced	'x'	0	no	no	syntax 97.2	
+Object	start	instance	plain	'STRING'	0	no	no	sent	
+Object	start	instance	subclass	'STRING'	0	no	no	sent	
+Object	start	instance	enhanced	'STRING'	0	no	no	sent	
+Object	startWith	instance	plain	'STRING',.array~new	0	no	no	sent	
+Object	startWith	instance	subclass	'STRING',.array~new	0	no	no	sent	
+Object	startWith	instance	enhanced	'STRING',.array~new	0	no	no	sent	
+Object	string	instance	plain		0	no	no	sent	
+Object	string	instance	subclass		0	no	no	sent	
+Object	string	instance	enhanced		0	no	no	sent	
+Object	unsetMethod	instance	plain	'x'	0	no	no	syntax 97.2	
+Object	unsetMethod	instance	subclass	'x'	0	no	no	syntax 97.2	
+Object	unsetMethod	instance	enhanced	'x'	0	no	no	syntax 97.2	
+Package	new	class	plain	1	0	no	no	syntax 43.901	
+Package	new	class	subclass	1	0	no	no	syntax 43.901	
+Package	defaultOptions	class	plain		0	no	no	syntax 88.901	
+Package	defaultOptions	class	subclass		0	no	no	syntax 88.901	
+Package	addClass	instance	plain	1,.Object	0	no	no	syntax 98.984	
+Package	addPackage	instance	plain	.context~package	0	no	no	syntax 98.984	
+Package	addPublicClass	instance	plain	1,.Object	0	no	no	syntax 98.984	
+Package	addPublicRoutine	instance	plain	1,.Routine~new('r', 'return 1')	0	no	no	syntax 98.984	
+Package	addRoutine	instance	plain	1,.Routine~new('r', 'return 1')	0	no	no	syntax 98.984	
+Package	annotation	instance	plain	1	0	no	no	sent	
+Package	annotations	instance	plain		0	no	no	sent	
+Package	classes	instance	plain		0	no	no	sent	
+Package	definedMethods	instance	plain		0	no	no	sent	
+Package	digits	instance	plain		0	no	no	sent	
+Package	findClass	instance	plain	1	0	no	no	sent	
+Package	findNamespace	instance	plain	1	0	no	no	sent	
+Package	findProgram	instance	plain	1	0	no	no	sent	
+Package	findPublicClass	instance	plain	1	0	no	no	sent	
+Package	findPublicRoutine	instance	plain	1	0	no	no	sent	
+Package	findRoutine	instance	plain	1	0	no	no	sent	
+Package	form	instance	plain		0	no	no	sent	
+Package	fuzz	instance	plain		0	no	no	sent	
+Package	importedClasses	instance	plain		0	no	no	sent	
+Package	importedPackages	instance	plain		0	no	no	sent	
+Package	importedRoutines	instance	plain		0	no	no	sent	
+Package	loadLibrary	instance	plain	1	0	no	no	syntax 98.984	
+Package	loadPackage	instance	plain	1	0	no	no	syntax 98.984	
+Package	local	instance	plain		0	no	no	sent	
+Package	name	instance	plain		0	no	no	sent	
+Package	namespaces	instance	plain		0	no	no	sent	
+Package	options	instance	plain		0	no	no	sent	
+Package	prolog	instance	plain		0	no	no	sent	
+Package	publicClasses	instance	plain		0	no	no	sent	
+Package	publicRoutines	instance	plain		0	no	no	sent	
+Package	resource	instance	plain	1	0	no	no	sent	
+Package	resources	instance	plain		0	no	no	sent	
+Package	routines	instance	plain		0	no	no	sent	
+Package	setSecurityManager	instance	plain		0	no	no	syntax 98.984	
+Package	source	instance	plain		0	no	no	sent	
+Package	sourceLine	instance	plain	1	0	no	no	sent	
+Package	sourceSize	instance	plain		0	no	no	sent	
+Package	trace	instance	plain		0	no	no	sent	
+Routine	new	class	plain	1,.array~of('v')	0	no	no	sent	
+Routine	new	class	subclass	1,.array~of('v')	0	no	no	sent	
+Routine	loadExternalRoutine	class	plain	1,'x'	0	no	no	syntax 99.917	
+Routine	loadExternalRoutine	class	subclass	1,'x'	0	no	no	syntax 99.917	
+Routine	newFile	class	plain	'zzfile'	0	no	no	syntax 3.1	
+Routine	newFile	class	subclass	'zzfile'	0	no	no	syntax 3.1	
+Routine	[]	instance	plain		0	no	no	sent	
+Routine	annotation	instance	plain	1	0	no	no	sent	
+Routine	annotations	instance	plain		0	no	no	sent	
+Routine	call	instance	plain		0	no	no	sent	
+Routine	callWith	instance	plain	.array~of('v')	0	no	no	sent	
+Routine	package	instance	plain		0	no	no	sent	
+Routine	setSecurityManager	instance	plain		0	no	no	sent	
+Routine	source	instance	plain		0	no	no	sent	
+String	new	class	plain	'x'	0	no	no	sent	
+String	new	class	subclass	'x'	0	no	no	sent	
+String	alnum	class	plain		0	no	no	sent	
+String	alnum	class	subclass		0	no	no	sent	
+String	alpha	class	plain		0	no	no	sent	
+String	alpha	class	subclass		0	no	no	sent	
+String	blank	class	plain		0	no	no	sent	
+String	blank	class	subclass		0	no	no	sent	
+String	cntrl	class	plain		0	no	no	sent	
+String	cntrl	class	subclass		0	no	no	sent	
+String	cr	class	plain		0	no	no	sent	
+String	cr	class	subclass		0	no	no	sent	
+String	digit	class	plain		0	no	no	sent	
+String	digit	class	subclass		0	no	no	sent	
+String	graph	class	plain		0	no	no	sent	
+String	graph	class	subclass		0	no	no	sent	
+String	lower	class	plain		0	no	no	sent	
+String	lower	class	subclass		0	no	no	sent	
+String	nl	class	plain		0	no	no	sent	
+String	nl	class	subclass		0	no	no	sent	
+String	null	class	plain		0	no	no	sent	
+String	null	class	subclass		0	no	no	sent	
+String	print	class	plain		0	no	no	sent	
+String	print	class	subclass		0	no	no	sent	
+String	punct	class	plain		0	no	no	sent	
+String	punct	class	subclass		0	no	no	sent	
+String	space	class	plain		0	no	no	sent	
+String	space	class	subclass		0	no	no	sent	
+String	tab	class	plain		0	no	no	sent	
+String	tab	class	subclass		0	no	no	sent	
+String	upper	class	plain		0	no	no	sent	
+String	upper	class	subclass		0	no	no	sent	
+String	xdigit	class	plain		0	no	no	sent	
+String	xdigit	class	subclass		0	no	no	sent	
+String	+	instance	plain	1,1	0	no	no	syntax 93.902	
+String	+	instance	subclass	1,1	0	no	no	syntax 93.902	
+String	+	instance	enhanced	1,1	0	no	no	syntax 93.902	
+String	-	instance	plain	1,1	0	no	no	syntax 93.902	
+String	-	instance	subclass	1,1	0	no	no	syntax 93.902	
+String	-	instance	enhanced	1,1	0	no	no	syntax 93.902	
+String	*	instance	plain	1,1	0	no	no	syntax 93.902	
+String	*	instance	subclass	1,1	0	no	no	syntax 93.902	
+String	*	instance	enhanced	1,1	0	no	no	syntax 93.902	
+String	**	instance	plain	1,1	0	no	no	syntax 93.902	
+String	**	instance	subclass	1,1	0	no	no	syntax 93.902	
+String	**	instance	enhanced	1,1	0	no	no	syntax 93.902	
+String	/	instance	plain	1,1	0	no	no	syntax 93.902	
+String	/	instance	subclass	1,1	0	no	no	syntax 93.902	
+String	/	instance	enhanced	1,1	0	no	no	syntax 93.902	
+String	//	instance	plain	1,1	0	no	no	syntax 93.902	
+String	//	instance	subclass	1,1	0	no	no	syntax 93.902	
+String	//	instance	enhanced	1,1	0	no	no	syntax 93.902	
+String	%	instance	plain	1,1	0	no	no	syntax 93.902	
+String	%	instance	subclass	1,1	0	no	no	syntax 93.902	
+String	%	instance	enhanced	1,1	0	no	no	syntax 93.902	
+String	=	instance	plain	1	0	no	no	sent	
+String	=	instance	subclass	1	0	no	no	sent	
+String	=	instance	enhanced	1	0	no	no	sent	
+String	==	instance	plain	1	0	no	no	sent	
+String	==	instance	subclass	1	0	no	no	sent	
+String	==	instance	enhanced	1	0	no	no	sent	
+String	<	instance	plain	1	0	no	no	sent	
+String	<	instance	subclass	1	0	no	no	sent	
+String	<	instance	enhanced	1	0	no	no	sent	
+String	<=	instance	plain	1	0	no	no	sent	
+String	<=	instance	subclass	1	0	no	no	sent	
+String	<=	instance	enhanced	1	0	no	no	sent	
+String	<<	instance	plain	1	0	no	no	sent	
+String	<<	instance	subclass	1	0	no	no	sent	
+String	<<	instance	enhanced	1	0	no	no	sent	
+String	<<=	instance	plain	1	0	no	no	sent	
+String	<<=	instance	subclass	1	0	no	no	sent	
+String	<<=	instance	enhanced	1	0	no	no	sent	
+String	<>	instance	plain	1	0	no	no	sent	
+String	<>	instance	subclass	1	0	no	no	sent	
+String	<>	instance	enhanced	1	0	no	no	sent	
+String	>	instance	plain	1	0	no	no	sent	
+String	>	instance	subclass	1	0	no	no	sent	
+String	>	instance	enhanced	1	0	no	no	sent	
+String	>=	instance	plain	1	0	no	no	sent	
+String	>=	instance	subclass	1	0	no	no	sent	
+String	>=	instance	enhanced	1	0	no	no	sent	
+String	><	instance	plain	1	0	no	no	sent	
+String	><	instance	subclass	1	0	no	no	sent	
+String	><	instance	enhanced	1	0	no	no	sent	
+String	>>	instance	plain	1	0	no	no	sent	
+String	>>	instance	subclass	1	0	no	no	sent	
+String	>>	instance	enhanced	1	0	no	no	sent	
+String	>>=	instance	plain	1	0	no	no	sent	
+String	>>=	instance	subclass	1	0	no	no	sent	
+String	>>=	instance	enhanced	1	0	no	no	sent	
+String	\=	instance	plain	1	0	no	no	sent	
+String	\=	instance	subclass	1	0	no	no	sent	
+String	\=	instance	enhanced	1	0	no	no	sent	
+String	\==	instance	plain	1	0	no	no	sent	
+String	\==	instance	subclass	1	0	no	no	sent	
+String	\==	instance	enhanced	1	0	no	no	sent	
+String	\<	instance	plain	1	0	no	no	sent	
+String	\<	instance	subclass	1	0	no	no	sent	
+String	\<	instance	enhanced	1	0	no	no	sent	
+String	\<<	instance	plain	1	0	no	no	sent	
+String	\<<	instance	subclass	1	0	no	no	sent	
+String	\<<	instance	enhanced	1	0	no	no	sent	
+String	\>	instance	plain	1	0	no	no	sent	
+String	\>	instance	subclass	1	0	no	no	sent	
+String	\>	instance	enhanced	1	0	no	no	sent	
+String	\>>	instance	plain	1	0	no	no	sent	
+String	\>>	instance	subclass	1	0	no	no	sent	
+String	\>>	instance	enhanced	1	0	no	no	sent	
+String	(abuttal)	instance	plain	1	0	no	no	syntax 97.1	
+String	(abuttal)	instance	subclass	1	0	no	no	syntax 97.1	
+String	(abuttal)	instance	enhanced	1	0	no	no	syntax 97.1	
+String	||	instance	plain	1	0	no	no	sent	
+String	||	instance	subclass	1	0	no	no	sent	
+String	||	instance	enhanced	1	0	no	no	sent	
+String	(blank)	instance	plain	1	0	no	no	syntax 97.1	
+String	(blank)	instance	subclass	1	0	no	no	syntax 97.1	
+String	(blank)	instance	enhanced	1	0	no	no	syntax 97.1	
+String	\	instance	plain	1	0	no	no	syntax 93.902	
+String	\	instance	subclass	1	0	no	no	syntax 93.902	
+String	\	instance	enhanced	1	0	no	no	syntax 93.902	
+String	&	instance	plain	1	0	no	no	syntax 34.901	
+String	&	instance	subclass	1	0	no	no	syntax 34.901	
+String	&	instance	enhanced	1	0	no	no	syntax 34.901	
+String	&&	instance	plain	1	0	no	no	syntax 34.901	
+String	&&	instance	subclass	1	0	no	no	syntax 34.901	
+String	&&	instance	enhanced	1	0	no	no	syntax 34.901	
+String	|	instance	plain	1	0	no	no	syntax 34.901	
+String	|	instance	subclass	1	0	no	no	syntax 34.901	
+String	|	instance	enhanced	1	0	no	no	syntax 34.901	
+String	[]	instance	plain	1	0	no	no	sent	
+String	[]	instance	subclass	1	0	no	no	sent	
+String	[]	instance	enhanced	1	0	no	no	sent	
+String	?	instance	plain	'v','v'	0	no	no	syntax 34.901	
+String	?	instance	subclass	'v','v'	0	no	no	syntax 34.901	
+String	?	instance	enhanced	'v','v'	0	no	no	syntax 34.901	
+String	abbrev	instance	plain	'x'	0	no	no	sent	
+String	abbrev	instance	subclass	'x'	0	no	no	sent	
+String	abbrev	instance	enhanced	'x'	0	no	no	sent	
+String	abs	instance	plain		0	no	no	syntax 93.943	
+String	abs	instance	subclass		0	no	no	syntax 93.943	
+String	abs	instance	enhanced		0	no	no	syntax 93.943	
+String	append	instance	plain	'x'	0	no	no	sent	
+String	append	instance	subclass	'x'	0	no	no	sent	
+String	append	instance	enhanced	'x'	0	no	no	sent	
+String	b2x	instance	plain		0	no	no	syntax 93.934	
+String	b2x	instance	subclass		0	no	no	syntax 93.934	
+String	b2x	instance	enhanced		0	no	no	syntax 93.934	
+String	bitAnd	instance	plain		0	no	no	sent	
+String	bitAnd	instance	subclass		0	no	no	sent	
+String	bitAnd	instance	enhanced		0	no	no	sent	
+String	bitOr	instance	plain		0	no	no	sent	
+String	bitOr	instance	subclass		0	no	no	sent	
+String	bitOr	instance	enhanced		0	no	no	sent	
+String	bitXor	instance	plain		0	no	no	sent	
+String	bitXor	instance	subclass		0	no	no	sent	
+String	bitXor	instance	enhanced		0	no	no	sent	
+String	c2d	instance	plain		0	no	no	sent	
+String	c2d	instance	subclass		0	no	no	sent	
+String	c2d	instance	enhanced		0	no	no	sent	
+String	c2x	instance	plain		0	no	no	sent	
+String	c2x	instance	subclass		0	no	no	sent	
+String	c2x	instance	enhanced		0	no	no	sent	
+String	caselessAbbrev	instance	plain	'x'	0	no	no	sent	
+String	caselessAbbrev	instance	subclass	'x'	0	no	no	sent	
+String	caselessAbbrev	instance	enhanced	'x'	0	no	no	sent	
+String	caselessChangeStr	instance	plain	1,1	0	no	no	sent	
+String	caselessChangeStr	instance	subclass	1,1	0	no	no	sent	
+String	caselessChangeStr	instance	enhanced	1,1	0	no	no	sent	
+String	caselessCompare	instance	plain	'x'	0	no	no	sent	
+String	caselessCompare	instance	subclass	'x'	0	no	no	sent	
+String	caselessCompare	instance	enhanced	'x'	0	no	no	sent	
+String	caselessCompareTo	instance	plain	'x'	0	no	no	sent	
+String	caselessCompareTo	instance	subclass	'x'	0	no	no	sent	
+String	caselessCompareTo	instance	enhanced	'x'	0	no	no	sent	
+String	caselessContains	instance	plain	.array~of('v')	0	no	no	sent	
+String	caselessContains	instance	subclass	.array~of('v')	0	no	no	sent	
+String	caselessContains	instance	enhanced	.array~of('v')	0	no	no	sent	
+String	caselessContainsWord	instance	plain	'x'	0	no	no	sent	
+String	caselessContainsWord	instance	subclass	'x'	0	no	no	sent	
+String	caselessContainsWord	instance	enhanced	'x'	0	no	no	sent	
+String	caselessCountStr	instance	plain	1	0	no	no	sent	
+String	caselessCountStr	instance	subclass	1	0	no	no	sent	
+String	caselessCountStr	instance	enhanced	1	0	no	no	sent	
+String	caselessEndsWith	instance	plain	.array~of('v')	0	no	no	sent	
+String	caselessEndsWith	instance	subclass	.array~of('v')	0	no	no	sent	
+String	caselessEndsWith	instance	enhanced	.array~of('v')	0	no	no	sent	
+String	caselessEquals	instance	plain	.array~of('v')	0	no	no	sent	
+String	caselessEquals	instance	subclass	.array~of('v')	0	no	no	sent	
+String	caselessEquals	instance	enhanced	.array~of('v')	0	no	no	sent	
+String	caselessLastPos	instance	plain	1	0	no	no	sent	
+String	caselessLastPos	instance	subclass	1	0	no	no	sent	
+String	caselessLastPos	instance	enhanced	1	0	no	no	sent	
+String	caselessMatch	instance	plain	1,.array~of('v')	0	no	no	sent	
+String	caselessMatch	instance	subclass	1,.array~of('v')	0	no	no	sent	
+String	caselessMatch	instance	enhanced	1,.array~of('v')	0	no	no	sent	
+String	caselessMatchChar	instance	plain	1,1	0	no	no	sent	
+String	caselessMatchChar	instance	subclass	1,1	0	no	no	sent	
+String	caselessMatchChar	instance	enhanced	1,1	0	no	no	sent	
+String	caselessPos	instance	plain	1	0	no	no	sent	
+String	caselessPos	instance	subclass	1	0	no	no	sent	
+String	caselessPos	instance	enhanced	1	0	no	no	sent	
+String	caselessStartsWith	instance	plain	.array~of('v')	0	no	no	sent	
+String	caselessStartsWith	instance	subclass	.array~of('v')	0	no	no	sent	
+String	caselessStartsWith	instance	enhanced	.array~of('v')	0	no	no	sent	
+String	caselessWordPos	instance	plain	'x'	0	no	no	sent	
+String	caselessWordPos	instance	subclass	'x'	0	no	no	sent	
+String	caselessWordPos	instance	enhanced	'x'	0	no	no	sent	
+String	ceiling	instance	plain		0	no	no	syntax 93.943	
+String	ceiling	instance	subclass		0	no	no	syntax 93.943	
+String	ceiling	instance	enhanced		0	no	no	syntax 93.943	
+String	center	instance	plain	1	0	no	no	sent	
+String	center	instance	subclass	1	0	no	no	sent	
+String	center	instance	enhanced	1	0	no	no	sent	
+String	centre	instance	plain	1	0	no	no	sent	
+String	centre	instance	subclass	1	0	no	no	sent	
+String	centre	instance	enhanced	1	0	no	no	sent	
+String	changeStr	instance	plain	1,1	0	no	no	sent	
+String	changeStr	instance	subclass	1,1	0	no	no	sent	
+String	changeStr	instance	enhanced	1,1	0	no	no	sent	
+String	compare	instance	plain	'x'	0	no	no	sent	
+String	compare	instance	subclass	'x'	0	no	no	sent	
+String	compare	instance	enhanced	'x'	0	no	no	sent	
+String	compareTo	instance	plain	'x'	0	no	no	sent	
+String	compareTo	instance	subclass	'x'	0	no	no	sent	
+String	compareTo	instance	enhanced	'x'	0	no	no	sent	
+String	contains	instance	plain	.array~of('v')	0	no	no	sent	
+String	contains	instance	subclass	.array~of('v')	0	no	no	sent	
+String	contains	instance	enhanced	.array~of('v')	0	no	no	sent	
+String	containsWord	instance	plain	'x'	0	no	no	sent	
+String	containsWord	instance	subclass	'x'	0	no	no	sent	
+String	containsWord	instance	enhanced	'x'	0	no	no	sent	
+String	copies	instance	plain	1	0	no	no	sent	
+String	copies	instance	subclass	1	0	no	no	sent	
+String	copies	instance	enhanced	1	0	no	no	sent	
+String	countStr	instance	plain	1	0	no	no	sent	
+String	countStr	instance	subclass	1	0	no	no	sent	
+String	countStr	instance	enhanced	1	0	no	no	sent	
+String	d2c	instance	plain		0	no	no	syntax 93.929	
+String	d2c	instance	subclass		0	no	no	syntax 93.929	
+String	d2c	instance	enhanced		0	no	no	syntax 93.929	
+String	d2x	instance	plain		0	no	no	syntax 93.928	
+String	d2x	instance	subclass		0	no	no	syntax 93.928	
+String	d2x	instance	enhanced		0	no	no	syntax 93.928	
+String	dataType	instance	plain		0	no	no	sent	
+String	dataType	instance	subclass		0	no	no	sent	
+String	dataType	instance	enhanced		0	no	no	sent	
+String	decodeBase64	instance	plain		0	no	no	syntax 93.962	
+String	decodeBase64	instance	subclass		0	no	no	syntax 93.962	
+String	decodeBase64	instance	enhanced		0	no	no	syntax 93.962	
+String	delStr	instance	plain		0	no	no	sent	
+String	delStr	instance	subclass		0	no	no	sent	
+String	delStr	instance	enhanced		0	no	no	sent	
+String	delWord	instance	plain	1	0	no	no	sent	
+String	delWord	instance	subclass	1	0	no	no	sent	
+String	delWord	instance	enhanced	1	0	no	no	sent	
+String	encodeBase64	instance	plain		0	no	no	sent	
+String	encodeBase64	instance	subclass		0	no	no	sent	
+String	encodeBase64	instance	enhanced		0	no	no	sent	
+String	endsWith	instance	plain	.array~of('v')	0	no	no	sent	
+String	endsWith	instance	subclass	.array~of('v')	0	no	no	sent	
+String	endsWith	instance	enhanced	.array~of('v')	0	no	no	sent	
+String	equals	instance	plain	.array~of('v')	0	no	no	sent	
+String	equals	instance	subclass	.array~of('v')	0	no	no	sent	
+String	equals	instance	enhanced	.array~of('v')	0	no	no	sent	
+String	floor	instance	plain		0	no	no	syntax 93.943	
+String	floor	instance	subclass		0	no	no	syntax 93.943	
+String	floor	instance	enhanced		0	no	no	syntax 93.943	
+String	format	instance	plain		0	no	no	syntax 93.943	
+String	format	instance	subclass		0	no	no	syntax 93.943	
+String	format	instance	enhanced		0	no	no	syntax 93.943	
+String	hashCode	instance	plain		0	no	no	sent	
+String	hashCode	instance	subclass		0	no	no	sent	
+String	hashCode	instance	enhanced		0	no	no	sent	
+String	insert	instance	plain	1	0	no	no	sent	
+String	insert	instance	subclass	1	0	no	no	sent	
+String	insert	instance	enhanced	1	0	no	no	sent	
+String	lastPos	instance	plain	1	0	no	no	sent	
+String	lastPos	instance	subclass	1	0	no	no	sent	
+String	lastPos	instance	enhanced	1	0	no	no	sent	
+String	left	instance	plain	1	0	no	no	sent	
+String	left	instance	subclass	1	0	no	no	sent	
+String	left	instance	enhanced	1	0	no	no	sent	
+String	length	instance	plain		0	no	no	sent	
+String	length	instance	subclass		0	no	no	sent	
+String	length	instance	enhanced		0	no	no	sent	
+String	lower	instance	plain		0	no	no	sent	
+String	lower	instance	subclass		0	no	no	sent	
+String	lower	instance	enhanced		0	no	no	sent	
+String	makeArray	instance	plain		0	no	no	sent	
+String	makeArray	instance	subclass		0	no	no	sent	
+String	makeArray	instance	enhanced		0	no	no	sent	
+String	makeString	instance	plain		0	no	no	sent	
+String	makeString	instance	subclass		0	no	no	sent	
+String	makeString	instance	enhanced		0	no	no	sent	
+String	match	instance	plain	1,.array~of('v')	0	no	no	sent	
+String	match	instance	subclass	1,.array~of('v')	0	no	no	sent	
+String	match	instance	enhanced	1,.array~of('v')	0	no	no	sent	
+String	matchChar	instance	plain	1,1	0	no	no	sent	
+String	matchChar	instance	subclass	1,1	0	no	no	sent	
+String	matchChar	instance	enhanced	1,1	0	no	no	sent	
+String	max	instance	plain	1	0	no	no	syntax 93.943	
+String	max	instance	subclass	1	0	no	no	syntax 93.943	
+String	max	instance	enhanced	1	0	no	no	syntax 93.943	
+String	min	instance	plain	1	0	no	no	syntax 93.943	
+String	min	instance	subclass	1	0	no	no	syntax 93.943	
+String	min	instance	enhanced	1	0	no	no	syntax 93.943	
+String	modulo	instance	plain	1	0	no	no	syntax 93.943	
+String	modulo	instance	subclass	1	0	no	no	syntax 93.943	
+String	modulo	instance	enhanced	1	0	no	no	syntax 93.943	
+String	overlay	instance	plain	1	0	no	no	sent	
+String	overlay	instance	subclass	1	0	no	no	sent	
+String	overlay	instance	enhanced	1	0	no	no	sent	
+String	pos	instance	plain	1	0	no	no	sent	
+String	pos	instance	subclass	1	0	no	no	sent	
+String	pos	instance	enhanced	1	0	no	no	sent	
+String	replaceAt	instance	plain	1,1	0	no	no	sent	
+String	replaceAt	instance	subclass	1,1	0	no	no	sent	
+String	replaceAt	instance	enhanced	1,1	0	no	no	sent	
+String	reverse	instance	plain		0	no	no	sent	
+String	reverse	instance	subclass		0	no	no	sent	
+String	reverse	instance	enhanced		0	no	no	sent	
+String	right	instance	plain	1	0	no	no	sent	
+String	right	instance	subclass	1	0	no	no	sent	
+String	right	instance	enhanced	1	0	no	no	sent	
+String	round	instance	plain		0	no	no	syntax 93.943	
+String	round	instance	subclass		0	no	no	syntax 93.943	
+String	round	instance	enhanced		0	no	no	syntax 93.943	
+String	sign	instance	plain		0	no	no	syntax 93.943	
+String	sign	instance	subclass		0	no	no	syntax 93.943	
+String	sign	instance	enhanced		0	no	no	syntax 93.943	
+String	space	instance	plain		0	no	no	sent	
+String	space	instance	subclass		0	no	no	sent	
+String	space	instance	enhanced		0	no	no	sent	
+String	startsWith	instance	plain	.array~of('v')	0	no	no	sent	
+String	startsWith	instance	subclass	.array~of('v')	0	no	no	sent	
+String	startsWith	instance	enhanced	.array~of('v')	0	no	no	sent	
+String	strip	instance	plain		0	no	no	sent	
+String	strip	instance	subclass		0	no	no	sent	
+String	strip	instance	enhanced		0	no	no	sent	
+String	subChar	instance	plain	1	0	no	no	sent	
+String	subChar	instance	subclass	1	0	no	no	sent	
+String	subChar	instance	enhanced	1	0	no	no	sent	
+String	substr	instance	plain	1	0	no	no	sent	
+String	substr	instance	subclass	1	0	no	no	sent	
+String	substr	instance	enhanced	1	0	no	no	sent	
+String	subWord	instance	plain	1	0	no	no	sent	
+String	subWord	instance	subclass	1	0	no	no	sent	
+String	subWord	instance	enhanced	1	0	no	no	sent	
+String	subWords	instance	plain		0	no	no	sent	
+String	subWords	instance	subclass		0	no	no	sent	
+String	subWords	instance	enhanced		0	no	no	sent	
+String	translate	instance	plain		0	no	no	sent	
+String	translate	instance	subclass		0	no	no	sent	
+String	translate	instance	enhanced		0	no	no	sent	
+String	trunc	instance	plain		0	no	no	syntax 93.943	
+String	trunc	instance	subclass		0	no	no	syntax 93.943	
+String	trunc	instance	enhanced		0	no	no	syntax 93.943	
+String	upper	instance	plain		0	no	no	sent	
+String	upper	instance	subclass		0	no	no	sent	
+String	upper	instance	enhanced		0	no	no	sent	
+String	verify	instance	plain	'x'	0	no	no	sent	
+String	verify	instance	subclass	'x'	0	no	no	sent	
+String	verify	instance	enhanced	'x'	0	no	no	sent	
+String	word	instance	plain	1	0	no	no	sent	
+String	word	instance	subclass	1	0	no	no	sent	
+String	word	instance	enhanced	1	0	no	no	sent	
+String	wordIndex	instance	plain	1	0	no	no	sent	
+String	wordIndex	instance	subclass	1	0	no	no	sent	
+String	wordIndex	instance	enhanced	1	0	no	no	sent	
+String	wordLength	instance	plain	1	0	no	no	sent	
+String	wordLength	instance	subclass	1	0	no	no	sent	
+String	wordLength	instance	enhanced	1	0	no	no	sent	
+String	wordPos	instance	plain	'x'	0	no	no	sent	
+String	wordPos	instance	subclass	'x'	0	no	no	sent	
+String	wordPos	instance	enhanced	'x'	0	no	no	sent	
+String	words	instance	plain		0	no	no	sent	
+String	words	instance	subclass		0	no	no	sent	
+String	words	instance	enhanced		0	no	no	sent	
+String	x2b	instance	plain		0	no	no	sent	
+String	x2b	instance	subclass		0	no	no	sent	
+String	x2b	instance	enhanced		0	no	no	sent	
+String	x2c	instance	plain		0	no	no	sent	
+String	x2c	instance	subclass		0	no	no	sent	
+String	x2c	instance	enhanced		0	no	no	sent	
+String	x2d	instance	plain		0	no	no	sent	
+String	x2d	instance	subclass		0	no	no	sent	
+String	x2d	instance	enhanced		0	no	no	sent	
+Collection	[]	instance	plain	1	0	no	no	syntax 93.965	
+Collection	[]	instance	subclass	1	0	no	no	syntax 93.965	
+Collection	[]	instance	enhanced	1	0	no	no	syntax 93.965	
+Collection	[]=	instance	plain	1,'v'	0	no	no	syntax 93.965	
+Collection	[]=	instance	subclass	1,'v'	0	no	no	syntax 93.965	
+Collection	[]=	instance	enhanced	1,'v'	0	no	no	syntax 93.965	
+Collection	allIndexes	instance	plain		0	no	no	syntax 93.965	
+Collection	allIndexes	instance	subclass		0	no	no	syntax 93.965	
+Collection	allIndexes	instance	enhanced		0	no	no	syntax 93.965	
+Collection	allItems	instance	plain		0	no	no	syntax 93.965	
+Collection	allItems	instance	subclass		0	no	no	syntax 93.965	
+Collection	allItems	instance	enhanced		0	no	no	syntax 93.965	
+Collection	at	instance	plain	1	0	no	no	syntax 93.965	
+Collection	at	instance	subclass	1	0	no	no	syntax 93.965	
+Collection	at	instance	enhanced	1	0	no	no	syntax 93.965	
+Collection	difference	instance	plain	1	0	no	no	syntax 93.948	
+Collection	difference	instance	subclass	1	0	no	no	syntax 93.948	
+Collection	difference	instance	enhanced	1	0	no	no	syntax 93.948	
+Collection	disjoint	instance	plain	1	0	no	no	syntax 93.965	
+Collection	disjoint	instance	subclass	1	0	no	no	syntax 93.965	
+Collection	disjoint	instance	enhanced	1	0	no	no	syntax 93.965	
+Collection	equivalent	instance	plain	1	0	no	no	syntax 93.965	
+Collection	equivalent	instance	subclass	1	0	no	no	syntax 93.965	
+Collection	equivalent	instance	enhanced	1	0	no	no	syntax 93.965	
+Collection	hasIndex	instance	plain	1	0	no	no	syntax 93.965	
+Collection	hasIndex	instance	subclass	1	0	no	no	syntax 93.965	
+Collection	hasIndex	instance	enhanced	1	0	no	no	syntax 93.965	
+Collection	hasItem	instance	plain	'v'	0	no	no	syntax 93.965	
+Collection	hasItem	instance	subclass	'v'	0	no	no	syntax 93.965	
+Collection	hasItem	instance	enhanced	'v'	0	no	no	syntax 93.965	
+Collection	index	instance	plain	'v'	0	no	no	syntax 93.965	
+Collection	index	instance	subclass	'v'	0	no	no	syntax 93.965	
+Collection	index	instance	enhanced	'v'	0	no	no	syntax 93.965	
+Collection	intersection	instance	plain	1	0	no	no	syntax 93.965	
+Collection	intersection	instance	subclass	1	0	no	no	syntax 93.965	
+Collection	intersection	instance	enhanced	1	0	no	no	syntax 93.965	
+Collection	items	instance	plain		0	no	no	syntax 93.965	
+Collection	items	instance	subclass		0	no	no	syntax 93.965	
+Collection	items	instance	enhanced		0	no	no	syntax 93.965	
+Collection	makeArray	instance	plain		0	no	no	syntax 93.965	
+Collection	makeArray	instance	subclass		0	no	no	syntax 93.965	
+Collection	makeArray	instance	enhanced		0	no	no	syntax 93.965	
+Collection	put	instance	plain	'v',1	0	no	no	syntax 93.965	
+Collection	put	instance	subclass	'v',1	0	no	no	syntax 93.965	
+Collection	put	instance	enhanced	'v',1	0	no	no	syntax 93.965	
+Collection	subset	instance	plain	1	0	no	no	syntax 93.948	
+Collection	subset	instance	subclass	1	0	no	no	syntax 93.948	
+Collection	subset	instance	enhanced	1	0	no	no	syntax 93.948	
+Collection	supplier	instance	plain		0	no	no	syntax 93.965	
+Collection	supplier	instance	subclass		0	no	no	syntax 93.965	
+Collection	supplier	instance	enhanced		0	no	no	syntax 93.965	
+Collection	union	instance	plain	1	0	no	no	syntax 93.965	
+Collection	union	instance	subclass	1	0	no	no	syntax 93.965	
+Collection	union	instance	enhanced	1	0	no	no	syntax 93.965	
+Collection	xor	instance	plain	1	0	no	no	syntax 93.965	
+Collection	xor	instance	subclass	1	0	no	no	syntax 93.965	
+Collection	xor	instance	enhanced	1	0	no	no	syntax 93.965	
+MapCollection	of	class	plain	'x'	0	no	no	syntax 88.923	
+MapCollection	of	class	subclass	'x'	0	no	no	syntax 88.923	
+MapCollection	makeArray	instance	plain		0	no	no	syntax 93.965	
+MapCollection	makeArray	instance	subclass		0	no	no	syntax 93.965	
+MapCollection	makeArray	instance	enhanced		0	no	no	syntax 93.965	
+MapCollection	putAll	instance	plain	1	0	no	no	syntax 93.948	
+MapCollection	putAll	instance	subclass	1	0	no	no	syntax 93.948	
+MapCollection	putAll	instance	enhanced	1	0	no	no	syntax 93.948	
+MapCollection	[]	instance	plain	1	0	no	no	syntax 93.965	
+MapCollection	[]	instance	subclass	1	0	no	no	syntax 93.965	
+MapCollection	[]	instance	enhanced	1	0	no	no	syntax 93.965	
+MapCollection	[]=	instance	plain	1,'v'	0	no	no	syntax 93.965	
+MapCollection	[]=	instance	subclass	1,'v'	0	no	no	syntax 93.965	
+MapCollection	[]=	instance	enhanced	1,'v'	0	no	no	syntax 93.965	
+MapCollection	allIndexes	instance	plain		0	no	no	syntax 93.965	
+MapCollection	allIndexes	instance	subclass		0	no	no	syntax 93.965	
+MapCollection	allIndexes	instance	enhanced		0	no	no	syntax 93.965	
+MapCollection	allItems	instance	plain		0	no	no	syntax 93.965	
+MapCollection	allItems	instance	subclass		0	no	no	syntax 93.965	
+MapCollection	allItems	instance	enhanced		0	no	no	syntax 93.965	
+MapCollection	at	instance	plain	1	0	no	no	syntax 93.965	
+MapCollection	at	instance	subclass	1	0	no	no	syntax 93.965	
+MapCollection	at	instance	enhanced	1	0	no	no	syntax 93.965	
+MapCollection	difference	instance	plain	1	0	no	no	syntax 93.948	
+MapCollection	difference	instance	subclass	1	0	no	no	syntax 93.948	
+MapCollection	difference	instance	enhanced	1	0	no	no	syntax 93.948	
+MapCollection	disjoint	instance	plain	1	0	no	no	syntax 93.965	
+MapCollection	disjoint	instance	subclass	1	0	no	no	syntax 93.965	
+MapCollection	disjoint	instance	enhanced	1	0	no	no	syntax 93.965	
+MapCollection	equivalent	instance	plain	1	0	no	no	syntax 93.965	
+MapCollection	equivalent	instance	subclass	1	0	no	no	syntax 93.965	
+MapCollection	equivalent	instance	enhanced	1	0	no	no	syntax 93.965	
+MapCollection	hasIndex	instance	plain	1	0	no	no	syntax 93.965	
+MapCollection	hasIndex	instance	subclass	1	0	no	no	syntax 93.965	
+MapCollection	hasIndex	instance	enhanced	1	0	no	no	syntax 93.965	
+MapCollection	hasItem	instance	plain	'v'	0	no	no	syntax 93.965	
+MapCollection	hasItem	instance	subclass	'v'	0	no	no	syntax 93.965	
+MapCollection	hasItem	instance	enhanced	'v'	0	no	no	syntax 93.965	
+MapCollection	index	instance	plain	'v'	0	no	no	syntax 93.965	
+MapCollection	index	instance	subclass	'v'	0	no	no	syntax 93.965	
+MapCollection	index	instance	enhanced	'v'	0	no	no	syntax 93.965	
+MapCollection	intersection	instance	plain	1	0	no	no	syntax 93.965	
+MapCollection	intersection	instance	subclass	1	0	no	no	syntax 93.965	
+MapCollection	intersection	instance	enhanced	1	0	no	no	syntax 93.965	
+MapCollection	items	instance	plain		0	no	no	syntax 93.965	
+MapCollection	items	instance	subclass		0	no	no	syntax 93.965	
+MapCollection	items	instance	enhanced		0	no	no	syntax 93.965	
+MapCollection	put	instance	plain	'v',1	0	no	no	syntax 93.965	
+MapCollection	put	instance	subclass	'v',1	0	no	no	syntax 93.965	
+MapCollection	put	instance	enhanced	'v',1	0	no	no	syntax 93.965	
+MapCollection	subset	instance	plain	1	0	no	no	syntax 93.948	
+MapCollection	subset	instance	subclass	1	0	no	no	syntax 93.948	
+MapCollection	subset	instance	enhanced	1	0	no	no	syntax 93.948	
+MapCollection	supplier	instance	plain		0	no	no	syntax 93.965	
+MapCollection	supplier	instance	subclass		0	no	no	syntax 93.965	
+MapCollection	supplier	instance	enhanced		0	no	no	syntax 93.965	
+MapCollection	union	instance	plain	1	0	no	no	syntax 93.965	
+MapCollection	union	instance	subclass	1	0	no	no	syntax 93.965	
+MapCollection	union	instance	enhanced	1	0	no	no	syntax 93.965	
+MapCollection	xor	instance	plain	1	0	no	no	syntax 93.965	
+MapCollection	xor	instance	subclass	1	0	no	no	syntax 93.965	
+MapCollection	xor	instance	enhanced	1	0	no	no	syntax 93.965	
+OrderedCollection	append	instance	plain	'v'	0	no	no	syntax 93.965	
+OrderedCollection	append	instance	subclass	'v'	0	no	no	syntax 93.965	
+OrderedCollection	append	instance	enhanced	'v'	0	no	no	syntax 93.965	
+OrderedCollection	appendAll	instance	plain	1	0	no	no	syntax 93.948	
+OrderedCollection	appendAll	instance	subclass	1	0	no	no	syntax 93.948	
+OrderedCollection	appendAll	instance	enhanced	1	0	no	no	syntax 93.948	
+OrderedCollection	delete	instance	plain	1	0	no	no	syntax 93.965	
+OrderedCollection	delete	instance	subclass	1	0	no	no	syntax 93.965	
+OrderedCollection	delete	instance	enhanced	1	0	no	no	syntax 93.965	
+OrderedCollection	difference	instance	plain	1	0	no	no	syntax 93.948	
+OrderedCollection	difference	instance	subclass	1	0	no	no	syntax 93.948	
+OrderedCollection	difference	instance	enhanced	1	0	no	no	syntax 93.948	
+OrderedCollection	first	instance	plain		0	no	no	syntax 93.965	
+OrderedCollection	first	instance	subclass		0	no	no	syntax 93.965	
+OrderedCollection	first	instance	enhanced		0	no	no	syntax 93.965	
+OrderedCollection	firstItem	instance	plain		0	no	no	syntax 93.965	
+OrderedCollection	firstItem	instance	subclass		0	no	no	syntax 93.965	
+OrderedCollection	firstItem	instance	enhanced		0	no	no	syntax 93.965	
+OrderedCollection	insert	instance	plain	'v'	0	no	no	syntax 93.965	
+OrderedCollection	insert	instance	subclass	'v'	0	no	no	syntax 93.965	
+OrderedCollection	insert	instance	enhanced	'v'	0	no	no	syntax 93.965	
+OrderedCollection	intersection	instance	plain	1	0	no	no	syntax 93.965	
+OrderedCollection	intersection	instance	subclass	1	0	no	no	syntax 93.965	
+OrderedCollection	intersection	instance	enhanced	1	0	no	no	syntax 93.965	
+OrderedCollection	last	instance	plain		0	no	no	syntax 93.965	
+OrderedCollection	last	instance	subclass		0	no	no	syntax 93.965	
+OrderedCollection	last	instance	enhanced		0	no	no	syntax 93.965	
+OrderedCollection	lastItem	instance	plain		0	no	no	syntax 93.965	
+OrderedCollection	lastItem	instance	subclass		0	no	no	syntax 93.965	
+OrderedCollection	lastItem	instance	enhanced		0	no	no	syntax 93.965	
+OrderedCollection	next	instance	plain		0	no	no	syntax 93.965	
+OrderedCollection	next	instance	subclass		0	no	no	syntax 93.965	
+OrderedCollection	next	instance	enhanced		0	no	no	syntax 93.965	
+OrderedCollection	previous	instance	plain	1	0	no	no	syntax 93.965	
+OrderedCollection	previous	instance	subclass	1	0	no	no	syntax 93.965	
+OrderedCollection	previous	instance	enhanced	1	0	no	no	syntax 93.965	
+OrderedCollection	section	instance	plain	1	0	no	no	syntax 93.965	
+OrderedCollection	section	instance	subclass	1	0	no	no	syntax 93.965	
+OrderedCollection	section	instance	enhanced	1	0	no	no	syntax 93.965	
+OrderedCollection	sort	instance	plain		0	no	no	syntax 93.965	
+OrderedCollection	sort	instance	subclass		0	no	no	syntax 93.965	
+OrderedCollection	sort	instance	enhanced		0	no	no	syntax 93.965	
+OrderedCollection	sortWith	instance	plain	.Comparator~new	0	no	no	syntax 93.965	
+OrderedCollection	sortWith	instance	subclass	.Comparator~new	0	no	no	syntax 93.965	
+OrderedCollection	sortWith	instance	enhanced	.Comparator~new	0	no	no	syntax 93.965	
+OrderedCollection	stableSort	instance	plain		0	no	no	syntax 93.965	
+OrderedCollection	stableSort	instance	subclass		0	no	no	syntax 93.965	
+OrderedCollection	stableSort	instance	enhanced		0	no	no	syntax 93.965	
+OrderedCollection	stableSortWith	instance	plain	.Comparator~new	0	no	no	syntax 93.965	
+OrderedCollection	stableSortWith	instance	subclass	.Comparator~new	0	no	no	syntax 93.965	
+OrderedCollection	stableSortWith	instance	enhanced	.Comparator~new	0	no	no	syntax 93.965	
+OrderedCollection	subset	instance	plain	1	0	no	no	syntax 93.948	
+OrderedCollection	subset	instance	subclass	1	0	no	no	syntax 93.948	
+OrderedCollection	subset	instance	enhanced	1	0	no	no	syntax 93.948	
+OrderedCollection	union	instance	plain	1	0	no	no	syntax 93.965	
+OrderedCollection	union	instance	subclass	1	0	no	no	syntax 93.965	
+OrderedCollection	union	instance	enhanced	1	0	no	no	syntax 93.965	
+OrderedCollection	xor	instance	plain	1	0	no	no	syntax 93.965	
+OrderedCollection	xor	instance	subclass	1	0	no	no	syntax 93.965	
+OrderedCollection	xor	instance	enhanced	1	0	no	no	syntax 93.965	
+OrderedCollection	[]	instance	plain	1	0	no	no	syntax 93.965	
+OrderedCollection	[]	instance	subclass	1	0	no	no	syntax 93.965	
+OrderedCollection	[]	instance	enhanced	1	0	no	no	syntax 93.965	
+OrderedCollection	[]=	instance	plain	1,'v'	0	no	no	syntax 93.965	
+OrderedCollection	[]=	instance	subclass	1,'v'	0	no	no	syntax 93.965	
+OrderedCollection	[]=	instance	enhanced	1,'v'	0	no	no	syntax 93.965	
+OrderedCollection	allIndexes	instance	plain		0	no	no	syntax 93.965	
+OrderedCollection	allIndexes	instance	subclass		0	no	no	syntax 93.965	
+OrderedCollection	allIndexes	instance	enhanced		0	no	no	syntax 93.965	
+OrderedCollection	allItems	instance	plain		0	no	no	syntax 93.965	
+OrderedCollection	allItems	instance	subclass		0	no	no	syntax 93.965	
+OrderedCollection	allItems	instance	enhanced		0	no	no	syntax 93.965	
+OrderedCollection	at	instance	plain	1	0	no	no	syntax 93.965	
+OrderedCollection	at	instance	subclass	1	0	no	no	syntax 93.965	
+OrderedCollection	at	instance	enhanced	1	0	no	no	syntax 93.965	
+OrderedCollection	disjoint	instance	plain	1	0	no	no	syntax 93.965	
+OrderedCollection	disjoint	instance	subclass	1	0	no	no	syntax 93.965	
+OrderedCollection	disjoint	instance	enhanced	1	0	no	no	syntax 93.965	
+OrderedCollection	equivalent	instance	plain	1	0	no	no	syntax 93.965	
+OrderedCollection	equivalent	instance	subclass	1	0	no	no	syntax 93.965	
+OrderedCollection	equivalent	instance	enhanced	1	0	no	no	syntax 93.965	
+OrderedCollection	hasIndex	instance	plain	1	0	no	no	syntax 93.965	
+OrderedCollection	hasIndex	instance	subclass	1	0	no	no	syntax 93.965	
+OrderedCollection	hasIndex	instance	enhanced	1	0	no	no	syntax 93.965	
+OrderedCollection	hasItem	instance	plain	'v'	0	no	no	syntax 93.965	
+OrderedCollection	hasItem	instance	subclass	'v'	0	no	no	syntax 93.965	
+OrderedCollection	hasItem	instance	enhanced	'v'	0	no	no	syntax 93.965	
+OrderedCollection	index	instance	plain	'v'	0	no	no	syntax 93.965	
+OrderedCollection	index	instance	subclass	'v'	0	no	no	syntax 93.965	
+OrderedCollection	index	instance	enhanced	'v'	0	no	no	syntax 93.965	
+OrderedCollection	items	instance	plain		0	no	no	syntax 93.965	
+OrderedCollection	items	instance	subclass		0	no	no	syntax 93.965	
+OrderedCollection	items	instance	enhanced		0	no	no	syntax 93.965	
+OrderedCollection	makeArray	instance	plain		0	no	no	syntax 93.965	
+OrderedCollection	makeArray	instance	subclass		0	no	no	syntax 93.965	
+OrderedCollection	makeArray	instance	enhanced		0	no	no	syntax 93.965	
+OrderedCollection	put	instance	plain	'v',1	0	no	no	syntax 93.965	
+OrderedCollection	put	instance	subclass	'v',1	0	no	no	syntax 93.965	
+OrderedCollection	put	instance	enhanced	'v',1	0	no	no	syntax 93.965	
+OrderedCollection	supplier	instance	plain		0	no	no	syntax 93.965	
+OrderedCollection	supplier	instance	subclass		0	no	no	syntax 93.965	
+OrderedCollection	supplier	instance	enhanced		0	no	no	syntax 93.965	
+SetCollection	[]	instance	plain	1	0	no	no	syntax 93.965	
+SetCollection	[]	instance	subclass	1	0	no	no	syntax 93.965	
+SetCollection	[]	instance	enhanced	1	0	no	no	syntax 93.965	
+SetCollection	[]=	instance	plain	1,'v'	0	no	no	syntax 93.965	
+SetCollection	[]=	instance	subclass	1,'v'	0	no	no	syntax 93.965	
+SetCollection	[]=	instance	enhanced	1,'v'	0	no	no	syntax 93.965	
+SetCollection	allIndexes	instance	plain		0	no	no	syntax 93.965	
+SetCollection	allIndexes	instance	subclass		0	no	no	syntax 93.965	
+SetCollection	allIndexes	instance	enhanced		0	no	no	syntax 93.965	
+SetCollection	allItems	instance	plain		0	no	no	syntax 93.965	
+SetCollection	allItems	instance	subclass		0	no	no	syntax 93.965	
+SetCollection	allItems	instance	enhanced		0	no	no	syntax 93.965	
+SetCollection	at	instance	plain	1	0	no	no	syntax 93.965	
+SetCollection	at	instance	subclass	1	0	no	no	syntax 93.965	
+SetCollection	at	instance	enhanced	1	0	no	no	syntax 93.965	
+SetCollection	difference	instance	plain	1	0	no	no	syntax 93.948	
+SetCollection	difference	instance	subclass	1	0	no	no	syntax 93.948	
+SetCollection	difference	instance	enhanced	1	0	no	no	syntax 93.948	
+SetCollection	disjoint	instance	plain	1	0	no	no	syntax 93.965	
+SetCollection	disjoint	instance	subclass	1	0	no	no	syntax 93.965	
+SetCollection	disjoint	instance	enhanced	1	0	no	no	syntax 93.965	
+SetCollection	equivalent	instance	plain	1	0	no	no	syntax 93.965	
+SetCollection	equivalent	instance	subclass	1	0	no	no	syntax 93.965	
+SetCollection	equivalent	instance	enhanced	1	0	no	no	syntax 93.965	
+SetCollection	hasIndex	instance	plain	1	0	no	no	syntax 93.965	
+SetCollection	hasIndex	instance	subclass	1	0	no	no	syntax 93.965	
+SetCollection	hasIndex	instance	enhanced	1	0	no	no	syntax 93.965	
+SetCollection	hasItem	instance	plain	'v'	0	no	no	syntax 93.965	
+SetCollection	hasItem	instance	subclass	'v'	0	no	no	syntax 93.965	
+SetCollection	hasItem	instance	enhanced	'v'	0	no	no	syntax 93.965	
+SetCollection	index	instance	plain	'v'	0	no	no	syntax 93.965	
+SetCollection	index	instance	subclass	'v'	0	no	no	syntax 93.965	
+SetCollection	index	instance	enhanced	'v'	0	no	no	syntax 93.965	
+SetCollection	intersection	instance	plain	1	0	no	no	syntax 93.965	
+SetCollection	intersection	instance	subclass	1	0	no	no	syntax 93.965	
+SetCollection	intersection	instance	enhanced	1	0	no	no	syntax 93.965	
+SetCollection	items	instance	plain		0	no	no	syntax 93.965	
+SetCollection	items	instance	subclass		0	no	no	syntax 93.965	
+SetCollection	items	instance	enhanced		0	no	no	syntax 93.965	
+SetCollection	makeArray	instance	plain		0	no	no	syntax 93.965	
+SetCollection	makeArray	instance	subclass		0	no	no	syntax 93.965	
+SetCollection	makeArray	instance	enhanced		0	no	no	syntax 93.965	
+SetCollection	put	instance	plain	'v',1	0	no	no	syntax 93.965	
+SetCollection	put	instance	subclass	'v',1	0	no	no	syntax 93.965	
+SetCollection	put	instance	enhanced	'v',1	0	no	no	syntax 93.965	
+SetCollection	subset	instance	plain	1	0	no	no	syntax 93.948	
+SetCollection	subset	instance	subclass	1	0	no	no	syntax 93.948	
+SetCollection	subset	instance	enhanced	1	0	no	no	syntax 93.948	
+SetCollection	supplier	instance	plain		0	no	no	syntax 93.965	
+SetCollection	supplier	instance	subclass		0	no	no	syntax 93.965	
+SetCollection	supplier	instance	enhanced		0	no	no	syntax 93.965	
+SetCollection	union	instance	plain	1	0	no	no	syntax 93.965	
+SetCollection	union	instance	subclass	1	0	no	no	syntax 93.965	
+SetCollection	union	instance	enhanced	1	0	no	no	syntax 93.965	
+SetCollection	xor	instance	plain	1	0	no	no	syntax 93.965	
+SetCollection	xor	instance	subclass	1	0	no	no	syntax 93.965	
+SetCollection	xor	instance	enhanced	1	0	no	no	syntax 93.965	
+Array	new	class	plain	1	0	no	no	sent	
+Array	new	class	subclass	1	0	no	no	sent	
+Array	of	class	plain		0	no	no	sent	
+Array	of	class	subclass		0	no	no	sent	
+Array	[]	instance	plain	1	0	no	no	sent	
+Array	[]	instance	subclass	1	0	no	no	sent	
+Array	[]	instance	enhanced	1	0	no	no	sent	
+Array	[]=	instance	plain	1,'v'	0	no	no	syntax 93.907	
+Array	[]=	instance	subclass	1,'v'	0	no	no	syntax 93.907	
+Array	[]=	instance	enhanced	1,'v'	0	no	no	syntax 93.907	
+Array	allIndexes	instance	plain		0	no	no	sent	
+Array	allIndexes	instance	subclass		0	no	no	sent	
+Array	allIndexes	instance	enhanced		0	no	no	sent	
+Array	allItems	instance	plain		0	no	no	sent	
+Array	allItems	instance	subclass		0	no	no	sent	
+Array	allItems	instance	enhanced		0	no	no	sent	
+Array	append	instance	plain	'v'	0	no	no	sent	
+Array	append	instance	subclass	'v'	0	no	no	sent	
+Array	append	instance	enhanced	'v'	0	no	no	sent	
+Array	at	instance	plain	1	0	no	no	sent	
+Array	at	instance	subclass	1	0	no	no	sent	
+Array	at	instance	enhanced	1	0	no	no	sent	
+Array	delete	instance	plain	1	0	no	no	sent	
+Array	delete	instance	subclass	1	0	no	no	sent	
+Array	delete	instance	enhanced	1	0	no	no	sent	
+Array	dimension	instance	plain	1	0	no	no	sent	
+Array	dimension	instance	subclass	1	0	no	no	sent	
+Array	dimension	instance	enhanced	1	0	no	no	sent	
+Array	dimensions	instance	plain		0	no	no	sent	
+Array	dimensions	instance	subclass		0	no	no	sent	
+Array	dimensions	instance	enhanced		0	no	no	sent	
+Array	empty	instance	plain		0	no	no	sent	
+Array	empty	instance	subclass		0	no	no	sent	
+Array	empty	instance	enhanced		0	no	no	sent	
+Array	fill	instance	plain	'v'	0	no	no	sent	
+Array	fill	instance	subclass	'v'	0	no	no	sent	
+Array	fill	instance	enhanced	'v'	0	no	no	sent	
+Array	first	instance	plain		0	no	no	sent	
+Array	first	instance	subclass		0	no	no	sent	
+Array	first	instance	enhanced		0	no	no	sent	
+Array	firstItem	instance	plain		0	no	no	sent	
+Array	firstItem	instance	subclass		0	no	no	sent	
+Array	firstItem	instance	enhanced		0	no	no	sent	
+Array	hasIndex	instance	plain	1	0	no	no	sent	
+Array	hasIndex	instance	subclass	1	0	no	no	sent	
+Array	hasIndex	instance	enhanced	1	0	no	no	sent	
+Array	hasItem	instance	plain	'v'	0	no	no	sent	
+Array	hasItem	instance	subclass	'v'	0	no	no	sent	
+Array	hasItem	instance	enhanced	'v'	0	no	no	sent	
+Array	index	instance	plain	'v'	0	no	no	sent	
+Array	index	instance	subclass	'v'	0	no	no	sent	
+Array	index	instance	enhanced	'v'	0	no	no	sent	
+Array	insert	instance	plain	'v'	0	no	no	sent	
+Array	insert	instance	subclass	'v'	0	no	no	sent	
+Array	insert	instance	enhanced	'v'	0	no	no	sent	
+Array	isEmpty	instance	plain		0	no	no	sent	
+Array	isEmpty	instance	subclass		0	no	no	sent	
+Array	isEmpty	instance	enhanced		0	no	no	sent	
+Array	items	instance	plain		0	no	no	sent	
+Array	items	instance	subclass		0	no	no	sent	
+Array	items	instance	enhanced		0	no	no	sent	
+Array	last	instance	plain		0	no	no	sent	
+Array	last	instance	subclass		0	no	no	sent	
+Array	last	instance	enhanced		0	no	no	sent	
+Array	lastItem	instance	plain		0	no	no	sent	
+Array	lastItem	instance	subclass		0	no	no	sent	
+Array	lastItem	instance	enhanced		0	no	no	sent	
+Array	makeArray	instance	plain		0	no	no	sent	
+Array	makeArray	instance	subclass		0	no	no	sent	
+Array	makeArray	instance	enhanced		0	no	no	sent	
+Array	makeString	instance	plain		0	no	no	sent	
+Array	makeString	instance	subclass		0	no	no	sent	
+Array	makeString	instance	enhanced		0	no	no	sent	
+Array	next	instance	plain	1	0	no	no	sent	
+Array	next	instance	subclass	1	0	no	no	sent	
+Array	next	instance	enhanced	1	0	no	no	sent	
+Array	previous	instance	plain	1	0	no	no	sent	
+Array	previous	instance	subclass	1	0	no	no	sent	
+Array	previous	instance	enhanced	1	0	no	no	sent	
+Array	put	instance	plain	'v',1	0	no	no	sent	
+Array	put	instance	subclass	'v',1	0	no	no	sent	
+Array	put	instance	enhanced	'v',1	0	no	no	sent	
+Array	remove	instance	plain	1	0	no	no	sent	
+Array	remove	instance	subclass	1	0	no	no	sent	
+Array	remove	instance	enhanced	1	0	no	no	sent	
+Array	removeItem	instance	plain	'v'	0	no	no	sent	
+Array	removeItem	instance	subclass	'v'	0	no	no	sent	
+Array	removeItem	instance	enhanced	'v'	0	no	no	sent	
+Array	section	instance	plain	1	0	no	no	sent	
+Array	section	instance	subclass	1	0	no	no	sent	
+Array	section	instance	enhanced	1	0	no	no	sent	
+Array	size	instance	plain		0	no	no	sent	
+Array	size	instance	subclass		0	no	no	sent	
+Array	size	instance	enhanced		0	no	no	sent	
+Array	sort	instance	plain		0	no	no	sent	
+Array	sort	instance	subclass		0	no	no	sent	
+Array	sort	instance	enhanced		0	no	no	sent	
+Array	sortWith	instance	plain	.Comparator~new	0	no	no	sent	
+Array	sortWith	instance	subclass	.Comparator~new	0	no	no	sent	
+Array	sortWith	instance	enhanced	.Comparator~new	0	no	no	sent	
+Array	stableSort	instance	plain		0	no	no	sent	
+Array	stableSort	instance	subclass		0	no	no	sent	
+Array	stableSort	instance	enhanced		0	no	no	sent	
+Array	stableSortWith	instance	plain	.Comparator~new	0	no	no	sent	
+Array	stableSortWith	instance	subclass	.Comparator~new	0	no	no	sent	
+Array	stableSortWith	instance	enhanced	.Comparator~new	0	no	no	sent	
+Array	supplier	instance	plain		0	no	no	sent	
+Array	supplier	instance	subclass		0	no	no	sent	
+Array	supplier	instance	enhanced		0	no	no	sent	
+Array	toString	instance	plain		0	no	no	sent	
+Array	toString	instance	subclass		0	no	no	sent	
+Array	toString	instance	enhanced		0	no	no	sent	
+Array	difference	instance	plain	1	0	no	no	sent	
+Array	difference	instance	subclass	1	0	no	no	sent	
+Array	difference	instance	enhanced	1	0	no	no	sent	
+Array	disjoint	instance	plain	1	0	no	no	sent	
+Array	disjoint	instance	subclass	1	0	no	no	sent	
+Array	disjoint	instance	enhanced	1	0	no	no	sent	
+Array	equivalent	instance	plain	1	0	no	no	syntax 97.1	
+Array	equivalent	instance	subclass	1	0	no	no	syntax 97.1	
+Array	equivalent	instance	enhanced	1	0	no	no	syntax 97.1	
+Array	intersection	instance	plain	1	0	no	no	sent	
+Array	intersection	instance	subclass	1	0	no	no	sent	
+Array	intersection	instance	enhanced	1	0	no	no	sent	
+Array	subset	instance	plain	1	0	no	no	sent	
+Array	subset	instance	subclass	1	0	no	no	sent	
+Array	subset	instance	enhanced	1	0	no	no	sent	
+Array	union	instance	plain	1	0	no	no	sent	
+Array	union	instance	subclass	1	0	no	no	sent	
+Array	union	instance	enhanced	1	0	no	no	sent	
+Array	xor	instance	plain	1	0	no	no	sent	
+Array	xor	instance	subclass	1	0	no	no	sent	
+Array	xor	instance	enhanced	1	0	no	no	sent	
+Array	appendAll	instance	plain	1	0	no	no	syntax 93.948	
+Array	appendAll	instance	subclass	1	0	no	no	syntax 93.948	
+Array	appendAll	instance	enhanced	1	0	no	no	syntax 93.948	
+Bag	new	class	plain		0	no	no	sent	
+Bag	new	class	subclass		0	no	no	sent	
+Bag	of	class	plain	'v'	0	no	no	sent	
+Bag	of	class	subclass	'v'	0	no	no	sent	
+Bag	[]	instance	plain	1	0	no	no	sent	
+Bag	[]	instance	subclass	1	0	no	no	sent	
+Bag	[]	instance	enhanced	1	0	no	no	sent	
+Bag	[]=	instance	plain	'v'	0	no	no	sent	
+Bag	[]=	instance	subclass	'v'	0	no	no	sent	
+Bag	[]=	instance	enhanced	'v'	0	no	no	sent	
+Bag	allAt	instance	plain	1	0	no	no	sent	
+Bag	allAt	instance	subclass	1	0	no	no	sent	
+Bag	allAt	instance	enhanced	1	0	no	no	sent	
+Bag	allIndex	instance	plain	'v'	0	no	no	sent	
+Bag	allIndex	instance	subclass	'v'	0	no	no	sent	
+Bag	allIndex	instance	enhanced	'v'	0	no	no	sent	
+Bag	allIndexes	instance	plain		0	no	no	sent	
+Bag	allIndexes	instance	subclass		0	no	no	sent	
+Bag	allIndexes	instance	enhanced		0	no	no	sent	
+Bag	allItems	instance	plain		0	no	no	sent	
+Bag	allItems	instance	subclass		0	no	no	sent	
+Bag	allItems	instance	enhanced		0	no	no	sent	
+Bag	at	instance	plain	1	0	no	no	sent	
+Bag	at	instance	subclass	1	0	no	no	sent	
+Bag	at	instance	enhanced	1	0	no	no	sent	
+Bag	difference	instance	plain	1	0	no	no	sent	
+Bag	difference	instance	subclass	1	0	no	no	sent	
+Bag	difference	instance	enhanced	1	0	no	no	sent	
+Bag	empty	instance	plain		0	no	no	sent	
+Bag	empty	instance	subclass		0	no	no	sent	
+Bag	empty	instance	enhanced		0	no	no	sent	
+Bag	hasIndex	instance	plain	1	0	no	no	sent	
+Bag	hasIndex	instance	subclass	1	0	no	no	sent	
+Bag	hasIndex	instance	enhanced	1	0	no	no	sent	
+Bag	hasItem	instance	plain	'v'	0	no	no	sent	
+Bag	hasItem	instance	subclass	'v'	0	no	no	sent	
+Bag	hasItem	instance	enhanced	'v'	0	no	no	sent	
+Bag	index	instance	plain	'v'	0	no	no	sent	
+Bag	index	instance	subclass	'v'	0	no	no	sent	
+Bag	index	instance	enhanced	'v'	0	no	no	sent	
+Bag	intersection	instance	plain	1	0	no	no	sent	
+Bag	intersection	instance	subclass	1	0	no	no	sent	
+Bag	intersection	instance	enhanced	1	0	no	no	sent	
+Bag	isEmpty	instance	plain		0	no	no	sent	
+Bag	isEmpty	instance	subclass		0	no	no	sent	
+Bag	isEmpty	instance	enhanced		0	no	no	sent	
+Bag	items	instance	plain		0	no	no	sent	
+Bag	items	instance	subclass		0	no	no	sent	
+Bag	items	instance	enhanced		0	no	no	sent	
+Bag	makeArray	instance	plain		0	no	no	sent	
+Bag	makeArray	instance	subclass		0	no	no	sent	
+Bag	makeArray	instance	enhanced		0	no	no	sent	
+Bag	put	instance	plain	'v'	0	no	no	sent	
+Bag	put	instance	subclass	'v'	0	no	no	sent	
+Bag	put	instance	enhanced	'v'	0	no	no	sent	
+Bag	putAll	instance	plain	1	0	no	no	sent	
+Bag	putAll	instance	subclass	1	0	no	no	sent	
+Bag	putAll	instance	enhanced	1	0	no	no	sent	
+Bag	remove	instance	plain	1	0	no	no	sent	
+Bag	remove	instance	subclass	1	0	no	no	sent	
+Bag	remove	instance	enhanced	1	0	no	no	sent	
+Bag	removeAll	instance	plain	1	0	no	no	sent	
+Bag	removeAll	instance	subclass	1	0	no	no	sent	
+Bag	removeAll	instance	enhanced	1	0	no	no	sent	
+Bag	removeItem	instance	plain	'v'	0	no	no	sent	
+Bag	removeItem	instance	subclass	'v'	0	no	no	sent	
+Bag	removeItem	instance	enhanced	'v'	0	no	no	sent	
+Bag	subset	instance	plain	1	0	no	no	sent	
+Bag	subset	instance	subclass	1	0	no	no	sent	
+Bag	subset	instance	enhanced	1	0	no	no	sent	
+Bag	supplier	instance	plain		0	no	no	sent	
+Bag	supplier	instance	subclass		0	no	no	sent	
+Bag	supplier	instance	enhanced		0	no	no	sent	
+Bag	union	instance	plain	1	0	no	no	sent	
+Bag	union	instance	subclass	1	0	no	no	sent	
+Bag	union	instance	enhanced	1	0	no	no	sent	
+Bag	uniqueIndexes	instance	plain		0	no	no	sent	
+Bag	uniqueIndexes	instance	subclass		0	no	no	sent	
+Bag	uniqueIndexes	instance	enhanced		0	no	no	sent	
+Bag	xor	instance	plain	1	0	no	no	sent	
+Bag	xor	instance	subclass	1	0	no	no	sent	
+Bag	xor	instance	enhanced	1	0	no	no	sent	
+Bag	disjoint	instance	plain	1	0	no	no	sent	
+Bag	disjoint	instance	subclass	1	0	no	no	sent	
+Bag	disjoint	instance	enhanced	1	0	no	no	sent	
+Bag	equivalent	instance	plain	1	0	no	no	syntax 97.1	
+Bag	equivalent	instance	subclass	1	0	no	no	syntax 97.1	
+Bag	equivalent	instance	enhanced	1	0	no	no	syntax 97.1	
+CircularQueue	of	class	plain		0	no	no	sent	
+CircularQueue	of	class	subclass		0	no	no	sent	
+CircularQueue	append	instance	plain	'v'	0	no	no	sent	
+CircularQueue	append	instance	subclass	'v'	0	no	no	sent	
+CircularQueue	append	instance	enhanced	'v'	0	no	no	sent	
+CircularQueue	init	instance	plain	1	0	no	no	sent	
+CircularQueue	init	instance	subclass	1	0	no	no	sent	
+CircularQueue	init	instance	enhanced	1	0	no	no	sent	
+CircularQueue	insert	instance	plain	'v'	0	no	no	sent	
+CircularQueue	insert	instance	subclass	'v'	0	no	no	sent	
+CircularQueue	insert	instance	enhanced	'v'	0	no	no	sent	
+CircularQueue	intersection	instance	plain	1	0	no	no	sent	
+CircularQueue	intersection	instance	subclass	1	0	no	no	sent	
+CircularQueue	intersection	instance	enhanced	1	0	no	no	sent	
+CircularQueue	makeArray	instance	plain		0	no	no	sent	
+CircularQueue	makeArray	instance	subclass		0	no	no	sent	
+CircularQueue	makeArray	instance	enhanced		0	no	no	sent	
+CircularQueue	makeString	instance	plain		0	no	no	sent	
+CircularQueue	makeString	instance	subclass		0	no	no	sent	
+CircularQueue	makeString	instance	enhanced		0	no	no	sent	
+CircularQueue	push	instance	plain	'v'	0	no	no	sent	
+CircularQueue	push	instance	subclass	'v'	0	no	no	sent	
+CircularQueue	push	instance	enhanced	'v'	0	no	no	sent	
+CircularQueue	queue	instance	plain	'v'	0	no	no	sent	
+CircularQueue	queue	instance	subclass	'v'	0	no	no	sent	
+CircularQueue	queue	instance	enhanced	'v'	0	no	no	sent	
+CircularQueue	resize	instance	plain	1	0	no	no	sent	
+CircularQueue	resize	instance	subclass	1	0	no	no	sent	
+CircularQueue	resize	instance	enhanced	1	0	no	no	sent	
+CircularQueue	section	instance	plain	1	0	no	no	sent	
+CircularQueue	section	instance	subclass	1	0	no	no	sent	
+CircularQueue	section	instance	enhanced	1	0	no	no	sent	
+CircularQueue	size	instance	plain		0	no	no	sent	
+CircularQueue	size	instance	subclass		0	no	no	sent	
+CircularQueue	size	instance	enhanced		0	no	no	sent	
+CircularQueue	string	instance	plain		0	no	no	sent	
+CircularQueue	string	instance	subclass		0	no	no	sent	
+CircularQueue	string	instance	enhanced		0	no	no	sent	
+CircularQueue	supplier	instance	plain		0	no	no	sent	
+CircularQueue	supplier	instance	subclass		0	no	no	sent	
+CircularQueue	supplier	instance	enhanced		0	no	no	sent	
+CircularQueue	union	instance	plain	1	0	no	no	sent	
+CircularQueue	union	instance	subclass	1	0	no	no	sent	
+CircularQueue	union	instance	enhanced	1	0	no	no	sent	
+CircularQueue	xor	instance	plain	1	0	no	no	sent	
+CircularQueue	xor	instance	subclass	1	0	no	no	sent	
+CircularQueue	xor	instance	enhanced	1	0	no	no	sent	
+CircularQueue	[]	instance	plain	1	0	no	no	sent	
+CircularQueue	[]	instance	subclass	1	0	no	no	sent	
+CircularQueue	[]	instance	enhanced	1	0	no	no	sent	
+CircularQueue	[]=	instance	plain	1,'v'	0	no	no	syntax 93.907	
+CircularQueue	[]=	instance	subclass	1,'v'	0	no	no	syntax 93.907	
+CircularQueue	[]=	instance	enhanced	1,'v'	0	no	no	syntax 93.907	
+CircularQueue	allIndexes	instance	plain		0	no	no	sent	
+CircularQueue	allIndexes	instance	subclass		0	no	no	sent	
+CircularQueue	allIndexes	instance	enhanced		0	no	no	sent	
+CircularQueue	allItems	instance	plain		0	no	no	sent	
+CircularQueue	allItems	instance	subclass		0	no	no	sent	
+CircularQueue	allItems	instance	enhanced		0	no	no	sent	
+CircularQueue	at	instance	plain	1	0	no	no	sent	
+CircularQueue	at	instance	subclass	1	0	no	no	sent	
+CircularQueue	at	instance	enhanced	1	0	no	no	sent	
+CircularQueue	difference	instance	plain	1	0	no	no	sent	
+CircularQueue	difference	instance	subclass	1	0	no	no	sent	
+CircularQueue	difference	instance	enhanced	1	0	no	no	sent	
+CircularQueue	disjoint	instance	plain	1	0	no	no	sent	
+CircularQueue	disjoint	instance	subclass	1	0	no	no	sent	
+CircularQueue	disjoint	instance	enhanced	1	0	no	no	sent	
+CircularQueue	equivalent	instance	plain	1	0	no	no	syntax 97.1	
+CircularQueue	equivalent	instance	subclass	1	0	no	no	syntax 97.1	
+CircularQueue	equivalent	instance	enhanced	1	0	no	no	syntax 97.1	
+CircularQueue	hasIndex	instance	plain	1	0	no	no	sent	
+CircularQueue	hasIndex	instance	subclass	1	0	no	no	sent	
+CircularQueue	hasIndex	instance	enhanced	1	0	no	no	sent	
+CircularQueue	hasItem	instance	plain	'v'	0	no	no	sent	
+CircularQueue	hasItem	instance	subclass	'v'	0	no	no	sent	
+CircularQueue	hasItem	instance	enhanced	'v'	0	no	no	sent	
+CircularQueue	index	instance	plain	'v'	0	no	no	sent	
+CircularQueue	index	instance	subclass	'v'	0	no	no	sent	
+CircularQueue	index	instance	enhanced	'v'	0	no	no	sent	
+CircularQueue	items	instance	plain		0	no	no	sent	
+CircularQueue	items	instance	subclass		0	no	no	sent	
+CircularQueue	items	instance	enhanced		0	no	no	sent	
+CircularQueue	put	instance	plain	'v',1	0	no	no	syntax 93.966	
+CircularQueue	put	instance	subclass	'v',1	0	no	no	syntax 93.966	
+CircularQueue	put	instance	enhanced	'v',1	0	no	no	syntax 93.966	
+CircularQueue	subset	instance	plain	1	0	no	no	sent	
+CircularQueue	subset	instance	subclass	1	0	no	no	sent	
+CircularQueue	subset	instance	enhanced	1	0	no	no	sent	
+CircularQueue	appendAll	instance	plain	1	0	no	no	syntax 93.948	
+CircularQueue	appendAll	instance	subclass	1	0	no	no	syntax 93.948	
+CircularQueue	appendAll	instance	enhanced	1	0	no	no	syntax 93.948	
+CircularQueue	delete	instance	plain	1	0	no	no	sent	
+CircularQueue	delete	instance	subclass	1	0	no	no	sent	
+CircularQueue	delete	instance	enhanced	1	0	no	no	sent	
+CircularQueue	first	instance	plain		0	no	no	sent	
+CircularQueue	first	instance	subclass		0	no	no	sent	
+CircularQueue	first	instance	enhanced		0	no	no	sent	
+CircularQueue	firstItem	instance	plain		0	no	no	sent	
+CircularQueue	firstItem	instance	subclass		0	no	no	sent	
+CircularQueue	firstItem	instance	enhanced		0	no	no	sent	
+CircularQueue	last	instance	plain		0	no	no	sent	
+CircularQueue	last	instance	subclass		0	no	no	sent	
+CircularQueue	last	instance	enhanced		0	no	no	sent	
+CircularQueue	lastItem	instance	plain		0	no	no	sent	
+CircularQueue	lastItem	instance	subclass		0	no	no	sent	
+CircularQueue	lastItem	instance	enhanced		0	no	no	sent	
+CircularQueue	next	instance	plain		0	no	no	syntax 93.901	
+CircularQueue	next	instance	subclass		0	no	no	syntax 93.901	
+CircularQueue	next	instance	enhanced		0	no	no	syntax 93.901	
+CircularQueue	previous	instance	plain	1	0	no	no	sent	
+CircularQueue	previous	instance	subclass	1	0	no	no	sent	
+CircularQueue	previous	instance	enhanced	1	0	no	no	sent	
+CircularQueue	sort	instance	plain		0	no	no	sent	
+CircularQueue	sort	instance	subclass		0	no	no	sent	
+CircularQueue	sort	instance	enhanced		0	no	no	sent	
+CircularQueue	sortWith	instance	plain	.Comparator~new	0	no	no	sent	
+CircularQueue	sortWith	instance	subclass	.Comparator~new	0	no	no	sent	
+CircularQueue	sortWith	instance	enhanced	.Comparator~new	0	no	no	sent	
+CircularQueue	stableSort	instance	plain		0	no	no	sent	
+CircularQueue	stableSort	instance	subclass		0	no	no	sent	
+CircularQueue	stableSort	instance	enhanced		0	no	no	sent	
+CircularQueue	stableSortWith	instance	plain	.Comparator~new	0	no	no	sent	
+CircularQueue	stableSortWith	instance	subclass	.Comparator~new	0	no	no	sent	
+CircularQueue	stableSortWith	instance	enhanced	.Comparator~new	0	no	no	sent	
+CircularQueue	new	class	plain		0	no	no	syntax 93.901	
+CircularQueue	new	class	subclass		0	no	no	syntax 93.901	
+CircularQueue	empty	instance	plain		0	no	no	sent	
+CircularQueue	empty	instance	subclass		0	no	no	sent	
+CircularQueue	empty	instance	enhanced		0	no	no	sent	
+CircularQueue	isEmpty	instance	plain		0	no	no	sent	
+CircularQueue	isEmpty	instance	subclass		0	no	no	sent	
+CircularQueue	isEmpty	instance	enhanced		0	no	no	sent	
+CircularQueue	peek	instance	plain		0	no	no	sent	
+CircularQueue	peek	instance	subclass		0	no	no	sent	
+CircularQueue	peek	instance	enhanced		0	no	no	sent	
+CircularQueue	pull	instance	plain		0	no	no	sent	
+CircularQueue	pull	instance	subclass		0	no	no	sent	
+CircularQueue	pull	instance	enhanced		0	no	no	sent	
+CircularQueue	remove	instance	plain	1	0	no	no	sent	
+CircularQueue	remove	instance	subclass	1	0	no	no	sent	
+CircularQueue	remove	instance	enhanced	1	0	no	no	sent	
+CircularQueue	removeItem	instance	plain	'v'	0	no	no	sent	
+CircularQueue	removeItem	instance	subclass	'v'	0	no	no	sent	
+CircularQueue	removeItem	instance	enhanced	'v'	0	no	no	sent	
+Directory	new	class	plain		0	no	no	sent	
+Directory	new	class	subclass		0	no	no	sent	
+Directory	[]	instance	plain	1	0	no	no	sent	
+Directory	[]	instance	subclass	1	0	no	no	sent	
+Directory	[]	instance	enhanced	1	0	no	no	sent	
+Directory	[]=	instance	plain	1,'v'	0	no	no	sent	
+Directory	[]=	instance	subclass	1,'v'	0	no	no	sent	
+Directory	[]=	instance	enhanced	1,'v'	0	no	no	sent	
+Directory	allIndexes	instance	plain		0	no	no	sent	
+Directory	allIndexes	instance	subclass		0	no	no	sent	
+Directory	allIndexes	instance	enhanced		0	no	no	sent	
+Directory	allItems	instance	plain		0	no	no	sent	
+Directory	allItems	instance	subclass		0	no	no	sent	
+Directory	allItems	instance	enhanced		0	no	no	sent	
+Directory	at	instance	plain	1	0	no	no	sent	
+Directory	at	instance	subclass	1	0	no	no	sent	
+Directory	at	instance	enhanced	1	0	no	no	sent	
+Directory	empty	instance	plain		0	no	no	sent	
+Directory	empty	instance	subclass		0	no	no	sent	
+Directory	empty	instance	enhanced		0	no	no	sent	
+Directory	entry	instance	plain	1	0	no	no	sent	
+Directory	entry	instance	subclass	1	0	no	no	sent	
+Directory	entry	instance	enhanced	1	0	no	no	sent	
+Directory	hasEntry	instance	plain	1	0	no	no	sent	
+Directory	hasEntry	instance	subclass	1	0	no	no	sent	
+Directory	hasEntry	instance	enhanced	1	0	no	no	sent	
+Directory	hasIndex	instance	plain	1	0	no	no	sent	
+Directory	hasIndex	instance	subclass	1	0	no	no	sent	
+Directory	hasIndex	instance	enhanced	1	0	no	no	sent	
+Directory	hasItem	instance	plain	'v'	0	no	no	sent	
+Directory	hasItem	instance	subclass	'v'	0	no	no	sent	
+Directory	hasItem	instance	enhanced	'v'	0	no	no	sent	
+Directory	index	instance	plain	'v'	0	no	no	sent	
+Directory	index	instance	subclass	'v'	0	no	no	sent	
+Directory	index	instance	enhanced	'v'	0	no	no	sent	
+Directory	isEmpty	instance	plain		0	no	no	sent	
+Directory	isEmpty	instance	subclass		0	no	no	sent	
+Directory	isEmpty	instance	enhanced		0	no	no	sent	
+Directory	items	instance	plain		0	no	no	sent	
+Directory	items	instance	subclass		0	no	no	sent	
+Directory	items	instance	enhanced		0	no	no	sent	
+Directory	makeArray	instance	plain		0	no	no	sent	
+Directory	makeArray	instance	subclass		0	no	no	sent	
+Directory	makeArray	instance	enhanced		0	no	no	sent	
+Directory	put	instance	plain	'v',1	0	no	no	sent	
+Directory	put	instance	subclass	'v',1	0	no	no	sent	
+Directory	put	instance	enhanced	'v',1	0	no	no	sent	
+Directory	remove	instance	plain	1	0	no	no	sent	
+Directory	remove	instance	subclass	1	0	no	no	sent	
+Directory	remove	instance	enhanced	1	0	no	no	sent	
+Directory	removeEntry	instance	plain	1	0	no	no	sent	
+Directory	removeEntry	instance	subclass	1	0	no	no	sent	
+Directory	removeEntry	instance	enhanced	1	0	no	no	sent	
+Directory	removeItem	instance	plain	'v'	0	no	no	sent	
+Directory	removeItem	instance	subclass	'v'	0	no	no	sent	
+Directory	removeItem	instance	enhanced	'v'	0	no	no	sent	
+Directory	setEntry	instance	plain	1	0	no	no	sent	
+Directory	setEntry	instance	subclass	1	0	no	no	sent	
+Directory	setEntry	instance	enhanced	1	0	no	no	sent	
+Directory	setMethod	instance	plain	1	0	no	no	sent	
+Directory	setMethod	instance	subclass	1	0	no	no	sent	
+Directory	setMethod	instance	enhanced	1	0	no	no	sent	
+Directory	supplier	instance	plain		0	no	no	sent	
+Directory	supplier	instance	subclass		0	no	no	sent	
+Directory	supplier	instance	enhanced		0	no	no	sent	
+Directory	unknown	instance	plain	'STRING',.array~new	0	no	no	sent	
+Directory	unknown	instance	subclass	'STRING',.array~new	0	no	no	sent	
+Directory	unknown	instance	enhanced	'STRING',.array~new	0	no	no	sent	
+Directory	unsetMethod	instance	plain	1	0	no	no	sent	
+Directory	unsetMethod	instance	subclass	1	0	no	no	sent	
+Directory	unsetMethod	instance	enhanced	1	0	no	no	sent	
+Directory	difference	instance	plain	1	0	no	no	syntax 93.948	
+Directory	difference	instance	subclass	1	0	no	no	syntax 93.948	
+Directory	difference	instance	enhanced	1	0	no	no	syntax 93.948	
+Directory	disjoint	instance	plain	1	0	no	no	sent	
+Directory	disjoint	instance	subclass	1	0	no	no	sent	
+Directory	disjoint	instance	enhanced	1	0	no	no	sent	
+Directory	equivalent	instance	plain	1	0	no	no	syntax 97.1	
+Directory	equivalent	instance	subclass	1	0	no	no	syntax 97.1	
+Directory	equivalent	instance	enhanced	1	0	no	no	syntax 97.1	
+Directory	intersection	instance	plain	1	0	no	no	sent	
+Directory	intersection	instance	subclass	1	0	no	no	sent	
+Directory	intersection	instance	enhanced	1	0	no	no	sent	
+Directory	subset	instance	plain	1	0	no	no	syntax 93.948	
+Directory	subset	instance	subclass	1	0	no	no	syntax 93.948	
+Directory	subset	instance	enhanced	1	0	no	no	syntax 93.948	
+Directory	union	instance	plain	1	0	no	no	sent	
+Directory	union	instance	subclass	1	0	no	no	sent	
+Directory	union	instance	enhanced	1	0	no	no	sent	
+Directory	xor	instance	plain	1	0	no	no	sent	
+Directory	xor	instance	subclass	1	0	no	no	sent	
+Directory	xor	instance	enhanced	1	0	no	no	sent	
+Directory	of	class	plain	'x'	0	no	no	syntax 88.923	
+Directory	of	class	subclass	'x'	0	no	no	syntax 88.923	
+Directory	putAll	instance	plain	1	0	no	no	syntax 93.948	
+Directory	putAll	instance	subclass	1	0	no	no	syntax 93.948	
+Directory	putAll	instance	enhanced	1	0	no	no	syntax 93.948	
+IdentityTable	new	class	plain		0	no	no	sent	
+IdentityTable	new	class	subclass		0	no	no	sent	
+IdentityTable	[]	instance	plain	1	0	no	no	sent	
+IdentityTable	[]	instance	subclass	1	0	no	no	sent	
+IdentityTable	[]	instance	enhanced	1	0	no	no	sent	
+IdentityTable	[]=	instance	plain	1,'v'	0	no	no	sent	
+IdentityTable	[]=	instance	subclass	1,'v'	0	no	no	sent	
+IdentityTable	[]=	instance	enhanced	1,'v'	0	no	no	sent	
+IdentityTable	allIndexes	instance	plain		0	no	no	sent	
+IdentityTable	allIndexes	instance	subclass		0	no	no	sent	
+IdentityTable	allIndexes	instance	enhanced		0	no	no	sent	
+IdentityTable	allItems	instance	plain		0	no	no	sent	
+IdentityTable	allItems	instance	subclass		0	no	no	sent	
+IdentityTable	allItems	instance	enhanced		0	no	no	sent	
+IdentityTable	at	instance	plain	1	0	no	no	sent	
+IdentityTable	at	instance	subclass	1	0	no	no	sent	
+IdentityTable	at	instance	enhanced	1	0	no	no	sent	
+IdentityTable	empty	instance	plain		0	no	no	sent	
+IdentityTable	empty	instance	subclass		0	no	no	sent	
+IdentityTable	empty	instance	enhanced		0	no	no	sent	
+IdentityTable	hasIndex	instance	plain	1	0	no	no	sent	
+IdentityTable	hasIndex	instance	subclass	1	0	no	no	sent	
+IdentityTable	hasIndex	instance	enhanced	1	0	no	no	sent	
+IdentityTable	hasItem	instance	plain	'v'	0	no	no	sent	
+IdentityTable	hasItem	instance	subclass	'v'	0	no	no	sent	
+IdentityTable	hasItem	instance	enhanced	'v'	0	no	no	sent	
+IdentityTable	index	instance	plain	'v'	0	no	no	sent	
+IdentityTable	index	instance	subclass	'v'	0	no	no	sent	
+IdentityTable	index	instance	enhanced	'v'	0	no	no	sent	
+IdentityTable	isEmpty	instance	plain		0	no	no	sent	
+IdentityTable	isEmpty	instance	subclass		0	no	no	sent	
+IdentityTable	isEmpty	instance	enhanced		0	no	no	sent	
+IdentityTable	items	instance	plain		0	no	no	sent	
+IdentityTable	items	instance	subclass		0	no	no	sent	
+IdentityTable	items	instance	enhanced		0	no	no	sent	
+IdentityTable	makeArray	instance	plain		0	no	no	sent	
+IdentityTable	makeArray	instance	subclass		0	no	no	sent	
+IdentityTable	makeArray	instance	enhanced		0	no	no	sent	
+IdentityTable	put	instance	plain	'v',1	0	no	no	sent	
+IdentityTable	put	instance	subclass	'v',1	0	no	no	sent	
+IdentityTable	put	instance	enhanced	'v',1	0	no	no	sent	
+IdentityTable	remove	instance	plain	1	0	no	no	sent	
+IdentityTable	remove	instance	subclass	1	0	no	no	sent	
+IdentityTable	remove	instance	enhanced	1	0	no	no	sent	
+IdentityTable	removeItem	instance	plain	'v'	0	no	no	sent	
+IdentityTable	removeItem	instance	subclass	'v'	0	no	no	sent	
+IdentityTable	removeItem	instance	enhanced	'v'	0	no	no	sent	
+IdentityTable	supplier	instance	plain		0	no	no	sent	
+IdentityTable	supplier	instance	subclass		0	no	no	sent	
+IdentityTable	supplier	instance	enhanced		0	no	no	sent	
+IdentityTable	difference	instance	plain	1	0	no	no	syntax 93.948	
+IdentityTable	difference	instance	subclass	1	0	no	no	syntax 93.948	
+IdentityTable	difference	instance	enhanced	1	0	no	no	syntax 93.948	
+IdentityTable	disjoint	instance	plain	1	0	no	no	sent	
+IdentityTable	disjoint	instance	subclass	1	0	no	no	sent	
+IdentityTable	disjoint	instance	enhanced	1	0	no	no	sent	
+IdentityTable	equivalent	instance	plain	1	0	no	no	syntax 97.1	
+IdentityTable	equivalent	instance	subclass	1	0	no	no	syntax 97.1	
+IdentityTable	equivalent	instance	enhanced	1	0	no	no	syntax 97.1	
+IdentityTable	intersection	instance	plain	1	0	no	no	sent	
+IdentityTable	intersection	instance	subclass	1	0	no	no	sent	
+IdentityTable	intersection	instance	enhanced	1	0	no	no	sent	
+IdentityTable	subset	instance	plain	1	0	no	no	syntax 93.948	
+IdentityTable	subset	instance	subclass	1	0	no	no	syntax 93.948	
+IdentityTable	subset	instance	enhanced	1	0	no	no	syntax 93.948	
+IdentityTable	union	instance	plain	1	0	no	no	sent	
+IdentityTable	union	instance	subclass	1	0	no	no	sent	
+IdentityTable	union	instance	enhanced	1	0	no	no	sent	
+IdentityTable	xor	instance	plain	1	0	no	no	sent	
+IdentityTable	xor	instance	subclass	1	0	no	no	sent	
+IdentityTable	xor	instance	enhanced	1	0	no	no	sent	
+IdentityTable	of	class	plain	'x'	0	no	no	syntax 88.923	
+IdentityTable	of	class	subclass	'x'	0	no	no	syntax 88.923	
+IdentityTable	putAll	instance	plain	1	0	no	no	syntax 93.948	
+IdentityTable	putAll	instance	subclass	1	0	no	no	syntax 93.948	
+IdentityTable	putAll	instance	enhanced	1	0	no	no	syntax 93.948	
+List	new	class	plain		0	no	no	sent	
+List	new	class	subclass		0	no	no	sent	
+List	of	class	plain	'v'	0	no	no	sent	
+List	of	class	subclass	'v'	0	no	no	sent	
+List	[]	instance	plain	1	0	no	no	sent	
+List	[]	instance	subclass	1	0	no	no	sent	
+List	[]	instance	enhanced	1	0	no	no	sent	
+List	[]=	instance	plain	1,'v'	0	no	no	syntax 93.918	
+List	[]=	instance	subclass	1,'v'	0	no	no	syntax 93.918	
+List	[]=	instance	enhanced	1,'v'	0	no	no	syntax 93.918	
+List	allIndexes	instance	plain		0	no	no	sent	
+List	allIndexes	instance	subclass		0	no	no	sent	
+List	allIndexes	instance	enhanced		0	no	no	sent	
+List	allItems	instance	plain		0	no	no	sent	
+List	allItems	instance	subclass		0	no	no	sent	
+List	allItems	instance	enhanced		0	no	no	sent	
+List	append	instance	plain	'v'	0	no	no	sent	
+List	append	instance	subclass	'v'	0	no	no	sent	
+List	append	instance	enhanced	'v'	0	no	no	sent	
+List	at	instance	plain	1	0	no	no	sent	
+List	at	instance	subclass	1	0	no	no	sent	
+List	at	instance	enhanced	1	0	no	no	sent	
+List	delete	instance	plain	1	0	no	no	sent	
+List	delete	instance	subclass	1	0	no	no	sent	
+List	delete	instance	enhanced	1	0	no	no	sent	
+List	empty	instance	plain		0	no	no	sent	
+List	empty	instance	subclass		0	no	no	sent	
+List	empty	instance	enhanced		0	no	no	sent	
+List	first	instance	plain		0	no	no	sent	
+List	first	instance	subclass		0	no	no	sent	
+List	first	instance	enhanced		0	no	no	sent	
+List	firstItem	instance	plain		0	no	no	sent	
+List	firstItem	instance	subclass		0	no	no	sent	
+List	firstItem	instance	enhanced		0	no	no	sent	
+List	hasIndex	instance	plain	1	0	no	no	sent	
+List	hasIndex	instance	subclass	1	0	no	no	sent	
+List	hasIndex	instance	enhanced	1	0	no	no	sent	
+List	hasItem	instance	plain	'v'	0	no	no	sent	
+List	hasItem	instance	subclass	'v'	0	no	no	sent	
+List	hasItem	instance	enhanced	'v'	0	no	no	sent	
+List	index	instance	plain	'v'	0	no	no	sent	
+List	index	instance	subclass	'v'	0	no	no	sent	
+List	index	instance	enhanced	'v'	0	no	no	sent	
+List	insert	instance	plain	'v'	0	no	no	sent	
+List	insert	instance	subclass	'v'	0	no	no	sent	
+List	insert	instance	enhanced	'v'	0	no	no	sent	
+List	isEmpty	instance	plain		0	no	no	sent	
+List	isEmpty	instance	subclass		0	no	no	sent	
+List	isEmpty	instance	enhanced		0	no	no	sent	
+List	items	instance	plain		0	no	no	sent	
+List	items	instance	subclass		0	no	no	sent	
+List	items	instance	enhanced		0	no	no	sent	
+List	last	instance	plain		0	no	no	sent	
+List	last	instance	subclass		0	no	no	sent	
+List	last	instance	enhanced		0	no	no	sent	
+List	lastItem	instance	plain		0	no	no	sent	
+List	lastItem	instance	subclass		0	no	no	sent	
+List	lastItem	instance	enhanced		0	no	no	sent	
+List	makeArray	instance	plain		0	no	no	sent	
+List	makeArray	instance	subclass		0	no	no	sent	
+List	makeArray	instance	enhanced		0	no	no	sent	
+List	next	instance	plain	1	0	no	no	sent	
+List	next	instance	subclass	1	0	no	no	sent	
+List	next	instance	enhanced	1	0	no	no	sent	
+List	previous	instance	plain	1	0	no	no	sent	
+List	previous	instance	subclass	1	0	no	no	sent	
+List	previous	instance	enhanced	1	0	no	no	sent	
+List	put	instance	plain	'v',1	0	no	no	syntax 93.918	
+List	put	instance	subclass	'v',1	0	no	no	syntax 93.918	
+List	put	instance	enhanced	'v',1	0	no	no	syntax 93.918	
+List	remove	instance	plain	1	0	no	no	sent	
+List	remove	instance	subclass	1	0	no	no	sent	
+List	remove	instance	enhanced	1	0	no	no	sent	
+List	removeItem	instance	plain	'v'	0	no	no	sent	
+List	removeItem	instance	subclass	'v'	0	no	no	sent	
+List	removeItem	instance	enhanced	'v'	0	no	no	sent	
+List	section	instance	plain	1	0	no	no	syntax 93.918	
+List	section	instance	subclass	1	0	no	no	syntax 93.918	
+List	section	instance	enhanced	1	0	no	no	syntax 93.918	
+List	supplier	instance	plain		0	no	no	sent	
+List	supplier	instance	subclass		0	no	no	sent	
+List	supplier	instance	enhanced		0	no	no	sent	
+List	difference	instance	plain	1	0	no	no	sent	
+List	difference	instance	subclass	1	0	no	no	sent	
+List	difference	instance	enhanced	1	0	no	no	sent	
+List	disjoint	instance	plain	1	0	no	no	sent	
+List	disjoint	instance	subclass	1	0	no	no	sent	
+List	disjoint	instance	enhanced	1	0	no	no	sent	
+List	equivalent	instance	plain	1	0	no	no	syntax 97.1	
+List	equivalent	instance	subclass	1	0	no	no	syntax 97.1	
+List	equivalent	instance	enhanced	1	0	no	no	syntax 97.1	
+List	intersection	instance	plain	1	0	no	no	sent	
+List	intersection	instance	subclass	1	0	no	no	sent	
+List	intersection	instance	enhanced	1	0	no	no	sent	
+List	subset	instance	plain	1	0	no	no	sent	
+List	subset	instance	subclass	1	0	no	no	sent	
+List	subset	instance	enhanced	1	0	no	no	sent	
+List	union	instance	plain	1	0	no	no	sent	
+List	union	instance	subclass	1	0	no	no	sent	
+List	union	instance	enhanced	1	0	no	no	sent	
+List	xor	instance	plain	1	0	no	no	sent	
+List	xor	instance	subclass	1	0	no	no	sent	
+List	xor	instance	enhanced	1	0	no	no	sent	
+List	appendAll	instance	plain	1	0	no	no	syntax 93.948	
+List	appendAll	instance	subclass	1	0	no	no	syntax 93.948	
+List	appendAll	instance	enhanced	1	0	no	no	syntax 93.948	
+List	sort	instance	plain		0	no	no	sent	
+List	sort	instance	subclass		0	no	no	sent	
+List	sort	instance	enhanced		0	no	no	sent	
+List	sortWith	instance	plain	.Comparator~new	0	no	no	sent	
+List	sortWith	instance	subclass	.Comparator~new	0	no	no	sent	
+List	sortWith	instance	enhanced	.Comparator~new	0	no	no	sent	
+List	stableSort	instance	plain		0	no	no	sent	
+List	stableSort	instance	subclass		0	no	no	sent	
+List	stableSort	instance	enhanced		0	no	no	sent	
+List	stableSortWith	instance	plain	.Comparator~new	0	no	no	sent	
+List	stableSortWith	instance	subclass	.Comparator~new	0	no	no	sent	
+List	stableSortWith	instance	enhanced	.Comparator~new	0	no	no	sent	
+Properties	load	class	plain	.array~of('v')	0	no	no	syntax 97.1	
+Properties	load	class	subclass	.array~of('v')	0	no	no	syntax 97.1	
+Properties	[]=	instance	plain	1,'v'	0	no	no	sent	
+Properties	[]=	instance	subclass	1,'v'	0	no	no	sent	
+Properties	[]=	instance	enhanced	1,'v'	0	no	no	sent	
+Properties	getLogical	instance	plain	1	0	no	no	syntax 34.904	
+Properties	getLogical	instance	subclass	1	0	no	no	syntax 34.904	
+Properties	getLogical	instance	enhanced	1	0	no	no	syntax 34.904	
+Properties	getProperty	instance	plain	1	0	no	no	sent	
+Properties	getProperty	instance	subclass	1	0	no	no	sent	
+Properties	getProperty	instance	enhanced	1	0	no	no	sent	
+Properties	getWhole	instance	plain	1	0	no	no	syntax 26.901	
+Properties	getWhole	instance	subclass	1	0	no	no	syntax 26.901	
+Properties	getWhole	instance	enhanced	1	0	no	no	syntax 26.901	
+Properties	load	instance	plain	.array~of('v')	0	no	no	syntax 97.1	
+Properties	load	instance	subclass	.array~of('v')	0	no	no	syntax 97.1	
+Properties	load	instance	enhanced	.array~of('v')	0	no	no	syntax 97.1	
+Properties	put	instance	plain	'v',1	0	no	no	sent	
+Properties	put	instance	subclass	'v',1	0	no	no	sent	
+Properties	put	instance	enhanced	'v',1	0	no	no	sent	
+Properties	save	instance	plain	'v'	0	no	no	sent	
+Properties	save	instance	subclass	'v'	0	no	no	sent	
+Properties	save	instance	enhanced	'v'	0	no	no	sent	
+Properties	setLogical	instance	plain	1,'v'	0	no	no	syntax 34.901	
+Properties	setLogical	instance	subclass	1,'v'	0	no	no	syntax 34.901	
+Properties	setLogical	instance	enhanced	1,'v'	0	no	no	syntax 34.901	
+Properties	setProperty	instance	plain	1,'v'	0	no	no	sent	
+Properties	setProperty	instance	subclass	1,'v'	0	no	no	sent	
+Properties	setProperty	instance	enhanced	1,'v'	0	no	no	sent	
+Properties	setWhole	instance	plain	1,'v'	0	no	no	syntax 93.905	
+Properties	setWhole	instance	subclass	1,'v'	0	no	no	syntax 93.905	
+Properties	setWhole	instance	enhanced	1,'v'	0	no	no	syntax 93.905	
+Properties	[]	instance	plain	1	0	no	no	sent	
+Properties	[]	instance	subclass	1	0	no	no	sent	
+Properties	[]	instance	enhanced	1	0	no	no	sent	
+Properties	allIndexes	instance	plain		0	no	no	sent	
+Properties	allIndexes	instance	subclass		0	no	no	sent	
+Properties	allIndexes	instance	enhanced		0	no	no	sent	
+Properties	allItems	instance	plain		0	no	no	sent	
+Properties	allItems	instance	subclass		0	no	no	sent	
+Properties	allItems	instance	enhanced		0	no	no	sent	
+Properties	at	instance	plain	1	0	no	no	sent	
+Properties	at	instance	subclass	1	0	no	no	sent	
+Properties	at	instance	enhanced	1	0	no	no	sent	
+Properties	difference	instance	plain	1	0	no	no	syntax 93.948	
+Properties	difference	instance	subclass	1	0	no	no	syntax 93.948	
+Properties	difference	instance	enhanced	1	0	no	no	syntax 93.948	
+Properties	disjoint	instance	plain	1	0	no	no	sent	
+Properties	disjoint	instance	subclass	1	0	no	no	sent	
+Properties	disjoint	instance	enhanced	1	0	no	no	sent	
+Properties	equivalent	instance	plain	1	0	no	no	syntax 97.1	
+Properties	equivalent	instance	subclass	1	0	no	no	syntax 97.1	
+Properties	equivalent	instance	enhanced	1	0	no	no	syntax 97.1	
+Properties	hasIndex	instance	plain	1	0	no	no	sent	
+Properties	hasIndex	instance	subclass	1	0	no	no	sent	
+Properties	hasIndex	instance	enhanced	1	0	no	no	sent	
+Properties	hasItem	instance	plain	'v'	0	no	no	sent	
+Properties	hasItem	instance	subclass	'v'	0	no	no	sent	
+Properties	hasItem	instance	enhanced	'v'	0	no	no	sent	
+Properties	index	instance	plain	'v'	0	no	no	sent	
+Properties	index	instance	subclass	'v'	0	no	no	sent	
+Properties	index	instance	enhanced	'v'	0	no	no	sent	
+Properties	intersection	instance	plain	1	0	no	no	sent	
+Properties	intersection	instance	subclass	1	0	no	no	sent	
+Properties	intersection	instance	enhanced	1	0	no	no	sent	
+Properties	items	instance	plain		0	no	no	sent	
+Properties	items	instance	subclass		0	no	no	sent	
+Properties	items	instance	enhanced		0	no	no	sent	
+Properties	makeArray	instance	plain		0	no	no	sent	
+Properties	makeArray	instance	subclass		0	no	no	sent	
+Properties	makeArray	instance	enhanced		0	no	no	sent	
+Properties	subset	instance	plain	1	0	no	no	syntax 93.948	
+Properties	subset	instance	subclass	1	0	no	no	syntax 93.948	
+Properties	subset	instance	enhanced	1	0	no	no	syntax 93.948	
+Properties	supplier	instance	plain		0	no	no	sent	
+Properties	supplier	instance	subclass		0	no	no	sent	
+Properties	supplier	instance	enhanced		0	no	no	sent	
+Properties	union	instance	plain	1	0	no	no	sent	
+Properties	union	instance	subclass	1	0	no	no	sent	
+Properties	union	instance	enhanced	1	0	no	no	sent	
+Properties	xor	instance	plain	1	0	no	no	sent	
+Properties	xor	instance	subclass	1	0	no	no	sent	
+Properties	xor	instance	enhanced	1	0	no	no	sent	
+Properties	of	class	plain	'x'	0	no	no	syntax 88.923	
+Properties	of	class	subclass	'x'	0	no	no	syntax 88.923	
+Properties	putAll	instance	plain	1	0	no	no	syntax 93.948	
+Properties	putAll	instance	subclass	1	0	no	no	syntax 93.948	
+Properties	putAll	instance	enhanced	1	0	no	no	syntax 93.948	
+Properties	new	class	plain		0	no	no	sent	
+Properties	new	class	subclass		0	no	no	sent	
+Properties	empty	instance	plain		0	no	no	sent	
+Properties	empty	instance	subclass		0	no	no	sent	
+Properties	empty	instance	enhanced		0	no	no	sent	
+Properties	entry	instance	plain	1	0	no	no	sent	
+Properties	entry	instance	subclass	1	0	no	no	sent	
+Properties	entry	instance	enhanced	1	0	no	no	sent	
+Properties	hasEntry	instance	plain	1	0	no	no	sent	
+Properties	hasEntry	instance	subclass	1	0	no	no	sent	
+Properties	hasEntry	instance	enhanced	1	0	no	no	sent	
+Properties	isEmpty	instance	plain		0	no	no	sent	
+Properties	isEmpty	instance	subclass		0	no	no	sent	
+Properties	isEmpty	instance	enhanced		0	no	no	sent	
+Properties	remove	instance	plain	1	0	no	no	sent	
+Properties	remove	instance	subclass	1	0	no	no	sent	
+Properties	remove	instance	enhanced	1	0	no	no	sent	
+Properties	removeEntry	instance	plain	1	0	no	no	sent	
+Properties	removeEntry	instance	subclass	1	0	no	no	sent	
+Properties	removeEntry	instance	enhanced	1	0	no	no	sent	
+Properties	removeItem	instance	plain	'v'	0	no	no	sent	
+Properties	removeItem	instance	subclass	'v'	0	no	no	sent	
+Properties	removeItem	instance	enhanced	'v'	0	no	no	sent	
+Properties	setEntry	instance	plain	1	0	no	no	sent	
+Properties	setEntry	instance	subclass	1	0	no	no	sent	
+Properties	setEntry	instance	enhanced	1	0	no	no	sent	
+Properties	setMethod	instance	plain	1	0	no	no	sent	
+Properties	setMethod	instance	subclass	1	0	no	no	sent	
+Properties	setMethod	instance	enhanced	1	0	no	no	sent	
+Properties	unknown	instance	plain	'STRING',.array~new	0	no	no	sent	
+Properties	unknown	instance	subclass	'STRING',.array~new	0	no	no	sent	
+Properties	unknown	instance	enhanced	'STRING',.array~new	0	no	no	sent	
+Properties	unsetMethod	instance	plain	1	0	no	no	sent	
+Properties	unsetMethod	instance	subclass	1	0	no	no	sent	
+Properties	unsetMethod	instance	enhanced	1	0	no	no	sent	
+Queue	new	class	plain		0	no	no	sent	
+Queue	new	class	subclass		0	no	no	sent	
+Queue	of	class	plain	'v'	0	no	no	sent	
+Queue	of	class	subclass	'v'	0	no	no	sent	
+Queue	[]	instance	plain	1	0	no	no	sent	
+Queue	[]	instance	subclass	1	0	no	no	sent	
+Queue	[]	instance	enhanced	1	0	no	no	sent	
+Queue	[]=	instance	plain	1,'v'	0	no	no	syntax 93.907	
+Queue	[]=	instance	subclass	1,'v'	0	no	no	syntax 93.907	
+Queue	[]=	instance	enhanced	1,'v'	0	no	no	syntax 93.907	
+Queue	allIndexes	instance	plain		0	no	no	sent	
+Queue	allIndexes	instance	subclass		0	no	no	sent	
+Queue	allIndexes	instance	enhanced		0	no	no	sent	
+Queue	allItems	instance	plain		0	no	no	sent	
+Queue	allItems	instance	subclass		0	no	no	sent	
+Queue	allItems	instance	enhanced		0	no	no	sent	
+Queue	append	instance	plain	'v'	0	no	no	sent	
+Queue	append	instance	subclass	'v'	0	no	no	sent	
+Queue	append	instance	enhanced	'v'	0	no	no	sent	
+Queue	at	instance	plain	1	0	no	no	sent	
+Queue	at	instance	subclass	1	0	no	no	sent	
+Queue	at	instance	enhanced	1	0	no	no	sent	
+Queue	delete	instance	plain	1	0	no	no	sent	
+Queue	delete	instance	subclass	1	0	no	no	sent	
+Queue	delete	instance	enhanced	1	0	no	no	sent	
+Queue	empty	instance	plain		0	no	no	sent	
+Queue	empty	instance	subclass		0	no	no	sent	
+Queue	empty	instance	enhanced		0	no	no	sent	
+Queue	first	instance	plain		0	no	no	sent	
+Queue	first	instance	subclass		0	no	no	sent	
+Queue	first	instance	enhanced		0	no	no	sent	
+Queue	firstItem	instance	plain		0	no	no	sent	
+Queue	firstItem	instance	subclass		0	no	no	sent	
+Queue	firstItem	instance	enhanced		0	no	no	sent	
+Queue	hasIndex	instance	plain	1	0	no	no	sent	
+Queue	hasIndex	instance	subclass	1	0	no	no	sent	
+Queue	hasIndex	instance	enhanced	1	0	no	no	sent	
+Queue	hasItem	instance	plain	'v'	0	no	no	sent	
+Queue	hasItem	instance	subclass	'v'	0	no	no	sent	
+Queue	hasItem	instance	enhanced	'v'	0	no	no	sent	
+Queue	index	instance	plain	'v'	0	no	no	sent	
+Queue	index	instance	subclass	'v'	0	no	no	sent	
+Queue	index	instance	enhanced	'v'	0	no	no	sent	
+Queue	insert	instance	plain	'v'	0	no	no	sent	
+Queue	insert	instance	subclass	'v'	0	no	no	sent	
+Queue	insert	instance	enhanced	'v'	0	no	no	sent	
+Queue	isEmpty	instance	plain		0	no	no	sent	
+Queue	isEmpty	instance	subclass		0	no	no	sent	
+Queue	isEmpty	instance	enhanced		0	no	no	sent	
+Queue	items	instance	plain		0	no	no	sent	
+Queue	items	instance	subclass		0	no	no	sent	
+Queue	items	instance	enhanced		0	no	no	sent	
+Queue	last	instance	plain		0	no	no	sent	
+Queue	last	instance	subclass		0	no	no	sent	
+Queue	last	instance	enhanced		0	no	no	sent	
+Queue	lastItem	instance	plain		0	no	no	sent	
+Queue	lastItem	instance	subclass		0	no	no	sent	
+Queue	lastItem	instance	enhanced		0	no	no	sent	
+Queue	makeArray	instance	plain		0	no	no	sent	
+Queue	makeArray	instance	subclass		0	no	no	sent	
+Queue	makeArray	instance	enhanced		0	no	no	sent	
+Queue	next	instance	plain	1	0	no	no	sent	
+Queue	next	instance	subclass	1	0	no	no	sent	
+Queue	next	instance	enhanced	1	0	no	no	sent	
+Queue	peek	instance	plain		0	no	no	sent	
+Queue	peek	instance	subclass		0	no	no	sent	
+Queue	peek	instance	enhanced		0	no	no	sent	
+Queue	previous	instance	plain	1	0	no	no	sent	
+Queue	previous	instance	subclass	1	0	no	no	sent	
+Queue	previous	instance	enhanced	1	0	no	no	sent	
+Queue	pull	instance	plain		0	no	no	sent	
+Queue	pull	instance	subclass		0	no	no	sent	
+Queue	pull	instance	enhanced		0	no	no	sent	
+Queue	push	instance	plain	'v'	0	no	no	sent	
+Queue	push	instance	subclass	'v'	0	no	no	sent	
+Queue	push	instance	enhanced	'v'	0	no	no	sent	
+Queue	put	instance	plain	'v',1	0	no	no	syntax 93.966	
+Queue	put	instance	subclass	'v',1	0	no	no	syntax 93.966	
+Queue	put	instance	enhanced	'v',1	0	no	no	syntax 93.966	
+Queue	queue	instance	plain	'v'	0	no	no	sent	
+Queue	queue	instance	subclass	'v'	0	no	no	sent	
+Queue	queue	instance	enhanced	'v'	0	no	no	sent	
+Queue	remove	instance	plain	1	0	no	no	sent	
+Queue	remove	instance	subclass	1	0	no	no	sent	
+Queue	remove	instance	enhanced	1	0	no	no	sent	
+Queue	removeItem	instance	plain	'v'	0	no	no	sent	
+Queue	removeItem	instance	subclass	'v'	0	no	no	sent	
+Queue	removeItem	instance	enhanced	'v'	0	no	no	sent	
+Queue	section	instance	plain	1	0	no	no	sent	
+Queue	section	instance	subclass	1	0	no	no	sent	
+Queue	section	instance	enhanced	1	0	no	no	sent	
+Queue	size	instance	plain		0	no	no	sent	
+Queue	size	instance	subclass		0	no	no	sent	
+Queue	size	instance	enhanced		0	no	no	sent	
+Queue	supplier	instance	plain		0	no	no	sent	
+Queue	supplier	instance	subclass		0	no	no	sent	
+Queue	supplier	instance	enhanced		0	no	no	sent	
+Queue	difference	instance	plain	1	0	no	no	sent	
+Queue	difference	instance	subclass	1	0	no	no	sent	
+Queue	difference	instance	enhanced	1	0	no	no	sent	
+Queue	disjoint	instance	plain	1	0	no	no	sent	
+Queue	disjoint	instance	subclass	1	0	no	no	sent	
+Queue	disjoint	instance	enhanced	1	0	no	no	sent	
+Queue	equivalent	instance	plain	1	0	no	no	syntax 97.1	
+Queue	equivalent	instance	subclass	1	0	no	no	syntax 97.1	
+Queue	equivalent	instance	enhanced	1	0	no	no	syntax 97.1	
+Queue	intersection	instance	plain	1	0	no	no	sent	
+Queue	intersection	instance	subclass	1	0	no	no	sent	
+Queue	intersection	instance	enhanced	1	0	no	no	sent	
+Queue	subset	instance	plain	1	0	no	no	sent	
+Queue	subset	instance	subclass	1	0	no	no	sent	
+Queue	subset	instance	enhanced	1	0	no	no	sent	
+Queue	union	instance	plain	1	0	no	no	sent	
+Queue	union	instance	subclass	1	0	no	no	sent	
+Queue	union	instance	enhanced	1	0	no	no	sent	
+Queue	xor	instance	plain	1	0	no	no	sent	
+Queue	xor	instance	subclass	1	0	no	no	sent	
+Queue	xor	instance	enhanced	1	0	no	no	sent	
+Queue	appendAll	instance	plain	1	0	no	no	syntax 93.948	
+Queue	appendAll	instance	subclass	1	0	no	no	syntax 93.948	
+Queue	appendAll	instance	enhanced	1	0	no	no	syntax 93.948	
+Queue	sort	instance	plain		0	no	no	sent	
+Queue	sort	instance	subclass		0	no	no	sent	
+Queue	sort	instance	enhanced		0	no	no	sent	
+Queue	sortWith	instance	plain	.Comparator~new	0	no	no	sent	
+Queue	sortWith	instance	subclass	.Comparator~new	0	no	no	sent	
+Queue	sortWith	instance	enhanced	.Comparator~new	0	no	no	sent	
+Queue	stableSort	instance	plain		0	no	no	sent	
+Queue	stableSort	instance	subclass		0	no	no	sent	
+Queue	stableSort	instance	enhanced		0	no	no	sent	
+Queue	stableSortWith	instance	plain	.Comparator~new	0	no	no	sent	
+Queue	stableSortWith	instance	subclass	.Comparator~new	0	no	no	sent	
+Queue	stableSortWith	instance	enhanced	.Comparator~new	0	no	no	sent	
+Relation	new	class	plain		0	no	no	sent	
+Relation	new	class	subclass		0	no	no	sent	
+Relation	[]	instance	plain	1	0	no	no	sent	
+Relation	[]	instance	subclass	1	0	no	no	sent	
+Relation	[]	instance	enhanced	1	0	no	no	sent	
+Relation	[]=	instance	plain	1,'v'	0	no	no	sent	
+Relation	[]=	instance	subclass	1,'v'	0	no	no	sent	
+Relation	[]=	instance	enhanced	1,'v'	0	no	no	sent	
+Relation	allAt	instance	plain	1	0	no	no	sent	
+Relation	allAt	instance	subclass	1	0	no	no	sent	
+Relation	allAt	instance	enhanced	1	0	no	no	sent	
+Relation	allIndex	instance	plain	'v'	0	no	no	sent	
+Relation	allIndex	instance	subclass	'v'	0	no	no	sent	
+Relation	allIndex	instance	enhanced	'v'	0	no	no	sent	
+Relation	allIndexes	instance	plain		0	no	no	sent	
+Relation	allIndexes	instance	subclass		0	no	no	sent	
+Relation	allIndexes	instance	enhanced		0	no	no	sent	
+Relation	allItems	instance	plain		0	no	no	sent	
+Relation	allItems	instance	subclass		0	no	no	sent	
+Relation	allItems	instance	enhanced		0	no	no	sent	
+Relation	at	instance	plain	1	0	no	no	sent	
+Relation	at	instance	subclass	1	0	no	no	sent	
+Relation	at	instance	enhanced	1	0	no	no	sent	
+Relation	difference	instance	plain	1	0	no	no	sent	
+Relation	difference	instance	subclass	1	0	no	no	sent	
+Relation	difference	instance	enhanced	1	0	no	no	sent	
+Relation	empty	instance	plain		0	no	no	sent	
+Relation	empty	instance	subclass		0	no	no	sent	
+Relation	empty	instance	enhanced		0	no	no	sent	
+Relation	hasIndex	instance	plain	1	0	no	no	sent	
+Relation	hasIndex	instance	subclass	1	0	no	no	sent	
+Relation	hasIndex	instance	enhanced	1	0	no	no	sent	
+Relation	hasItem	instance	plain	'v'	0	no	no	sent	
+Relation	hasItem	instance	subclass	'v'	0	no	no	sent	
+Relation	hasItem	instance	enhanced	'v'	0	no	no	sent	
+Relation	index	instance	plain	'v'	0	no	no	sent	
+Relation	index	instance	subclass	'v'	0	no	no	sent	
+Relation	index	instance	enhanced	'v'	0	no	no	sent	
+Relation	intersection	instance	plain	1	0	no	no	sent	
+Relation	intersection	instance	subclass	1	0	no	no	sent	
+Relation	intersection	instance	enhanced	1	0	no	no	sent	
+Relation	isEmpty	instance	plain		0	no	no	sent	
+Relation	isEmpty	instance	subclass		0	no	no	sent	
+Relation	isEmpty	instance	enhanced		0	no	no	sent	
+Relation	items	instance	plain		0	no	no	sent	
+Relation	items	instance	subclass		0	no	no	sent	
+Relation	items	instance	enhanced		0	no	no	sent	
+Relation	makeArray	instance	plain		0	no	no	sent	
+Relation	makeArray	instance	subclass		0	no	no	sent	
+Relation	makeArray	instance	enhanced		0	no	no	sent	
+Relation	put	instance	plain	'v',1	0	no	no	sent	
+Relation	put	instance	subclass	'v',1	0	no	no	sent	
+Relation	put	instance	enhanced	'v',1	0	no	no	sent	
+Relation	remove	instance	plain	1	0	no	no	sent	
+Relation	remove	instance	subclass	1	0	no	no	sent	
+Relation	remove	instance	enhanced	1	0	no	no	sent	
+Relation	removeAll	instance	plain	1	0	no	no	sent	
+Relation	removeAll	instance	subclass	1	0	no	no	sent	
+Relation	removeAll	instance	enhanced	1	0	no	no	sent	
+Relation	removeItem	instance	plain	'v'	0	no	no	sent	
+Relation	removeItem	instance	subclass	'v'	0	no	no	sent	
+Relation	removeItem	instance	enhanced	'v'	0	no	no	sent	
+Relation	subset	instance	plain	1	0	no	no	sent	
+Relation	subset	instance	subclass	1	0	no	no	sent	
+Relation	subset	instance	enhanced	1	0	no	no	sent	
+Relation	supplier	instance	plain		0	no	no	sent	
+Relation	supplier	instance	subclass		0	no	no	sent	
+Relation	supplier	instance	enhanced		0	no	no	sent	
+Relation	union	instance	plain	1	0	no	no	sent	
+Relation	union	instance	subclass	1	0	no	no	sent	
+Relation	union	instance	enhanced	1	0	no	no	sent	
+Relation	uniqueIndexes	instance	plain		0	no	no	sent	
+Relation	uniqueIndexes	instance	subclass		0	no	no	sent	
+Relation	uniqueIndexes	instance	enhanced		0	no	no	sent	
+Relation	xor	instance	plain	1	0	no	no	sent	
+Relation	xor	instance	subclass	1	0	no	no	sent	
+Relation	xor	instance	enhanced	1	0	no	no	sent	
+Relation	disjoint	instance	plain	1	0	no	no	sent	
+Relation	disjoint	instance	subclass	1	0	no	no	sent	
+Relation	disjoint	instance	enhanced	1	0	no	no	sent	
+Relation	equivalent	instance	plain	1	0	no	no	syntax 97.1	
+Relation	equivalent	instance	subclass	1	0	no	no	syntax 97.1	
+Relation	equivalent	instance	enhanced	1	0	no	no	syntax 97.1	
+Relation	of	class	plain	'x'	0	no	no	syntax 88.923	
+Relation	of	class	subclass	'x'	0	no	no	syntax 88.923	
+Relation	putAll	instance	plain	1	0	no	no	syntax 93.948	
+Relation	putAll	instance	subclass	1	0	no	no	syntax 93.948	
+Relation	putAll	instance	enhanced	1	0	no	no	syntax 93.948	
+Set	new	class	plain		0	no	no	sent	
+Set	new	class	subclass		0	no	no	sent	
+Set	of	class	plain	'v'	0	no	no	sent	
+Set	of	class	subclass	'v'	0	no	no	sent	
+Set	[]	instance	plain	1	0	no	no	sent	
+Set	[]	instance	subclass	1	0	no	no	sent	
+Set	[]	instance	enhanced	1	0	no	no	sent	
+Set	[]=	instance	plain	'v'	0	no	no	sent	
+Set	[]=	instance	subclass	'v'	0	no	no	sent	
+Set	[]=	instance	enhanced	'v'	0	no	no	sent	
+Set	allIndexes	instance	plain		0	no	no	sent	
+Set	allIndexes	instance	subclass		0	no	no	sent	
+Set	allIndexes	instance	enhanced		0	no	no	sent	
+Set	allItems	instance	plain		0	no	no	sent	
+Set	allItems	instance	subclass		0	no	no	sent	
+Set	allItems	instance	enhanced		0	no	no	sent	
+Set	at	instance	plain	1	0	no	no	sent	
+Set	at	instance	subclass	1	0	no	no	sent	
+Set	at	instance	enhanced	1	0	no	no	sent	
+Set	empty	instance	plain		0	no	no	sent	
+Set	empty	instance	subclass		0	no	no	sent	
+Set	empty	instance	enhanced		0	no	no	sent	
+Set	hasIndex	instance	plain	1	0	no	no	sent	
+Set	hasIndex	instance	subclass	1	0	no	no	sent	
+Set	hasIndex	instance	enhanced	1	0	no	no	sent	
+Set	hasItem	instance	plain	'v'	0	no	no	sent	
+Set	hasItem	instance	subclass	'v'	0	no	no	sent	
+Set	hasItem	instance	enhanced	'v'	0	no	no	sent	
+Set	index	instance	plain	'v'	0	no	no	sent	
+Set	index	instance	subclass	'v'	0	no	no	sent	
+Set	index	instance	enhanced	'v'	0	no	no	sent	
+Set	intersection	instance	plain	1	0	no	no	sent	
+Set	intersection	instance	subclass	1	0	no	no	sent	
+Set	intersection	instance	enhanced	1	0	no	no	sent	
+Set	isEmpty	instance	plain		0	no	no	sent	
+Set	isEmpty	instance	subclass		0	no	no	sent	
+Set	isEmpty	instance	enhanced		0	no	no	sent	
+Set	items	instance	plain		0	no	no	sent	
+Set	items	instance	subclass		0	no	no	sent	
+Set	items	instance	enhanced		0	no	no	sent	
+Set	makeArray	instance	plain		0	no	no	sent	
+Set	makeArray	instance	subclass		0	no	no	sent	
+Set	makeArray	instance	enhanced		0	no	no	sent	
+Set	put	instance	plain	'v'	0	no	no	sent	
+Set	put	instance	subclass	'v'	0	no	no	sent	
+Set	put	instance	enhanced	'v'	0	no	no	sent	
+Set	putAll	instance	plain	1	0	no	no	sent	
+Set	putAll	instance	subclass	1	0	no	no	sent	
+Set	putAll	instance	enhanced	1	0	no	no	sent	
+Set	remove	instance	plain	1	0	no	no	sent	
+Set	remove	instance	subclass	1	0	no	no	sent	
+Set	remove	instance	enhanced	1	0	no	no	sent	
+Set	removeItem	instance	plain	'v'	0	no	no	sent	
+Set	removeItem	instance	subclass	'v'	0	no	no	sent	
+Set	removeItem	instance	enhanced	'v'	0	no	no	sent	
+Set	subset	instance	plain	1	0	no	no	syntax 93.948	
+Set	subset	instance	subclass	1	0	no	no	syntax 93.948	
+Set	subset	instance	enhanced	1	0	no	no	syntax 93.948	
+Set	supplier	instance	plain		0	no	no	sent	
+Set	supplier	instance	subclass		0	no	no	sent	
+Set	supplier	instance	enhanced		0	no	no	sent	
+Set	union	instance	plain	1	0	no	no	sent	
+Set	union	instance	subclass	1	0	no	no	sent	
+Set	union	instance	enhanced	1	0	no	no	sent	
+Set	xor	instance	plain	1	0	no	no	sent	
+Set	xor	instance	subclass	1	0	no	no	sent	
+Set	xor	instance	enhanced	1	0	no	no	sent	
+Set	difference	instance	plain	1	0	no	no	syntax 93.948	
+Set	difference	instance	subclass	1	0	no	no	syntax 93.948	
+Set	difference	instance	enhanced	1	0	no	no	syntax 93.948	
+Set	disjoint	instance	plain	1	0	no	no	sent	
+Set	disjoint	instance	subclass	1	0	no	no	sent	
+Set	disjoint	instance	enhanced	1	0	no	no	sent	
+Set	equivalent	instance	plain	1	0	no	no	syntax 97.1	
+Set	equivalent	instance	subclass	1	0	no	no	syntax 97.1	
+Set	equivalent	instance	enhanced	1	0	no	no	syntax 97.1	
+Stem	new	class	plain		0	no	no	sent	
+Stem	new	class	subclass		0	no	no	sent	
+Stem	[]	instance	plain		0	no	no	sent	
+Stem	[]	instance	subclass		0	no	no	sent	
+Stem	[]	instance	enhanced		0	no	no	sent	
+Stem	[]=	instance	plain	'v'	0	no	no	sent	
+Stem	[]=	instance	subclass	'v'	0	no	no	sent	
+Stem	[]=	instance	enhanced	'v'	0	no	no	sent	
+Stem	allIndexes	instance	plain		0	no	no	sent	
+Stem	allIndexes	instance	subclass		0	no	no	sent	
+Stem	allIndexes	instance	enhanced		0	no	no	sent	
+Stem	allItems	instance	plain		0	no	no	sent	
+Stem	allItems	instance	subclass		0	no	no	sent	
+Stem	allItems	instance	enhanced		0	no	no	sent	
+Stem	at	instance	plain		0	no	no	sent	
+Stem	at	instance	subclass		0	no	no	sent	
+Stem	at	instance	enhanced		0	no	no	sent	
+Stem	empty	instance	plain		0	no	no	sent	
+Stem	empty	instance	subclass		0	no	no	sent	
+Stem	empty	instance	enhanced		0	no	no	sent	
+Stem	hasIndex	instance	plain		0	no	no	sent	
+Stem	hasIndex	instance	subclass		0	no	no	sent	
+Stem	hasIndex	instance	enhanced		0	no	no	sent	
+Stem	hasItem	instance	plain	'v'	0	no	no	sent	
+Stem	hasItem	instance	subclass	'v'	0	no	no	sent	
+Stem	hasItem	instance	enhanced	'v'	0	no	no	sent	
+Stem	index	instance	plain	'v'	0	no	no	sent	
+Stem	index	instance	subclass	'v'	0	no	no	sent	
+Stem	index	instance	enhanced	'v'	0	no	no	sent	
+Stem	isEmpty	instance	plain		0	no	no	sent	
+Stem	isEmpty	instance	subclass		0	no	no	sent	
+Stem	isEmpty	instance	enhanced		0	no	no	sent	
+Stem	items	instance	plain		0	no	no	sent	
+Stem	items	instance	subclass		0	no	no	sent	
+Stem	items	instance	enhanced		0	no	no	sent	
+Stem	makeArray	instance	plain		0	no	no	sent	
+Stem	makeArray	instance	subclass		0	no	no	sent	
+Stem	makeArray	instance	enhanced		0	no	no	sent	
+Stem	put	instance	plain	'v'	0	no	no	sent	
+Stem	put	instance	subclass	'v'	0	no	no	sent	
+Stem	put	instance	enhanced	'v'	0	no	no	sent	
+Stem	remove	instance	plain		0	no	no	sent	
+Stem	remove	instance	subclass		0	no	no	sent	
+Stem	remove	instance	enhanced		0	no	no	sent	
+Stem	removeItem	instance	plain	'v'	0	no	no	sent	
+Stem	removeItem	instance	subclass	'v'	0	no	no	sent	
+Stem	removeItem	instance	enhanced	'v'	0	no	no	sent	
+Stem	request	instance	plain	'x'	0	no	no	sent	
+Stem	request	instance	subclass	'x'	0	no	no	sent	
+Stem	request	instance	enhanced	'x'	0	no	no	sent	
+Stem	supplier	instance	plain		0	no	no	sent	
+Stem	supplier	instance	subclass		0	no	no	sent	
+Stem	supplier	instance	enhanced		0	no	no	sent	
+Stem	toDirectory	instance	plain		0	no	no	sent	
+Stem	toDirectory	instance	subclass		0	no	no	sent	
+Stem	toDirectory	instance	enhanced		0	no	no	sent	
+Stem	unknown	instance	plain	'STRING',.array~new	0	no	no	sent	
+Stem	unknown	instance	subclass	'STRING',.array~new	0	no	no	sent	
+Stem	unknown	instance	enhanced	'STRING',.array~new	0	no	no	sent	
+Stem	difference	instance	plain	1	0	no	no	syntax 93.948	
+Stem	difference	instance	subclass	1	0	no	no	syntax 93.948	
+Stem	difference	instance	enhanced	1	0	no	no	syntax 93.948	
+Stem	disjoint	instance	plain	1	0	no	no	sent	
+Stem	disjoint	instance	subclass	1	0	no	no	sent	
+Stem	disjoint	instance	enhanced	1	0	no	no	sent	
+Stem	equivalent	instance	plain	1	0	no	no	syntax 97.1	
+Stem	equivalent	instance	subclass	1	0	no	no	syntax 97.1	
+Stem	equivalent	instance	enhanced	1	0	no	no	syntax 97.1	
+Stem	intersection	instance	plain	1	0	no	no	sent	
+Stem	intersection	instance	subclass	1	0	no	no	sent	
+Stem	intersection	instance	enhanced	1	0	no	no	sent	
+Stem	subset	instance	plain	1	0	no	no	syntax 93.948	
+Stem	subset	instance	subclass	1	0	no	no	syntax 93.948	
+Stem	subset	instance	enhanced	1	0	no	no	syntax 93.948	
+Stem	union	instance	plain	1	0	no	no	sent	
+Stem	union	instance	subclass	1	0	no	no	sent	
+Stem	union	instance	enhanced	1	0	no	no	sent	
+Stem	xor	instance	plain	1	0	no	no	sent	
+Stem	xor	instance	subclass	1	0	no	no	sent	
+Stem	xor	instance	enhanced	1	0	no	no	sent	
+Stem	of	class	plain	'x'	0	no	no	syntax 88.923	
+Stem	of	class	subclass	'x'	0	no	no	syntax 88.923	
+Stem	putAll	instance	plain	1	0	no	no	syntax 93.948	
+Stem	putAll	instance	subclass	1	0	no	no	syntax 93.948	
+Stem	putAll	instance	enhanced	1	0	no	no	syntax 93.948	
+StringTable	new	class	plain		0	no	no	sent	
+StringTable	new	class	subclass		0	no	no	sent	
+StringTable	[]	instance	plain	1	0	no	no	sent	
+StringTable	[]	instance	subclass	1	0	no	no	sent	
+StringTable	[]	instance	enhanced	1	0	no	no	sent	
+StringTable	[]=	instance	plain	1,'v'	0	no	no	sent	
+StringTable	[]=	instance	subclass	1,'v'	0	no	no	sent	
+StringTable	[]=	instance	enhanced	1,'v'	0	no	no	sent	
+StringTable	allIndexes	instance	plain		0	no	no	sent	
+StringTable	allIndexes	instance	subclass		0	no	no	sent	
+StringTable	allIndexes	instance	enhanced		0	no	no	sent	
+StringTable	allItems	instance	plain		0	no	no	sent	
+StringTable	allItems	instance	subclass		0	no	no	sent	
+StringTable	allItems	instance	enhanced		0	no	no	sent	
+StringTable	at	instance	plain	1	0	no	no	sent	
+StringTable	at	instance	subclass	1	0	no	no	sent	
+StringTable	at	instance	enhanced	1	0	no	no	sent	
+StringTable	empty	instance	plain		0	no	no	sent	
+StringTable	empty	instance	subclass		0	no	no	sent	
+StringTable	empty	instance	enhanced		0	no	no	sent	
+StringTable	entry	instance	plain	1	0	no	no	sent	
+StringTable	entry	instance	subclass	1	0	no	no	sent	
+StringTable	entry	instance	enhanced	1	0	no	no	sent	
+StringTable	hasEntry	instance	plain	1	0	no	no	sent	
+StringTable	hasEntry	instance	subclass	1	0	no	no	sent	
+StringTable	hasEntry	instance	enhanced	1	0	no	no	sent	
+StringTable	hasIndex	instance	plain	1	0	no	no	sent	
+StringTable	hasIndex	instance	subclass	1	0	no	no	sent	
+StringTable	hasIndex	instance	enhanced	1	0	no	no	sent	
+StringTable	hasItem	instance	plain	'v'	0	no	no	sent	
+StringTable	hasItem	instance	subclass	'v'	0	no	no	sent	
+StringTable	hasItem	instance	enhanced	'v'	0	no	no	sent	
+StringTable	index	instance	plain	'v'	0	no	no	sent	
+StringTable	index	instance	subclass	'v'	0	no	no	sent	
+StringTable	index	instance	enhanced	'v'	0	no	no	sent	
+StringTable	isEmpty	instance	plain		0	no	no	sent	
+StringTable	isEmpty	instance	subclass		0	no	no	sent	
+StringTable	isEmpty	instance	enhanced		0	no	no	sent	
+StringTable	items	instance	plain		0	no	no	sent	
+StringTable	items	instance	subclass		0	no	no	sent	
+StringTable	items	instance	enhanced		0	no	no	sent	
+StringTable	makeArray	instance	plain		0	no	no	sent	
+StringTable	makeArray	instance	subclass		0	no	no	sent	
+StringTable	makeArray	instance	enhanced		0	no	no	sent	
+StringTable	put	instance	plain	'v',1	0	no	no	sent	
+StringTable	put	instance	subclass	'v',1	0	no	no	sent	
+StringTable	put	instance	enhanced	'v',1	0	no	no	sent	
+StringTable	remove	instance	plain	1	0	no	no	sent	
+StringTable	remove	instance	subclass	1	0	no	no	sent	
+StringTable	remove	instance	enhanced	1	0	no	no	sent	
+StringTable	removeEntry	instance	plain	1	0	no	no	sent	
+StringTable	removeEntry	instance	subclass	1	0	no	no	sent	
+StringTable	removeEntry	instance	enhanced	1	0	no	no	sent	
+StringTable	removeItem	instance	plain	'v'	0	no	no	sent	
+StringTable	removeItem	instance	subclass	'v'	0	no	no	sent	
+StringTable	removeItem	instance	enhanced	'v'	0	no	no	sent	
+StringTable	setEntry	instance	plain	1	0	no	no	sent	
+StringTable	setEntry	instance	subclass	1	0	no	no	sent	
+StringTable	setEntry	instance	enhanced	1	0	no	no	sent	
+StringTable	supplier	instance	plain		0	no	no	sent	
+StringTable	supplier	instance	subclass		0	no	no	sent	
+StringTable	supplier	instance	enhanced		0	no	no	sent	
+StringTable	unknown	instance	plain	'STRING',.array~new	0	no	no	sent	
+StringTable	unknown	instance	subclass	'STRING',.array~new	0	no	no	sent	
+StringTable	unknown	instance	enhanced	'STRING',.array~new	0	no	no	sent	
+StringTable	difference	instance	plain	1	0	no	no	syntax 93.948	
+StringTable	difference	instance	subclass	1	0	no	no	syntax 93.948	
+StringTable	difference	instance	enhanced	1	0	no	no	syntax 93.948	
+StringTable	disjoint	instance	plain	1	0	no	no	sent	
+StringTable	disjoint	instance	subclass	1	0	no	no	sent	
+StringTable	disjoint	instance	enhanced	1	0	no	no	sent	
+StringTable	equivalent	instance	plain	1	0	no	no	syntax 97.1	
+StringTable	equivalent	instance	subclass	1	0	no	no	syntax 97.1	
+StringTable	equivalent	instance	enhanced	1	0	no	no	syntax 97.1	
+StringTable	intersection	instance	plain	1	0	no	no	sent	
+StringTable	intersection	instance	subclass	1	0	no	no	sent	
+StringTable	intersection	instance	enhanced	1	0	no	no	sent	
+StringTable	subset	instance	plain	1	0	no	no	syntax 93.948	
+StringTable	subset	instance	subclass	1	0	no	no	syntax 93.948	
+StringTable	subset	instance	enhanced	1	0	no	no	syntax 93.948	
+StringTable	union	instance	plain	1	0	no	no	sent	
+StringTable	union	instance	subclass	1	0	no	no	sent	
+StringTable	union	instance	enhanced	1	0	no	no	sent	
+StringTable	xor	instance	plain	1	0	no	no	sent	
+StringTable	xor	instance	subclass	1	0	no	no	sent	
+StringTable	xor	instance	enhanced	1	0	no	no	sent	
+StringTable	of	class	plain	'x'	0	no	no	syntax 88.923	
+StringTable	of	class	subclass	'x'	0	no	no	syntax 88.923	
+StringTable	putAll	instance	plain	1	0	no	no	syntax 93.948	
+StringTable	putAll	instance	subclass	1	0	no	no	syntax 93.948	
+StringTable	putAll	instance	enhanced	1	0	no	no	syntax 93.948	
+Table	new	class	plain		0	no	no	sent	
+Table	new	class	subclass		0	no	no	sent	
+Table	[]	instance	plain	1	0	no	no	sent	
+Table	[]	instance	subclass	1	0	no	no	sent	
+Table	[]	instance	enhanced	1	0	no	no	sent	
+Table	[]=	instance	plain	1,'v'	0	no	no	sent	
+Table	[]=	instance	subclass	1,'v'	0	no	no	sent	
+Table	[]=	instance	enhanced	1,'v'	0	no	no	sent	
+Table	allIndexes	instance	plain		0	no	no	sent	
+Table	allIndexes	instance	subclass		0	no	no	sent	
+Table	allIndexes	instance	enhanced		0	no	no	sent	
+Table	allItems	instance	plain		0	no	no	sent	
+Table	allItems	instance	subclass		0	no	no	sent	
+Table	allItems	instance	enhanced		0	no	no	sent	
+Table	at	instance	plain	1	0	no	no	sent	
+Table	at	instance	subclass	1	0	no	no	sent	
+Table	at	instance	enhanced	1	0	no	no	sent	
+Table	empty	instance	plain		0	no	no	sent	
+Table	empty	instance	subclass		0	no	no	sent	
+Table	empty	instance	enhanced		0	no	no	sent	
+Table	hasIndex	instance	plain	1	0	no	no	sent	
+Table	hasIndex	instance	subclass	1	0	no	no	sent	
+Table	hasIndex	instance	enhanced	1	0	no	no	sent	
+Table	hasItem	instance	plain	'v'	0	no	no	sent	
+Table	hasItem	instance	subclass	'v'	0	no	no	sent	
+Table	hasItem	instance	enhanced	'v'	0	no	no	sent	
+Table	index	instance	plain	'v'	0	no	no	sent	
+Table	index	instance	subclass	'v'	0	no	no	sent	
+Table	index	instance	enhanced	'v'	0	no	no	sent	
+Table	isEmpty	instance	plain		0	no	no	sent	
+Table	isEmpty	instance	subclass		0	no	no	sent	
+Table	isEmpty	instance	enhanced		0	no	no	sent	
+Table	items	instance	plain		0	no	no	sent	
+Table	items	instance	subclass		0	no	no	sent	
+Table	items	instance	enhanced		0	no	no	sent	
+Table	makeArray	instance	plain		0	no	no	sent	
+Table	makeArray	instance	subclass		0	no	no	sent	
+Table	makeArray	instance	enhanced		0	no	no	sent	
+Table	put	instance	plain	'v',1	0	no	no	sent	
+Table	put	instance	subclass	'v',1	0	no	no	sent	
+Table	put	instance	enhanced	'v',1	0	no	no	sent	
+Table	remove	instance	plain	1	0	no	no	sent	
+Table	remove	instance	subclass	1	0	no	no	sent	
+Table	remove	instance	enhanced	1	0	no	no	sent	
+Table	removeItem	instance	plain	'v'	0	no	no	sent	
+Table	removeItem	instance	subclass	'v'	0	no	no	sent	
+Table	removeItem	instance	enhanced	'v'	0	no	no	sent	
+Table	supplier	instance	plain		0	no	no	sent	
+Table	supplier	instance	subclass		0	no	no	sent	
+Table	supplier	instance	enhanced		0	no	no	sent	
+Table	difference	instance	plain	1	0	no	no	syntax 93.948	
+Table	difference	instance	subclass	1	0	no	no	syntax 93.948	
+Table	difference	instance	enhanced	1	0	no	no	syntax 93.948	
+Table	disjoint	instance	plain	1	0	no	no	sent	
+Table	disjoint	instance	subclass	1	0	no	no	sent	
+Table	disjoint	instance	enhanced	1	0	no	no	sent	
+Table	equivalent	instance	plain	1	0	no	no	syntax 97.1	
+Table	equivalent	instance	subclass	1	0	no	no	syntax 97.1	
+Table	equivalent	instance	enhanced	1	0	no	no	syntax 97.1	
+Table	intersection	instance	plain	1	0	no	no	sent	
+Table	intersection	instance	subclass	1	0	no	no	sent	
+Table	intersection	instance	enhanced	1	0	no	no	sent	
+Table	subset	instance	plain	1	0	no	no	syntax 93.948	
+Table	subset	instance	subclass	1	0	no	no	syntax 93.948	
+Table	subset	instance	enhanced	1	0	no	no	syntax 93.948	
+Table	union	instance	plain	1	0	no	no	sent	
+Table	union	instance	subclass	1	0	no	no	sent	
+Table	union	instance	enhanced	1	0	no	no	sent	
+Table	xor	instance	plain	1	0	no	no	sent	
+Table	xor	instance	subclass	1	0	no	no	sent	
+Table	xor	instance	enhanced	1	0	no	no	sent	
+Table	of	class	plain	'x'	0	no	no	syntax 88.923	
+Table	of	class	subclass	'x'	0	no	no	syntax 88.923	
+Table	putAll	instance	plain	1	0	no	no	syntax 93.948	
+Table	putAll	instance	subclass	1	0	no	no	syntax 93.948	
+Table	putAll	instance	enhanced	1	0	no	no	syntax 93.948	
+Alarm	attachment	instance	plain		0	no	no	sent	
+Alarm	attachment	instance	subclass		0	no	no	sent	
+Alarm	attachment	instance	enhanced		0	no	no	syntax 93.901	
+Alarm	cancel	instance	plain		0	no	no	sent	
+Alarm	cancel	instance	subclass		0	no	no	sent	
+Alarm	cancel	instance	enhanced		0	no	no	syntax 93.901	
+Alarm	canceled	instance	plain		0	no	no	sent	
+Alarm	canceled	instance	subclass		0	no	no	sent	
+Alarm	canceled	instance	enhanced		0	no	no	syntax 93.901	
+Alarm	cancelled	instance	plain		0	no	no	sent	
+Alarm	cancelled	instance	subclass		0	no	no	sent	
+Alarm	cancelled	instance	enhanced		0	no	no	syntax 93.901	
+Alarm	init	instance	plain	1,'v'	0	no	no	syntax 88.914	Error 97.1:  Object "v" does not understand message "TRIGGERED".
+Alarm	init	instance	subclass	1,'v'	0	no	no	syntax 88.914	Error 97.1:  Object "v" does not understand message "TRIGGERED".
+Alarm	init	instance	enhanced	1,'v'	0	no	no	syntax 93.901	
+Alarm	scheduledTime	instance	plain		0	no	no	sent	
+Alarm	scheduledTime	instance	subclass		0	no	no	sent	
+Alarm	scheduledTime	instance	enhanced		0	no	no	syntax 93.901	
+Alarm	triggered	instance	plain		0	no	no	sent	
+Alarm	triggered	instance	subclass		0	no	no	sent	
+Alarm	triggered	instance	enhanced		0	no	no	syntax 93.901	
+AlarmNotification	cancel	instance	plain	.array~of('v')	0	no	no	sent	
+AlarmNotification	cancel	instance	subclass	.array~of('v')	0	no	no	sent	
+AlarmNotification	cancel	instance	enhanced	.array~of('v')	0	no	no	sent	
+AlarmNotification	triggered	instance	plain	.array~of('v')	0	no	no	syntax 93.965	
+AlarmNotification	triggered	instance	subclass	.array~of('v')	0	no	no	syntax 93.965	
+AlarmNotification	triggered	instance	enhanced	.array~of('v')	0	no	no	syntax 93.965	
+Buffer	new	class	plain		0	no	no	syntax 93.967	
+Buffer	new	class	subclass		0	no	no	syntax 93.967	
+Comparable	compareTo	instance	plain	.array~of('v')	0	no	no	sent	
+Comparable	compareTo	instance	subclass	.array~of('v')	0	no	no	sent	
+Comparable	compareTo	instance	enhanced	.array~of('v')	0	no	no	sent	
+Comparator	compare	instance	plain	'v','v'	0	no	no	sent	
+Comparator	compare	instance	subclass	'v','v'	0	no	no	sent	
+Comparator	compare	instance	enhanced	'v','v'	0	no	no	sent	
+CaselessComparator	compare	instance	plain	'v','v'	0	no	no	sent	
+CaselessComparator	compare	instance	subclass	'v','v'	0	no	no	sent	
+CaselessComparator	compare	instance	enhanced	'v','v'	0	no	no	sent	
+ColumnComparator	compare	instance	plain	'v','v'	0	no	no	sent	
+ColumnComparator	compare	instance	subclass	'v','v'	0	no	no	sent	
+ColumnComparator	compare	instance	enhanced	'v','v'	0	no	no	sent	
+ColumnComparator	init	instance	plain	1,1	0	no	no	sent	
+ColumnComparator	init	instance	subclass	1,1	0	no	no	sent	
+ColumnComparator	init	instance	enhanced	1,1	0	no	no	sent	
+CaselessColumnComparator	compare	instance	plain	'v','v'	0	no	no	sent	
+CaselessColumnComparator	compare	instance	subclass	'v','v'	0	no	no	sent	
+CaselessColumnComparator	compare	instance	enhanced	'v','v'	0	no	no	sent	
+CaselessColumnComparator	init	instance	plain	1,1	0	no	no	sent	
+CaselessColumnComparator	init	instance	subclass	1,1	0	no	no	sent	
+CaselessColumnComparator	init	instance	enhanced	1,1	0	no	no	sent	
+DescendingComparator	compare	instance	plain	'v','v'	0	no	no	sent	
+DescendingComparator	compare	instance	subclass	'v','v'	0	no	no	sent	
+DescendingComparator	compare	instance	enhanced	'v','v'	0	no	no	sent	
+CaselessDescendingComparator	compare	instance	plain	'v','v'	0	no	no	sent	
+CaselessDescendingComparator	compare	instance	subclass	'v','v'	0	no	no	sent	
+CaselessDescendingComparator	compare	instance	enhanced	'v','v'	0	no	no	sent	
+InvertingComparator	compare	instance	plain	'v','v'	0	no	no	sent	
+InvertingComparator	compare	instance	subclass	'v','v'	0	no	no	sent	
+InvertingComparator	compare	instance	enhanced	'v','v'	0	no	no	sent	
+InvertingComparator	init	instance	plain	.Comparator~new	0	no	no	sent	
+InvertingComparator	init	instance	subclass	.Comparator~new	0	no	no	sent	
+InvertingComparator	init	instance	enhanced	.Comparator~new	0	no	no	sent	
+NumericComparator	compare	instance	plain	'v','v'	0	no	no	syntax 41.1	
+NumericComparator	compare	instance	subclass	'v','v'	0	no	no	syntax 41.1	
+NumericComparator	compare	instance	enhanced	'v','v'	0	no	no	syntax 41.1	
+NumericComparator	init	instance	plain		0	no	no	sent	
+NumericComparator	init	instance	subclass		0	no	no	sent	
+NumericComparator	init	instance	enhanced		0	no	no	sent	
+DateTime	init	instance	plain		0	no	no	sent	
+DateTime	init	instance	subclass		0	no	no	sent	
+DateTime	init	instance	enhanced		0	no	no	sent	
+DateTime	new	class	plain		0	no	no	sent	
+DateTime	new	class	subclass		0	no	no	sent	
+DateTime	fromBaseDate	class	plain	'x'	0	no	no	syntax 88.918	
+DateTime	fromBaseDate	class	subclass	'x'	0	no	no	syntax 88.918	
+DateTime	fromCivilTime	class	plain	1	0	no	no	syntax 88.918	
+DateTime	fromCivilTime	class	subclass	1	0	no	no	syntax 88.918	
+DateTime	fromEuropeanDate	class	plain	'x'	0	no	no	syntax 88.918	
+DateTime	fromEuropeanDate	class	subclass	'x'	0	no	no	syntax 88.918	
+DateTime	fromIsoDate	class	plain	'x'	0	no	no	syntax 88.918	
+DateTime	fromIsoDate	class	subclass	'x'	0	no	no	syntax 88.918	
+DateTime	fromLongTime	class	plain	1	0	no	no	syntax 88.918	
+DateTime	fromLongTime	class	subclass	1	0	no	no	syntax 88.918	
+DateTime	fromNormalDate	class	plain	'x'	0	no	no	syntax 88.918	
+DateTime	fromNormalDate	class	subclass	'x'	0	no	no	syntax 88.918	
+DateTime	fromNormalTime	class	plain	1	0	no	no	syntax 88.918	
+DateTime	fromNormalTime	class	subclass	1	0	no	no	syntax 88.918	
+DateTime	fromOrderedDate	class	plain	'x'	0	no	no	syntax 88.918	
+DateTime	fromOrderedDate	class	subclass	'x'	0	no	no	syntax 88.918	
+DateTime	fromOrdinalDate	class	plain	'x'	0	no	no	syntax 88.918	
+DateTime	fromOrdinalDate	class	subclass	'x'	0	no	no	syntax 88.918	
+DateTime	fromStandardDate	class	plain	'x'	0	no	no	syntax 88.918	
+DateTime	fromStandardDate	class	subclass	'x'	0	no	no	syntax 88.918	
+DateTime	fromTicks	class	plain	1	0	no	no	sent	
+DateTime	fromTicks	class	subclass	1	0	no	no	sent	
+DateTime	fromUsaDate	class	plain	'x'	0	no	no	syntax 88.918	
+DateTime	fromUsaDate	class	subclass	'x'	0	no	no	syntax 88.918	
+DateTime	fromUtcIsoDate	class	plain	'x'	0	no	no	syntax 88.918	
+DateTime	fromUtcIsoDate	class	subclass	'x'	0	no	no	syntax 88.918	
+DateTime	fromWeekNumberDate	class	plain	'x'	0	no	no	syntax 88.918	
+DateTime	fromWeekNumberDate	class	subclass	'x'	0	no	no	syntax 88.918	
+DateTime	maxDate	class	plain		0	no	no	sent	
+DateTime	maxDate	class	subclass		0	no	no	sent	
+DateTime	minDate	class	plain		0	no	no	sent	
+DateTime	minDate	class	subclass		0	no	no	sent	
+DateTime	today	class	plain		0	no	no	sent	
+DateTime	today	class	subclass		0	no	no	sent	
+DateTime	+	instance	plain	1,1	0	no	no	syntax 93.902	
+DateTime	+	instance	subclass	1,1	0	no	no	syntax 93.902	
+DateTime	+	instance	enhanced	1,1	0	no	no	syntax 93.902	
+DateTime	-	instance	plain	1,1	0	no	no	syntax 93.902	
+DateTime	-	instance	subclass	1,1	0	no	no	syntax 93.902	
+DateTime	-	instance	enhanced	1,1	0	no	no	syntax 93.902	
+DateTime	addDays	instance	plain	1	0	no	no	sent	
+DateTime	addDays	instance	subclass	1	0	no	no	sent	
+DateTime	addDays	instance	enhanced	1	0	no	no	sent	
+DateTime	addHours	instance	plain	1	0	no	no	sent	
+DateTime	addHours	instance	subclass	1	0	no	no	sent	
+DateTime	addHours	instance	enhanced	1	0	no	no	sent	
+DateTime	addMicroseconds	instance	plain	1	0	no	no	sent	
+DateTime	addMicroseconds	instance	subclass	1	0	no	no	sent	
+DateTime	addMicroseconds	instance	enhanced	1	0	no	no	sent	
+DateTime	addMinutes	instance	plain	1	0	no	no	sent	
+DateTime	addMinutes	instance	subclass	1	0	no	no	sent	
+DateTime	addMinutes	instance	enhanced	1	0	no	no	sent	
+DateTime	addSeconds	instance	plain	1	0	no	no	sent	
+DateTime	addSeconds	instance	subclass	1	0	no	no	sent	
+DateTime	addSeconds	instance	enhanced	1	0	no	no	sent	
+DateTime	addWeeks	instance	plain	1	0	no	no	sent	
+DateTime	addWeeks	instance	subclass	1	0	no	no	sent	
+DateTime	addWeeks	instance	enhanced	1	0	no	no	sent	
+DateTime	addYears	instance	plain	1	0	no	no	sent	
+DateTime	addYears	instance	subclass	1	0	no	no	sent	
+DateTime	addYears	instance	enhanced	1	0	no	no	sent	
+DateTime	baseDate	instance	plain		0	no	no	sent	
+DateTime	baseDate	instance	subclass		0	no	no	sent	
+DateTime	baseDate	instance	enhanced		0	no	no	sent	
+DateTime	civilTime	instance	plain		0	no	no	sent	
+DateTime	civilTime	instance	subclass		0	no	no	sent	
+DateTime	civilTime	instance	enhanced		0	no	no	sent	
+DateTime	compareTo	instance	plain	.array~of('v')	0	no	no	sent	
+DateTime	compareTo	instance	subclass	.array~of('v')	0	no	no	sent	
+DateTime	compareTo	instance	enhanced	.array~of('v')	0	no	no	sent	
+DateTime	date	instance	plain		0	no	no	sent	
+DateTime	date	instance	subclass		0	no	no	sent	
+DateTime	date	instance	enhanced		0	no	no	sent	
+DateTime	day	instance	plain		0	no	no	sent	
+DateTime	day	instance	subclass		0	no	no	sent	
+DateTime	day	instance	enhanced		0	no	no	sent	
+DateTime	dayMicroseconds	instance	plain		0	no	no	sent	
+DateTime	dayMicroseconds	instance	subclass		0	no	no	sent	
+DateTime	dayMicroseconds	instance	enhanced		0	no	no	sent	
+DateTime	dayMinutes	instance	plain		0	no	no	sent	
+DateTime	dayMinutes	instance	subclass		0	no	no	sent	
+DateTime	dayMinutes	instance	enhanced		0	no	no	sent	
+DateTime	dayName	instance	plain		0	no	no	sent	
+DateTime	dayName	instance	subclass		0	no	no	sent	
+DateTime	dayName	instance	enhanced		0	no	no	sent	
+DateTime	daySeconds	instance	plain		0	no	no	sent	
+DateTime	daySeconds	instance	subclass		0	no	no	sent	
+DateTime	daySeconds	instance	enhanced		0	no	no	sent	
+DateTime	daysInMonth	instance	plain		0	no	no	sent	
+DateTime	daysInMonth	instance	subclass		0	no	no	sent	
+DateTime	daysInMonth	instance	enhanced		0	no	no	sent	
+DateTime	daysInYear	instance	plain		0	no	no	sent	
+DateTime	daysInYear	instance	subclass		0	no	no	sent	
+DateTime	daysInYear	instance	enhanced		0	no	no	sent	
+DateTime	elapsed	instance	plain		0	no	no	sent	
+DateTime	elapsed	instance	subclass		0	no	no	sent	
+DateTime	elapsed	instance	enhanced		0	no	no	sent	
+DateTime	europeanDate	instance	plain		0	no	no	sent	
+DateTime	europeanDate	instance	subclass		0	no	no	sent	
+DateTime	europeanDate	instance	enhanced		0	no	no	sent	
+DateTime	fullDate	instance	plain		0	no	no	sent	
+DateTime	fullDate	instance	subclass		0	no	no	sent	
+DateTime	fullDate	instance	enhanced		0	no	no	sent	
+DateTime	hashCode	instance	plain		0	no	no	sent	
+DateTime	hashCode	instance	subclass		0	no	no	sent	
+DateTime	hashCode	instance	enhanced		0	no	no	sent	
+DateTime	hours	instance	plain		0	no	no	sent	
+DateTime	hours	instance	subclass		0	no	no	sent	
+DateTime	hours	instance	enhanced		0	no	no	sent	
+DateTime	isLeapYear	instance	plain		0	no	no	sent	
+DateTime	isLeapYear	instance	subclass		0	no	no	sent	
+DateTime	isLeapYear	instance	enhanced		0	no	no	sent	
+DateTime	isoDate	instance	plain		0	no	no	sent	
+DateTime	isoDate	instance	subclass		0	no	no	sent	
+DateTime	isoDate	instance	enhanced		0	no	no	sent	
+DateTime	languageDate	instance	plain		0	no	no	sent	
+DateTime	languageDate	instance	subclass		0	no	no	sent	
+DateTime	languageDate	instance	enhanced		0	no	no	sent	
+DateTime	longTime	instance	plain		0	no	no	sent	
+DateTime	longTime	instance	subclass		0	no	no	sent	
+DateTime	longTime	instance	enhanced		0	no	no	sent	
+DateTime	makeString	instance	plain		0	no	no	sent	
+DateTime	makeString	instance	subclass		0	no	no	sent	
+DateTime	makeString	instance	enhanced		0	no	no	sent	
+DateTime	microseconds	instance	plain		0	no	no	sent	
+DateTime	microseconds	instance	subclass		0	no	no	sent	
+DateTime	microseconds	instance	enhanced		0	no	no	sent	
+DateTime	minutes	instance	plain		0	no	no	sent	
+DateTime	minutes	instance	subclass		0	no	no	sent	
+DateTime	minutes	instance	enhanced		0	no	no	sent	
+DateTime	month	instance	plain		0	no	no	sent	
+DateTime	month	instance	subclass		0	no	no	sent	
+DateTime	month	instance	enhanced		0	no	no	sent	
+DateTime	monthName	instance	plain		0	no	no	sent	
+DateTime	monthName	instance	subclass		0	no	no	sent	
+DateTime	monthName	instance	enhanced		0	no	no	sent	
+DateTime	normalDate	instance	plain		0	no	no	sent	
+DateTime	normalDate	instance	subclass		0	no	no	sent	
+DateTime	normalDate	instance	enhanced		0	no	no	sent	
+DateTime	normalTime	instance	plain		0	no	no	sent	
+DateTime	normalTime	instance	subclass		0	no	no	sent	
+DateTime	normalTime	instance	enhanced		0	no	no	sent	
+DateTime	offset	instance	plain		0	no	no	sent	
+DateTime	offset	instance	subclass		0	no	no	sent	
+DateTime	offset	instance	enhanced		0	no	no	sent	
+DateTime	orderedDate	instance	plain		0	no	no	sent	
+DateTime	orderedDate	instance	subclass		0	no	no	sent	
+DateTime	orderedDate	instance	enhanced		0	no	no	sent	
+DateTime	ordinalDate	instance	plain		0	no	no	sent	
+DateTime	ordinalDate	instance	subclass		0	no	no	sent	
+DateTime	ordinalDate	instance	enhanced		0	no	no	sent	
+DateTime	seconds	instance	plain		0	no	no	sent	
+DateTime	seconds	instance	subclass		0	no	no	sent	
+DateTime	seconds	instance	enhanced		0	no	no	sent	
+DateTime	standardDate	instance	plain		0	no	no	sent	
+DateTime	standardDate	instance	subclass		0	no	no	sent	
+DateTime	standardDate	instance	enhanced		0	no	no	sent	
+DateTime	string	instance	plain		0	no	no	sent	
+DateTime	string	instance	subclass		0	no	no	sent	
+DateTime	string	instance	enhanced		0	no	no	sent	
+DateTime	ticks	instance	plain		0	no	no	sent	
+DateTime	ticks	instance	subclass		0	no	no	sent	
+DateTime	ticks	instance	enhanced		0	no	no	sent	
+DateTime	timeOfDay	instance	plain		0	no	no	sent	
+DateTime	timeOfDay	instance	subclass		0	no	no	sent	
+DateTime	timeOfDay	instance	enhanced		0	no	no	sent	
+DateTime	toLocalTime	instance	plain		0	no	no	sent	
+DateTime	toLocalTime	instance	subclass		0	no	no	sent	
+DateTime	toLocalTime	instance	enhanced		0	no	no	sent	
+DateTime	toTimezone	instance	plain		0	no	no	sent	
+DateTime	toTimezone	instance	subclass		0	no	no	sent	
+DateTime	toTimezone	instance	enhanced		0	no	no	sent	
+DateTime	toUtcTime	instance	plain		0	no	no	sent	
+DateTime	toUtcTime	instance	subclass		0	no	no	sent	
+DateTime	toUtcTime	instance	enhanced		0	no	no	sent	
+DateTime	usaDate	instance	plain		0	no	no	sent	
+DateTime	usaDate	instance	subclass		0	no	no	sent	
+DateTime	usaDate	instance	enhanced		0	no	no	sent	
+DateTime	utcDate	instance	plain		0	no	no	sent	
+DateTime	utcDate	instance	subclass		0	no	no	sent	
+DateTime	utcDate	instance	enhanced		0	no	no	sent	
+DateTime	utcIsoDate	instance	plain		0	no	no	sent	
+DateTime	utcIsoDate	instance	subclass		0	no	no	sent	
+DateTime	utcIsoDate	instance	enhanced		0	no	no	sent	
+DateTime	weekDay	instance	plain		0	no	no	sent	
+DateTime	weekDay	instance	subclass		0	no	no	sent	
+DateTime	weekDay	instance	enhanced		0	no	no	sent	
+DateTime	weekNumber	instance	plain		0	no	no	sent	
+DateTime	weekNumber	instance	subclass		0	no	no	sent	
+DateTime	weekNumber	instance	enhanced		0	no	no	sent	
+DateTime	weekNumberDate	instance	plain		0	no	no	sent	
+DateTime	weekNumberDate	instance	subclass		0	no	no	sent	
+DateTime	weekNumberDate	instance	enhanced		0	no	no	sent	
+DateTime	weekNumberYear	instance	plain		0	no	no	sent	
+DateTime	weekNumberYear	instance	subclass		0	no	no	sent	
+DateTime	weekNumberYear	instance	enhanced		0	no	no	sent	
+DateTime	weeksInYear	instance	plain		0	no	no	sent	
+DateTime	weeksInYear	instance	subclass		0	no	no	sent	
+DateTime	weeksInYear	instance	enhanced		0	no	no	sent	
+DateTime	year	instance	plain		0	no	no	sent	
+DateTime	year	instance	subclass		0	no	no	sent	
+DateTime	year	instance	enhanced		0	no	no	sent	
+DateTime	yearDay	instance	plain		0	no	no	sent	
+DateTime	yearDay	instance	subclass		0	no	no	sent	
+DateTime	yearDay	instance	enhanced		0	no	no	sent	
+DateTime	=	instance	plain	1	0	no	no	sent	
+DateTime	=	instance	subclass	1	0	no	no	sent	
+DateTime	=	instance	enhanced	1	0	no	no	sent	
+DateTime	==	instance	plain	1	0	no	no	sent	
+DateTime	==	instance	subclass	1	0	no	no	sent	
+DateTime	==	instance	enhanced	1	0	no	no	sent	
+DateTime	<	instance	plain	1	0	no	no	sent	
+DateTime	<	instance	subclass	1	0	no	no	sent	
+DateTime	<	instance	enhanced	1	0	no	no	sent	
+DateTime	<=	instance	plain	1	0	no	no	sent	
+DateTime	<=	instance	subclass	1	0	no	no	sent	
+DateTime	<=	instance	enhanced	1	0	no	no	sent	
+DateTime	<<	instance	plain	1	0	no	no	sent	
+DateTime	<<	instance	subclass	1	0	no	no	sent	
+DateTime	<<	instance	enhanced	1	0	no	no	sent	
+DateTime	<<=	instance	plain	1	0	no	no	sent	
+DateTime	<<=	instance	subclass	1	0	no	no	sent	
+DateTime	<<=	instance	enhanced	1	0	no	no	sent	
+DateTime	<>	instance	plain	1	0	no	no	sent	
+DateTime	<>	instance	subclass	1	0	no	no	sent	
+DateTime	<>	instance	enhanced	1	0	no	no	sent	
+DateTime	>	instance	plain	1	0	no	no	sent	
+DateTime	>	instance	subclass	1	0	no	no	sent	
+DateTime	>	instance	enhanced	1	0	no	no	sent	
+DateTime	>=	instance	plain	1	0	no	no	sent	
+DateTime	>=	instance	subclass	1	0	no	no	sent	
+DateTime	>=	instance	enhanced	1	0	no	no	sent	
+DateTime	><	instance	plain	1	0	no	no	sent	
+DateTime	><	instance	subclass	1	0	no	no	sent	
+DateTime	><	instance	enhanced	1	0	no	no	sent	
+DateTime	>>	instance	plain	1	0	no	no	sent	
+DateTime	>>	instance	subclass	1	0	no	no	sent	
+DateTime	>>	instance	enhanced	1	0	no	no	sent	
+DateTime	>>=	instance	plain	1	0	no	no	sent	
+DateTime	>>=	instance	subclass	1	0	no	no	sent	
+DateTime	>>=	instance	enhanced	1	0	no	no	sent	
+DateTime	\=	instance	plain	1	0	no	no	sent	
+DateTime	\=	instance	subclass	1	0	no	no	sent	
+DateTime	\=	instance	enhanced	1	0	no	no	sent	
+DateTime	\==	instance	plain	1	0	no	no	sent	
+DateTime	\==	instance	subclass	1	0	no	no	sent	
+DateTime	\==	instance	enhanced	1	0	no	no	sent	
+DateTime	\<	instance	plain	1	0	no	no	sent	
+DateTime	\<	instance	subclass	1	0	no	no	sent	
+DateTime	\<	instance	enhanced	1	0	no	no	sent	
+DateTime	\<<	instance	plain	1	0	no	no	sent	
+DateTime	\<<	instance	subclass	1	0	no	no	sent	
+DateTime	\<<	instance	enhanced	1	0	no	no	sent	
+DateTime	\>	instance	plain	1	0	no	no	sent	
+DateTime	\>	instance	subclass	1	0	no	no	sent	
+DateTime	\>	instance	enhanced	1	0	no	no	sent	
+DateTime	\>>	instance	plain	1	0	no	no	sent	
+DateTime	\>>	instance	subclass	1	0	no	no	sent	
+DateTime	\>>	instance	enhanced	1	0	no	no	sent	
+EventSemaphore	new	class	plain		0	no	no	sent	
+EventSemaphore	new	class	subclass		0	no	no	sent	
+EventSemaphore	isPosted	instance	plain		0	no	no	sent	
+EventSemaphore	isPosted	instance	subclass		0	no	no	sent	
+EventSemaphore	isPosted	instance	enhanced		0	no	no	sent	
+EventSemaphore	post	instance	plain		0	no	no	sent	
+EventSemaphore	post	instance	subclass		0	no	no	sent	
+EventSemaphore	post	instance	enhanced		0	no	no	sent	
+EventSemaphore	reset	instance	plain		0	no	no	sent	
+EventSemaphore	reset	instance	subclass		0	no	no	sent	
+EventSemaphore	reset	instance	enhanced		0	no	no	sent	
+EventSemaphore	uninit	instance	plain		0	no	no	sent	
+EventSemaphore	uninit	instance	subclass		0	no	no	sent	
+EventSemaphore	uninit	instance	enhanced		0	no	no	sent	
+EventSemaphore	wait	instance	plain		120	no	yes		rexx-exec: a wait that nothing left to run can end is not implemented
+EventSemaphore	wait	instance	subclass		120	no	yes		rexx-exec: a wait that nothing left to run can end is not implemented
+EventSemaphore	wait	instance	enhanced		120	no	yes		rexx-exec: a wait that nothing left to run can end is not implemented
+File	isCaseSensitive	class	plain		0	no	no	sent	
+File	isCaseSensitive	class	subclass		0	no	no	sent	
+File	listRoots	class	plain		0	no	no	sent	
+File	listRoots	class	subclass		0	no	no	sent	
+File	pathSeparator	class	plain		0	no	no	sent	
+File	pathSeparator	class	subclass		0	no	no	sent	
+File	readChars	class	plain	'zzfile'	0	no	no	sent	
+File	readChars	class	subclass	'zzfile'	0	no	no	sent	
+File	readLines	class	plain	'zzfile'	0	no	no	sent	
+File	readLines	class	subclass	'zzfile'	0	no	no	sent	
+File	searchPath	class	plain	1	0	no	no	sent	
+File	searchPath	class	subclass	1	0	no	no	sent	
+File	separator	class	plain		0	no	no	sent	
+File	separator	class	subclass		0	no	no	sent	
+File	temporaryPath	class	plain		0	no	no	sent	
+File	temporaryPath	class	subclass		0	no	no	sent	
+File	writeChars	class	plain	'zzfile','x'	0	no	no	sent	
+File	writeChars	class	subclass	'zzfile','x'	0	no	no	sent	
+File	writeLines	class	plain	'zzfile',1	0	no	no	syntax 88.914	
+File	writeLines	class	subclass	'zzfile',1	0	no	no	syntax 88.914	
+File	absoluteFile	instance	plain		0	no	no	sent	
+File	absoluteFile	instance	subclass		0	no	no	sent	
+File	absoluteFile	instance	enhanced		0	no	no	sent	
+File	absolutePath	instance	plain		0	no	no	sent	
+File	absolutePath	instance	subclass		0	no	no	sent	
+File	absolutePath	instance	enhanced		0	no	no	sent	
+File	canRead	instance	plain		0	no	no	sent	
+File	canRead	instance	subclass		0	no	no	sent	
+File	canRead	instance	enhanced		0	no	no	sent	
+File	canWrite	instance	plain		0	no	no	sent	
+File	canWrite	instance	subclass		0	no	no	sent	
+File	canWrite	instance	enhanced		0	no	no	sent	
+File	compareTo	instance	plain	.array~of('v')	0	no	no	sent	
+File	compareTo	instance	subclass	.array~of('v')	0	no	no	sent	
+File	compareTo	instance	enhanced	.array~of('v')	0	no	no	sent	
+File	delete	instance	plain		0	no	no	sent	
+File	delete	instance	subclass		0	no	no	sent	
+File	delete	instance	enhanced		0	no	no	sent	
+File	exists	instance	plain		0	no	no	sent	
+File	exists	instance	subclass		0	no	no	sent	
+File	exists	instance	enhanced		0	no	no	sent	
+File	extension	instance	plain		0	no	no	sent	
+File	extension	instance	subclass		0	no	no	sent	
+File	extension	instance	enhanced		0	no	no	sent	
+File	hashCode	instance	plain		0	no	no	sent	
+File	hashCode	instance	subclass		0	no	no	sent	
+File	hashCode	instance	enhanced		0	no	no	sent	
+File	init	instance	plain	'zzfile'	0	no	no	sent	
+File	init	instance	subclass	'zzfile'	0	no	no	sent	
+File	init	instance	enhanced	'zzfile'	0	no	no	sent	
+File	isCaseSensitive	instance	plain		0	no	no	sent	
+File	isCaseSensitive	instance	subclass		0	no	no	sent	
+File	isCaseSensitive	instance	enhanced		0	no	no	sent	
+File	isDirectory	instance	plain		0	no	no	sent	
+File	isDirectory	instance	subclass		0	no	no	sent	
+File	isDirectory	instance	enhanced		0	no	no	sent	
+File	isFile	instance	plain		0	no	no	sent	
+File	isFile	instance	subclass		0	no	no	sent	
+File	isFile	instance	enhanced		0	no	no	sent	
+File	isHidden	instance	plain		0	no	no	sent	
+File	isHidden	instance	subclass		0	no	no	sent	
+File	isHidden	instance	enhanced		0	no	no	sent	
+File	lastAccessed	instance	plain		0	no	no	sent	
+File	lastAccessed	instance	subclass		0	no	no	sent	
+File	lastAccessed	instance	enhanced		0	no	no	sent	
+File	lastModified	instance	plain		0	no	no	sent	
+File	lastModified	instance	subclass		0	no	no	sent	
+File	lastModified	instance	enhanced		0	no	no	sent	
+File	length	instance	plain		0	no	no	sent	
+File	length	instance	subclass		0	no	no	sent	
+File	length	instance	enhanced		0	no	no	sent	
+File	list	instance	plain		0	no	no	sent	
+File	list	instance	subclass		0	no	no	sent	
+File	list	instance	enhanced		0	no	no	sent	
+File	listFiles	instance	plain		0	no	no	sent	
+File	listFiles	instance	subclass		0	no	no	sent	
+File	listFiles	instance	enhanced		0	no	no	sent	
+File	makeDir	instance	plain		0	no	no	sent	
+File	makeDir	instance	subclass		0	no	no	sent	
+File	makeDir	instance	enhanced		0	no	no	sent	
+File	makeDirs	instance	plain		0	no	no	sent	
+File	makeDirs	instance	subclass		0	no	no	sent	
+File	makeDirs	instance	enhanced		0	no	no	sent	
+File	makeString	instance	plain		0	no	no	sent	
+File	makeString	instance	subclass		0	no	no	sent	
+File	makeString	instance	enhanced		0	no	no	sent	
+File	name	instance	plain		0	no	no	sent	
+File	name	instance	subclass		0	no	no	sent	
+File	name	instance	enhanced		0	no	no	sent	
+File	parent	instance	plain		0	no	no	sent	
+File	parent	instance	subclass		0	no	no	sent	
+File	parent	instance	enhanced		0	no	no	sent	
+File	parentFile	instance	plain		0	no	no	sent	
+File	parentFile	instance	subclass		0	no	no	sent	
+File	parentFile	instance	enhanced		0	no	no	sent	
+File	path	instance	plain		0	no	no	sent	
+File	path	instance	subclass		0	no	no	sent	
+File	path	instance	enhanced		0	no	no	sent	
+File	pathSeparator	instance	plain		0	no	no	sent	
+File	pathSeparator	instance	subclass		0	no	no	sent	
+File	pathSeparator	instance	enhanced		0	no	no	sent	
+File	renameTo	instance	plain	'zzfile'	0	no	no	syntax 88.914	
+File	renameTo	instance	subclass	'zzfile'	0	no	no	syntax 88.914	
+File	renameTo	instance	enhanced	'zzfile'	0	no	no	syntax 88.914	
+File	separator	instance	plain		0	no	no	sent	
+File	separator	instance	subclass		0	no	no	sent	
+File	separator	instance	enhanced		0	no	no	sent	
+File	setReadOnly	instance	plain		0	no	no	sent	
+File	setReadOnly	instance	subclass		0	no	no	sent	
+File	setReadOnly	instance	enhanced		0	no	no	sent	
+File	setWritable	instance	plain		0	no	no	sent	
+File	setWritable	instance	subclass		0	no	no	sent	
+File	setWritable	instance	enhanced		0	no	no	sent	
+File	string	instance	plain		0	no	no	sent	
+File	string	instance	subclass		0	no	no	sent	
+File	string	instance	enhanced		0	no	no	sent	
+File	=	instance	plain	1	0	no	no	sent	
+File	=	instance	subclass	1	0	no	no	sent	
+File	=	instance	enhanced	1	0	no	no	sent	
+File	==	instance	plain	1	0	no	no	sent	
+File	==	instance	subclass	1	0	no	no	sent	
+File	==	instance	enhanced	1	0	no	no	sent	
+File	<	instance	plain	1	0	no	no	sent	
+File	<	instance	subclass	1	0	no	no	sent	
+File	<	instance	enhanced	1	0	no	no	sent	
+File	<=	instance	plain	1	0	no	no	sent	
+File	<=	instance	subclass	1	0	no	no	sent	
+File	<=	instance	enhanced	1	0	no	no	sent	
+File	<<	instance	plain	1	0	no	no	sent	
+File	<<	instance	subclass	1	0	no	no	sent	
+File	<<	instance	enhanced	1	0	no	no	sent	
+File	<<=	instance	plain	1	0	no	no	sent	
+File	<<=	instance	subclass	1	0	no	no	sent	
+File	<<=	instance	enhanced	1	0	no	no	sent	
+File	<>	instance	plain	1	0	no	no	sent	
+File	<>	instance	subclass	1	0	no	no	sent	
+File	<>	instance	enhanced	1	0	no	no	sent	
+File	>	instance	plain	1	0	no	no	sent	
+File	>	instance	subclass	1	0	no	no	sent	
+File	>	instance	enhanced	1	0	no	no	sent	
+File	>=	instance	plain	1	0	no	no	sent	
+File	>=	instance	subclass	1	0	no	no	sent	
+File	>=	instance	enhanced	1	0	no	no	sent	
+File	><	instance	plain	1	0	no	no	sent	
+File	><	instance	subclass	1	0	no	no	sent	
+File	><	instance	enhanced	1	0	no	no	sent	
+File	>>	instance	plain	1	0	no	no	sent	
+File	>>	instance	subclass	1	0	no	no	sent	
+File	>>	instance	enhanced	1	0	no	no	sent	
+File	>>=	instance	plain	1	0	no	no	sent	
+File	>>=	instance	subclass	1	0	no	no	sent	
+File	>>=	instance	enhanced	1	0	no	no	sent	
+File	\=	instance	plain	1	0	no	no	sent	
+File	\=	instance	subclass	1	0	no	no	sent	
+File	\=	instance	enhanced	1	0	no	no	sent	
+File	\==	instance	plain	1	0	no	no	sent	
+File	\==	instance	subclass	1	0	no	no	sent	
+File	\==	instance	enhanced	1	0	no	no	sent	
+File	\<	instance	plain	1	0	no	no	sent	
+File	\<	instance	subclass	1	0	no	no	sent	
+File	\<	instance	enhanced	1	0	no	no	sent	
+File	\<<	instance	plain	1	0	no	no	sent	
+File	\<<	instance	subclass	1	0	no	no	sent	
+File	\<<	instance	enhanced	1	0	no	no	sent	
+File	\>	instance	plain	1	0	no	no	sent	
+File	\>	instance	subclass	1	0	no	no	sent	
+File	\>	instance	enhanced	1	0	no	no	sent	
+File	\>>	instance	plain	1	0	no	no	sent	
+File	\>>	instance	subclass	1	0	no	no	sent	
+File	\>>	instance	enhanced	1	0	no	no	sent	
+MessageNotification	messageComplete	instance	plain	.array~of('v')	0	no	no	syntax 93.965	
+MessageNotification	messageComplete	instance	subclass	.array~of('v')	0	no	no	syntax 93.965	
+MessageNotification	messageComplete	instance	enhanced	.array~of('v')	0	no	no	syntax 93.965	
+Monitor	current	instance	plain		0	no	no	sent	
+Monitor	current	instance	subclass		0	no	no	sent	
+Monitor	current	instance	enhanced		0	no	no	sent	
+Monitor	destination	instance	plain		0	no	no	sent	
+Monitor	destination	instance	subclass		0	no	no	sent	
+Monitor	destination	instance	enhanced		0	no	no	sent	
+Monitor	init	instance	plain		0	no	no	sent	
+Monitor	init	instance	subclass		0	no	no	sent	
+Monitor	init	instance	enhanced		0	no	no	sent	
+Monitor	unknown	instance	plain	'STRING',.array~new	0	no	no	sent	
+Monitor	unknown	instance	subclass	'STRING',.array~new	0	no	no	sent	
+Monitor	unknown	instance	enhanced	'STRING',.array~new	0	no	no	sent	
+MutableBuffer	new	class	plain		0	no	no	sent	
+MutableBuffer	new	class	subclass		0	no	no	sent	
+MutableBuffer	[]	instance	plain	1	0	no	no	sent	
+MutableBuffer	[]	instance	subclass	1	0	no	no	sent	
+MutableBuffer	[]	instance	enhanced	1	0	no	no	sent	
+MutableBuffer	[]=	instance	plain	1,1	0	no	no	sent	
+MutableBuffer	[]=	instance	subclass	1,1	0	no	no	sent	
+MutableBuffer	[]=	instance	enhanced	1,1	0	no	no	sent	
+MutableBuffer	append	instance	plain	'x'	0	no	no	sent	
+MutableBuffer	append	instance	subclass	'x'	0	no	no	sent	
+MutableBuffer	append	instance	enhanced	'x'	0	no	no	sent	
+MutableBuffer	caselessChangeStr	instance	plain	1,1	0	no	no	sent	
+MutableBuffer	caselessChangeStr	instance	subclass	1,1	0	no	no	sent	
+MutableBuffer	caselessChangeStr	instance	enhanced	1,1	0	no	no	sent	
+MutableBuffer	caselessContains	instance	plain	.array~of('v')	0	no	no	sent	
+MutableBuffer	caselessContains	instance	subclass	.array~of('v')	0	no	no	sent	
+MutableBuffer	caselessContains	instance	enhanced	.array~of('v')	0	no	no	sent	
+MutableBuffer	caselessContainsWord	instance	plain	'x'	0	no	no	sent	
+MutableBuffer	caselessContainsWord	instance	subclass	'x'	0	no	no	sent	
+MutableBuffer	caselessContainsWord	instance	enhanced	'x'	0	no	no	sent	
+MutableBuffer	caselessCountStr	instance	plain	1	0	no	no	sent	
+MutableBuffer	caselessCountStr	instance	subclass	1	0	no	no	sent	
+MutableBuffer	caselessCountStr	instance	enhanced	1	0	no	no	sent	
+MutableBuffer	caselessEndsWith	instance	plain	.array~of('v')	0	no	no	sent	
+MutableBuffer	caselessEndsWith	instance	subclass	.array~of('v')	0	no	no	sent	
+MutableBuffer	caselessEndsWith	instance	enhanced	.array~of('v')	0	no	no	sent	
+MutableBuffer	caselessLastPos	instance	plain	1	0	no	no	sent	
+MutableBuffer	caselessLastPos	instance	subclass	1	0	no	no	sent	
+MutableBuffer	caselessLastPos	instance	enhanced	1	0	no	no	sent	
+MutableBuffer	caselessMatch	instance	plain	1,.array~of('v')	0	no	no	sent	
+MutableBuffer	caselessMatch	instance	subclass	1,.array~of('v')	0	no	no	sent	
+MutableBuffer	caselessMatch	instance	enhanced	1,.array~of('v')	0	no	no	sent	
+MutableBuffer	caselessMatchChar	instance	plain	1,1	0	no	no	sent	
+MutableBuffer	caselessMatchChar	instance	subclass	1,1	0	no	no	sent	
+MutableBuffer	caselessMatchChar	instance	enhanced	1,1	0	no	no	sent	
+MutableBuffer	caselessPos	instance	plain	1	0	no	no	sent	
+MutableBuffer	caselessPos	instance	subclass	1	0	no	no	sent	
+MutableBuffer	caselessPos	instance	enhanced	1	0	no	no	sent	
+MutableBuffer	caselessStartsWith	instance	plain	.array~of('v')	0	no	no	sent	
+MutableBuffer	caselessStartsWith	instance	subclass	.array~of('v')	0	no	no	sent	
+MutableBuffer	caselessStartsWith	instance	enhanced	.array~of('v')	0	no	no	sent	
+MutableBuffer	caselessWordPos	instance	plain	'x'	0	no	no	sent	
+MutableBuffer	caselessWordPos	instance	subclass	'x'	0	no	no	sent	
+MutableBuffer	caselessWordPos	instance	enhanced	'x'	0	no	no	sent	
+MutableBuffer	changeStr	instance	plain	1,1	0	no	no	sent	
+MutableBuffer	changeStr	instance	subclass	1,1	0	no	no	sent	
+MutableBuffer	changeStr	instance	enhanced	1,1	0	no	no	sent	
+MutableBuffer	contains	instance	plain	.array~of('v')	0	no	no	sent	
+MutableBuffer	contains	instance	subclass	.array~of('v')	0	no	no	sent	
+MutableBuffer	contains	instance	enhanced	.array~of('v')	0	no	no	sent	
+MutableBuffer	containsWord	instance	plain	'x'	0	no	no	sent	
+MutableBuffer	containsWord	instance	subclass	'x'	0	no	no	sent	
+MutableBuffer	containsWord	instance	enhanced	'x'	0	no	no	sent	
+MutableBuffer	countStr	instance	plain	1	0	no	no	sent	
+MutableBuffer	countStr	instance	subclass	1	0	no	no	sent	
+MutableBuffer	countStr	instance	enhanced	1	0	no	no	sent	
+MutableBuffer	delete	instance	plain		0	no	no	sent	
+MutableBuffer	delete	instance	subclass		0	no	no	sent	
+MutableBuffer	delete	instance	enhanced		0	no	no	sent	
+MutableBuffer	delStr	instance	plain		0	no	no	sent	
+MutableBuffer	delStr	instance	subclass		0	no	no	sent	
+MutableBuffer	delStr	instance	enhanced		0	no	no	sent	
+MutableBuffer	delWord	instance	plain	1	0	no	no	sent	
+MutableBuffer	delWord	instance	subclass	1	0	no	no	sent	
+MutableBuffer	delWord	instance	enhanced	1	0	no	no	sent	
+MutableBuffer	endsWith	instance	plain	.array~of('v')	0	no	no	sent	
+MutableBuffer	endsWith	instance	subclass	.array~of('v')	0	no	no	sent	
+MutableBuffer	endsWith	instance	enhanced	.array~of('v')	0	no	no	sent	
+MutableBuffer	getBufferSize	instance	plain		0	no	no	sent	
+MutableBuffer	getBufferSize	instance	subclass		0	no	no	sent	
+MutableBuffer	getBufferSize	instance	enhanced		0	no	no	sent	
+MutableBuffer	insert	instance	plain	1	0	no	no	sent	
+MutableBuffer	insert	instance	subclass	1	0	no	no	sent	
+MutableBuffer	insert	instance	enhanced	1	0	no	no	sent	
+MutableBuffer	lastPos	instance	plain	1	0	no	no	sent	
+MutableBuffer	lastPos	instance	subclass	1	0	no	no	sent	
+MutableBuffer	lastPos	instance	enhanced	1	0	no	no	sent	
+MutableBuffer	length	instance	plain		0	no	no	sent	
+MutableBuffer	length	instance	subclass		0	no	no	sent	
+MutableBuffer	length	instance	enhanced		0	no	no	sent	
+MutableBuffer	lower	instance	plain		0	no	no	sent	
+MutableBuffer	lower	instance	subclass		0	no	no	sent	
+MutableBuffer	lower	instance	enhanced		0	no	no	sent	
+MutableBuffer	makeArray	instance	plain		0	no	no	sent	
+MutableBuffer	makeArray	instance	subclass		0	no	no	sent	
+MutableBuffer	makeArray	instance	enhanced		0	no	no	sent	
+MutableBuffer	makeString	instance	plain		0	no	no	sent	
+MutableBuffer	makeString	instance	subclass		0	no	no	sent	
+MutableBuffer	makeString	instance	enhanced		0	no	no	sent	
+MutableBuffer	match	instance	plain	1,.array~of('v')	0	no	no	sent	
+MutableBuffer	match	instance	subclass	1,.array~of('v')	0	no	no	sent	
+MutableBuffer	match	instance	enhanced	1,.array~of('v')	0	no	no	sent	
+MutableBuffer	matchChar	instance	plain	1,1	0	no	no	sent	
+MutableBuffer	matchChar	instance	subclass	1,1	0	no	no	sent	
+MutableBuffer	matchChar	instance	enhanced	1,1	0	no	no	sent	
+MutableBuffer	overlay	instance	plain	1	0	no	no	sent	
+MutableBuffer	overlay	instance	subclass	1	0	no	no	sent	
+MutableBuffer	overlay	instance	enhanced	1	0	no	no	sent	
+MutableBuffer	pos	instance	plain	1	0	no	no	sent	
+MutableBuffer	pos	instance	subclass	1	0	no	no	sent	
+MutableBuffer	pos	instance	enhanced	1	0	no	no	sent	
+MutableBuffer	replaceAt	instance	plain	1,1	0	no	no	sent	
+MutableBuffer	replaceAt	instance	subclass	1,1	0	no	no	sent	
+MutableBuffer	replaceAt	instance	enhanced	1,1	0	no	no	sent	
+MutableBuffer	setBufferSize	instance	plain	1	0	no	no	sent	
+MutableBuffer	setBufferSize	instance	subclass	1	0	no	no	sent	
+MutableBuffer	setBufferSize	instance	enhanced	1	0	no	no	sent	
+MutableBuffer	setText	instance	plain	'x'	0	no	no	sent	
+MutableBuffer	setText	instance	subclass	'x'	0	no	no	sent	
+MutableBuffer	setText	instance	enhanced	'x'	0	no	no	sent	
+MutableBuffer	space	instance	plain		0	no	no	sent	
+MutableBuffer	space	instance	subclass		0	no	no	sent	
+MutableBuffer	space	instance	enhanced		0	no	no	sent	
+MutableBuffer	startsWith	instance	plain	.array~of('v')	0	no	no	sent	
+MutableBuffer	startsWith	instance	subclass	.array~of('v')	0	no	no	sent	
+MutableBuffer	startsWith	instance	enhanced	.array~of('v')	0	no	no	sent	
+MutableBuffer	string	instance	plain		0	no	no	sent	
+MutableBuffer	string	instance	subclass		0	no	no	sent	
+MutableBuffer	string	instance	enhanced		0	no	no	sent	
+MutableBuffer	subChar	instance	plain	1	0	no	no	sent	
+MutableBuffer	subChar	instance	subclass	1	0	no	no	sent	
+MutableBuffer	subChar	instance	enhanced	1	0	no	no	sent	
+MutableBuffer	substr	instance	plain	1	0	no	no	sent	
+MutableBuffer	substr	instance	subclass	1	0	no	no	sent	
+MutableBuffer	substr	instance	enhanced	1	0	no	no	sent	
+MutableBuffer	subWord	instance	plain	1	0	no	no	sent	
+MutableBuffer	subWord	instance	subclass	1	0	no	no	sent	
+MutableBuffer	subWord	instance	enhanced	1	0	no	no	sent	
+MutableBuffer	subWords	instance	plain		0	no	no	sent	
+MutableBuffer	subWords	instance	subclass		0	no	no	sent	
+MutableBuffer	subWords	instance	enhanced		0	no	no	sent	
+MutableBuffer	translate	instance	plain		0	no	no	sent	
+MutableBuffer	translate	instance	subclass		0	no	no	sent	
+MutableBuffer	translate	instance	enhanced		0	no	no	sent	
+MutableBuffer	upper	instance	plain		0	no	no	sent	
+MutableBuffer	upper	instance	subclass		0	no	no	sent	
+MutableBuffer	upper	instance	enhanced		0	no	no	sent	
+MutableBuffer	verify	instance	plain	'x'	0	no	no	sent	
+MutableBuffer	verify	instance	subclass	'x'	0	no	no	sent	
+MutableBuffer	verify	instance	enhanced	'x'	0	no	no	sent	
+MutableBuffer	word	instance	plain	1	0	no	no	sent	
+MutableBuffer	word	instance	subclass	1	0	no	no	sent	
+MutableBuffer	word	instance	enhanced	1	0	no	no	sent	
+MutableBuffer	wordIndex	instance	plain	1	0	no	no	sent	
+MutableBuffer	wordIndex	instance	subclass	1	0	no	no	sent	
+MutableBuffer	wordIndex	instance	enhanced	1	0	no	no	sent	
+MutableBuffer	wordLength	instance	plain	1	0	no	no	sent	
+MutableBuffer	wordLength	instance	subclass	1	0	no	no	sent	
+MutableBuffer	wordLength	instance	enhanced	1	0	no	no	sent	
+MutableBuffer	wordPos	instance	plain	'x'	0	no	no	sent	
+MutableBuffer	wordPos	instance	subclass	'x'	0	no	no	sent	
+MutableBuffer	wordPos	instance	enhanced	'x'	0	no	no	sent	
+MutableBuffer	words	instance	plain		0	no	no	sent	
+MutableBuffer	words	instance	subclass		0	no	no	sent	
+MutableBuffer	words	instance	enhanced		0	no	no	sent	
+MutexSemaphore	new	class	plain		0	no	no	sent	
+MutexSemaphore	new	class	subclass		0	no	no	sent	
+MutexSemaphore	acquire	instance	plain		0	no	no	sent	
+MutexSemaphore	acquire	instance	subclass		0	no	no	sent	
+MutexSemaphore	acquire	instance	enhanced		0	no	no	sent	
+MutexSemaphore	release	instance	plain		0	no	no	sent	
+MutexSemaphore	release	instance	subclass		0	no	no	sent	
+MutexSemaphore	release	instance	enhanced		0	no	no	sent	
+MutexSemaphore	uninit	instance	plain		0	no	no	sent	
+MutexSemaphore	uninit	instance	subclass		0	no	no	sent	
+MutexSemaphore	uninit	instance	enhanced		0	no	no	sent	
+Orderable	=	instance	plain	1	0	no	no	sent	
+Orderable	=	instance	subclass	1	0	no	no	sent	
+Orderable	=	instance	enhanced	1	0	no	no	sent	
+Orderable	==	instance	plain	1	0	no	no	sent	
+Orderable	==	instance	subclass	1	0	no	no	sent	
+Orderable	==	instance	enhanced	1	0	no	no	sent	
+Orderable	<	instance	plain	1	0	no	no	sent	
+Orderable	<	instance	subclass	1	0	no	no	sent	
+Orderable	<	instance	enhanced	1	0	no	no	sent	
+Orderable	<=	instance	plain	1	0	no	no	sent	
+Orderable	<=	instance	subclass	1	0	no	no	sent	
+Orderable	<=	instance	enhanced	1	0	no	no	sent	
+Orderable	<<	instance	plain	1	0	no	no	sent	
+Orderable	<<	instance	subclass	1	0	no	no	sent	
+Orderable	<<	instance	enhanced	1	0	no	no	sent	
+Orderable	<<=	instance	plain	1	0	no	no	sent	
+Orderable	<<=	instance	subclass	1	0	no	no	sent	
+Orderable	<<=	instance	enhanced	1	0	no	no	sent	
+Orderable	<>	instance	plain	1	0	no	no	sent	
+Orderable	<>	instance	subclass	1	0	no	no	sent	
+Orderable	<>	instance	enhanced	1	0	no	no	sent	
+Orderable	>	instance	plain	1	0	no	no	sent	
+Orderable	>	instance	subclass	1	0	no	no	sent	
+Orderable	>	instance	enhanced	1	0	no	no	sent	
+Orderable	>=	instance	plain	1	0	no	no	sent	
+Orderable	>=	instance	subclass	1	0	no	no	sent	
+Orderable	>=	instance	enhanced	1	0	no	no	sent	
+Orderable	><	instance	plain	1	0	no	no	sent	
+Orderable	><	instance	subclass	1	0	no	no	sent	
+Orderable	><	instance	enhanced	1	0	no	no	sent	
+Orderable	>>	instance	plain	1	0	no	no	sent	
+Orderable	>>	instance	subclass	1	0	no	no	sent	
+Orderable	>>	instance	enhanced	1	0	no	no	sent	
+Orderable	>>=	instance	plain	1	0	no	no	sent	
+Orderable	>>=	instance	subclass	1	0	no	no	sent	
+Orderable	>>=	instance	enhanced	1	0	no	no	sent	
+Orderable	\=	instance	plain	1	0	no	no	sent	
+Orderable	\=	instance	subclass	1	0	no	no	sent	
+Orderable	\=	instance	enhanced	1	0	no	no	sent	
+Orderable	\==	instance	plain	1	0	no	no	sent	
+Orderable	\==	instance	subclass	1	0	no	no	sent	
+Orderable	\==	instance	enhanced	1	0	no	no	sent	
+Orderable	\<	instance	plain	1	0	no	no	sent	
+Orderable	\<	instance	subclass	1	0	no	no	sent	
+Orderable	\<	instance	enhanced	1	0	no	no	sent	
+Orderable	\<<	instance	plain	1	0	no	no	sent	
+Orderable	\<<	instance	subclass	1	0	no	no	sent	
+Orderable	\<<	instance	enhanced	1	0	no	no	sent	
+Orderable	\>	instance	plain	1	0	no	no	sent	
+Orderable	\>	instance	subclass	1	0	no	no	sent	
+Orderable	\>	instance	enhanced	1	0	no	no	sent	
+Orderable	\>>	instance	plain	1	0	no	no	sent	
+Orderable	\>>	instance	subclass	1	0	no	no	sent	
+Orderable	\>>	instance	enhanced	1	0	no	no	sent	
+Orderable	compareTo	instance	plain	.array~of('v')	0	no	no	sent	
+Orderable	compareTo	instance	subclass	.array~of('v')	0	no	no	sent	
+Orderable	compareTo	instance	enhanced	.array~of('v')	0	no	no	sent	
+Pointer	new	class	plain		0	no	no	syntax 93.967	
+Pointer	new	class	subclass		0	no	no	syntax 93.967	
+RexxContext	args	instance	plain		0	no	no	sent	
+RexxContext	condition	instance	plain		0	no	no	sent	
+RexxContext	digits	instance	plain		0	no	no	sent	
+RexxContext	executable	instance	plain		0	no	no	sent	
+RexxContext	form	instance	plain		0	no	no	sent	
+RexxContext	fuzz	instance	plain		0	no	no	sent	
+RexxContext	interpreter	instance	plain		0	no	no	sent	
+RexxContext	invocation	instance	plain		0	no	no	sent	
+RexxContext	line	instance	plain		0	no	no	sent	
+RexxContext	name	instance	plain		0	no	no	sent	
+RexxContext	package	instance	plain		0	no	no	sent	
+RexxContext	rs	instance	plain		0	no	no	sent	
+RexxContext	stackFrames	instance	plain		0	no	no	sent	
+RexxContext	thread	instance	plain		0	no	no	sent	
+RexxContext	variables	instance	plain		0	no	no	sent	
+RexxInfo	architecture	instance	plain		0	no	no	sent	
+RexxInfo	caseSensitiveFiles	instance	plain		0	no	no	sent	
+RexxInfo	date	instance	plain		0	no	no	sent	
+RexxInfo	debug	instance	plain		0	no	no	sent	
+RexxInfo	digits	instance	plain		0	no	no	sent	
+RexxInfo	directorySeparator	instance	plain		0	no	no	sent	
+RexxInfo	endofline	instance	plain		0	no	no	sent	
+RexxInfo	executable	instance	plain		0	no	no	sent	
+RexxInfo	form	instance	plain		0	no	no	sent	
+RexxInfo	fuzz	instance	plain		0	no	no	sent	
+RexxInfo	internalDigits	instance	plain		0	no	no	sent	
+RexxInfo	internalMaxNumber	instance	plain		0	no	no	sent	
+RexxInfo	internalMinNumber	instance	plain		0	no	no	sent	
+RexxInfo	languageLevel	instance	plain		0	no	no	sent	
+RexxInfo	libraryPath	instance	plain		0	no	no	sent	
+RexxInfo	majorVersion	instance	plain		0	no	no	sent	
+RexxInfo	maxArraySize	instance	plain		0	no	no	sent	
+RexxInfo	maxExponent	instance	plain		0	no	no	sent	
+RexxInfo	maxPathLength	instance	plain		0	no	no	sent	
+RexxInfo	minExponent	instance	plain		0	no	no	sent	
+RexxInfo	modification	instance	plain		0	no	no	sent	
+RexxInfo	name	instance	plain		0	no	no	sent	
+RexxInfo	package	instance	plain		0	no	no	sent	
+RexxInfo	pathSeparator	instance	plain		0	no	no	sent	
+RexxInfo	platform	instance	plain		0	no	no	sent	
+RexxInfo	release	instance	plain		0	no	no	sent	
+RexxInfo	revision	instance	plain		0	no	no	sent	
+RexxInfo	version	instance	plain		0	no	no	sent	
+RexxQueue	new	class	plain		0	no	no	sent	
+RexxQueue	new	class	subclass		0	no	no	sent	
+RexxQueue	create	class	plain		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_create_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	create	class	subclass		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_create_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	delete	class	plain	1	120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_delete_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	delete	class	subclass	1	120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_delete_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	exists	class	plain	1	120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_queue_exists" is not implemented (Phase 10 Rxapi)
+RexxQueue	exists	class	subclass	1	120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_queue_exists" is not implemented (Phase 10 Rxapi)
+RexxQueue	open	class	plain	1	120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_open_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	open	class	subclass	1	120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_open_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	delete	instance	plain		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_delete_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	delete	instance	subclass		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_delete_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	delete	instance	enhanced		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_delete_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	empty	instance	plain		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	empty	instance	subclass		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	empty	instance	enhanced		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	get	instance	plain		0	no	no	sent	
+RexxQueue	get	instance	subclass		0	no	no	sent	
+RexxQueue	get	instance	enhanced		0	no	no	sent	
+RexxQueue	init	instance	plain		0	no	no	sent	
+RexxQueue	init	instance	subclass		0	no	no	sent	
+RexxQueue	init	instance	enhanced		0	no	no	sent	
+RexxQueue	lineIn	instance	plain		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_linein_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	lineIn	instance	subclass		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_linein_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	lineIn	instance	enhanced		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_linein_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	lineOut	instance	plain		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_queue_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	lineOut	instance	subclass		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_queue_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	lineOut	instance	enhanced		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_queue_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	makeArray	instance	plain		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_query_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	makeArray	instance	subclass		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_query_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	makeArray	instance	enhanced		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_query_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	pull	instance	plain		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_pull_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	pull	instance	subclass		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_pull_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	pull	instance	enhanced		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_pull_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	push	instance	plain		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_push_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	push	instance	subclass		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_push_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	push	instance	enhanced		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_push_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	queue	instance	plain		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_queue_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	queue	instance	subclass		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_queue_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	queue	instance	enhanced		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_queue_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	queued	instance	plain		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_query_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	queued	instance	subclass		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_query_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	queued	instance	enhanced		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_query_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	say	instance	plain		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_queue_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	say	instance	subclass		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_queue_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	say	instance	enhanced		120	no	yes		rexx-exec: the LIBRARY REXX entry point "rexx_queue_queue" is not implemented (Phase 10 Rxapi)
+RexxQueue	set	instance	plain	1	0	no	no	sent	
+RexxQueue	set	instance	subclass	1	0	no	no	sent	
+RexxQueue	set	instance	enhanced	1	0	no	no	sent	
+Singleton	new	class	plain		0	no	no	syntax 93.901	
+Singleton	new	class	subclass		0	no	no	syntax 93.901	
+StreamSupplier	available	instance	plain		0	no	no	sent	
+StreamSupplier	index	instance	plain		0	no	no	syntax 93.937	
+StreamSupplier	init	instance	plain		0	no	no	syntax 97.1	
+StreamSupplier	item	instance	plain		0	no	no	syntax 93.937	
+StreamSupplier	next	instance	plain		0	no	no	syntax 93.937	
+StreamSupplier	new	class	plain	.array~of('v'),1	0	no	no	syntax 97.1	
+StreamSupplier	new	class	subclass	.array~of('v'),1	0	no	no	syntax 97.1	
+StreamSupplier	allIndexes	instance	plain		0	no	no	sent	
+StreamSupplier	allItems	instance	plain		0	no	no	sent	
+StreamSupplier	supplier	instance	plain		0	no	no	sent	
+Supplier	new	class	plain	.array~of('v'),1	0	no	no	sent	
+Supplier	new	class	subclass	.array~of('v'),1	0	no	no	sent	
+Supplier	allIndexes	instance	plain		0	no	no	sent	
+Supplier	allIndexes	instance	subclass		0	no	no	sent	
+Supplier	allIndexes	instance	enhanced		0	no	no	sent	
+Supplier	allItems	instance	plain		0	no	no	sent	
+Supplier	allItems	instance	subclass		0	no	no	sent	
+Supplier	allItems	instance	enhanced		0	no	no	sent	
+Supplier	available	instance	plain		0	no	no	sent	
+Supplier	available	instance	subclass		0	no	no	sent	
+Supplier	available	instance	enhanced		0	no	no	sent	
+Supplier	index	instance	plain		0	no	no	syntax 93.937	
+Supplier	index	instance	subclass		0	no	no	syntax 93.937	
+Supplier	index	instance	enhanced		0	no	no	syntax 93.937	
+Supplier	item	instance	plain		0	no	no	syntax 93.937	
+Supplier	item	instance	subclass		0	no	no	syntax 93.937	
+Supplier	item	instance	enhanced		0	no	no	syntax 93.937	
+Supplier	next	instance	plain		0	no	no	syntax 93.937	
+Supplier	next	instance	subclass		0	no	no	syntax 93.937	
+Supplier	next	instance	enhanced		0	no	no	syntax 93.937	
+Supplier	supplier	instance	plain		0	no	no	sent	
+Supplier	supplier	instance	subclass		0	no	no	sent	
+Supplier	supplier	instance	enhanced		0	no	no	sent	
+Ticker	attachment	instance	plain		0	no	no	sent	
+Ticker	attachment	instance	subclass		0	no	no	sent	
+Ticker	attachment	instance	enhanced		0	no	no	syntax 93.901	
+Ticker	cancel	instance	plain		0	no	no	sent	
+Ticker	cancel	instance	subclass		0	no	no	sent	
+Ticker	cancel	instance	enhanced		0	no	no	syntax 93.901	
+Ticker	canceled	instance	plain		0	no	no	sent	
+Ticker	canceled	instance	subclass		0	no	no	sent	
+Ticker	canceled	instance	enhanced		0	no	no	syntax 93.901	
+Ticker	cancelled	instance	plain		0	no	no	sent	
+Ticker	cancelled	instance	subclass		0	no	no	sent	
+Ticker	cancelled	instance	enhanced		0	no	no	syntax 93.901	
+Ticker	init	instance	plain	1,'v'	0	no	no	syntax 88.914	Error 88.914:  Argument 1 must be an instance of the Pointer class.
+Ticker	init	instance	subclass	1,'v'	0	no	no	syntax 88.914	Error 88.914:  Argument 1 must be an instance of the Pointer class.
+Ticker	init	instance	enhanced	1,'v'	0	no	no	syntax 93.901	
+Ticker	interval	instance	plain		0	no	no	sent	
+Ticker	interval	instance	subclass		0	no	no	sent	
+Ticker	interval	instance	enhanced		0	no	no	syntax 93.901	
+TimeSpan	init	instance	plain		0	no	no	syntax 93.901	
+TimeSpan	init	instance	subclass		0	no	no	syntax 93.901	
+TimeSpan	init	instance	enhanced		0	no	no	syntax 93.901	
+TimeSpan	new	class	plain		0	no	no	syntax 93.901	
+TimeSpan	new	class	subclass		0	no	no	syntax 93.901	
+TimeSpan	fromCivilTime	class	plain	1	0	no	no	syntax 88.918	
+TimeSpan	fromCivilTime	class	subclass	1	0	no	no	syntax 88.918	
+TimeSpan	fromDays	class	plain	1	0	no	no	sent	
+TimeSpan	fromDays	class	subclass	1	0	no	no	sent	
+TimeSpan	fromHours	class	plain	1	0	no	no	sent	
+TimeSpan	fromHours	class	subclass	1	0	no	no	sent	
+TimeSpan	fromLongTime	class	plain	1	0	no	no	syntax 88.918	
+TimeSpan	fromLongTime	class	subclass	1	0	no	no	syntax 88.918	
+TimeSpan	fromMicroseconds	class	plain	1	0	no	no	sent	
+TimeSpan	fromMicroseconds	class	subclass	1	0	no	no	sent	
+TimeSpan	fromMinutes	class	plain	1	0	no	no	sent	
+TimeSpan	fromMinutes	class	subclass	1	0	no	no	sent	
+TimeSpan	fromNormalTime	class	plain	1	0	no	no	syntax 88.918	
+TimeSpan	fromNormalTime	class	subclass	1	0	no	no	syntax 88.918	
+TimeSpan	fromSeconds	class	plain	1	0	no	no	sent	
+TimeSpan	fromSeconds	class	subclass	1	0	no	no	sent	
+TimeSpan	fromStringFormat	class	plain	1	0	no	no	syntax 88.918	
+TimeSpan	fromStringFormat	class	subclass	1	0	no	no	syntax 88.918	
+TimeSpan	+	instance	plain	1,1	0	no	no	syntax 93.902	
+TimeSpan	+	instance	subclass	1,1	0	no	no	syntax 93.902	
+TimeSpan	+	instance	enhanced	1,1	0	no	no	syntax 93.902	
+TimeSpan	-	instance	plain	1,1	0	no	no	syntax 93.902	
+TimeSpan	-	instance	subclass	1,1	0	no	no	syntax 93.902	
+TimeSpan	-	instance	enhanced	1,1	0	no	no	syntax 93.902	
+TimeSpan	*	instance	plain	1,1	0	no	no	syntax 93.902	
+TimeSpan	*	instance	subclass	1,1	0	no	no	syntax 93.902	
+TimeSpan	*	instance	enhanced	1,1	0	no	no	syntax 93.902	
+TimeSpan	/	instance	plain	1,1	0	no	no	syntax 93.902	
+TimeSpan	/	instance	subclass	1,1	0	no	no	syntax 93.902	
+TimeSpan	/	instance	enhanced	1,1	0	no	no	syntax 93.902	
+TimeSpan	//	instance	plain	1,1	0	no	no	syntax 93.902	
+TimeSpan	//	instance	subclass	1,1	0	no	no	syntax 93.902	
+TimeSpan	//	instance	enhanced	1,1	0	no	no	syntax 93.902	
+TimeSpan	%	instance	plain	1,1	0	no	no	syntax 93.902	
+TimeSpan	%	instance	subclass	1,1	0	no	no	syntax 93.902	
+TimeSpan	%	instance	enhanced	1,1	0	no	no	syntax 93.902	
+TimeSpan	addDays	instance	plain	1	0	no	no	sent	
+TimeSpan	addDays	instance	subclass	1	0	no	no	sent	
+TimeSpan	addDays	instance	enhanced	1	0	no	no	sent	
+TimeSpan	addHours	instance	plain	1	0	no	no	sent	
+TimeSpan	addHours	instance	subclass	1	0	no	no	sent	
+TimeSpan	addHours	instance	enhanced	1	0	no	no	sent	
+TimeSpan	addMicroseconds	instance	plain	1	0	no	no	sent	
+TimeSpan	addMicroseconds	instance	subclass	1	0	no	no	sent	
+TimeSpan	addMicroseconds	instance	enhanced	1	0	no	no	sent	
+TimeSpan	addMinutes	instance	plain	1	0	no	no	sent	
+TimeSpan	addMinutes	instance	subclass	1	0	no	no	sent	
+TimeSpan	addMinutes	instance	enhanced	1	0	no	no	sent	
+TimeSpan	addSeconds	instance	plain	1	0	no	no	sent	
+TimeSpan	addSeconds	instance	subclass	1	0	no	no	sent	
+TimeSpan	addSeconds	instance	enhanced	1	0	no	no	sent	
+TimeSpan	addWeeks	instance	plain	1	0	no	no	sent	
+TimeSpan	addWeeks	instance	subclass	1	0	no	no	sent	
+TimeSpan	addWeeks	instance	enhanced	1	0	no	no	sent	
+TimeSpan	compareTo	instance	plain	.array~of('v')	0	no	no	sent	
+TimeSpan	compareTo	instance	subclass	.array~of('v')	0	no	no	sent	
+TimeSpan	compareTo	instance	enhanced	.array~of('v')	0	no	no	sent	
+TimeSpan	days	instance	plain		0	no	no	sent	
+TimeSpan	days	instance	subclass		0	no	no	sent	
+TimeSpan	days	instance	enhanced		0	no	no	sent	
+TimeSpan	duration	instance	plain		0	no	no	sent	
+TimeSpan	duration	instance	subclass		0	no	no	sent	
+TimeSpan	duration	instance	enhanced		0	no	no	sent	
+TimeSpan	hashCode	instance	plain		0	no	no	sent	
+TimeSpan	hashCode	instance	subclass		0	no	no	sent	
+TimeSpan	hashCode	instance	enhanced		0	no	no	sent	
+TimeSpan	hours	instance	plain		0	no	no	sent	
+TimeSpan	hours	instance	subclass		0	no	no	sent	
+TimeSpan	hours	instance	enhanced		0	no	no	sent	
+TimeSpan	makeString	instance	plain		0	no	no	sent	
+TimeSpan	makeString	instance	subclass		0	no	no	sent	
+TimeSpan	makeString	instance	enhanced		0	no	no	sent	
+TimeSpan	microseconds	instance	plain		0	no	no	sent	
+TimeSpan	microseconds	instance	subclass		0	no	no	sent	
+TimeSpan	microseconds	instance	enhanced		0	no	no	sent	
+TimeSpan	minutes	instance	plain		0	no	no	sent	
+TimeSpan	minutes	instance	subclass		0	no	no	sent	
+TimeSpan	minutes	instance	enhanced		0	no	no	sent	
+TimeSpan	seconds	instance	plain		0	no	no	sent	
+TimeSpan	seconds	instance	subclass		0	no	no	sent	
+TimeSpan	seconds	instance	enhanced		0	no	no	sent	
+TimeSpan	sign	instance	plain		0	no	no	sent	
+TimeSpan	sign	instance	subclass		0	no	no	sent	
+TimeSpan	sign	instance	enhanced		0	no	no	sent	
+TimeSpan	string	instance	plain		0	no	no	sent	
+TimeSpan	string	instance	subclass		0	no	no	sent	
+TimeSpan	string	instance	enhanced		0	no	no	sent	
+TimeSpan	totalDays	instance	plain		0	no	no	sent	
+TimeSpan	totalDays	instance	subclass		0	no	no	sent	
+TimeSpan	totalDays	instance	enhanced		0	no	no	sent	
+TimeSpan	totalHours	instance	plain		0	no	no	sent	
+TimeSpan	totalHours	instance	subclass		0	no	no	sent	
+TimeSpan	totalHours	instance	enhanced		0	no	no	sent	
+TimeSpan	totalMicroseconds	instance	plain		0	no	no	sent	
+TimeSpan	totalMicroseconds	instance	subclass		0	no	no	sent	
+TimeSpan	totalMicroseconds	instance	enhanced		0	no	no	sent	
+TimeSpan	totalMinutes	instance	plain		0	no	no	sent	
+TimeSpan	totalMinutes	instance	subclass		0	no	no	sent	
+TimeSpan	totalMinutes	instance	enhanced		0	no	no	sent	
+TimeSpan	totalSeconds	instance	plain		0	no	no	sent	
+TimeSpan	totalSeconds	instance	subclass		0	no	no	sent	
+TimeSpan	totalSeconds	instance	enhanced		0	no	no	sent	
+TimeSpan	=	instance	plain	1	0	no	no	sent	
+TimeSpan	=	instance	subclass	1	0	no	no	sent	
+TimeSpan	=	instance	enhanced	1	0	no	no	sent	
+TimeSpan	==	instance	plain	1	0	no	no	sent	
+TimeSpan	==	instance	subclass	1	0	no	no	sent	
+TimeSpan	==	instance	enhanced	1	0	no	no	sent	
+TimeSpan	<	instance	plain	1	0	no	no	sent	
+TimeSpan	<	instance	subclass	1	0	no	no	sent	
+TimeSpan	<	instance	enhanced	1	0	no	no	sent	
+TimeSpan	<=	instance	plain	1	0	no	no	sent	
+TimeSpan	<=	instance	subclass	1	0	no	no	sent	
+TimeSpan	<=	instance	enhanced	1	0	no	no	sent	
+TimeSpan	<<	instance	plain	1	0	no	no	sent	
+TimeSpan	<<	instance	subclass	1	0	no	no	sent	
+TimeSpan	<<	instance	enhanced	1	0	no	no	sent	
+TimeSpan	<<=	instance	plain	1	0	no	no	sent	
+TimeSpan	<<=	instance	subclass	1	0	no	no	sent	
+TimeSpan	<<=	instance	enhanced	1	0	no	no	sent	
+TimeSpan	<>	instance	plain	1	0	no	no	sent	
+TimeSpan	<>	instance	subclass	1	0	no	no	sent	
+TimeSpan	<>	instance	enhanced	1	0	no	no	sent	
+TimeSpan	>	instance	plain	1	0	no	no	sent	
+TimeSpan	>	instance	subclass	1	0	no	no	sent	
+TimeSpan	>	instance	enhanced	1	0	no	no	sent	
+TimeSpan	>=	instance	plain	1	0	no	no	sent	
+TimeSpan	>=	instance	subclass	1	0	no	no	sent	
+TimeSpan	>=	instance	enhanced	1	0	no	no	sent	
+TimeSpan	><	instance	plain	1	0	no	no	sent	
+TimeSpan	><	instance	subclass	1	0	no	no	sent	
+TimeSpan	><	instance	enhanced	1	0	no	no	sent	
+TimeSpan	>>	instance	plain	1	0	no	no	sent	
+TimeSpan	>>	instance	subclass	1	0	no	no	sent	
+TimeSpan	>>	instance	enhanced	1	0	no	no	sent	
+TimeSpan	>>=	instance	plain	1	0	no	no	sent	
+TimeSpan	>>=	instance	subclass	1	0	no	no	sent	
+TimeSpan	>>=	instance	enhanced	1	0	no	no	sent	
+TimeSpan	\=	instance	plain	1	0	no	no	sent	
+TimeSpan	\=	instance	subclass	1	0	no	no	sent	
+TimeSpan	\=	instance	enhanced	1	0	no	no	sent	
+TimeSpan	\==	instance	plain	1	0	no	no	sent	
+TimeSpan	\==	instance	subclass	1	0	no	no	sent	
+TimeSpan	\==	instance	enhanced	1	0	no	no	sent	
+TimeSpan	\<	instance	plain	1	0	no	no	sent	
+TimeSpan	\<	instance	subclass	1	0	no	no	sent	
+TimeSpan	\<	instance	enhanced	1	0	no	no	sent	
+TimeSpan	\<<	instance	plain	1	0	no	no	sent	
+TimeSpan	\<<	instance	subclass	1	0	no	no	sent	
+TimeSpan	\<<	instance	enhanced	1	0	no	no	sent	
+TimeSpan	\>	instance	plain	1	0	no	no	sent	
+TimeSpan	\>	instance	subclass	1	0	no	no	sent	
+TimeSpan	\>	instance	enhanced	1	0	no	no	sent	
+TimeSpan	\>>	instance	plain	1	0	no	no	sent	
+TimeSpan	\>>	instance	subclass	1	0	no	no	sent	
+TimeSpan	\>>	instance	enhanced	1	0	no	no	sent	
+TraceObject	activate	class	plain		0	no	no	sent	
+TraceObject	activate	class	subclass		0	no	no	sent	
+TraceObject	collector	class	plain		0	no	no	sent	
+TraceObject	collector	class	subclass		0	no	no	sent	
+TraceObject	collector=	class	plain	'v'	0	no	no	sent	
+TraceObject	collector=	class	subclass	'v'	0	no	no	sent	
+TraceObject	counter	class	plain		0	no	no	sent	
+TraceObject	counter	class	subclass		0	no	no	sent	
+TraceObject	makeStringImpl	class	plain	.TraceObject~new	0	no	no	sent	
+TraceObject	makeStringImpl	class	subclass	.TraceObject~new	0	no	no	sent	
+TraceObject	new	class	plain		0	no	no	sent	
+TraceObject	new	class	subclass		0	no	no	sent	
+TraceObject	notify	class	plain		0	no	no	sent	
+TraceObject	notify	class	subclass		0	no	no	sent	
+TraceObject	notify=	class	plain	'v'	0	no	no	sent	
+TraceObject	notify=	class	subclass	'v'	0	no	no	sent	
+TraceObject	option	class	plain		0	no	no	sent	
+TraceObject	option	class	subclass		0	no	no	sent	
+TraceObject	option=	class	plain		0	no	no	syntax 93.914	
+TraceObject	option=	class	subclass		0	no	no	syntax 93.914	
+TraceObject	setMakeString	class	plain	'STRING'	0	no	no	sent	
+TraceObject	setMakeString	class	subclass	'STRING'	0	no	no	sent	
+TraceObject	unsetMakeString	class	plain		0	no	no	sent	
+TraceObject	unsetMakeString	class	subclass		0	no	no	sent	
+TraceObject	compareTo	instance	plain	.TraceObject~new	0	no	no	sent	
+TraceObject	compareTo	instance	subclass	.TraceObject~new	0	no	no	sent	
+TraceObject	compareTo	instance	enhanced	.TraceObject~new	0	no	no	syntax 41.1	
+TraceObject	makeString	instance	plain		0	no	no	sent	
+TraceObject	makeString	instance	subclass		0	no	no	sent	
+TraceObject	makeString	instance	enhanced		0	no	no	syntax 41.1	
+Validate	classType	class	plain	1,'v',.Object	0	no	no	sent	
+Validate	classType	class	subclass	1,'v',.Object	0	no	no	sent	
+Validate	length	class	plain	1,1	0	no	no	sent	
+Validate	length	class	subclass	1,1	0	no	no	sent	
+Validate	logical	class	plain	1,1	0	no	no	sent	
+Validate	logical	class	subclass	1,1	0	no	no	sent	
+Validate	nonNegativeNumber	class	plain	1,1	0	no	no	sent	
+Validate	nonNegativeNumber	class	subclass	1,1	0	no	no	sent	
+Validate	nonNegativeWholeNumber	class	plain	1,1	0	no	no	sent	
+Validate	nonNegativeWholeNumber	class	subclass	1,1	0	no	no	sent	
+Validate	number	class	plain	1,1	0	no	no	sent	
+Validate	number	class	subclass	1,1	0	no	no	sent	
+Validate	numberRange	class	plain	1,1,1,1	0	no	no	sent	
+Validate	numberRange	class	subclass	1,1,1,1	0	no	no	sent	
+Validate	position	class	plain	1,1	0	no	no	sent	
+Validate	position	class	subclass	1,1	0	no	no	sent	
+Validate	positiveNumber	class	plain	1,1	0	no	no	sent	
+Validate	positiveNumber	class	subclass	1,1	0	no	no	sent	
+Validate	positiveWholeNumber	class	plain	1,1	0	no	no	sent	
+Validate	positiveWholeNumber	class	subclass	1,1	0	no	no	sent	
+Validate	requestClassType	class	plain	1,'v',.Object	0	no	no	sent	
+Validate	requestClassType	class	subclass	1,'v',.Object	0	no	no	sent	
+Validate	wholeNumber	class	plain	1,1	0	no	no	sent	
+Validate	wholeNumber	class	subclass	1,1	0	no	no	sent	
+Validate	wholeNumberRange	class	plain	1,1,1,1	0	no	no	sent	
+Validate	wholeNumberRange	class	subclass	1,1,1,1	0	no	no	sent	
+VariableReference	name	instance	plain		0	no	no	sent	
+VariableReference	request	instance	plain	'x'	0	no	no	sent	
+VariableReference	unknown	instance	plain		0	no	no	syntax 93.903	
+VariableReference	value	instance	plain		0	no	no	sent	
+WeakReference	new	class	plain	'v'	0	no	no	sent	
+WeakReference	new	class	subclass	'v'	0	no	no	sent	
+WeakReference	value	instance	plain		0	no	no	sent	
+WeakReference	value	instance	subclass		0	no	no	sent	
+WeakReference	value	instance	enhanced		0	no	no	sent	
+InputOutputStream	arrayOut	instance	plain		0	no	no	syntax 93.901	
+InputOutputStream	arrayOut	instance	subclass		0	no	no	syntax 93.901	
+InputOutputStream	arrayOut	instance	enhanced		0	no	no	syntax 93.901	
+InputOutputStream	charIn	instance	plain		0	no	no	syntax 93.965	
+InputOutputStream	charIn	instance	subclass		0	no	no	syntax 93.965	
+InputOutputStream	charIn	instance	enhanced		0	no	no	syntax 93.965	
+InputOutputStream	charOut	instance	plain		0	no	no	syntax 93.963	
+InputOutputStream	charOut	instance	subclass		0	no	no	syntax 93.963	
+InputOutputStream	charOut	instance	enhanced		0	no	no	syntax 93.963	
+InputOutputStream	chars	instance	plain		0	no	no	syntax 93.965	
+InputOutputStream	chars	instance	subclass		0	no	no	syntax 93.965	
+InputOutputStream	chars	instance	enhanced		0	no	no	syntax 93.965	
+InputOutputStream	close	instance	plain		0	no	no	sent	
+InputOutputStream	close	instance	subclass		0	no	no	sent	
+InputOutputStream	close	instance	enhanced		0	no	no	sent	
+InputOutputStream	lineIn	instance	plain		0	no	no	syntax 93.965	
+InputOutputStream	lineIn	instance	subclass		0	no	no	syntax 93.965	
+InputOutputStream	lineIn	instance	enhanced		0	no	no	syntax 93.965	
+InputOutputStream	lineOut	instance	plain		0	no	no	syntax 93.963	
+InputOutputStream	lineOut	instance	subclass		0	no	no	syntax 93.963	
+InputOutputStream	lineOut	instance	enhanced		0	no	no	syntax 93.963	
+InputOutputStream	lines	instance	plain		0	no	no	syntax 93.965	
+InputOutputStream	lines	instance	subclass		0	no	no	syntax 93.965	
+InputOutputStream	lines	instance	enhanced		0	no	no	syntax 93.965	
+InputOutputStream	open	instance	plain		0	no	no	sent	
+InputOutputStream	open	instance	subclass		0	no	no	sent	
+InputOutputStream	open	instance	enhanced		0	no	no	sent	
+InputOutputStream	position	instance	plain		0	no	no	syntax 93.963	
+InputOutputStream	position	instance	subclass		0	no	no	syntax 93.963	
+InputOutputStream	position	instance	enhanced		0	no	no	syntax 93.963	
+InputOutputStream	arrayIn	instance	plain		0	no	no	syntax 93.965	
+InputOutputStream	arrayIn	instance	subclass		0	no	no	syntax 93.965	
+InputOutputStream	arrayIn	instance	enhanced		0	no	no	syntax 93.965	
+InputStream	arrayIn	instance	plain		0	no	no	syntax 93.965	
+InputStream	arrayIn	instance	subclass		0	no	no	syntax 93.965	
+InputStream	arrayIn	instance	enhanced		0	no	no	syntax 93.965	
+InputStream	charIn	instance	plain		0	no	no	syntax 93.965	
+InputStream	charIn	instance	subclass		0	no	no	syntax 93.965	
+InputStream	charIn	instance	enhanced		0	no	no	syntax 93.965	
+InputStream	charOut	instance	plain		0	no	no	syntax 93.963	
+InputStream	charOut	instance	subclass		0	no	no	syntax 93.963	
+InputStream	charOut	instance	enhanced		0	no	no	syntax 93.963	
+InputStream	chars	instance	plain		0	no	no	syntax 93.965	
+InputStream	chars	instance	subclass		0	no	no	syntax 93.965	
+InputStream	chars	instance	enhanced		0	no	no	syntax 93.965	
+InputStream	close	instance	plain		0	no	no	sent	
+InputStream	close	instance	subclass		0	no	no	sent	
+InputStream	close	instance	enhanced		0	no	no	sent	
+InputStream	lineIn	instance	plain		0	no	no	syntax 93.965	
+InputStream	lineIn	instance	subclass		0	no	no	syntax 93.965	
+InputStream	lineIn	instance	enhanced		0	no	no	syntax 93.965	
+InputStream	lineOut	instance	plain		0	no	no	syntax 93.963	
+InputStream	lineOut	instance	subclass		0	no	no	syntax 93.963	
+InputStream	lineOut	instance	enhanced		0	no	no	syntax 93.963	
+InputStream	lines	instance	plain		0	no	no	syntax 93.965	
+InputStream	lines	instance	subclass		0	no	no	syntax 93.965	
+InputStream	lines	instance	enhanced		0	no	no	syntax 93.965	
+InputStream	open	instance	plain		0	no	no	sent	
+InputStream	open	instance	subclass		0	no	no	sent	
+InputStream	open	instance	enhanced		0	no	no	sent	
+InputStream	position	instance	plain		0	no	no	syntax 93.963	
+InputStream	position	instance	subclass		0	no	no	syntax 93.963	
+InputStream	position	instance	enhanced		0	no	no	syntax 93.963	
+OutputStream	arrayOut	instance	plain		0	no	no	syntax 93.901	
+OutputStream	arrayOut	instance	subclass		0	no	no	syntax 93.901	
+OutputStream	arrayOut	instance	enhanced		0	no	no	syntax 93.901	
+OutputStream	charIn	instance	plain		0	no	no	syntax 93.963	
+OutputStream	charIn	instance	subclass		0	no	no	syntax 93.963	
+OutputStream	charIn	instance	enhanced		0	no	no	syntax 93.963	
+OutputStream	charOut	instance	plain		0	no	no	syntax 93.965	
+OutputStream	charOut	instance	subclass		0	no	no	syntax 93.965	
+OutputStream	charOut	instance	enhanced		0	no	no	syntax 93.965	
+OutputStream	chars	instance	plain		0	no	no	syntax 93.963	
+OutputStream	chars	instance	subclass		0	no	no	syntax 93.963	
+OutputStream	chars	instance	enhanced		0	no	no	syntax 93.963	
+OutputStream	close	instance	plain		0	no	no	sent	
+OutputStream	close	instance	subclass		0	no	no	sent	
+OutputStream	close	instance	enhanced		0	no	no	sent	
+OutputStream	lineIn	instance	plain		0	no	no	syntax 93.963	
+OutputStream	lineIn	instance	subclass		0	no	no	syntax 93.963	
+OutputStream	lineIn	instance	enhanced		0	no	no	syntax 93.963	
+OutputStream	lineOut	instance	plain		0	no	no	syntax 93.965	
+OutputStream	lineOut	instance	subclass		0	no	no	syntax 93.965	
+OutputStream	lineOut	instance	enhanced		0	no	no	syntax 93.965	
+OutputStream	lines	instance	plain		0	no	no	syntax 93.963	
+OutputStream	lines	instance	subclass		0	no	no	syntax 93.963	
+OutputStream	lines	instance	enhanced		0	no	no	syntax 93.963	
+OutputStream	open	instance	plain		0	no	no	sent	
+OutputStream	open	instance	subclass		0	no	no	sent	
+OutputStream	open	instance	enhanced		0	no	no	sent	
+OutputStream	position	instance	plain		0	no	no	syntax 93.963	
+OutputStream	position	instance	subclass		0	no	no	syntax 93.963	
+OutputStream	position	instance	enhanced		0	no	no	syntax 93.963	
+Stream	new	class	plain	1	0	no	no	sent	
+Stream	new	class	subclass	1	0	no	no	sent	
+Stream	arrayIn	instance	plain		0	no	no	sent	
+Stream	arrayIn	instance	subclass		0	no	no	sent	
+Stream	arrayIn	instance	enhanced		0	no	no	sent	
+Stream	arrayOut	instance	plain	.array~of('v')	0	no	no	sent	
+Stream	arrayOut	instance	subclass	.array~of('v')	0	no	no	sent	
+Stream	arrayOut	instance	enhanced	.array~of('v')	0	no	no	sent	
+Stream	charIn	instance	plain		0	no	no	sent	
+Stream	charIn	instance	subclass		0	no	no	sent	
+Stream	charIn	instance	enhanced		0	no	no	sent	
+Stream	charOut	instance	plain		0	no	no	sent	
+Stream	charOut	instance	subclass		0	no	no	sent	
+Stream	charOut	instance	enhanced		0	no	no	sent	
+Stream	chars	instance	plain		0	no	no	sent	
+Stream	chars	instance	subclass		0	no	no	sent	
+Stream	chars	instance	enhanced		0	no	no	sent	
+Stream	close	instance	plain		0	no	no	sent	
+Stream	close	instance	subclass		0	no	no	sent	
+Stream	close	instance	enhanced		0	no	no	sent	
+Stream	command	instance	plain	'query exists'	0	no	no	sent	
+Stream	command	instance	subclass	'query exists'	0	no	no	sent	
+Stream	command	instance	enhanced	'query exists'	0	no	no	sent	
+Stream	description	instance	plain		0	no	no	sent	
+Stream	description	instance	subclass		0	no	no	sent	
+Stream	description	instance	enhanced		0	no	no	sent	
+Stream	flush	instance	plain		0	no	no	sent	
+Stream	flush	instance	subclass		0	no	no	sent	
+Stream	flush	instance	enhanced		0	no	no	sent	
+Stream	init	instance	plain	1	0	no	no	sent	
+Stream	init	instance	subclass	1	0	no	no	sent	
+Stream	init	instance	enhanced	1	0	no	no	sent	
+Stream	lineIn	instance	plain		0	no	no	sent	
+Stream	lineIn	instance	subclass		0	no	no	sent	
+Stream	lineIn	instance	enhanced		0	no	no	sent	
+Stream	lineOut	instance	plain		0	no	no	sent	
+Stream	lineOut	instance	subclass		0	no	no	sent	
+Stream	lineOut	instance	enhanced		0	no	no	sent	
+Stream	lines	instance	plain		0	no	no	sent	
+Stream	lines	instance	subclass		0	no	no	sent	
+Stream	lines	instance	enhanced		0	no	no	sent	
+Stream	makeArray	instance	plain		0	no	no	sent	
+Stream	makeArray	instance	subclass		0	no	no	sent	
+Stream	makeArray	instance	enhanced		0	no	no	sent	
+Stream	open	instance	plain		0	no	no	sent	
+Stream	open	instance	subclass		0	no	no	sent	
+Stream	open	instance	enhanced		0	no	no	sent	
+Stream	position	instance	plain	1	0	no	no	sent	
+Stream	position	instance	subclass	1	0	no	no	sent	
+Stream	position	instance	enhanced	1	0	no	no	sent	
+Stream	qualify	instance	plain		0	no	no	sent	
+Stream	qualify	instance	subclass		0	no	no	sent	
+Stream	qualify	instance	enhanced		0	no	no	sent	
+Stream	query	instance	plain		0	no	no	syntax 93.901	
+Stream	query	instance	subclass		0	no	no	syntax 93.901	
+Stream	query	instance	enhanced		0	no	no	syntax 93.901	
+Stream	say	instance	plain		0	no	no	sent	
+Stream	say	instance	subclass		0	no	no	sent	
+Stream	say	instance	enhanced		0	no	no	sent	
+Stream	seek	instance	plain	1	0	no	no	sent	
+Stream	seek	instance	subclass	1	0	no	no	sent	
+Stream	seek	instance	enhanced	1	0	no	no	sent	
+Stream	state	instance	plain		0	no	no	sent	
+Stream	state	instance	subclass		0	no	no	sent	
+Stream	state	instance	enhanced		0	no	no	sent	
+Stream	string	instance	plain		0	no	no	sent	
+Stream	string	instance	subclass		0	no	no	sent	
+Stream	string	instance	enhanced		0	no	no	sent	
+Stream	supplier	instance	plain		0	no	no	sent	
+Stream	supplier	instance	subclass		0	no	no	sent	
+Stream	supplier	instance	enhanced		0	no	no	sent	
+Stream	uninit	instance	plain		0	no	no	sent	
+Stream	uninit	instance	subclass		0	no	no	sent	
+Stream	uninit	instance	enhanced		0	no	no	sent	

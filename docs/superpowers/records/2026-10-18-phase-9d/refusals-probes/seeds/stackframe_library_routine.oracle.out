@@ -1,0 +1,4 @@
+frame ROUTINE R
+executable Routine 0 1
+frame PROGRAM /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/refusals-probes/seeds/stackframe_library_routine.rex
+executable Routine 0 0

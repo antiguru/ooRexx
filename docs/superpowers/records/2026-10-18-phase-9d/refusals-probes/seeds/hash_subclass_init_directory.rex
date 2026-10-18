@@ -1,0 +1,12 @@
+-- A Directory subclass whose INIT does not forward to its superclass.
+signal on syntax name trapped
+o = .zz~new
+say 'items' o~items
+o~put('v', 'I')
+say 'put' o~items o~hasIndex('I')
+exit 0
+trapped: say 'syntax' condition('O')~code
+exit 0
+::class zz subclass Directory
+::method init
+  nop

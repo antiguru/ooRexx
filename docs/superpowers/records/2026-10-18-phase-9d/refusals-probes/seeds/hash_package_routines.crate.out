@@ -1,0 +1,5 @@
+class StringTable
+items 1 1 1 1
+supplier 1 1 0
+copy 1
+public StringTable 1 1

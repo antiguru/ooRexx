@@ -1,0 +1,4 @@
+       *-* Compiled routine "R".
+     4 *-* say r(.k~new)
+Error 88 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/refusals-probes/seeds/stackframe_library_routine_live.rex:  Invalid argument.
+Error 88.909:  Argument 1 must have a string value.
