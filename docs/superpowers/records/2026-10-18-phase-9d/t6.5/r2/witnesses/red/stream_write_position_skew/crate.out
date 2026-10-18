@@ -1,0 +1,32 @@
+line then lineout : L2=0 w23 r1 L=0 w28 r1
+   [line1|new|2|line3|@@@@tail|]
+line then charout : L2=0 w23 r1 C=0 w27 r1
+   [line1|new|2|line3|@@@@tail]
+line then charout twice : L2=0 w23 r1 C=0 w25 r1 C=0 w27 r1
+   [line1|new|2|line3|@@@@abcd]
+charout at then lineout : C7=0 w9 r1 L=0 w14 r1
+   [line1|XYtail|ine3|]
+linein, line, lineout : R=line1 w19 r7 L3=0 w23 r7 L=0 w28 r7
+   [line1|line2|new|3|@@@@tail|]
+line, linein, lineout : L2=0 w23 r1 R=line1 w23 r7 L=0 w28 r7
+   [line1|new|2|line3|@@@@tail|]
+line, seek, lineout : L2=0 w23 r1 S=4 w4 r1 L=0 w9 r1
+   [lintail|w|2|line3|]
+seek write line, lineout : S=2 w7 r1 L=0 w12 r1
+   [line1|tail||line3|]
+seek line, lineout : S=3 w13 r13 L=0 w18 r13
+   [line1|line2|tail||]
+line twice : L2=0 w23 r1 L3=0 w24 r1
+   [line1|new|2|line3|@@@@more|]
+line, chars, lineout : L2=0 w23 r1 N=18 w23 r1 L=0 w28 r1
+   [line1|new|2|line3|@@@@tail|]
+line, lines, lineout : L2=0 w23 r1 M=1 w23 r1 L=0 w28 r1
+   [line1|new|2|line3|@@@@tail|]
+charin, relative seek : I=li w19 r3 S=17 w17 r3
+   [line1|line2|line3|]
+seek from end line, charout at : S=1 w19 r1 C9=0 w11 r1
+   [line1|liRR2|line3|]
+record line then lineout : L2=0 w9 r1 L=0 w13 r1
+   [AAAAnew tailDDDD]
+linein, record line, lineout : R=AAAA w17 r5 L1=0 w5 r5 L=0 w9 r5
+   [ab  cd  CCCCDDDD]

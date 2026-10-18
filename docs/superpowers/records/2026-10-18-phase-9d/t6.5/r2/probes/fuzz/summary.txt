@@ -1,0 +1,16 @@
+== fuzz7001
+scenarios 80 regressions 0 fixed 40 still-differ 1
+== fuzz7002
+scenarios 80 regressions 0 fixed 40 still-differ 2
+== fuzz7003
+scenarios 80 regressions 0 fixed 35 still-differ 1
+== fuzz7004
+scenarios 80 regressions 0 fixed 42 still-differ 2
+== fuzzb7001
+scenarios 80 regressions 0 fixed 21 still-differ 0
+== fuzzb7002
+scenarios 80 regressions 0 fixed 19 still-differ 2
+== fuzzb7003
+scenarios 80 regressions 0 fixed 14 still-differ 0
+== fuzzb7004
+scenarios 80 regressions 0 fixed 24 still-differ 0
