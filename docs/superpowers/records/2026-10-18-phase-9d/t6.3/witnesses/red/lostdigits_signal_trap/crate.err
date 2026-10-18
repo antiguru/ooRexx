@@ -1,0 +1,5 @@
+    57 *-*     x= 1111111111%1
+    57 *-*     interpret 'x=' expr
+    10 *-*   call try e, 9
+Error 26 running lostdigits_signal_trap.rex line 57:  Invalid whole number.
+Error 26.11:  Result of % operation did not result in a whole number.

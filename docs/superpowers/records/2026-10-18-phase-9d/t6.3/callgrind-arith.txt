@@ -1,0 +1,8 @@
+# base = 4f62b0d43 (this task's parent), head = 9095627aa
+# rust/bench-programs/callgrind.sh -p "arith rexxcps emptyloop" -o /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.3-arith base=/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.3/rexx-base-4f62b0d43 head=/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.3/rexx-head   (exit 0)
+# base ae65dc12ddf596d8de967cc4e30f781965fa54ebd591012904384ed876c6b4f7
+program	base	head	head d%	base -libc	head -libc	head -libc d%	base spread%	head spread%
+arith	12059548298	12059542939	-0.0000	11482662219	11482662420	+0.0000	0.0000	0.0000
+rexxcps	19261961537	19261956051	-0.0000	17777145016	17777144623	-0.0000	0.0000	0.0000
+emptyloop	7747165607	7747159873	-0.0001	7685275825	7685276026	+0.0000	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.3-arith
