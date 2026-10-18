@@ -1,0 +1,41 @@
+count 40
+/* A FIFO is a transient stream: a write does not seek, and a write position
+   is 93.958. Each is the first write to its FIFO.
+   QUERY EXISTS on an open device answers the name as written. The LINES
+   method takes only an option starting N or C. */
+address system 'mkfifo wfifo wfifo2 wfifo3'
+call on notready name caught
+say 'lineout' lineout('wfifo', 'x') stream('wfifo', 'D')
+signal on syntax name positioned
+say lineout('wfifo2', 'z', 1)
+positioned:
+say 'position' condition('O')~code condition('O')~message
+signal on syntax name charpositioned
+say charout('wfifo3', 'z', 1)
+charpositioned:
+say 'charout position' condition('O')~code condition('O')~message
+say 'open' stream('/dev/null', 'C', 'OPEN WRITE')
+say 'exists' stream('/dev/null', 'C', 'QUERY EXISTS')
+say 'close' stream('/dev/null', 'C', 'CLOSE')
+call charout 'f.txt', 'abc'
+say 'open file' stream('f.txt', 'C', 'OPEN WRITE')
+say 'exists file' (stream('f.txt', 'C', 'QUERY EXISTS') == qualify('f.txt'))
+call stream 'f.txt', 'C', 'CLOSE'
+s = .Stream~new('f.txt')
+do option over .array~of('n', 'Count', '2.5', '')
+  call linesOption s, option
+end
+exit
+
+linesOption: procedure
+  use arg s, option
+  signal on syntax name badOption
+  say 'lines' option s~lines(option)
+  return
+badOption:
+  say 'lines' option condition('O')~code condition('O')~message
+  return
+
+caught:
+  say 'notready' condition('D')
+  return

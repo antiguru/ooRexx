@@ -181,3 +181,9 @@ lang/stream_notready_names.rex
 lang/stream_command_open_failure.rex
 lang/stream_charin_eof.rex
 lang/stream_position_arguments.rex
+
+# 9d Task 6.4 fix round 1: a propagated HALT is reported untrapped, a
+# propagate after REPLY returning a value is 98.936, and transient stream
+# writes, QUERY EXISTS on an open device and the LINES method option.
+lang/raise_propagate_unreportable.rex
+lang/stream_transient_queries.rex

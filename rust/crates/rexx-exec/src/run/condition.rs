@@ -13,8 +13,8 @@
 
 use super::{
     ActiveCondition, CallEntry, CallType, Code, ConditionTrap, Cow, Ended, Entry, Failure, Flow,
-    HandlerExit, Interp, Loud, Novalue, Number, ObjRef, PendingTrap, Raise, Raised, Rc, Search,
-    Trap, TrappedCondition, body_of, raise_syntax_condition,
+    HandlerExit, Interp, Loud, Novalue, Number, ObjRef, PendingTrap, Raise, Raised, Rc, ReplyState,
+    Search, Trap, TrappedCondition, body_of, raise_syntax_condition,
 };
 
 impl Interp {
@@ -1102,10 +1102,13 @@ impl Interp {
 
     /// `RAISE PROPAGATE` of a condition other than `SYNTAX`. Like a tail-less
     /// `RAISE` it leaves this activation and every internal call beneath it,
-    /// offers the same condition object to the caller of the first activation
-    /// that is not one, and returns the object's `RESULT` unless a `SIGNAL ON`
-    /// trap takes it (`RexxActivation::raise`, `execution/RexxActivation.cpp:
-    /// 1801`-`:1805` and `:1895`).
+    /// and offers the same condition object to the caller of the first
+    /// activation that is not one -- none after a `REPLY`, whose sender has
+    /// its answer. Untrapped, `HALT` and `NOMETHOD` are reported as errors.
+    /// Unless a `SIGNAL ON` trap takes it, the activation returns the
+    /// object's `RESULT`, which after a `REPLY` is 98.936
+    /// (`RexxActivation::raise`, `execution/RexxActivation.cpp:1801`-`:1805`
+    /// and `:1866`-`:1895`).
     fn propagate_unreportable(&mut self, raised: &Raised) -> Result<Flow, Failure> {
         let object = self.activation().condition().and_then(|c| c.object);
         let result = object.and_then(|object| self.condition_entry(object, b"RESULT"));
@@ -1113,13 +1116,20 @@ impl Interp {
             self.roots.activity_mut().push_temp(result);
         }
         let top = self.first_non_internal_depth();
-        let caller = self.frame_at(top + 1).map(|activation| activation.id);
-        let Some(caller) = caller.filter(|_| !self.input_dispatcher_takes(caller)) else {
+        let replied = self
+            .frame_at(top)
+            .is_some_and(|activation| activation.reply != ReplyState::None);
+        let caller = self
+            .frame_at(top + 1)
+            .map(|activation| activation.id)
+            .filter(|_| !replied);
+        if caller.is_some() && self.input_dispatcher_takes(caller) {
             return Ok(Flow::Exit(result));
-        };
+        }
         let name = raised.condition.as_bytes();
-        match self.trap_at_depth(top + 1, name) {
-            Some(trap) if trap.call => {
+        let trap = caller.and_then(|caller| Some((caller, self.trap_at_depth(top + 1, name)?)));
+        match trap {
+            Some((caller, trap)) if trap.call => {
                 if let Some(object) = object {
                     self.propagate_to_call_trap(object)?;
                 }
@@ -1145,6 +1155,25 @@ impl Interp {
                 self.activity.reraised_object = object;
                 Err(raised.into())
             }
+            None if name == b"HALT" => {
+                let mut raised = Raised::halt();
+                raised.delivery.search = Search::Top;
+                Err(raised.into())
+            }
+            None if name == b"NOMETHOD" => {
+                let receiver =
+                    object.and_then(|object| self.condition_entry(object, b"ADDITIONAL"));
+                let mut raised = match (receiver, raised.description.clone()) {
+                    (Some(receiver), Some(description)) => {
+                        let receiver = self.string_value_text(receiver);
+                        Raised::no_method(&receiver, &description)
+                    }
+                    _ => Raised::syntax(97, 5, Vec::new()),
+                };
+                raised.delivery.search = Search::Top;
+                Err(raised.into())
+            }
+            None if replied && result.is_some() => Err(Raised::return_after_reply().into()),
             None => Ok(Flow::Exit(result)),
         }
     }

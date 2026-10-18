@@ -1,0 +1,79 @@
+/* RAISE PROPAGATE of a condition other than SYNTAX, from a trap handler of
+   the activation that took it. Through INTERPRET it leaves the handler's
+   activation and offers the object to the caller's CALL ON or SIGNAL ON
+   trap; untrapped, the activation returns the object's RESULT. After a
+   REPLY there is no caller to offer it to, and returning the RESULT is
+   98.936. An untrapped propagated HALT is error 4.1 at the RAISE. */
+call on error name caught
+call viaInterpret
+say 'call on, result' result
+call off error
+say 'untrapped, result' viaInterpret()
+signal on error name signalled
+call viaInterpret
+say 'not reached'
+signalled:
+call show 'signalled'
+signal off error
+say 'reply' .Replier~new~run
+call SysSleep 0.5
+say 'after reply'
+say 'user, reply' .Replier~new~quiet
+call SysSleep 0.5
+call nested
+say 'not reached'
+exit
+
+caught:
+  call show 'caught'
+  return
+
+show:
+  o = condition('O')
+  say arg(1) condition('C') condition('I') o~propagated o~hasIndex('RESULT') o~result o~instruction
+  return
+
+nested: procedure
+  call haltOuter
+  return 'not reached'
+
+::routine viaInterpret
+  signal on error name handler
+  'exit 3'
+  return 'not reached'
+handler:
+  interpret 'raise propagate'
+  return 'fell through'
+
+::routine haltOuter
+  signal on halt name outer
+  call haltInner
+  return 'not reached'
+outer:
+  say 'outer' condition('C') condition('I') condition('O')~propagated
+  raise propagate
+
+::routine haltInner
+  signal on halt name inner
+  call raiser
+  return 'not reached'
+inner:
+  raise propagate
+raiser:
+  raise halt description 'dd'
+
+::class Replier
+::method run
+  reply 'replied'
+  signal on error name handler
+  'exit 5'
+  return 'not reached'
+handler:
+  raise propagate
+::method quiet
+  reply 'replied'
+  signal on novalue name handler
+  say 'value' undefined_v
+  return 'not reached'
+handler:
+  raise propagate

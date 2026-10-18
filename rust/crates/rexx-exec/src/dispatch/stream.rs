@@ -282,6 +282,16 @@ pub(super) fn query_exists(
         };
         return Ok(Some(interp.text_built(answer)));
     }
+    // `StreamInfo::streamExists`: an open stream answers without a lookup, a
+    // device by the name as written and anything else by its qualified name.
+    if let Some(open) = state.open.as_ref() {
+        let answer = if is_device(&open.file) {
+            state.name.clone()
+        } else {
+            state.qualified.clone()
+        };
+        return Ok(Some(interp.text_built(answer)));
+    }
     let path = qualified_path(interp, receiver)?;
     let exists = std::fs::metadata(&path).is_ok_and(|meta| meta.is_file());
     let answer = if exists {
@@ -759,15 +769,11 @@ fn offset_of(position: i64) -> u64 {
 fn read_from(file: &mut std::fs::File, position: u64, len: usize) -> std::io::Result<Vec<u8>> {
     use std::io::{Read, Seek, SeekFrom};
     file.seek(SeekFrom::Start(position.saturating_sub(1)))?;
-    let mut out = vec![0u8; len];
-    let mut filled = 0;
-    while filled < len {
-        match file.read(&mut out[filled..])? {
-            0 => break,
-            got => filled += got,
-        }
-    }
-    out.truncate(filled);
+    // Grown as bytes arrive, so a count past the end allocates no more than
+    // the file holds.
+    let mut out = Vec::new();
+    file.take(u64::try_from(len).unwrap_or(u64::MAX))
+        .read_to_end(&mut out)?;
     Ok(out)
 }
 
@@ -835,6 +841,14 @@ fn is_transient(file: &std::fs::File) -> bool {
     use std::os::unix::fs::FileTypeExt;
     file.metadata()
         .is_ok_and(|meta| meta.file_type().is_char_device() || meta.file_type().is_fifo())
+}
+
+/// Whether an open descriptor is a device, as `SysFile::getStreamTypeInfo`
+/// decides it: a character or block device.
+fn is_device(file: &std::fs::File) -> bool {
+    use std::os::unix::fs::FileTypeExt;
+    file.metadata()
+        .is_ok_and(|meta| meta.file_type().is_char_device() || meta.file_type().is_block_device())
 }
 
 /// The file's size, or 0 when it cannot be stat'd.
@@ -1304,13 +1318,17 @@ pub(super) fn charout(
         return Ok(Some(interp.text(b"0")));
     };
     if let Some(start) = start {
+        if open.transient {
+            return Err(Raised::transient_positioning().into());
+        }
         open.write_position = as_position(positive(start)?);
     }
     let Some(data) = data else {
         return Ok(Some(interp.text(b"0")));
     };
     let at = open.write_position;
-    match write_at(&mut open.file, offset_of(at), &data) {
+    let transient = open.transient;
+    match write_at(&mut open.file, offset_of(at), &data, transient) {
         Ok(()) => {
             open.write_position = at + data.len() as i64;
             open.last_op_was_read = false;
@@ -1364,6 +1382,9 @@ pub(super) fn lineout(
         } else {
             0
         };
+        if open.transient {
+            return Err(Raised::transient_positioning().into());
+        }
         let (from_line, from_char) = (open.line_write, open.line_write_char);
         let line = as_position(positive(line)?);
         let (number, at) = seek_line(open, line, record_length, from_line, from_char);
@@ -1385,7 +1406,8 @@ pub(super) fn lineout(
     }
     let mut bytes = data;
     bytes.push(b'\n');
-    match write_at(&mut open.file, offset_of(at), &bytes) {
+    let transient = open.transient;
+    match write_at(&mut open.file, offset_of(at), &bytes, transient) {
         Ok(()) => {
             let appended = at == size + 1 || at == size;
             // **Measured, and the two disagree**: after a write placed by line
@@ -1440,10 +1462,18 @@ fn close_for_write(
     Ok(Some(interp.text(b"0")))
 }
 
-/// Writes `bytes` at `position` (1-based).
-fn write_at(file: &mut std::fs::File, position: u64, bytes: &[u8]) -> std::io::Result<()> {
+/// Writes `bytes` at `position` (1-based). A transient stream has no
+/// position, so it is written where it stands.
+fn write_at(
+    file: &mut std::fs::File,
+    position: u64,
+    bytes: &[u8],
+    transient: bool,
+) -> std::io::Result<()> {
     use std::io::{Seek, SeekFrom, Write};
-    file.seek(SeekFrom::Start(position.saturating_sub(1)))?;
+    if !transient {
+        file.seek(SeekFrom::Start(position.saturating_sub(1)))?;
+    }
     file.write_all(bytes)
 }
 
@@ -1486,11 +1516,17 @@ pub(super) fn lines(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    // `stream_lines`: the first letter only, and anything but `N` or `C` is
+    // 93.915.
     let quick = match args.first().copied().flatten() {
-        Some(value) => interp
-            .to_text(value)
-            .first()
-            .is_some_and(|byte| byte.eq_ignore_ascii_case(&b'N')),
+        Some(value) => {
+            let text = interp.to_text(value).into_owned();
+            match text.first().map(u8::to_ascii_uppercase) {
+                Some(b'N') => true,
+                Some(b'C') => false,
+                _ => return Err(Raised::method_option_not_recognised("CN", &text).into()),
+            }
+        }
         None => false,
     };
     if let Some(which) = standard_of(interp, receiver)? {
