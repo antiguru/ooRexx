@@ -2436,9 +2436,15 @@ DEVIATIONS -- permanent, chosen
      the reported write position is 4101 on a 5400-byte file, and a
      following read, CHARS or LINES makes the next write land there,
      overwriting bytes the program never named, or NUL-filling past the
-     end of a small file. On a `NOBUFFER` stream the oracle gives the
-     documented answer. This crate gives the documented answer on every
-     stream. Measured by the Phase 9d Task 6.5 review of rounds 2 and 3
+     end of a small file. On a `NOBUFFER` stream the oracle places writes
+     at the documented write position, but two of its operations still
+     depart from the documentation there: a relative SEEK moves from wherever
+     the last read or write left the file descriptor, not from the position
+     it names, and a char SEEK `<n WRITE` from the end lands past the end
+     (`seek <1 write` on an 18-byte file gives 20, where the buffered oracle
+     and the documentation give 18). This crate gives the documented answer
+     on every stream, for all three (Task 6.5 fix round 4 fuzz, 1280
+     scenarios against the NOBUFFER oracle). Measured by the Phase 9d Task 6.5 review of rounds 2 and 3
      (.superpowers/sdd/2026-10-18-phase-9d/task-6.5-review-r23.md).
      LICENSED DIVERGENCE WITNESS: write-position-after-buffered-read
      LICENSED DIVERGENCE WITNESS: relative-seek-from-named-position
