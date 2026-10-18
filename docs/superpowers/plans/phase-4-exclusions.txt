@@ -2444,7 +2444,8 @@ DEVIATIONS -- permanent, chosen
      (`seek <1 write` on an 18-byte file gives 20, where the buffered oracle
      and the documentation give 18). This crate gives the documented answer
      on every stream, for all three (Task 6.5 fix round 4 fuzz, 1280
-     scenarios against the NOBUFFER oracle). Measured by the Phase 9d Task 6.5 review of rounds 2 and 3
+     scenarios against the NOBUFFER oracle). Measured by the Phase 9d Task
+     6.5 review of rounds 2 and 3
      (.superpowers/sdd/2026-10-18-phase-9d/task-6.5-review-r23.md).
      LICENSED DIVERGENCE WITNESS: write-position-after-buffered-read
      LICENSED DIVERGENCE WITNESS: relative-seek-from-named-position
