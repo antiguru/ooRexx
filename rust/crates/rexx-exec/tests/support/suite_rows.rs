@@ -274,9 +274,21 @@ pub const R1_GROUPS: &[&str] = &[
     "utilities/rxsubcom/rxsubcom",
 ];
 
+/// The `extensions/` directories of pure-Rexx packages, which Moritz ruled
+/// Phase 9's (2026-10-17).
+pub const PHASE_9_EXTENSION_DIRS: &[&str] = &[
+    "extensions/dateparser/",
+    "extensions/json/",
+    "extensions/yaml/",
+];
+
 /// The reason a group the roadmap makes Phase 10's is, or `None`.
 pub fn phase_10_group(group: &str) -> Option<Deferral> {
-    if group.starts_with("extensions/") {
+    if group.starts_with("extensions/")
+        && !PHASE_9_EXTENSION_DIRS
+            .iter()
+            .any(|dir| group.starts_with(dir))
+    {
         Some(Deferral::Extension)
     } else if ROW_10_GROUPS.contains(&group) {
         Some(Deferral::Row10NativeApi)

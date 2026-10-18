@@ -1858,9 +1858,15 @@ impl Interp {
         let Some(mut top) = self.activity.flat_top.take() else {
             return Err(Loud::op_not_driven("a pass boundary with no loop open").into());
         };
+        // A loop that user code run by the step opens and closes (a `WHILE`
+        // or `UNTIL` calling a routine that loops) ends by uncovering the
+        // loop enclosing `top` into `flat_top`, so each arm below finds either
+        // `None` or that enclosing loop there.
         match self.flat_loop_step(code, source, &mut top, arrival, counted) {
             Ok(FlatStep::Body(op_body)) => {
-                self.activity.flat_top = Some(top);
+                if let Some(enclosing) = self.activity.flat_top.replace(top) {
+                    self.cover_enclosing_loop(enclosing);
+                }
                 Ok(FlatStep::Body(op_body))
             }
             Ok(FlatStep::Done(flow)) => {
@@ -1868,7 +1874,9 @@ impl Interp {
                 self.activity.flat_spares.push(top);
                 // The loop that just ended uncovers the one enclosing it, and
                 // `None` here is the outermost of a nest having ended.
-                self.activity.flat_top = self.activity.flat_loops.pop();
+                if self.activity.flat_top.is_none() {
+                    self.activity.flat_top = self.activity.flat_loops.pop();
+                }
                 Ok(FlatStep::Done(flow))
             }
             // `top` is dropped rather than handed back, and this loop's own
@@ -1880,9 +1888,20 @@ impl Interp {
             // `flat_loops` needed before this field existed.
             Err(failure) => {
                 self.release_loop_objects(&top);
+                if let Some(enclosing) = self.activity.flat_top.take() {
+                    self.cover_enclosing_loop(enclosing);
+                }
                 Err(failure)
             }
         }
+    }
+
+    /// Puts `enclosing` back beneath the innermost flat loop, where a loop
+    /// closed during that loop's own pass boundary uncovered it.
+    #[cold]
+    #[inline(never)]
+    fn cover_enclosing_loop(&mut self, enclosing: Box<FlatLoop>) {
+        self.activity.flat_loops.push(enclosing);
     }
 
     /// Ends the innermost flat loop away from a pass boundary: its objects

@@ -151,3 +151,8 @@ lang/parse_error_directive_insert.rex
 
 # 9c Task 4: an INTERPRET error names the INTERPRET clause's line.
 lang/parse_error_interpret_line.rex
+
+# 9d Task 4: a WHILE or UNTIL test that runs a routine with a loop of its own,
+# at a pass boundary with loops open around it.
+lang/loop_test_callee_loop.rex
+lang/loop_test_callee_loop_chunk.rex

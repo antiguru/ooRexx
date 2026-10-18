@@ -1498,6 +1498,7 @@ mod row_checks {
         "base/bif/CHAROUT",
         "base/class/RexxQueue",
         "extensions/json/json",
+        "extensions/rxmath/RxMath",
         "API/oo/RexxStart",
         "utilities/rxapi",
         "base/rexxutil/platform/unix/tilde",
@@ -1513,7 +1514,7 @@ mod row_checks {
         ),
         (
             EXCLUSIONS,
-            "extensions/json/json\tTEST_INVALID_EMPTY\tPhase 10 Extension\tgroup",
+            "extensions/rxmath/RxMath\tTEST_NAN\tPhase 10 Extension\tgroup",
         ),
         (
             EXCLUSIONS,
@@ -1542,6 +1543,10 @@ mod row_checks {
     ];
 
     const FAILING: &[(&str, &str)] = &[
+        (
+            EXCLUSIONS,
+            "extensions/json/json\tTEST_INVALID_EMPTY\tPhase 10 Extension\tgroup",
+        ),
         (
             EXCLUSIONS,
             "base/bif/RXQUEUE\tTEST_RXQUEUE_NOARG\tPhase 10 Rxapi",

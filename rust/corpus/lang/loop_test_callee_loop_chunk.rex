@@ -1,0 +1,25 @@
+/* A WHILE whose test calls a routine that loops, in a loop whose enclosing
+   loop is in another routine's chunk. */
+do j = 1 to 2
+  call work j
+end
+say 'done'
+exit
+::routine work
+  use arg j
+  x = j j
+  n = 0
+  do while n < 2
+    n = n + 1
+    k = 0
+    do while more(k)
+      k = k + 1
+    end
+    say j n k
+  end
+  return
+::routine more
+  use arg k
+  if k >= 1 then do i = 1 to 1
+  end
+  return k < 1
