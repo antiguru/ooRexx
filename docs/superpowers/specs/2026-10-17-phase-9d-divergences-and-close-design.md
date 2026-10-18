@@ -10,7 +10,8 @@ holds. Phase state at writing: 9c closed at `0e27a36ca` and was pushed at `71ab6
 Phase 9 ends when the interpreter is conformant enough to move on to Phase 10. Moritz, 2026-10-17:
 "all but rxapi and some C interfaces implemented, deviations documented." For 9d that means three
 things:
-* every test ooTest has that the oracle passes, passes here or is licensed;
+* every ooTest test with no exclusion row that the oracle passes either passes here or is
+  licensed;
 * every refusal a program can reach is either implemented or ruled;
 * every known divergence, tested or not, has a disposition on record.
 
@@ -21,13 +22,13 @@ The corpus of real programs and `RxFuncAdd` move to Phase 10
 
 ### 2.1 The 9d set
 
-Every test that fails here and passes on the oracle passes under the suite harness, or has a
+Every test with no exclusion row that fails here and passes on the oracle passes under the suite
+harness, or has a
 `suite-licences.txt` row citing a numbered Deviation that Moritz has ruled on. This is parent
 section 3.
 
 * **The first task re-derives `rust/corpus/suite-9d-set.txt`** from the 9c close's
-  `docs/superpowers/records/2026-10-15-phase-9c/close/suite/tests.tsv`. That table shows 178 tests
-  failing here that pass on the oracle, and 15 rows of the current file passing.
+  `docs/superpowers/records/2026-10-15-phase-9c/close/suite/tests.tsv`. Some rows of the current file already pass there.
 * **The same task partitions the set into clusters** and commits the partition as a table that
   assigns every test to exactly one cluster. The parent's six clusters are a start. The table also
   covers the groups they miss: `SecurityManager`, `VarRef`, `TRACE`, `TRACE_TraceObject`, `CLASS`,
@@ -46,7 +47,8 @@ section 3.
 * **Mechanism.** `phase_10_group` (`rexx-exec/tests/support/suite_rows.rs`) makes every
   `extensions/` group Phase 10's by prefix. It gains an exception for the groups under
   `extensions/json`, `extensions/yaml` and `extensions/dateparser`. Their derived rows then leave
-  `phase-9-exclusions.txt`, and `suite.rs`'s fixture for the predicate gains a case. These groups
+  `phase-9-exclusions.txt`. In `tests/suite.rs`'s fixture for the predicate, the `PASSING` row
+  naming one of these groups moves to `FAILING`, and a C-extension group takes its place. These groups
   must pass under the suite harness per D1.
 * **The work.** At the 9c close, json and dateparser already pass every test here. yaml fails
   `TEST35_DIRECTIVES` and `TEST47_MULTILINEFLOWCOLLECTIONS` on an `op_not_driven`-family refusal,
@@ -65,10 +67,14 @@ Moritz, 2026-10-17: "We should add test coverage for reachable sites."
 
 * **Enumerate.** A task derives, statically and with a committed command, every class and method
   pair whose dispatch ends in `Loud::native_method` or in the generic fallthrough in `dispatch.rs`.
-  The pairs come from the inventory's method rows against the body tables. The derived list is
-  committed.
-* **Cover.** Each pair a Rexx program can reach gets a witness against the oracle: a
-  `corpus/lang/*.rex` program listed in `rust/corpus/phase-9.txt`. ooTest stays read-only and is
+  The per-class method list is `rust/corpus/docs/class-methods.txt`, and the `loud` rows of
+  `rust/corpus/method-bodies.txt` are the starting set. `hash.rs`'s refusal depends on the
+  receiver's representation (the condition object, `.methods`), not on its class
+  (`.superpowers/sdd/queued/2026-10-01-condition-object-directory-methods.md`), so those rows also
+  name the receiver. The derived list is committed.
+* **Cover.** Each pair a Rexx program can reach is witnessed against the oracle by a
+  `corpus/lang/*.rex` program listed in `rust/corpus/phase-9.txt`. One program may witness several
+  pairs. ooTest stays read-only and is
   not extended for this.
 * **Implement.** Each reached pair is implemented as the oracle answers. The two sites 9a recorded
   as owed to 9d are among them (`phase-9a-gate.md:287`, `:291`): `StackFrame~executable` on a
@@ -91,9 +97,10 @@ Moritz, 2026-10-17: "all queued items should be inventoried."
   * owned by a later phase, named;
   * already closed, with its evidence;
   * not a divergence, such as a process or performance note, with its owner.
-* **A queued divergence in Phase 9's scope** is fixed in 9d unless Moritz rules otherwise. That
-  scope covers the language, the built-ins, RexxUtil apart from Deviations 42 and 43, streams and
-  the binaries.
+* **The batch ruling.** The inventory proposes a disposition for each row, and goes to Moritz
+  as one batch (Moritz, 2026-10-18: "alternative is better and matches the intention"). 9d fixes
+  only the rows he accepts for 9d and the rows already inside a 9d set cluster. Every other open
+  row gets a named later phase as its owner.
 * **Each queued file** gets a first line stating its disposition, as `2026-10-11-output-lost-on-kill.md`
   has.
 
@@ -162,8 +169,9 @@ Beyond those:
   of the Phase 9 pin (`/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run`, sha256 beginning
   `c4b4e8c4`). At the 9c close, `churn` was +0.165% and `sayloop` +0.145%.
 * **Per-task perf check.** A task that changes the interpreter's run path runs
-  `bench-programs/callgrind.sh -p "startup interpret parse churn sayloop"` against the previous
-  task's binary. Its own delta must be at most +0.05% on each program. This run is the one
+  `bench-programs/callgrind.sh -p "startup interpret parse churn sayloop"` against the pin. Its
+  own delta must be at most +0.05% on each program. The cumulative figure stays under the close
+  budget. This run is the one
   exception to the 5-minute per-task bound. New error and refusal construction stays `#[cold]` and
   out of line.
 * **Checks.** Per task, at most about 5 minutes otherwise:
@@ -186,7 +194,7 @@ Beyond those:
 | `json`, `yaml` and `dateparser` belong in 9d; the C extensions stay Phase 10 | Moritz | 2026-10-17 |
 | The corpus and `RxFuncAdd`/`Query`/`Drop` move to Phase 10 | Moritz | 2026-10-17 |
 | Reachable refusal sites get test coverage, and ooTest is not extended | Moritz; the medium is the controller's | 2026-10-17 |
-| Every queued item is inventoried | Moritz | 2026-10-17 |
+| Every queued item is inventoried; dispositions go to Moritz as one batch, and 9d fixes only what he accepts or a cluster already holds | Moritz | 2026-10-17, 2026-10-18 |
 | `SysFork` is not supported: Deviation 42 | Moritz | 2026-10-17 |
 | Named RexxUtil semaphores are not supported: Deviation 43 | Moritz | 2026-10-17 |
 | Fix rounds stop after three, and the remainder goes to Moritz | controller, from 6.1 | 2026-10-17 |

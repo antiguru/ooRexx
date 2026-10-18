@@ -239,3 +239,132 @@ Two collisions.
   One writer at a time, or the plan merges rows at the end.
 * The labels task deletes `Owner::Phase9` while cluster tasks may still be constructing refusals with it.
   Section 7's order (labels after clusters) is right and should be stated as a dependency, not a suggestion.
+
+## Re-review
+
+Revision `3e2209c23` (2026-10-18), scoped to B1-B5, M1-M7 and Moritz's two new rulings.
+New claims were checked against the tree at `3e2209c23`.
+
+### Verdict
+
+**Ready with fixes.**
+Every blocking finding of the first round is resolved or reduced to a wording fix.
+One new item needs Moritz's word because it sets 9d's size, and two new claims point a subagent at the wrong artifact.
+
+### Rulings (a) and (b)
+
+* (a) "add test coverage for reachable sites", medium chosen: `corpus/lang/*.rex` witnesses in `rust/corpus/phase-9.txt`, ooTest not extended.
+  Stated at :64-72 and :140.
+  The instrument is real: `tests/corpus.rs` reads every `phase-*.txt` as a union (`:560-574`, `phase-9.txt` at `:573`), runs each program on both sides (`:384-386`), and gates verdict mismatches under `REXX_CORPUS_GATE` (`:40`).
+  Faithful.
+* (b) "all queued items should be inventoried".
+  Stated at :83-98.
+  The spec adds a default the ruling does not contain: "A queued divergence in Phase 9's scope is fixed in 9d unless Moritz rules otherwise" (:94-96).
+  See N1.
+
+### First-round findings
+
+| # | State | Where |
+|---|---|---|
+| B1 scclient/sfclient | Resolved. Members of the set, measured first, no pre-decided row. | :35-38 |
+| B2 extension packages | Resolved. Predicate change, the two yaml tests, `op_not_driven`, the oracle's `bin/yaml.cls`, GUARD row corrected. One wording fix, see N3. | :46-58 |
+| B3 native_method and fallthrough | Resolved in shape: static enumeration, witnesses, 9a's two owed sites named, no GUARD on an agent's judgement. Two gaps in the enumeration's source and dimension, see N2. | :66-79 |
+| B4 queued and carried items | Resolved as an inventory. The default disposition is new scope, see N1. | :85-98 |
+| B5 handover measurements | Resolved. `docs/superpowers/records/2026-10-17-corpus-probe/README.md` and `rexx-parser-oracle.tsv` exist, dated, with the crate at `71ab69cfe` and the oracle at `build/`. | :132-134 |
+| M1 per-task perf | Resolved in instrument: `callgrind.sh -p "startup interpret parse churn sayloop"` is a real option (`callgrind.sh:5-12`, `:23-33`, `:57-61`, all five names in `PROGRAMS`). Two residues, see N4. | :164-168 |
+| M2 partition and rulings | Resolved. The first task commits a partition covering the named groups, and the close waits on rulings collected as they arise. | :31-34, :127-128 |
+| M3 close artifacts | Resolved. `phase-9d-gate.md`, `phase-9-gate.md`, roadmap row 9 `CLOSED` edit. | :123-126 |
+| M4 relabel obligations | Resolved. Dispositions rows for `named_semaphore` and `fork_child`, variant deletion with its sites and fixtures. | :105-111 |
+| M5 "set is empty" | Resolved. `l3_core_suite` exits 0, prose acceptance of 101 ruled out. | :39-40 |
+| M6 `names()` witness | Resolved. A unit case for the `Phase 9.1` literal. | :119-120 |
+| M7 Phase 10 decisions | Resolved. Moved to `.superpowers/sdd/queued/2026-10-17-phase-10-corpus-and-rxfunc.md`, the rx2cpp ruling quoted there. | :17-18, :132-134 |
+
+### Open findings
+
+#### N1. The inventory's default disposition makes 9d's size Moritz's silence, not his ruling (needs Moritz)
+
+:94-96: "A queued divergence in Phase 9's scope is fixed in 9d unless Moritz rules otherwise. That scope covers the language, the built-ins, RexxUtil apart from Deviations 42 and 43, streams and the binaries."
+
+* `.superpowers/sdd/queued/` holds 157 files; 134 have no RESOLVED or CLOSED marker in their first twelve lines.
+  Nine of the open ones are the interactive-debug family (`2026-10-07-debug-*`, `2026-10-10-debug-*`), all "language" by the sentence above and reached by no ooTest test.
+* Ruling (b) says inventoried.
+  Ruling 2 says "Let's not load too much into 9d".
+  The default turns every open language or stream divergence into 9d work unless Moritz reads the inventory row by row and objects, and he has said he will not read.
+* The rest of 2.4 already gives the right shape: each row gets exactly one disposition and the close waits on his rulings (:127-128).
+
+Fix, replacing :94-96:
+"The inventory proposes a disposition per row and goes to Moritz as one batch.
+A divergence is fixed in 9d only where the inventory proposes it and Moritz accepts, or where it is in a 9d cluster already.
+Every other open divergence is owned by a later phase, named."
+Ask Moritz which default he wants, since the two readings differ by an order of magnitude in work.
+
+#### N2. The enumeration names the wrong source and misses a dimension
+
+:66-69: "The pairs come from the inventory's method rows against the body tables."
+
+* `rexx-inventory` holds no method rows.
+  Its inputs are `interpreter/messages/rexxmsg.xml` and `interpreter/expression/BuiltinFunctions.cpp` (`rexx-inventory/build.rs:8-9`): error messages and builtin-function names.
+  The per-class method list from the oracle's docs is `rust/corpus/docs/class-methods.txt` (header `:1-4`, one row per class, method, arm, status), and `rust/corpus/method-bodies.txt` already classifies each row as `loud` or `answers` when sent with no arguments (`:1-15`).
+  "Body table" is not an identifier anywhere under `rexx-exec/src`; it appears in one comment (`dispatch.rs:2479`) and two test strings.
+  A subagent sent to `rexx-inventory` finds nothing.
+* The (class, method) pair dimension misses `hash.rs:214`'s site.
+  `refusal_outside` refuses a hash method on a receiver whose representation is outside the hash table (the condition object, `.methods`), so the same pair answers on one receiver and refuses on another.
+  `method-bodies.txt` sends to one construction expression per class (`:3-4`) and cannot see that.
+  Queued `2026-10-01-condition-object-directory-methods.md:8-10` records exactly this reach: ITEMS, SETENTRY, REMOVE, EMPTY on the condition object's Directory.
+
+Fix:
+* Replace "the inventory's method rows against the body tables" with "`rust/corpus/docs/class-methods.txt`'s rows against the crate's native method tables, starting from `rust/corpus/method-bodies.txt`'s `loud` rows".
+* Add: "For `hash.rs`'s site the enumeration is per receiver kind, not per class: every receiver `receiver_class_id` can answer that the hash table does not hold, with the condition object and `.methods` as the first two."
+
+#### N3. The predicate fixture "gains a case" is the wrong verb
+
+:49: "`suite.rs`'s fixture for the predicate gains a case."
+
+The only `extensions/` fixture is the `PASSING` row at `tests/suite.rs:1514-1517`, `extensions/json/json TEST_INVALID_EMPTY Phase 10 Extension group`.
+After the exception it fails its owner check, so it moves to `FAILING` (`:1544`) and a C-extension group row takes its place in `PASSING`.
+Say that, or a subagent adds a case and leaves the red one.
+
+#### N4. The per-task perf check does not say where the previous binary lives, and the sum is still unbounded
+
+:164-168.
+
+* "Against the previous task's binary": nothing says where each task keeps its binary.
+  `/tmp` is wiped (`phase-9a-gate.md:10`), and the pin lives at `/home/moritz/dev/repos/ooRexx-p9-pin/` for that reason.
+* A per-task +0.05% on five programs bounds no sum.
+  `churn` has 0.335% of headroom and `sayloop` 0.355%.
+
+Fix: run each task's check against the pin (`pin=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run head=<this task>`), which gives the cumulative figure directly, and record it in the task report.
+The per-task delta is then the difference of two pin-relative lines, and no binary needs keeping.
+
+### New claims checked, all true
+
+* :29-30 "178 tests failing here that pass on the oracle, and 15 rows of the current file passing": matches the join over `close/suite/tests.tsv`.
+* :36 "9c fixed the front-end cause recorded at `phase-9a-gate.md:426-428`": the lines say so, and `rexx` with the resolver is 9c's.
+* :51-53 json and dateparser pass every test, yaml fails the two named tests on `op_not_driven`: both texts are `Loud::op_not_driven` (`lib.rs:877-881`), from `run/loops.rs:1859` and `ir/drive.rs:3782` with `undriven_op_name` answering `"Store"` (`drive.rs:329`); one TSV row, `refusal-dispositions.tsv:52`.
+* :56-57 the harness loads the oracle's `build/bin/yaml.cls`: `lay_class_files`, `tests/suite.rs:342-353`.
+* :74-75 the two 9a sites: `phase-9a-gate.md:287` and `:291` say "stays refused, 9d".
+* :102-104 three `Owner::Phase9` sites, one open `OWNER: Phase 9` row: unchanged since the first round.
+* :163 `churn` +0.165% and `sayloop` +0.145%: `close/callgrind.txt`.
+* :86 "the carried lists of the 9a, 9b, 9b1 and 9c gate records": 9b's gate has no carried list, only a note at `:118-121` that the SysFork and semaphore rows "stay deferred" and "9d's plan settles how they are carried", which Deviations 42 and 43 now settle. Harmless.
+* `2026-10-17-corpus-probe/rexx-parser-oracle.tsv` has no header line; the README (`:35-36`) names the columns. Acceptable.
+
+### Minor
+
+* :13 "every test ooTest has that the oracle passes, passes here or is licensed" overstates: Phase 10 rows remain and are not licences in D2's sense. Write "passes here or has a row".
+* :24-25 "Every test that fails here and passes on the oracle" is now unscoped and would include Phase 10-rowed tests (`CLASSIC`'s `Row10NativeApi` rows fail here). Add "with no row".
+* :71 "a `corpus/lang/*.rex` program" per pair could be read as one file per pair. Say a program may witness several pairs of one class.
+* :102 "The three `Owner::Phase9` sites" is still a set size in prose.
+* `git status` shows the branch three commits ahead of `origin`, unpushed.
+
+### Updated summary for Moritz
+
+9d closes Phase 9 on three conditions: every ooTest test the oracle passes and the crate fails (178 today, 38 groups) passes or carries a Deviation you ruled; every refusal a program can reach is implemented or ruled, with a corpus witness against the oracle per reached site; every queued divergence has a disposition on record.
+json and dateparser already pass; yaml needs one IR driver fix for two tests.
+SysFork and named semaphores name Deviations 42 and 43, `Owner::Phase9` goes, `closed_phases` polices Phase 9, and the close runs the full gates plus callgrind within +0.5% of the pin.
+The corpus programs and `RxFuncAdd` are Phase 10's, with today's probe recorded.
+Still open for you: the spec's default makes every open queued divergence in language, built-ins, RexxUtil, streams or binaries 9d's unless you rule otherwise.
+There are 134 open queued files.
+Your ruling was "inventoried", and "not too much into 9d"; say whether the default is fix-in-9d or later-phase.
+Two wording fixes point subagents at the right artifacts (the method list is `corpus/docs/class-methods.txt`, not `rexx-inventory`; the hash refusal is per receiver, not per class).
+The per-task perf check should run against the pin, so the cumulative figure is read directly.
+With those, Ready.
