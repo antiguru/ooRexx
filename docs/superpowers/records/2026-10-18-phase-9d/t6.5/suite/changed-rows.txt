@@ -1,0 +1,61 @@
+# diff <(grep -v '^#' t6.4/r1/suite/tests.tsv | sort) <(grep -v '^#' t6.5/suite/tests.tsv | sort)
+1752c1752
+< base/bif/CHAROUT	TEST_POSITIONING_1_BIN	-	passed	failed
+---
+> base/bif/CHAROUT	TEST_POSITIONING_1_BIN	-	passed	passed
+1793c1793
+< base/bif/CHARS	TEST_MANYCHARS_BIN	-	passed	failed
+---
+> base/bif/CHARS	TEST_MANYCHARS_BIN	-	passed	passed
+4097c4097
+< base/bif/LINEOUT	TEST_BINARY	-	passed	failed
+---
+> base/bif/LINEOUT	TEST_BINARY	Deviation(46)	passed	failed
+4103c4103
+< base/bif/LINEOUT	TEST_LINE_TOO_LONG	-	passed	failed
+---
+> base/bif/LINEOUT	TEST_LINE_TOO_LONG	-	passed	passed
+4591,4592c4591,4592
+< base/bif/STREAM	TEST_OPEN_WRITE_ONLY_3274050_C	-	passed	failed
+< base/bif/STREAM	TEST_OPEN_WRITE_ONLY_3274050_D	-	passed	failed
+---
+> base/bif/STREAM	TEST_OPEN_WRITE_ONLY_3274050_C	-	passed	passed
+> base/bif/STREAM	TEST_OPEN_WRITE_ONLY_3274050_D	-	passed	passed
+4597c4597
+< base/bif/STREAM	TEST_QUERYFILE_EXISTS_OPENED_01	-	passed	failed
+---
+> base/bif/STREAM	TEST_QUERYFILE_EXISTS_OPENED_01	-	passed	passed
+4599c4599
+< base/bif/STREAM	TEST_QUERYFILE_EXISTS_OPENED_03	-	passed	failed
+---
+> base/bif/STREAM	TEST_QUERYFILE_EXISTS_OPENED_03	-	passed	passed
+4607,4608c4607,4608
+< base/bif/STREAM	TEST_SEEK_CLOSEDFILE_2785896	-	passed	failed
+< base/bif/STREAM	TEST_SEEK_CLOSEDFILE_2787994	-	passed	failed
+---
+> base/bif/STREAM	TEST_SEEK_CLOSEDFILE_2785896	-	passed	passed
+> base/bif/STREAM	TEST_SEEK_CLOSEDFILE_2787994	-	passed	passed
+10617c10617
+< base/class/Stream	TEST_ARRAYIN_3_BIN	-	passed	failed
+---
+> base/class/Stream	TEST_ARRAYIN_3_BIN	-	passed	passed
+10621c10621
+< base/class/Stream	TEST_ARRAYIN_BIN	-	passed	failed
+---
+> base/class/Stream	TEST_ARRAYIN_BIN	-	passed	passed
+10667,10670c10667,10670
+< base/class/Stream	TEST_OPEN_WRITE_ONLY_3274050_C	-	passed	failed
+< base/class/Stream	TEST_OPEN_WRITE_ONLY_3274050_D	-	passed	failed
+< base/class/Stream	TEST_OPEN_WRITE_ONLY_3274050_E	-	passed	failed
+< base/class/Stream	TEST_OPEN_WRITE_ONLY_3274050_F	-	passed	failed
+---
+> base/class/Stream	TEST_OPEN_WRITE_ONLY_3274050_C	-	passed	passed
+> base/class/Stream	TEST_OPEN_WRITE_ONLY_3274050_D	-	passed	passed
+> base/class/Stream	TEST_OPEN_WRITE_ONLY_3274050_E	-	passed	passed
+> base/class/Stream	TEST_OPEN_WRITE_ONLY_3274050_F	-	passed	passed
+10693,10694c10693,10694
+< base/class/Stream	TEST_SEEK_PARSER	-	passed	failed
+< base/class/Stream	TEST_SEEK_USEDASCOUNT_2776442	-	passed	failed
+---
+> base/class/Stream	TEST_SEEK_PARSER	-	passed	passed
+> base/class/Stream	TEST_SEEK_USEDASCOUNT_2776442	-	passed	passed
