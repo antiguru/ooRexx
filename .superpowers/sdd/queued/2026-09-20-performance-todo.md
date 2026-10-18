@@ -1,3 +1,5 @@
+**DEFERRED to Phase 9.1, ruled by Moritz 2026-10-18.** the open performance queue; no probe.
+
 # Performance to-do, ordered, 2026-09-20
 
 Everything surfaced by the llvm-lines pass, the DWARF correlation, the `GRANTING`

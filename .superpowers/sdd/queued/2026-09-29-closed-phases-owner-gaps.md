@@ -1,3 +1,5 @@
+**CLOSED: Phase 6.1 Task 7.** its own "Closed 2026-10-09" section; the_row_check_reads_only_a_resolution_that_opens_a_clause is in tests/closed_phases.rs.
+
 # Queued: two gaps in closed_phases' exclusions OWNER check
 
 From the Phase 8 final re-review (N2, scratchpad/review-final8/task-9-rereview.md):

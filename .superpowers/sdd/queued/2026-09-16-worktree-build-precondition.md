@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** a test-harness path like arity-harness-ignores-target-dir; dispatch/library/tests.rs:26 canonicalizes ../../../build/lib.
+
 # Queued: the suite passes only in a checkout that has built `build/lib`
 
 Found 2026-09-16 by the `run/tests.rs` split task, as an aside it first called a

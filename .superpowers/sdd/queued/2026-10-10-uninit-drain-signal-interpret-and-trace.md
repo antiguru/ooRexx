@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** not probed, its probes were in /tmp and are gone; UNINITs never drain and memory grows to 356 MB against 24 MB.
+
 # UNINIT drain misses an INTERPRET left by SIGNAL, and trace lines
 
 The Task 11b re-review (Phase 6.1) found both of these on 2026-10-10.

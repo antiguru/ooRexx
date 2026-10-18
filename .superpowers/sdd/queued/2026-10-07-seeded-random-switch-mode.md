@@ -1,3 +1,5 @@
+**CLOSED: Phase 6.1.** the simulation mode shipped in Phase 6.1 (crates/rexx-exec/src/sim.rs, sim:trace replay).
+
 # Deterministic simulation testing of the scheduler (Phase 6.1)
 
 Moritz, 2026-10-07: fuzz the scheduler instead of testing one interleaving, under deterministic

@@ -1,3 +1,5 @@
+**CLOSED: probe agrees.** DO WITH .
+
 # 2026-10-02-do-with-over-refusal
 
 Found by the Phase 6 S2-S5 Task 10 review (a). Not fixed; owned by no Phase 6 stage.

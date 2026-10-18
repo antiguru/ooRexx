@@ -1,3 +1,5 @@
+**CLOSED: dispatched.** a dispatched performance brief: item 1 landed (performance-todo.md:374, 7a28f68e6 and 7fbadfecb).
+
 # Item 1: do not emit trace ops where the setting is statically known
 
 BASE `f9ffe9a8b`. Tree clean. This is item 1 of

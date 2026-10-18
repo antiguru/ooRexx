@@ -1,3 +1,5 @@
+**CLOSED: dispatched.** a dispatched performance brief: report .superpowers/sdd/2026-09-22-store-fusion-report.md.
+
 # Price a removed op: fuse a producer with the `Store` that consumes it
 
 **This task exists to measure a constant, and the commit is the instrument.**

@@ -1,3 +1,5 @@
+**DEFERRED to Phase 9.1, ruled by Moritz 2026-10-18.** unsized performance candidates; no probe.
+
 # Queued: three performance candidates derived from CREXX, each unsized
 
 Produced 2026-09-17 by a read-only design comparison against

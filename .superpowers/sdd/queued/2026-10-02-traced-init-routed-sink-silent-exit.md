@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: rc 165 here with an unrouted <I< line, rc 0 and the sink's lines on the oracle.
+
 # A traced INIT with .traceOutput routed to a Rexx sink ends the program silently
 
 Present at a4bde5677 (before Phase 6 Task 9). With `.traceOutput` routed to a Rexx object whose

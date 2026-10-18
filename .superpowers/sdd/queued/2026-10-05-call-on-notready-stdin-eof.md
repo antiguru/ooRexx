@@ -1,3 +1,5 @@
+**CLOSED: probe agrees.** own probe from the text: the handler runs, rc 0 on both.
+
 # CALL ON NOTREADY at end of the default input stream is Error 43.1
 
 Found by the Phase 6 S2-S5 Task 21 re-review 4 (N-3). Pre-existing (present before P66 at bf76afa1d).

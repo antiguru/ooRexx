@@ -1,3 +1,5 @@
+**CLOSED: 1c0e1d769.** closed by Phase 9a Task 8; 99.949 on both.
+
 # `::class k subclass rexxinfo` reports 98.909 where the oracle reports 99.949
 
 Found by Phase 6.1 scout A (2026-10-07, section 4, `b8_rexxinfo_*`). Queued by Phase 6.1 Task 12 (2026-10-10). Both refuse the program; the error number, message and rc differ.

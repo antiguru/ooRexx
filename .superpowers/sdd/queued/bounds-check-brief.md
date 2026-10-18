@@ -1,3 +1,5 @@
+**CLOSED: dispatched.** a dispatched performance brief: report .superpowers/sdd/2026-09-21-bounds-check-report.md; item 7 landed (performance-todo.md:1012).
+
 # Item 7: assert the bound before indexing
 
 Item 7 of `.superpowers/sdd/queued/2026-09-20-performance-todo.md`, and the

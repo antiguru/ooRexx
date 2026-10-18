@@ -1,3 +1,5 @@
+**DEFERRED to Phase 9.1, ruled by Moritz 2026-10-18.** a measurement record behind the performance to-do; no probe.
+
 # The instructions-per-op profile on rexxcps, measured 2026-09-20
 
 Moritz, 2026-09-20: *"we have to get the instructions per op down."* This is the

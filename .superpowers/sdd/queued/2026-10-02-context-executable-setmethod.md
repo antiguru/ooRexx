@@ -1,3 +1,5 @@
+**CLOSED: probe agrees.** The NIL object, rc 0 on both.
+
 # `.context~executable` in a method set with `setMethod`
 
 Found by Phase 6 S2-S5 Task 9 through `TRACE_TraceObject.testGroup` `test_object_and_scope`. It

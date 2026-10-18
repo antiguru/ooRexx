@@ -1,3 +1,5 @@
+**CLOSED: dispatched.** a dispatched performance brief: report .superpowers/sdd/2026-09-21-parse-in-place-report.txt; landed at 5e765dc5a.
+
 # PARSE candidate 2: parse the source where it already is
 
 Read `.superpowers/sdd/2026-09-21-parse-cost-scout-report.md` section

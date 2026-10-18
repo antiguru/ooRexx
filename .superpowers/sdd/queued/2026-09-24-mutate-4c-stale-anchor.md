@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe; scripts/mutate-4c.sh:537 still anchors on a statement parse_template.rs no longer has (:461 is a let binding).
+
 # mutate-4c.sh mutation 5's anchor matches nothing
 
 Found by file-split Task 5's fix round (2026-09-24), not caused by it:

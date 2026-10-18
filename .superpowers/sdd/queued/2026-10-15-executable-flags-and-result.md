@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe recorded; the oracle is still to be measured.
+
 # Two pre-existing findings from 9b1 Task 8b
 
 1. `.context~executable` inside a running method whose class redefined it (define) answers the

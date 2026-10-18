@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe run (needs a capped address space and a full pool); a hang where the oracle raises 48.1.
+
 # A failed pool-thread spawn still runs a blocking call inline
 
 The Task 11b review (Phase 6.1) found this on 2026-10-10. It predates the task.

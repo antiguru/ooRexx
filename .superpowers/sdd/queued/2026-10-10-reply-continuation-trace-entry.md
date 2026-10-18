@@ -1,3 +1,5 @@
+**OPEN: ruled 9d, cluster trace-reply-continuation (Phase 9d inventory).** probe still lacks the second ONETWO >I>/<I< pair; it is TRACE TEST_TRACE_LABEL_WITH_FORWARD.
+
 # A REPLY continuation that runs to its end is not announced with `>I>`/`<I<`
 
 Found by Phase 6.1 Task 2 (whole-group row TRACE TEST_TRACE_LABEL_WITH_FORWARD; the Task 2 review's `p7.rex`, the test's `test_forwarded3.rex` resource with no loop). Ruled not a 6.1 item and queued at Task 12 (ledger, Task 2). Queued by Phase 6.1 Task 12 (2026-10-10). Concurrent: 5 runs per engine. Same stdout and rc; the oracle traces 12 `>I>`/`<I<` lines in every run, this crate 10.

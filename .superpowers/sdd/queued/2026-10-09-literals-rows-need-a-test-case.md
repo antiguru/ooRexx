@@ -1,3 +1,5 @@
+**CLOSED: 98caea3de.** RESOLVED in its first line; tests/assertions.rs:208 EXEMPT is empty.
+
 # The `Literals` assertion rows need a test case for `self`
 
 RESOLVED by 98caea3de (Phase 6.1 Task 11a Step 6): `Routine~new` and `Method~new` take a context, and `tests/assertions.rs` runs a row that sends to `self` in a test case; EXEMPT is empty.

@@ -1,3 +1,5 @@
+**CLOSED: probe agrees.** own probe from the text: the later guarded send reads the continuation's write on both.
+
 # 2026-10-01-reply-continuation-state-visibility
 
 Found by Phase 6 S0/S1 final review slice A (2026-10-01): a later guarded send could not see the

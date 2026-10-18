@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe; tests/support/arity.rs:616-618 still judges a row stable from two oracle runs.
+
 # Defect: `every_unstable_row_is_really_unstable` can redden by coincidence
 
 Found 2026-09-21 when a release gate went rc 101 on a commit that could not

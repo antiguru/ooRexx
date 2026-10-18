@@ -1,3 +1,5 @@
+**OPEN: ruled 9d, cluster attribute-body-error-number (Phase 9d inventory).** probe still differs (99.937 against 99.905); it is ATTRIBUTE TESTMISPLACEDCLASSMETHOD.
+
 # `::attribute foo class` with a body and no `::CLASS` reports 99.937 where the oracle reports 99.905
 
 Found by Phase 6.1 Task 5 I2 (ATTRIBUTE TESTMISPLACEDCLASSMETHOD in `whole_groups`); older than Phase 6.1. Queued by Phase 6.1 Task 12 (2026-10-10). Same rc; error number, message and traceback line differ.

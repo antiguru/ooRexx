@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe; builtin/string.rs:123 and rexx-parse block/references.rs:190,:197 still point at text that is gone.
+
 # Three pointers name a POS-window doc the comment prune deleted
 
 Found by file-split Task 7's review (2026-09-25). `find_forward`'s doc in

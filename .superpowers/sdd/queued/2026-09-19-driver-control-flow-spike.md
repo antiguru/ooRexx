@@ -1,3 +1,5 @@
+**CLOSED: rejected 2026-09-19.** its own "Spike result" section; report .superpowers/sdd/2026-09-19-driver-control-flow-spike-report.md.
+
 # Queued spike: the op driver's control flow
 
 Requested by Moritz, 2026-09-19, after the llvm-lines and DWARF pass on

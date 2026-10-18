@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** FILESPEC and DIRECTORY still render an object where the oracle raises 88.909; SysFileExists now agrees.
+
 # Native routine arguments that are not strings are rendered, not refused
 
 Found by the Phase 6.1 final review (finding 2, `probes/s2/native_routine_args.rex`, `probes/s3/s3_62.rex`, `s3_69.rex`); pre-existing at the 6.1 base. Queued by the Phase 6.1 final fix (2026-10-10). Silent: rc 0 here where the oracle raises 88.909.

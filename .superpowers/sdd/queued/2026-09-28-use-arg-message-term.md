@@ -1,3 +1,5 @@
+**CLOSED: probe agrees.** stdout x, rc 0 on both.
+
 # USE ARG into a message term refuses (owner: not assigned)
 
 Found by the Task 8 review (m5, `review-s8/p/pm8.rex`); not fixed by fix round A, by ruling.

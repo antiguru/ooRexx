@@ -1,3 +1,5 @@
+**DEFERRED to Phase 11.1, ruled by Moritz 2026-10-18.** probe still differs: typed lines keep running after an untrapped RAISE here.
+
 # An untrapped RAISE typed at a debug pause does not stop the typed lines
 
 Found by the Phase 6.1 Task 6 re-review (out-of-scope observation, `t4`); pre-existing at `fe4956b36`. Queued by Phase 6.1 Task 12 (2026-10-10). Silent: rc 0 on both; stdout and stderr differ.

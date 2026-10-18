@@ -1,3 +1,5 @@
+**CLOSED: probe agrees.** both print 1 *-* y=(; and "at "("" for the INTERPRET form.
+
 # 2026-10-07-interpret-syntax-traceback-line
 
 Found by the Phase 6 final review (`.superpowers/sdd/2026-10-01-phase-6-s2-s5/final-review.md` M4).

@@ -1,3 +1,5 @@
+**CLOSED: probe agrees.** the traceback now prints the source line and the Compiled method "NEW" line on both sides.
+
 # A source that does not parse, compiled by Method~new, Routine~new, NewMethod, NewRoutine: the compiled source's frame (owner: not assigned)
 
 Found by the Phase 8 surface plan's Task 8. Task 8's fix round A made the compile path raise the

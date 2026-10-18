@@ -1,3 +1,5 @@
+**CLOSED: 6.1 close within budget.** a +0.09% delta the 6.1 close absorbed (rexxcps +0.2694% against base61, task-12-evidence/cg-close2/table.txt); no probe.
+
 # rexxcps +0.09% Ir between Task 6 fix rounds 1 and 2, unexplained
 
 Found by the Phase 6.1 Task 6 re-review (`task-6-rereview.md`, Perf: round 2 against round 1 +0.0919% on rexxcps). Queued by Phase 6.1 Task 12 fix round 1 (2026-10-10). Not a divergence; a perf delta nobody attributed.

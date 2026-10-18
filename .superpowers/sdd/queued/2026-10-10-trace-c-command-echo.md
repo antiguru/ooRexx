@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still lacks the 3 *-* address command 'false' echo here.
+
 # `trace c` omits the clause echo of an ADDRESS instruction's command
 
 Found by the Phase 6.1 Task 6 review (M5, `cc2`); pre-existing. Queued by Phase 6.1 Task 12 (2026-10-10). Same stdout and rc; one trace line is missing here.

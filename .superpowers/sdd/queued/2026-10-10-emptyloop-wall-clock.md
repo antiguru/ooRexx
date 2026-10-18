@@ -1,3 +1,5 @@
+**DEFERRED to Phase 9.1, ruled by Moritz 2026-10-18.** unattributed cycles; no probe.
+
 # emptyloop wall clock is +4.6% in cycles at fewer instructions
 
 Found by Phase 6.1 Task 2 (accepted then by Moritz, ledger l.48) and re-measured at the Task 12 close. Queued 2026-10-10, left open by Moritz.

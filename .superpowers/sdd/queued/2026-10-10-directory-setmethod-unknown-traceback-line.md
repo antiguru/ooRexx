@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** both probes still print an extra Compiled method "UNKNOWN" traceback line here.
+
 # A Directory~setMethod entry adds a `Compiled method "UNKNOWN"` traceback line
 
 Found by Phase 6.1 Task 4 (report concern 3); Task 4 fix round 1 fixed the name (`running GO`), not the extra line. Queued by Phase 6.1 Task 12 (2026-10-10). Same rc and message; stderr has one extra line here.

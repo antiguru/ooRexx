@@ -1,3 +1,5 @@
+**CLOSED: rows removed.** the TIME and CALL rows it names are gone from DIFFERING (tests/concurrency_tests.rs:2664) and REPLY's stay, as it suggested.
+
 # `whole_groups` DIFFERING rows that now agree
 
 Found by Phase 6.1 Task 5 I2 (ledger: "DIFFERING rows that agree in both green runs"; "CALL whole now passes TEST_4 but the rest run failed it"). Queued by Phase 6.1 Task 12 (2026-10-10).

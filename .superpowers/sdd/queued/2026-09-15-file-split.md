@@ -1,3 +1,5 @@
+**CLOSED: 9956c0ac6.** 2026-09-15-file-split/progress.md ends "File-split plan complete" at the final-review fix 9956c0ac6.
+
 # Self-contained, single-purpose modules — implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to

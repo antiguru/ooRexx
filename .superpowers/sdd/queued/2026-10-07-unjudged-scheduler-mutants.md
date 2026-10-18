@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe; six scheduler mutants stay green and none is judged observable or not.
+
 # 2026-10-07-unjudged-scheduler-mutants
 
 Found by the Phase 6 final review (`.superpowers/sdd/2026-10-01-phase-6-s2-s5/final-review.md`,

@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: 35.1 on line 2 on the oracle, 13.1 on line 3 here.
+
 # An invalid character in a later clause is reported before an earlier clause's parse error
 
 Found 2026-10-17 by the Phase 9c final review (`.superpowers/sdd/2026-10-15-phase-9c/final-review.md`,

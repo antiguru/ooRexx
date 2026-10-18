@@ -1,3 +1,5 @@
+**CLOSED: e8a19b2e6.** RESOLVED in its first line; depth 2000 agrees (h 44.1), test appends_and_reads_copy_slots_linearly.
+
 # SYNTAX propagating through deep frames grows superlinearly
 
 RESOLVED by e8a19b2e6 (Phase 6.1 Task 11a Step 7): `List~append` and `Array~append` read their length and last item without copying slots, so the unwind is linear within the cap (callgrind 173 / 224 / 326 M Ir at depth 2000 / 4000 / 8000); test `dispatch::tests::appends_and_reads_copy_slots_linearly`.

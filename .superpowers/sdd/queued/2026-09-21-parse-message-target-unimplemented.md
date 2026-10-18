@@ -1,3 +1,5 @@
+**CLOSED: probe agrees.** closed 2026-09-28 by Phase 8 surface Task 8; the witness agrees on all three descriptors.
+
 # Defect: a PARSE target that is a message term is unimplemented
 
 Found 2026-09-21 by the `exec_parse` cost scout, incidentally, while checking

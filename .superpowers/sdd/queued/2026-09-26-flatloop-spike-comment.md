@@ -1,3 +1,5 @@
+**CLOSED: 4b694fe7c.** its own "Closed 2026-09-29" section; no "SPIKE, not for commit" remains under rust/crates.
+
 # FlatLoop still says "SPIKE, not for commit."
 
 `rust/crates/rexx-exec/src/run/loops.rs:93` (found by the file-split final

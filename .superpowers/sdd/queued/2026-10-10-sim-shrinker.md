@@ -1,3 +1,5 @@
+**DEFERRED to a later research phase, ruled by Moritz 2026-10-18.**
+
 # A shrinker for simulation decision traces
 
 Out of 6.1 scope by spec D9 ("the shrinker ... queued"); the DST spec review asked for it (`.superpowers/sdd/2026-10-07-phase-6-1/spec-review-dst.md` I6, O10). Queued by Phase 6.1 Task 12 (2026-10-10).

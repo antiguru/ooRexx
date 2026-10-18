@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** a command whose background child keeps stdout open: crate waits to timeout rc 124, oracle returns at once.
+
 # A command whose background child keeps stdout open makes the crate wait
 
 Found 2026-10-18 by Phase 9d Task 2. The probe is

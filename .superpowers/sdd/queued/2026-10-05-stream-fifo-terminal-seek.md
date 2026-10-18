@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: CHARIN on a FIFO answers [] ERROR here and [abc] READY on the oracle.
+
 # Named FIFOs and terminals do not work through the stream class
 
 Found by the Phase 6 S2-S5 Task 21 re-review 3 (F-2). Pre-existing, outside Phase 6.

@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: LINES by name sees the open Stream object's write here (0 1, 1) and not on the oracle (0 0, 0).
+
 # A Stream object's writes are visible by name before it is closed
 
 Found by the surface Task 6 review (review-s6, its M7), not made by Task 6: the

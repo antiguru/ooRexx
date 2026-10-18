@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: directory(d) answers empty for a directory named d'ff'x here and enters it on the oracle.
+
 # Remaining lossy UTF-8 conversions on paths
 
 Source: Phase 9b Task 4 review Q5 (.superpowers/sdd/2026-10-13-phase-9b/task-4-review.md), lines at

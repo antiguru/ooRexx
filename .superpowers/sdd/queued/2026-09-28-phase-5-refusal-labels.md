@@ -1,3 +1,5 @@
+**CLOSED: Phase 6.1 Task 7.** its own "Closed 2026-10-09" section; closed_phases.rs:37 lists "Phase 5" in CLOSED.
+
 # Refusals that still name Phase 5, which is closed
 
 Phase 8's close (Task 9, ruling 1) relabelled `Loud::native_method` to Phase 9 and left the rest,

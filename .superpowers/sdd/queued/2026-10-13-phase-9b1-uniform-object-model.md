@@ -1,3 +1,5 @@
+**CLOSED: Phase 9b1.** phase-9b1-gate.md: every leak fixed or licensed, SysStemSort as Deviation 37, the addRoutine copy as L10.
+
 # Phase 9b1: a uniform object model (representation never observable)
 
 Moritz 2026-10-13: queue as a new Phase 9b1, after 9b and before 9c, "because we don't want to do two

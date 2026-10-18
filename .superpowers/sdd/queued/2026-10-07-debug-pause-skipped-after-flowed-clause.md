@@ -1,3 +1,5 @@
+**CLOSED: probe agrees.** c1 p1 p2 c3 p3 c4 on both.
+
 # 2026-10-07-debug-pause-skipped-after-flowed-clause
 
 Found during the trace-analysis assert diagnosis (P87,

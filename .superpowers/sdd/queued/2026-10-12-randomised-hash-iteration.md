@@ -1,3 +1,5 @@
+**DEFERRED to a later research phase, ruled by Moritz 2026-10-18.**
+
 # Randomise hash iteration order per run
 
 Moritz 2026-10-12: "hash iteration order isn't specified, and ideally changes on every run. The

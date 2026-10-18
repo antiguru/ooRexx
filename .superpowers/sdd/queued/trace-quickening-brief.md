@@ -1,3 +1,5 @@
+**CLOSED: dispatched.** a dispatched performance brief: item 2 built and reverted (performance-todo.md:619).
+
 # Item 2: promote an observed TRACE setting into the pool, behind a guard
 
 BASE `7fbadfecb`. Tree clean. Item 2 of

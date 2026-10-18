@@ -1,3 +1,5 @@
+**CLOSED: 23716a5ec.** RESOLVED in its first line; one run a side agrees, rc 252 and the 4.1 report.
+
 # Message~halt after a ~send whose method replied
 
 RESOLVED by 23716a5ec (Phase 6.1 Task 11a Step 2): `Message~send` records its sending activity and `Message~halt` asks it; witnesses `rust/corpus/lang/message_halt_after_send.rex`, `message_halt_sender_ended.rex`.

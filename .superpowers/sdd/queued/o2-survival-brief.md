@@ -1,3 +1,5 @@
+**CLOSED: dispatched.** a dispatched performance brief: result docs/superpowers/records/2026-09-20-performance-items/2026-09-22-o2-survival.md.
+
 # Does an optimisation found at `-O2` survive into `-O3` with fat LTO?
 
 One question, answered by measurement: **can we explore at a cheaper

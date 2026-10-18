@@ -1,3 +1,5 @@
+**CLOSED: Deviation 22.** a licensed scheduling observable (rulings P32, P44); not probed, the site varies run to run.
+
 # Where a cross-activity HALT lands inside a spinning loop (licensed divergence, P32)
 
 The oracle raises a HALT set by another thread at the end of the instruction after its target's

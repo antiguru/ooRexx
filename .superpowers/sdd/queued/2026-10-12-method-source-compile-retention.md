@@ -1,3 +1,5 @@
+**CLOSED: Phase 9b1 L8.** queued-probes/memcompile/rss.txt: 44992 kB at 50000 and 45160 kB at 100000 here, was 921808 kB; flat.
+
 # Compiled method sources are never reclaimed
 
 Found 2026-10-12 by the Phase 9a enhanced-semantics scout

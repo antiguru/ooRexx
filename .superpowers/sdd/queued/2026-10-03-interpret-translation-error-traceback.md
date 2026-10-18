@@ -1,3 +1,5 @@
+**CLOSED: probe agrees.** both report 99.912 with the interpreted clause's line.
+
 # A translation error inside INTERPRET omits the interpreted clause's traceback line
 
 Found by the Phase 6 S2-S5 Task 12 review (m6). Pre-existing: same at 217f33a2c; not related to

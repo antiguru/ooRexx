@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: (>zz) || 'x' drops the reference's string value here.
+
 # Concatenation with a variable reference drops its string value
 
 Found by Phase 6.1 scout A (2026-10-07, section 4, `out-op.txt`). Queued by Phase 6.1 Task 12 (2026-10-10). Silent: rc 0 on both.

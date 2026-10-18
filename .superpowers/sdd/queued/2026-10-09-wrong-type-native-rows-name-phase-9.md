@@ -1,3 +1,5 @@
+**CLOSED: ae86f4d04.** RESOLVED in its first line; a_native_row_on_a_receiver_of_another_class_refuses_its_type is in dispatch/tests.rs.
+
 # Wrong-type native rows that refuse naming Phase 9
 
 RESOLVED by ae86f4d04 (Phase 6.1 Task 11a Step 5): the wrong-type case refuses through `Loud::receiver_class`; test `dispatch::tests::a_native_row_on_a_receiver_of_another_class_refuses_its_type`.

@@ -1,3 +1,5 @@
+**CLOSED: not wanted.** its first line: CLOSED as not wanted by Moritz, 2026-10-10.
+
 # A seeded gate judged by the oracle
 
 CLOSED as not wanted by Moritz, 2026-10-10. The seeded gate stays judged by the crate's own invariants with oracle differences reported (R1). A sampled oracle outcome set cannot cover every interleaving the policy reaches, so gating on it would fail correct rare outcomes.

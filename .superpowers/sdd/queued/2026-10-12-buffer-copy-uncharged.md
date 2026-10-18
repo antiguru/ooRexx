@@ -1,3 +1,5 @@
+**DEFERRED to Phase 9.1, ruled by Moritz 2026-10-18.** collector accounting under memory pressure; no probe.
+
 # A Buffer copy is not charged to the collector
 
 Found 2026-10-12 by the Phase 9a Task 8 re-review (`.superpowers/sdd/2026-10-11-phase-9a/task-8-rereview.md`).

@@ -1,3 +1,5 @@
+**DEFERRED to Phase 9.1, ruled by Moritz 2026-10-18.** own reduced probe: 2000 removes from a 100000-item List take over 0.5 s here and under it on the oracle.
+
 # `List~remove` copies the list per call
 
 Found by the Phase 6.1 final review (finding 4, `probes/b/t21a.rex`); pre-existing at the 6.1 base, which the review found timing out on the first loop. Queued by the Phase 6.1 final fix (2026-10-10). Same answers; quadratic time where the oracle is constant per call. Task 11a's scope named `Array~append`, `items` and `List~append`, not `remove`.

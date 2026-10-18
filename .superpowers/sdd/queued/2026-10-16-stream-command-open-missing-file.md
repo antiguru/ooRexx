@@ -1,3 +1,5 @@
+**OPEN: ruled 9d, cluster stream-notready-names (Phase 9d inventory).** probe still differs (91.999 against ERROR:2); the cluster holds the same no-result open command.
+
 # STREAM(name, 'C', 'OPEN READ') on a missing file raises 91.999
 
 Found 2026-10-16 by an external-corpus probe (rx2cpp fixtures, scratch only). Re-run by the

@@ -1,3 +1,5 @@
+**CLOSED: 04c46cb3b.** RESOLVED in its first line; rc 165 and the 91.999 report on both.
+
 # EXIT in a CALL ON handler run at the REPLY clause's end
 
 RESOLVED by 04c46cb3b (Phase 6.1 Task 11a Step 3): EXIT makes its reply check on the activation it ends and replaces the reply value; witnesses `rust/corpus/lang/reply_handler_exit.rex`, `reply_handler_exit_value.rex`, `reply_handler_exit_after_split.rex`.

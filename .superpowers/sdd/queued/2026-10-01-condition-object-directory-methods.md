@@ -1,3 +1,5 @@
+**CLOSED: probe agrees.** items 13 and copy items 13 on both.
+
 # 2026-10-01-condition-object-directory-methods
 
 Found by the Phase 6 S2-S5 Task 3 review (M1), ruled not that task's (queued 2026-10-01). Not fixed.

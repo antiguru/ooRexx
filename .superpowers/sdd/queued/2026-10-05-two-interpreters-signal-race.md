@@ -1,3 +1,5 @@
+**DEFERRED to Phase 10, ruled by Moritz 2026-10-18.** the second interpreter instance is row 10's; no probe.
+
 # Two interpreters in one process reopen the Ctrl-C command race
 
 Found by the Phase 6 S2-S5 Task 21 re-review 3 (F-3). For the interpreter API phase.

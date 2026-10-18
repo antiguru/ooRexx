@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probes still differ: the second traceback line names the END on the oracle and the DO here.
+
 # 2026-10-02-while-condition-failure-traceback
 
 Found by the Phase 6 S2-S5 Task 4 re-review (O1), ruled not that task's (queued 2026-10-02). Not

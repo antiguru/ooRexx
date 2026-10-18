@@ -1,3 +1,5 @@
+**DEFERRED to Phase 10, ruled by Moritz 2026-10-18.** not probed, it reaches rxapi; roadmap row 10 names FUNCTION TEST_REXXQUEUE.
+
 # FUNCTION's TEST_REXXQUEUE needs RexxQueue (owner: Phase 10)
 
 `.rexxqueue~create('ADDRESSWITH')` is rc 120, `the LIBRARY REXX entry point

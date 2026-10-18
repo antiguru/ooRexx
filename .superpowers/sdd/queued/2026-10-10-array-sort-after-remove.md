@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: 98.975 rc 158 here, 2 a c rc 0 on the oracle.
+
 # Array~sort raises 98.975 after a trailing remove
 
 Found by the Phase 6.1 final fix (concern 4 in `final-fix-report.md`); the fixer reports the same answer before and after finding 3. Queued by the Phase 6.1 controller (2026-10-10).

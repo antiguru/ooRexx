@@ -1,3 +1,5 @@
+**OPEN: ruled 9d, cluster traceobject-probe-option (Phase 9d inventory).** no single probe; names TEST_VARIABLE and TEST_TRACEOBJECT_COLLECTOR, which are that cluster's.
+
 # TraceObject: the VARIABLE entry, and TraceObjects off the routed path
 
 Found by Phase 6 S2-S5 Task 9, which gave routed TraceObjects their THREAD, INVOCATION, STACKFRAME,

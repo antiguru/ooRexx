@@ -1,3 +1,5 @@
+**CLOSED: Phase 6 Task 9 fix round 1.** its witness corpus/lang/builtin_argument_call.rex agrees.
+
 # `say min(3, f())` prints 5, oracle 3
 
 Found by Phase 6 Task 8's implementer (2026-09-30); present on the base binary too, not caused by

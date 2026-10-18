@@ -1,3 +1,5 @@
+**NOT A DIVERGENCE, ruled by Moritz 2026-10-18.** upstream report SF #2117; probe: the oracle answers 1 0 and the crate the right 0 1.
+
 # Oracle bug SF #2117: `\` on an object forwarding to .true/.false is inverted
 
 Measured 2026-10-17, fresh empty dir, oracle `build/` vs 9b1 close binary

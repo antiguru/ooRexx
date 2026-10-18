@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** own probe: streamtype, query handle, lines, query exists and qualify on STDIN still differ.
+
 # .Stream~new('STDIN') answers differ from the oracle
 
 Source: .superpowers/sdd/2026-10-13-phase-9b/task-9-report.md, concern 3 (pre-existing).

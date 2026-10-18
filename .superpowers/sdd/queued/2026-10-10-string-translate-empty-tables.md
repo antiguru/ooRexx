@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: the String method answers [  ] here and [12] on the oracle.
+
 # `'12'~translate('', '')` blanks the string
 
 Found by Phase 6.1 scout D (2026-10-07, `tr_base`). Queued by Phase 6.1 Task 12 (2026-10-10). Silent: rc 0 on both. The built-in function form agrees (`b8_translate_bif.rex`: `translate('12','','')` is `[12]` on both).

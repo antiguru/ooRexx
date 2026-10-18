@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe; gate rows time out under load and none of the three directions is chosen, which the Phase 9 close gates meet.
+
 # Queued: a gate verdict that depends on machine load
 
 Found 2026-09-17 while closing fix round 1 of the file-split task. Pre-existing,

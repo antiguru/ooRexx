@@ -1,3 +1,5 @@
+**CLOSED: probe agrees.** RESOLVED in its first line; three notifier runs and two reports on both.
+
 # A notifier that raises in a started activity
 
 RESOLVED by Phase 6 S2-S5 Task 7 fix round 1: a notifier failure replaces the started send's failure in two stages, as `Activity::run`'s handler and the thread's own do (`Interp::end_failed_started`); the probe below now matches the oracle (crate test `a_notifier_failing_on_a_started_success_is_the_sends_failure`).

@@ -1,3 +1,5 @@
+**NOT A DIVERGENCE, ruled by Moritz 2026-10-18.** upstream report; Deviation 25 is the crate's rule.
+
 # Upstream candidate: the oracle's DO TO test compares a user answer with TheTrueObject by pointer
 
 Found by Phase 6.1 Task 3 (memory `oorexx-do-to-true-identity-bug`; Moritz 2026-10-08 ruled it an oracle bug). Queued by Phase 6.1 Task 12 (2026-10-10). Not a crate item: Deviation 25 in `docs/superpowers/plans/phase-4-exclusions.txt` records the crate's rule. Filing upstream needs Moritz.

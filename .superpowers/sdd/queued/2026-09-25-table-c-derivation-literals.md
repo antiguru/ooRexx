@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe; corpus/gate-tables/classes/*.rex line 6 still names tests/gate_table_c.rs.
+
 # Probe-text literals name gate_table_c.rs for code now in tests/table_c/
 
 File-split Task 10 (2026-09-25) moved gate table C's probe derivations from

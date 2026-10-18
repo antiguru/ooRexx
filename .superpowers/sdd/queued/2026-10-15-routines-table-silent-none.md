@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe; environment.rs build_package_string_table and identities.rs find_written_routine still answer Ok(None).
+
 # .ROUTINES table builders answer Ok(None) silently
 
 From the 9b1 final re-review (.superpowers/sdd/2026-10-14-phase-9b1/final-rereview.md, Minor 1).

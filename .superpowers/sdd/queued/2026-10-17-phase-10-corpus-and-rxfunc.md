@@ -1,3 +1,5 @@
+**DEFERRED to Phase 10, ruled by Moritz 2026-10-18.** ruled by Moritz 2026-10-17 (9d plan ruling 3).
+
 # Phase 10: a real-program corpus, and RxFuncAdd with the daemon
 
 Moritz, 2026-10-17, during the Phase 9d scoping. These are Phase 10's, not 9d's:

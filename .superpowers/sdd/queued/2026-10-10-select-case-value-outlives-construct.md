@@ -1,3 +1,5 @@
+**NOT A DIVERGENCE, ruled by Moritz 2026-10-18.** no program reads the stale value; an unasserted invariant, no probe.
+
 # The SELECT CASE value stays on the activation after its construct ends
 
 Found by Phase 6.1 Task 1 (report concern 2; deferred minor "current_case_text is never cleared at construct end"). Queued by Phase 6.1 Task 12 (2026-10-10).

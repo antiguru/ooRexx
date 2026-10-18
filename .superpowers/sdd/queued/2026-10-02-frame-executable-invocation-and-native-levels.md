@@ -1,3 +1,5 @@
+**OPEN: ruled 9d, cluster native-stack-frames (Phase 9d inventory).** fexe1 agrees; fexe2 (1 2 against 3 2) and fexe3 (no METHOD SEND frame) differ; clusters.md names this item as that cluster's parent.
+
 # Frame values: an internal call's executable, an INTERPRET frame's invocation, native levels
 
 Found by the Phase 6 S2-S5 Task 9 review (x3, x4, y1); present at a4bde5677 and visible since

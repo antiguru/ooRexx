@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: an extra 9 *-* call s line here.
+
 # A condition propagated from an internal call in a handler prints the call's traceback line
 
 Found by Phase 6.1 scout B (2026-10-07, `cond3`); out of 6.1 scope by spec D9. Queued by Phase 6.1 Task 12 (2026-10-10). Code, message and rc agree; stderr has one extra line here.

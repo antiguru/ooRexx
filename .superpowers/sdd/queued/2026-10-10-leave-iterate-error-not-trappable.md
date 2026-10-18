@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: 28.3 untrapped rc 228 here, trapped 4 on the oracle.
+
 # Error 28 from LEAVE or ITERATE is not trapped by SIGNAL ON SYNTAX
 
 Found by the Phase 6.1 Task 6 review (M5, `lv4o`, no TRACE); pre-existing at the 6.1 base. Queued by Phase 6.1 Task 12 (2026-10-10). Loud here (rc 228), the oracle traps it.

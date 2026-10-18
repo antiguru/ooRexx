@@ -1,3 +1,5 @@
+**CLOSED: dispatched.** a dispatched performance brief: report .superpowers/sdd/2026-09-21-reprofile-report.md.
+
 # Regenerate the candidate queue from a fresh profile
 
 Five performance commits landed today and `rexxcps` went from 21,147,005,593

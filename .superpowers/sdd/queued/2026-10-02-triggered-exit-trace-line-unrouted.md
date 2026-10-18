@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: the <I< line of a triggered method reaches stdout here, the sink on the oracle.
+
 # The `<I<` line of a method run by `Message~triggered` is not routed
 
 Found by the Phase 6 S2-S5 Task 9 review (z6); base a4bde5677 and Task 9 answer the same. With

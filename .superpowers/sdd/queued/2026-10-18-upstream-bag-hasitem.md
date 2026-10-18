@@ -1,3 +1,5 @@
+**NOT A DIVERGENCE, ruled by Moritz 2026-10-18.** upstream report; Deviation 45 is the crate's rule.
+
 # Upstream: Bag~hasItem's documentation typo and its `.nil` answer
 
 These are for the ooRexx project, not for this crate. Found 2026-10-18 during Phase 9d Task 1

@@ -1,3 +1,5 @@
+**DEFERRED to Phase 9.1, ruled by Moritz 2026-10-18.** static op-shape evidence for superinstructions; no probe.
+
 # How many clause shapes would a superinstruction set have to cover?
 
 Derived 2026-09-22 from the rendered op stream of the pinned

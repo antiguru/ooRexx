@@ -1,4 +1,4 @@
-**INSERTS CLOSED 2026-10-17 by Phase 9c (Tasks 2 and 4):** 35.1 at `"~"` and 47.2 `"S1"` match the oracle (`.superpowers/sdd/2026-10-15-phase-9c/task-4-report.md`). The `instanceMethod` item stays open.
+**OPEN: ruled 9d, cluster setmethod-instancemethod-kind (Phase 9d inventory).** Inserts closed 2026-10-17 by Phase 9c (Tasks 2 and 4): 35.1 at `"~"` and 47.2 `"S1"` match the oracle (`.superpowers/sdd/2026-10-15-phase-9c/task-4-report.md`). The `instanceMethod` item stays open.
 
 # Error message position prints "&1" where the oracle prints "~"
 

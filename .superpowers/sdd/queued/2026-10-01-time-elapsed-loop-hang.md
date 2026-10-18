@@ -1,3 +1,5 @@
+**CLOSED: e25925ad8.** RESOLVED in its first line; both loops end on both sides.
+
 # 2026-10-01-time-elapsed-loop-hang
 
 RESOLVED by e25925ad8 and a8593f6e6 (Phase 6.1 Task 11a Step 1): a WHILE re-test after the first pass and an UNTIL test read a fresh clock, so a loop with no body clause ends; witness `rust/corpus/lang/time_elapsed_empty_loop.rex`.

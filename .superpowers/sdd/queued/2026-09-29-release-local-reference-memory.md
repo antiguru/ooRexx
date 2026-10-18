@@ -1,3 +1,5 @@
+**DEFERRED to Phase 10, ruled by Moritz 2026-10-18.** not probed, it needs the forged native library; native-API memory, ruled "do not fix, queue" at the Phase 8 close.
+
 # Queued: `ReleaseLocalReference` frees nothing until the call ends
 
 Found by the Phase 8 final review (M2, `scratchpad/review-final8/task-9-review.md`); ruled

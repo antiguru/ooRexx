@@ -1,3 +1,5 @@
+**NOT A DIVERGENCE, ruled by Moritz 2026-10-18.** probe still differs only in when UNINIT runs, which is collection timing (Moritz 2026-09-01: gc ordering is unpredictable).
+
 # A trapped error in a user `>` during a DO header holds the TO object
 
 Found by the Phase 6.1 Task 3 re-review 3 (`.superpowers/sdd/2026-10-07-phase-6-1/task-3-rereview3.md`, out-of-scope observation 3, `lkJ.rex`); the base `6a3091cc6` binary does the same. Queued by Phase 6.1 Task 12 (2026-10-10). Silent: rc 0 on both; the UNINIT runs four collections late.

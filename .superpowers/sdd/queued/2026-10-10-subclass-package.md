@@ -1,3 +1,5 @@
+**CLOSED: 1c0e1d769.** closed by Phase 9a Task 8; 1 and 3 on both.
+
 # A subclass of Package builds a plain Package
 
 Found by Phase 6.1 scout A (2026-10-07, section 4, `b8_package_*`). Queued by Phase 6.1 Task 12 (2026-10-10). Loud on ours (97.1), the oracle answers.

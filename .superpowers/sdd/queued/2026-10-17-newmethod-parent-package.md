@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no witness exists, the difference is read from the code; METHOD is a Phase 9 native-API group.
+
 # Native `NewMethod` on source gives the method the caller's package
 
 Found 2026-10-17 by the Phase 9c Task 9 re-review (`.superpowers/sdd/2026-10-15-phase-9c/task-9-rereview.md`).

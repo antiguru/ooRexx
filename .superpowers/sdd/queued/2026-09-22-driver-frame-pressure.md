@@ -1,3 +1,5 @@
+**DEFERRED to Phase 9.1, ruled by Moritz 2026-10-18.** unrun outlining variant; no probe.
+
 # The driver's frame, and the one outlining variant nobody has run
 
 Measured 2026-09-22 by the driver-gap task, while identifying `drive.rs:0`:

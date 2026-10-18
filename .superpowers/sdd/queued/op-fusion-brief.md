@@ -1,3 +1,5 @@
+**CLOSED: dispatched.** a dispatched performance brief: report .superpowers/sdd/2026-09-21-op-fusion-report.txt; item 3 landed at 725aa8863.
+
 # Items 3 and 5: fuse two adjacent op pairs, each in its own commit
 
 BASE is whatever `git rev-parse HEAD` answers when you start; the tree is clean

@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal.
+
 # SysFork: fork with helper threads
 
 Moritz 2026-10-13: deferred (9b1 or later). Earlier grant: one unsafe fork() site in

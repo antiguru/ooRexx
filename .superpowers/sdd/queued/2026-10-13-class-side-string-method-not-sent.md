@@ -1,4 +1,4 @@
-**CLOSED 2026-10-14 by Phase 9b1 Task 2 (0a055271c).**
+**CLOSED: 0a055271c.** Closed 2026-10-14 by Phase 9b1 Task 2; the probe agrees on both engines.
 
 # A class-side ::method string is not sent for a class object's string value
 

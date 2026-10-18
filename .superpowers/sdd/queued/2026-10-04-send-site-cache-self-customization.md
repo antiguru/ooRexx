@@ -1,3 +1,5 @@
+**DEFERRED to Phase 9.1, ruled by Moritz 2026-10-18.** design note with ranked items; no probe.
+
 # Send-site cache and related work from SELF's Customization paper
 
 Design note, not scheduled: https://claude.ai/artifact/LyVy7vbvZBhCbd8d352cGH (Chambers and Ungar,

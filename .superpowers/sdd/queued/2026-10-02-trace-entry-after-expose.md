@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: no >I> or <I< here when TRACE follows EXPOSE.
+
 # `>I>` missing for a method whose `TRACE` follows its `EXPOSE`
 
 Found by Phase 6 S2-S5 Task 9. A method whose first instruction is `EXPOSE` and second `TRACE A`

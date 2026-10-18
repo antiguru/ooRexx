@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still lacks the sender's 2 *-* say 'got' o~m line here.
+
 # A condition propagated in a REPLY continuation lacks the sender's traceback line
 
 Found by Phase 6.1 Task 1 (report concern 1, the RF1 (d) SIGNAL ON variant). Queued by Phase 6.1 Task 12 (2026-10-10). Concurrent: 5 runs per engine. Code, message and rc agree; the crate test `scheduler::tests::a_reply_continuation_propagates_its_methods_condition` asserts only those.

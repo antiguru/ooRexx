@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe; tests/refusal_sites.rs code_lines (:73) still drops only inline #[cfg(test)] mod blocks, and Task 3 reads that table.
+
 # The refusal-site scanner reads file-level test modules as production code
 
 Found by File split Task 2 (implementer's concern 1, confirmed by the review).

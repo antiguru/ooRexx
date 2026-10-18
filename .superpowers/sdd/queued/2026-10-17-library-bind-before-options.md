@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: 26.5 on line 2 here, 98.903 on line 1 on the oracle.
+
 # `EXTERNAL "LIBRARY"` binds before `::OPTIONS` is checked on the oracle
 
 Found 2026-10-17 by the Phase 9c Task 8 review (`.superpowers/sdd/2026-10-15-phase-9c/task-8-review.md`,

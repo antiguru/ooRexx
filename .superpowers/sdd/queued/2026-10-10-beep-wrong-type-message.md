@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: the range message and the running REXX line.
+
 # BEEP's wrong-type argument message differs
 
 Found by the Phase 6.1 final review (minor 6, `probes/s2/beep_msg.rex`); pre-existing at the 6.1 base. Queued by the Phase 6.1 final fix (2026-10-10). Same rc and code; the message and the `running` line differ.

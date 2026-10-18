@@ -1,3 +1,5 @@
+**DEFERRED to Phase 10, ruled by Moritz 2026-10-18.** embedding API (ruling P53); no probe.
+
 # An aborted run leaks its Interp
 
 Since Task 18 (2fd6b05b3), a run that ends with a native call or command still in flight (deadline,

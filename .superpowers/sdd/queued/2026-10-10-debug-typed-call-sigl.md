@@ -1,3 +1,5 @@
+**DEFERRED to Phase 11.1, ruled by Moritz 2026-10-18.** probe still differs: in sub 1 here, in sub 3 on the oracle.
+
 # A CALL typed at a debug pause gives the callee SIGL 1
 
 Found by the Phase 6.1 Task 6 re-review (`c2call`); pre-existing at the 6.1 base. Queued by Phase 6.1 Task 12 (2026-10-10). Silent: rc 0 on both; the oracle gives the paused clause's line.

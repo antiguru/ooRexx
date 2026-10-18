@@ -1,3 +1,5 @@
+**DEFERRED to Phase 11.1, ruled by Moritz 2026-10-18.** probe still differs: the re-executed ITERATE echoes at its static indent here; a KNOWN GAP row in phase-4-exclusions.txt.
+
 # `=` at the pause after an ITERATE echoes it at its static indent
 
 Found by Phase 6.1 Task 6 (report concern 1; KNOWN GAP row in `docs/superpowers/plans/phase-4-exclusions.txt`). Queued by Phase 6.1 Task 12 (2026-10-10). Same stdout and rc; one echo line's indent differs.

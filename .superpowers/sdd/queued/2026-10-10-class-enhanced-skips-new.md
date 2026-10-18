@@ -1,3 +1,5 @@
+**CLOSED: 70d314bac.** closed by Phase 9a Task 8b; both probes agree.
+
 # `Class~enhanced` builds its instance without sending NEW
 
 Found by Phase 6.1 scout D (2026-10-07, `clsenh_*`). Queued by Phase 6.1 Task 12 (2026-10-10). Loud here (93.902), the oracle answers. Once subclass `NEW` exists (Phase 9 row), sending NEW is the change.

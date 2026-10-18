@@ -1,3 +1,5 @@
+**DEFERRED to Phase 11.1, ruled by Moritz 2026-10-18.** probe still differs: the handler runs before the header's pause here.
+
 # A NOTREADY raised by a DO header under `trace ?a` runs its handler before the header's pause
 
 Found by the Phase 6.1 Task 6 re-review (`dh1`); pre-existing at the 6.1 base; without debug both agree (`dh1n`). Queued by Phase 6.1 Task 12 (2026-10-10). Same stdout and rc; the pause order and banner differ.

@@ -1,3 +1,5 @@
+**NOT A DIVERGENCE, ruled by Moritz 2026-10-18.** upstream report; Deviation 26 is the crate's rule.
+
 # Upstream candidate: `=` at a zero-pass DO's pause makes a later END raise 10.1
 
 Found by Phase 6.1 Task 6 (report concern 2); recorded as Deviation 26 in `docs/superpowers/plans/phase-4-exclusions.txt`, owner none. Queued by Phase 6.1 Task 12 (2026-10-10). Not a crate item. Filing upstream needs Moritz.

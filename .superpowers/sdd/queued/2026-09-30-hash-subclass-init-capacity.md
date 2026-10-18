@@ -1,3 +1,5 @@
+**CLOSED: 1c0e1d769.** closed by Phase 9a Task 8; its witness corpus/lang/hash_subclass_init_capacity.rex agrees.
+
 # Hash-collection subclass keeps NEW's capacity when its INIT skips super
 
 Found by Phase 6 Task 9's re-review (2026-09-30), pre-existing, not fixed: the oracle sizes a hash

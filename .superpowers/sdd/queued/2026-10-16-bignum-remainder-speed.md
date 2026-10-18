@@ -1,3 +1,5 @@
+**DEFERRED to Phase 9.1, ruled by Moritz 2026-10-18.** probe: output 78 on both, 2000 iterations under 1 s on the oracle and over it here.
+
 # Large-digit `*` and `//` are about 33x slower than the oracle
 
 Found 2026-10-16 by an external-corpus probe (rx2cpp `bignum_modmul.rex`, scratch only). Controller

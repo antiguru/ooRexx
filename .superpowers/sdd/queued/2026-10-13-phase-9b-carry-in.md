@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** N1 native-frame memcpy cost is phase:9.1; the unchecked minors m1, m3, m4 are 9d.
+
 # Phase 9b carry-in from the Phase 9a final review
 
 Source: `.superpowers/sdd/2026-10-11-phase-9a/final-review.md`, `final-rereview.md`, ledger tail.

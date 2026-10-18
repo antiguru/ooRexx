@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe with stdout closed: lineout 0 READY: here, 1 ERROR:9 on the oracle.
+
 # LINEOUT to a closed stdout answers 0 READY:
 
 Source: 9b Task 9 review M1 (.superpowers/sdd/2026-10-13-phase-9b/task-9-review.md), pre-existing.

@@ -1,3 +1,5 @@
+**CLOSED: 70d314bac.** closed by Phase 9a Task 8b; "enhanced Object" on both.
+
 # An enhanced object is named `an Object` in error messages
 
 Found by Phase 6.1 Task 4 (report concern 3). Queued by Phase 6.1 Task 12 (2026-10-10). Same rc and code; the 97.1 message differs.

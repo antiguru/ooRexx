@@ -1,3 +1,5 @@
+**CLOSED: dispatched.** a dispatched performance brief: result docs/superpowers/records/2026-09-20-performance-items/2026-09-22-category-rollup.md.
+
 # The inclusive category rollup, ours against the oracle
 
 Produce one table: where each interpreter's instructions go per clause on the

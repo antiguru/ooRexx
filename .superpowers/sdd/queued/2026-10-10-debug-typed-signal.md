@@ -1,3 +1,5 @@
+**DEFERRED to Phase 11.1, ruled by Moritz 2026-10-18.** probe still differs: a typed SIGNAL does not transfer control here.
+
 # A SIGNAL typed at a debug pause does not transfer control
 
 Found by the Phase 6.1 Task 6 re-review (`c1sig`, `c2sig`); pre-existing at the 6.1 base. Queued by Phase 6.1 Task 12 (2026-10-10). Silent: rc 0 on both, stdout differs.

@@ -1,3 +1,5 @@
+**CLOSED: dispatched.** a dispatched performance brief: report .superpowers/sdd/2026-09-21-parse-cost-scout-report.md.
+
 # Scout: where the instructions inside `exec_parse` go
 
 Read-only diagnosis. You produce a report and a candidate list, not a change.

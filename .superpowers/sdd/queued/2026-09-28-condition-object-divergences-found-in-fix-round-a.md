@@ -1,3 +1,5 @@
+**OPEN: ruled 9d, cluster call-on-trap-argument (Phase 9d inventory).** callarg still 1 1 against 0 0 (the cluster); coorder still lacks RESULT and ADDITIONAL, which stream-notready-names touches.
+
 # Condition-object divergences found by Task 8 fix round A, not fixed (owner: not assigned)
 
 Both pre-exist `2b26b6970`; neither is in `phase-4-exclusions.txt`. Probes in the fix round's

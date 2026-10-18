@@ -1,3 +1,5 @@
+**CLOSED: Phase 9b1.** phase-9b1-gate.md: L5 to L7 fixed, TESTRECLAIM01 passed; side-maps.tsv keeps package state on the package object's body.
+
 # Package becomes a real object; sweep for other built-ins that should be
 
 Moritz 2026-10-12: "We'll need to turn Package into a real class/object, with a handle to the

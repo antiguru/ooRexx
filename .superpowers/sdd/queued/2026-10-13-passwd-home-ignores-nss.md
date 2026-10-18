@@ -1,3 +1,5 @@
+**DEFERRED to Phase 11, ruled by Moritz 2026-10-18.** not probed, no NSS-only account here; a host assumption, which row 11 puts behind the platform seam.
+
 # passwd_home reads /etc/passwd only
 
 Source: Phase 9b Task 6 re-review M2 (.superpowers/sdd/2026-10-13-phase-9b/task-6-rereview.md).

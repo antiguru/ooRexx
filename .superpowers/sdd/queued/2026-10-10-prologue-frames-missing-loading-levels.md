@@ -1,3 +1,5 @@
+**OPEN: ruled 9d, cluster prolog-trace-lines (Phase 9d inventory).** both probes still lack a loading frame here; clusters.md names this item as that cluster's parent.
+
 # A loaded file's prologue sees no frames for the levels that loaded it
 
 Found by Phase 6.1 Task 5 (a KNOWN GAP row in `docs/superpowers/plans/phase-4-exclusions.txt`, "A PROLOGUE'S LIVE STACK FRAMES LACK THE LEVELS THAT LOADED IT", NO OWNER) and widened by the Task 5 re-review (`.superpowers/sdd/2026-10-07-phase-6-1/task-5-rereview.md`: nested and `newFile` shapes miss the intermediate frames too). Queued by Phase 6.1 Task 12 (2026-10-10). Silent: rc 0 on both.

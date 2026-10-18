@@ -1,4 +1,4 @@
-**CLOSED 2026-10-17 by Phase 9c (Tasks 3 and 4).** `trace ?s` and `e103` answer the oracle's inserts, identical stdout, stderr and rc (`.superpowers/sdd/2026-10-15-phase-9c/task-4-report.md`, "Queued items closed").
+**CLOSED: Phase 9c Tasks 3 and 4.** `trace ?s` and `e103` answer the oracle's inserts with identical stdout, stderr and rc, closed 2026-10-17 by Phase 9c (`.superpowers/sdd/2026-10-15-phase-9c/task-4-report.md`, "Queued items closed").
 
 # Translation errors print their message inserts unsubstituted
 

@@ -1,3 +1,5 @@
+**CLOSED: Deviation 21.** licensed by ruling P39; not probed, the oracle's third line races process exit.
+
 # REPLY in an UNINIT run at termination never runs its continuation
 
 Found by the Task 6 review (M2), pre-existing (the deferral before Task 6 behaved the same). An

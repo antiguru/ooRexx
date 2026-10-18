@@ -1,3 +1,5 @@
+**CLOSED: dispatched.** a dispatched performance brief: report .superpowers/sdd/2026-09-22-driver-gap-report.md.
+
 # The interpretation machinery, which is 63.7% of the gap to the oracle
 
 `rexxcps`, 20,000,000 clauses: we run **1,014.6 instructions per clause**, the

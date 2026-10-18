@@ -1,3 +1,5 @@
+**CLOSED: probe agrees.** own probe: 25.1 found "NOSTRING" on both.
+
 # `call on nostring` reports 25.1 with an unsubstituted insert
 
 The Task 11a reviewer (Phase 6.1) found this on 2026-10-10. It reproduces on base `fbdf615e8` and on `f8d7049e8`.

@@ -1,3 +1,5 @@
+**CLOSED: probe agrees.** typed then after on both; TRACE TEST_TRACE_NUMERIC_DEBUG passed at the 9c close.
+
 # 2026-10-07-debug-input-does-not-reach-pauses
 
 Found during the trace-analysis assert diagnosis (P87,

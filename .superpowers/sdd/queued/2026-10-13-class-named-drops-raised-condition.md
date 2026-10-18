@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe recorded; dispatch/library/surface.rs:859 still drops the lookup's Err through .ok()?.
+
 # find_class's class_named branch drops a raised condition
 
 Source: Phase 9b Task 1 review M1 (.superpowers/sdd/2026-10-13-phase-9b/task-1-review.md).

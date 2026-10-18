@@ -1,3 +1,5 @@
+**DEFERRED to Phase 9.1, ruled by Moritz 2026-10-18.** no probe; both Op::TraceFunction pushes in ir/compile.rs (:1627, :1645) are still unconditional.
+
 # Defect: `Op::TraceFunction` is emitted without the gate every other echo has
 
 Found 2026-09-22 by the driver-gap task, incidentally, and deliberately not

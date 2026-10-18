@@ -1,3 +1,5 @@
+**DEFERRED to Phase 11.1, ruled by Moritz 2026-10-18.** probe still differs: no pause after a labelled block DO header; a KNOWN GAP row.
+
 # A labelled block DO does not pause after its header
 
 Found by Phase 6.1 Task 6 (report concern 4; KNOWN GAP row). Unchanged from the 6.1 base. Queued by Phase 6.1 Task 12 (2026-10-10). Same stdout and rc; the pause positions differ from the first pause on.

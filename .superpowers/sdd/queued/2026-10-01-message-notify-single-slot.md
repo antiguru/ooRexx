@@ -1,3 +1,5 @@
+**CLOSED: probe agrees.** RESOLVED by Phase 6 S2-S5 Task 7 fix round 1; re2a 1 0 0 and re2b 0 1 0 1 0 on both.
+
 # 2026-10-01-message-notify-single-slot
 
 RESOLVED by Phase 6 S2-S5 Task 7 fix round 1: each Rexx activation keeps a single notify slot (`Activation::notify_message`); `re2a` and `re2b` answer as the oracle, and witness `rust/corpus/lang/message_notify_single_slot.rex` covers both forms.

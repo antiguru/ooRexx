@@ -1,3 +1,5 @@
+**CLOSED: dispatched.** a dispatched performance brief: report .superpowers/sdd/2026-09-21-parse-contained-report.txt.
+
 # PARSE, the contained candidates: 3, 4 and 5
 
 Read `.superpowers/sdd/2026-09-21-parse-cost-scout-report.md` first, all of it.

@@ -1,6 +1,4 @@
-**CLOSED 2026-10-17 by Phase 9c Task 7 (e4bbcbba4).** Standard error is handed over at each line
-end, so a kill keeps it as on the oracle. What a redirected standard output still holds at a kill
-is lost, as Python's is: Deviation 40 (`docs/superpowers/plans/phase-4-exclusions.txt`).
+**CLOSED: e4bbcbba4.** Phase 9c Task 7 hands standard error over at each line end, so a kill keeps it as on the oracle (closed 2026-10-17), while a redirected standard output is still lost at a kill, as Python's is: Deviation 40 (`docs/superpowers/plans/phase-4-exclusions.txt`).
 
 # Output written before a KILL is lost
 

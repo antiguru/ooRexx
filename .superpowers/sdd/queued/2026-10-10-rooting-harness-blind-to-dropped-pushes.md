@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe; removing either root push left every rooting test green, a test gap in tests/collect_stress.rs.
+
 # The rooting harness cannot see a dropped push in the truth or condition-value paths
 
 Found by the Phase 6.1 Task 4a review (`.superpowers/sdd/2026-10-07-phase-6-1/task-4a-review.md`). Queued by Phase 6.1 Task 12 (2026-10-10). A test-harness gap for the final review, not a program divergence.

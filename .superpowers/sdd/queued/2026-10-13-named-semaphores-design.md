@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal.
+
 # Named RexxUtil semaphores: POSIX sem_open
 
 Moritz 2026-10-13: deferred, the refusal stays. Found at 9b Task 8's Step 1 gate

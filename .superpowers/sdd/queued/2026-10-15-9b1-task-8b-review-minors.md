@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** own probes: m1 lists Z here and A on the oracle, m4 answers the new source here and the old one on the oracle.
+
 # 9b1 Task 8b review minors (.superpowers/sdd/2026-10-14-phase-9b1/task-8b-review.md)
 
 - m1 (pre-existing): `.context~variables` lists a `USE ARG >z` alias; the oracle omits it.

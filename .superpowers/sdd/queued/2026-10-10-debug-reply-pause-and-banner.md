@@ -1,3 +1,5 @@
+**DEFERRED to Phase 11.1, ruled by Moritz 2026-10-18.** probe still differs: no pause after REPLY and a repeated banner; a KNOWN GAP row.
+
 # Under interactive trace, REPLY does not pause and the continuation prints the banner again
 
 Found by Phase 6.1 Task 6 (report concern 3; re-review M4 for the banner; KNOWN GAP row for the pause). Queued by Phase 6.1 Task 12 (2026-10-10). Concurrent: 5 runs per engine. Same stdout and rc. The method `U` part of this probe also shows the `>I>` gap queued as `2026-10-02-trace-entry-after-expose`.

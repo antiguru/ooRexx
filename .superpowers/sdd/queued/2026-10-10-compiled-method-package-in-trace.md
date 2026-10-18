@@ -1,3 +1,5 @@
+**OPEN: ruled 9d, cluster dynamic-package-name (Phase 9d inventory).** probe still differs: the package is "M" on the oracle and the caller's file here, the cluster's mechanism.
+
 # A method compiled from source text names the caller's file as its package in `>I>` lines
 
 Found by Phase 6.1 Task 4 (report concern 3). Queued by Phase 6.1 Task 12 (2026-10-10). Same rc and stdout; the trace lines differ.

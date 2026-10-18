@@ -1,3 +1,5 @@
+**DEFERRED to Phase 10, ruled by Moritz 2026-10-18.** not probed, it needs a forged extension; a native-API path beside Deviation 24.
+
 # A held 98.983 from a kept-context member can be lost later in the same native call
 
 A thread-context member reached through a context another activity kept does nothing and holds

@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe recorded; two oracle measurements to make first.
+
 # Two findings from 9b Task 9 (not RexxUtil)
 
 Source: .superpowers/sdd/2026-10-13-phase-9b/task-9-report.md, concern 5.

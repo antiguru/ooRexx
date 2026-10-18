@@ -1,3 +1,5 @@
+**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe; tests/support/arity.rs:399 still joins ../../target/release/rexx where group_runner uses CARGO_BIN_EXE_rexx.
+
 # The arity harnesses run `rust/target/release/rexx-run` whatever `CARGO_TARGET_DIR` says
 
 Found by File split Task 3b (implementer's concern 3), 2026-09-24.
