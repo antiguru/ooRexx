@@ -1,0 +1,7 @@
+# ootest revision 13178
+group	verdict	crate	oracle denominator
+extensions/dateparser/DateFormatter	green		equal
+extensions/dateparser/DateParser	green		equal
+extensions/json/json	green		equal
+extensions/json/json_02	green		equal
+extensions/yaml/yaml	green		equal

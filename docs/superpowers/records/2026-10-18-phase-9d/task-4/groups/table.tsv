@@ -1,0 +1,12 @@
+# ootest revision 13178
+group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
+extensions/dateparser/DateFormatter	oracle	31	31	31			-	-	1	yes	ulimit -v 1048576	31
+extensions/dateparser/DateFormatter	crate	31	31	31			-	-	1	yes	memcap 2G	31
+extensions/dateparser/DateParser	oracle	112	112	112			-	-	1	yes	ulimit -v 1048576	112
+extensions/dateparser/DateParser	crate	112	112	112			-	-	1	yes	memcap 2G	112
+extensions/json/json	oracle	33	33	33			-	-	1	yes	ulimit -v 1048576	33
+extensions/json/json	crate	33	33	33			-	-	1	yes	memcap 2G	33
+extensions/json/json_02	oracle	227	227	227			-	-	1	yes	ulimit -v 1048576	227
+extensions/json/json_02	crate	227	227	227			-	-	1	yes	memcap 2G	227
+extensions/yaml/yaml	oracle	50	50	50			-	-	1	yes	ulimit -v 1048576	50
+extensions/yaml/yaml	crate	50	50	50			-	-	1	yes	memcap 2G	50
