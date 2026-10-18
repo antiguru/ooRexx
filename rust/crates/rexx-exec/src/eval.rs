@@ -1319,7 +1319,7 @@ impl Interp {
         // `StringClass.cpp:1248`), except `\=`, `<>`, `><` and `\==`, which
         // answer `.true`. So `'The NIL object' == .nil` is `0`, `'a' < .nil`
         // is `0` with no NOSTRING, and `'a' || .nil`, which is not a
-        // comparison, is `aThe NIL object`.
+        // comparison, reads the string value.
         if right == ObjRef::NIL && is_comparison(op) {
             return Ok(logical(is_inequality(op)));
         }
