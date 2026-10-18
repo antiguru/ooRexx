@@ -1590,7 +1590,7 @@ fn native_string_datatype(
         let kind = crate::builtin::datatype::datatype_kind(&bytes);
         return Ok(Some(interp.text(kind)));
     };
-    let Some(matched) = crate::builtin::datatype::datatype_matches(interp, &bytes, letter) else {
+    let Some(matched) = crate::builtin::datatype::datatype_matches(interp, &bytes, letter)? else {
         return Err(Raised::method_option_not_recognised(
             crate::builtin::datatype::DATATYPE_OPTIONS,
             &[letter],

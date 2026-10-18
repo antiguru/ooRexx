@@ -1719,9 +1719,10 @@ struct Interp {
     /// Whether the required-string protocol can answer anything other than
     /// the value it was handed -- `Interp::required_string_value`'s gate.
     reqstr_armed: bool,
-    /// Whether any package in this run has escalated `LOSTDIGITS`, by an
-    /// installed `::OPTIONS ... LOSTDIGITS SYNTAX` or a `Package~options`
-    /// write; the gate on [`Interp::lostdigits_check`].
+    /// Whether anything in this run could take `LOSTDIGITS`: a `SIGNAL ON
+    /// LOSTDIGITS` or `SIGNAL ON ANY` trap, an installed `::OPTIONS ...
+    /// LOSTDIGITS SYNTAX` or a `Package~options` write. It only ever sets.
+    /// The gate on [`Interp::lostdigits_check`].
     lostdigits_armed: bool,
     /// The running program's own location, as `PARSE SOURCE`'s third word.
     program_path: Vec<u8>,

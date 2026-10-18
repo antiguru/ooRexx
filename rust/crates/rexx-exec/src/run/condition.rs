@@ -36,6 +36,12 @@ impl Interp {
                 if matches!(&trap.condition[..], b"NOSTRING" | b"ANY") {
                     self.reqstr_armed = true;
                 }
+                // The same for LOSTDIGITS, which only a `SIGNAL ON` trap
+                // takes: measured, `CALL ON ANY` over `1 / 9999999999` does
+                // not run its handler.
+                if !call && matches!(&trap.condition[..], b"LOSTDIGITS" | b"ANY") {
+                    self.lostdigits_armed = true;
+                }
                 let entry = Trap {
                     call,
                     label: std::rc::Rc::from(label.as_ref()),
@@ -213,8 +219,10 @@ impl Interp {
         }
     }
 
-    /// Raises 98.972 where `::OPTIONS LOSTDIGITS SYNTAX` is in force and
-    /// `operand` really does carry more digits than the precision in force.
+    /// Raises LOSTDIGITS where `operand` carries more digits than the
+    /// precision in force: to a `SIGNAL ON` trap, else as 98.972 where
+    /// `::OPTIONS LOSTDIGITS SYNTAX` is in force
+    /// (`NumberString::checkLostDigits`, `Activity::raiseCondition`).
     #[inline(always)]
     pub(crate) fn lostdigits_check(
         &mut self,
@@ -243,17 +251,49 @@ impl Interp {
         self.lostdigits_raise(right, right_value)
     }
 
-    /// [`Interp::lostdigits_check`]'s armed half: the per-activation setting,
-    /// then the operand's own digit count, then the operand's bytes.
+    /// [`Interp::lostdigits_check`] for an operand that is `text` rather than
+    /// a value, whose description is `text` itself.
+    pub(crate) fn lostdigits_check_text(
+        &mut self,
+        operand: &Number,
+        text: &[u8],
+    ) -> Result<(), Failure> {
+        if !self.lostdigits_armed {
+            return Ok(());
+        }
+        self.lostdigits_raise_with(operand, |_| text.to_vec())
+    }
+
+    /// [`Interp::lostdigits_check`]'s armed half.
     #[cold]
     #[inline(never)]
     fn lostdigits_raise(&mut self, operand: &Number, value: ObjRef) -> Result<(), Failure> {
-        if !self.condition_raises_syntax(b"LOSTDIGITS") {
+        self.lostdigits_raise_with(operand, |interp| interp.string_value_text(value))
+    }
+
+    /// The operand's own digit count, then the trap, then the per-activation
+    /// setting; `description` renders the operand only once one of them takes
+    /// it. The description is the operand as written: measured, `' 1111111111
+    /// ' + 1` names `' 1111111111 '` with its blanks.
+    fn lostdigits_raise_with(
+        &mut self,
+        operand: &Number,
+        description: impl FnOnce(&mut Self) -> Vec<u8>,
+    ) -> Result<(), Failure> {
+        let digits = usize::try_from(self.activation().settings.digits()).unwrap_or(usize::MAX);
+        if operand.digit_count() <= digits {
             return Ok(());
         }
-        let digits = usize::try_from(self.activation().settings.digits()).unwrap_or(usize::MAX);
-        if operand.digit_count() > digits {
-            let text = self.string_value_text(value);
+        if self.trap_for(b"LOSTDIGITS").is_some_and(|trap| !trap.call) {
+            let text = description(self);
+            return Err(Raised {
+                description: Some(text),
+                ..Raised::condition(Cow::Borrowed("LOSTDIGITS"))
+            }
+            .into());
+        }
+        if self.condition_raises_syntax(b"LOSTDIGITS") {
+            let text = description(self);
             return Err(Raised::lostdigits(&text).into());
         }
         Ok(())

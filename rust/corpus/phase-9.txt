@@ -164,3 +164,8 @@ lang/requires_dynamic_search_start.rex
 # 9d Task 6.1 fix round 1: an external CALL and findProgram in code compiled
 # from source search the same way.
 lang/external_call_dynamic_search_start.rex
+
+# 9d Task 6.3: LOSTDIGITS reaches a SIGNAL ON trap, and DATATYPE W rounds at
+# any width.
+lang/lostdigits_signal_trap.rex
+lang/datatype_whole_wide.rex

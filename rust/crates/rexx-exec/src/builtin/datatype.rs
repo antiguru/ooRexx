@@ -211,7 +211,7 @@ pub(crate) fn datatype(
     // path a bad letter takes, and the byte `error.rs`'s `displayable`
     // turns into `?` when the report line it landed in gets printed.
     let letter = option.first().copied().unwrap_or(0).to_ascii_uppercase();
-    let Some(matched) = datatype_matches(interp, &text, letter) else {
+    let Some(matched) = datatype_matches(interp, &text, letter)? else {
         return Err(Raised::invalid_option(DATATYPE_OPTIONS, &[letter]).into());
     };
     Ok(interp.text(if matched { b"1" } else { b"0" }))
@@ -228,7 +228,12 @@ pub(crate) fn datatype_kind(text: &[u8]) -> &'static [u8] {
 
 /// Whether `text` is of the kind `letter` names, shared with
 /// `String~dataType`, or `None` when `letter` is not one of the thirteen.
-pub(crate) fn datatype_matches(interp: &Interp, text: &[u8], letter: u8) -> Option<bool> {
+/// Fails only for `W`, whose rounding is arithmetic.
+pub(crate) fn datatype_matches(
+    interp: &mut Interp,
+    text: &[u8],
+    letter: u8,
+) -> Result<Option<bool>, Failure> {
     let matched = match letter {
         b'A' => !text.is_empty() && text.iter().all(u8::is_ascii_alphanumeric),
         b'B' => text.is_empty() || grouped(text, |b| matches!(b, b'0' | b'1'), 4),
@@ -248,21 +253,27 @@ pub(crate) fn datatype_matches(interp: &Interp, text: &[u8], letter: u8) -> Opti
         // `W`'s precision is the *running* `NUMERIC DIGITS`, where `I`'s and
         // `9`'s are the two fixed ones -- `StringUtil::dataType`'s `'W'` arm
         // rounds through `NumberString::plus(IntegerZero)` under the current
-        // settings rather than through `numberValue`'s own fixed-precision
-        // conversion (`classes/support/StringUtil.cpp:1076`-`1097`).
-        b'W' => {
-            let digits = interp.activation().settings.digits();
-            parse_number(text)
-                .and_then(|n| n.whole_value(digits as usize))
-                .is_some()
-        }
+        // settings and asks `NumberString::isInteger` of the result, with no
+        // bound from a machine integer (`classes/support/StringUtil.cpp:1076`).
+        // That `plus` is an operator, so it raises LOSTDIGITS and 42 as one.
+        b'W' => match parse_number(text) {
+            Some(number) => {
+                let digits = interp.activation().settings.digits();
+                interp.lostdigits_check_text(&number, text)?;
+                number
+                    .add(&Number::zero(), digits)
+                    .map_err(Raised::from)?
+                    .is_integer(digits)
+            }
+            None => false,
+        },
         b'X' => text.is_empty() || grouped(text, |b| b.is_ascii_hexdigit(), 2),
         b'9' => parse_number(text)
             .and_then(|n| n.whole_value(rexx_num::DEFAULT_DIGITS as usize))
             .is_some(),
-        _ => return None,
+        _ => return Ok(None),
     };
-    Some(matched)
+    Ok(Some(matched))
 }
 
 /// Whether `name`'s own slot currently holds a value, growing the slot if it
