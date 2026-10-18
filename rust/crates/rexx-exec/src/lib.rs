@@ -544,7 +544,7 @@ impl Loud {
         Loud {
             message: format!(
                 "routine \"{shown}\" with a named semaphore, a POSIX sem_open semaphore \
-                 shared between processes, is not implemented (Deviation 43)"
+                 shared between processes, is not supported (Deviation 43)"
             ),
         }
     }
@@ -560,7 +560,7 @@ impl Loud {
         Loud {
             message: format!(
                 "routine \"{shown}\", whose forked child cannot continue without the timer \
-                 thread and the joining main thread, is not implemented (Deviation 42)"
+                 thread and the joining main thread, is not supported (Deviation 42)"
             ),
         }
     }
