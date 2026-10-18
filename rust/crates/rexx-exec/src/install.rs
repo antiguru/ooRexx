@@ -927,9 +927,8 @@ impl Interp {
     /// each parent's. The REXX package has no name and searches the global
     /// context.
     fn resolve_requires(&self, id: ProgramId, name: &[u8]) -> Option<Vec<u8>> {
-        let own = || self.resolve_search(Some(self.program_display_name(id)), name, true);
         let Some(package) = self.program_package(id) else {
-            return own();
+            return self.resolve_search(Some(self.program_display_name(id)), name, true);
         };
         self.package_chain(Some(package)).find_map(|(_, data)| {
             let program = data
