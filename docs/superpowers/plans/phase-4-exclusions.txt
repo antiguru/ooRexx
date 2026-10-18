@@ -2421,6 +2421,25 @@ DEVIATIONS -- permanent, chosen
      position. The documentation gives transient streams no positions
      (rexxref iostrms.xml:186-197). This crate writes to a transient stream
      without seeking (.superpowers/sdd/queued/2026-10-18-fifo-buffered-write-seek.md).
+ 49. READ AND WRITE POSITIONS ON A PERSISTENT STREAM FOLLOW THE
+     DOCUMENTATION, BUFFERED OR NOT (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-18: "following documentation is better than
+     corrupting files." The reference keeps a separate read and write
+     position (rexxref iostrms.xml:226-227). A write starts at the write
+     position and moves it by what was written (funct.xml:1399-1402), and a
+     relative SEEK moves from the position it names. The oracle's
+     `SysFile::write` (common/platform/unix/SysFile.cpp, and the Windows
+     file alike) seeks when it switches from reading to writing but never
+     updates its own `filePointer`. Every later position on a buffered
+     stream is computed from that stale value. After `lineout(f,'new',2)`
+     the reported write position is 4101 on a 5400-byte file, and a
+     following read, CHARS or LINES makes the next write land there,
+     overwriting bytes the program never named, or NUL-filling past the
+     end of a small file. On a `NOBUFFER` stream the oracle gives the
+     documented answer. This crate gives the documented answer on every
+     stream. Measured by the Phase 9d Task 6.5 review of rounds 2 and 3
+     (.superpowers/sdd/2026-10-18-phase-9d/task-6.5-review-r23.md).
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
