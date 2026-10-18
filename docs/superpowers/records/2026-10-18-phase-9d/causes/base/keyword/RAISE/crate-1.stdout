@@ -1,0 +1,64 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          22
+Assertions:         120
+Failures:           4
+Errors:             0
+
+[failure] 20261018 11:25:49.935659
+  Test:   TEST_RAISE_INSERT_CRLF
+  Class:  RAISE.TESTGROUP
+  File:   .../ooRexx/base/keyword/RAISE.testGroup
+  Line:   487
+  Failed: assertSame
+    Expected: ["Error 98.900:  ?????????????????????????????" || "0A"x || "second line."]
+    Actual:   Error 98.900:  ?????????????????????????????
+
+[failure] 20261018 11:25:49.937016
+  Test:   TEST_RAISE_PROPAGATE
+  Class:  RAISE.TESTGROUP
+  File:   .../ooRexx/base/keyword/RAISE.testGroup
+  Line:   440
+  Failed: assertNotNull
+    Expected: not .nil
+    Actual:   .nil
+
+[failure] 20261018 11:25:49.938311
+  Test:   TEST_RAISE_SYNTAX_EXIT_02
+  Class:  RAISE.TESTGROUP
+  File:   .../ooRexx/base/keyword/RAISE.testGroup
+  Line:   286
+  Failed: assertNotNull
+    Expected: not .nil
+    Actual:   .nil
+
+[failure] 20261018 11:25:49.938599
+  Test:   TEST_RAISE_SYNTAX_RETURN_02
+  Class:  RAISE.TESTGROUP
+  File:   .../ooRexx/base/keyword/RAISE.testGroup
+  Line:   387
+  Failed: assertNotNull
+    Expected: not .nil
+    Actual:   .nil
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          22
+Assertions:         120
+Failures:           4
+Errors:             0
+
+File search:        00:00:00.002173
+Suite construction: 00:00:00.001056
+Test execution:     00:00:00.004812
+Total time:         00:00:00.009259
+

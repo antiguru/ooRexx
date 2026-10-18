@@ -1,0 +1,6 @@
+err ERROR exit 1
+fail FAILURE 
+lost LOSTDIGITS 9999999999
+nostr NOSTRING The NIL object
+notr NOTREADY /
+noval NOVALUE NO_VALUE

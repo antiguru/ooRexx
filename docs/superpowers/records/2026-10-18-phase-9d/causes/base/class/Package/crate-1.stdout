@@ -1,0 +1,47 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          80
+Assertions:         164
+Failures:           1
+Errors:             1
+
+[failure] 20261018 11:25:46.477907
+  Test:   TEST_PROLOG
+  Class:  Package.testGroup
+  File:   .../ooRexx/base/class/Package.testGroup
+  Line:   639
+  Failed: assertSame
+    Expected: The NIL object
+    Actual:   a Routine
+
+[error] 20261018 11:25:46.474966
+  Test:   TEST_NEW01
+  Class:  Package.testGroup
+  File:   .../ooRexx/base/class/Package.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "testPackage2.rex" for ::REQUIRES.
+    Line:    131
+     2 *-* ::requires 'testPackage2.rex'
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   131 *-* res = self~runDynamicSource(("return 123", "::requires 'testPackage2.rex'"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+File search:        00:00:00.004740
+Suite construction: 00:00:00.002086
+Test execution:     00:00:00.034571
+Total time:         00:00:00.043086
+

@@ -1,0 +1,8 @@
+       >I> Routine "tv" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/run-traceobject-probe/p.rex".
+     1 *-* o = 1
+       >>>   "1"
+     2 *-* d = o + 1
+       >>>   "2"
+     3 *-* return d
+       >>>   "2"
+       <I< Routine "tv" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/run-traceobject-probe/p.rex".

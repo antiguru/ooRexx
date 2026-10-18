@@ -1,0 +1,88 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          10
+Assertions:         18
+Failures:           3
+Errors:             2
+
+[failure] 20261018 11:25:50.673844
+  Test:   TEST_CALLER_STACK_FRAME_REPLY_START
+  Class:  TRACE_TRACEOBJECT.TESTGROUP
+  File:   .../ooRexx/base/keyword/TRACE_TraceObject.testGroup
+  Line:   706
+  Failed: assertEquals
+    Expected: 0
+    Actual:   2
+
+[failure] 20261018 11:25:50.674774
+  Test:   TEST_OBJECT_AND_SCOPE
+  Class:  TRACE_TRACEOBJECT.TESTGROUP
+  File:   .../ooRexx/base/keyword/TRACE_TraceObject.testGroup
+  Line:   506
+  Failed: assertEquals
+    Expected: 0
+    Actual:   19
+
+[failure] 20261018 11:25:50.777922
+  Test:   TEST_VARIABLE
+  Class:  TRACE_TRACEOBJECT.TESTGROUP
+  File:   .../ooRexx/base/keyword/TRACE_TraceObject.testGroup
+  Line:   162
+  Failed: assertSame
+    Expected: 6
+    Actual:   0
+    Message:  number of variable related trace objects
+
+[error] 20261018 11:25:50.652677
+  Test:   TEST_CALLER_STACK_FRAME
+  Class:  TRACE_TRACEOBJECT.TESTGROUP
+  File:   .../ooRexx/base/keyword/TRACE_TraceObject.testGroup
+  Event:  SYNTAX 98.986 raised unexpectedly.
+    Reference to unassigned variable "OHACALLERSTACKFRAME".
+    Line:    626
+   626 *-* call compareStackFrames ohaCallerStackFrame, do_the_work_stack_frame, indices, self
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:50.776378
+  Test:   TEST_TRACEOBJECT_COLLECTOR
+  Class:  TRACE_TRACEOBJECT.TESTGROUP
+  File:   .../ooRexx/base/keyword/TRACE_TraceObject.testGroup
+  Event:  SYNTAX 97.1 raised unexpectedly.
+    Object "The NIL object" does not understand message "STARTSWITH".
+    Line:    276
+   276 *-*   self~assertTrue(str~startsWith(prodLine), "traceline" pp(str) "does not start with" pp(prodLine))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          10
+Assertions:         18
+Failures:           3
+Errors:             2
+
+File search:        00:00:00.001900
+Suite construction: 00:00:00.001267
+Test execution:     00:00:00.126001
+Total time:         00:00:00.130467
+

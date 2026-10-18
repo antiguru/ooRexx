@@ -1,0 +1,28 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          34
+Assertions:         228
+Failures:           1
+Errors:             0
+
+[failure] 20261018 11:25:44.444122
+  Test:   TEST_HASITEM_VALUE_NOTEQUAL_INDEX
+  Class:  Bag.testGroup
+  File:   .../ooRexx/base/class/Bag.testGroup
+  Line:   834
+  Failed: assertEquals
+    Expected: The NIL object
+    Actual:   0
+
+File search:        00:00:00.002920
+Suite construction: 00:00:00.004071
+Test execution:     00:00:00.006305
+Total time:         00:00:00.014522
+

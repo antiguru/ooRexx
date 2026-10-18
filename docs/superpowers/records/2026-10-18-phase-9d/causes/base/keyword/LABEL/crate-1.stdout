@@ -1,0 +1,175 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          42
+Assertions:         32
+Failures:           3
+Errors:             6
+
+[failure] 20261018 11:25:49.555570
+  Test:   TEST_LABEL_IF_2_3
+  Class:  LABEL.TESTGROUP
+  File:   .../ooRexx/base/keyword/LABEL.testGroup
+  Line:   -1
+  Failed: expectSyntax
+    Expected: SYNTAX 47.3
+    Actual:   Not raised
+
+[failure] 20261018 11:25:49.557233
+  Test:   TEST_SELECT_1_5
+  Class:  LABEL.TESTGROUP
+  File:   .../ooRexx/base/keyword/LABEL.testGroup
+  Line:   -1
+  Failed: expectSyntax
+    Expected: SYNTAX 47.4
+    Actual:   Not raised
+
+[failure] 20261018 11:25:49.557694
+  Test:   TEST_SELECT_2_3
+  Class:  LABEL.TESTGROUP
+  File:   .../ooRexx/base/keyword/LABEL.testGroup
+  Line:   -1
+  Failed: expectSyntax
+    Expected: SYNTAX 47.4
+    Actual:   Not raised
+
+[error] 20261018 11:25:49.555247
+  Test:   TEST_LABEL_IF_1_2
+  Class:  LABEL.TESTGROUP
+  File:   .../ooRexx/base/keyword/LABEL.testGroup
+  Event:  SYNTAX 98.987 raised unexpectedly.
+    Namespace "LBL" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/target-9d-t1/tmp/suite-832971-1-crate-base__keyword__LABEL/run/testOORexx.rex".
+    Program: test
+    Line:    105
+     1 *-*     lbl: nop
+       *-* Compiled method "NEW" with scope "Package".
+  1208 *-* r = .package~new("test", code, parentPackage)
+   105 *-* self~assertSyntaxError(47.3, "if .true then lbl: nop")
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.555474
+  Test:   TEST_LABEL_IF_2_1
+  Class:  LABEL.TESTGROUP
+  File:   .../ooRexx/base/keyword/LABEL.testGroup
+  Event:  SYNTAX 98.987 raised unexpectedly.
+    Namespace "LBL" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/target-9d-t1/tmp/suite-832971-1-crate-base__keyword__LABEL/run/testOORexx.rex".
+    Program: test
+    Line:    107
+     1 *-*     lbl: nop;
+       *-* Compiled method "NEW" with scope "Package".
+  1208 *-* r = .package~new("test", code, parentPackage)
+   107 *-* self~assertSyntaxError(47.3, "if .true then lbl: nop; else nop")
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.555867
+  Test:   TEST_LABEL_IF_3_1
+  Class:  LABEL.TESTGROUP
+  File:   .../ooRexx/base/keyword/LABEL.testGroup
+  Event:  SYNTAX 10.1 raised unexpectedly.
+    END has no corresponding DO, LOOP, or SELECT.
+    Program: .../run/framework/OOREXXUNIT.CLS
+    Line:    111
+     1 *-* end;
+       *-* Compiled method "NEW" with scope "Package".
+  1208 *-* r = .package~new("test", code, parentPackage)
+   111 *-* self~assertSyntaxError(47.3, "if .true then lbl: do; nop; end; else do; nop; end")
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.556288
+  Test:   TEST_LABEL_IF_3_5
+  Class:  LABEL.TESTGROUP
+  File:   .../ooRexx/base/keyword/LABEL.testGroup
+  Event:  SYNTAX 10.1 raised unexpectedly.
+    END has no corresponding DO, LOOP, or SELECT.
+    Program: .../run/framework/OOREXXUNIT.CLS
+    Line:    119
+     1 *-* end
+       *-* Compiled method "NEW" with scope "Package".
+  1208 *-* r = .package~new("test", code, parentPackage)
+   119 *-* self~assertSyntaxError(47.3, "if .true then do; nop; end; else lbl: do; nop; end")
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.557036
+  Test:   TEST_SELECT_1_3
+  Class:  LABEL.TESTGROUP
+  File:   .../ooRexx/base/keyword/LABEL.testGroup
+  Event:  SYNTAX 98.987 raised unexpectedly.
+    Namespace "LBL" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/target-9d-t1/tmp/suite-832971-1-crate-base__keyword__LABEL/run/testOORexx.rex".
+    Program: test
+    Line:    133
+     1 *-*       lbl: nop;
+       *-* Compiled method "NEW" with scope "Package".
+  1208 *-* r = .package~new("test", code, parentPackage)
+   133 *-* self~assertSyntaxError(47.4, "select; when .true then lbl: nop; otherwise nop; end")
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.557988
+  Test:   TEST_SELECT_2_5
+  Class:  LABEL.TESTGROUP
+  File:   .../ooRexx/base/keyword/LABEL.testGroup
+  Event:  SYNTAX 98.987 raised unexpectedly.
+    Namespace "LBL" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/target-9d-t1/tmp/suite-832971-1-crate-base__keyword__LABEL/run/testOORexx.rex".
+    Program: test
+    Line:    149
+     1 *-*     lbl: nop;
+       *-* Compiled method "NEW" with scope "Package".
+  1208 *-* r = .package~new("test", code, parentPackage)
+   149 *-* self~assertSyntaxError(47.4, "select case c; when .true then nop; otherwise lbl: nop; end")
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          42
+Assertions:         32
+Failures:           3
+Errors:             6
+
+File search:        00:00:00.001980
+Suite construction: 00:00:00.001407
+Test execution:     00:00:00.005447
+Total time:         00:00:00.010175
+

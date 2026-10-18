@@ -1,0 +1,46 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          149
+Assertions:         287
+Failures:           3
+Errors:             0
+
+[failure] 20261018 11:25:45.863644
+  Test:   TEST_INSTANCEMETHOD
+  Class:  object.testGroup
+  File:   .../ooRexx/base/class/Object.testGroup
+  Line:   681
+  Failed: assertSame
+    Expected: a Method
+    Actual:   a Method
+
+[failure] 20261018 11:25:45.870864
+  Test:   TEST_SETMETHOD
+  Class:  object.testGroup
+  File:   .../ooRexx/base/class/Object.testGroup
+  Line:   790
+  Failed: assertIsA
+    Expected: Method
+    Actual:   Object
+
+[failure] 20261018 11:25:45.999045
+  Test:   TEST_UNINIT
+  Class:  object.testGroup
+  File:   .../ooRexx/base/class/Object.testGroup
+  Line:   1080
+  Failed: assertTrue
+    Expected: 1
+    Actual:   0
+
+File search:        00:00:00.007796
+Suite construction: 00:00:00.003168
+Test execution:     00:00:00.163540
+Total time:         00:00:00.175868
+

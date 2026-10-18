@@ -1,0 +1,28 @@
+Searching for test containers
+Executing automated test suite
+     
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          39
+Assertions:         631
+Failures:           1
+Errors:             0
+
+[failure] 20261018 11:25:41.455615
+  Test:   TEST_POSITIONING_1_BIN
+  Class:  CHAROUT.testGroup
+  File:   .../ooRexx/base/bif/CHAROUT.testGroup
+  Line:   1018
+  Failed: assertSame
+    Expected: 11
+    Actual:   10
+
+File search:        00:00:00.003678
+Suite construction: 00:00:00.001506
+Test execution:     00:00:00.087336
+Total time:         00:00:00.093869
+

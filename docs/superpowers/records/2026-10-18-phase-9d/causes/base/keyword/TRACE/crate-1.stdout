@@ -1,0 +1,137 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          57
+Assertions:         129
+Failures:           6
+Errors:             1
+
+[failure] 20261018 11:25:50.332792
+  Test:   TEST_TRACE_DROP
+  Class:  TRACE.TESTGROUP
+  File:   .../ooRexx/base/keyword/TRACE.testGroup
+  Line:   336
+  Failed: assertTrue
+    Expected: 1
+    Actual:   0
+    Message:  trace output mismatch at line 2        >V>   LIST => "rc result" 
+ actual trace output 
+   334 *-* drop (list)
+   335 *-* trace off 
+ expected trace output 
+     1 *-* drop (list)
+       >V>   LIST => "rc result"
+
+[failure] 20261018 11:25:50.333925
+  Test:   TEST_TRACE_EXIT
+  Class:  TRACE.TESTGROUP
+  File:   .../ooRexx/base/keyword/TRACE.testGroup
+  Line:   347
+  Failed: assertTrue
+    Expected: 1
+    Actual:   0
+    Message:  trace output mismatch at line 1        >I> Routine "trace_exit" in package "trace_exit". 
+ actual trace output 
+       >I> Routine "trace_exit" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/target-9d-t1/tmp/suite-833153-1-crate-base__keyword__TRACE/run/testOORexx.rex".
+     1 *-* exit 99
+       >L>   "99"
+       >>>   "99"
+       <I< Routine "trace_exit" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/target-9d-t1/tmp/suite-833153-1-crate-base__keyword__TRACE/run/testOORexx.rex". 
+ expected trace output 
+       >I> Routine "trace_exit" in package "trace_exit".
+     1 *-* exit 99
+       >L>   "99"
+       >>>   "99"
+       <I< Routine "trace_exit" in package "trace_exit".
+
+[failure] 20261018 11:25:50.334438
+  Test:   TEST_TRACE_EXPOSE
+  Class:  TRACE.TESTGROUP
+  File:   .../ooRexx/base/keyword/TRACE.testGroup
+  Line:   379
+  Failed: assertTrue
+    Expected: 1
+    Actual:   0
+    Message:  actual and expected trace output have different line counts 
+ actual trace output 
+       >I> Method "TRACE_EXPOSE" with scope "TRACE.TESTGROUP" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/target-9d-t1/tmp/suite-833153-1-crate-base__keyword__TRACE/run/testOORexx.rex".
+     1 *-* expose (list);
+       <I< Method "TRACE_EXPOSE" with scope "TRACE.TESTGROUP" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/target-9d-t1/tmp/suite-833153-1-crate-base__keyword__TRACE/run/testOORexx.rex". 
+ expected trace output 
+       >I> Method "TRACE_EXPOSE" with scope "TRACE.TESTGROUP" in package "".
+     1 *-* expose (list);
+       >V>   LIST => "a b"
+       <I< Method "TRACE_EXPOSE" with scope "TRACE.TESTGROUP" in package "".
+
+[failure] 20261018 11:25:50.336356
+  Test:   TEST_TRACE_IGNORED
+  Class:  TRACE.TESTGROUP
+  File:   .../ooRexx/base/keyword/TRACE.testGroup
+  Line:   1055
+  Failed: assertSame
+    Expected: ?C
+    Actual:   N
+
+[failure] 20261018 11:25:50.341276
+  Test:   TEST_TRACE_LABEL_WITH_FORWARD
+  Class:  TRACE.TESTGROUP
+  File:   .../ooRexx/base/keyword/TRACE.testGroup
+  Line:   1188
+  Failed: assertTrue
+    Expected: 1
+    Actual:   0
+    Message:  test "test_forwarded3.rex": actual (10 lines) and expected (12 lines) trace output have different line counts
+
+[failure] 20261018 11:25:50.345694
+  Test:   TEST_TRACE_OTHER_ENTRYPOINT
+  Class:  TRACE.TESTGROUP
+  File:   .../ooRexx/base/keyword/TRACE.testGroup
+  Line:   937
+  Failed: assertTrue
+    Expected: 1
+    Actual:   0
+    Message:  trace output mismatch at line 1        >I> Routine "trace_other_entrypoint" in package "trace_other_entrypoint". 
+ actual trace output 
+       >I> Routine "trace_other_entrypoint" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/target-9d-t1/tmp/suite-833153-1-crate-base__keyword__TRACE/run/testOORexx.rex".
+       <I< Routine "trace_other_entrypoint" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/target-9d-t1/tmp/suite-833153-1-crate-base__keyword__TRACE/run/testOORexx.rex". 
+ expected trace output 
+       >I> Routine "trace_other_entrypoint" in package "trace_other_entrypoint".
+       <I< Routine "trace_other_entrypoint" in package "trace_other_entrypoint".
+
+[error] 20261018 11:25:50.347478
+  Test:   TEST_TRACE_PROCEDURE
+  Class:  TRACE.TESTGROUP
+  File:   .../ooRexx/base/keyword/TRACE.testGroup
+  Event:  SYNTAX 17.1 raised unexpectedly.
+    PROCEDURE is valid only when it is the first instruction executed after an internal CALL or function invocation.
+    Line:    659
+   661 *-*   procedure expose a
+   659 *-* a = p()
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          57
+Assertions:         129
+Failures:           6
+Errors:             1
+
+File search:        00:00:00.003168
+Suite construction: 00:00:00.001786
+Test execution:     00:00:00.038515
+Total time:         00:00:00.044678
+

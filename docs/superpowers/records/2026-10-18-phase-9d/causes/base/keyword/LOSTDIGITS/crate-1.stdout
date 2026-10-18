@@ -1,0 +1,144 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          11
+Assertions:         0
+Failures:           8
+Errors:             2
+
+[failure] 20261018 11:25:49.746283
+  Test:   TESTADDITION
+  Class:  LOSTDIGITS.testGroup
+  File:   .../ooRexx/base/keyword/LOSTDIGITS.testGroup
+  Line:   92
+  Failed: fail
+    Expected: n/a
+    Actual:   n/a
+    Message:  LOSTDIGITS not raised for 1111111111+1
+
+[failure] 20261018 11:25:49.747679
+  Test:   TESTCOMPARE
+  Class:  LOSTDIGITS.testGroup
+  File:   .../ooRexx/base/keyword/LOSTDIGITS.testGroup
+  Line:   308
+  Failed: fail
+    Expected: n/a
+    Actual:   n/a
+    Message:  LOSTDIGITS not raised for 1111111111=1
+
+[failure] 20261018 11:25:49.748246
+  Test:   TESTDIVIDE
+  Class:  LOSTDIGITS.testGroup
+  File:   .../ooRexx/base/keyword/LOSTDIGITS.testGroup
+  Line:   200
+  Failed: fail
+    Expected: n/a
+    Actual:   n/a
+    Message:  LOSTDIGITS not raised for 1111111111/1
+
+[failure] 20261018 11:25:49.749313
+  Test:   TESTMULTIPLY
+  Class:  LOSTDIGITS.testGroup
+  File:   .../ooRexx/base/keyword/LOSTDIGITS.testGroup
+  Line:   164
+  Failed: fail
+    Expected: n/a
+    Actual:   n/a
+    Message:  LOSTDIGITS not raised for 1111111111*1
+
+[failure] 20261018 11:25:49.749666
+  Test:   TESTPOWER
+  Class:  LOSTDIGITS.testGroup
+  File:   .../ooRexx/base/keyword/LOSTDIGITS.testGroup
+  Line:   377
+  Failed: fail
+    Expected: n/a
+    Actual:   n/a
+    Message:  LOSTDIGITS not raised for 1111111111**2
+
+[failure] 20261018 11:25:49.749998
+  Test:   TESTPREFIXMINUS
+  Class:  LOSTDIGITS.testGroup
+  File:   .../ooRexx/base/keyword/LOSTDIGITS.testGroup
+  Line:   336
+  Failed: fail
+    Expected: n/a
+    Actual:   n/a
+    Message:  LOSTDIGITS not raised for -1111111111
+
+[failure] 20261018 11:25:49.750326
+  Test:   TESTPREFIXPLUS
+  Class:  LOSTDIGITS.testGroup
+  File:   .../ooRexx/base/keyword/LOSTDIGITS.testGroup
+  Line:   356
+  Failed: fail
+    Expected: n/a
+    Actual:   n/a
+    Message:  LOSTDIGITS not raised for +1111111111
+
+[failure] 20261018 11:25:49.751307
+  Test:   TESTSUBTRACTION
+  Class:  LOSTDIGITS.testGroup
+  File:   .../ooRexx/base/keyword/LOSTDIGITS.testGroup
+  Line:   128
+  Failed: fail
+    Expected: n/a
+    Actual:   n/a
+    Message:  LOSTDIGITS not raised for 1111111111-1
+
+[error] 20261018 11:25:49.748816
+  Test:   TESTINTEGERDIVIDE
+  Class:  LOSTDIGITS.testGroup
+  File:   .../ooRexx/base/keyword/LOSTDIGITS.testGroup
+  Event:  SYNTAX 26.11 raised unexpectedly.
+    Result of % operation did not result in a whole number.
+    Line:    236
+    58 *-* x=1111111111%1
+    58 *-* interpret "x="expr
+   236 *-* self~assertLostDigits("1111111111%1")
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.750865
+  Test:   TESTREMAINDER
+  Class:  LOSTDIGITS.testGroup
+  File:   .../ooRexx/base/keyword/LOSTDIGITS.testGroup
+  Event:  SYNTAX 26.12 raised unexpectedly.
+    Result of // operation did not result in a whole number.
+    Line:    272
+    58 *-* x=1111111111//1
+    58 *-* interpret "x="expr
+   272 *-* self~assertLostDigits("1111111111//1")
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          11
+Assertions:         0
+Failures:           8
+Errors:             2
+
+File search:        00:00:00.001450
+Suite construction: 00:00:00.000915
+Test execution:     00:00:00.005877
+Total time:         00:00:00.009643
+

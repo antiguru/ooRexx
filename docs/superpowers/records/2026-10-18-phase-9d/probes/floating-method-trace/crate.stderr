@@ -1,0 +1,8 @@
+       >I> Routine "" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/run-floating-method-trace/p.rex".
+     1 *-* .c~r(.methods["FLOAT"])    
+       >I> Method "R" with scope "C" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/run-floating-method-trace/p.rex".
+     5 *-* forward message "run"  
+       >I> Method "*UNNAMED*" with scope ".NIL" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/run-floating-method-trace/p.rex".
+       <I< Method "*UNNAMED*" with scope ".NIL" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/run-floating-method-trace/p.rex".
+       <I< Method "R" with scope "C" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/run-floating-method-trace/p.rex".
+       <I< Routine "" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/run-floating-method-trace/p.rex".

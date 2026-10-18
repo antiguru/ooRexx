@@ -1,0 +1,128 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          87
+Assertions:         121
+Failures:           7
+Errors:             1
+
+[failure] 20261018 11:25:49.192189
+  Test:   TEST_ALL_SYNTAX_NOTREADY
+  Class:  OPTIONS.testGroup
+  File:   .../ooRexx/base/directives/OPTIONS.testGroup
+  Line:   -1
+  Failed: expectSyntax
+    Expected: SYNTAX 98.974
+    Actual:   Not raised
+
+[failure] 20261018 11:25:49.194362
+  Test:   TEST_ALL_SYNTAX_OVERRIDE
+  Class:  OPTIONS.testGroup
+  File:   .../ooRexx/base/directives/OPTIONS.testGroup
+  Line:   379
+  Failed: assertSame
+    Expected: 3 30 1 CHAR 0 NOVALUE
+    Actual:   3 30 1 CHAR 340 NOVALUE
+
+[failure] 20261018 11:25:49.215558
+  Test:   TEST_LOSTDIGITS_SYNTAX_OVERRIDE
+  Class:  OPTIONS.testGroup
+  File:   .../ooRexx/base/directives/OPTIONS.testGroup
+  Line:   265
+  Failed: assertSame
+    Expected: LOSTDIGITS
+    Actual:   1.23456789E+9
+
+[failure] 20261018 11:25:49.218936
+  Test:   TEST_NOTREADY_SYNTAX_OVERRIDE
+  Class:  OPTIONS.testGroup
+  File:   .../ooRexx/base/directives/OPTIONS.testGroup
+  Line:   354
+  Failed: assertSame
+    Expected: NOTREADY
+    Actual:   340
+
+[failure] 20261018 11:25:49.221486
+  Test:   TEST_OPTIONS_TRACE_ALL_WITH_FLOATING_METHOD
+  Class:  OPTIONS.testGroup
+  File:   .../ooRexx/base/directives/OPTIONS.testGroup
+  Line:   639
+  Failed: assertTrue
+    Expected: 1
+    Actual:   0
+
+[failure] 20261018 11:25:49.221971
+  Test:   TEST_OPTION_SETTINGS
+  Class:  OPTIONS.testGroup
+  File:   .../ooRexx/base/directives/OPTIONS.testGroup
+  Line:   67
+  Failed: assertEquals
+    Expected: ?C
+    Actual:   C
+
+[failure] 20261018 11:25:49.223592
+  Test:   TEST_TRACE_LABELS
+  Class:  OPTIONS.testGroup
+  File:   .../ooRexx/base/directives/OPTIONS.testGroup
+  Line:   597
+  Failed: assertSameList
+    Expected: an Array with 9 items
+    Actual:   an Array with 7 items
+    Message:  expected:
+       >I> Routine "" in package "".
+       <I< Routine "" in package "".
+       >I> Routine "" in package "".
+       >I> Routine "R" in package "".
+       <I< Routine "R" in package "".
+     4 *-*   lbl:
+       >I> Method "M" with scope "C" in package "".
+       <I< Method "M" with scope "C" in package "".
+       <I< Routine "" in package "".
+actual:
+       >I> Routine "" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/target-9d-t1/tmp/suite-832833-1-crate-base__directives__OPTIONS/run/testOORexx.rex".
+       >I> Routine "R" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/target-9d-t1/tmp/suite-832833-1-crate-base__directives__OPTIONS/run/testOORexx.rex".
+       <I< Routine "R" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/target-9d-t1/tmp/suite-832833-1-crate-base__directives__OPTIONS/run/testOORexx.rex".
+     4 *-*   lbl:
+       >I> Method "M" with scope "C" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/target-9d-t1/tmp/suite-832833-1-crate-base__directives__OPTIONS/run/testOORexx.rex".
+       <I< Method "M" with scope "C" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/target-9d-t1/tmp/suite-832833-1-crate-base__directives__OPTIONS/run/testOORexx.rex".
+       <I< Routine "" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/target-9d-t1/tmp/suite-832833-1-crate-base__directives__OPTIONS/run/testOORexx.rex".
+
+[error] 20261018 11:25:49.218574
+  Test:   TEST_NOTREADY_SYNTAX_NOT
+  Class:  OPTIONS.testGroup
+  File:   .../ooRexx/base/directives/OPTIONS.testGroup
+  Event:  SYNTAX 91.999 raised unexpectedly.
+    Message "COMMAND" did not return a result.
+    Line:    344
+     1 *-* return stream('/', 'command', 'open read')
+       *-* Compiled method "[]" with scope "Routine".
+  1230 *-* return r[]
+   344 *-* self~assertSame("ERROR:2", self~runDynamicSource(("return stream('/', 'command', 'open read')", "::options notready syntax")))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          87
+Assertions:         121
+Failures:           7
+Errors:             1
+
+File search:        00:00:00.003644
+Suite construction: 00:00:00.002085
+Test execution:     00:00:00.035045
+Total time:         00:00:00.042048
+

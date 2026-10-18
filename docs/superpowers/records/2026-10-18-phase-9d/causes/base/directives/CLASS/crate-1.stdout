@@ -1,0 +1,124 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          54
+Assertions:         130
+Failures:           0
+Errors:             5
+
+[error] 20261018 11:25:48.853103
+  Test:   TEST_INHERIT
+  Class:  CLASS.testGroup
+  File:   .../ooRexx/base/directives/CLASS.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "custom_mixin.cls" for ::REQUIRES.
+    Line:    421
+     3 *-* ::requires 'custom_mixin.cls'
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   421 *-* package = self~runDynamicSource(("return .context~package", "::class test inherit comparable 'testMixin' rexx:orderable", "::requires 'custom_mixin.cls'"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:48.855250
+  Test:   TEST_METACLASS
+  Class:  CLASS.testGroup
+  File:   .../ooRexx/base/directives/CLASS.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "custom_metaclass.cls" for ::REQUIRES.
+    Line:    319
+     3 *-* ::requires 'custom_metaclass.cls'
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   319 *-* class = self~runDynamicSource(("return .test", "::class test metaclass testMetaclass", "::requires 'custom_metaclass.cls'"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:48.856700
+  Test:   TEST_MIXINCLASS
+  Class:  CLASS.testGroup
+  File:   .../ooRexx/base/directives/CLASS.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "import_class.cls" for ::REQUIRES.
+    Line:    246
+     3 *-* ::requires 'import_class.cls'
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   246 *-* package = self~runDynamicSource(("return .context~package", "::class test mixinclass testSuper private", "::requires 'import_class.cls'"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:48.860146
+  Test:   TEST_SUBCLASS
+  Class:  CLASS.testGroup
+  File:   .../ooRexx/base/directives/CLASS.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "import_class.cls" for ::REQUIRES.
+    Line:    117
+     3 *-* ::requires 'import_class.cls'
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   117 *-* package = self~runDynamicSource(("return .context~package", "::class test subclass testSuper private", "::requires 'import_class.cls'"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:48.860870
+  Test:   TEST_SUBCLASS_NO_CLASS_LOCAL
+  Class:  CLASS.testGroup
+  File:   .../ooRexx/base/directives/CLASS.testGroup
+  Event:  SYNTAX 98.909 raised unexpectedly.
+    Class "INPUT" not found.
+    Program: test
+    Line:    150
+     1 *-* ::class test subclass input
+       *-* Compiled method "NEW" with scope "Package".
+  1208 *-* r = .package~new("test", code, parentPackage)
+   150 *-* self~assertSyntaxError(99.949, "::class test subclass input")
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          54
+Assertions:         130
+Failures:           0
+Errors:             5
+
+File search:        00:00:00.002447
+Suite construction: 00:00:00.001738
+Test execution:     00:00:00.011102
+Total time:         00:00:00.016565
+

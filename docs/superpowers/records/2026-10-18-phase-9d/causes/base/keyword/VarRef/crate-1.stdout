@@ -1,0 +1,73 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          43
+Assertions:         74
+Failures:           5
+Errors:             0
+
+[failure] 20261018 11:25:50.946712
+  Test:   TESTDOUBLEARGSTEM
+  Class:  VARIABLE.REFERENCE.testGroup
+  File:   .../ooRexx/base/keyword/VarRef.testGroup
+  Line:   -1
+  Failed: expectSyntax
+    Expected: SYNTAX 98.995
+    Actual:   Not raised
+
+[failure] 20261018 11:25:50.947297
+  Test:   TESTREFAUTOEXPOSED
+  Class:  VARIABLE.REFERENCE.testGroup
+  File:   .../ooRexx/base/keyword/VarRef.testGroup
+  Line:   -1
+  Failed: expectSyntax
+    Expected: SYNTAX 98.995
+    Actual:   Not raised
+
+[failure] 20261018 11:25:50.947443
+  Test:   TESTREFAUTOEXPOSEDSTEM
+  Class:  VARIABLE.REFERENCE.testGroup
+  File:   .../ooRexx/base/keyword/VarRef.testGroup
+  Line:   -1
+  Failed: expectSyntax
+    Expected: SYNTAX 98.995
+    Actual:   Not raised
+
+[failure] 20261018 11:25:50.947666
+  Test:   TESTREFEXPOSED
+  Class:  VARIABLE.REFERENCE.testGroup
+  File:   .../ooRexx/base/keyword/VarRef.testGroup
+  Line:   -1
+  Failed: expectSyntax
+    Expected: SYNTAX 98.995
+    Actual:   Not raised
+
+[failure] 20261018 11:25:50.947781
+  Test:   TESTREFEXPOSEDSTEM
+  Class:  VARIABLE.REFERENCE.testGroup
+  File:   .../ooRexx/base/keyword/VarRef.testGroup
+  Line:   -1
+  Failed: expectSyntax
+    Expected: SYNTAX 98.995
+    Actual:   Not raised
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          43
+Assertions:         74
+Failures:           5
+Errors:             0
+
+File search:        00:00:00.002407
+Suite construction: 00:00:00.001399
+Test execution:     00:00:00.004340
+Total time:         00:00:00.009367
+

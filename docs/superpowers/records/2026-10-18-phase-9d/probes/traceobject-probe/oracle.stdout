@@ -1,0 +1,10 @@
+2
+8
+0        >I> Routine "tv" in package "tv".
+0      1 *-* o = 1
+0        >>>   "1"
+0      2 *-* d = o + 1
+0        >>>   "2"
+0      3 *-* return d
+0        >>>   "2"
+0        <I< Routine "tv" in package "tv".

@@ -1,0 +1,179 @@
+group	test	cluster	cause
+base/bif/CHAROUT	TEST_POSITIONING_1_BIN	stream-binary-records	line 1018 assertSame: expected 11, actual 10
+base/bif/CHARS	TEST_CHARS_NOTREADY_DIRECTORY	stream-notready-names	line 259 assertTrue: expected 1, actual 0 (CHARS should raise NOTREADY)
+base/bif/CHARS	TEST_CHARS_NOTREADY_INVALID	stream-notready-names	line 254 assertSame: expected *, actual The NIL object
+base/bif/CHARS	TEST_CHARS_NOTREADY_NONEXISTING	stream-notready-names	line 268 assertSame: expected non-existing-file, actual The NIL object
+base/bif/CHARS	TEST_MANYCHARS_BIN	stream-binary-records	line 198 assertSame: expected 14, actual 20
+base/bif/CONDITION	TEST_CONDITION_CALL	call-on-trap-argument	line 232 assertSame: expected 1, actual 0 (we expect one argument: the condition object)
+base/bif/CONDITION	TEST_CONDITION_CALL_BIF	call-on-trap-argument	SYNTAX 40.3 raised unexpectedly: Not enough arguments in invocation of REVERSE; minimum expected is 1.
+base/bif/CONDITION	TEST_CONDITION_CALL_EXTERNAL	call-on-trap-argument	SYNTAX 40.3 raised unexpectedly: Not enough arguments in invocation of EXTERNAL; minimum expected is 1.
+base/bif/CONDITION	TEST_CONDITION_SIGNAL	lostdigits-not-raised	line 170 assertSame: expected LOSTDIGITS, actual SYNTAX (CONDITION(C))
+base/bif/CONDITION	TEST_NOVALUE_DROP	variable-reference-list	line -1 expectSyntax: expected SYNTAX 98.986, actual Not raised
+base/bif/CONDITION	TEST_NOVALUE_METHOD_EXPOSE	variable-reference-list	line -1 expectSyntax: expected SYNTAX 98.986, actual Not raised
+base/bif/CONDITION	TEST_NOVALUE_PROEDURE_EXPOSE	variable-reference-list	line -1 expectSyntax: expected SYNTAX 98.986, actual Not raised
+base/bif/LINEOUT	TEST_BINARY	stream-binary-records	line 220 assertSame: expected 1    22   333  4444 55555, actual ["1, " || "000000"x || "22, " || "0000"x || "333, " || "00"x || "4444, 55555"]
+base/bif/LINEOUT	TEST_INVALID_FILE	stream-notready-names	line 111 assertSame: expected 1, actual 0
+base/bif/LINEOUT	TEST_LINE_NONNUMERIC	stream-argument-error-numbers	SYNTAX 93.907 raised unexpectedly: Method argument 2 must be a positive whole number; found "line".
+base/bif/LINEOUT	TEST_LINE_TOO_LONG	stream-binary-records	line -1 expectSyntax: expected SYNTAX 93, actual Not raised
+base/bif/LINES	TEST_LINES_NOTREADY_DIRECTORY	stream-notready-names	line 296 assertTrue: expected 1, actual 0 (LINES should raise NOTREADY)
+base/bif/LINES	TEST_LINES_NOTREADY_INVALID	stream-notready-names	line 291 assertSame: expected *, actual The NIL object
+base/bif/LINES	TEST_LINES_NOTREADY_NONEXISTING	stream-notready-names	line 305 assertSame: expected non-existing-file, actual The NIL object
+base/bif/STREAM	TEST_OPEN_WRITE_ONLY_3274050_C	stream-open-write-only	SYNTAX 91.999 raised unexpectedly: Message "COMMAND" did not return a result.
+base/bif/STREAM	TEST_OPEN_WRITE_ONLY_3274050_D	stream-open-write-only	SYNTAX 91.999 raised unexpectedly: Message "COMMAND" did not return a result.
+base/bif/STREAM	TEST_QUERYFILE_EXISTS_OPENED_01	stream-command-position	line 682 assertTrue: expected 1, actual 0
+base/bif/STREAM	TEST_QUERYFILE_EXISTS_OPENED_03	stream-command-position	line 755 assertSame: expected 12, actual 1
+base/bif/STREAM	TEST_SEEK_CLOSEDFILE_2785896	stream-command-position	line 525 assertSame: expected 1, actual 0
+base/bif/STREAM	TEST_SEEK_CLOSEDFILE_2787994	stream-command-position	line 582 assertSame: expected 1, actual 0
+base/class/Array	TESTINSERT	array-array-index	SYNTAX 93.907 raised unexpectedly: Method argument 2 must be a positive whole number; found "an Array".
+base/class/Array	TESTMULTIINDEXINSERT	array-array-index	SYNTAX 93.907 raised unexpectedly: Method argument 2 must be a positive whole number; found "an Array".
+base/class/Array	TEST_SECTION	array-array-index	SYNTAX 93.907 raised unexpectedly: Method argument 1 must be a positive whole number; found "an Array".
+base/class/Array	TEST_SECTION_SYNTAX5	collection-argument-error-numbers	SYNTAX 93.906 raised unexpectedly: Method argument 2 must be zero or a positive whole number; found "The NIL object".
+base/class/Array	TEST_SECTION_SYNTAX6	collection-argument-error-numbers	SYNTAX 93.906 raised unexpectedly: Method argument 2 must be zero or a positive whole number; found "The String class".
+base/class/Bag	TEST_HASITEM_VALUE_NOTEQUAL_INDEX	bag-hasitem-nil	line 834 assertEquals: expected The NIL object, actual 0
+base/class/CircularQueue	TEST_DIFFERENCE	collection-set-operations	line 712 assertEquals: expected 1v,2v, actual 1v,2v
+base/class/Class	TEST_ACTIVATE	class-activate-order	line 968 assertTrue: expected 1, actual 0 (class1~activate ran before class2~activate)
+base/class/Class	TEST_METHODS	method-object-identity	line 582 assertTrue: expected 1, actual 0
+base/class/IdentityTable	TEST_AT01	identity-collection-equality	line 78 assertNull: expected .nil, actual 2
+base/class/IdentityTable	TEST_BUG_1468	identity-collection-equality	line 669 assertFalse: expected 0, actual 1
+base/class/IdentityTable	TEST_HASINDEX	identity-collection-equality	line 163 assertFalse: expected 0, actual 1
+base/class/IdentityTable	TEST_HASITEM	identity-collection-equality	line 173 assertFalse: expected 0, actual 1
+base/class/IdentityTable	TEST_INDEX	identity-collection-equality	line 183 assertNull: expected .nil, actual 22
+base/class/IdentityTable	TEST_[]	identity-collection-equality	line 89 assertNull: expected .nil, actual 2
+base/class/Object	TEST_INSTANCEMETHOD	method-object-identity	line 681 assertSame: expected a Method, actual a Method
+base/class/Object	TEST_SETMETHOD	setmethod-instancemethod-kind	line 790 assertIsA: expected Method, actual Object
+base/class/Object	TEST_UNINIT	uninit-define-on-superclass	line 1080 assertTrue: expected 1, actual 0
+base/class/Package	TEST_NEW01	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "testPackage2.rex" for ::REQUIRES.
+base/class/Package	TEST_PROLOG	method-package-prolog	line 639 assertSame: expected The NIL object, actual a Routine
+base/class/Queue	TEST_DIFFERENCE	collection-set-operations	line 1029 assertEquals: expected a Queue, actual a Queue
+base/class/Queue	TEST_XOR	collection-set-operations	line 988 assertEquals: expected a Queue, actual a Queue
+base/class/QueueRGF	TEST_DIFFERENCE	collection-set-operations	line 200 assertEquals: expected a Queue, actual a Queue
+base/class/QueueRGF	TEST_INSERT_ERROR2	collection-argument-error-numbers	SYNTAX 93.918 raised unexpectedly: Incorrect list index "99".
+base/class/QueueRGF	TEST_XOR	collection-set-operations	line 780 assertEquals: expected a Queue, actual a Queue
+base/class/RexxContext	TESTRS01	context-rs	line 138 assertSame: expected 0, actual The NIL object
+base/class/RexxInteger	TEST_INTEGER_ADDITION	rexxinteger-min-representation	line 168 assertTrue: expected 1, actual 0 (0 + 0)
+base/class/RexxInteger	TEST_INTEGER_CONSTANT	rexxinteger-min-representation	line 139 assertTrue: expected 1, actual 0 (0 should be a RexxInteger)
+base/class/RexxInteger	TEST_INTEGER_D2X	rexxinteger-min-representation	line 281 assertTrue: expected 1, actual 0 (0~d2x should be a RexxInteger)
+base/class/RexxInteger	TEST_INTEGER_DATE	rexxinteger-min-representation	line 379 assertTrue: expected 1, actual 0 (date('B') should return a RexxInteger)
+base/class/RexxInteger	TEST_INTEGER_DIVISION	rexxinteger-min-representation	line 203 assertTrue: expected 1, actual 0 (0 / 1 should be a RexxInteger)
+base/class/RexxInteger	TEST_INTEGER_INTEGERDIVIDE	rexxinteger-min-representation	line 215 assertTrue: expected 1, actual 0 (0 % 1 should be a RexxInteger)
+base/class/RexxInteger	TEST_INTEGER_MODULO	rexxinteger-min-representation	line 240 assertTrue: expected 1, actual 0 (0~modulo(1) should be a RexxInteger)
+base/class/RexxInteger	TEST_INTEGER_MULTIPLICATION	rexxinteger-min-representation	line 190 assertTrue: expected 1, actual 0 (0 * 0 should be a RexxInteger)
+base/class/RexxInteger	TEST_INTEGER_POWER	rexxinteger-min-representation	line 258 assertTrue: expected 1, actual 0 (-1000 ** 0 NumberString should be > 999999999999999999)
+base/class/RexxInteger	TEST_INTEGER_REMAINDER	rexxinteger-min-representation	line 226 assertTrue: expected 1, actual 0 (0 // 1 should be a RexxInteger)
+base/class/RexxInteger	TEST_INTEGER_REXXINFO	rexxinteger-min-representation	line 367 assertTrue: expected 1, actual 0 (999999999999999999 should be a RexxInteger)
+base/class/RexxInteger	TEST_INTEGER_SUBTRACTION	rexxinteger-min-representation	line 179 assertTrue: expected 1, actual 0 (0 - 0)
+base/class/RexxInteger	TEST_INTEGER_TIME	rexxinteger-min-representation	line 391 assertTrue: expected 1, actual 0 (time('F') should return a RexxInteger)
+base/class/RexxInteger	TEST_INTEGER_UNARY_MINUS	rexxinteger-min-representation	line 158 assertTrue: expected 1, actual 0 (-0 should be a RexxInteger)
+base/class/RexxInteger	TEST_INTEGER_UNARY_PLUS	rexxinteger-min-representation	line 149 assertTrue: expected 1, actual 0 (+0 should be a RexxInteger)
+base/class/RexxInteger	TEST_NUMBERSTRING_CEIL_FLOOR_ROUND_TRUNC	rexxinteger-min-representation	line 301 assertTrue: expected 1, actual 0 (0.~trunc should be a RexxInteger)
+base/class/RexxInteger	TEST_NUMBERSTRING_INTEGERDIVIDE	rexxinteger-min-representation	line 320 assertTrue: expected 1, actual 0 (0. % 1 should be a RexxInteger)
+base/class/RexxInteger	TEST_STRING_C2D	rexxinteger-min-representation	line 339 assertTrue: expected 1, actual 0 ( ~c2d should be a RexxInteger)
+base/class/RexxInteger	TEST_STRING_X2D	rexxinteger-min-representation	line 358 assertTrue: expected 1, actual 0 (0~x2d should be a RexxInteger)
+base/class/StackFrame	TESTNATIVECODEFRAME	native-stack-frames	line 141 assertTrue: expected 1, actual 0
+base/class/Stream	TEST_ARRAYIN_3_BIN	stream-binary-records	line 726 assertSame: expected ["line 04" || "0A"x], actual line 04
+base/class/Stream	TEST_ARRAYIN_BIN	stream-binary-records	line 651 assertSame: expected 10, actual 12
+base/class/Stream	TEST_LINEIN_ARG_ONE_INVALID	stream-argument-error-numbers	SYNTAX 93.907 raised unexpectedly: Method argument 1 must be a positive whole number; found "The NIL object".
+base/class/Stream	TEST_NOTREADY_EOF_2792702	stream-eof-state	line 1673 assertSame: expected NOTREADY:EOF, actual ERROR:0
+base/class/Stream	TEST_OPEN_WRITE_ONLY_3274050_C	stream-open-write-only	line 1770 assertSame: expected READY:, actual ERROR:13
+base/class/Stream	TEST_OPEN_WRITE_ONLY_3274050_D	stream-open-write-only	line 1804 assertSame: expected READY:, actual ERROR:13
+base/class/Stream	TEST_OPEN_WRITE_ONLY_3274050_E	stream-open-write-only	SYNTAX 91.999 raised unexpectedly: Message "COMMAND" did not return a result.
+base/class/Stream	TEST_OPEN_WRITE_ONLY_3274050_F	stream-open-write-only	SYNTAX 91.999 raised unexpectedly: Message "COMMAND" did not return a result.
+base/class/Stream	TEST_SEEK_PARSER	stream-command-position	line 2277 assertFalse: expected 0, actual 1
+base/class/Stream	TEST_SEEK_USEDASCOUNT_2776442	stream-command-position	line 1551 assertSame: expected 9, actual 10
+base/class/Stream	TEST_STATE_NOTREADY_2	stream-eof-state	line 1242 assertSame: expected NOTREADY, actual ERROR
+base/class/String/comparisonOperators	TEST_NIL	nil-comparison	line 334 assertTrue: expected 1, actual 0 (Unexpected NOSTRING condition raised at 277)
+base/class/Validate	TEST_VALIDATE_NON_NEGATIVE_WHOLE_NUMBER	datatype-whole-wide-numbers	SYNTAX 88.904 raised unexpectedly: The  argument must be zero or a positive whole number; found "9999999999999999999".
+base/class/Validate	TEST_VALIDATE_POSITIVE_WHOLE_NUMBER	datatype-whole-wide-numbers	SYNTAX 88.905 raised unexpectedly: Argument  must be a positive whole number; found "9999999999999999999".
+base/class/Validate	TEST_VALIDATE_WHOLE_NUMBER	datatype-whole-wide-numbers	SYNTAX 88.903 raised unexpectedly: The  argument must be a whole number; found "1111111111111111111".
+base/class/collections/queue	TEST_16	queue-removeitem	line 222 assertEquals: expected Tom, actual The NIL object
+base/directives/ATTRIBUTE	TESTMISPLACEDCLASSMETHOD	attribute-body-error-number	SYNTAX 99.937 raised unexpectedly: Attribute methods without a SET or GET designation cannot have a method body.
+base/directives/CLASS	TEST_INHERIT	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "custom_mixin.cls" for ::REQUIRES.
+base/directives/CLASS	TEST_METACLASS	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "custom_metaclass.cls" for ::REQUIRES.
+base/directives/CLASS	TEST_MIXINCLASS	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "import_class.cls" for ::REQUIRES.
+base/directives/CLASS	TEST_SUBCLASS	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "import_class.cls" for ::REQUIRES.
+base/directives/CLASS	TEST_SUBCLASS_NO_CLASS_LOCAL	superclass-not-a-class	SYNTAX 98.909 raised unexpectedly: Class "INPUT" not found.
+base/directives/CONSTANT	TEST_EXPRESSION_NOVALUE_ERROR	constant-expression-novalue-option	SYNTAX 41.1 raised unexpectedly: Nonnumeric value ("B") used in arithmetic operation.
+base/directives/OPTIONS	TEST_ALL_SYNTAX_NOTREADY	stream-notready-names	line -1 expectSyntax: expected SYNTAX 98.974, actual Not raised
+base/directives/OPTIONS	TEST_ALL_SYNTAX_OVERRIDE	stream-notready-names	line 379 assertSame: expected 3 30 1 CHAR 0 NOVALUE, actual 3 30 1 CHAR 340 NOVALUE
+base/directives/OPTIONS	TEST_LOSTDIGITS_SYNTAX_OVERRIDE	lostdigits-not-raised	line 265 assertSame: expected LOSTDIGITS, actual 1.23456789E+9
+base/directives/OPTIONS	TEST_NOTREADY_SYNTAX_NOT	stream-notready-names	SYNTAX 91.999 raised unexpectedly: Message "COMMAND" did not return a result.
+base/directives/OPTIONS	TEST_NOTREADY_SYNTAX_OVERRIDE	stream-notready-names	line 354 assertSame: expected NOTREADY, actual 340
+base/directives/OPTIONS	TEST_OPTIONS_TRACE_ALL_WITH_FLOATING_METHOD	prolog-trace-lines	line 639 assertTrue: expected 1, actual 0
+base/directives/OPTIONS	TEST_OPTION_SETTINGS	interactive-trace-setting	line 67 assertEquals: expected ?C, actual C
+base/directives/OPTIONS	TEST_TRACE_LABELS	dynamic-package-name	line 597 assertSameList: expected an Array with 9 items, actual an Array with 7 items (expected:)
+base/directives/REQUIRES	TEST_ACTIVATE	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "activate.cls" for ::REQUIRES.
+base/directives/REQUIRES	TEST_BASIC_GOOD_REQUIRES	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "basic_good.cls" for ::REQUIRES.
+base/directives/REQUIRES	TEST_CASCADED_REQUIRES	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "cascade_b.cls" for ::REQUIRES.
+base/directives/REQUIRES	TEST_CASCADED_REQUIRES2	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "cascade2_b.cls" for ::REQUIRES.
+base/directives/REQUIRES	TEST_CASCADED_REQUIRES3	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "cascade3_b.cls" for ::REQUIRES.
+base/directives/REQUIRES	TEST_MULTIPLE_NAMESPACE	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "multiple_namespace_a.cls" for ::REQUIRES.
+base/directives/REQUIRES	TEST_MULTIPLE_NAMESPACE2	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "multiple_namespace2_a.cls" for ::REQUIRES.
+base/directives/REQUIRES	TEST_NAMESPACE_GOOD_REQUIRES	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "namespace_good.cls" for ::REQUIRES.
+base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_CALL	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "namespace_no_public_call.cls" for ::REQUIRES.
+base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_CLASS	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "namespace_no_public_class.cls" for ::REQUIRES.
+base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_ROUTINE	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "namespace_no_public_routine.cls" for ::REQUIRES.
+base/directives/REQUIRES	TEST_NO_PUBLIC_CLASS	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "no_public_class.cls" for ::REQUIRES.
+base/directives/REQUIRES	TEST_NO_PUBLIC_ROUTINE	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "no_public_routine.cls" for ::REQUIRES.
+base/directives/REQUIRES	TEST_PROLOG	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "prolog.cls" for ::REQUIRES.
+base/directives/REQUIRES	TEST_PROLOG2	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "prolog2.cls" for ::REQUIRES.
+base/directives/REQUIRES	TEST_PROLOG3	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "prolog3.cls" for ::REQUIRES.
+base/directives/REQUIRES	TEST_SEARCH_ORDER_CLS	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "SEARCH_ORDER_CLS.OTHER" for ::REQUIRES.
+base/directives/REQUIRES	TEST_SEARCH_ORDER_NONE	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "SEARCH_ORDER_NONE" for ::REQUIRES.
+base/directives/REQUIRES	TEST_SEARCH_ORDER_REX	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "SEARCH_ORDER_REX" for ::REQUIRES.
+base/directives/REQUIRES	TEST_SEARCH_ORDER_TESTGROUP	requires-from-dynamic-code	SYNTAX 43.901 raised unexpectedly: Could not find file "SEARCH_ORDER_TESTGROUP" for ::REQUIRES.
+base/keyword/LABEL	TEST_LABEL_IF_1_2	label-in-if-select-branch	SYNTAX 98.987 raised unexpectedly: Namespace "LBL" not found in package "<run>/testOORexx.rex".
+base/keyword/LABEL	TEST_LABEL_IF_2_1	label-in-if-select-branch	SYNTAX 98.987 raised unexpectedly: Namespace "LBL" not found in package "<run>/testOORexx.rex".
+base/keyword/LABEL	TEST_LABEL_IF_2_3	label-in-if-select-branch	line -1 expectSyntax: expected SYNTAX 47.3, actual Not raised
+base/keyword/LABEL	TEST_LABEL_IF_3_1	label-in-if-select-branch	SYNTAX 10.1 raised unexpectedly: END has no corresponding DO, LOOP, or SELECT.
+base/keyword/LABEL	TEST_LABEL_IF_3_5	label-in-if-select-branch	SYNTAX 10.1 raised unexpectedly: END has no corresponding DO, LOOP, or SELECT.
+base/keyword/LABEL	TEST_SELECT_1_3	label-in-if-select-branch	SYNTAX 98.987 raised unexpectedly: Namespace "LBL" not found in package "<run>/testOORexx.rex".
+base/keyword/LABEL	TEST_SELECT_1_5	label-in-if-select-branch	line -1 expectSyntax: expected SYNTAX 47.4, actual Not raised
+base/keyword/LABEL	TEST_SELECT_2_3	label-in-if-select-branch	line -1 expectSyntax: expected SYNTAX 47.4, actual Not raised
+base/keyword/LABEL	TEST_SELECT_2_5	label-in-if-select-branch	SYNTAX 98.987 raised unexpectedly: Namespace "LBL" not found in package "<run>/testOORexx.rex".
+base/keyword/LOSTDIGITS	TESTADDITION	lostdigits-not-raised	line 92 fail: expected n/a, actual n/a (LOSTDIGITS not raised for 1111111111+1)
+base/keyword/LOSTDIGITS	TESTCOMPARE	lostdigits-not-raised	line 308 fail: expected n/a, actual n/a (LOSTDIGITS not raised for 1111111111=1)
+base/keyword/LOSTDIGITS	TESTDIVIDE	lostdigits-not-raised	line 200 fail: expected n/a, actual n/a (LOSTDIGITS not raised for 1111111111/1)
+base/keyword/LOSTDIGITS	TESTINTEGERDIVIDE	lostdigits-not-raised	SYNTAX 26.11 raised unexpectedly: Result of % operation did not result in a whole number.
+base/keyword/LOSTDIGITS	TESTMULTIPLY	lostdigits-not-raised	line 164 fail: expected n/a, actual n/a (LOSTDIGITS not raised for 1111111111*1)
+base/keyword/LOSTDIGITS	TESTPOWER	lostdigits-not-raised	line 377 fail: expected n/a, actual n/a (LOSTDIGITS not raised for 1111111111**2)
+base/keyword/LOSTDIGITS	TESTPREFIXMINUS	lostdigits-not-raised	line 336 fail: expected n/a, actual n/a (LOSTDIGITS not raised for -1111111111)
+base/keyword/LOSTDIGITS	TESTPREFIXPLUS	lostdigits-not-raised	line 356 fail: expected n/a, actual n/a (LOSTDIGITS not raised for +1111111111)
+base/keyword/LOSTDIGITS	TESTREMAINDER	lostdigits-not-raised	SYNTAX 26.12 raised unexpectedly: Result of // operation did not result in a whole number.
+base/keyword/LOSTDIGITS	TESTSUBTRACTION	lostdigits-not-raised	line 128 fail: expected n/a, actual n/a (LOSTDIGITS not raised for 1111111111-1)
+base/keyword/RAISE	TEST_RAISE_INSERT_CRLF	reply-thread-error-report-line-ends	line 487 assertSame: expected ["Error 98.900:  ?????????????????????????????" || "0A"x || "second line."], actual Error 98.900:  ?????????????????????????????
+base/keyword/RAISE	TEST_RAISE_PROPAGATE	raise-result-entry	line 440 assertNotNull: expected not .nil, actual .nil
+base/keyword/RAISE	TEST_RAISE_SYNTAX_EXIT_02	raise-result-entry	line 286 assertNotNull: expected not .nil, actual .nil
+base/keyword/RAISE	TEST_RAISE_SYNTAX_RETURN_02	raise-result-entry	line 387 assertNotNull: expected not .nil, actual .nil
+base/keyword/SIGNAL	TEST_BUG_1877	signal-trap-missing-label	SYNTAX 16.1 raised unexpectedly: Label "NOVALUE" not found.
+base/keyword/SIGNAL	TEST_SIGNAL_ANY_CONDITION_ERROR	raise-propagate-from-method	line -1 expectCondition: expected ERROR, actual Not raised
+base/keyword/SIGNAL	TEST_SIGNAL_ANY_CONDITION_FAILURE	raise-propagate-from-method	line -1 expectCondition: expected FAILURE, actual Not raised
+base/keyword/SIGNAL	TEST_SIGNAL_ANY_CONDITION_HALT	hostemu-halt	line -1 expectCondition: expected HALT, actual Not raised
+base/keyword/SIGNAL	TEST_SIGNAL_ANY_CONDITION_LOSTDIGITS	lostdigits-not-raised	line -1 expectCondition: expected LOSTDIGITS, actual Not raised
+base/keyword/SIGNAL	TEST_SIGNAL_ANY_CONDITION_NOSTRING	raise-propagate-from-method	line -1 expectCondition: expected NOSTRING, actual Not raised
+base/keyword/SIGNAL	TEST_SIGNAL_ANY_CONDITION_NOTREADY	raise-propagate-from-method	line -1 expectCondition: expected NOTREADY, actual Not raised
+base/keyword/SIGNAL	TEST_SIGNAL_ANY_CONDITION_NOVALUE	raise-propagate-from-method	line -1 expectCondition: expected NOVALUE, actual Not raised
+base/keyword/TRACE	TEST_TRACE_DROP	variable-reference-list	line 336 assertTrue: expected 1, actual 0 (trace output mismatch at line 2        >V>   LIST => "rc result")
+base/keyword/TRACE	TEST_TRACE_EXIT	dynamic-package-name	line 347 assertTrue: expected 1, actual 0 (trace output mismatch at line 1        >I> Routine "trace_exit" in package "trace_exit".)
+base/keyword/TRACE	TEST_TRACE_EXPOSE	variable-reference-list	line 379 assertTrue: expected 1, actual 0 (actual and expected trace output have different line counts)
+base/keyword/TRACE	TEST_TRACE_IGNORED	interactive-trace-setting	line 1055 assertSame: expected ?C, actual N
+base/keyword/TRACE	TEST_TRACE_LABEL_WITH_FORWARD	trace-reply-continuation	line 1188 assertTrue: expected 1, actual 0 (test "test_forwarded3.rex": actual (10 lines) and expected (12 lines) trace output have different line counts)
+base/keyword/TRACE	TEST_TRACE_OTHER_ENTRYPOINT	dynamic-package-name	line 937 assertTrue: expected 1, actual 0 (trace output mismatch at line 1        >I> Routine "trace_other_entrypoint" in package "trace_other_entrypoint".)
+base/keyword/TRACE	TEST_TRACE_PROCEDURE	trace-label-before-procedure	SYNTAX 17.1 raised unexpectedly: PROCEDURE is valid only when it is the first instruction executed after an internal CALL or function invocation.
+base/keyword/TRACE_TraceObject	TEST_CALLER_STACK_FRAME	traceobject-probe-option	SYNTAX 98.986 raised unexpectedly: Reference to unassigned variable "OHACALLERSTACKFRAME".
+base/keyword/TRACE_TraceObject	TEST_CALLER_STACK_FRAME_REPLY_START	traceobject-probe-option	line 706 assertEquals: expected 0, actual 2
+base/keyword/TRACE_TraceObject	TEST_OBJECT_AND_SCOPE	traceobject-probe-option	line 506 assertEquals: expected 0, actual 19
+base/keyword/TRACE_TraceObject	TEST_TRACEOBJECT_COLLECTOR	traceobject-probe-option	SYNTAX 97.1 raised unexpectedly: Object "The NIL object" does not understand message "STARTSWITH".
+base/keyword/TRACE_TraceObject	TEST_VARIABLE	traceobject-probe-option	line 162 assertSame: expected 6, actual 0 (number of variable related trace objects)
+base/keyword/VarRef	TESTDOUBLEARGSTEM	use-arg-reference-conflict	line -1 expectSyntax: expected SYNTAX 98.995, actual Not raised
+base/keyword/VarRef	TESTREFAUTOEXPOSED	use-arg-reference-conflict	line -1 expectSyntax: expected SYNTAX 98.995, actual Not raised
+base/keyword/VarRef	TESTREFAUTOEXPOSEDSTEM	use-arg-reference-conflict	line -1 expectSyntax: expected SYNTAX 98.995, actual Not raised
+base/keyword/VarRef	TESTREFEXPOSED	use-arg-reference-conflict	line -1 expectSyntax: expected SYNTAX 98.995, actual Not raised
+base/keyword/VarRef	TESTREFEXPOSEDSTEM	use-arg-reference-conflict	line -1 expectSyntax: expected SYNTAX 98.995, actual Not raised
+base/runtime.objects/environmentEntries	TEST_ZZZ_TRACEOUTPUT_INVALID	traceoutput-invalid-destination	line -1 expectSyntax: expected SYNTAX 97.1, actual Not raised
+base/security.manager/SecurityManager	TEST_ENVIRONMENT_HANDLE	security-manager-environment-result	line 256 assertSame: expected The NIL object, actual a RexxInfo
+base/security.manager/SecurityManager	TEST_METHOD_HANDLE_NO_RESULT	security-manager-method-event	line 300 assertSame: expected METHOD, actual [] (Security manager METHOD event expected)
+base/security.manager/SecurityManager	TEST_METHOD_HANDLE_RESULT	security-manager-method-event	line 287 assertSame: expected ENVIRONMENT LOCAL METHOD, actual ENVIRONMENT LOCAL (Security manager METHOD event expected)
+base/security.manager/SecurityManager	TEST_METHOD_PASS	security-manager-method-event	line 271 assertSame: expected METHOD, actual [] (Security manager METHOD event expected)
+base/security.manager/SecurityManager	TEST_STREAM_PASS_BIF_STREAM_OPEN	stream-notready-names	SYNTAX 91.999 raised unexpectedly: Message "COMMAND" did not return a result.
+samples/scclient	TEST_04_SCCLIENT.REX	redirected-command-holds-baton	line 220 assertEquals: expected type "X" to exit, actual Connect failed: ECONNREFUSED
+samples/sfclient	TEST_04_SFCLIENT.REX	redirected-command-holds-baton	line 220 assertEquals: expected type "X" to exit, actual SockConnect failed: ECONNREFUSED

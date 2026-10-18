@@ -1,0 +1,107 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          33
+Assertions:         34
+Failures:           7
+Errors:             1
+
+[failure] 20261018 11:25:50.133840
+  Test:   TEST_SIGNAL_ANY_CONDITION_ERROR
+  Class:  SIGNAL.TESTGROUP
+  File:   .../ooRexx/base/keyword/SIGNAL.testGroup
+  Line:   -1
+  Failed: expectCondition
+    Expected: ERROR
+    Actual:   Not raised
+
+[failure] 20261018 11:25:50.134127
+  Test:   TEST_SIGNAL_ANY_CONDITION_FAILURE
+  Class:  SIGNAL.TESTGROUP
+  File:   .../ooRexx/base/keyword/SIGNAL.testGroup
+  Line:   -1
+  Failed: expectCondition
+    Expected: FAILURE
+    Actual:   Not raised
+
+[failure] 20261018 11:25:50.134371
+  Test:   TEST_SIGNAL_ANY_CONDITION_HALT
+  Class:  SIGNAL.TESTGROUP
+  File:   .../ooRexx/base/keyword/SIGNAL.testGroup
+  Line:   -1
+  Failed: expectCondition
+    Expected: HALT
+    Actual:   Not raised
+
+[failure] 20261018 11:25:50.134479
+  Test:   TEST_SIGNAL_ANY_CONDITION_LOSTDIGITS
+  Class:  SIGNAL.TESTGROUP
+  File:   .../ooRexx/base/keyword/SIGNAL.testGroup
+  Line:   -1
+  Failed: expectCondition
+    Expected: LOSTDIGITS
+    Actual:   Not raised
+
+[failure] 20261018 11:25:50.134664
+  Test:   TEST_SIGNAL_ANY_CONDITION_NOSTRING
+  Class:  SIGNAL.TESTGROUP
+  File:   .../ooRexx/base/keyword/SIGNAL.testGroup
+  Line:   -1
+  Failed: expectCondition
+    Expected: NOSTRING
+    Actual:   Not raised
+
+[failure] 20261018 11:25:50.134796
+  Test:   TEST_SIGNAL_ANY_CONDITION_NOTREADY
+  Class:  SIGNAL.TESTGROUP
+  File:   .../ooRexx/base/keyword/SIGNAL.testGroup
+  Line:   -1
+  Failed: expectCondition
+    Expected: NOTREADY
+    Actual:   Not raised
+
+[failure] 20261018 11:25:50.134906
+  Test:   TEST_SIGNAL_ANY_CONDITION_NOVALUE
+  Class:  SIGNAL.TESTGROUP
+  File:   .../ooRexx/base/keyword/SIGNAL.testGroup
+  Line:   -1
+  Failed: expectCondition
+    Expected: NOVALUE
+    Actual:   Not raised
+
+[error] 20261018 11:25:50.132193
+  Test:   TEST_BUG_1877
+  Class:  SIGNAL.TESTGROUP
+  File:   .../ooRexx/base/keyword/SIGNAL.testGroup
+  Event:  SYNTAX 16.1 raised unexpectedly.
+    Label "NOVALUE" not found.
+    Line:    263
+   263 *-* a = novalue
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          33
+Assertions:         34
+Failures:           7
+Errors:             1
+
+File search:        00:00:00.005669
+Suite construction: 00:00:00.001360
+Test execution:     00:00:00.006256
+Total time:         00:00:00.014665
+

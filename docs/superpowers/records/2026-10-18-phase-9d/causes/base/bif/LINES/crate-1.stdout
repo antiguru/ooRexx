@@ -1,0 +1,47 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          16
+Assertions:         99
+Failures:           3
+Errors:             0
+
+[failure] 20261018 11:25:42.261521
+  Test:   TEST_LINES_NOTREADY_DIRECTORY
+  Class:  LINES.testGroup
+  File:   .../ooRexx/base/bif/LINES.testGroup
+  Line:   296
+  Failed: assertTrue
+    Expected: 1
+    Actual:   0
+    Message:  LINES should raise NOTREADY
+
+[failure] 20261018 11:25:42.261915
+  Test:   TEST_LINES_NOTREADY_INVALID
+  Class:  LINES.testGroup
+  File:   .../ooRexx/base/bif/LINES.testGroup
+  Line:   291
+  Failed: assertSame
+    Expected: *
+    Actual:   The NIL object
+
+[failure] 20261018 11:25:42.262089
+  Test:   TEST_LINES_NOTREADY_NONEXISTING
+  Class:  LINES.testGroup
+  File:   .../ooRexx/base/bif/LINES.testGroup
+  Line:   305
+  Failed: assertSame
+    Expected: non-existing-file
+    Actual:   The NIL object
+
+File search:        00:00:00.001849
+Suite construction: 00:00:00.001122
+Test execution:     00:00:00.002962
+Total time:         00:00:00.007191
+

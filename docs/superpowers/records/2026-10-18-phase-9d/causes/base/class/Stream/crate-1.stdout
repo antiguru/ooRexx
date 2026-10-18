@@ -1,0 +1,149 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          107
+Assertions:         25287
+Failures:           8
+Errors:             3
+
+[failure] 20261018 11:25:48.000083
+  Test:   TEST_SEEK_PARSER
+  Class:  STREAM2.TESTGROUP
+  File:   .../ooRexx/base/class/Stream.testGroup
+  Line:   2277
+  Failed: assertFalse
+    Expected: 0
+    Actual:   1
+
+[failure] 20261018 11:25:48.003653
+  Test:   TEST_ARRAYIN_3_BIN
+  Class:  Stream.testGroup
+  File:   .../ooRexx/base/class/Stream.testGroup
+  Line:   726
+  Failed: assertSame
+    Expected: ["line 04" || "0A"x]
+    Actual:   line 04
+
+[failure] 20261018 11:25:48.004798
+  Test:   TEST_ARRAYIN_BIN
+  Class:  Stream.testGroup
+  File:   .../ooRexx/base/class/Stream.testGroup
+  Line:   651
+  Failed: assertSame
+    Expected: 10
+    Actual:   12
+
+[failure] 20261018 11:25:48.147972
+  Test:   TEST_NOTREADY_EOF_2792702
+  Class:  Stream.testGroup
+  File:   .../ooRexx/base/class/Stream.testGroup
+  Line:   1673
+  Failed: assertSame
+    Expected: NOTREADY:EOF
+    Actual:   ERROR:0
+
+[failure] 20261018 11:25:48.158818
+  Test:   TEST_OPEN_WRITE_ONLY_3274050_C
+  Class:  Stream.testGroup
+  File:   .../ooRexx/base/class/Stream.testGroup
+  Line:   1770
+  Failed: assertSame
+    Expected: READY:
+    Actual:   ERROR:13
+
+[failure] 20261018 11:25:48.160884
+  Test:   TEST_OPEN_WRITE_ONLY_3274050_D
+  Class:  Stream.testGroup
+  File:   .../ooRexx/base/class/Stream.testGroup
+  Line:   1804
+  Failed: assertSame
+    Expected: READY:
+    Actual:   ERROR:13
+
+[failure] 20261018 11:25:48.166197
+  Test:   TEST_SEEK_USEDASCOUNT_2776442
+  Class:  Stream.testGroup
+  File:   .../ooRexx/base/class/Stream.testGroup
+  Line:   1551
+  Failed: assertSame
+    Expected: 9
+    Actual:   10
+
+[failure] 20261018 11:25:48.169217
+  Test:   TEST_STATE_NOTREADY_2
+  Class:  Stream.testGroup
+  File:   .../ooRexx/base/class/Stream.testGroup
+  Line:   1242
+  Failed: assertSame
+    Expected: NOTREADY
+    Actual:   ERROR
+
+[error] 20261018 11:25:48.138122
+  Test:   TEST_LINEIN_ARG_ONE_INVALID
+  Class:  Stream.testGroup
+  File:   .../ooRexx/base/class/Stream.testGroup
+  Event:  SYNTAX 93.907 raised unexpectedly.
+    Method argument 1 must be a positive whole number; found "The NIL object".
+    Line:    1884
+       *-* Compiled method "LINEIN" with scope "Stream".
+  1884 *-* .Stream~new(self~filename)~lineIn(.nil)
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:48.163166
+  Test:   TEST_OPEN_WRITE_ONLY_3274050_E
+  Class:  Stream.testGroup
+  File:   .../ooRexx/base/class/Stream.testGroup
+  Event:  SYNTAX 91.999 raised unexpectedly.
+    Message "COMMAND" did not return a result.
+    Line:    1837
+  1837 *-* ret = fsObj~command("open write append")
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:48.165496
+  Test:   TEST_OPEN_WRITE_ONLY_3274050_F
+  Class:  Stream.testGroup
+  File:   .../ooRexx/base/class/Stream.testGroup
+  Event:  SYNTAX 91.999 raised unexpectedly.
+    Message "COMMAND" did not return a result.
+    Line:    1871
+  1871 *-* ret = fsObj~command("open write append")
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          107
+Assertions:         25287
+Failures:           8
+Errors:             3
+
+File search:        00:00:00.006346
+Suite construction: 00:00:00.003220
+Test execution:     00:00:00.176701
+Total time:         00:00:00.187617
+

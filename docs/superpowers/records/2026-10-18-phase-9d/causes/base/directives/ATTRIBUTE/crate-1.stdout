@@ -1,0 +1,39 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          84
+Assertions:         303
+Failures:           0
+Errors:             1
+
+[error] 20261018 11:25:48.669393
+  Test:   TESTMISPLACEDCLASSMETHOD
+  Class:  ATTRIBUTE.testGroup
+  File:   .../ooRexx/base/directives/ATTRIBUTE.testGroup
+  Event:  SYNTAX 99.937 raised unexpectedly.
+    Attribute methods without a SET or GET designation cannot have a method body.
+    Program: .../run/framework/OOREXXUNIT.CLS
+    Line:    524
+     2 *-* say hi
+       *-* Compiled method "NEW" with scope "Package".
+  1208 *-* r = .package~new("test", code, parentPackage)
+   524 *-* self~assertSyntaxError(99.905, ("::attribute 'foo' class", "say hi"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+File search:        00:00:00.004476
+Suite construction: 00:00:00.002213
+Test execution:     00:00:00.011284
+Total time:         00:00:00.019450
+

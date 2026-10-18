@@ -1,0 +1,204 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          87
+Assertions:         243
+Failures:           12
+Errors:             3
+
+[failure] 20261018 11:25:51.294208
+  Test:   TEST_ENVIRONMENT_HANDLE
+  Class:  SECURITYMANAGERMETHOD.TESTGROUP
+  File:   .../ooRexx/base/security.manager/SecurityManager.testGroup
+  Line:   256
+  Failed: assertSame
+    Expected: The NIL object
+    Actual:   a RexxInfo
+
+[failure] 20261018 11:25:51.295054
+  Test:   TEST_METHOD_HANDLE_NO_RESULT
+  Class:  SECURITYMANAGERMETHOD.TESTGROUP
+  File:   .../ooRexx/base/security.manager/SecurityManager.testGroup
+  Line:   300
+  Failed: assertSame
+    Expected: METHOD
+    Actual:   []
+    Message:  Security manager METHOD event expected
+
+[failure] 20261018 11:25:51.295312
+  Test:   TEST_METHOD_HANDLE_RESULT
+  Class:  SECURITYMANAGERMETHOD.TESTGROUP
+  File:   .../ooRexx/base/security.manager/SecurityManager.testGroup
+  Line:   287
+  Failed: assertSame
+    Expected: ENVIRONMENT LOCAL METHOD
+    Actual:   ENVIRONMENT LOCAL
+    Message:  Security manager METHOD event expected
+
+[failure] 20261018 11:25:51.295685
+  Test:   TEST_METHOD_PASS
+  Class:  SECURITYMANAGERMETHOD.TESTGROUP
+  File:   .../ooRexx/base/security.manager/SecurityManager.testGroup
+  Line:   271
+  Failed: assertSame
+    Expected: METHOD
+    Actual:   []
+    Message:  Security manager METHOD event expected
+
+[failure] 20261018 11:25:51.301750
+  Test:   TEST_ENVIRONMENT_HANDLE
+  Class:  SECURITYMANAGERPACKAGE.TESTGROUP
+  File:   .../ooRexx/base/security.manager/SecurityManager.testGroup
+  Line:   256
+  Failed: assertSame
+    Expected: The NIL object
+    Actual:   a RexxInfo
+
+[failure] 20261018 11:25:51.302650
+  Test:   TEST_METHOD_HANDLE_NO_RESULT
+  Class:  SECURITYMANAGERPACKAGE.TESTGROUP
+  File:   .../ooRexx/base/security.manager/SecurityManager.testGroup
+  Line:   300
+  Failed: assertSame
+    Expected: METHOD
+    Actual:   []
+    Message:  Security manager METHOD event expected
+
+[failure] 20261018 11:25:51.302916
+  Test:   TEST_METHOD_HANDLE_RESULT
+  Class:  SECURITYMANAGERPACKAGE.TESTGROUP
+  File:   .../ooRexx/base/security.manager/SecurityManager.testGroup
+  Line:   287
+  Failed: assertSame
+    Expected: ENVIRONMENT LOCAL METHOD
+    Actual:   ENVIRONMENT LOCAL
+    Message:  Security manager METHOD event expected
+
+[failure] 20261018 11:25:51.303165
+  Test:   TEST_METHOD_PASS
+  Class:  SECURITYMANAGERPACKAGE.TESTGROUP
+  File:   .../ooRexx/base/security.manager/SecurityManager.testGroup
+  Line:   271
+  Failed: assertSame
+    Expected: METHOD
+    Actual:   []
+    Message:  Security manager METHOD event expected
+
+[failure] 20261018 11:25:51.308626
+  Test:   TEST_ENVIRONMENT_HANDLE
+  Class:  SECURITYMANAGERROUTINE.TESTGROUP
+  File:   .../ooRexx/base/security.manager/SecurityManager.testGroup
+  Line:   256
+  Failed: assertSame
+    Expected: The NIL object
+    Actual:   a RexxInfo
+
+[failure] 20261018 11:25:51.309277
+  Test:   TEST_METHOD_HANDLE_NO_RESULT
+  Class:  SECURITYMANAGERROUTINE.TESTGROUP
+  File:   .../ooRexx/base/security.manager/SecurityManager.testGroup
+  Line:   300
+  Failed: assertSame
+    Expected: METHOD
+    Actual:   []
+    Message:  Security manager METHOD event expected
+
+[failure] 20261018 11:25:51.309506
+  Test:   TEST_METHOD_HANDLE_RESULT
+  Class:  SECURITYMANAGERROUTINE.TESTGROUP
+  File:   .../ooRexx/base/security.manager/SecurityManager.testGroup
+  Line:   287
+  Failed: assertSame
+    Expected: ENVIRONMENT LOCAL METHOD
+    Actual:   ENVIRONMENT LOCAL
+    Message:  Security manager METHOD event expected
+
+[failure] 20261018 11:25:51.309755
+  Test:   TEST_METHOD_PASS
+  Class:  SECURITYMANAGERROUTINE.TESTGROUP
+  File:   .../ooRexx/base/security.manager/SecurityManager.testGroup
+  Line:   271
+  Failed: assertSame
+    Expected: METHOD
+    Actual:   []
+    Message:  Security manager METHOD event expected
+
+[error] 20261018 11:25:51.298815
+  Test:   TEST_STREAM_PASS_BIF_STREAM_OPEN
+  Class:  SECURITYMANAGERMETHOD.TESTGROUP
+  File:   .../ooRexx/base/security.manager/SecurityManager.testGroup
+  Event:  SYNTAX 91.999 raised unexpectedly.
+    Message "COMMAND" did not return a result.
+    Program: 
+    Line:    375
+     1 *-* call stream '.', 'c', 'open read shared'
+    94 *-* self~runMethod
+   375 *-* self~runWithSecMgr("call stream '.', 'c', 'open read shared'", mgr)
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:51.305307
+  Test:   TEST_STREAM_PASS_BIF_STREAM_OPEN
+  Class:  SECURITYMANAGERPACKAGE.TESTGROUP
+  File:   .../ooRexx/base/security.manager/SecurityManager.testGroup
+  Event:  SYNTAX 91.999 raised unexpectedly.
+    Message "COMMAND" did not return a result.
+    Program: 
+    Line:    375
+     1 *-* call stream '.', 'c', 'open read shared' ;
+       *-* Compiled method "CALL" with scope "Routine".
+    79 *-* p~prolog~call
+   375 *-* self~runWithSecMgr("call stream '.', 'c', 'open read shared'", mgr)
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:51.312007
+  Test:   TEST_STREAM_PASS_BIF_STREAM_OPEN
+  Class:  SECURITYMANAGERROUTINE.TESTGROUP
+  File:   .../ooRexx/base/security.manager/SecurityManager.testGroup
+  Event:  SYNTAX 91.999 raised unexpectedly.
+    Message "COMMAND" did not return a result.
+    Program: 
+    Line:    375
+     1 *-* call stream '.', 'c', 'open read shared'
+       *-* Compiled method "CALL" with scope "Routine".
+    64 *-* r~call
+   375 *-* self~runWithSecMgr("call stream '.', 'c', 'open read shared'", mgr)
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          87
+Assertions:         243
+Failures:           12
+Errors:             3
+
+File search:        00:00:00.002634
+Suite construction: 00:00:00.003236
+Test execution:     00:00:00.022620
+Total time:         00:00:00.029755
+

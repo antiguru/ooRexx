@@ -1,0 +1,413 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          33
+Assertions:         13
+Failures:           0
+Errors:             20
+
+[error] 20261018 11:25:49.398131
+  Test:   TEST_ACTIVATE
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "activate.cls" for ::REQUIRES.
+    Line:    329
+     2 *-* ::requires 'activate.cls'
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   329 *-* test2 = self~runDynamicSource(("return .test2", "::requires 'activate.cls'"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.398837
+  Test:   TEST_BASIC_GOOD_REQUIRES
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "basic_good.cls" for ::REQUIRES.
+    Line:    121
+     2 *-* ::requires 'basic_good.cls'
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   121 *-* ret = self~runDynamicSource(("return .test~testValue||testRoutine()", "::requires 'basic_good.cls'"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.399131
+  Test:   TEST_CASCADED_REQUIRES
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "cascade_b.cls" for ::REQUIRES.
+    Line:    226
+     7 *-* ::requires 'cascade_b.cls'
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   226 *-* ret = self~runDynamicSource(("res = .test~testValue||.testa~testValue||.testb~testValue", -      "return res testRoutine()||testRoutinea()||testRoutineb()", -      "::class test public", "::constant testValue 789", "::routine testRoutine public", "return 'ghi'", -      "::requires 'cascade_b.cls'"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.399407
+  Test:   TEST_CASCADED_REQUIRES2
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "cascade2_b.cls" for ::REQUIRES.
+    Line:    245
+     7 *-* ::requires 'cascade2_b.cls' namespace test_a
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   245 *-* ret = self~runDynamicSource(("res = .test~testValue||test_a:test~testValue", -      "return res testRoutine()||test_a:testRoutine()", -      "::class test public", "::constant testValue 789", "::routine testRoutine public", "return 'ghi'", -      "::requires 'cascade2_b.cls' namespace test_a"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.399669
+  Test:   TEST_CASCADED_REQUIRES3
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "cascade3_b.cls" for ::REQUIRES.
+    Line:    265
+     7 *-* ::requires 'cascade3_b.cls' namespace test_a
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   265 *-* ret = self~runDynamicSource(("res = .test~testValue||test_a:test~testValue", -      "return res testRoutine()||test_a:testRoutine()", -      "::class test public", "::constant testValue 789", "::routine testRoutine public", "return 'ghi'", -      "::requires 'cascade3_b.cls' namespace test_a"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.400458
+  Test:   TEST_MULTIPLE_NAMESPACE
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "multiple_namespace_a.cls" for ::REQUIRES.
+    Line:    190
+     3 *-* ::requires 'multiple_namespace_a.cls' namespace test_a
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   190 *-* ret = self~runDynamicSource(("res = .test~testValue||test_a:test~testValue||test_b:test~testValue", -      "return res testRoutine()||test_a:testRoutine()||test_b:testRoutine()", -      "::requires 'multiple_namespace_a.cls' namespace test_a", "::requires 'multiple_namespace_b.cls' namespace test_b"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.400710
+  Test:   TEST_MULTIPLE_NAMESPACE2
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "multiple_namespace2_a.cls" for ::REQUIRES.
+    Line:    207
+     7 *-* ::requires 'multiple_namespace2_a.cls' namespace test_a
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   207 *-* ret = self~runDynamicSource(("res = .test~testValue||test_a:test~testValue||test_b:test~testValue", -      "return res testRoutine()||test_a:testRoutine()||test_b:testRoutine()", -      "::class test public", "::constant testValue 789", "::routine testRoutine public", "return 'ghi'", -      "::requires 'multiple_namespace2_a.cls' namespace test_a", "::requires 'multiple_namespace2_b.cls' namespace test_b"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.400917
+  Test:   TEST_NAMESPACE_GOOD_REQUIRES
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "namespace_good.cls" for ::REQUIRES.
+    Line:    149
+     3 *-* ::requires 'namespace_good.cls' namespace mytest
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   149 *-* ret = self~runDynamicSource(("call mytest:testRoutine", "return result||mytest:test~testValue||mytest:testRoutine()", "::requires 'namespace_good.cls' namespace mytest"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.401125
+  Test:   TEST_NAMESPACE_NO_PUBLIC_CALL
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "namespace_no_public_call.cls" for ::REQUIRES.
+    Program: test
+    Line:    177
+     3 *-* ::requires 'namespace_no_public_call.cls' namespace mytest
+       *-* Compiled method "NEW" with scope "Routine".
+  1219 *-* r = .routine~new("test", code, parentPackage)
+   177 *-* self~assertRuntimeError(43.902, ("call mytest:testRoutine", "return result", "::requires 'namespace_no_public_call.cls' namespace mytest"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.401309
+  Test:   TEST_NAMESPACE_NO_PUBLIC_CLASS
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "namespace_no_public_class.cls" for ::REQUIRES.
+    Program: test
+    Line:    159
+     2 *-* ::requires 'namespace_no_public_class.cls' namespace mytest
+       *-* Compiled method "NEW" with scope "Routine".
+  1219 *-* r = .routine~new("test", code, parentPackage)
+   159 *-* self~assertRuntimeError(98.988, ("return mytest:test~testValue", "::requires 'namespace_no_public_class.cls' namespace mytest"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.401498
+  Test:   TEST_NAMESPACE_NO_PUBLIC_ROUTINE
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "namespace_no_public_routine.cls" for ::REQUIRES.
+    Program: test
+    Line:    168
+     2 *-* ::requires 'namespace_no_public_routine.cls' namespace mytest
+       *-* Compiled method "NEW" with scope "Routine".
+  1219 *-* r = .routine~new("test", code, parentPackage)
+   168 *-* self~assertRuntimeError(43.902, ("return mytest:testRoutine()", "::requires 'namespace_no_public_routine.cls' namespace mytest"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.401696
+  Test:   TEST_NO_PUBLIC_CLASS
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "no_public_class.cls" for ::REQUIRES.
+    Program: test
+    Line:    131
+     2 *-* ::requires 'no_public_class.cls'
+       *-* Compiled method "NEW" with scope "Routine".
+  1219 *-* r = .routine~new("test", code, parentPackage)
+   131 *-* self~assertRuntimeError(97.1, ("return .test~testValue", "::requires 'no_public_class.cls'"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.401892
+  Test:   TEST_NO_PUBLIC_ROUTINE
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "no_public_routine.cls" for ::REQUIRES.
+    Program: test
+    Line:    140
+     2 *-* ::requires 'no_public_routine.cls'
+       *-* Compiled method "NEW" with scope "Routine".
+  1219 *-* r = .routine~new("test", code, parentPackage)
+   140 *-* self~assertRuntimeError(43.1, ("return testRoutine()", "::requires 'no_public_routine.cls'"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.402305
+  Test:   TEST_PROLOG
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "prolog.cls" for ::REQUIRES.
+    Line:    282
+     2 *-* ::requires 'prolog.cls'
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   282 *-* ret = self~runDynamicSource(("return .test~testValue||testRoutine()", -      "::requires 'prolog.cls'"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.402510
+  Test:   TEST_PROLOG2
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "prolog2.cls" for ::REQUIRES.
+    Line:    298
+     2 *-* ::requires 'prolog2.cls'
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   298 *-* ret = self~runDynamicSource(("return .test~testValue||testRoutine()", -      "::requires 'prolog2.cls'"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.402706
+  Test:   TEST_PROLOG3
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "prolog3.cls" for ::REQUIRES.
+    Line:    314
+     2 *-* ::requires 'prolog3.cls'
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   314 *-* ret = self~runDynamicSource(("return .test~testValue||testRoutine()", -      "::requires 'prolog3.cls'"))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.403796
+  Test:   TEST_SEARCH_ORDER_CLS
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "SEARCH_ORDER_CLS.OTHER" for ::REQUIRES.
+    Line:    345
+     2 *-* ::requires search_order_cls.other
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   345 *-* self~assertSame("other", self~runDynamicSource(("return .c~extension", "::requires search_order_cls.other")))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.404173
+  Test:   TEST_SEARCH_ORDER_NONE
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "SEARCH_ORDER_NONE" for ::REQUIRES.
+    Line:    376
+     2 *-* ::requires search_order_none
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   376 *-* self~assertSame("(none)", self~runDynamicSource(("return .c~extension", "::requires search_order_none")))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.404582
+  Test:   TEST_SEARCH_ORDER_REX
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "SEARCH_ORDER_REX" for ::REQUIRES.
+    Line:    370
+     2 *-* ::requires search_order_rex
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   370 *-* self~assertSame("rex", self~runDynamicSource(("return .c~extension", "::requires search_order_rex")))
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:49.405051
+  Test:   TEST_SEARCH_ORDER_TESTGROUP
+  Class:  REQUIRES.testGroup
+  File:   .../ooRexx/base/directives/REQUIRES.testGroup
+  Event:  SYNTAX 43.901 raised unexpectedly.
+    Could not find file "SEARCH_ORDER_TESTGROUP" for ::REQUIRES.
+    Line:    359
+     2 *-* ::requires search_order_testgroup
+       *-* Compiled method "NEW" with scope "Routine".
+  1229 *-* r = .routine~new(parentPackage~name, code, parentPackage)
+   359 *-* self~assertSame("testGroup", self~runDynamicSource(("return .c~extension", "::requires search_order_testgroup")), "this ::REQUIRES search order tests fails when run from within the same directory, but works as expected otherwise")
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          33
+Assertions:         13
+Failures:           0
+Errors:             20
+
+File search:        00:00:00.002098
+Suite construction: 00:00:00.001398
+Test execution:     00:00:00.007749
+Total time:         00:00:00.012471
+

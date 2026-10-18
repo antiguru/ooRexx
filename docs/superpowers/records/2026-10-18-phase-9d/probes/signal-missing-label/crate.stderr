@@ -1,0 +1,4 @@
+     6 *-*   a = novalue
+     1 *-* call m
+Error 16 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/run-signal-missing-label/p.rex line 6:  Label not found.
+Error 16.1:  Label "NOVALUE" not found.

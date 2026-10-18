@@ -1,0 +1,29 @@
+Searching for test containers
+Executing automated test suite
+   104 *-* trace n
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          14
+Assertions:         178
+Failures:           1
+Errors:             0
+
+[failure] 20261018 11:25:51.126326
+  Test:   TEST_ZZZ_TRACEOUTPUT_INVALID
+  Class:  ENVIRONMENTENTRIES.TESTGROUP
+  File:   .../ooRexx/base/runtime.objects/environmentEntries.testGroup
+  Line:   -1
+  Failed: expectSyntax
+    Expected: SYNTAX 97.1
+    Actual:   Not raised
+
+File search:        00:00:00.001510
+Suite construction: 00:00:00.000966
+Test execution:     00:00:00.006185
+Total time:         00:00:00.009881
+

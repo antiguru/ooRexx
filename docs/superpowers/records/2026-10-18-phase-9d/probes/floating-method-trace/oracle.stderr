@@ -1,0 +1,10 @@
+       >I> Routine "" in package "".
+       <I< Routine "" in package "".
+       >I> Routine "" in package "".
+     1 *-* .c~r(.methods["FLOAT"])    
+       >I> Method "R" with scope "C" in package "".
+     5 *-* forward message "run"  
+       >I> Method "*UNNAMED*" with scope ".NIL" in package "".
+       <I< Method "*UNNAMED*" with scope ".NIL" in package "".
+       <I< Method "R" with scope "C" in package "".
+       <I< Routine "" in package "".

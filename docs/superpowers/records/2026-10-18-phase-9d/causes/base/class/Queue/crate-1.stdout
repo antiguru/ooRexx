@@ -1,0 +1,42 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          43
+Assertions:         1753
+Failures:           2
+Errors:             0
+
+[failure] 20261018 11:25:46.665887
+  Test:   TEST_DIFFERENCE
+  Class:  QUEUE.TESTGROUP
+  File:   .../ooRexx/base/class/Queue.testGroup
+  Line:   1029
+  Failed: assertEquals
+    Expected: a Queue
+    Actual:   a Queue
+
+[failure] 20261018 11:25:46.676006
+  Test:   TEST_XOR
+  Class:  QUEUE.TESTGROUP
+  File:   .../ooRexx/base/class/Queue.testGroup
+  Line:   988
+  Failed: assertEquals
+    Expected: a Queue
+    Actual:   a Queue
+    Message:  
+ 1v 2v 2v 2v 11 11 XOR 
+ 2v 2v 11 11 22 22 3v = 
+ 1v 2v 22 22 3v 
+ 1v 2v 22 22 3v
+
+File search:        00:00:00.004157
+Suite construction: 00:00:00.003023
+Test execution:     00:00:00.011025
+Total time:         00:00:00.019522
+

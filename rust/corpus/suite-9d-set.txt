@@ -1,22 +1,12 @@
-# Phase 9d's set (spec 2026-10-10 section 3): the tests that complete with a
-# failure here and pass on the oracle, other than the 9b and 9c witnesses
-# spec section 3 names (utilities/rexx/rexx_command, utilities/rexxc/rexxc,
-# base/rexxutil/SysFileTree, API/oo/METHOD's TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA,
-# and base/class/Method's and Routine's TEST_NEW_ARRAY_FROM_FILE and
-# TEST_NEW_FILE_COMPILED), and other than the tests with a row. Derived from
-# the per-test record of the suite gate's run at 5fd68d060 (the 9a close),
-# docs/superpowers/records/2026-10-11-phase-9a/suite-close/tests.tsv, by:
+# Phase 9d's set (spec 2026-10-17 section 2.1, parent spec 2026-10-10 section 3):
+# the tests with no row that complete with a failure here and pass on the
+# oracle. Derived from the per-test record of the suite gate's run at
+# 25197002a (the 9c close),
+# docs/superpowers/records/2026-10-15-phase-9c/close/suite/tests.tsv, by:
 #
-#   awk -F'\t' '$3=="-" && $4=="passed" && $5=="failed" && $1!="utilities/rexx/rexx_command" && $1!="utilities/rexxc/rexxc" && $1!="base/rexxutil/SysFileTree" && !($1=="API/oo/METHOD" && $2=="TEST_REXXC_WITH_NEWROUTINE_LOADPACKAGEFROMDATA") && !(($1=="base/class/Method" || $1=="base/class/Routine") && ($2=="TEST_NEW_ARRAY_FROM_FILE" || $2=="TEST_NEW_FILE_COMPILED")) {print $1"\t"$2}' tests.tsv
+#   awk -F'\t' '$3=="-" && $4=="passed" && $5=="failed" {print $1"\t"$2}' tests.tsv
 #
 # ootest revision 13178
-#
-# Removed after the derivation, each once it passed under the harness (Phase
-# 9b Task 4): base/rexxutil/SysFileXXX TEST_FILEEXISTS_NIL_INVALID and
-# samples/samples TEST_MAKESTRING.
-# Phase 9c Task 4: base/source.file/incorrectCharacters
-# TEST_INCORRECT_CHARACTERS.
-base/bif/ARG	TEST_EXTERNAL_CALLS
 base/bif/CHAROUT	TEST_POSITIONING_1_BIN
 base/bif/CHARS	TEST_CHARS_NOTREADY_DIRECTORY
 base/bif/CHARS	TEST_CHARS_NOTREADY_INVALID
@@ -111,8 +101,6 @@ base/directives/CLASS	TEST_MIXINCLASS
 base/directives/CLASS	TEST_SUBCLASS
 base/directives/CLASS	TEST_SUBCLASS_NO_CLASS_LOCAL
 base/directives/CONSTANT	TEST_EXPRESSION_NOVALUE_ERROR
-base/directives/OPTIONS	TEST_ALL_SYNTAX_INVALID
-base/directives/OPTIONS	TEST_ALL_SYNTAX_MISSING
 base/directives/OPTIONS	TEST_ALL_SYNTAX_NOTREADY
 base/directives/OPTIONS	TEST_ALL_SYNTAX_OVERRIDE
 base/directives/OPTIONS	TEST_LOSTDIGITS_SYNTAX_OVERRIDE
@@ -141,18 +129,6 @@ base/directives/REQUIRES	TEST_SEARCH_ORDER_CLS
 base/directives/REQUIRES	TEST_SEARCH_ORDER_NONE
 base/directives/REQUIRES	TEST_SEARCH_ORDER_REX
 base/directives/REQUIRES	TEST_SEARCH_ORDER_TESTGROUP
-base/expressions/Literals	TEST_BINARY_INVALID_WHITESPACE_1
-base/expressions/Literals	TEST_BINARY_INVALID_WHITESPACE_2
-base/expressions/Literals	TEST_BINARY_INVALID_WHITESPACE_3
-base/expressions/Literals	TEST_BINARY_INVALID_WHITESPACE_4
-base/expressions/Literals	TEST_BINARY_INVALID_WHITESPACE_5
-base/expressions/Literals	TEST_BINARY_INVALID_WHITESPACE_6
-base/expressions/Literals	TEST_HEXADECIMAL_INVALID_WHITESPACE_1
-base/expressions/Literals	TEST_HEXADECIMAL_INVALID_WHITESPACE_2
-base/expressions/Literals	TEST_HEXADECIMAL_INVALID_WHITESPACE_3
-base/expressions/Literals	TEST_HEXADECIMAL_INVALID_WHITESPACE_4
-base/expressions/Literals	TEST_HEXADECIMAL_INVALID_WHITESPACE_5
-base/expressions/Literals	TEST_HEXADECIMAL_INVALID_WHITESPACE_6
 base/keyword/LABEL	TEST_LABEL_IF_1_2
 base/keyword/LABEL	TEST_LABEL_IF_2_1
 base/keyword/LABEL	TEST_LABEL_IF_2_3

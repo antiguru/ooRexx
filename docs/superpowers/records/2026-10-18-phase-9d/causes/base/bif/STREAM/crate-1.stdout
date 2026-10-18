@@ -1,0 +1,96 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          40
+Assertions:         197
+Failures:           4
+Errors:             2
+
+[failure] 20261018 11:25:42.465308
+  Test:   TEST_QUERYFILE_EXISTS_OPENED_01
+  Class:  STREAM.testGroup
+  File:   .../ooRexx/base/bif/STREAM.testGroup
+  Line:   682
+  Failed: assertTrue
+    Expected: 1
+    Actual:   0
+
+[failure] 20261018 11:25:42.465847
+  Test:   TEST_QUERYFILE_EXISTS_OPENED_03
+  Class:  STREAM.testGroup
+  File:   .../ooRexx/base/bif/STREAM.testGroup
+  Line:   755
+  Failed: assertSame
+    Expected: 12
+    Actual:   1
+
+[failure] 20261018 11:25:42.466722
+  Test:   TEST_SEEK_CLOSEDFILE_2785896
+  Class:  STREAM.testGroup
+  File:   .../ooRexx/base/bif/STREAM.testGroup
+  Line:   525
+  Failed: assertSame
+    Expected: 1
+    Actual:   0
+
+[failure] 20261018 11:25:42.466932
+  Test:   TEST_SEEK_CLOSEDFILE_2787994
+  Class:  STREAM.testGroup
+  File:   .../ooRexx/base/bif/STREAM.testGroup
+  Line:   582
+  Failed: assertSame
+    Expected: 1
+    Actual:   0
+
+[error] 20261018 11:25:42.461051
+  Test:   TEST_OPEN_WRITE_ONLY_3274050_C
+  Class:  STREAM.testGroup
+  File:   .../ooRexx/base/bif/STREAM.testGroup
+  Event:  SYNTAX 91.999 raised unexpectedly.
+    Message "COMMAND" did not return a result.
+    Line:    461
+   461 *-* ret = stream(fileName, "c", "open write append")
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:42.464041
+  Test:   TEST_OPEN_WRITE_ONLY_3274050_D
+  Class:  STREAM.testGroup
+  File:   .../ooRexx/base/bif/STREAM.testGroup
+  Event:  SYNTAX 91.999 raised unexpectedly.
+    Message "COMMAND" did not return a result.
+    Line:    494
+   494 *-* ret = stream(fileName, "c", "open write append")
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          40
+Assertions:         197
+Failures:           4
+Errors:             2
+
+File search:        00:00:00.003373
+Suite construction: 00:00:00.001653
+Test execution:     00:00:00.020706
+Total time:         00:00:00.026947
+

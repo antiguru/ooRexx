@@ -1,0 +1,7 @@
+     2 *-* ::requires 'y_st.cls'
+       *-* Compiled method "NEW" with scope "Routine".
+     3 *-* r = .routine~new(.context~package~name, ("return hello()", "::requires 'y_st.cls'"), .context~package)
+       *-* Compiled method "CALL" with scope "Routine".
+     2 *-* say p~findRoutine('go')~call
+Error 43 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/run-req/b/m.rex line 2:  Routine not found.
+Error 43.901:  Could not find file "y_st.cls" for ::REQUIRES.

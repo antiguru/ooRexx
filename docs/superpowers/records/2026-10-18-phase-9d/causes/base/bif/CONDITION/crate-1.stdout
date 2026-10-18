@@ -1,0 +1,108 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          14
+Assertions:         108
+Failures:           5
+Errors:             2
+
+[failure] 20261018 11:25:41.906141
+  Test:   TEST_CONDITION_CALL
+  Class:  CONDITION.TESTGROUP
+  File:   .../ooRexx/base/bif/CONDITION.testGroup
+  Line:   232
+  Failed: assertSame
+    Expected: 1
+    Actual:   0
+    Message:  we expect one argument: the condition object
+
+[failure] 20261018 11:25:41.910774
+  Test:   TEST_CONDITION_SIGNAL
+  Class:  CONDITION.TESTGROUP
+  File:   .../ooRexx/base/bif/CONDITION.testGroup
+  Line:   170
+  Failed: assertSame
+    Expected: LOSTDIGITS
+    Actual:   SYNTAX
+    Message:  CONDITION(C)
+
+[failure] 20261018 11:25:41.911043
+  Test:   TEST_NOVALUE_DROP
+  Class:  CONDITION.TESTGROUP
+  File:   .../ooRexx/base/bif/CONDITION.testGroup
+  Line:   -1
+  Failed: expectSyntax
+    Expected: SYNTAX 98.986
+    Actual:   Not raised
+
+[failure] 20261018 11:25:41.911185
+  Test:   TEST_NOVALUE_METHOD_EXPOSE
+  Class:  CONDITION.TESTGROUP
+  File:   .../ooRexx/base/bif/CONDITION.testGroup
+  Line:   -1
+  Failed: expectSyntax
+    Expected: SYNTAX 98.986
+    Actual:   Not raised
+
+[failure] 20261018 11:25:41.911534
+  Test:   TEST_NOVALUE_PROEDURE_EXPOSE
+  Class:  CONDITION.TESTGROUP
+  File:   .../ooRexx/base/bif/CONDITION.testGroup
+  Line:   -1
+  Failed: expectSyntax
+    Expected: SYNTAX 98.986
+    Actual:   Not raised
+
+[error] 20261018 11:25:41.907289
+  Test:   TEST_CONDITION_CALL_BIF
+  Class:  CONDITION.TESTGROUP
+  File:   .../ooRexx/base/bif/CONDITION.testGroup
+  Event:  SYNTAX 40.3 raised unexpectedly.
+    Not enough arguments in invocation of REVERSE; minimum expected is 1.
+    Line:    375
+   375 *-* "exit 1"                             -- ERROR, Windows/Linux
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261018 11:25:41.908529
+  Test:   TEST_CONDITION_CALL_EXTERNAL
+  Class:  CONDITION.TESTGROUP
+  File:   .../ooRexx/base/bif/CONDITION.testGroup
+  Event:  SYNTAX 40.3 raised unexpectedly.
+    Not enough arguments in invocation of EXTERNAL; minimum expected is 1.
+    Line:    345
+   445 *-* use strict arg condition
+   345 *-* "exit 1"                             -- ERROR, Windows/Linux
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          14
+Assertions:         108
+Failures:           5
+Errors:             2
+
+File search:        00:00:00.001939
+Suite construction: 00:00:00.000919
+Test execution:     00:00:00.006838
+Total time:         00:00:00.010876
+

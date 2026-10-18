@@ -1,0 +1,82 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          43
+Assertions:         173
+Failures:           6
+Errors:             0
+
+[failure] 20261018 11:25:45.203101
+  Test:   TEST_AT01
+  Class:  IdentityTable.testGroup
+  File:   .../ooRexx/base/class/IdentityTable.testGroup
+  Line:   78
+  Failed: assertNull
+    Expected: .nil
+    Actual:   2
+
+[failure] 20261018 11:25:45.203666
+  Test:   TEST_BUG_1468
+  Class:  IdentityTable.testGroup
+  File:   .../ooRexx/base/class/IdentityTable.testGroup
+  Line:   669
+  Failed: assertFalse
+    Expected: 0
+    Actual:   1
+
+[failure] 20261018 11:25:45.204633
+  Test:   TEST_HASINDEX
+  Class:  IdentityTable.testGroup
+  File:   .../ooRexx/base/class/IdentityTable.testGroup
+  Line:   163
+  Failed: assertFalse
+    Expected: 0
+    Actual:   1
+
+[failure] 20261018 11:25:45.204798
+  Test:   TEST_HASITEM
+  Class:  IdentityTable.testGroup
+  File:   .../ooRexx/base/class/IdentityTable.testGroup
+  Line:   173
+  Failed: assertFalse
+    Expected: 0
+    Actual:   1
+
+[failure] 20261018 11:25:45.205063
+  Test:   TEST_INDEX
+  Class:  IdentityTable.testGroup
+  File:   .../ooRexx/base/class/IdentityTable.testGroup
+  Line:   183
+  Failed: assertNull
+    Expected: .nil
+    Actual:   22
+
+[failure] 20261018 11:25:45.207676
+  Test:   TEST_[]
+  Class:  IdentityTable.testGroup
+  File:   .../ooRexx/base/class/IdentityTable.testGroup
+  Line:   89
+  Failed: assertNull
+    Expected: .nil
+    Actual:   2
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          43
+Assertions:         173
+Failures:           6
+Errors:             0
+
+File search:        00:00:00.002840
+Suite construction: 00:00:00.001524
+Test execution:     00:00:00.005452
+Total time:         00:00:00.011077
+
