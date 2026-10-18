@@ -34,9 +34,8 @@ outside the cluster.
    `CHAROUT TEST_POSITIONING_1_BIN` and `CHARS TEST_MANYCHARS_BIN` failed for the `LINEIN` cause.
 2. **A `LINEOUT` with no data (Deviation 46).** On a record stream the oracle pads
    `reclen - (charWritePosition - 1) % reclen` blanks before positioning or closing. On a record
-   boundary that is a whole blank record. That is the `@@BUG` in `TEST_BINARY`. `complete_record`
-   writes nothing on a record boundary. It pads a partial record, kept as the oracle does,
-   pending Moritz's ruling on Deviation 46's scope.
+   boundary that is a whole blank record. That is the `@@BUG` in `TEST_BINARY`. Under Deviation 46
+   as extended (fix round 3), a LINEOUT with no string writes nothing.
 
 ### `stream-open-write-only`
 
@@ -177,9 +176,8 @@ Review: `task-6.5-review.md`. Code commit `76acd13a3`. The records commit that f
 
 ### Findings
 
-1. **No-data LINEOUT pads a partial record.** Unchanged, as directed. Root cause 2 now says the
-   padding is kept as the oracle does, pending Moritz's ruling on Deviation 46's scope. The false
-   documentation claim is gone.
+1. **No-data LINEOUT pads a partial record.** Unchanged in this round, as directed, and the false
+   documentation claim was deleted. Fix round 3 settles it.
 2. **The read side of a write-only stream.** The causes, from `StreamNative.cpp` and `SysFile.cpp`:
    * `StreamInfo::chars` and `::lines` answer 0 for a persistent stream that is neither
      `read_only` nor `read_write`. Both now check the mode.
@@ -347,3 +345,56 @@ Each status read unpiped:
 * The whole suite, with the table at `t6.5/r2/suite/table.tsv`: exit 101, 402 groups, 28 red. No
   row changed against `t6.5/r1/suite/tests.tsv` (`t6.5/r2/suite/changed-rows.txt` holds only the
   command).
+
+## Fix round 3
+
+Ruling: Deviation 46 extended (`phase-4-exclusions.txt`, row 46; derivation in
+`record-io-semantics.md`). Only a LINEOUT with a string pads its record. A LINEOUT with no string
+only positions or closes. Code commit `db010eca6`. The records commit that follows it holds
+`t6.5/r3/suite/` and this section.
+
+### Change
+
+`complete_record` is deleted. The no-string `LINEOUT` path in `lineout` and `close_for_write`
+writes nothing, so `close_for_write` lost its `complete` parameter. This also retires fix round
+1's finding 4, the failed-pad handling, because no pad remains. `write_record`, the padding by a
+LINEOUT with a string, is unchanged.
+
+The report's "pending Moritz's ruling" wording is gone from root cause 2 and from fix round 1's
+finding 1.
+
+### Probes
+
+The derivation's table, re-run as `t6.5/r3/probes/recio/` (b1 to b8, w1, w2, n1 to n3, t1, t2).
+The crate now gives the documented column on every row. The oracle differs on b1, b6, b7, w1 and
+n1, which are exactly the derivation's "no" rows that the probe covers. The ruled case, b1, is
+`AAAAxBBBCCCCDDDD` here.
+
+### Witnesses
+
+* `lang/stream_binary_records.rex` used to close with `lineout(f)` after a `charout` left a
+  partial record, which checked the oracle's padding. It now closes with
+  `stream(f, 'c', 'close')`, which pads nothing on either side, and stays in `phase-9.txt`. It
+  matches the oracle on all three descriptors, and its `sourceline_oracle` file was regenerated.
+* The cases that differ by ruling form a new licensed divergence row,
+  `lineout-without-string-pads-nothing`. It is in `tests/licensed_divergences.rs` and carries
+  the marker line `LICENSED DIVERGENCE WITNESS: lineout-without-string-pads-nothing` under row 46.
+  It has three cases: a partial record closed by `lineout(f)` on `RECLENGTH 4`, a position-only
+  `lineout(f, , 4)` then `lineout(f)`, and `lineout(f)` on `BINARY` with no `RECLENGTH`. The
+  oracle prints `AAAAx___CCCCDDDD`, `AAAAx___CCCC____` and `AAAAx___________`, and the crate prints
+  `AAAAxBBBCCCCDDDD` all three times. Red is the crate at `270207ffa`, the before-ruling behaviour,
+  which agrees with the oracle on the first and third cases. Green is `db010eca6`. Both runs are
+  in `t6.5/r3/witnesses/`, with the program as `lic46.rex`.
+
+### Checks
+
+Each status read unpiped:
+* `cargo fmt --all --check`: exit 0.
+* `memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings`: exit 0.
+* `sourceline_oracle`, the refusal tables and `unsafe_sites`: exit 0.
+* `--test licensed_divergences`: exit 0. `the_licensed_divergences_still_diverge_exactly_as_recorded`
+  and `the_prose_rows_and_this_table_name_the_same_divergences` both pass.
+* `REXX_CORPUS_GATE=1 ... --test corpus`: exit 0, 29 passed, 1 ignored.
+* The whole suite, with the table at `t6.5/r3/suite/table.tsv`: exit 101, 402 groups, 28 red. No
+  row changed against `t6.5/r2/suite/tests.tsv`. `LINEOUT TEST_BINARY` keeps its
+  `Deviation(46)` row.
