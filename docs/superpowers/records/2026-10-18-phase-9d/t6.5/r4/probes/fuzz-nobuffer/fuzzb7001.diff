@@ -1,0 +1,131 @@
+DIFF
+  oracle: s2 : C=0 w19 r1 S=22 w19 r22 S=5 w5 r22 C3=0 w4 r22 QR=6 w4 r22 S=3 w4 r9 L1=0 w5 r9
+   [n1  BBBBCCCCDDDDab] 
+  crate:  s2 : C=0 w19 r1 S=4 w19 r4 S=5 w5 r4 C3=0 w4 r4 QR=1 w4 r4 S=3 w4 r9 L1=0 w5 r9
+   [n1  BBBBCCCCDDDDab]
+DIFF
+  oracle: s4 : C=0 w19 r1 S=20 w20 r1
+   [AAAABBBBCCCCDDDDab] 
+  crate:  s4 : C=0 w19 r1 S=18 w18 r1
+   [AAAABBBBCCCCDDDDab]
+DIFF
+  oracle: s5 : L1=0 w5 r1 S=3 w9 r1 S=18 w18 r1
+   [n1  BBBBCCCCDDDD] 
+  crate:  s5 : L1=0 w5 r1 S=3 w9 r1 S=16 w16 r1
+   [n1  BBBBCCCCDDDD]
+DIFF
+  oracle: s15 : S=1 w17 r1 S=2 w5 r1 S=18 w18 r1 L3=0 w13 r1 N=16 w13 r1 QL=4 w13 r1 S=4 w13 r1 K=1 w13 r1
+   [AAAABBBBn3  DDDD] 
+  crate:  s15 : S=1 w17 r1 S=2 w5 r1 S=16 w16 r1 L3=0 w13 r1 N=16 w13 r1 QL=4 w13 r1 S=4 w13 r1 K=1 w13 r1
+   [AAAABBBBn3  DDDD]
+DIFF
+  oracle: s18 : R=AAAA w17 r5 C9=0 w11 r5 S=5 w5 r5 S=18 w18 r5 S=21 w18 r21 S=1 w18 r1 QR=1 w18 r1
+   [AAAABBBBRRCCDDDD] 
+  crate:  s18 : R=AAAA w17 r5 C9=0 w11 r5 S=5 w5 r5 S=16 w16 r5 S=8 w16 r8 S=1 w16 r1 QR=1 w16 r1
+   [AAAABBBBRRCCDDDD]
+DIFF
+  oracle: s19 : S=7 w7 r7 L=0 w9 r7 C3=0 w4 r7 S=7 w4 r7 S=10 w4 r10 R3=CCCC w4 r13 L3=0 w13 r13 L=0 w17 r13 QR=4 w17 r13
+   [AAQABBy n3  x   ] 
+  crate:  s19 : S=7 w7 r7 L=0 w9 r7 C3=0 w4 r7 S=10 w4 r10 S=13 w4 r13 R3=CCCC w4 r13 L3=0 w13 r13 L=0 w17 r13 QR=4 w17 r13
+   [AAQABBy n3  x   ]
+DIFF
+  oracle: s23 : S=20 w17 r20 QL=5 w17 r20 S=1 w1 r20 M=0 w1 r20 S=1 w1 r1
+   [AAAABBBBCCCCDDDD] 
+  crate:  s23 : S=4 w17 r4 QL=5 w17 r4 S=1 w1 r4 M=1 w1 r4 S=1 w1 r1
+   [AAAABBBBCCCCDDDD]
+DIFF
+  oracle: s26 : R3=CCCC w17 r13 L2=0 w9 r13 N=4 w9 r13 S=7 w7 r7 S=18 w18 r7 C9=0 w11 r7 C9=0 w11 r7
+   [AAAAn2  RRCCDDDD] 
+  crate:  s26 : R3=CCCC w17 r13 L2=0 w9 r13 N=4 w9 r13 S=7 w7 r7 S=16 w16 r7 C9=0 w11 r7 C9=0 w11 r7
+   [AAAAn2  RRCCDDDD]
+DIFF
+  oracle: s29 : S=15 w15 r1 S=18 w18 r1 S=2 w18 r5 R=BBBB w18 r9 I=CC w18 r11
+   [AAAABBBBCCCCDDDD] 
+  crate:  s29 : S=15 w15 r1 S=16 w16 r1 S=2 w16 r5 R=BBBB w16 r9 I=CC w16 r11
+   [AAAABBBBCCCCDDDD]
+DIFF
+  oracle: s30 : L2=0 w9 r1 S=18 w18 r1 R3=CCCC w18 r13
+   [AAAAn2  CCCCDDDD] 
+  crate:  s30 : L2=0 w9 r1 S=16 w16 r1 R3=CCCC w16 r13
+   [AAAAn2  CCCCDDDD]
+DIFF
+  oracle: s32 : L1=0 w5 r1 S=18 w18 r1 L3=0 w13 r1
+   [n1  BBBBn3  DDDD] 
+  crate:  s32 : L1=0 w5 r1 S=16 w16 r1 L3=0 w13 r1
+   [n1  BBBBn3  DDDD]
+DIFF
+  oracle: s34 : S=1 w17 r1 S=18 w18 r1 S=7 w7 r7 L3=0 w13 r7 R3=n3   w13 r13 S=4 w13 r13 S=11 w11 r13 I=DD w11 r15
+   [AAAABBBBn3  DDDD] 
+  crate:  s34 : S=1 w17 r1 S=16 w16 r1 S=7 w7 r7 L3=0 w13 r7 R3=n3   w13 r13 S=4 w13 r13 S=11 w11 r13 I=DD w11 r15
+   [AAAABBBBn3  DDDD]
+DIFF
+  oracle: s44 : R=AAAA w17 r5 S=2 w17 r5 C20=0 w21 r5 S=22 w22 r5
+   [AAAABBBBCCCCDDDD@@@Z] 
+  crate:  s44 : R=AAAA w17 r5 S=2 w17 r5 C20=0 w21 r5 S=20 w20 r5
+   [AAAABBBBCCCCDDDD@@@Z]
+DIFF
+  oracle: s49 : R1=AAAA w17 r5 M=1 w17 r5 S=18 w18 r5 S=3 w9 r5 S=3 w9 r9 S=3 w9 r9 S=7 w7 r7 C9=0 w11 r7 I=BB w11 r9
+   [AAAABBBBRRCCDDDD] 
+  crate:  s49 : R1=AAAA w17 r5 M=1 w17 r5 S=16 w16 r5 S=3 w9 r5 S=3 w9 r9 S=3 w9 r9 S=7 w7 r7 C9=0 w11 r7 I=BB w11 r9
+   [AAAABBBBRRCCDDDD]
+DIFF
+  oracle: s51 : S=2 w5 r1 S=2 w5 r1 S=18 w18 r1 S=5 w5 r1 QR=1 w5 r1 K=1 w5 r1 S=8 w5 r8 R1=AAAA w5 r5
+   [AAAABBBBCCCCDDDD] 
+  crate:  s51 : S=2 w5 r1 S=2 w5 r1 S=16 w16 r1 S=5 w5 r1 QR=1 w5 r1 K=1 w5 r1 S=4 w5 r4 R1=AAAA w5 r5
+   [AAAABBBBCCCCDDDD]
+DIFF
+  oracle: s52 : S=2 w17 r5 L3=0 w13 r5 L=0 w17 r5 S=18 w18 r5 S=18 w18 r5 S=3 w9 r5 L1=0 w5 r5
+   [n1  BBBBn3  x   ] 
+  crate:  s52 : S=2 w17 r5 L3=0 w13 r5 L=0 w17 r5 S=16 w16 r5 S=16 w16 r5 S=3 w9 r5 L1=0 w5 r5
+   [n1  BBBBn3  x   ]
+DIFF
+  oracle: s54 : S=20 w17 r20 S=1 w17 r1 C20=0 w21 r1 I=AA w21 r3 C3=0 w4 r3 S=7 w7 r7
+   [AAQABBBBCCCCDDDD@@@Z] 
+  crate:  s54 : S=4 w17 r4 S=1 w17 r1 C20=0 w21 r1 I=AA w21 r3 C3=0 w4 r3 S=7 w7 r7
+   [AAQABBBBCCCCDDDD@@@Z]
+DIFF
+  oracle: s57 : C20=0 w21 r1 L=0 w25 r1 L=0 w29 r1 S=32 w29 r32 R= w29 r32 S=7 w7 r7 L5=0 w21 r7 L=0 w25 r7
+   [AAAABBBBCCCCDDDDn5  x   x   ] 
+  crate:  s57 : C20=0 w21 r1 L=0 w25 r1 L=0 w29 r1 S=4 w29 r4 R=A w29 r5 S=7 w7 r7 L5=0 w21 r7 L=0 w25 r7
+   [AAAABBBBCCCCDDDDn5  x   x   ]
+DIFF
+  oracle: s59 : QL=5 w17 r1 QR=1 w17 r1 R3=CCCC w17 r13 S=3 w9 r9 M=1 w9 r9 S=2 w9 r5 S=2 w5 r5 S=12 w5 r12
+   [AAAABBBBCCCCDDDD] 
+  crate:  s59 : QL=5 w17 r1 QR=1 w17 r1 R3=CCCC w17 r13 S=3 w9 r9 M=1 w9 r9 S=2 w9 r5 S=2 w5 r5 S=8 w5 r8
+   [AAAABBBBCCCCDDDD]
+DIFF
+  oracle: s60 : K=1 w17 r1 S=18 w18 r1 S=2 w18 r5 S=3 w9 r5 S=18 w18 r5 C20=0 w21 r5 S=19 w19 r5 N=16 w19 r5
+   [AAAABBBBCCCCDDDD@@@Z] 
+  crate:  s60 : K=1 w17 r1 S=16 w16 r1 S=2 w16 r5 S=3 w9 r5 S=16 w16 r5 C20=0 w21 r5 S=19 w19 r5 N=16 w19 r5
+   [AAAABBBBCCCCDDDD@@@Z]
+DIFF
+  oracle: s61 : S=20 w17 r20 C3=0 w4 r20 R= w4 r20 C=0 w6 r20
+   [AAQabBBBCCCCDDDD] 
+  crate:  s61 : S=4 w17 r4 C3=0 w4 r4 R=A w4 r5 C=0 w6 r5
+   [AAQabBBBCCCCDDDD]
+DIFF
+  oracle: s64 : S=3 w9 r1 S=18 w18 r1 S=3 w9 r9 C20=0 w21 r9 R1=AAAA w21 r5 S=22 w22 r5 S=2 w5 r5 C3=0 w4 r5
+   [AAQABBBBCCCCDDDD@@@Z] 
+  crate:  s64 : S=3 w9 r1 S=16 w16 r1 S=3 w9 r9 C20=0 w21 r9 R1=AAAA w21 r5 S=20 w20 r5 S=2 w5 r5 C3=0 w4 r5
+   [AAQABBBBCCCCDDDD@@@Z]
+DIFF
+  oracle: s70 : S=18 w18 r1 L5=0 w21 r1 L2=0 w9 r1 S=4 w13 r1 S=12 w13 r12 S=4 w13 r12
+   [AAAAn2  CCCCDDDDn5  ] 
+  crate:  s70 : S=16 w16 r1 L5=0 w21 r1 L2=0 w9 r1 S=4 w13 r1 S=4 w13 r4 S=4 w13 r4
+   [AAAAn2  CCCCDDDDn5  ]
+DIFF
+  oracle: s71 : S=3 w9 r9 S=3 w9 r9 L2=0 w9 r9 R=CCCC w9 r13 S=1 w9 r1 S=0 w-1 r1
+   [AAAAn2  CCCCDDDD] 
+  crate:  s71 : S=3 w9 r9 S=3 w9 r9 L2=0 w9 r9 R=CCCC w9 r13 S=1 w9 r1 S=7 w7 r1
+   [AAAAn2  CCCCDDDD]
+DIFF
+  oracle: s72 : I=AA w17 r3 S=1 w17 r1 QL=5 w17 r1 QR=1 w17 r1 I=AA w17 r3 L2=0 w9 r3 S=12 w9 r12 L2=0 w9 r12
+   [AAAAn2  CCCCDDDD] 
+  crate:  s72 : I=AA w17 r3 S=1 w17 r1 QL=5 w17 r1 QR=1 w17 r1 I=AA w17 r3 L2=0 w9 r3 S=6 w9 r6 L2=0 w9 r6
+   [AAAAn2  CCCCDDDD]
+DIFF
+  oracle: s78 : S=15 w15 r1 R1=AAAA w15 r5 N=12 w15 r5 C20=0 w21 r5 L2=0 w9 r5 S=12 w9 r12
+   [AAAAn2  CCCCDDDD@@@Z] 
+  crate:  s78 : S=15 w15 r1 R1=AAAA w15 r5 N=12 w15 r5 C20=0 w21 r5 L2=0 w9 r5 S=8 w9 r8
+   [AAAAn2  CCCCDDDD@@@Z]
+scenarios 80 differ 26 lengths 80 80

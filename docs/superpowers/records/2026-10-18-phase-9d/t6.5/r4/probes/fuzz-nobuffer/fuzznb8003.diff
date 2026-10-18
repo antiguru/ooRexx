@@ -1,0 +1,81 @@
+DIFF
+  oracle: s14 : L5=0 w21 r1 C20=0 w21 r1 QL=6 w21 r1 S=22 w22 r1 I=AA w22 r3 R3=CCCC w22 r13
+   [AAAABBBBCCCCDDDDn5 Z] 
+  crate:  s14 : L5=0 w21 r1 C20=0 w21 r1 QL=6 w21 r1 S=20 w20 r1 I=AA w20 r3 R3=CCCC w20 r13
+   [AAAABBBBCCCCDDDDn5 Z]
+DIFF
+  oracle: s18 : L=0 w21 r1 I=AA w21 r3 S=22 w22 r3 L=0 w25 r3 R=AA w25 r5 I=BB w25 r7
+   [AAAABBBBCCCCDDDDy   @x  ] 
+  crate:  s18 : L=0 w21 r1 I=AA w21 r3 S=20 w20 r3 L=0 w21 r3 R=AA w21 r5 I=BB w21 r7
+   [AAAABBBBCCCCDDDDy  x]
+DIFF
+  oracle: s21 : S=18 w18 r1 S=7 w7 r7 R=BB w7 r9 QL=2 w7 r9 K=1 w7 r9 S=5 w5 r9 S=2 w5 r5
+   [AAAABBBBCCCCDDDD] 
+  crate:  s21 : S=16 w16 r1 S=7 w7 r7 R=BB w7 r9 QL=2 w7 r9 K=1 w7 r9 S=5 w5 r9 S=2 w5 r5
+   [AAAABBBBCCCCDDDD]
+DIFF
+  oracle: s28 : S=3 w9 r1 M=1 w9 r1 S=18 w18 r1 M=1 w18 r1 L2=0 w9 r1 N=16 w9 r1
+   [AAAAn2  CCCCDDDD] 
+  crate:  s28 : S=3 w9 r1 M=1 w9 r1 S=16 w16 r1 M=1 w16 r1 L2=0 w9 r1 N=16 w9 r1
+   [AAAAn2  CCCCDDDD]
+DIFF
+  oracle: s30 : C3=0 w4 r1 I=AA w4 r3 QL=1 w4 r3 I=QA w4 r5 K=1 w4 r5 S=5 w5 r5 S=5 w5 r5 L=0 w9 r5 S=18 w18 r5
+   [AAQAy   CCCCDDDD] 
+  crate:  s30 : C3=0 w4 r1 I=AA w4 r3 QL=1 w4 r3 I=QA w4 r5 K=1 w4 r5 S=5 w5 r5 S=5 w5 r5 L=0 w9 r5 S=16 w16 r5
+   [AAQAy   CCCCDDDD]
+DIFF
+  oracle: s31 : C=0 w19 r1 S=4 w13 r1 QR=1 w13 r1 R1=AAAA w13 r5 C=0 w15 r5 C9=0 w11 r5 S=4 w13 r5 S=20 w20 r5
+   [AAAABBBBRRCCabDDab] 
+  crate:  s31 : C=0 w19 r1 S=4 w13 r1 QR=1 w13 r1 R1=AAAA w13 r5 C=0 w15 r5 C9=0 w11 r5 S=4 w13 r5 S=18 w18 r5
+   [AAAABBBBRRCCabDDab]
+DIFF
+  oracle: s35 : L5=0 w21 r1 S=22 w22 r1
+   [AAAABBBBCCCCDDDDn5  ] 
+  crate:  s35 : L5=0 w21 r1 S=20 w20 r1
+   [AAAABBBBCCCCDDDDn5  ]
+DIFF
+  oracle: s36 : R1=AAAA w17 r5 S=3 w9 r9 L=0 w13 r9 C20=0 w21 r9 C=0 w23 r9 S=24 w24 r9 S=5 w17 r9
+   [AAAABBBBy   DDDD@@@Zab] 
+  crate:  s36 : R1=AAAA w17 r5 S=3 w9 r9 L=0 w13 r9 C20=0 w21 r9 C=0 w23 r9 S=22 w22 r9 S=5 w17 r9
+   [AAAABBBBy   DDDD@@@Zab]
+DIFF
+  oracle: s38 : L3=0 w13 r1 S=18 w18 r1 R1=AAAA w18 r5
+   [AAAABBBBn3  DDDD] 
+  crate:  s38 : L3=0 w13 r1 S=16 w16 r1 R1=AAAA w16 r5
+   [AAAABBBBn3  DDDD]
+DIFF
+  oracle: s39 : S=5 w5 r1 S=18 w18 r1 L1=0 w5 r1 L1=0 w5 r1 S=7 w7 r7 M=1 w7 r7 L2=0 w9 r7 S=1 w9 r1
+   [n1  n2  CCCCDDDD] 
+  crate:  s39 : S=5 w5 r1 S=16 w16 r1 L1=0 w5 r1 L1=0 w5 r1 S=7 w7 r7 M=1 w7 r7 L2=0 w9 r7 S=1 w9 r1
+   [n1  n2  CCCCDDDD]
+DIFF
+  oracle: s40 : C9=0 w11 r1 I=AA w11 r3 S=18 w18 r3 L2=0 w9 r3 S=5 w5 r3
+   [AAAAn2  RRCCDDDD] 
+  crate:  s40 : C9=0 w11 r1 I=AA w11 r3 S=16 w16 r3 L2=0 w9 r3 S=5 w5 r3
+   [AAAAn2  RRCCDDDD]
+DIFF
+  oracle: s47 : S=18 w18 r1 L1=0 w5 r1 S=2 w5 r5
+   [n1  BBBBCCCCDDDD] 
+  crate:  s47 : S=16 w16 r1 L1=0 w5 r1 S=2 w5 r5
+   [n1  BBBBCCCCDDDD]
+DIFF
+  oracle: s51 : S=18 w18 r1 L3=0 w13 r1 L=0 w17 r1 L5=0 w21 r1 I=AA w21 r3
+   [AAAABBBBn3  x   n5  ] 
+  crate:  s51 : S=16 w16 r1 L3=0 w13 r1 L=0 w17 r1 L5=0 w21 r1 I=AA w21 r3
+   [AAAABBBBn3  x   n5  ]
+DIFF
+  oracle: s64 : C=0 w19 r1 C9=0 w11 r1 S=3 w9 r9 QR=3 w9 r9 S=20 w20 r9 S=7 w7 r7
+   [AAAABBBBRRCCDDDDab] 
+  crate:  s64 : C=0 w19 r1 C9=0 w11 r1 S=3 w9 r9 QR=3 w9 r9 S=18 w18 r9 S=7 w7 r7
+   [AAAABBBBRRCCDDDDab]
+DIFF
+  oracle: s69 : S=5 w5 r1 L5=0 w21 r1 S=22 w22 r1 R=AAAA w22 r5 C20=0 w21 r5
+   [AAAABBBBCCCCDDDDn5 Z] 
+  crate:  s69 : S=5 w5 r1 L5=0 w21 r1 S=20 w20 r1 R=AAAA w20 r5 C20=0 w21 r5
+   [AAAABBBBCCCCDDDDn5 Z]
+DIFF
+  oracle: s72 : S=18 w18 r1 QL=5 w18 r1
+   [AAAABBBBCCCCDDDD] 
+  crate:  s72 : S=16 w16 r1 QL=4 w16 r1
+   [AAAABBBBCCCCDDDD]
+scenarios 80 differ 16 lengths 80 80

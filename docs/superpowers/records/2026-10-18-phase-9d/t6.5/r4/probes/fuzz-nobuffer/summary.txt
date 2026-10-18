@@ -1,0 +1,16 @@
+fuzz7001 scenarios 80 differ 28 lengths 80 80
+fuzz7002 scenarios 80 differ 23 lengths 80 80
+fuzz7003 scenarios 80 differ 21 lengths 80 80
+fuzz7004 scenarios 80 differ 27 lengths 80 80
+fuzzb7001 scenarios 80 differ 26 lengths 80 80
+fuzzb7002 scenarios 80 differ 23 lengths 80 80
+fuzzb7003 scenarios 80 differ 19 lengths 80 80
+fuzzb7004 scenarios 80 differ 29 lengths 80 80
+fuzzn8001 scenarios 80 differ 11 lengths 80 80
+fuzznb8001 scenarios 80 differ 10 lengths 80 80
+fuzzn8002 scenarios 80 differ 15 lengths 80 80
+fuzznb8002 scenarios 80 differ 14 lengths 80 80
+fuzzn8003 scenarios 80 differ 18 lengths 80 80
+fuzznb8003 scenarios 80 differ 16 lengths 80 80
+fuzzn8004 scenarios 80 differ 8 lengths 80 80
+fuzznb8004 scenarios 80 differ 7 lengths 80 80

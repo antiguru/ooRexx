@@ -2440,6 +2440,8 @@ DEVIATIONS -- permanent, chosen
      documented answer. This crate gives the documented answer on every
      stream. Measured by the Phase 9d Task 6.5 review of rounds 2 and 3
      (.superpowers/sdd/2026-10-18-phase-9d/task-6.5-review-r23.md).
+     LICENSED DIVERGENCE WITNESS: write-position-after-buffered-read
+     LICENSED DIVERGENCE WITNESS: relative-seek-from-named-position
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------

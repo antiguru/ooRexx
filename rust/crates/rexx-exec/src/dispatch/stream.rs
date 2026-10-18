@@ -762,9 +762,6 @@ pub(super) fn open(
         line_size: 0,
         last_op_was_read: true,
         transient,
-        read_window: None,
-        write_skew: 0,
-        oracle_tell: (write_position - 1).max(0),
     });
     state.status = StreamStatus::Ready;
     Ok(Some(interp.text(b"READY:")))
@@ -980,9 +977,6 @@ fn ensure_open(
         line_size: 0,
         last_op_was_read: !for_write,
         transient,
-        read_window: None,
-        write_skew: 0,
-        oracle_tell: (write_position - 1).max(0),
     });
     Ok(true)
 }
@@ -1163,7 +1157,6 @@ pub(super) fn charin(
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"")));
     };
-    read_setup_seek(open, open.read_position);
     if let Some(start) = start {
         if open.transient {
             return Err(Raised::transient_positioning().into());
@@ -1173,7 +1166,6 @@ pub(super) fn charin(
             return notready(interp, receiver, StreamStatus::NotReady, Vec::new());
         }
         open.read_position = start;
-        oracle_seek(open, start);
     }
     let at = open.read_position;
     let wanted = usize::try_from(length).unwrap_or(usize::MAX);
@@ -1189,7 +1181,6 @@ pub(super) fn charin(
             return notready(interp, receiver, StreamStatus::Error(errno), Vec::new());
         }
     };
-    note_read(open, at, at + read.len() as i64);
     if read.is_empty() {
         return notready(interp, receiver, StreamStatus::Error(0), Vec::new());
     }
@@ -1301,12 +1292,8 @@ fn read_record(
     };
     let from = open.read_position;
     let wanted = record_remainder(from, record_length);
-    read_setup_seek(open, from);
     let (bytes, errno) = match read_from(&mut open.file, offset_of(from), wanted) {
-        Ok(bytes) => {
-            note_read(open, from, from + bytes.len() as i64);
-            (bytes, 0)
-        }
+        Ok(bytes) => (bytes, 0),
         Err(error) => (Vec::new(), error.raw_os_error().unwrap_or(0)),
     };
     open.read_position = from + bytes.len() as i64;
@@ -1349,11 +1336,7 @@ fn next_line(interp: &mut Interp, receiver: ObjRef) -> Result<Option<Vec<u8>>, F
         return Ok(None);
     };
     let at = open.read_position;
-    read_setup_seek(open, at);
-    let read = read_line_from(&mut open.file, offset_of(at)).unwrap_or(None);
-    let next = read.as_ref().map_or(at, |(_, next)| *next);
-    note_read(open, at, next);
-    match read {
+    match read_line_from(&mut open.file, offset_of(at)).unwrap_or(None) {
         Some((text, next)) => {
             open.read_position = next;
             if open.line_read != 0 {
@@ -1441,7 +1424,6 @@ fn seek_to_line(interp: &mut Interp, receiver: ObjRef, line: i64) -> Result<(), 
     open.read_position = at;
     open.line_read = line;
     open.line_read_char = at;
-    oracle_seek(open, at);
     Ok(())
 }
 
@@ -1477,23 +1459,20 @@ pub(super) fn charout(
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"0")));
     };
-    write_setup_seek(open);
     if let Some(start) = start {
         if open.transient {
             return Err(Raised::transient_positioning().into());
         }
         open.write_position = as_position(positive(start)?);
-        oracle_seek(open, open.write_position);
     }
     let Some(data) = data else {
         return Ok(Some(interp.text(b"0")));
     };
     let at = open.write_position;
     let transient = open.transient;
-    let (land, reported) = land_write(open, at, data.len(), start.is_some());
-    match write_at(&mut open.file, offset_of(land), &data, transient) {
+    match write_at(&mut open.file, offset_of(at), &data, transient) {
         Ok(()) => {
-            open.write_position = reported;
+            open.write_position = at + data.len() as i64;
             open.last_op_was_read = false;
             reset_line_positions(open);
             Ok(Some(interp.text(b"0")))
@@ -1539,7 +1518,6 @@ pub(super) fn lineout(
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"1")));
     };
-    write_setup_seek(open);
     // `setLineWritePosition`: a line number names a line, not a character, so
     // it goes through the same walk `SEEK ... LINE` uses. Writing at the number
     // itself overwrites whatever happens to sit at that offset.
@@ -1558,13 +1536,12 @@ pub(super) fn lineout(
         open.line_write = number;
         open.line_write_char = at;
         open.write_position = at;
-        oracle_seek(open, at);
     }
     let Some(data) = data else {
         return Ok(Some(interp.text(b"0")));
     };
     if let Some(record_length) = record {
-        return write_record(interp, receiver, record_length, data, line.is_some());
+        return write_record(interp, receiver, record_length, data);
     }
     // A file whose last byte is ctrl-Z has it overwritten rather than kept.
     let size = size_of(&open.file) as i64;
@@ -1588,10 +1565,9 @@ pub(super) fn lineout(
     let mut bytes = data;
     bytes.push(b'\n');
     let transient = open.transient;
-    let (land, reported) = land_write(open, at, bytes.len(), line.is_some());
-    match write_at(&mut open.file, offset_of(land), &bytes, transient) {
+    match write_at(&mut open.file, offset_of(at), &bytes, transient) {
         Ok(()) => {
-            open.write_position = reported;
+            open.write_position = at + bytes.len() as i64;
             open.last_op_was_read = false;
             if open.line_write > 0 {
                 open.line_write += 1;
@@ -1640,7 +1616,6 @@ fn write_record(
     receiver: ObjRef,
     record_length: u64,
     mut data: Vec<u8>,
-    placed: bool,
 ) -> Result<Option<ObjRef>, Failure> {
     let state = require_mut(interp, receiver)?;
     let Some(open) = state.open.as_mut() else {
@@ -1652,10 +1627,9 @@ fn write_record(
         return Err(Raised::syntax(93, 0, Vec::new()).into());
     }
     data.resize(room, b' ');
-    let (land, reported) = land_write(open, at, data.len(), placed);
-    match write_at(&mut open.file, offset_of(land), &data, open.transient) {
+    match write_at(&mut open.file, offset_of(at), &data, open.transient) {
         Ok(()) => {
-            open.write_position = reported;
+            open.write_position = at + data.len() as i64;
             open.last_op_was_read = false;
             Ok(Some(interp.text(b"0")))
         }
@@ -1664,97 +1638,6 @@ fn write_record(
             notready(interp, receiver, StreamStatus::Error(errno), b"1".to_vec())
         }
     }
-}
-
-/// The bytes `SysFile` reads into its buffer at a time (`DEFAULT_BUFFER_SIZE`).
-const ORACLE_BUFFER: i64 = 4096;
-
-/// The bytes one read of a line walk asks for (`LINE_POSITIONING_BUFFER`).
-const LINE_REQUEST: i64 = 512;
-
-/// Records a read of the 1-based range `[from, to)` against the oracle's read
-/// buffer. A read inside the buffer leaves it, and one past it refills it a
-/// buffer at a time from where the read left it. A read ends any write skew.
-/// The caller has already moved the oracle to `from`.
-fn note_read(open: &mut rexx_core::OpenFile, from: i64, to: i64) {
-    open.write_skew = 0;
-    open.oracle_tell = to - 1;
-    let (start, end) = (from - 1, to - 1);
-    // A read starting at the buffer's end continues it, as `SysFile::read`
-    // refills from where the buffer ended.
-    let base = match open.read_window {
-        Some((low, high)) if (low..=high).contains(&start) => {
-            if end <= high {
-                return;
-            }
-            high
-        }
-        _ => start,
-    };
-    if end <= base {
-        open.read_window = None;
-        return;
-    }
-    let size = size_of(&open.file) as i64;
-    let last = base + (end - 1 - base) / ORACLE_BUFFER * ORACLE_BUFFER;
-    open.read_window = Some((last, (last + ORACLE_BUFFER).min(size)));
-}
-
-/// Whether the oracle's read buffer holds the 1-based `position`.
-fn buffered(open: &rexx_core::OpenFile, position: i64) -> bool {
-    open.read_window
-        .is_some_and(|(low, high)| (low..high).contains(&(position - 1)))
-}
-
-/// `SysFile::setPosition` to the 1-based `position`: a pending write is
-/// flushed, and the read buffer survives only when it holds the position.
-fn oracle_seek(open: &mut rexx_core::OpenFile, position: i64) {
-    open.write_skew = 0;
-    open.oracle_tell = position - 1;
-    if !buffered(open, position) {
-        open.read_window = None;
-    }
-}
-
-/// `readSetup`'s move to the read position, which it skips when the oracle
-/// already reports standing there.
-fn read_setup_seek(open: &mut rexx_core::OpenFile, position: i64) {
-    if open.oracle_tell != position - 1 {
-        oracle_seek(open, position);
-    }
-}
-
-/// `writeSetup`'s move to the write position, which it skips when the
-/// oracle already reports standing there.
-fn write_setup_seek(open: &mut rexx_core::OpenFile) {
-    if open.oracle_tell != open.write_position - 1 {
-        oracle_seek(open, open.write_position);
-    }
-}
-
-/// Where a write of `len` bytes at the reported position `at` lands, and the
-/// reported position after it. `placed` is a write whose position was just
-/// set. A write continuing after one placed inside the read buffer lands
-/// behind the position the oracle reports. Measured: `lineout(f, 'new', 2)`
-/// on a three-line file reports 23, and the next `lineout(f, 'tail')` writes
-/// over line 3.
-fn land_write(open: &mut rexx_core::OpenFile, at: i64, len: usize, placed: bool) -> (i64, i64) {
-    let len = len as i64;
-    if open.transient {
-        return (at, at + len);
-    }
-    if !placed && open.write_skew != 0 {
-        open.oracle_tell = at + len - 1;
-        return (at - open.write_skew, at + len);
-    }
-    let reported = match open.read_window {
-        Some((_, high)) if buffered(open, at) => high + 1 + len,
-        _ => at + len,
-    };
-    open.write_skew = reported - (at + len);
-    open.read_window = None;
-    open.oracle_tell = reported - 1;
-    (at, reported)
 }
 
 /// Writes `bytes` at `position` (1-based). A transient stream has no
@@ -1802,9 +1685,6 @@ pub(super) fn chars(
     if !open.transient && !readable {
         return Ok(Some(interp.text(b"0")));
     }
-    // `size()` flushes a pending write, after which the oracle writes where
-    // it reports.
-    open.write_skew = 0;
     let left = (size_of(&open.file) as i64 - (open.read_position - 1)).max(0);
     Ok(Some(interp.text_built(left.to_string().into_bytes())))
 }
@@ -1853,7 +1733,6 @@ pub(super) fn lines(
     if !open.transient && !readable {
         return Ok(Some(interp.text(b"0")));
     }
-    open.write_skew = 0;
     let size = size_of(&open.file) as i64;
     if open.read_position > size {
         return Ok(Some(interp.text(b"0")));
@@ -1876,10 +1755,7 @@ pub(super) fn lines(
         // short after a `CHARIN` stored the cache with a zero line position.
         open.line_size
     } else {
-        let from = open.read_position;
-        oracle_seek(open, from);
-        let count = count_lines_from(&mut open.file, offset_of(from)).unwrap_or(0);
-        note_read(open, from, size + 1);
+        let count = count_lines_from(&mut open.file, offset_of(open.read_position)).unwrap_or(0);
         open.line_size = (count + open.line_read).saturating_sub(1);
         count
     };
@@ -2156,18 +2032,21 @@ pub(super) fn position(
     };
     let size = size_of(&open.file) as i64;
     if parsed.by_char {
+        let current = if parsed.read {
+            open.read_position
+        } else {
+            open.write_position
+        };
         // `setPosition` seeks and adds one, so an absolute offset is used as
-        // written and everything else lands relative, unchecked either way.
-        // A relative seek moves from the position `SysFile` reports, not from
-        // the stream's read or write position: measured, `charin(f, , 2)` and
-        // then `seek -2 write` answers 1.
+        // written and everything else lands relative to the position it
+        // names, unchecked either way (Deviation 49: the oracle's buffered
+        // stream moves from its own file pointer).
         let landed = match parsed.style {
             SeekFrom::Start => offset,
             SeekFrom::End => size - offset + 1,
-            SeekFrom::Forward | SeekFrom::Backward => open.oracle_tell + 1 + offset,
+            SeekFrom::Forward | SeekFrom::Backward => current + offset,
         };
         reset_line_positions(open);
-        oracle_seek(open, landed);
         if parsed.read {
             open.read_position = landed;
             if parsed.write {
@@ -2183,10 +2062,8 @@ pub(super) fn position(
         return Ok(Some(interp.text(b"0")));
     }
     let (current_line, current_char) = if parsed.read {
-        oracle_seek(open, open.read_position);
         (open.line_read, open.line_read_char)
     } else {
-        oracle_seek(open, open.write_position);
         (open.line_write, open.line_write_char)
     };
     let target = match parsed.style {
@@ -2232,9 +2109,7 @@ fn line_count(open: &mut rexx_core::OpenFile, record_length: u64) -> u64 {
     if open.line_size > 0 {
         return open.line_size;
     }
-    oracle_seek(open, 1);
     let count = count_lines_from(&mut open.file, 1).unwrap_or(0);
-    note_read(open, 1, size as i64 + 1);
     open.line_size = count;
     count
 }
@@ -2269,25 +2144,8 @@ fn seek_line(
         (current_line, current_char)
     };
     let wanted = u64::try_from(target).unwrap_or(1) - line;
-    // `readForwardByLine` moves to the walk's start and reads in
-    // `LINE_POSITIONING_BUFFER` requests, the last of which may run past the
-    // line end it stops at.
-    oracle_seek(open, at);
-    let (moved, end) = match seek_forward_lines(&mut open.file, at, wanted) {
-        Ok((moved, end)) => {
-            let size = size_of(&open.file) as i64;
-            let requested = if moved == wanted {
-                let requests = (end - 1 - at) / LINE_REQUEST + 1;
-                (at + requests * LINE_REQUEST).min(size + 1)
-            } else {
-                size + 1
-            };
-            note_read(open, at, requested.max(at));
-            (moved, end)
-        }
-        Err(_) => (0, at),
-    };
-    let (line, at) = (line + moved, end);
+    let (moved, at) = seek_forward_lines(&mut open.file, at, wanted).unwrap_or((0, at));
+    let line = line + moved;
     if moved < wanted {
         open.line_size = line;
     }
@@ -2330,9 +2188,7 @@ fn line_read_position(open: &mut rexx_core::OpenFile, record_length: u64) -> std
         return Ok((open.read_position - 1) / as_position(record_length) + 1);
     }
     if open.line_read == 0 {
-        let position = open.read_position;
-        open.line_read = count_lines_upto(&mut open.file, position)?;
-        note_line_count(open, position);
+        open.line_read = count_lines_upto(&mut open.file, open.read_position)?;
     }
     open.line_read_char = open.read_position;
     Ok(as_position(open.line_read))
@@ -2349,25 +2205,10 @@ fn line_write_position(open: &mut rexx_core::OpenFile, record_length: u64) -> st
         return Ok(open.write_position / reclen + i64::from(open.write_position % reclen != 0));
     }
     if open.line_write == 0 {
-        let position = open.write_position;
-        open.line_write = count_lines_upto(&mut open.file, position)? + 1;
-        note_line_count(open, position);
+        open.line_write = count_lines_upto(&mut open.file, open.write_position)? + 1;
     }
     open.line_write_char = open.write_position;
     Ok(as_position(open.line_write))
-}
-
-/// `queryLinePosition`'s count from the start of the file, which reads
-/// through the end of the line holding the 1-based `position`
-/// (`SysFile::countLines`).
-fn note_line_count(open: &mut rexx_core::OpenFile, position: i64) {
-    oracle_seek(open, 1);
-    let from = position.max(1);
-    let end = match seek_forward_lines(&mut open.file, from, 1) {
-        Ok((1, end)) => end,
-        _ => size_of(&open.file) as i64 + 1,
-    };
-    note_read(open, 1, end);
 }
 
 /// `queryLinePosition`: which line a 1-based character position lies in,

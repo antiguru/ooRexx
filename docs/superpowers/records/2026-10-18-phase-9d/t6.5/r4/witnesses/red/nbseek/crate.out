@@ -1,0 +1,2 @@
+both: <1 write 18, read 1, +3 read 23, =5 write 5, -2 write 3
+both nobuffer: <1 write 18, read 1, +3 read 23, =5 write 5, -2 write 3

@@ -1,0 +1,91 @@
+DIFF
+  oracle: s14 : L5=0 w22 r1 C20=0 w21 r1 QL=5 w21 r1 S=23 w23 r1 I=li w23 r3 R3=line3 w23 r19
+   [line1|line2|line3|nZ|] 
+  crate:  s14 : L5=0 w22 r1 C20=0 w21 r1 QL=5 w21 r1 S=21 w21 r1 I=li w21 r3 R3=line3 w21 r19
+   [line1|line2|line3|nZ|]
+DIFF
+  oracle: s18 : L=0 w23 r1 I=li w23 r3 S=24 w24 r3 L=0 w27 r3 R=ne1 w27 r7 I=li w27 r9
+   [line1|line2|line3|yy2|@x1|] 
+  crate:  s18 : L=0 w23 r1 I=li w23 r3 S=22 w22 r3 L=0 w25 r3 R=ne1 w25 r7 I=li w25 r9
+   [line1|line2|line3|yy2x1|]
+DIFF
+  oracle: s21 : S=20 w20 r1 S=7 w7 r7 R=line2 w7 r13 QL=3 w7 r13 K=1 w7 r13 S=5 w5 r13 S=1 w5 r1
+   [line1|line2|line3|] 
+  crate:  s21 : S=18 w18 r1 S=7 w7 r7 R=line2 w7 r13 QL=3 w7 r13 K=1 w7 r13 S=5 w5 r13 S=1 w5 r1
+   [line1|line2|line3|]
+DIFF
+  oracle: s28 : S=2 w7 r1 M=1 w7 r1 S=20 w20 r1 M=1 w20 r1 L2=0 w10 r1 N=18 w10 r1
+   [line1|n2|e2|line3|] 
+  crate:  s28 : S=2 w7 r1 M=1 w7 r1 S=18 w18 r1 M=1 w18 r1 L2=0 w10 r1 N=18 w10 r1
+   [line1|n2|e2|line3|]
+DIFF
+  oracle: s30 : C3=0 w4 r1 I=li w4 r3 QL=2 w4 r3 I=Qe w4 r5 K=1 w4 r5 S=5 w5 r5 S=5 w5 r5 L=0 w9 r5 S=20 w20 r5
+   [liQeyy2|ne2|line3|] 
+  crate:  s30 : C3=0 w4 r1 I=li w4 r3 QL=2 w4 r3 I=Qe w4 r5 K=1 w4 r5 S=5 w5 r5 S=5 w5 r5 L=0 w9 r5 S=18 w18 r5
+   [liQeyy2|ne2|line3|]
+DIFF
+  oracle: s31 : C=0 w21 r1 S=3 w13 r1 QR=1 w13 r1 R1=line1 w13 r7 C=0 w15 r7 C9=0 w11 r7 S=3 w13 r7 S=22 w22 r7
+   [line1|liRR2|abne3|ab] 
+  crate:  s31 : C=0 w21 r1 S=3 w13 r1 QR=1 w13 r1 R1=line1 w13 r7 C=0 w15 r7 C9=0 w11 r7 S=3 w13 r7 S=20 w20 r7
+   [line1|liRR2|abne3|ab]
+DIFF
+  oracle: s35 : L5=0 w22 r1 S=23 w23 r1
+   [line1|line2|line3|n5|] 
+  crate:  s35 : L5=0 w22 r1 S=21 w21 r1
+   [line1|line2|line3|n5|]
+DIFF
+  oracle: s36 : R1=line1 w19 r7 S=3 w13 r13 L=0 w17 r13 C20=0 w21 r13 C=0 w23 r13 S=24 w24 r13 S=4 w17 r13
+   [line1|line2|yy2|3|@Zab] 
+  crate:  s36 : R1=line1 w19 r7 S=3 w13 r13 L=0 w17 r13 C20=0 w21 r13 C=0 w23 r13 S=22 w22 r13 S=4 w17 r13
+   [line1|line2|yy2|3|@Zab]
+DIFF
+  oracle: s38 : L3=0 w16 r1 S=20 w20 r1 R1=line1 w20 r7
+   [line1|line2|n3|e3|] 
+  crate:  s38 : L3=0 w16 r1 S=18 w18 r1 R1=line1 w18 r7
+   [line1|line2|n3|e3|]
+DIFF
+  oracle: s39 : S=5 w5 r1 S=20 w20 r1 L1=0 w4 r1 L1=0 w4 r1 S=7 w7 r7 M=1 w7 r7 L2=0 w7 r7 S=1 w7 r1
+   [n1|n2|line2|line3|] 
+  crate:  s39 : S=5 w5 r1 S=18 w18 r1 L1=0 w4 r1 L1=0 w4 r1 S=7 w7 r7 M=1 w7 r7 L2=0 w7 r7 S=1 w7 r1
+   [n1|n2|line2|line3|]
+DIFF
+  oracle: s40 : C9=0 w11 r1 I=li w11 r3 S=20 w20 r3 L2=0 w10 r3 S=5 w5 r3
+   [line1|n2|R2|line3|] 
+  crate:  s40 : C9=0 w11 r1 I=li w11 r3 S=18 w18 r3 L2=0 w10 r3 S=5 w5 r3
+   [line1|n2|R2|line3|]
+DIFF
+  oracle: s42 : S=7 w7 r7 L3=1 w7 r7 L2=1 w7 r7 C3=0 w4 r7 R=line2 w4 r13 S=1 w4 r1 C9=0 w11 r1
+   [liQe1|liRR2|line3|] 
+  crate:  s42 : S=7 w7 r7 L3=0 w15 r7 L2=0 w10 r7 C3=0 w4 r7 R=n2 w4 r10 S=2 w4 r7 C9=0 w11 r7
+   [liQe1|n2RR2n3|ne3|]
+DIFF
+  oracle: s47 : S=20 w20 r1 L1=0 w4 r1 S=2 w4 r4
+   [n1|e1|line2|line3|] 
+  crate:  s47 : S=18 w18 r1 L1=0 w4 r1 S=2 w4 r4
+   [n1|e1|line2|line3|]
+DIFF
+  oracle: s51 : S=20 w20 r1 L3=0 w16 r1 L=0 w19 r1 L5=0 w22 r1 I=li w22 r3
+   [line1|line2|n3|x1|n5|] 
+  crate:  s51 : S=18 w18 r1 L3=0 w16 r1 L=0 w19 r1 L5=0 w22 r1 I=li w22 r3
+   [line1|line2|n3|x1|n5|]
+DIFF
+  oracle: s57 : I=li w19 r3 L=0 w23 r3 R1=line1 w23 r7 S=7 w7 r7 S=0 w7 r7 R= w7 r7
+   [line1|line2|line3|yy2|] 
+  crate:  s57 : I=li w19 r3 L=0 w23 r3 R1=line1 w23 r7 S=7 w7 r7 S=3 w6 r7 R=line2 w6 r13
+   [line1|line2|line3|yy2|]
+DIFF
+  oracle: s64 : C=0 w21 r1 C9=0 w11 r1 S=3 w13 r13 QR=3 w13 r13 S=22 w22 r13 S=7 w7 r7
+   [line1|liRR2|line3|ab] 
+  crate:  s64 : C=0 w21 r1 C9=0 w11 r1 S=3 w13 r13 QR=3 w13 r13 S=20 w20 r13 S=7 w7 r7
+   [line1|liRR2|line3|ab]
+DIFF
+  oracle: s69 : S=5 w5 r1 L5=0 w22 r1 S=23 w23 r1 R=line1 w23 r7 C20=0 w21 r7
+   [line1|line2|line3|nZ|] 
+  crate:  s69 : S=5 w5 r1 L5=0 w22 r1 S=21 w21 r1 R=line1 w21 r7 C20=0 w21 r7
+   [line1|line2|line3|nZ|]
+DIFF
+  oracle: s72 : S=20 w20 r1 QL=4 w20 r1
+   [line1|line2|line3|] 
+  crate:  s72 : S=18 w18 r1 QL=4 w18 r1
+   [line1|line2|line3|]
+scenarios 80 differ 18 lengths 80 80

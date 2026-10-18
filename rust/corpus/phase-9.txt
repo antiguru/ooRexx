@@ -198,6 +198,6 @@ lang/stream_command_position.rex
 # line of a read-only implicit open.
 lang/stream_write_only_reads.rex
 
-# 9d Task 6.5 fix round 2: where a write lands after one placed inside the
-# oracle's read buffer, and relative SEEK from the reported position.
-lang/stream_write_position_skew.rex
+# 9d Task 6.5 fix round 4: read and write positions on a NOBUFFER stream,
+# where the oracle keeps the documented positions (Deviation 49).
+lang/stream_nobuffer_positions.rex

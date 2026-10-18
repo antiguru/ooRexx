@@ -125,6 +125,78 @@ const LICENSED_DIVERGENCES: &[LicensedDivergence] = &[
         oracle_stdout: "r AAAAx___CCCCDDDD\np AAAAx___CCCC____\nn AAAAx___________\n",
         crate_stdout: "r AAAAxBBBCCCCDDDD\np AAAAxBBBCCCCDDDD\nn AAAAxBBBCCCCDDDD\n",
     },
+    LicensedDivergence {
+        name: "write-position-after-buffered-read",
+        // A line-numbered LINEOUT on a buffered stream, then an unplaced
+        // LINEOUT, and after a read another: on a three-line file, and on a
+        // 5400-byte file larger than the oracle's 4096-byte buffer. The files
+        // sit beside the program, which `materialise` writes into a fresh
+        // directory.
+        program: "parse source . . me\n\
+              d = me~left(me~lastPos('/'))\n\
+              f = d || 'small.txt'\n\
+              call stream f, 'c', 'open write replace'\n\
+              call charout f, 'line1' || '0a'x || 'line2' || '0a'x || 'line3' || '0a'x\n\
+              call stream f, 'c', 'close'\n\
+              call stream f, 'c', 'open both'\n\
+              call lineout f, 'new', 2\n\
+              w1 = stream(f, 'c', 'query position write')\n\
+              call lineout f, 'tail'\n\
+              w2 = stream(f, 'c', 'query position write')\n\
+              call linein f\n\
+              call lineout f, 'more'\n\
+              say 'small' w1 w2 stream(f, 'c', 'query position write') c2x(charin(f, 1, stream(f, 'c', 'query size')))\n\
+              call stream f, 'c', 'close'\n\
+              g = d || 'big.txt'\n\
+              call stream g, 'c', 'open write replace'\n\
+              do i = 1 to 600\n\
+              \x20 call lineout g, 'L' || i~right(6, 0) || '.'\n\
+              end\n\
+              call stream g, 'c', 'close'\n\
+              call stream g, 'c', 'open both'\n\
+              call lineout g, 'new', 2\n\
+              w1 = stream(g, 'c', 'query position write')\n\
+              call linein g\n\
+              call lineout g, 'tail'\n\
+              call stream g, 'c', 'close'\n\
+              say 'big' w1 stream(g, 'c', 'query size') charin(g, 1, 27)~changestr('0a'x, '|') charin(g, 4092, 27)~changestr('0a'x, '|')\n\
+              call stream g, 'c', 'close'\n",
+        exit_code: 0,
+        stderr: "",
+        oracle_stdout: "small 23 28 33 6C696E65310A6E65770A7461696C0A65330A0000000000000000006D6F72650A\n\
+                        big 4101 5400 L000001.|new|002.|L000003.| 55.|L0004tail|000457.|L0004\n",
+        crate_stdout: "small 11 16 21 6C696E65310A6E65770A7461696C0A6D6F72650A\n\
+                       big 14 5400 L000001.|new|tail|L000003.| 55.|L000456.|L000457.|L0004\n",
+    },
+    LicensedDivergence {
+        name: "relative-seek-from-named-position",
+        // A relative SEEK after a write, and a SEEK from the end, on a
+        // buffered and on a NOBUFFER stream. The files sit beside the
+        // program, which `materialise` writes into a fresh directory.
+        program: "parse source . . me\n\
+              dir = me~left(me~lastPos('/'))\n\
+              do mode over 'both', 'both nobuffer'\n\
+              \x20 f = dir || mode~changestr(' ', '_') || '.txt'\n\
+              \x20 call stream f, 'c', 'open write replace'\n\
+              \x20 call charout f, 'line1' || '0a'x || 'line2' || '0a'x || 'line3' || '0a'x\n\
+              \x20 call stream f, 'c', 'close'\n\
+              \x20 call stream f, 'c', 'open' mode\n\
+              \x20 a = stream(f, 'c', 'seek <1 write')\n\
+              \x20 call charout f, 'ab'\n\
+              \x20 b = stream(f, 'c', 'query position read')\n\
+              \x20 c = stream(f, 'c', 'seek +3 read')\n\
+              \x20 d = stream(f, 'c', 'seek =5 write')\n\
+              \x20 e = stream(f, 'c', 'seek -2 write')\n\
+              \x20 say mode': <1 write' a', read' b', +3 read' c', =5 write' d', -2 write' e\n\
+              \x20 call stream f, 'c', 'close'\n\
+              end\n",
+        exit_code: 0,
+        stderr: "",
+        oracle_stdout: "both: <1 write 18, read 1, +3 read 23, =5 write 5, -2 write 3\n\
+                        both nobuffer: <1 write 20, read 1, +3 read 25, =5 write 5, -2 write 3\n",
+        crate_stdout: "both: <1 write 18, read 1, +3 read 4, =5 write 5, -2 write 3\n\
+                       both nobuffer: <1 write 18, read 1, +3 read 4, =5 write 5, -2 write 3\n",
+    },
 ];
 
 /// Where the prose half lives. `builtin_status.rs`'s own `exclusions_path`,

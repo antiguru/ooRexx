@@ -544,17 +544,6 @@ pub struct OpenFile {
     pub line_size: u64,
     pub last_op_was_read: bool,
     pub transient: bool,
-    /// The 0-based byte range `[start, end)` the oracle's read buffer holds,
-    /// `None` when it holds nothing. A write placed inside it lands where it
-    /// was placed but is reported from the range's end (`SysFile::write`,
-    /// `SysFile::getPosition`).
-    pub read_window: Option<(i64, i64)>,
-    /// How far the reported write position runs ahead of where the next
-    /// unplaced write lands, after a write placed inside the read buffer.
-    pub write_skew: i64,
-    /// The 0-based offset the oracle reports as its position, which decides
-    /// whether `writeSetup` moves before a write (`SysFile::getPosition`).
-    pub oracle_tell: i64,
 }
 
 /// A `Stream`'s own state (`streamLibrary/StreamNative.hpp:158`). The name is
