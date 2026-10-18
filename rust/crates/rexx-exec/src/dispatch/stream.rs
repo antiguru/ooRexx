@@ -1460,7 +1460,7 @@ pub(super) fn charout(
     };
     let start = optional_position(interp, args.get(1).copied().flatten(), 2)?;
     if data.is_none() && start.is_none() {
-        return close_for_write(interp, _cleared, receiver, b"0", false);
+        return close_for_write(interp, _cleared, receiver, b"0");
     }
     if let Some(which) = standard_of(interp, receiver)? {
         refuse_transient_position(interp, which, start.is_some())?;
@@ -1519,7 +1519,7 @@ pub(super) fn lineout(
     };
     let line = optional_position(interp, args.get(1).copied().flatten(), 2)?;
     if data.is_none() && line.is_none() {
-        return close_for_write(interp, _cleared, receiver, b"1", true);
+        return close_for_write(interp, _cleared, receiver, b"1");
     }
     if let Some(which) = standard_of(interp, receiver)? {
         refuse_transient_position(interp, which, line.is_some())?;
@@ -1531,13 +1531,9 @@ pub(super) fn lineout(
     if !write_setup(interp, receiver, b"1")? {
         return Ok(Some(interp.text(b"1")));
     }
+    // Only a LINEOUT with a string pads its record. Positioning writes
+    // nothing (Deviation 46: the oracle pads from the write position here).
     let record = record_length(interp, receiver)?;
-    if data.is_none()
-        && let Some(record_length) = record
-        && let Some(answer) = complete_record(interp, receiver, record_length)?
-    {
-        return Ok(Some(answer));
-    }
     let mode = require(interp, receiver)?.mode;
     let state = require_mut(interp, receiver)?;
     let Some(open) = state.open.as_mut() else {
@@ -1613,14 +1609,15 @@ pub(super) fn lineout(
 /// `LINEOUT` or `CHAROUT` with neither data nor a position: a stream opened
 /// read-only is closed first, then the write setup runs -- creating a missing
 /// file, or raising `NOTREADY` with `answer` where it cannot -- and the stream
-/// is closed (`StreamInfo::lineout`, `StreamInfo::charout`). `complete`, for
-/// `LINEOUT`, completes a partial record first. A standard stream only closes.
+/// is closed (`StreamInfo::lineout`, `StreamInfo::charout`). A close writes
+/// nothing (Deviation 46: the oracle's `LINEOUT` pads a record stream's
+/// current record from the write position first). A standard stream only
+/// closes.
 fn close_for_write(
     interp: &mut Interp,
     cleared: Cleared,
     receiver: ObjRef,
     answer: &[u8],
-    complete: bool,
 ) -> Result<Option<ObjRef>, Failure> {
     if standard_of(interp, receiver)?.is_none() {
         let state = require_mut(interp, receiver)?;
@@ -1630,52 +1627,9 @@ fn close_for_write(
         if !write_setup(interp, receiver, answer)? {
             return Ok(Some(interp.text_built(answer.to_vec())));
         }
-        if complete
-            && let Some(record_length) = record_length(interp, receiver)?
-            && let Some(answer) = complete_record(interp, receiver, record_length)?
-        {
-            return Ok(Some(answer));
-        }
     }
     close(interp, cleared, receiver, &[])?;
     Ok(Some(interp.text(b"0")))
-}
-
-/// Pads a record a `CHAROUT` left partial with blanks to its end. A write
-/// position on a record boundary writes nothing (Deviation 46: the oracle
-/// blanks the whole next record there). A failed write raises `NOTREADY` and
-/// answers `Some` of what the `LINEOUT` answers, which then neither positions
-/// nor closes (`completeLine`'s NOTREADY does not return).
-fn complete_record(
-    interp: &mut Interp,
-    receiver: ObjRef,
-    record_length: u64,
-) -> Result<Option<ObjRef>, Failure> {
-    let state = require_mut(interp, receiver)?;
-    let Some(open) = state.open.as_mut() else {
-        return Ok(None);
-    };
-    let at = open.write_position;
-    let padding = record_remainder(at, record_length);
-    if u64::try_from(padding).is_ok_and(|padding| padding == record_length) {
-        return Ok(None);
-    }
-    match write_at(
-        &mut open.file,
-        offset_of(at),
-        &vec![b' '; padding],
-        open.transient,
-    ) {
-        Ok(()) => {
-            open.write_position = at + padding as i64;
-            open.last_op_was_read = false;
-            Ok(None)
-        }
-        Err(error) => {
-            let errno = error.raw_os_error().unwrap_or(0);
-            notready(interp, receiver, StreamStatus::Error(errno), b"1".to_vec())
-        }
-    }
 }
 
 /// `LINEOUT` on a record stream: `data` padded with blanks to the end of the

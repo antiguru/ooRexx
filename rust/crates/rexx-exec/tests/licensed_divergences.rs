@@ -102,6 +102,29 @@ const LICENSED_DIVERGENCES: &[LicensedDivergence] = &[
         oracle_stdout: "pass\npass\npass\nend\n",
         crate_stdout: "34\n",
     },
+    LicensedDivergence {
+        name: "lineout-without-string-pads-nothing",
+        // A CHAROUT leaves record 2 partly written, then a LINEOUT with no
+        // string closes: on a RECLENGTH stream, after positioning at a record
+        // boundary, and with BINARY and no RECLENGTH. The files sit beside
+        // the program, which `materialise` writes into a fresh directory.
+        program: "parse source . . me\nd = me~left(me~lastPos('/'))\n\
+              call v 'r', 'both binary reclength 4', 'call lineout f'\n\
+              call v 'p', 'both binary reclength 4', 'call lineout f, , 4; call lineout f'\n\
+              call v 'n', 'both binary', 'call lineout f'\n\
+              exit\n\
+              v:\n  f = d || arg(1) || '.dat'\n\
+              \x20 call stream f, 'c', 'open write replace'\n\
+              \x20 call charout f, 'AAAABBBBCCCCDDDD'\n  call charout f\n\
+              \x20 call stream f, 'c', 'open' arg(2)\n  call charout f, 'x', 5\n\
+              \x20 interpret arg(3)\n\
+              \x20 say arg(1) translate(charin(f, 1, chars(f)), '_', ' ')\n\
+              \x20 call stream f, 'c', 'close'\n  return\n",
+        exit_code: 0,
+        stderr: "",
+        oracle_stdout: "r AAAAx___CCCCDDDD\np AAAAx___CCCC____\nn AAAAx___________\n",
+        crate_stdout: "r AAAAxBBBCCCCDDDD\np AAAAxBBBCCCCDDDD\nn AAAAxBBBCCCCDDDD\n",
+    },
 ];
 
 /// Where the prose half lives. `builtin_status.rs`'s own `exclusions_path`,

@@ -2397,6 +2397,7 @@ DEVIATIONS -- permanent, chosen
      close only closes (rexxpg rexio.xml:613-616, rexxref funct.xml:3193-3196).
      Ruled: `AAAABBBBCCCCDDDD` opened BOTH BINARY RECLENGTH 4, then
      `charout(f,'x',5)` and `lineout(f)`, leaves `AAAAxBBBCCCCDDDD`.
+     LICENSED DIVERGENCE WITNESS: lineout-without-string-pads-nothing
 
  47. A `DO` REPETITOR OR `FOR` COUNT WIDER THAN NUMERIC DIGITS RAISES 26.2
      OR 26.3 (Phase 9d). OWNER: none.

@@ -15,7 +15,7 @@ say 'charout' charout(f, 'xy')
 say 'too long after charout' tryout(f, 'abcd')
 say 'lineout' lineout(f, 'abc')
 say 'charout' charout(f, 'z')
-say 'close' lineout(f)
+say 'close' stream(f, 'c', 'close')
 say '[' || charin(f, 1, 30) || ']'
 call stream f, 'c', 'close'
 
