@@ -921,20 +921,31 @@ impl Interp {
     }
 
     /// The file a `::REQUIRES` of `name` in package `id` resolves to, or
-    /// `None` when no route holds one: `PackageClass::resolveProgramName`
+    /// `None` when no route holds one.
+    fn resolve_requires(&self, id: ProgramId, name: &[u8]) -> Option<Vec<u8>> {
+        self.resolve_in_package(id, name, true)
+    }
+
+    /// The file `name` resolves to from package `id`, or `None` when no route
+    /// holds one: `PackageClass::resolveProgramName`
     /// (`classes/PackageClass.cpp:926`), searched from the directory and
     /// extension of the name each package was given, its own first and then
     /// each parent's. The REXX package has no name and searches the global
     /// context.
-    fn resolve_requires(&self, id: ProgramId, name: &[u8]) -> Option<Vec<u8>> {
+    pub(crate) fn resolve_in_package(
+        &self,
+        id: ProgramId,
+        name: &[u8],
+        requires: bool,
+    ) -> Option<Vec<u8>> {
         let Some(package) = self.program_package(id) else {
-            return self.resolve_search(Some(self.program_display_name(id)), name, true);
+            return self.resolve_search(Some(self.program_display_name(id)), name, requires);
         };
         self.package_chain(Some(package)).find_map(|(_, data)| {
             let program = data
                 .program
                 .map(|program| self.program_display_name(program));
-            self.resolve_search(program, name, true)
+            self.resolve_search(program, name, requires)
         })
     }
 

@@ -2382,7 +2382,7 @@ impl Interp {
     /// route holds one. `&self`, which is what lets the call resolver use it.
     pub(crate) fn external_program(&self, name: &[u8]) -> Option<Vec<u8>> {
         let program = self.running_activation()?.program_id;
-        self.resolve_search(Some(self.package_path(program)), name, false)
+        self.resolve_in_package(program, name, false)
     }
 
     /// One external Rexx file, entered by a call: read, parsed, registered and

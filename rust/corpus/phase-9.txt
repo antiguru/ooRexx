@@ -160,3 +160,7 @@ lang/loop_test_callee_loop_chunk.rex
 # 9d Task 6.1: a ::REQUIRES in code compiled from source searches from the
 # name the code was given, then from its parent package.
 lang/requires_dynamic_search_start.rex
+
+# 9d Task 6.1 fix round 1: an external CALL and findProgram in code compiled
+# from source search the same way.
+lang/external_call_dynamic_search_start.rex

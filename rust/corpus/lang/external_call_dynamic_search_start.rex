@@ -1,0 +1,46 @@
+/* An external CALL in code compiled from source, and that code's
+   package~findProgram, search from the directory and extension of the name
+   the code was given, then from its parent package's. */
+dir = qualify('rqx')
+ok = .File~new(dir)~makeDir
+call write dir'/ext_own.rex', 'own'
+call write dir'/ext_ext.zzz', 'ext'
+call write dir'/ext_par.rex', 'parent'
+f = .stream~new(dir'/lib.cls')
+f~open('write replace')
+f~lineout('::routine go public')
+f~lineout('  use arg code')
+f~lineout('  return .routine~new("bare", code, .context~package)')
+f~close
+go = .package~new(dir'/lib.cls')~findRoutine('GO')
+
+-- The name's own directory.
+r = .routine~new(dir'/any.zzz', ("call ext_own", "return result"))
+say r~call (r~package~findProgram('ext_own') \== .nil)
+-- The name's own extension.
+r = .routine~new(dir'/any.zzz', ("call ext_ext", "return result"))
+say r~call (r~package~findProgram('ext_ext') \== .nil)
+-- A bare name has no directory, so the parent package's is searched.
+r = go~call(("call ext_par", "return result"))
+say r~call (r~package~findProgram('ext_par') \== .nil)
+-- Neither holds the file.
+r = .routine~new(dir'/any.zzz', ("call ext_none", "return result"))
+say 'findProgram' (r~package~findProgram('ext_none') == .nil)
+signal on syntax
+say r~call
+exit
+syntax:
+say 'syntax' condition('o')~code
+do name over .array~of('ext_own.rex', 'ext_ext.zzz', 'ext_par.rex', 'lib.cls')
+  ok = .File~new(dir'/'name)~delete
+end
+ok = .File~new(dir)~delete
+exit
+
+write: procedure
+  use arg path, answer
+  f = .stream~new(path)
+  f~open('write replace')
+  f~lineout('return "'answer'"')
+  f~close
+  return
