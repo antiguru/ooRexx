@@ -1,0 +1,4 @@
+program	oracle rc	parent rc	parent stdout	parent stderr	t6.6 rc	t6.6 stdout	t6.6 stderr
+class_constant_expression_novalue_option	158	215	same	differs	158	same	same
+class_constant_expression_numeric_options	0	0	differs	same	0	same	same
+class_subclass_local_not_a_class	157	158	same	differs	157	same	same

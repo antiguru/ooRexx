@@ -1,0 +1,66 @@
+# Single-round experiments behind the directory-model build in Interp::directive_class.
+# base = ebeab2d35 (first archive build). Tables reprinted with callgrind.sh -T from the run directories; the binaries (listed below each table) were removed after the runs.
+
+# ab2: ab941ce38 built from git archive at the base's path (head) and from the worktree (worktree). The deltas reproduce, so they are not a path effect.
+program	base	head	worktree	head d%	worktree d%	base -libc	head -libc	worktree -libc	head -libc d%	worktree -libc d%	base spread%	head spread%	worktree spread%
+startup	119111315	119167987	119170271	+0.0476	+0.0495	57273455	57306552	57306604	+0.0578	+0.0579	0.0001	0.0002	0.0001
+interpret	4115391369	4124696068	4124698009	+0.2261	+0.2261	1702051441	1702544770	1702544804	+0.0290	+0.0290	0.0000	0.0000	0.0001
+parse	1653143812	1653202034	1653204434	+0.0035	+0.0037	1551173766	1551206970	1551207244	+0.0021	+0.0022	0.0000	0.0000	0.0000
+churn	632131990	632367128	632369069	+0.0372	+0.0375	379006842	379040179	379040333	+0.0088	+0.0088	0.0000	0.0000	0.0000
+sayloop	179717116	179762793	179764911	+0.0254	+0.0266	107625030	107658143	107658195	+0.0308	+0.0308	0.0000	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6-ab2
+# base /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6/rexx-base-ebeab2d35 2ce168029e830f34aa0d513b5646918050ffe910c14962babbcaa79030a4e924
+# head /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6/rexx-head-archived 6037899351dff74d3857c670cfeac151e56cd46848c7b5057a03ef533752986f
+# worktree /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6/rexx-head 2817e7664adf3eb2357c09e43df725df7d6d506fd3de78f559eca1baab29540d
+
+# exp1: ab941ce38 plus #[inline(never)] on Block::finish (reverted).
+program	base	exp1	exp1 d%	base -libc	exp1 -libc	exp1 -libc d%	base spread%	exp1 spread%
+interpret	4115391163	4124829980	+0.2294	1702051321	1702909679	+0.0504	0.0000	0.0000
+startup	119111147	119160104	+0.0411	57273335	57311498	+0.0666	0.0000	0.0000
+sayloop	179717116	179754844	+0.0210	107625030	107663089	+0.0354	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6-exp1
+# base /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6/rexx-base-ebeab2d35 2ce168029e830f34aa0d513b5646918050ffe910c14962babbcaa79030a4e924
+# exp1 /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6/rexx-exp1 fb25eb4bf4212a086623396feadbf051301727ec9f31a7a49d452601fed51b8d
+
+# exp2: the REXX package step uncached (no rexx_class_cache inserts).
+program	base	exp2	exp2 d%	base -libc	exp2 -libc	exp2 -libc d%	base spread%	exp2 spread%
+interpret	4115391369	4118784737	+0.0825	1702051441	1702541448	+0.0288	0.0000	0.0000
+startup	119111315	119165332	+0.0454	57273455	57303128	+0.0518	0.0000	0.0000
+sayloop	179717116	179754312	+0.0207	107625030	107654329	+0.0272	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6-exp2
+# base /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6/rexx-base-ebeab2d35 2ce168029e830f34aa0d513b5646918050ffe910c14962babbcaa79030a4e924
+# exp2 /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6/rexx-exp2 7ad47e2b794defdfa08e1141897929d507d023ef1dd5d0b469f2600ed6e38a4e
+
+# ctl: exp2's parser and install changes with ebeab2d35's directive_class, beside exp2.
+program	base	ctl	exp2	ctl d%	exp2 d%	base -libc	ctl -libc	exp2 -libc	ctl -libc d%	exp2 -libc d%	base spread%	ctl spread%	exp2 spread%
+interpret	4115391369	4116251692	4118784472	+0.0209	+0.0824	1702051441	1702546023	1702541448	+0.0291	+0.0288	0.0000	0.0000	0.0000
+startup	119107205	119154012	119165332	+0.0393	+0.0488	57273065	57307907	57303128	+0.0608	+0.0525	0.0000	0.0000	0.0000
+sayloop	179717116	179760998	179754312	+0.0244	+0.0207	107625030	107659498	107654329	+0.0320	+0.0272	0.0000	0.0000	0.0000
+parse	1653143547	1653186998	1653192024	+0.0026	+0.0029	1551173766	1551208205	1551203378	+0.0022	+0.0019	0.0000	0.0000	0.0000
+churn	632131990	632175537	632199370	+0.0069	+0.0107	379006842	379041432	379036857	+0.0091	+0.0079	0.0000	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6-ctl
+# base /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6/rexx-base-ebeab2d35 2ce168029e830f34aa0d513b5646918050ffe910c14962babbcaa79030a4e924
+# ctl /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6/rexx-ctl-parser-only 61389751401eb34d0d7d6ce0055938ce3418e3acb5eabe802d931e98e407ae08
+# exp2 /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6/rexx-exp2 7ad47e2b794defdfa08e1141897929d507d023ef1dd5d0b469f2600ed6e38a4e
+
+# exp3: exp2 plus label peeling in a cold function.
+program	base	exp3	exp3 d%	base -libc	exp3 -libc	exp3 -libc d%	base spread%	exp3 spread%
+interpret	4115391104	4118780693	+0.0824	1702051441	1702537404	+0.0286	0.0000	0.0000
+startup	119111315	119161003	+0.0417	57273455	57299084	+0.0447	0.0000	0.0000
+sayloop	179716851	179753992	+0.0207	107625030	107650675	+0.0238	0.0000	0.0000
+parse	1653143812	1653191489	+0.0029	1551173766	1551199586	+0.0017	0.0000	0.0000
+churn	632131990	632195326	+0.0100	379006842	379032813	+0.0069	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6-exp3
+# base /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6/rexx-base-ebeab2d35 2ce168029e830f34aa0d513b5646918050ffe910c14962babbcaa79030a4e924
+# exp3 /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6/rexx-exp3 3cb8d2c3e891e4f3e56123cf3a2fd06ac45a7bf41836e3b81c2f80b5a4771a80
+
+# exp4: exp3 plus environment_model() ahead of the REXX package step, what f568d48c0 commits.
+program	base	exp4	exp4 d%	base -libc	exp4 -libc	exp4 -libc d%	base spread%	exp4 spread%
+interpret	4115392604	4116638685	+0.0303	1702051303	1702535027	+0.0284	0.0000	0.0000
+startup	119111315	119145063	+0.0283	57273455	57296587	+0.0404	0.0000	0.0000
+sayloop	179716851	179751124	+0.0191	107625030	107648298	+0.0216	0.0000	0.0000
+parse	1653143547	1653177679	+0.0021	1551173766	1551197227	+0.0015	0.0000	0.0000
+churn	632131990	632165957	+0.0054	379006842	379030436	+0.0062	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6-exp4
+# base /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6/rexx-base-ebeab2d35 2ce168029e830f34aa0d513b5646918050ffe910c14962babbcaa79030a4e924
+# exp4 /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6/rexx-exp4 2fc9df22c813d9dc0149f1919738994afbd59e4ad12cf2ca90f91452c64b246d

@@ -1,0 +1,3 @@
+     4 *-* end
+Error 10 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t66/rec/label/label_03.rex line 4:  Unexpected or unmatched END.
+Error 10.1:  END has no corresponding DO, LOOP, or SELECT.

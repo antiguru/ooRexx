@@ -1,0 +1,16 @@
+program	oracle rc	parent rc	parent stdout	parent stderr	t6.6 rc	t6.6 stdout	t6.6 stderr
+directive_01	157	157	same	differs	157	same	same
+directive_02	157	157	same	differs	157	same	same
+directive_03	157	221	same	differs	157	same	same
+directive_04	157	157	same	differs	157	same	same
+directive_05	157	221	same	differs	157	same	same
+directive_06	157	157	same	differs	157	same	same
+directive_07	157	157	same	same	157	same	same
+directive_08	157	157	same	same	157	same	same
+directive_09	157	157	same	same	157	same	same
+directive_10	157	157	same	differs	157	same	differs
+directive_11	157	221	same	differs	221	same	differs
+directive_12	157	157	same	differs	157	same	same
+directive_13	157	157	same	same	157	same	same
+directive_14	0	0	same	same	0	same	same
+directive_15	157	157	same	differs	157	same	same

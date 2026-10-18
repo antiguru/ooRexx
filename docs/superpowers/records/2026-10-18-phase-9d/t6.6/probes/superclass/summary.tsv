@@ -1,0 +1,13 @@
+program	oracle rc	parent rc	parent stdout	parent stderr	t6.6 rc	t6.6 stdout	t6.6 stderr
+superclass_a	157	158	same	differs	157	same	same
+superclass_b	157	158	same	differs	157	same	same
+superclass_c	0	158	differs	differs	0	same	same
+superclass_d	0	0	same	same	0	same	same
+superclass_e	157	158	same	differs	157	same	differs
+superclass_f	0	0	differs	same	0	same	same
+superclass_g	158	158	same	differs	158	same	differs
+superclass_h	157	158	same	differs	157	same	same
+superclass_i	157	158	same	differs	157	same	same
+superclass_j	157	158	same	differs	157	same	same
+superclass_k	158	158	same	same	158	same	same
+superclass_l	158	158	same	differs	158	same	differs

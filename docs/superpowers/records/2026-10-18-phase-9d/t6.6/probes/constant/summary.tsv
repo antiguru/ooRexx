@@ -1,0 +1,9 @@
+program	oracle rc	parent rc	parent stdout	parent stderr	t6.6 rc	t6.6 stdout	t6.6 stderr
+constant_a	0	0	differs	same	0	same	same
+constant_b	158	215	same	differs	158	same	same
+constant_c	0	0	same	differs	0	same	differs
+constant_d	158	215	same	differs	158	same	same
+constant_e	0	0	same	same	0	same	same
+constant_f	0	0	differs	same	0	same	same
+constant_g	0	0	same	same	0	same	same
+constant_h	158	215	same	differs	158	same	same

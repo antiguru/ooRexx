@@ -1,0 +1,11 @@
+       >I> Method "::CONSTANT" with scope "C" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t66/rec/constant/constant_c.rex".
+     3 *-* ::constant k (1+2)
+       >L>   "1"
+       >L>   "2"
+       >O>   "+" => "3"
+       >>>   "3"
+       <I< Method "::CONSTANT" with scope "C" in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t66/rec/constant/constant_c.rex".
+     1 *-* say .c~k
+       >E>   .C => "The C class"
+       >M>   "K" => "3"
+       >>>   "3"

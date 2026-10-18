@@ -1,0 +1,43 @@
+# diff <(grep -v '^#' t6.5/r4/suite/tests.tsv | sort) <(grep -v '^#' t6.6/suite/tests.tsv | sort)
+17704c17704
+< base/directives/ATTRIBUTE	TESTMISPLACEDCLASSMETHOD	-	passed	failed
+---
+> base/directives/ATTRIBUTE	TESTMISPLACEDCLASSMETHOD	-	passed	passed
+17778c17778
+< base/directives/CLASS	TEST_SUBCLASS_NO_CLASS_LOCAL	-	passed	failed
+---
+> base/directives/CLASS	TEST_SUBCLASS_NO_CLASS_LOCAL	-	passed	passed
+17800c17800
+< base/directives/CONSTANT	TEST_EXPRESSION_NOVALUE_ERROR	-	passed	failed
+---
+> base/directives/CONSTANT	TEST_EXPRESSION_NOVALUE_ERROR	-	passed	passed
+21642,21645c21642,21645
+< base/keyword/LABEL	TEST_LABEL_IF_1_2	-	passed	failed
+< base/keyword/LABEL	TEST_LABEL_IF_2_1	-	passed	failed
+< base/keyword/LABEL	TEST_LABEL_IF_2_3	-	passed	failed
+< base/keyword/LABEL	TEST_LABEL_IF_3_1	-	passed	failed
+---
+> base/keyword/LABEL	TEST_LABEL_IF_1_2	-	passed	passed
+> base/keyword/LABEL	TEST_LABEL_IF_2_1	-	passed	passed
+> base/keyword/LABEL	TEST_LABEL_IF_2_3	-	passed	passed
+> base/keyword/LABEL	TEST_LABEL_IF_3_1	-	passed	passed
+21649c21649
+< base/keyword/LABEL	TEST_LABEL_IF_3_5	-	passed	failed
+---
+> base/keyword/LABEL	TEST_LABEL_IF_3_5	-	passed	passed
+21656c21656
+< base/keyword/LABEL	TEST_SELECT_1_3	-	passed	failed
+---
+> base/keyword/LABEL	TEST_SELECT_1_3	-	passed	passed
+21658c21658
+< base/keyword/LABEL	TEST_SELECT_1_5	-	passed	failed
+---
+> base/keyword/LABEL	TEST_SELECT_1_5	-	passed	passed
+21662c21662
+< base/keyword/LABEL	TEST_SELECT_2_3	-	passed	failed
+---
+> base/keyword/LABEL	TEST_SELECT_2_3	-	passed	passed
+21664c21664
+< base/keyword/LABEL	TEST_SELECT_2_5	-	passed	failed
+---
+> base/keyword/LABEL	TEST_SELECT_2_5	-	passed	passed

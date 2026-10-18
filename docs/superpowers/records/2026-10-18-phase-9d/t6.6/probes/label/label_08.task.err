@@ -1,0 +1,3 @@
+     4 *-* otherwise lab: nop
+Error 47 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t66/rec/label/label_08.rex line 4:  Unexpected label.
+Error 47.4:  Labels are not allowed within a SELECT block; found "OTHERWISE".

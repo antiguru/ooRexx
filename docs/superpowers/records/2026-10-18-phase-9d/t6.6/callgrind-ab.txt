@@ -1,0 +1,11 @@
+# A/B against the parent: base = ebeab2d35 built from git archive (touched, fresh Compiling), head = f568d48c0
+# rust/bench-programs/callgrind.sh -B 0.5 -p "startup interpret parse churn sayloop" -o /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6-ab base=/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6/rexx-base-ebeab2d35 head=/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6/rexx-head   (exit 0)
+# base 6f80dedd86c05b51c1b3b9fd24b439a982dbac0718730c8b09b6bf5e69b9b8dd
+# head e71191ddeea3018f8965bb3c9305e5b0e6ce79ab1babf3b45912723623b1fb24
+program	base	head	head d%	base -libc	head -libc	head -libc d%	base spread%	head spread%
+startup	119111368	119145231	+0.0284	57273455	57296707	+0.0406	0.0001	0.0000
+interpret	4115391416	4116638685	+0.0303	1702051441	1702535027	+0.0284	0.0000	0.0000
+parse	1653143626	1653177679	+0.0021	1551173628	1551197227	+0.0015	0.0003	0.0000
+churn	632132043	632166222	+0.0054	379006842	379030436	+0.0062	0.0007	0.0000
+sayloop	179717169	179750859	+0.0187	107625030	107648298	+0.0216	0.0023	0.0023
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6-ab

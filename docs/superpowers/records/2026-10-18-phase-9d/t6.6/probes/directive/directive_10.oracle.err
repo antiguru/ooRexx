@@ -1,0 +1,3 @@
+     3 *-* ::attribute a
+Error 99 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t66/rec/directive/directive_10.rex line 3:  Translation error.
+Error 99.931:  Duplicate ::ATTRIBUTE directive instruction.

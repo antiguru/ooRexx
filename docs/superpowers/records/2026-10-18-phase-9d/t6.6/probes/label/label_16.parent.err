@@ -1,0 +1,3 @@
+     3 *-*     lab: nop
+Error 98 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t66/rec/label/label_16.rex line 3:  Execution error.
+Error 98.987:  Namespace "LAB" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t66/rec/label/label_16.rex".

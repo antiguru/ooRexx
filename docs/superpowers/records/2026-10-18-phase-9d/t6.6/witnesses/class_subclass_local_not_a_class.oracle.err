@@ -1,0 +1,3 @@
+     6 *-* ::class t subclass input
+Error 99 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t66/rec/witnesses/class_subclass_local_not_a_class.rex line 6:  Translation error.
+Error 99.949:  "INPUT" is not a valid class.

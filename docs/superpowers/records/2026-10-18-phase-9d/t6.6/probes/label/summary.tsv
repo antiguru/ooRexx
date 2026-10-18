@@ -1,0 +1,20 @@
+program	oracle rc	parent rc	parent stdout	parent stderr	t6.6 rc	t6.6 stdout	t6.6 stderr
+label_01	209	158	same	differs	209	same	same
+label_02	209	0	same	differs	209	same	same
+label_03	209	246	same	differs	209	same	same
+label_04	209	246	same	differs	209	same	same
+label_05	209	158	same	differs	209	same	same
+label_06	209	0	same	differs	209	same	same
+label_07	209	158	same	differs	209	same	same
+label_08	209	0	same	differs	209	same	same
+label_09	209	221	same	differs	209	same	same
+label_10	209	221	same	differs	209	same	same
+label_11	221	221	same	same	221	same	same
+label_12	0	0	same	same	0	same	same
+label_13	209	209	same	same	209	same	same
+label_14	209	236	same	differs	209	same	same
+label_15	209	236	same	differs	209	same	same
+label_16	209	158	same	differs	209	same	same
+label_17	209	158	same	differs	209	same	same
+label_18	209	0	same	differs	209	same	same
+label_19	0	0	differs	same	0	same	same
