@@ -191,8 +191,7 @@ Review: `task-6.5-review.md`. Code commit `76acd13a3`. The records commit that f
      `seekForwardLines` treats the failed read as the end of the file, and `LINEIN` is
      `NOTREADY:EOF`. The crate already agreed on both.
    * `lineout(f, 'x', 2)` therefore writes at line 1, and the oracle's write position is 3, after
-     the bytes. The crate's measured rule, "end of the file plus what was written" after a
-     line-placed write, now applies only to a stream that can read.
+     the bytes.
 3. **Implicit read-only open, `QUERY POSITION WRITE LINE` 2 against 1.** This predates Task 6.5.
    The crate built from `93063dff5` (git archive, its own target dir) prints `abc 1 2 READY:`, the
    same as `06f0ce3af`. The oracle prints `abc 1 1`. `implicitOpen` zeroes `lineWritePosition` only
@@ -288,10 +287,6 @@ The fuzzing below found three more mechanisms behind the same mismatch, and they
 * `LINEOUT` keeps that cache as `StreamInfo::lineout` does. It grows when the stream was opened
   `APPEND` or when `charWritePosition == size()`, and is dropped otherwise. The crate grew it on
   any append.
-
-The earlier measured rule, "after a write placed by line number the pointer lands at the end of
-the file plus what was written", was this mechanism seen from one call, and `land_write` replaces
-it.
 
 ### The places the controller named
 
@@ -398,3 +393,99 @@ Each status read unpiped:
 * The whole suite, with the table at `t6.5/r3/suite/table.tsv`: exit 101, 402 groups, 28 red. No
   row changed against `t6.5/r2/suite/tests.tsv`. `LINEOUT TEST_BINARY` keeps its
   `Deviation(46)` row.
+
+## Fix round 4
+
+Ruling: Deviation 49 (`phase-4-exclusions.txt` row 49). Read and write positions on a persistent
+stream follow the documentation, buffered or not. Review: `task-6.5-review-r23.md`. Code commits
+are `ea1c46b06` and `9ab50c915`. The records commit that follows them holds `t6.5/r4/suite/` and
+this section.
+
+### Change
+
+* The round-2 buffer model is removed: `land_write`, `note_read`, `oracle_seek`,
+  `read_setup_seek`, `write_setup_seek`, `note_line_count`, and the `read_window`, `write_skew` and
+  `oracle_tell` fields of `OpenFile`. `rexx-core/src/body.rs` is back to its state before round 2
+  (`git diff c6fff3e8d~1 -- rust/crates/rexx-core/src/body.rs` is empty).
+* A write lands at the write position, and the write position moves by what was written, so
+  QUERY POSITION WRITE reports where the bytes went.
+* A relative SEEK moves from the read or write position it names.
+* Two round-2 changes stay, because neither depends on the oracle's lost file pointer:
+  * `SEEK <n LINE` uses the cached line count (`getLineSize`).
+  * LINEOUT keeps that cache as `StreamInfo::lineout` does.
+
+  Both agree with the oracle on NOBUFFER streams in every fuzz scenario below. Neither explains a
+  difference.
+* The round-2 sentence that called the oracle's buffered position "the measured rule" is deleted
+  from this report, and so is the matching round-1 sentence. The code comment it replaced went in
+  round 2.
+
+### Witnesses
+
+* `lang/stream_write_position_skew.rex` is renamed `lang/stream_nobuffer_positions.rex` (with its
+  `sourceline_oracle` file and its `phase-9.txt` entry). It opens its streams `BOTH NOBUFFER` and
+  drops the relative-SEEK case. It matches the oracle on all three descriptors.
+  * Red: the crate at `db010eca6` (round 3) gives `w23 w28` and NUL fill where the oracle gives
+    `w11 w16`.
+  * Green: `ea1c46b06` matches.
+* `lang/stream_lineout_position.rex` (Phase 7, `phase-7.txt`) recorded the buffered oracle's
+  write position after a line-numbered LINEOUT, and its own comment called that position "not
+  where the bytes went". It failed the gated corpus after the change (`wchar` 11, 9 and 9 against
+  22, 20 and 28). Its streams now open `BOTH NOBUFFER`, where the oracle reports 11, 9 and 9, and
+  its comments state the documented position. Its `sourceline_oracle` file is regenerated
+  (`9ab50c915`).
+* There are two new licensed-divergence rows in `tests/licensed_divergences.rs`, each marked in row
+  49:
+  * `write-position-after-buffered-read`, from program `lic49.rex`. It covers a three-line file
+    and a 5400-byte file opened `BOTH`. The oracle reports 23 and 28, NUL-fills `small`, reports
+    4101 for `big`, and writes `tail` over line 456 (`L0004tail|000457.`). The crate reports 11,
+    16 and 21, and writes `tail` as line 3. The same program opened NOBUFFER (`lic49nb.rex`)
+    gives the crate's answer on the oracle.
+  * `relative-seek-from-named-position`, from program `nbseek2.rex`. It runs on `BOTH` and on
+    `BOTH NOBUFFER`. After a two-byte CHAROUT, the oracle's `seek +3 read` answers 23 (buffered)
+    and 25 (NOBUFFER), and the crate answers the documented 4. The oracle's NOBUFFER
+    `seek <1 write` answers 20 on an 18-byte file, and the crate answers 18, as the buffered oracle
+    does.
+
+  Red for both rows is the crate at `db010eca6`. On the first row it equals the oracle. On the
+  second it equals the oracle on the buffered line. Green is `ea1c46b06`. The outputs are in
+  `t6.5/r4/witnesses/`.
+
+### Fuzz against the NOBUFFER oracle
+
+The round-2 sequences were re-run with `OPEN BOTH NOBUFFER` (and `BINARY RECLENGTH 4 NOBUFFER`), on
+the text and the binary file. Eight new seeds were added without relative SEEKs. The programs, the
+comparison script `two.sh`, each run's diff and `classify.py` are in
+`t6.5/r4/probes/fuzz-nobuffer/`. The result is 1280 scenarios, with 295 differing from the oracle.
+`classify.py` assigns every difference, and none is unexplained:
+
+* **A, 140: a relative SEEK.** The oracle's `SysFile::seek` takes `SEEK_CUR` from the descriptor's
+  offset, wherever the last I/O left it. The crate takes it from the named position, as Deviation 49
+  rules. Probe: `t6.5/r4/probes/nbseek/`.
+* **B, 148: a character SEEK from the end.** Unbuffered, the oracle's `SysFile::seek` calls
+  `lseek64(fileHandle, offset, SEEK_END)` with the offset's sign unchanged. So `seek <1 write` on an
+  18-byte file lands at 20, past the end. The buffered oracle and the crate answer 18. This is the
+  same ruling's case: the documented answer on every stream.
+* **C, 7: a SEEK of both pointers followed by line positioning.** The oracle copies the read line
+  into the write line but leaves the write line's character position at 0. The next line walk then
+  seeks to offset -1 and fails, so a LINEOUT answers 1 and `seek <1 write line` answers 0. This is
+  the SEEK-to-zero class reported in round 2. It is not from this round.
+
+**Concern:** classes A and B mean the oracle's NOBUFFER stream is not documented for relative SEEKs
+and SEEKs from the end. On those two operations, the crate's answers come from Deviation 49's text,
+not from the NOBUFFER oracle.
+
+### Checks
+
+Each status read unpiped:
+* `cargo fmt --all --check`: exit 0.
+* `memcap 8G cargo clippy -j 4 -p rexx-core -p rexx-exec --all-targets -- -D warnings`: exit 0.
+* `sourceline_oracle`, the refusal tables and `unsafe_sites`: exit 0.
+* `--test licensed_divergences`: exit 0, both properties pass. The first run left a stray
+  `rust/crates/rexx-exec/5both_nobuffer.txt`, because the program reused `d` for a SEEK answer. The
+  variable was renamed and the file deleted.
+* `REXX_CORPUS_GATE=1 ... --test corpus`: exit 101 before `9ab50c915` (`stream_lineout_position.rex`
+  unclassified), and exit 0 after it, with 29 passed and 1 ignored.
+* `--test ir_recorded --test collect_stress`: exit 0, run because a corpus program changed.
+* The whole suite, with the table at `t6.5/r4/suite/table.tsv`: exit 101, 402 groups, 28 red. No
+  row changed against `t6.5/r3/suite/tests.tsv`.
