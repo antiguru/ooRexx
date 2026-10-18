@@ -259,7 +259,7 @@ pub(crate) fn datatype_matches(
         b'W' => match parse_number(text) {
             Some(number) => {
                 let digits = interp.activation().settings.digits();
-                interp.lostdigits_check_text(&number, text)?;
+                interp.lostdigits_check_with(&number, |_| text.to_vec())?;
                 number
                     .add(&Number::zero(), digits)
                     .map_err(Raised::from)?

@@ -373,10 +373,17 @@ fn max_min(
     let best = target_number(interp, name, args)?;
     let best_text = required_string(interp, args, 1);
     let objects: Vec<Option<ObjRef>> = (0..rest.len()).map(|i| args.object(i + 2)).collect();
-    max_min_over(interp, name, &best, best_text, rest, &objects, want)
+    max_min_over(interp, name, &best, best_text, rest, &objects, want, true)
 }
 
 /// `MAX`'s and `MIN`'s general path, shared with `String~max` and `String~min`.
+/// With `lostdigits`, each argument after the target is an operand to
+/// LOSTDIGITS, as `NumberString::maxMin`'s `prepareOperatorNumber` makes it
+/// (`classes/NumberStringMath.cpp:277`). The target never is.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the two callers differ in each of them"
+)]
 pub(crate) fn max_min_over(
     interp: &mut Interp,
     name: &'static [u8],
@@ -385,6 +392,7 @@ pub(crate) fn max_min_over(
     rest: &[Option<ObjRef>],
     objects: &[Option<ObjRef>],
     want: Extreme,
+    lostdigits: bool,
 ) -> Result<ObjRef, Failure> {
     let Numeric { digits, fuzz, form } = current(interp);
     let mut best = target.clone().into_round(digits);
@@ -404,6 +412,14 @@ pub(crate) fn max_min_over(
             };
             return Err(Raised::method_argument_not_a_number(index + 1, &named).into());
         };
+        // The description is the argument's number as `prepareOperatorNumber`'s
+        // clone renders it, unrounded: measured, `' 4444444444 '` names
+        // `4444444444` and `44444444440E-1` names `4.4444444440E+9`.
+        if lostdigits {
+            interp.lostdigits_check_with(&number, |_| {
+                number.render_unrounded(digits, form).into_bytes()
+            })?;
+        }
         let number = number.into_round(digits);
         // Both sides are already parsed, so the byte slices are never read
         // for these two non-strict operators; they are the real renderings
@@ -425,6 +441,21 @@ pub(crate) fn max_min_over(
         }
     }
     Ok(interp.number(best, saturate(digits), form))
+}
+
+/// Whether `RexxInteger::Max`/`::Min` answer `target` and `rest` without
+/// `NumberString::maxMin`: an integer target valid under `digits` and an
+/// integer in every argument.
+pub(crate) fn integer_path_applies(
+    interp: &mut Interp,
+    target: ObjRef,
+    rest: &[Option<ObjRef>],
+    digits: u64,
+) -> bool {
+    integer_object(&interp.to_text(target)).is_some_and(|value| valid_under(value, digits))
+        && rest
+            .iter()
+            .all(|slot| slot.is_some_and(|arg| integer_object(&interp.to_text(arg)).is_some()))
 }
 
 /// `RexxInteger::Max`/`::Min`'s fast path, or `None` when the oracle would

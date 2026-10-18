@@ -956,6 +956,51 @@ impl Number {
     }
 }
 
+impl Number {
+    /// Renders every stored digit, with `digits` and `form` deciding only
+    /// whether and how the exponent shows: `NumberString::stringValue`
+    /// (`classes/NumberStringClass.cpp:338`) on a number not yet rounded.
+    pub fn render_unrounded(&self, digits: u64, form: Form) -> String {
+        if self.is_zero() {
+            return "0".to_string();
+        }
+        let sign = if self.negative { "-" } else { "" };
+        let d: String = self.digits.iter().map(|x| (b'0' + x) as char).collect();
+        let exponent = i64::from(self.exponent);
+        if exponent == 0 {
+            return format!("{sign}{d}");
+        }
+        let count = d.len() as i64;
+        let digits = i64::try_from(digits).unwrap_or(i64::MAX);
+        let mut adjusted = exponent + count - 1;
+        let mut shown = exponent;
+        let mut suffix = String::new();
+        if adjusted >= digits || exponent.abs() > digits.saturating_mul(2) {
+            if form == Form::Engineering {
+                if adjusted < 0 {
+                    adjusted -= 2;
+                }
+                // Truncating division, as the C++ divides.
+                adjusted = (adjusted / 3) * 3;
+            }
+            shown -= adjusted;
+            if adjusted != 0 {
+                let e_sign = if adjusted < 0 { '-' } else { '+' };
+                suffix = format!("E{e_sign}{}", adjusted.abs());
+            }
+        }
+        let length = shown + count;
+        let body = if length <= 0 {
+            format!("0.{}{d}", "0".repeat((-length) as usize))
+        } else if length >= count {
+            format!("{d}{}", "0".repeat((length - count) as usize))
+        } else {
+            format!("{}.{}", &d[..length as usize], &d[length as usize..])
+        };
+        format!("{sign}{body}{suffix}")
+    }
+}
+
 impl std::fmt::Display for Number {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.format(DEFAULT_DIGITS))

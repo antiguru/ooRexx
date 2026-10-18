@@ -1783,7 +1783,12 @@ fn string_max_min(
 ) -> Result<Option<ObjRef>, Failure> {
     let value = numeric_receiver(interp, receiver, method)?;
     let text = interp.to_text(receiver).to_vec();
-    let answer = numeric::max_min_over(interp, method, &value, text, args, args, want)?;
+    // Measured, `1~max(1111111111)` at DIGITS 9 raises no LOSTDIGITS: the
+    // oracle's `RexxInteger::Max` answers it without `NumberString::maxMin`.
+    let digits = numeric::digits_setting(interp);
+    let lostdigits =
+        interp.lostdigits_armed && !numeric::integer_path_applies(interp, receiver, args, digits);
+    let answer = numeric::max_min_over(interp, method, &value, text, args, args, want, lostdigits)?;
     Ok(Some(answer))
 }
 

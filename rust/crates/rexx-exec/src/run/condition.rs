@@ -251,20 +251,22 @@ impl Interp {
         self.lostdigits_raise(right, right_value)
     }
 
-    /// [`Interp::lostdigits_check`] for an operand that is `text` rather than
-    /// a value, whose description is `text` itself.
-    pub(crate) fn lostdigits_check_text(
+    /// [`Interp::lostdigits_check`] with the condition's description from
+    /// `description`, which runs only for a raise.
+    pub(crate) fn lostdigits_check_with(
         &mut self,
         operand: &Number,
-        text: &[u8],
+        description: impl FnOnce(&mut Self) -> Vec<u8>,
     ) -> Result<(), Failure> {
         if !self.lostdigits_armed {
             return Ok(());
         }
-        self.lostdigits_raise_with(operand, |_| text.to_vec())
+        self.lostdigits_raise_with(operand, description)
     }
 
-    /// [`Interp::lostdigits_check`]'s armed half.
+    /// [`Interp::lostdigits_check`]'s armed half. The description is the
+    /// operand as written: measured, `' 1111111111 ' + 1` names
+    /// `' 1111111111 '` with its blanks.
     #[cold]
     #[inline(never)]
     fn lostdigits_raise(&mut self, operand: &Number, value: ObjRef) -> Result<(), Failure> {
@@ -273,8 +275,7 @@ impl Interp {
 
     /// The operand's own digit count, then the trap, then the per-activation
     /// setting; `description` renders the operand only once one of them takes
-    /// it. The description is the operand as written: measured, `' 1111111111
-    /// ' + 1` names `' 1111111111 '` with its blanks.
+    /// it.
     fn lostdigits_raise_with(
         &mut self,
         operand: &Number,

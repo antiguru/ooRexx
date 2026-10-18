@@ -169,3 +169,7 @@ lang/external_call_dynamic_search_start.rex
 # any width.
 lang/lostdigits_signal_trap.rex
 lang/datatype_whole_wide.rex
+
+# 9d Task 6.3 fix round 1: MAX and MIN raise LOSTDIGITS for an argument after
+# the first, outside the integer path.
+lang/lostdigits_max_min.rex
