@@ -1,0 +1,3 @@
+     4 *-* x~nosuch
+Error 97 running RUNDIR/t4b/t4b.rex line 4:  Object method not found.
+Error 97.1:  Object "enhanced Object" does not understand message "NOSUCH".

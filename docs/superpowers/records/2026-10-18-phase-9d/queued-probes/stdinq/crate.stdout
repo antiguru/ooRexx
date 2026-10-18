@@ -1,0 +1,7 @@
+type TRANSIENT
+handle 0
+chars 1
+lines 1
+open READY:
+exists 
+qualify RUNDIR/STDIN

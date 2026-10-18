@@ -1,0 +1,16 @@
+       +++ "LINUX COMMAND RUNDIR/dh1/dh1.rex"
+     3 *-* do i = 1 to length(linein('/nonexistent/dh')) + 1
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+p1
+     8 *-*     h:
+p2
+     8 *-*     say 'h sigl' sigl;
+p3
+     8 *-*     return
+     4 *-*   say 'body' i
+p4
+     5 *-* end
+     3 *-* do i = 1 to length(linein('/nonexistent/dh')) + 1
+     6 *-* say 'after'
+p5
+     7 *-* exit

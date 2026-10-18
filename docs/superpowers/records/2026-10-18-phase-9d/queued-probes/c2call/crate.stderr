@@ -1,0 +1,13 @@
+       +++ "LINUX COMMAND RUNDIR/c2call/c2call.rex"
+     3 *-* 'false'
+       >>>   "false"
+       +++   "RC(1)"
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+     6 *-*   sub:
+     6 *-*   say 'in sub' sigl;
+     6 *-*   return
+     7 *-*   h:
+     7 *-*   say 'handler sigl' sigl rc;
+     7 *-*   return
+     4 *-* say 'after'
+     5 *-* exit

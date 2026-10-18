@@ -1,0 +1,3 @@
+     1 *-* call .routines~put('a', 'b')
+Error 35 running RUNDIR/ins35/ins35.rex line 1:  Invalid expression.
+Error 35.1:  Incorrect expression detected at "~".

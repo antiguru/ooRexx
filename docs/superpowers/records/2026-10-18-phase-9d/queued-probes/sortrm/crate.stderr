@@ -1,0 +1,4 @@
+       *-* Compiled method "SORT" with scope "Array".
+     3 *-* b~sort
+Error 98 running RUNDIR/sortrm/sortrm.rex line 3:  Execution error.
+Error 98.975:  Missing array element at position 3.

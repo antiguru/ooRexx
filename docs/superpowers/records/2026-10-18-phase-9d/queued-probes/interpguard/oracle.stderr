@@ -1,0 +1,8 @@
+    16 *-* guard on when v > 0
+    16 *-* interpret 'guard on when v > 0'
+Error 99 running RUNDIR/interpguard/interpguard.rex line 16:  Translation error.
+Error 99.912:  INTERPRET data must not contain GUARD.
+    16 *-* guard on when v > 0
+    16 *-* interpret 'guard on when v > 0'
+Error 99 running RUNDIR/interpguard/interpguard.rex line 6:  Translation error.
+Error 99.912:  INTERPRET data must not contain GUARD.

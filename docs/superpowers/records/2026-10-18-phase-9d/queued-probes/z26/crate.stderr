@@ -1,0 +1,12 @@
+       +++ "LINUX COMMAND RUNDIR/z26/z26.rex"
+     2 *-* do 0
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+     2 *-* do 0
+     5 *-* do i = 1 to 2
+     6 *-*   nop
+     7 *-* end
+     5 *-* do i = 1 to 2
+     6 *-*   nop
+     7 *-* end
+     5 *-* do i = 1 to 2
+     8 *-* say 'end'

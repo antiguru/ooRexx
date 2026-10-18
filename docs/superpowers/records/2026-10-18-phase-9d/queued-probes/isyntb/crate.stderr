@@ -1,0 +1,4 @@
+     1 *-* y=(;
+     1 *-* interpret "x=1; y=(; z=2"
+Error 35 running RUNDIR/isyntb/isyntb.rex line 1:  Invalid expression.
+Error 35.1:  Incorrect expression detected at "(".

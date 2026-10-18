@@ -1,0 +1,3 @@
+     3 *-* return 1
+Error 99 running RUNDIR/attrcls/attrcls.rex line 3:  Translation error.
+Error 99.937:  Attribute methods without a SET or GET designation cannot have a method body.

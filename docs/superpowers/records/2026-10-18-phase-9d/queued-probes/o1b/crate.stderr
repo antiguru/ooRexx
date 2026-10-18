@@ -1,0 +1,4 @@
+     8 *-*         return 1 / 0
+     2 *-*   do while n < 3 & h(n)
+Error 42 running RUNDIR/o1b/o1b.rex line 8:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

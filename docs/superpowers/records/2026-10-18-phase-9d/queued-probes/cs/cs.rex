@@ -1,0 +1,2 @@
+trace ?s
+say 'x'

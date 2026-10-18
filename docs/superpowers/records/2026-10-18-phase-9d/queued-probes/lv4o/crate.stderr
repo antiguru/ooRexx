@@ -1,0 +1,3 @@
+     4 *-* leave zz
+Error 28 running RUNDIR/lv4o/lv4o.rex line 4:  Invalid LEAVE or ITERATE.
+Error 28.3:  Symbol following LEAVE ("ZZ") must either match the label of a current loop or block instruction.

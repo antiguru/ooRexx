@@ -1,0 +1,16 @@
+kt init 1
+kt  3 4 5 6 10 7 11 8 12 9 1 2
+table100  1 2 3 4 10 5 11 6 12 7 8 9
+table  3 4 5 6 10 7 11 8 12 9 1 2
+kf  1 2 3 4 10 5 11 6 12 7 8 9
+ks init 2
+KS 0
+kt init 1
+kt x 0
+kd init 1
+KD 0
+1 0 0 0
+e1 93.923 Invalid length argument specified; found "x".
+e2 93.923 Invalid length argument specified; found "x".
+e3 93.923 Invalid length argument specified; found "-1".
+e4 93.902 Too many arguments in invocation of method; 1 expected.

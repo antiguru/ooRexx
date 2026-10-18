@@ -1,0 +1,7 @@
+       +++ "LINUX COMMAND RUNDIR/t4/t4.rex"
+     4 *-* x = 1
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+     5 *-* say 'end'
++++ Interactive trace.  Error 40:   Incorrect call to routine.
++++ Interactive trace.  Error 40.1:  External routine "&1" failed.
+     6 *-* exit

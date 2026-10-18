@@ -1,0 +1,10 @@
+       >I> Method "ONE" with scope "TEST" in package "RUNDIR/p7/p7.rex".
+       >I> Method "ONETWO" with scope "TEST" in package "RUNDIR/p7/p7.rex".
+       <I< Method "ONETWO" with scope "TEST" in package "RUNDIR/p7/p7.rex".
+       <I< Method "ONE" with scope "TEST" in package "RUNDIR/p7/p7.rex".
+       >I> Method "THREE" with scope "TEST" in package "RUNDIR/p7/p7.rex".
+       <I< Method "THREE" with scope "TEST" in package "RUNDIR/p7/p7.rex".
+       >I> Method "THREE" with scope "TEST" in package "RUNDIR/p7/p7.rex".
+       >I> Method "THREEFOUR" with scope "TEST" in package "RUNDIR/p7/p7.rex".
+       <I< Method "THREEFOUR" with scope "TEST" in package "RUNDIR/p7/p7.rex".
+       <I< Method "THREE" with scope "TEST" in package "RUNDIR/p7/p7.rex".

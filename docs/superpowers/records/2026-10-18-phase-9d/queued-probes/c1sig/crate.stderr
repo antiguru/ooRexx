@@ -1,0 +1,10 @@
+       +++ "LINUX COMMAND RUNDIR/c1sig/c1sig.rex"
+     3 *-* 'false'
+       >>>   "false"
+       +++   "RC(1)"
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+     7 *-*   h:
+     7 *-*   say 'handler sigl' sigl;
+     7 *-*   return
+     4 *-* say 'after'
+     5 *-* exit

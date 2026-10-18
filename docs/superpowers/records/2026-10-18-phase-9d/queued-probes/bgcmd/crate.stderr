@@ -1,0 +1,4 @@
+     2 *-* address system '(sleep 0.3; printf abc > ff1) &'
+Error 4 running RUNDIR/bgcmd/bgcmd.rex line 2:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.
+memcap: left /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/claude-jail-3908839/memcap-852429 behind, processes are still in it

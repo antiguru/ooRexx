@@ -1,0 +1,3 @@
+     1 *-* call on nostring name h
+Error 25 running RUNDIR/nostr/nostr.rex line 1:  Invalid subkeyword found.
+Error 25.1:  CALL ON must be followed by one of the keywords ERROR, FAILURE, HALT, NOTREADY, USER, or ANY; found "NOSTRING".

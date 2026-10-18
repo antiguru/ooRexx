@@ -1,0 +1,4 @@
+     9 *-* return 1/0
+       *-* Compiled method "SEND" with scope "Message".
+Error 42 running RUNDIR/re2b/re2b.rex line 9:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

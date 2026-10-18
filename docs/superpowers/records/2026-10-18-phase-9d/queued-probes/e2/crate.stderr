@@ -1,0 +1,19 @@
+       +++ "LINUX COMMAND RUNDIR/e2/e2.rex"
+     2 *-* do i = 1 to 3
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+p1
+     3 *-*   if i = 1 
+p2
+     3 *-*     then
+     3 *-*       iterate
+     2 *-* do i = 1 to 3
+p3
+     3 *-*       iterate
+     2 *-* do i = 1 to 3
+p4
+     3 *-*   if i = 1 
+p5
+     4 *-*   say i
+p6
+     5 *-* end
+     2 *-* do i = 1 to 3

@@ -1,0 +1,3 @@
+sink: >I> Method "TWO"
+sink: 12 *-* return
+sink: <I< Method "TWO"

@@ -1,0 +1,1 @@
+memcap: left /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/claude-jail-3908839/memcap-852383 behind, processes are still in it

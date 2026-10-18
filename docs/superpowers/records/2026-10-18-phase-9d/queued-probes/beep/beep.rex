@@ -1,0 +1,1 @@
+say beep(.object~new)

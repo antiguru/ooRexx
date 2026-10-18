@@ -1,0 +1,20 @@
+       >I> Method "U" with scope "OBJ" in package "RUNDIR/k3/k3.rex".
+    11 *-* w = 1
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+p1
+    12 *-* guard on
+    13 *-* guard off when w = 1
+    14 *-* return
+       <I< Method "U" with scope "OBJ" in package "RUNDIR/k3/k3.rex".
+       >I> Method "R" with scope "OBJ" in package "RUNDIR/k3/k3.rex".
+    17 *-* reply 5
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+p2
+       <I< Method "R" with scope "OBJ" in package "RUNDIR/k3/k3.rex".
+       >I> Method "R" with scope "OBJ" in package "RUNDIR/k3/k3.rex".
+    18 *-* say 'after reply'
+p3
+    19 *-* nop
+p4
+    20 *-* return
+       <I< Method "R" with scope "OBJ" in package "RUNDIR/k3/k3.rex".

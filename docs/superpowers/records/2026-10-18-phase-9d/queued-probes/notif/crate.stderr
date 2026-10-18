@@ -1,0 +1,6 @@
+    11 *-* return 1/0
+Error 42 running RUNDIR/notif/notif.rex line 11:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+    11 *-* return 1/0
+Error 42 running RUNDIR/notif/notif.rex line 11:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

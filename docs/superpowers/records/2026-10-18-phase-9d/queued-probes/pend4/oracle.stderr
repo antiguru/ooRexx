@@ -1,0 +1,3 @@
+     4 *-* say m~halt
+Error 4 running RUNDIR/pend4/pend4.rex line 4:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.

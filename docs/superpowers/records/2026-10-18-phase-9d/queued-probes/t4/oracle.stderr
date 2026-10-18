@@ -1,0 +1,4 @@
+       +++ "LINUX COMMAND RUNDIR/t4/t4.rex"
+     4 *-* x = 1
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+     5 *-* say 'end'

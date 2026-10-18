@@ -1,0 +1,4 @@
+       *-* Compiled routine "BEEP".
+     1 *-* say beep(.object~new)
+Error 88 running RUNDIR/beep/beep.rex line 1:  Invalid argument.
+Error 88.907:  Argument frequency must be in the range 37 to 32767; found "an Object".

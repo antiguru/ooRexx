@@ -1,0 +1,6 @@
+       +++ "LINUX COMMAND RUNDIR/pa/pa.rex"
+     2 *-* say 'c1'
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+     3 *-* numeric digits 9
+     4 *-* say 'c3'
+     5 *-* say 'c4'

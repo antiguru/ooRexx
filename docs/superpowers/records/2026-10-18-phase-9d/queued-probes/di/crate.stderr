@@ -1,0 +1,5 @@
+       +++ "LINUX COMMAND RUNDIR/di/di.rex"
+     3 *-* nop
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+     4 *-* say 'after'
+     5 *-* exit

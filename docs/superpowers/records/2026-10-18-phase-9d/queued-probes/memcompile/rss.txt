@@ -1,0 +1,6 @@
+Max RSS of 50000 .method~new in a loop, one run a side, 2026-10-18.
+oracle: ( ulimit -v 1048576; LD_LIBRARY_PATH=.../build/lib /usr/bin/time -f %M timeout 60 rexx memcompile.rex ): 20092 kB
+crate: timeout 60 memcap 2G /usr/bin/time -f %M rexx memcompile.rex: 44992 kB
+Same commands at 100000 iterations (memcompile.rex with the bound doubled):
+oracle: 20308 kB
+crate: 45160 kB

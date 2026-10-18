@@ -1,0 +1,5 @@
+ROUTINE RUNDIR/frames1/p.cls 1
+METHOD NEW The NIL object
+PROGRAM RUNDIR/frames1/frames1.rex 1
+--
+==

@@ -1,0 +1,37 @@
+       +++ "LINUX COMMAND RUNDIR/g1/g1.rex"
+     2 *-* do label lbl
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+p1
+     3 *-*   nop
+p2
+     4 *-* end lbl
+     5 *-* do
+p3
+     6 *-*   nop
+p4
+     7 *-* end
+     8 *-* do label rl i = 1 to 2
+p5
+     9 *-*   nop
+p6
+    10 *-* end rl
+     8 *-* do label rl i = 1 to 2
+     9 *-*   nop
+p7
+    10 *-* end rl
+     8 *-* do label rl i = 1 to 2
+    11 *-* loop label fl
+p8
+    12 *-*   leave fl
+p9
+    14 *-* do label w while 0
+p10
+    16 *-* select label s
+p11
+    17 *-*   when 1 
+p12
+    17 *-*     then
+    17 *-*       nop
+p13
+    19 *-* say 'end'
+p14

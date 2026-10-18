@@ -1,0 +1,4 @@
+     7 *-*         return 1 / 0
+     1 *-*   do i = 1 while i < 3 | f(i)
+Error 42 running RUNDIR/o1/o1.rex line 7:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

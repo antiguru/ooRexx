@@ -1,0 +1,4 @@
+
+thread 'rexx-interp' (849918) panicked at crates/rexx-exec/src/activation.rs:1254:42:
+a live activation
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

@@ -1,0 +1,3 @@
+     2 *-* end j
+Error 10 running RUNDIR/e103/e103.rex line 2:  Unexpected or unmatched END.
+Error 10.2:  Symbol following END ("J") must match block specification name ("I") on line 1 or be omitted.

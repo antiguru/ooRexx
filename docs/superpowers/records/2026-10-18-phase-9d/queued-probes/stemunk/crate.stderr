@@ -1,0 +1,4 @@
+       *-* Compiled method "UNKNOWN" with scope "Stem".
+     2 *-* say x~nosuch
+Error 97 running RUNDIR/stemunk/stemunk.rex line 2:  Object method not found.
+Error 97.1:  Object "S." does not understand message "NOSUCH".

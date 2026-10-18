@@ -1,0 +1,3 @@
+       *-* Compiled method "STRING" with scope "Object".
+Error 93:  Incorrect call to method.
+Error 93.902:  Too many arguments in invocation of method; 0 expected.

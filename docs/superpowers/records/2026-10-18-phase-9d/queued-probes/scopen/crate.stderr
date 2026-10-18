@@ -1,0 +1,3 @@
+     1 *-* say stream('zz_missing.dat','C','OPEN READ')
+Error 91 running RUNDIR/scopen/scopen.rex line 1:  No result object.
+Error 91.999:  Message "COMMAND" did not return a result.
