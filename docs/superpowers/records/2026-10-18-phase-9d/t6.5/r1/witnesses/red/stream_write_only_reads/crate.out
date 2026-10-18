@@ -1,0 +1,17 @@
+stream(f, 'c', 'open write') [READY:] READY: 
+chars(f) [12] READY: 
+lines(f) [1] READY: 
+lines(f, 'N') [1] READY: 
+charin(f) [] ERROR:0 raised []
+linein(f) [] NOTREADY:EOF raised []
+stream(f, 'c', 'query position write') [13] NOTREADY:EOF 
+query position write line NOTREADY:EOF 0
+stream(f, 'c', 'query position read line') [1] NOTREADY:EOF 
+lineout(f, 'x', 2) [0] READY: 
+stream(f, 'c', 'query position write') [15] READY: 
+lineout(f, 'y') [0] READY: 
+stream(f, 'c', 'query position write') [17] READY: 
+stream(f, 'c', 'seek =1 write line') [0] READY: 
+stream(f, 'c', 'close') [READY:] UNKNOWN: 
+6C696E65310A6C696E65320A780A790A
+abc 1 2 READY:

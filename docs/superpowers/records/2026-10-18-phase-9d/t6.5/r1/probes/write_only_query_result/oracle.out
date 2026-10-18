@@ -1,0 +1,18 @@
+stream(f, 'c', 'open write') [READY:] READY: 
+chars(f) [0] READY: 
+lines(f) [0] READY: 
+lines(f, 'N') [0] READY: 
+charin(f) [] ERROR:9 Bad file descriptor raised []
+linein(f) [] NOTREADY:EOF raised []
+stream(f, 'c', 'query position write') [13] NOTREADY:EOF 
+stream(f, 'c', 'query position write line') [ERROR:9 Bad file descriptor] ERROR:9 Bad file descriptor raised [ERROR:9 Bad file descriptor]
+stream(f, 'c', 'query position read line') [1] ERROR:9 Bad file descriptor 
+lineout(f, 'x', 2) [0] READY: 
+stream(f, 'c', 'query position write') [3] READY: 
+lineout(f, 'y') [0] READY: 
+stream(f, 'c', 'query position write') [5] READY: 
+stream(f, 'c', 'seek =1 write line') [0] READY: 
+stream(f, 'c', 'seek =5 write char') [5] READY: 
+charout(f, 'z') [0] READY: 
+stream(f, 'c', 'close') [READY:] UNKNOWN: 
+780A790A7A0A6C696E65320A

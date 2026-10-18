@@ -1,0 +1,50 @@
+/* A stream that OPEN WRITE opened write-only cannot read. CHARS and LINES
+   answer 0, CHARIN is ERROR:9 and LINEIN is NOTREADY:EOF. Counting the write
+   line raises ERROR:9, and LINEOUT placed by line number cannot walk the file,
+   so it writes at line 1 and leaves the write position after its bytes. A
+   file that cannot be written and is opened by a read keeps write line 1. */
+call on notready name caught
+f = 'wo.txt'
+call lineout f, 'line1'
+call lineout f, 'line2'
+call lineout f
+'chmod a+w,a-r' f
+call t "stream(f, 'c', 'open write')"
+call t "chars(f)"
+call t "lines(f)"
+call t "lines(f, 'N')"
+call t "charin(f)"
+call t "linein(f)"
+call t "stream(f, 'c', 'query position write')"
+hits = ''
+call stream f, 'c', 'query position write line'
+say 'query position write line' stream(f, 'd') (hits \== '')
+call t "stream(f, 'c', 'query position read line')"
+call t "lineout(f, 'x', 2)"
+call t "stream(f, 'c', 'query position write')"
+call t "lineout(f, 'y')"
+call t "stream(f, 'c', 'query position write')"
+call t "stream(f, 'c', 'seek =1 write line')"
+call t "stream(f, 'c', 'close')"
+'chmod a+r' f
+say c2x(charin(f, 1, 40))
+call stream f, 'c', 'close'
+g = 'ro.txt'
+call lineout g, 'abc'
+call lineout g, 'def'
+call lineout g
+'chmod a-w' g
+say linein(g) stream(g, 'c', 'query position write'),
+  stream(g, 'c', 'query position write line') stream(g, 'd')
+call stream g, 'c', 'close'
+exit
+
+t:
+  hits = ''
+  interpret 'r =' arg(1)
+  say arg(1) '[' || r || ']' stream(f, 'd') hits
+  return
+
+caught:
+  hits = 'raised [' || condition('O')~result || ']'
+  return

@@ -955,11 +955,13 @@ fn ensure_open(
     }
     let size = size_of(&opened);
     let transient = is_transient(&opened);
-    // A stream that can write writes at the end, whichever operation opened it.
-    let write_position = if mode.read_only || transient {
-        1
+    // A stream that can write writes at the end, whichever operation opened it,
+    // and leaves its write line to be counted. A read-only or transient one
+    // keeps `implicitOpen`'s write line 1 at character 1.
+    let (write_position, line_write) = if mode.read_only || transient {
+        (1, 1)
     } else {
-        size as i64 + 1
+        (size as i64 + 1, 0)
     };
     let state = require_mut(interp, receiver)?;
     state.mode = mode;
@@ -969,9 +971,9 @@ fn ensure_open(
         read_position: 1,
         write_position,
         line_read: 1,
-        line_write: 0,
+        line_write,
         line_read_char: 1,
-        line_write_char: 0,
+        line_write_char: i64::from(line_write != 0),
         line_size: 0,
         last_op_was_read: !for_write,
         transient,
@@ -1170,7 +1172,15 @@ pub(super) fn charin(
     if wanted == 0 {
         return Ok(Some(interp.text(b"")));
     }
-    let read = read_from(&mut open.file, offset_of(at), wanted).unwrap_or_default();
+    // A read that fails reports its errno: measured, `EBADF` on a stream
+    // opened write-only is `ERROR:9`.
+    let read = match read_from(&mut open.file, offset_of(at), wanted) {
+        Ok(read) => read,
+        Err(error) => {
+            let errno = error.raw_os_error().unwrap_or(0);
+            return notready(interp, receiver, StreamStatus::Error(errno), Vec::new());
+        }
+    };
     if read.is_empty() {
         return notready(interp, receiver, StreamStatus::Error(0), Vec::new());
     }
@@ -1223,7 +1233,12 @@ pub(super) fn linein(
         let read = read_record(interp, receiver, record_length)?;
         let wanted = record_remainder(read.from, record_length);
         if read.bytes.is_empty() {
-            return notready(interp, receiver, StreamStatus::Error(0), Vec::new());
+            return notready(
+                interp,
+                receiver,
+                StreamStatus::Error(read.errno),
+                Vec::new(),
+            );
         }
         if read.bytes.len() < wanted {
             return notready(interp, receiver, StreamStatus::NotReady, read.bytes);
@@ -1256,10 +1271,12 @@ struct RecordRead {
     /// The read position the record started at.
     from: i64,
     bytes: Vec<u8>,
+    /// The errno of a read that failed, and 0 otherwise.
+    errno: i32,
 }
 
 /// Reads the rest of the current record and moves the read position past
-/// what it got. An unreadable file reads as nothing.
+/// what it got. A failed read reads nothing and carries its errno.
 fn read_record(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -1270,14 +1287,18 @@ fn read_record(
         return Ok(RecordRead {
             from: 1,
             bytes: Vec::new(),
+            errno: 0,
         });
     };
     let from = open.read_position;
     let wanted = record_remainder(from, record_length);
-    let bytes = read_from(&mut open.file, offset_of(from), wanted).unwrap_or_default();
+    let (bytes, errno) = match read_from(&mut open.file, offset_of(from), wanted) {
+        Ok(bytes) => (bytes, 0),
+        Err(error) => (Vec::new(), error.raw_os_error().unwrap_or(0)),
+    };
     open.read_position = from + bytes.len() as i64;
     open.last_op_was_read = true;
-    Ok(RecordRead { from, bytes })
+    Ok(RecordRead { from, bytes, errno })
 }
 
 /// One line from the read position, or `None` when there is none: the reading
@@ -1357,7 +1378,12 @@ pub(super) fn arrayin(
         loop {
             let read = read_record(interp, receiver, record_length)?;
             if read.bytes.is_empty() {
-                notready(interp, receiver, StreamStatus::Error(0), Vec::new())?;
+                notready(
+                    interp,
+                    receiver,
+                    StreamStatus::Error(read.errno),
+                    Vec::new(),
+                )?;
                 return Ok(None);
             }
             let item = interp.text_built(read.bytes);
@@ -1487,8 +1513,9 @@ pub(super) fn lineout(
     let record = record_length(interp, receiver)?;
     if data.is_none()
         && let Some(record_length) = record
+        && let Some(answer) = complete_record(interp, receiver, record_length)?
     {
-        complete_record(interp, receiver, record_length)?;
+        return Ok(Some(answer));
     }
     let mode = require(interp, receiver)?.mode;
     let state = require_mut(interp, receiver)?;
@@ -1538,8 +1565,10 @@ pub(super) fn lineout(
             // **Measured, and the two disagree**: after a write placed by line
             // number the pointer lands at the end of the file plus what was
             // written, not after the bytes. An append reaches the same answer
-            // by either arithmetic.
-            open.write_position = if line.is_some() {
+            // by either arithmetic. A stream that cannot read lands after the
+            // bytes: measured, `lineout(f, 'x', 2)` on a write-only stream
+            // leaves `QUERY POSITION WRITE` at 3.
+            open.write_position = if line.is_some() && (mode.read_write || mode.read_only) {
                 size + bytes.len() as i64 + 1
             } else {
                 at + bytes.len() as i64
@@ -1583,8 +1612,11 @@ fn close_for_write(
         if !write_setup(interp, receiver, answer)? {
             return Ok(Some(interp.text_built(answer.to_vec())));
         }
-        if complete && let Some(record_length) = record_length(interp, receiver)? {
-            complete_record(interp, receiver, record_length)?;
+        if complete
+            && let Some(record_length) = record_length(interp, receiver)?
+            && let Some(answer) = complete_record(interp, receiver, record_length)?
+        {
+            return Ok(Some(answer));
         }
     }
     close(interp, cleared, receiver, &[])?;
@@ -1593,20 +1625,22 @@ fn close_for_write(
 
 /// Pads a record a `CHAROUT` left partial with blanks to its end. A write
 /// position on a record boundary writes nothing (Deviation 46: the oracle
-/// blanks the whole next record there).
+/// blanks the whole next record there). A failed write raises `NOTREADY` and
+/// answers `Some` of what the `LINEOUT` answers, which then neither positions
+/// nor closes (`completeLine`'s NOTREADY does not return).
 fn complete_record(
     interp: &mut Interp,
     receiver: ObjRef,
     record_length: u64,
-) -> Result<(), Failure> {
+) -> Result<Option<ObjRef>, Failure> {
     let state = require_mut(interp, receiver)?;
     let Some(open) = state.open.as_mut() else {
-        return Ok(());
+        return Ok(None);
     };
     let at = open.write_position;
     let padding = record_remainder(at, record_length);
     if u64::try_from(padding).is_ok_and(|padding| padding == record_length) {
-        return Ok(());
+        return Ok(None);
     }
     match write_at(
         &mut open.file,
@@ -1617,12 +1651,11 @@ fn complete_record(
         Ok(()) => {
             open.write_position = at + padding as i64;
             open.last_op_was_read = false;
-            Ok(())
+            Ok(None)
         }
         Err(error) => {
             let errno = error.raw_os_error().unwrap_or(0);
-            notready(interp, receiver, StreamStatus::Error(errno), b"1".to_vec())?;
-            Ok(())
+            notready(interp, receiver, StreamStatus::Error(errno), b"1".to_vec())
         }
     }
 }
@@ -1675,7 +1708,8 @@ fn write_at(
 }
 
 /// `stream_chars`: the characters left from the read position, which is the
-/// size less what has been read, floored at zero.
+/// size less what has been read, floored at zero. A persistent stream that
+/// cannot read answers 0.
 pub(super) fn chars(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1696,9 +1730,13 @@ pub(super) fn chars(
         return Ok(Some(interp.text(b"0")));
     }
     let state = require_mut(interp, receiver)?;
+    let readable = state.mode.read_only || state.mode.read_write;
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"0")));
     };
+    if !open.transient && !readable {
+        return Ok(Some(interp.text(b"0")));
+    }
     let left = (size_of(&open.file) as i64 - (open.read_position - 1)).max(0);
     Ok(Some(interp.text_built(left.to_string().into_bytes())))
 }
@@ -1739,9 +1777,14 @@ pub(super) fn lines(
     }
     let record_length = record_length(interp, receiver)?;
     let state = require_mut(interp, receiver)?;
+    let readable = state.mode.read_only || state.mode.read_write;
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"0")));
     };
+    // A persistent stream that cannot read has no lines (`StreamInfo::lines`).
+    if !open.transient && !readable {
+        return Ok(Some(interp.text(b"0")));
+    }
     let size = size_of(&open.file) as i64;
     if open.read_position > size {
         return Ok(Some(interp.text(b"0")));
@@ -2183,32 +2226,32 @@ fn seek_forward_lines(
 /// `getLineReadPosition`: the tracked read line, recomputed from the character
 /// position when a character operation invalidated it -- measured, a `CHARIN`
 /// of three bytes leaves `QUERY POSITION READ LINE` answering 1, not 0.
-fn line_read_position(open: &mut rexx_core::OpenFile, record_length: u64) -> i64 {
+fn line_read_position(open: &mut rexx_core::OpenFile, record_length: u64) -> std::io::Result<i64> {
     if record_length > 0 {
-        return (open.read_position - 1) / as_position(record_length) + 1;
+        return Ok((open.read_position - 1) / as_position(record_length) + 1);
     }
     if open.line_read == 0 {
-        open.line_read = count_lines_upto(&mut open.file, open.read_position).unwrap_or(0);
+        open.line_read = count_lines_upto(&mut open.file, open.read_position)?;
     }
     open.line_read_char = open.read_position;
-    as_position(open.line_read)
+    Ok(as_position(open.line_read))
 }
 
 /// `getLineWritePosition`, which differs from the read side by a trailing
 /// `+ 1`: measured, a write position at the end of a three-line file answers 4
-/// where the read position on line 2 answers 2. The tracker starts untracked,
-/// so a stream that has written nothing recomputes here rather than answering
-/// the 1 an initialised tracker would hold.
-fn line_write_position(open: &mut rexx_core::OpenFile, record_length: u64) -> i64 {
+/// where the read position on line 2 answers 2. A writeable stream's tracker
+/// starts untracked, so one that has written nothing recomputes here rather
+/// than answering the 1 an initialised tracker would hold.
+fn line_write_position(open: &mut rexx_core::OpenFile, record_length: u64) -> std::io::Result<i64> {
     if record_length > 0 {
         let reclen = as_position(record_length);
-        return open.write_position / reclen + i64::from(open.write_position % reclen != 0);
+        return Ok(open.write_position / reclen + i64::from(open.write_position % reclen != 0));
     }
     if open.line_write == 0 {
-        open.line_write = count_lines_upto(&mut open.file, open.write_position).unwrap_or(0) + 1;
+        open.line_write = count_lines_upto(&mut open.file, open.write_position)? + 1;
     }
     open.line_write_char = open.write_position;
-    as_position(open.line_write)
+    Ok(as_position(open.line_write))
 }
 
 /// `queryLinePosition`: which line a 1-based character position lies in,
@@ -2312,11 +2355,19 @@ pub(super) fn query_position(
     };
     let answer = match (write, by_line) {
         (true, true) => line_write_position(open, record_length),
-        (true, false) => open.write_position,
+        (true, false) => Ok(open.write_position),
         (false, true) => line_read_position(open, record_length),
-        (false, false) => open.read_position,
+        (false, false) => Ok(open.read_position),
     };
-    Ok(Some(interp.text_built(answer.to_string().into_bytes())))
+    // A line count that cannot read the file raises with its errno: measured,
+    // `ERROR:9` on a stream opened write-only.
+    match answer {
+        Ok(answer) => Ok(Some(interp.text_built(answer.to_string().into_bytes()))),
+        Err(error) => {
+            let errno = error.raw_os_error().unwrap_or(0);
+            notready(interp, receiver, StreamStatus::Error(errno), Vec::new())
+        }
+    }
 }
 
 /// `stream_close`: `READY:` for a stream that was open, and the null string
