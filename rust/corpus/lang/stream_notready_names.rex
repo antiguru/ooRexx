@@ -1,0 +1,55 @@
+/* NOTREADY from a stream whose name is a directory, a name nothing resolves
+   to, a missing path, or a name holding a '80'x byte. An implicit open
+   rejects a directory as it rejects a missing file. The condition carries the
+   name as written as DESCRIPTION, the Stream object as ADDITIONAL, and the
+   value the call answers as RESULT. LINEOUT and CHAROUT with no data run the
+   write setup before they close, which creates a missing file. */
+names = .array~of('/', '*', 'non-existing-file', 'bad' || '80'x || 'name', 'nodir/x')
+ops = .array~of('chars', 'lines', 'linesC', 'linein', 'charin', 'lineout', 'charout', 'close')
+call on notready name caught
+do n over names
+  do op over ops
+    hits = 0
+    seen = ''
+    select
+      when op = 'chars' then r = chars(n)
+      when op = 'lines' then r = lines(n)
+      when op = 'linesC' then r = lines(n, 'C')
+      when op = 'linein' then r = linein(n)
+      when op = 'charin' then r = charin(n)
+      when op = 'lineout' then r = lineout(n, 'x')
+      when op = 'charout' then r = charout(n, 'xy')
+      when op = 'close' then r = lineout(n)
+    end
+    say c2x(n) op '[' || r || '] hits' hits 'state' stream(n) '[' || stream(n, 'D') || ']' seen
+    call lineout n
+  end
+end
+call off notready
+/* The object path: the condition's ADDITIONAL is the receiver itself. */
+s = .Stream~new('/')
+signal on notready name direct
+say s~chars
+direct:
+say 'direct' condition('C') condition('D') (condition('A') == s) condition('O')~result s~description
+/* A charout and a close of a stream opened read-only. */
+call charout 'ro.txt', 'abc'
+call charout 'ro.txt'
+say 'open read' stream('ro.txt', 'c', 'open read')
+call on notready name caught
+hits = 0
+seen = ''
+say 'charout read-only' charout('ro.txt', 'xyz') stream('ro.txt', 'D')
+say 'handler' hits seen
+say 'close read-only' charout('ro.txt') stream('ro.txt', 'D')
+say 'content' charin('ro.txt', 1, 10)
+call lineout 'ro.txt'
+say 'created by close' (stream('*', 'c', 'query exists') \== '') (stream('nodir/x', 'c', 'query exists') \== '')
+exit
+
+caught:
+  hits = hits + 1
+  o = condition('O')
+  seen = 'D=' || c2x(condition('D')) 'A=' || o~additional~class~id || ':' || c2x(o~additional~string),
+    'R=[' || o~result || '] I=' || o~instruction 'P=' || o~propagated
+  return

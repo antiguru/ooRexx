@@ -14,7 +14,8 @@
 //! with the arguments that followed, positionally, so an omitted middle
 //! argument arrives omitted (`BuiltinFunctions.cpp:2126-2570`).
 
-use rexx_core::ObjRef;
+use rexx_core::{Decoded, ObjRef};
+use rexx_num::{DIGITS64, Number};
 
 use super::{Args, arg, optional_string, required_string};
 use crate::error::Raised;
@@ -53,30 +54,64 @@ fn send_to_stream(
     .ok_or_else(|| Failure::from(Raised::no_result(message)))
 }
 
+/// The arguments at `positions` that the builtin declares as
+/// `optional_big_integer`: each present one must be a whole number in the
+/// `int64_t` range, or it is 40.12 (`ExpressionStack::optionalBigIntegerArg`).
+fn whole_positions(
+    interp: &mut Interp,
+    name: &[u8],
+    args: Args<'_>,
+    positions: &[usize],
+) -> Result<(), Failure> {
+    for &position in positions {
+        let Some(value) = arg(args, position) else {
+            continue;
+        };
+        let whole = match value.decode() {
+            Decoded::SmallInt(_) => true,
+            _ => {
+                let text = interp.to_text(value);
+                Number::parse_bytes(&text)
+                    .and_then(|number| number.int64_value(DIGITS64))
+                    .is_some()
+            }
+        };
+        if !whole {
+            let named = args.object(position).unwrap_or(value);
+            let found = interp.string_value_text(named);
+            return Err(Raised::argument_not_whole(name, position, &found).into());
+        }
+    }
+    Ok(())
+}
+
 /// `LINEIN(name, [line], [count])`.
 pub(crate) fn linein(
     interp: &mut Interp,
-    _name: &'static [u8],
+    name: &'static [u8],
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
+    whole_positions(interp, name, args, &[2, 3])?;
     send_to_stream(interp, args, b"LINEIN", true, true)
 }
 
 /// `CHARIN(name, [start], [length])`.
 pub(crate) fn charin(
     interp: &mut Interp,
-    _name: &'static [u8],
+    name: &'static [u8],
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
+    whole_positions(interp, name, args, &[2, 3])?;
     send_to_stream(interp, args, b"CHARIN", true, true)
 }
 
 /// `CHAROUT(name, [string], [start])`.
 pub(crate) fn charout(
     interp: &mut Interp,
-    _name: &'static [u8],
+    name: &'static [u8],
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
+    whole_positions(interp, name, args, &[3])?;
     send_to_stream(interp, args, b"CHAROUT", false, true)
 }
 
@@ -94,9 +129,10 @@ pub(crate) fn chars(
 /// what makes the next `LINEOUT` to that name reopen it (`:2277`).
 pub(crate) fn lineout(
     interp: &mut Interp,
-    _name: &'static [u8],
+    name: &'static [u8],
     args: Args<'_>,
 ) -> Result<ObjRef, Failure> {
+    whole_positions(interp, name, args, &[3])?;
     let answer = send_to_stream(interp, args, b"LINEOUT", false, true)?;
     if args.len() < 2 {
         let name = match arg(args, 1) {

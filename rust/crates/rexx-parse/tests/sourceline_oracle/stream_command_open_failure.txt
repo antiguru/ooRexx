@@ -1,0 +1,57 @@
+count 56
+/* An OPEN through the COMMAND method that the file system refuses answers
+   ERROR:n. The native open raises NOTREADY inside COMMAND, whose own handler
+   propagates it: the caller's trap takes the same condition object, marked
+   PROPAGATED, and an untrapped condition makes COMMAND answer the object's
+   RESULT. ::OPTIONS NOTREADY SYNTAX does not turn the propagated condition
+   into an error. The OPEN method's own raise is 98.974 in an activation
+   with no CALL OFF NOTREADY in force. A RAISE PROPAGATE of a command's ERROR returns its RESULT too. */
+say 'directory' stream('/', 'c', 'open read')
+say 'directory write' stream('/', 'c', 'open write')
+say 'missing' stream('zz_missing.dat', 'C', 'OPEN READ')
+say 'missing path' stream('nodir/x', 'c', 'open read')
+say 'method' .Stream~new('/')~command('open read')
+call on notready name caught
+say 'call on' stream('/', 'c', 'open read')
+call off notready
+signal on notready name signalled
+say 'signal on' stream('/', 'c', 'open read')
+say 'not reached'
+signalled:
+call show 'signalled'
+say 'routine' viaRoutine()
+say 'method returns' .Opener~new~open('/')
+say 'open method, CALL OFF in force' .Stream~new('/')~open('read')
+say 'open method' directOpen()
+say 'not reached'
+exit
+
+caught:
+  call show 'caught'
+  return
+
+show:
+  o = condition('O')
+  say arg(1) condition('C') condition('D') o~instruction o~propagated o~result,
+    o~additional~class~id o~additional~string
+  return
+
+viaRoutine: procedure
+  signal on notready name inner
+  return stream('/', 'c', 'open read')
+inner:
+  return 'inner' condition('O')~propagated condition('O')~result
+
+::routine directOpen
+  return .Stream~new('/')~open('read')
+
+::class Opener
+::method open
+  use arg name
+  signal on error name failed
+  'exit 7'
+  return 'not reached'
+failed:
+  raise propagate
+
+::options notready syntax

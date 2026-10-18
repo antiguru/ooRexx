@@ -53,8 +53,9 @@
 # of any two of missing_internal_argument, missing_named_argument and
 # missing_native_argument (88.901), or of missing_argument_named with
 # missing_method_argument (93.903), or of native_argument_not_logical with
-# not_logical (34.901), or of native_argument_out_of_range_unsigned with
-# native_argument_outside_range (88.907), or of native_argument_not_an_array
+# not_logical (34.901), or of any two of native_argument_out_of_range,
+# native_argument_out_of_range_unsigned and native_argument_outside_range
+# (88.907), or of native_argument_not_an_array
 # with object_not_single_dimensional (98.913), leaves every test in
 # refusal_sites.rs green. Measured. The groups
 # are enumerated by `the_answers_more_than_one_row_shares_are_the_recorded_ones`,
@@ -217,8 +218,8 @@ Raised	native_argument_not_an_instance	send	crates/rexx-exec/src/error.rs:1441	a
 Raised	native_argument_not_logical	send	crates/rexx-exec/src/error.rs:1422	agrees	yes	34.901	t~logical(3) over a required pk.cls declaring logical external "LIBRARY orxmethod TestLogicalArg" (library_native_refusal_logical.rex)
 Raised	native_argument_not_nonnegative	body+send	crates/rexx-exec/src/error.rs:1384	agrees	yes	88.904	t~nonneg(-1) over a required pk.cls declaring nonneg external "LIBRARY orxmethod TestNonnegativeWholeNumberArg" (library_native_refusal_nonnegative.rex)
 Raised	native_argument_not_positive	body+send	crates/rexx-exec/src/error.rs:1370	agrees	yes	88.905	RxCalcSqrt(2, 'x') inside a required package's routine (library_routine_caller_blame.rex)
-Raised	native_argument_out_of_range	body	crates/rexx-exec/src/error.rs:1299	off-send-surface	-	-	-
-Raised	native_argument_out_of_range_unsigned	send	crates/rexx-exec/src/error.rs:1320	diverges	yes	88.907	s = .Stream~new('f.txt'); s~charin(1, -1) -- the 88.907 sub line agrees byte for byte; the major line does not, because a native activation's argument-marshalling error names its own declaring package (REXX) and this crate names the program. Recorded in the Phase 7 ledger; the fix needs native entry points to carry a declaring package and is not this task's
+Raised	native_argument_out_of_range	body+send	crates/rexx-exec/src/error.rs:1299	agrees	yes	88.907	s = .Stream~new('f.txt'); s~lineIn(.nil) -- reported against REXX with no line, as the oracle's native argument marshalling is (stream_position_arguments.rex traps it)
+Raised	native_argument_out_of_range_unsigned	send	crates/rexx-exec/src/error.rs:1320	agrees	yes	88.907	s = .Stream~new('f.txt'); s~charin(1, -1) -- reported against REXX with no line, as the oracle's native argument marshalling is
 Raised	native_argument_outside_range	body+send	crates/rexx-exec/src/error.rs:1398	agrees	yes	88.907	t~int8(128) over a required pk.cls declaring int8 external "LIBRARY orxmethod TestInt8Arg" (library_native_refusal_range.rex)
 Loud	native_method	send	crates/rexx-exec/src/lib.rs:682	diverges	yes	of class	m~dimensions, .Message~new
 Raised	no_data_returned	body+ir	crates/rexx-exec/src/error.rs:257	off-send-surface	-	-	-

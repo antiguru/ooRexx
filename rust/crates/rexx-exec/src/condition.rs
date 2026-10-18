@@ -328,6 +328,15 @@ impl Interp {
         Ok(object)
     }
 
+    /// Marks a condition object `PROPAGATED` and taken by a `CALL ON` trap,
+    /// as `RAISE PROPAGATE` passes it to the caller's trap.
+    pub(crate) fn propagate_to_call_trap(&mut self, object: ObjRef) -> Result<(), Failure> {
+        let propagated = self.text(b"1");
+        self.condition_put(object, key::PROPAGATED, propagated)?;
+        let instruction = self.text(b"CALL");
+        self.condition_put(object, key::INSTRUCTION, instruction)
+    }
+
     /// `put` of `value` under `name` on a condition object, rooting `value`
     /// across the index's allocation.
     fn condition_put(&mut self, object: ObjRef, name: &[u8], value: ObjRef) -> Result<(), Failure> {

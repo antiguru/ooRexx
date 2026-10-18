@@ -631,11 +631,13 @@ const SHARED_ANSWERS: &[(&str, &[&str])] = &[
             "missing_native_argument",
         ],
     ),
-    // A stream method's own `size_t` argument and an extension's declared
-    // integer, which differ in how the range's ends are passed.
+    // A stream method's own `int64_t` and `size_t` arguments and an
+    // extension's declared integer, which differ in how the range's ends are
+    // passed.
     (
         "88.907",
         &[
+            "native_argument_out_of_range",
             "native_argument_out_of_range_unsigned",
             "native_argument_outside_range",
         ],

@@ -394,6 +394,26 @@ pub(super) fn query_handle(
 /// `ERROR:2` rather than `ERROR:21`.
 const ENOENT: i32 = 2;
 
+/// Puts the stream in `status` and raises `NOTREADY` for it, answering
+/// `answer`: what the entry point returns when no trap transfers control,
+/// and the condition's `RESULT` (`StreamInfo::notreadyError`).
+#[cold]
+#[inline(never)]
+fn notready(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    status: StreamStatus,
+    answer: Vec<u8>,
+) -> Result<Option<ObjRef>, Failure> {
+    let state = require_mut(interp, receiver)?;
+    state.status = status;
+    let name = state.name.clone();
+    let answer = interp.text_built(answer);
+    interp.roots.activity_mut().push_temp(answer);
+    interp.raise_notready(&name, receiver, answer)?;
+    Ok(Some(answer))
+}
+
 /// One token of an options string: runs of non-blanks, except that `=`, `+`,
 /// `-` and `<` are single-character tokens and also end the run before them
 /// (`streamLibrary/StreamCommandParser.cpp:56`-`:99`).
@@ -643,13 +663,8 @@ pub(super) fn open(
     }
 
     if parsed.read_only && !std::fs::metadata(&path).is_ok_and(|meta| meta.is_file()) {
-        let state = require_mut(interp, receiver)?;
-        state.status = StreamStatus::Error(ENOENT);
-        let name = state.name.clone();
-        interp.raise_notready(&name)?;
-        return Ok(Some(
-            interp.text_built(format!("ERROR:{ENOENT}").into_bytes()),
-        ));
+        let answer = format!("ERROR:{ENOENT}").into_bytes();
+        return notready(interp, receiver, StreamStatus::Error(ENOENT), answer);
     }
 
     let mut opening = std::fs::OpenOptions::new();
@@ -665,13 +680,8 @@ pub(super) fn open(
         Ok(file) => file,
         Err(error) => {
             let errno = error.raw_os_error().unwrap_or(ENOENT);
-            let state = require_mut(interp, receiver)?;
-            state.status = StreamStatus::Error(errno);
-            let name = state.name.clone();
-            interp.raise_notready(&name)?;
-            return Ok(Some(
-                interp.text_built(format!("ERROR:{errno}").into_bytes()),
-            ));
+            let answer = format!("ERROR:{errno}").into_bytes();
+            return notready(interp, receiver, StreamStatus::Error(errno), answer);
         }
     };
     // A directory opens on unix and is then rejected as if it had not
@@ -679,13 +689,8 @@ pub(super) fn open(
     // directory answers `ERROR:2` and not `ERROR:21`.
     let metadata = opened.metadata().ok();
     if metadata.as_ref().is_none_or(std::fs::Metadata::is_dir) {
-        let state = require_mut(interp, receiver)?;
-        state.status = StreamStatus::Error(ENOENT);
-        let name = state.name.clone();
-        interp.raise_notready(&name)?;
-        return Ok(Some(
-            interp.text_built(format!("ERROR:{ENOENT}").into_bytes()),
-        ));
+        let answer = format!("ERROR:{ENOENT}").into_bytes();
+        return notready(interp, receiver, StreamStatus::Error(ENOENT), answer);
     }
     let size = metadata.map_or(0, |meta| meta.len());
     let transient = is_transient(&opened);
@@ -839,8 +844,14 @@ fn size_of(file: &std::fs::File) -> u64 {
 
 /// Opens the stream if nothing has, the way an implicit open does: read-write
 /// first, then write-only or read-only depending on what the caller wants
-/// (`StreamInfo::implicitOpen`). A read never creates the file.
-fn ensure_open(interp: &mut Interp, receiver: ObjRef, for_write: bool) -> Result<bool, Failure> {
+/// (`StreamInfo::implicitOpen`). A read never creates the file. `answer` is
+/// what the caller returns when the open fails.
+fn ensure_open(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    for_write: bool,
+    answer: &[u8],
+) -> Result<bool, Failure> {
     if require(interp, receiver)?.open.is_some() {
         return Ok(true);
     }
@@ -874,7 +885,7 @@ fn ensure_open(interp: &mut Interp, receiver: ObjRef, for_write: bool) -> Result
                     ..rexx_core::OpenMode::default()
                 },
             ),
-            Err(error) => return fail_open(interp, receiver, &error),
+            Err(error) => return fail_open(interp, receiver, &error, answer),
         },
         Err(_) => match std::fs::OpenOptions::new().read(true).open(&path) {
             Ok(file) => (
@@ -884,9 +895,14 @@ fn ensure_open(interp: &mut Interp, receiver: ObjRef, for_write: bool) -> Result
                     ..rexx_core::OpenMode::default()
                 },
             ),
-            Err(error) => return fail_open(interp, receiver, &error),
+            Err(error) => return fail_open(interp, receiver, &error, answer),
         },
     };
+    // `SysFile::open` closes a directory it opened and fails with ENOENT.
+    if opened.metadata().is_ok_and(|meta| meta.is_dir()) {
+        let error = std::io::Error::from_raw_os_error(ENOENT);
+        return fail_open(interp, receiver, &error, answer);
+    }
     let size = size_of(&opened);
     let transient = is_transient(&opened);
     let state = require_mut(interp, receiver)?;
@@ -912,16 +928,48 @@ fn fail_open(
     interp: &mut Interp,
     receiver: ObjRef,
     error: &std::io::Error,
+    answer: &[u8],
 ) -> Result<bool, Failure> {
     let errno = error.raw_os_error().unwrap_or(ENOENT);
-    let state = require_mut(interp, receiver)?;
-    state.status = StreamStatus::Error(errno);
-    let name = state.name.clone();
     // Every entry point that opens implicitly raises when the open fails --
     // measured, `lines` and `chars` on a name nothing resolves to each fire a
     // `CALL ON NOTREADY` handler once, and both still answer 0.
-    interp.raise_notready(&name)?;
+    notready(
+        interp,
+        receiver,
+        StreamStatus::Error(errno),
+        answer.to_vec(),
+    )?;
     Ok(false)
+}
+
+/// `StreamInfo::readSetup`: the implicit open, after which the stream is
+/// `READY` until the read says otherwise.
+fn read_setup(interp: &mut Interp, receiver: ObjRef, answer: &[u8]) -> Result<bool, Failure> {
+    if !ensure_open(interp, receiver, false, answer)? {
+        return Ok(false);
+    }
+    require_mut(interp, receiver)?.status = StreamStatus::Ready;
+    Ok(true)
+}
+
+/// `StreamInfo::writeSetup`: the implicit open for writing, `NOTREADY` with
+/// `ERROR:13` on a stream opened read-only, and `READY` otherwise.
+fn write_setup(interp: &mut Interp, receiver: ObjRef, answer: &[u8]) -> Result<bool, Failure> {
+    if !ensure_open(interp, receiver, true, answer)? {
+        return Ok(false);
+    }
+    if require(interp, receiver)?.mode.read_only {
+        notready(
+            interp,
+            receiver,
+            StreamStatus::Error(EACCES),
+            answer.to_vec(),
+        )?;
+        return Ok(false);
+    }
+    require_mut(interp, receiver)?.status = StreamStatus::Ready;
+    Ok(true)
 }
 
 /// Which standard stream `receiver` is, when it is one. Every entry point
@@ -947,11 +995,12 @@ fn standard_write(
         StandardStream::Out => interp.write_out(bytes),
         StandardStream::Err => interp.write_err(bytes),
         StandardStream::In => {
-            let state = require_mut(interp, receiver)?;
-            state.status = StreamStatus::Error(EACCES);
-            let name = state.name.clone();
-            interp.raise_notready(&name)?;
-            return Ok(Some(interp.text_built(residual.to_vec())));
+            return notready(
+                interp,
+                receiver,
+                StreamStatus::Error(EACCES),
+                residual.to_vec(),
+            );
         }
     }
     let state = require_mut(interp, receiver)?;
@@ -997,8 +1046,10 @@ fn reset_line_positions(open: &mut rexx_core::OpenFile) {
 }
 
 /// `stream_charin`: `length` characters from `start`, or from the read
-/// position. A short read is the end of the file and leaves `ERROR:0`, which
-/// is what parts it from `LINEIN`'s `NOTREADY:EOF`.
+/// position. A short read raises `NOTREADY` and answers what it got: a read
+/// of nothing leaves `ERROR:0` and one that got some leaves `NOTREADY:EOF`
+/// (`StreamInfo::charin`, `SysFile::read`). A `start` past the end is
+/// `NOTREADY:EOF` before anything is read.
 pub(super) fn charin(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1012,6 +1063,7 @@ pub(super) fn charin(
     };
     if let Some(which) = standard_of(interp, receiver)? {
         refuse_transient_position(interp, which, start.is_some())?;
+        start.map(positive).transpose()?;
         let StandardStream::In = which else {
             return Ok(Some(interp.text(b"")));
         };
@@ -1034,15 +1086,13 @@ pub(super) fn charin(
             got if got < wanted => StreamStatus::NotReady,
             _ => StreamStatus::Ready,
         };
-        let state = require_mut(interp, receiver)?;
-        state.status = status;
         if status != StreamStatus::Ready {
-            let name = state.name.clone();
-            interp.raise_notready(&name)?;
+            return notready(interp, receiver, status, read);
         }
+        require_mut(interp, receiver)?.status = status;
         return Ok(Some(interp.text_built(read)));
     }
-    if !ensure_open(interp, receiver, false)? {
+    if !read_setup(interp, receiver, b"")? {
         return Ok(Some(interp.text(b"")));
     }
     let state = require_mut(interp, receiver)?;
@@ -1053,7 +1103,11 @@ pub(super) fn charin(
         if open.transient {
             return Err(Raised::transient_positioning().into());
         }
-        open.read_position = as_position(start);
+        let start = as_position(positive(start)?);
+        if start > size_of(&open.file) as i64 {
+            return notready(interp, receiver, StreamStatus::NotReady, Vec::new());
+        }
+        open.read_position = start;
     }
     let at = open.read_position;
     let wanted = usize::try_from(length).unwrap_or(usize::MAX);
@@ -1061,18 +1115,14 @@ pub(super) fn charin(
         return Ok(Some(interp.text(b"")));
     }
     let read = read_from(&mut open.file, offset_of(at), wanted).unwrap_or_default();
+    if read.is_empty() {
+        return notready(interp, receiver, StreamStatus::Error(0), Vec::new());
+    }
     open.read_position = at + read.len() as i64;
     open.last_op_was_read = true;
     reset_line_positions(open);
-    let short = read.len() < wanted;
-    let name = if short {
-        state.status = StreamStatus::Error(0);
-        Some(state.name.clone())
-    } else {
-        None
-    };
-    if let Some(name) = name {
-        interp.raise_notready(&name)?;
+    if read.len() < wanted {
+        return notready(interp, receiver, StreamStatus::NotReady, read);
     }
     Ok(Some(interp.text_built(read)))
 }
@@ -1096,11 +1146,12 @@ pub(super) fn linein(
     }
     if let Some(which) = standard_of(interp, receiver)? {
         refuse_transient_position(interp, which, line.is_some())?;
+        line.map(positive).transpose()?;
         let StandardStream::In = which else {
             return Ok(Some(interp.text(b"")));
         };
     } else {
-        if !ensure_open(interp, receiver, false)? {
+        if !read_setup(interp, receiver, b"")? {
             return Ok(Some(interp.text(b"")));
         }
         if let Some(line) = line {
@@ -1138,15 +1189,12 @@ fn next_line(interp: &mut Interp, receiver: ObjRef) -> Result<Option<Vec<u8>>, F
                 Ok(Some(text))
             }
             None => {
-                let state = require_mut(interp, receiver)?;
-                state.status = StreamStatus::NotReady;
-                let name = state.name.clone();
-                interp.raise_notready(&name)?;
+                notready(interp, receiver, StreamStatus::NotReady, Vec::new())?;
                 Ok(None)
             }
         };
     }
-    if !ensure_open(interp, receiver, false)? {
+    if !ensure_open(interp, receiver, false, b"")? {
         return Ok(None);
     }
     let state = require_mut(interp, receiver)?;
@@ -1165,9 +1213,7 @@ fn next_line(interp: &mut Interp, receiver: ObjRef) -> Result<Option<Vec<u8>>, F
             Ok(Some(text))
         }
         None => {
-            state.status = StreamStatus::NotReady;
-            let name = state.name.clone();
-            interp.raise_notready(&name)?;
+            notready(interp, receiver, StreamStatus::NotReady, Vec::new())?;
             Ok(None)
         }
     }
@@ -1199,7 +1245,7 @@ pub(super) fn arrayin(
 }
 
 /// Moves the read position to the start of `line`, counting from the top.
-fn seek_to_line(interp: &mut Interp, receiver: ObjRef, line: u64) -> Result<(), Failure> {
+fn seek_to_line(interp: &mut Interp, receiver: ObjRef, line: i64) -> Result<(), Failure> {
     let state = require_mut(interp, receiver)?;
     let Some(open) = state.open.as_mut() else {
         return Ok(());
@@ -1211,6 +1257,7 @@ fn seek_to_line(interp: &mut Interp, receiver: ObjRef, line: u64) -> Result<(), 
     if open.transient {
         return Err(Raised::transient_positioning().into());
     }
+    let line = positive(line)?;
     let mut at: i64 = 1;
     for _ in 1..line.max(1) {
         match read_line_from(&mut open.file, offset_of(at)).unwrap_or(None) {
@@ -1239,24 +1286,25 @@ pub(super) fn charout(
     };
     let start = optional_position(interp, args.get(1).copied().flatten(), 2)?;
     if data.is_none() && start.is_none() {
-        return close(interp, _cleared, receiver, &[]).map(|_| Some(interp.text(b"0")));
+        return close_for_write(interp, _cleared, receiver, b"0");
     }
     if let Some(which) = standard_of(interp, receiver)? {
         refuse_transient_position(interp, which, start.is_some())?;
+        start.map(positive).transpose()?;
         let data = data.unwrap_or_default();
         let residual = data.len().to_string().into_bytes();
         return standard_write(interp, receiver, which, &data, &residual);
     }
-    if !ensure_open(interp, receiver, true)? {
-        let residual = data.as_ref().map_or(0, Vec::len);
-        return Ok(Some(interp.text_built(residual.to_string().into_bytes())));
+    let residual = data.as_ref().map_or(0, Vec::len).to_string().into_bytes();
+    if !write_setup(interp, receiver, &residual)? {
+        return Ok(Some(interp.text_built(residual)));
     }
     let state = require_mut(interp, receiver)?;
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"0")));
     };
     if let Some(start) = start {
-        open.write_position = as_position(start);
+        open.write_position = as_position(positive(start)?);
     }
     let Some(data) = data else {
         return Ok(Some(interp.text(b"0")));
@@ -1271,11 +1319,7 @@ pub(super) fn charout(
         }
         Err(error) => {
             let errno = error.raw_os_error().unwrap_or(0);
-            state.status = StreamStatus::Error(errno);
-            let name = state.name.clone();
-            let residual = data.len().to_string().into_bytes();
-            interp.raise_notready(&name)?;
-            Ok(Some(interp.text_built(residual)))
+            notready(interp, receiver, StreamStatus::Error(errno), residual)
         }
     }
 }
@@ -1294,22 +1338,16 @@ pub(super) fn lineout(
     };
     let line = optional_position(interp, args.get(1).copied().flatten(), 2)?;
     if data.is_none() && line.is_none() {
-        return close(interp, _cleared, receiver, &[]).map(|_| Some(interp.text(b"0")));
+        return close_for_write(interp, _cleared, receiver, b"1");
     }
     if let Some(which) = standard_of(interp, receiver)? {
         refuse_transient_position(interp, which, line.is_some())?;
+        line.map(positive).transpose()?;
         let mut bytes = data.unwrap_or_default();
         bytes.push(b'\n');
         return standard_write(interp, receiver, which, &bytes, b"1");
     }
-    if !ensure_open(interp, receiver, true)? {
-        return Ok(Some(interp.text(b"1")));
-    }
-    if require(interp, receiver)?.mode.read_only {
-        let state = require_mut(interp, receiver)?;
-        state.status = StreamStatus::Error(EACCES);
-        let name = state.name.clone();
-        interp.raise_notready(&name)?;
+    if !write_setup(interp, receiver, b"1")? {
         return Ok(Some(interp.text(b"1")));
     }
     let mode = require(interp, receiver)?.mode;
@@ -1327,7 +1365,8 @@ pub(super) fn lineout(
             0
         };
         let (from_line, from_char) = (open.line_write, open.line_write_char);
-        let (number, at) = seek_line(open, as_position(line), record_length, from_line, from_char);
+        let line = as_position(positive(line)?);
+        let (number, at) = seek_line(open, line, record_length, from_line, from_char);
         open.line_write = number;
         open.line_write_char = at;
         open.write_position = at;
@@ -1372,12 +1411,33 @@ pub(super) fn lineout(
         }
         Err(error) => {
             let errno = error.raw_os_error().unwrap_or(0);
-            state.status = StreamStatus::Error(errno);
-            let name = state.name.clone();
-            interp.raise_notready(&name)?;
-            Ok(Some(interp.text(b"1")))
+            notready(interp, receiver, StreamStatus::Error(errno), b"1".to_vec())
         }
     }
+}
+
+/// `LINEOUT` or `CHAROUT` with neither data nor a position: a stream opened
+/// read-only is closed first, then the write setup runs -- creating a missing
+/// file, or raising `NOTREADY` with `answer` where it cannot -- and the stream
+/// is closed (`StreamInfo::lineout`, `StreamInfo::charout`). A standard stream
+/// only closes.
+fn close_for_write(
+    interp: &mut Interp,
+    cleared: Cleared,
+    receiver: ObjRef,
+    answer: &[u8],
+) -> Result<Option<ObjRef>, Failure> {
+    if standard_of(interp, receiver)?.is_none() {
+        let state = require_mut(interp, receiver)?;
+        if state.open.is_some() && state.mode.read_only {
+            state.open = None;
+        }
+        if !write_setup(interp, receiver, answer)? {
+            return Ok(Some(interp.text_built(answer.to_vec())));
+        }
+    }
+    close(interp, cleared, receiver, &[])?;
+    Ok(Some(interp.text(b"0")))
 }
 
 /// Writes `bytes` at `position` (1-based).
@@ -1405,7 +1465,7 @@ pub(super) fn chars(
         let left = interp.input_remaining().unwrap_or(1);
         return Ok(Some(interp.text_built(left.to_string().into_bytes())));
     }
-    if !ensure_open(interp, receiver, false)? {
+    if !ensure_open(interp, receiver, false, b"0")? {
         return Ok(Some(interp.text(b"0")));
     }
     let state = require_mut(interp, receiver)?;
@@ -1441,7 +1501,7 @@ pub(super) fn lines(
         let answer = if quick { u64::from(left > 0) } else { left };
         return Ok(Some(interp.text_built(answer.to_string().into_bytes())));
     }
-    if !ensure_open(interp, receiver, false)? {
+    if !ensure_open(interp, receiver, false, b"0")? {
         return Ok(Some(interp.text(b"0")));
     }
     let state = require_mut(interp, receiver)?;
@@ -1469,34 +1529,82 @@ pub(super) fn lines(
     Ok(Some(interp.text_built(answer.to_string().into_bytes())))
 }
 
-/// An optional 1-based position argument: absent, or a positive whole number.
+/// An optional position argument, marshalled as the native boundary's
+/// `int64_t`: anything that is not a whole number in its range is 88.907
+/// naming argument `which` (`NativeActivation::int64Value`).
 fn optional_position(
     interp: &mut Interp,
     value: Option<ObjRef>,
     which: usize,
-) -> Result<Option<u64>, Failure> {
+) -> Result<Option<i64>, Failure> {
     let Some(value) = value else {
         return Ok(None);
     };
-    let text = interp.to_text(value).into_owned();
-    match to_number(&text).filter(|number| *number != 0) {
+    let number = match value.decode() {
+        Decoded::SmallInt(number) => Some(number),
+        _ => {
+            let text = interp.to_text(value);
+            Number::parse_bytes(&text).and_then(|number| number.int64_value(DIGITS64))
+        }
+    };
+    match number {
         Some(number) => Ok(Some(number)),
-        None => Err(Raised::method_argument_not_positive(which, &text).into()),
+        None => {
+            let found = interp.string_value_text(value);
+            let mut raised = Raised::native_argument_out_of_range(
+                &format!("{which}"),
+                i64::MIN,
+                i64::MAX,
+                &found,
+            );
+            marshalling(&mut raised);
+            Err(raised.into())
+        }
     }
 }
 
-/// A whole-number argument that may be zero.
+/// A marshalling raise is reported against the REXX package with no line:
+/// measured, oracle, `.Stream~new('f.txt')~lineIn(.nil)` is `Error 88 running
+/// REXX:`.
+fn marshalling(raised: &mut Raised) {
+    raised.delivery.lineless = true;
+    raised.delivery.internal_package = true;
+}
+
+/// A position below 1 is 93.907, which names argument 1 whichever argument
+/// carried it (`StreamInfo::setCharReadPosition` and its siblings).
+fn positive(position: i64) -> Result<u64, Failure> {
+    u64::try_from(position)
+        .ok()
+        .filter(|position| *position != 0)
+        .ok_or_else(|| {
+            Raised::method_argument_not_positive(1, position.to_string().as_bytes()).into()
+        })
+}
+
+/// A whole-number argument that may be zero, marshalled as the native
+/// boundary's `size_t` (`NativeActivation::unsignedIntegerValue`).
 fn whole_number(interp: &mut Interp, value: ObjRef, which: usize) -> Result<u64, Failure> {
-    let text = interp.to_text(value).into_owned();
-    match to_number(&text) {
+    let number = match value.decode() {
+        Decoded::SmallInt(number) => u64::try_from(number).ok(),
+        _ => {
+            let text = interp.to_text(value);
+            Number::parse_bytes(&text).and_then(|number| number.unsigned_int64_value(DIGITS64))
+        }
+    };
+    match number {
         Some(number) => Ok(number),
-        None => Err(Raised::native_argument_out_of_range_unsigned(
-            &format!("{which}"),
-            0,
-            u64::MAX,
-            &text,
-        )
-        .into()),
+        None => {
+            let found = interp.string_value_text(value);
+            let mut raised = Raised::native_argument_out_of_range_unsigned(
+                &format!("{which}"),
+                0,
+                u64::MAX,
+                &found,
+            );
+            marshalling(&mut raised);
+            Err(raised.into())
+        }
     }
 }
 
@@ -1655,7 +1763,7 @@ pub(super) fn position(
     // seek naming one that does not exist answers 0 and leaves state ERROR.
     // Asking for the read-shaped open is what selects that, because it is the
     // `operation_nocreate` one whichever pointer is about to move.
-    if !ensure_open(interp, receiver, false)? {
+    if !ensure_open(interp, receiver, false, b"0")? {
         return Ok(Some(interp.text(b"0")));
     }
     let record_length = if mode.record_based {

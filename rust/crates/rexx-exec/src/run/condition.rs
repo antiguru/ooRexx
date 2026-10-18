@@ -108,7 +108,14 @@ impl Interp {
     ///
     /// **The caller answers normally after `Ok`**: a raise never changes what
     /// the failing call returns -- the residual, `1`, or the null string.
-    pub(crate) fn raise_notready(&mut self, name: &[u8]) -> Result<(), Failure> {
+    /// The condition object carries `stream` as `ADDITIONAL` and `result`, the
+    /// value the caller answers, as `RESULT` (`StreamInfo::notreadyError`).
+    pub(crate) fn raise_notready(
+        &mut self,
+        name: &[u8],
+        stream: ObjRef,
+        result: ObjRef,
+    ) -> Result<(), Failure> {
         // A native `LINEIN` the input reader sent runs in the reader's own
         // activation.
         let running = self.running_activation().map(|activation| activation.id);
@@ -123,6 +130,8 @@ impl Interp {
         };
         match self.trap_for(b"NOTREADY") {
             Some(trap) if trap.call => {
+                self.activity.pending_additional = Some(stream);
+                self.activity.pending_result = Some(result);
                 let object = self.build_condition_object(&raised, Some(true))?;
                 self.activity.pending_traps.push_back(PendingTrap {
                     condition: b"NOTREADY".as_slice().into(),
@@ -145,11 +154,15 @@ impl Interp {
                 });
                 Ok(())
             }
-            Some(_) => Err(Raised {
-                description: Some(name.to_vec()),
-                ..Raised::condition(Cow::Borrowed("NOTREADY"))
+            Some(_) => {
+                self.activity.pending_additional = Some(stream);
+                self.activity.pending_result = Some(result);
+                Err(Raised {
+                    description: Some(name.to_vec()),
+                    ..Raised::condition(Cow::Borrowed("NOTREADY"))
+                }
+                .into())
             }
-            .into()),
             None => {
                 if self.condition_raises_syntax(b"NOTREADY") {
                     return Err(Raised::notready_syntax(name).into());
@@ -1051,7 +1064,7 @@ impl Interp {
             return Err(Raised::syntax(98, 918, Vec::new()).into());
         };
         if !active.raised.reportable() {
-            return Ok(Flow::Exit(None));
+            return self.propagate_unreportable(&active.raised);
         }
         let mut raised = active.raised.clone();
         raised.delivery.search = Search::Nobody;
@@ -1085,6 +1098,55 @@ impl Interp {
             self.activity.reraise_leaving = top + 1;
         }
         Err(raised.into())
+    }
+
+    /// `RAISE PROPAGATE` of a condition other than `SYNTAX`. Like a tail-less
+    /// `RAISE` it leaves this activation and every internal call beneath it,
+    /// offers the same condition object to the caller of the first activation
+    /// that is not one, and returns the object's `RESULT` unless a `SIGNAL ON`
+    /// trap takes it (`RexxActivation::raise`, `execution/RexxActivation.cpp:
+    /// 1801`-`:1805` and `:1895`).
+    fn propagate_unreportable(&mut self, raised: &Raised) -> Result<Flow, Failure> {
+        let object = self.activation().condition().and_then(|c| c.object);
+        let result = object.and_then(|object| self.condition_entry(object, b"RESULT"));
+        if let Some(result) = result {
+            self.roots.activity_mut().push_temp(result);
+        }
+        let top = self.first_non_internal_depth();
+        let caller = self.frame_at(top + 1).map(|activation| activation.id);
+        let Some(caller) = caller.filter(|_| !self.input_dispatcher_takes(caller)) else {
+            return Ok(Flow::Exit(result));
+        };
+        let name = raised.condition.as_bytes();
+        match self.trap_at_depth(top + 1, name) {
+            Some(trap) if trap.call => {
+                if let Some(object) = object {
+                    self.propagate_to_call_trap(object)?;
+                }
+                self.activity.pending_traps.push_back(PendingTrap {
+                    condition: name.into(),
+                    rc: raised.rc.clone(),
+                    description: raised.description.clone(),
+                    object,
+                    activation: caller,
+                    queued_during_delivery: false,
+                    request: false,
+                    fragment_depth: self.activity.fragment_depth - self.fragments_within(top),
+                });
+                Ok(Flow::Exit(result))
+            }
+            Some(_) => {
+                let mut raised = raised.clone();
+                raised.delivery.search = if top == 0 {
+                    Search::Caller
+                } else {
+                    Search::AboveTop
+                };
+                self.activity.reraised_object = object;
+                Err(raised.into())
+            }
+            None => Ok(Flow::Exit(result)),
+        }
     }
 
     /// Resolves a `SIGNAL`/`SIGNAL VALUE` target against the running
