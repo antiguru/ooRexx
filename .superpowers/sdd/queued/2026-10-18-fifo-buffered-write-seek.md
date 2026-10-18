@@ -1,4 +1,4 @@
-**OPEN: found by Phase 9d Task 6.4 fix round 1. Needs Moritz's ruling: an oracle defect, proposed Deviation.** On a FIFO, the oracle fails every write that follows a still-buffered write with `ERROR:29 Illegal seek`.
+**CLOSED: Deviation 48, ruled by Moritz 2026-10-18.** This crate writes to a transient stream without seeking. The oracle defect is not copied.
 
 # Oracle: writes to a FIFO fail after a buffered write
 

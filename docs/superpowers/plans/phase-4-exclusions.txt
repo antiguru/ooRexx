@@ -2385,6 +2385,18 @@ DEVIATIONS -- permanent, chosen
      Ruled: this crate positions and closes as documented and clears no
      record. The test's earlier assertions, the five padded records, are
      not part of this licence.
+     Extended by Moritz 2026-10-18 ("Lgtm"), from the derivation in
+     docs/superpowers/records/2026-10-18-phase-9d/record-io-semantics.md: only
+     a LINEOUT with a string pads its record, and nothing else ever pads. The
+     oracle's `lineout(name)` with no string pads the current record from the
+     write position (StreamNative.cpp:2016-2045, `reclen - (pos-1) % reclen`
+     with no zero case), so it blanks the rest of a record a CHAROUT left
+     partly written, and with BINARY and no RECLENGTH everything after the
+     write position. Its other closes (`charout(name)`, STREAM CLOSE, the
+     close method, program end) pad nothing, and the documentation says a
+     close only closes (rexxpg rexio.xml:613-616, rexxref funct.xml:3193-3196).
+     Ruled: `AAAABBBBCCCCDDDD` opened BOTH BINARY RECLENGTH 4, then
+     `charout(f,'x',5)` and `lineout(f)`, leaves `AAAAxBBBCCCCDDDD`.
 
  47. A `DO` REPETITOR OR `FOR` COUNT WIDER THAN NUMERIC DIGITS RAISES 26.2
      OR 26.3 (Phase 9d). OWNER: none.
@@ -2397,6 +2409,17 @@ DEVIATIONS -- permanent, chosen
      Measured by the Phase 9d Task 6.3 review (probes rep.rex, rep2.rex) and
      the 2026-10-18 ANSI spike
      (.superpowers/sdd/2026-10-18-phase-9d/spike-ansi-model.md).
+ 48. A WRITE TO A TRANSIENT STREAM NEVER SEEKS (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-18 ("Lgtm"), from the derivation in
+     docs/superpowers/records/2026-10-18-phase-9d/record-io-semantics.md. On a
+     FIFO the oracle fails each write that follows a still-buffered write
+     with `NOTREADY ERROR:29 Illegal seek`, and a close after a buffered
+     write the same way: `writeSetup` (StreamNative.cpp:918-944) seeks
+     although its own buffer code treats a transient stream as having no
+     position. The documentation gives transient streams no positions
+     (rexxref iostrms.xml:186-197). This crate writes to a transient stream
+     without seeking (.superpowers/sdd/queued/2026-10-18-fifo-buffered-write-seek.md).
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
