@@ -1,0 +1,7 @@
+   .Array~of('p', 'q', 'r')~insert('z', 999999999999) 5.0
+   .Array~new~insert('z', 999999999999) 5.0
+   .Array~of('p', 'q', 'r')~put('z', 999999999999) 5.0
+   a = .Array~of('p'); a[999999999999] = 'z' 5.0
+   .Array~new(999999999999) 5.0
+   a~insert('z', 999999999999) 5.0
+still 3 3 p q r

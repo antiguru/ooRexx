@@ -282,3 +282,88 @@ identical.
   -2.1663, parse -0.0861 / -0.0861, churn +0.1110 / +0.1111, sayloop +0.0460 / +0.0460. The
   round's own delta is at most +0.0001% on every program, and the libc-subtracted figures move by
   at most 0.0001.
+
+## Fix round 1
+
+Review: `task-6.7-review.md`. Code commits `359435fdf`, `86d2e2d3b` and `bacf18d5a`; the records
+commit that follows holds `t6.7/r1/` and this section.
+
+### Important 1: Queue `next` and `previous`
+
+The pre-review section's claim that `position_in` covers `next` and `previous` was false:
+`array_step` replaced the receiver with its store before `position_in`, so `queue_index` never
+saw a Queue. `array_step` now reads its one index with `queue_index` against the receiver itself,
+then validates it against the store. Measured against the oracle, on Queue, CircularQueue and a
+Queue subclass: `next(.array~of('099'))` is `.nil` and `previous` of it is 3, `next` and
+`previous` of `.array~of(, 2)` are 3 and 1 (rc 120 before), and `next(.array~of(2)~~put(3, 3))`
+is 93.907 naming the Array (93.926 before).
+
+### Minor 2: `section`'s count reads an Array as its string
+
+`native_array_section` reads an Array count as its items' lines through `required_string_value`,
+then converts that by `optional_length_argument`; a refusal is 93.923 naming the Array. Measured
+against the oracle on Queue, a Queue subclass and Array: `.array~of(2)`, `.array~of('099')`,
+`.array~of('1.0')`, `.array~of(' 2 ')`, `.array~new(5)~~put(2, 1)` and `.array~of(, 2)` convert,
+and `.array~of(1, 2)` and `.array~new` are 93.923 "an Array". CircularQueue has a `section` of its
+own, which compares the count with `<`, and is 97.1 on both sides.
+
+This is the only method changed. The same rule holds on the oracle for other whole-number method
+arguments, which here still refuse an Array (`t6.7/r1/probes/review-shapes.*`):
+`'abcdef'~substr(.array~of(2), .array~of(3))` is `bcd` there and 93.924 here,
+`'abcdef'~left(.array~of(2))` is `ab` there and 93.923 here, `~copies` is 93.906 here, and
+MutableBuffer `substr` and `new`'s size are the same. Those parsers are
+`method_arguments.rs`'s `whole_method_argument` family, outside this task's files. Proposed as a
+queued item with Minor 4's shapes.
+
+### Refused Array growth is 5.0
+
+`collection::array_grow`, which `insert` past the end and `append` use, called `slots.resize`,
+which aborts when the allocator refuses (`.Array~of(...)~insert('z', 999999999999)`, rc 134). It
+now reserves first with `ArraySlots::try_reserve`, a new `rexx-core` method over
+`Vec::try_reserve` that grows by the amortised rule, and a refusal is 5.0. `86d2e2d3b` replaced
+`359435fdf`'s exact reservation, which would have reallocated on every append past the end.
+300000 appends and 300000 trailing inserts take 0.12 s against the pre-review binary's 0.13 s.
+
+The other growth paths were already fallible or do not grow: `put` and `[]=` go through
+`array_resize`, which reserves first, `.Array~new(n)` and multi-dimensional extension through
+`empty_slots`, which does too, `section` copies at most the receiver's own slots, and `fill`
+writes existing slots. The one remaining infallible growth is `array_splice_slot`'s one-slot
+`insert`. The 5.0 message differs: the oracle's condition carries `.nil` as its message, and this
+crate carries "System resources exhausted." The witness prints the code only. Memory-pressure
+answers are best-effort by ruling.
+
+### Witnesses
+
+* `lang/collection_queue_array_index.rex` gains, on Queue and CircularQueue, `next` and `previous`
+  of `.array~of('099')` and `.array~of(, 2)`, `next` of a two-item Array, and `section` counts of
+  each shape above, plus a Queue subclass and Array lines. On the pre-review binary `a40a7262e`
+  it stops at the first `next(.array~of(, 2))` (rc 120) after the `'099'` lines already differ
+  (`t6.7/r1/witnesses/collection_queue_array_index.pre-review.*`). On the parent it dies at the
+  first `put` (rc 163). On `bacf18d5a` it is identical to the oracle.
+* `lang/collection_array_grow_refused.rex`, new, in `phase-9.txt` with its `sourceline_oracle/`
+  file: `insert` past the end on a filled and an empty Array, `put`, `[]=` and `.Array~new` of
+  that size each print 5.0, and the Array is unchanged after the refused insert. The parent aborts
+  at the first line, rc 134. The task is identical to the oracle.
+
+`t6.7/r1/witnesses/summary.tsv` reruns every witness of this task: each is identical to the
+oracle.
+
+### Checks, on `bacf18d5a`
+
+* `cargo fmt --all --check`: exit 0.
+* `memcap 8G cargo clippy -j 4 -p rexx-exec -p rexx-core --all-targets -- -D warnings`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-exec --lib`: exit 0, 1152 passed.
+* `memcap 16G cargo test -j 4 --release -p rexx-core`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-exec --test refusal_sites --test owners --test
+  closed_phases --test phase_ten_reasons --test representation_refusals --test
+  refusal_dispositions --test coverage --test rexxc --test licensed_divergences`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-parse`: exit 0.
+* `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus`: exit 0,
+  1093 of 1093 matching.
+* The whole suite with the table at `t6.7/r1/suite/table.tsv`: exit 101 as expected, 402 groups,
+  16 red, 4m46s. Against `t6.7/pre-review/suite/tests.tsv` no row changed
+  (`t6.7/r1/suite/changed-rows.txt` holds only its command).
+* Perf, `t6.7/r1/callgrind.txt`: pin, `a40a7262e` (pre) and `bacf18d5a` in one run, exit 0.
+  Whole process against the pin, pre then head: startup +0.0418 / +0.0432, interpret -2.1664 /
+  -2.1660, parse -0.0861 / -0.0860, churn +0.1111 / +0.1114, sayloop +0.0458 / +0.0470. The
+  round's own delta is at most +0.0014%, and the libc-subtracted figures move by at most 0.0001.

@@ -1,0 +1,24 @@
+   .Queue~of('p','q','r')~section(1, .array~of(2))~makeArray~toString('L',' ') -> p q
+   .Queue~of('p','q','r')~section(1, .array~of('099'))~items -> 3
+   .Queue~of('p','q','r')~section(1, .array~of('1.0'))~items -> 1
+   .Queue~of('p','q','r')~section(1, .array~of(' 2 '))~items -> 2
+   .Queue~of('p','q','r')~section(1, .array~new(5)~~put(2,1))~items -> 2
+   .Queue~of('p','q','r')~section(1, .array~of(1,2))~items ERR 93.923 Invalid length argument specified; found "an Array".
+   .Queue~of('p','q','r')~section(1, .array~new)~items ERR 93.923 Invalid length argument specified; found "an Array".
+   .Array~of('p','q','r')~section(1, .array~of(2))~class~id -> Array
+   .Array~of('p','q','r')~section(1, .array~of(,2))~items -> 2
+   .QS~of('p','q','r')~section(1, .array~of(2))~class~id -> QS
+   'abcdef'~substr(.array~of(2), .array~of(3)) -> bcd
+   'abcdef'~left(.array~of(2)) -> ab
+   'abcdef'~copies(.array~of(2)) -> abcdefabcdef
+   .MutableBuffer~new('abcdef')~substr(.array~of(2), .array~of(3)) -> bcd
+   .MutableBuffer~new('abcdef', .array~of(50))~getBufferSize -> 50
+   'abcdef'~substr(.array~of(1,2)) ERR 93.924 Invalid position argument specified; found "an Array".
+   .Queue~of('p','q','r')~next(.array~of('099')) -> The NIL object
+   .Queue~of('p','q','r')~previous(.array~of('099')) -> 3
+   .Queue~of('p','q','r')~next(.array~of(,2)) -> 3
+   .Queue~of('p','q','r')~previous(.array~of(,2)) -> 1
+   .Queue~of('p','q','r')~next(.array~of(2)~~put(3,3)) ERR 93.907 Method argument 1 must be a positive whole number; found "an Array".
+   .CircularQueue~of('p','q','r')~next(.array~new(3)~~put(2,3)) -> 3
+   .Array~of('p','q','r')~insert('z', 999999999999) ERR 5.0 The NIL object
+   .Array~of('p','q','r')~put('z', 999999999999) ERR 5.0 The NIL object
