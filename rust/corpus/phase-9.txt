@@ -156,3 +156,7 @@ lang/parse_error_interpret_line.rex
 # at a pass boundary with loops open around it.
 lang/loop_test_callee_loop.rex
 lang/loop_test_callee_loop_chunk.rex
+
+# 9d Task 6.1: a ::REQUIRES in code compiled from source searches from the
+# name the code was given, then from its parent package.
+lang/requires_dynamic_search_start.rex
