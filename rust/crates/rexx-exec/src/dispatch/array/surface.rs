@@ -16,7 +16,7 @@
 use super::collection::{
     QUEUE_ITEMS, append_slot, array_grow, array_of, array_splice, array_splice_slot, dimensions_of,
     is_queue, item_argument, last_item, new_supplier, occupied, ordered_pairs, position_in,
-    read_slots, same_item, slots_of, store_of, store_scope, subscript_object,
+    queue_index, read_slots, same_item, slots_of, store_of, store_scope, subscript_object,
 };
 use super::{
     Arity, BehaviourId, Body, Cleared, Failure, IndexUse, Interp, Loud, NativeMethod, ObjRef,
@@ -471,9 +471,7 @@ fn native_array_fill(
 /// subscripts it holds, and exactly one of them is a position. `position` is
 /// the argument's place in the method's argument list.
 ///
-/// `QueueClass::validateIndex` (`classes/QueueClass.cpp:98`) does not spread
-/// an `Array`, so a queue reads one as `requestString` does, as its items'
-/// lines, and only a single item holding a position converts.
+/// A queue reads an `Array` index by [`queue_index`] instead.
 fn single_subscript(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -484,12 +482,8 @@ fn single_subscript(
         return super::positive_index(interp, value, position);
     }
     if is_queue(interp, receiver) {
-        let lines = interp.required_string_value(value)?;
-        if let Some(index) = super::whole_index(interp, lines) {
-            return Ok(index);
-        }
-        let found = interp.string_value_text(value);
-        return Err(Raised::method_argument_not_positive(position, &found).into());
+        let index = queue_index(interp, value, position)?;
+        return super::positive_index(interp, index, position);
     }
     let spread = match interp.array_slots(value) {
         Some(slots) => {

@@ -15,8 +15,8 @@
 use super::{
     Arity, Body, Cleared, DEFAULT_ARRAY_SIZE, Failure, IndexUse, Interp, Loud, NativeMethod,
     ObjRef, QUEUE_CAPACITY, Raised, append_slot, array_position, array_slots, array_splice,
-    array_splice_slot, item_argument, native_array_delete, pool_variable, queue_bound, read_slots,
-    store_of, store_scope,
+    array_splice_slot, item_argument, native_array_delete, pool_variable, queue_bound, queue_index,
+    read_slots, store_of, store_scope,
 };
 
 // ---- Queue ----
@@ -131,17 +131,16 @@ fn native_queue_put(
     };
     let store = store_of(interp, receiver)?;
     let refuse = |interp: &mut Interp| {
-        let written = interp.to_text(index);
+        let written = interp.string_value_text(index);
         Failure::from(Raised::incorrect_list_index(&written))
     };
+    let subscript = queue_index(interp, index, 2)?;
     // `putRexx` calls `checkInsertIndex` (`classes/QueueClass.cpp:205`)
     // before anything else can refuse, so an index past the last item is
     // 93.966 and never the 93.918 an unheld index would answer.
-    if let Some(index) = args.get(1).copied().flatten() {
-        let position = super::positive_index(interp, index, 2)?;
-        queue_bound(interp, receiver, position)?;
-    }
-    let Some(position) = array_position(interp, store, &args[1..], IndexUse::Get)? else {
+    let position = super::positive_index(interp, subscript, 2)?;
+    queue_bound(interp, receiver, index, position)?;
+    let Some(position) = array_position(interp, store, &[Some(subscript)], IndexUse::Get)? else {
         return Err(refuse(interp));
     };
     match interp.heap.get_mut(store).map(|object| &mut object.body) {
@@ -162,6 +161,10 @@ fn native_queue_at(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let store = store_of(interp, receiver)?;
+    if let [Some(only)] = args {
+        let index = queue_index(interp, *only, 1)?;
+        return super::native_array_at_for(interp, cleared, store, &[Some(index)]);
+    }
     super::native_array_at_for(interp, cleared, store, args)
 }
 

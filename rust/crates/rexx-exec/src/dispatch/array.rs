@@ -140,7 +140,7 @@ impl IndexUse {
     /// The argument list position the subscript list starts at, which every
     /// refusal a subscript raises counts from: `putRexx`'s first argument is
     /// the value, so its list starts one later than `getRexx`'s.
-    fn arg_position(self) -> usize {
+    pub(super) fn arg_position(self) -> usize {
         match self {
             IndexUse::Get => 1,
             IndexUse::Put => 2,
@@ -259,7 +259,7 @@ fn multi_dimension_position(
 /// A subscript converted under `Numerics::ARGUMENT_DIGITS` rather than under
 /// the activation's own `NUMERIC DIGITS`, or `None` for one that is not a
 /// whole number of at least 1.
-fn whole_index(interp: &mut Interp, value: ObjRef) -> Option<usize> {
+pub(super) fn whole_index(interp: &mut Interp, value: ObjRef) -> Option<usize> {
     // A tagged integer already is the answer when it is narrow enough that
     // the rounding rule would change nothing, the same shortcut
     // `builtin::whole_number` takes against the same width.

@@ -64,7 +64,8 @@ pub(super) fn dimensions_of(
     array_dimensions(interp, store)
 }
 
-/// [`array_position`] over the receiver's store rather than the receiver.
+/// [`array_position`] over the receiver's store rather than the receiver,
+/// with a `Queue`'s single index read by [`queue_index`].
 pub(super) fn position_in(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -72,7 +73,38 @@ pub(super) fn position_in(
     index_use: IndexUse,
 ) -> Result<Option<usize>, Failure> {
     let store = store_of(interp, receiver)?;
+    if let [Some(only)] = args
+        && interp.array_slots(*only).is_some()
+        && is_queue(interp, receiver)
+    {
+        let index = queue_index(interp, *only, index_use.arg_position())?;
+        return array_position(interp, store, &[Some(index)], index_use);
+    }
     array_position(interp, store, args, index_use)
+}
+
+/// The one index a `Queue` method validates, as `QueueClass::validateIndex`
+/// (`classes/QueueClass.cpp:98`) reads it: an `Array` is not spread into
+/// subscripts but read as `requestString` reads it, as its items' lines, so
+/// only a single item holding a positive whole number converts, and anything
+/// else is 93.907 naming the Array. Any other index is answered unchanged.
+/// `position` is the argument's place in the method's argument list.
+pub(super) fn queue_index(
+    interp: &mut Interp,
+    index: ObjRef,
+    position: usize,
+) -> Result<ObjRef, Failure> {
+    if interp.array_slots(index).is_none() {
+        return Ok(index);
+    }
+    let lines = interp.required_string_value(index)?;
+    match super::array::whole_index(interp, lines) {
+        Some(whole) => Ok(interp.counted(whole)),
+        None => {
+            let found = interp.string_value_text(index);
+            Err(Raised::method_argument_not_positive(position, &found).into())
+        }
+    }
 }
 
 /// The Array-shaped store's pool name, in the receiver's own pool under the
@@ -287,9 +319,11 @@ impl Interp {
 }
 
 /// A `Queue`'s two-tier index bound, which is two different errors.
+/// `index` is the argument as given, which the 93.918 names.
 pub(super) fn queue_bound(
     interp: &mut Interp,
     receiver: ObjRef,
+    index: ObjRef,
     position: usize,
 ) -> Result<(), Failure> {
     if !is_queue(interp, receiver) {
@@ -307,7 +341,7 @@ pub(super) fn queue_bound(
     };
     let extent = declared.max(slots_of(interp, receiver)?.iter().flatten().count());
     if position > extent {
-        let written = position.to_string().into_bytes();
+        let written = interp.string_value_text(index);
         return Err(Raised::incorrect_list_index(&written).into());
     }
     if position > last_item(interp, receiver)? {

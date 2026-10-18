@@ -16,9 +16,6 @@ base/bif/CONDITION	TEST_NOVALUE_METHOD_EXPOSE
 base/bif/CONDITION	TEST_NOVALUE_PROEDURE_EXPOSE
 base/class/Class	TEST_ACTIVATE
 base/class/Class	TEST_METHODS
-base/class/IdentityTable	TEST_AT01
-base/class/IdentityTable	TEST_HASINDEX
-base/class/IdentityTable	TEST_[]
 base/class/Object	TEST_INSTANCEMETHOD
 base/class/Object	TEST_SETMETHOD
 base/class/Object	TEST_UNINIT
