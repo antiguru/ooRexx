@@ -2353,6 +2353,14 @@ DEVIATIONS -- permanent, chosen
      way in its `isInteger` routine, so the tests that route through it
      differ (docs/superpowers/records/2026-10-18-phase-9d/clusters.md,
      `rexxinteger-min-representation`).
+     Extended by Moritz 2026-10-18 ("Yes, but try to follow the better and
+     justifiable approach") to `MAX` and `MIN` with a whole-number argument
+     wider than NUMERIC DIGITS. The oracle answers such an integer unrounded
+     (`2~max(1111111111)` at DIGITS 9 is `1111111111`), and it decides
+     LOSTDIGITS by the argument's object type, so `max(1, '1111111111')`
+     raises where `max(1, 1111111111)` does not. This crate rounds to the
+     digits in force. Ruled: this crate rounds in both the function and the
+     message form, as ANSI X3.274 section 9.4 does, and decides by the value.
 
  45. `Bag~hasItem` WITH AN INDEX UNEQUAL TO THE ITEM ANSWERS 0 (Phase 9d).
      OWNER: none.
@@ -2377,6 +2385,18 @@ DEVIATIONS -- permanent, chosen
      Ruled: this crate positions and closes as documented and clears no
      record. The test's earlier assertions, the five padded records, are
      not part of this licence.
+
+ 47. A `DO` REPETITOR OR `FOR` COUNT WIDER THAN NUMERIC DIGITS RAISES 26.2
+     OR 26.3 (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-18 ("Yes, but try to follow the better and
+     justifiable approach"). At NUMERIC DIGITS 9 the oracle runs
+     `do 1111111111` and `do i = 1 for 1111111111` as loops. ANSI X3.274
+     section 8.3.6 requires the count to be a whole number at the digits in
+     force, so it raises 26.2 and 26.3, and so does this crate, rc 230.
+     Measured by the Phase 9d Task 6.3 review (probes rep.rex, rep2.rex) and
+     the 2026-10-18 ANSI spike
+     (.superpowers/sdd/2026-10-18-phase-9d/spike-ansi-model.md).
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------

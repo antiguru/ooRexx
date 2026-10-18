@@ -27,6 +27,17 @@
    ("Defer the interactive debugger as an optional later phase. It's not a feature we should
    block on."). The `ruled` column of `queued-inventory.tsv` holds each row's ruling. The
    process and harness rows ruled `9d` form one Task 8 instance.
+10. **Numeric rulings** (2026-10-18, "Yes, but try to follow the better and justifiable
+    approach"). Deviation 44 extends to `MAX` and `MIN` with a whole-number argument wider than
+    DIGITS: this crate rounds in both forms and decides LOSTDIGITS by value. Deviation 47: a `DO`
+    count wider than DIGITS raises 26.2 or 26.3. Where the oracle and this crate agree and only
+    the ANSI standard differs (LOSTDIGITS on a first argument or on trailing zeros), this crate
+    follows the oracle. For a later numeric choice, prefer the behaviour that can be justified
+    from the language's rules over the oracle's representation, and take it to Moritz as a
+    Deviation.
+11. **This crate's numeric semantics written as Rexx** (2026-10-18: "Can you denote our
+    implementation as rexx code, like the standard does? Then we also don't have a copyright
+    issue"). Task 6.14 writes it.
 
 ## Global Constraints
 
