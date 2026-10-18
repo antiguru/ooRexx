@@ -217,3 +217,89 @@ read unpiped, on `f568d48c0` unless named:
   is outside this task's files.
 * `ClassDirective`'s search keeps `Access::Direct`, as before. The oracle's `findClass` would
   consult a package security manager around `.local` and `.environment`. Not probed.
+
+## Fix round 1
+
+Review: `task-6.6-review.md`. The code commit is `adf05e2ff`. The records commit that follows holds
+`t6.6/r1/` and this section.
+
+### Finding 1: NUMERIC INHERIT at install
+
+`eval_constant_expression` passed no caller to `package_start`, so a package with
+`::OPTIONS NUMERIC INHERIT` fell back to its own numeric settings. The oracle installs a package
+in an activation of its own, and a `::CONSTANT` expression starts from that activation. The same
+holds for a `::REQUIRES` prologue, which runs in the requiring package's installing activation:
+measured, the required file's `say digits()` prologue prints 4 under a `DIGITS 4` requirer on the
+oracle and 9 here. A run-time `.Package~new(name)` or `loadPackage` under `NUMERIC DIGITS 4` also
+prints 4 on the oracle and 9 here.
+
+Fix:
+* `Interp::install_caller` holds the caller settings of the `run_loaded` whose directives are
+  installing. It is saved and restored around `install_directives`, and it never allocates.
+* The constant's activation takes `package_start(id, caller)`.
+* `find_requires` hands the required package `start_settings(requirer, caller)` while an install
+  runs, and the running activation's settings otherwise.
+
+The code comment at the constant now names INHERIT.
+
+Probes in `t6.6/r1/probes/inherit/` (`summary.tsv`, run by `probe-r1.sh`): C22, C23 and C25 from
+the review, plus:
+* the controls C27 and C28;
+* C29, an inheriting called file that requires;
+* C30, a chain of two inheriting requires;
+* C31, a required file with its own DIGITS 6;
+* C32 (`.Package~new`) and C34 (`loadPackage`) at run time;
+* C33, a file with `numeric inherit digits 7`.
+
+All match the oracle in rc, stdout and stderr. The parent differs in stdout on every one but C27
+and C28.
+
+Witness `lang/class_constant_expression_numeric_inherit.rex`, with the fixtures in
+`class_constant_expression_numeric_inherit.d/`. It is registered in `phase-9.txt`, with its
+`sourceline_oracle/` file. It prints `prolog 4`, `0.3333`, `0.666667 6`, `loaded 6`, `0.333333`
+on the oracle. On the parent, stdout differs (`prolog 9`, `0.333333333`, `0.666666667 6`,
+`loaded 9`, `0.333333333`). On `adf05e2ff` it is identical (`t6.6/r1/witnesses/summary.tsv`).
+
+### Finding 2: a label opening the source clause
+
+`ClauseCursor::origin` now returns the start byte of the clause it finds, and as the token it steps
+back over label clauses contiguous with it, which `split_clauses` cut from the same source clause.
+The byte stays the found clause's: the oracle's line for `nop` / `a: ,` / `if 1 = 1 then b: nop`
+is 3. The `misplaced_label` doc names the leading-label case.
+
+TSV rows 1222-1226, derived with `derive.sh`:
+* `a: if 1 = 1 then b: nop` (`found "A"`);
+* `'x': if ...` (`found "x"`);
+* the continuation shape (line 3, `found "A"`);
+* `a: b: if ...` (`found "A"`);
+* the control `a: select` / `when 1 = 1 then b: nop` (`found "WHEN"`).
+
+On `f568d48c0` the first four said `found "IF"` (`t6.6/r1/probes/label/round0.txt`). On `adf05e2ff`
+all five match the oracle, and `rexxc.rs` passes.
+
+### Findings 3 and 4
+
+`rust/corpus/phase-5a.txt` is rewrapped, and `awk 'length>80'` gives 0 lines. The
+`signal-on-trap` row is deleted from
+`directive_options.rs`'s `lostdigits_raises_98_972_where_the_oracle_does_and_nowhere_else`. The
+comment over the remaining `do-repeat-count` row says one row is left.
+
+### Checks, on `adf05e2ff`
+
+* `cargo fmt --all --check`: exit 0.
+* `memcap 8G cargo clippy -j 4 -p rexx-parse -p rexx-exec --all-targets -- -D warnings`: exit 0.
+* `memcap 8G cargo test -j 4 --release -p rexx-parse`: exit 0 (`errors` 35, `program` 28,
+  unit 260).
+* `memcap 8G cargo test -j 4 --release -p rexx-exec --test directive_options --test refusal_sites
+  --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals
+  --test rexxc --test coverage --test refusal_dispositions --test package_requires`: exit 0
+  (`directive_options` 24 passed).
+* `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 --release -p rexx-exec --test corpus`: exit 0,
+  1086 of 1086 matching.
+* The whole suite with the table at `t6.6/r1/suite/table.tsv`: exit 101 as expected, 402 groups,
+  24 red. Against `t6.6/suite/tests.tsv` no row changed (`t6.6/r1/suite/changed-rows.txt` holds
+  only its command).
+* Perf, `t6.6/r1/callgrind.txt`: pin, round 0 and round 1 in one run, exit 0. Round 1 against the
+  pin is at or below round 0 on every program: startup +0.0416 against +0.0454, interpret -2.1635
+  against -2.1602, parse -0.0861 against -0.0859, churn +0.1079 against +0.1085, and sayloop
+  +0.0462 against +0.0483. So this round's own delta is not positive.

@@ -1,0 +1,6 @@
+program	oracle rc	parent rc	parent stdout	parent stderr	t6.6 rc	t6.6 stdout	t6.6 stderr
+lead_1	209	158	same	differs	209	same	same
+lead_2	209	158	same	differs	209	same	same
+lead_3	209	158	same	differs	209	same	same
+lead_4	209	158	same	differs	209	same	same
+lead_5	209	158	same	differs	209	same	same

@@ -1,0 +1,3 @@
+program	oracle rc	parent rc	parent stdout	parent stderr	t6.6 rc	t6.6 stdout	t6.6 stderr
+class_constant_expression_numeric_inherit	0	0	differs	same	0	same	same
+inherit_called	0	0	same	same	0	same	same
