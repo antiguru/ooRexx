@@ -406,12 +406,6 @@ impl Raised {
         Raised::syntax(99, sub, Vec::new())
     }
 
-    /// 99.905: a `CLASS` keyword on a member directive with no `::CLASS`
-    /// above it. No substitutions.
-    pub(crate) fn class_keyword_needs_class() -> Raised {
-        Raised::syntax(99, 905, Vec::new())
-    }
-
     /// 98.909: a `::CLASS` directive naming a `SUBCLASS` or an `INHERIT`
     /// target no name resolves to. One substitution, the target's upcased
     /// spelling.

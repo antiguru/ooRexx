@@ -201,3 +201,10 @@ lang/stream_write_only_reads.rex
 # 9d Task 6.5 fix round 4: read and write positions on a NOBUFFER stream,
 # where the oracle keeps the documented positions (Deviation 49).
 lang/stream_nobuffer_positions.rex
+
+# 9d Task 6.6: a ::CONSTANT expression starts from the package's ::OPTIONS
+# numeric and condition settings, and a ::CLASS target found in .local that
+# is not a class is 99.949.
+lang/class_constant_expression_numeric_options.rex
+lang/class_constant_expression_novalue_option.rex
+lang/class_subclass_local_not_a_class.rex

@@ -1084,10 +1084,12 @@ impl Interp {
         }
     }
 
-    /// `LanguageParser::checkDuplicateMethod`
+    /// The duplicate half of `LanguageParser::checkDuplicateMethod`
     /// (`parser/DirectiveParser.cpp:507`-`:530`): every dictionary key a
     /// member directive is about to claim, refused if the class it attaches
-    /// to has already been given that key on that side.
+    /// to has already been given that key on that side. The CLASS-keyword
+    /// half is the parser's, so a class-side key with no class above it is a
+    /// `::CONSTANT`'s, which claims none there.
     fn check_member_keys(
         &mut self,
         id: ProgramId,
@@ -1099,14 +1101,12 @@ impl Interp {
     ) -> Result<(), Failure> {
         let constant = matches!(directive.kind, DirectiveKind::Constant(_));
         for (name, class_side) in member_dictionary_keys(&directive.kind) {
-            if current_class.is_none() {
-                if constant && class_side {
-                    continue;
-                }
-                if class_side {
-                    self.blame_directive(id, program, directive);
-                    return Err(Raised::class_keyword_needs_class().into());
-                }
+            if current_class.is_none() && class_side {
+                debug_assert!(
+                    constant,
+                    "the parser refuses a CLASS member with no ::CLASS"
+                );
+                continue;
             }
             if claimed
                 .insert((current_class, class_side, name), index)
@@ -2644,7 +2644,19 @@ impl Interp {
         expr: &Expr,
     ) -> Result<ObjRef, Failure> {
         let empty_body = CodeBody::default();
+        // Taken before the frame is pushed, as every activation's is.
+        let start = self.package_start(id, None);
         let frame = self.push_directive_activation(id, program);
+        // `resolveConstants` runs the expression as a method of the package
+        // (`instructions/ClassDirective.cpp:257`), so it starts from the
+        // package's `::OPTIONS` numeric and condition settings. Measured:
+        // `::constant k (1+b)` under `::OPTIONS NOVALUE SYNTAX` is 98.986,
+        // and `(1/3)` under `::OPTIONS DIGITS 5` is `0.33333`.
+        if let Some(start) = start {
+            let activation = self.activation_mut();
+            activation.settings = start.settings;
+            activation.condition_syntax = start.syntax;
+        }
         // The oracle's own message name for this run, which is the string
         // `GlobalNames::CONSTANT_DIRECTIVE` holds (`memory/GlobalNames.h:84`).
         // The failure path this crate has a witness for does not print it:

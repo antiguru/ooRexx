@@ -537,16 +537,16 @@ lang/class_activate_failure_blames_the_last_installed_class.rex
 # One row per code, because a program can only fail once: ::METHOD's own,
 # ::METHOD colliding with a ::CONSTANT that occupies both dictionaries,
 # ::ATTRIBUTE's own reached through a setter key nothing in the file spells,
-# ::CONSTANT's own, and the CLASS keyword with no ::CLASS above it. The last
-# row is the negative control: every name in it is written twice and the
-# oracle runs all of it, so a rule phrased over the directive's name rather
+# and ::CONSTANT's own. The last row is the negative control: every name in
+# it is written twice and the oracle runs all of it, so a rule phrased over the directive's name rather
 # than over the keys it claims fails there.
 lang/class_duplicate_method.rex
 lang/class_duplicate_constant_and_method.rex
 lang/class_duplicate_attribute.rex
 lang/class_duplicate_constant.rex
-lang/class_member_class_keyword_needs_class.rex
 lang/class_member_names_per_side.rex
+# 9d Task 6.6 moved the CLASS-keyword row to corpus/errors/parse-errors.tsv:
+# the parser raises it now, so the program no longer parses.
 
 # Task 18, fix round 3: the rest of the duplicate-directive family. ::CLASS
 # was the last silent wrong answer in it, and ::RESOURCE the last gap.

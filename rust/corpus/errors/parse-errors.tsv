@@ -1197,3 +1197,25 @@ translation	19.925	1	Symbol or string expected after ::ANNOTATE ROUTINE keyword.
 translation	19.925	1	Symbol or string expected after ::ANNOTATE METHOD keyword.	::annotate method\n
 translation	19.925	1	Symbol or string expected after ::ANNOTATE ATTRIBUTE keyword.	::annotate attribute\n
 translation	19.925	1	Symbol or string expected after ::ANNOTATE CONSTANT keyword.	::annotate constant\n
+translation	47.3	2	Labels are not allowed within an IF block; found "IF".	nop\nif 1 = 1 then lab: nop\n
+translation	47.3	3	Labels are not allowed within an IF block; found "ELSE".	nop\nif 1 = 1 then nop\nelse lab: nop\n
+translation	47.3	2	Labels are not allowed within an IF block; found "IF".	nop\nif 1 = 1 then lab: do\nnop\nend\n
+translation	47.4	3	Labels are not allowed within a SELECT block; found "WHEN".	nop\nselect\nwhen 1 = 1 then lab: nop\nend\n
+translation	47.4	4	Labels are not allowed within a SELECT block; found "OTHERWISE".	nop\nselect\nwhen 1 = 1 then nop\notherwise lab: nop\nend\n
+translation	47.4	3	Labels are not allowed within a SELECT block; found "WHEN".	nop\nselect case 1\nwhen 1 then lab: nop\nend\n
+translation	47.3	3	Labels are not allowed within an IF block; found "THEN".	nop\nif 1 = 1\nthen lab: nop\n
+translation	47.3	2	Labels are not allowed within an IF block; found "IF".	nop\nif 1 = 1 then 'lab': nop\n
+translation	47.3	2	Labels are not allowed within an IF block; found "IF".	nop\nif 1 = 1 then ,\nlab: nop\n
+translation	47.3	2	Labels are not allowed within an IF block; found "IF".	nop\nif 1 = 1 then lab:\n
+translation	99.905	1	CLASS keyword on ::METHOD directive requires a matching ::CLASS directive.	::attribute 'foo' class\nsay hi\n
+translation	99.905	1	CLASS keyword on ::METHOD directive requires a matching ::CLASS directive.	::attribute a get class\nif\n
+translation	99.905	1	CLASS keyword on ::METHOD directive requires a matching ::CLASS directive.	::method m class\nif\n
+translation	99.905	1	CLASS keyword on ::METHOD directive requires a matching ::CLASS directive.	::method m class delegate 5\n
+translation	99.905	1	CLASS keyword on ::METHOD directive requires a matching ::CLASS directive.	::attribute a class external "LIBRARY x"\n
+translation	99.905	2	CLASS keyword on ::METHOD directive requires a matching ::CLASS directive.	::routine r\n::attribute a class\nsay hi\n
+translation	99.905	1	CLASS keyword on ::METHOD directive requires a matching ::CLASS directive.	::attribute a class\n
+translation	99.905	9	CLASS keyword on ::METHOD directive requires a matching ::CLASS directive.	/* The CLASS keyword on a member directive with no ::CLASS above it.\n\n   The message names ::METHOD whatever directive carried the keyword, and\n   this file carries it on an ::ATTRIBUTE to say so. Not a duplicate: it is\n   the other refusal the same check makes, and it fires on the first\n   directive to reach it rather than on a second. */\nsay 'prolog'\n\n::ATTRIBUTE p CLASS\n
+translation	35.1	2	Incorrect expression detected at ":".	nop\nif 1 = 1 then: nop\n
+translation	35.1	3	Incorrect expression detected at ":".	nop\nselect\nwhen 1 = 1 then: nop\nend\n
+-	ok	-	-	nop\nif 1 = 1 then nop\nelse: nop\n
+translation	47.4	4	Labels are not allowed within a SELECT block; found "OTHERWISE".	nop\nselect\nwhen 1 = 1 then nop\notherwise: nop\nend\n

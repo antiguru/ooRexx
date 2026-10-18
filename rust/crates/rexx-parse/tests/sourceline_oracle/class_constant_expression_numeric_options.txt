@@ -1,0 +1,14 @@
+count 13
+/* A ::CONSTANT expression starts from the package's ::OPTIONS numeric
+   settings, as a method of the package does. The ::OPTIONS directive stands
+   after the ::CONSTANT, because options are the package's and not the
+   following code's. */
+say .c~third
+say .c~big
+say 1/3
+
+::class c
+::constant third (1/3)
+::constant big (12345678 * 1000)
+
+::options digits 5 form engineering

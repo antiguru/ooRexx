@@ -61,9 +61,11 @@ fn parse_with_symbols(
         if let Err(e) = translate_block(&ctx, &mut cursor) {
             failure = Some(e);
         }
+        let mut in_class = false;
         while failure.is_none() && cursor.peek().is_some() {
-            match parse_directive(&ctx, &mut cursor) {
+            match parse_directive(&ctx, &mut cursor, in_class) {
                 Ok(mut directive) => {
+                    in_class |= matches!(directive.kind, DirectiveKind::Class(_));
                     // The same dispatch the public entry point uses, rather than
                     // a copy of it, so a directive kind that gains a body cannot
                     // be handled one way here and another way there.

@@ -31,7 +31,7 @@ use crate::ast::{
     VariableRef, compound_parts,
 };
 use crate::block::{Block, EnclosingSelect};
-use crate::clause::{Clause, ClauseCursor, PendingThen};
+use crate::clause::{Clause, ClauseCursor, PendingThen, Remainder};
 use crate::convert::{check_trace_setting, whole_number};
 use crate::expr::{
     Terminators, display_value, need_variable, parse_arg_list, parse_case_when_list,
@@ -207,7 +207,12 @@ pub(crate) fn parse_instruction(
         }
         let end_at = parser.keyword_end();
         parser.next_real();
-        return Ok(parser.finish_split(cursor, InstructionKind::Then, end_at));
+        return Ok(parser.finish_split(
+            cursor,
+            InstructionKind::Then,
+            end_at,
+            Remainder::Instruction,
+        ));
     }
 
     parser.dispatch(cursor, block)
@@ -420,9 +425,10 @@ impl<'a> Inst<'a> {
         cursor: &mut ClauseCursor,
         kind: InstructionKind,
         end_at: usize,
+        remainder: Remainder,
     ) -> Instruction {
         let clause = match self.peek_real_index() {
-            Some(at) => cursor.split_before(self.ctx, at, end_at),
+            Some(at) => cursor.split_before(self.ctx, at, end_at, remainder),
             None => {
                 let mut clause = cursor.next_clause().expect("the clause being parsed");
                 clause.span.end = end_at;
@@ -601,11 +607,17 @@ impl<'a> Inst<'a> {
                     cursor,
                     InstructionKind::Else { then_exit: None },
                     keyword_end,
+                    Remainder::Instruction,
                 ))
             }
             KW_OTHERWISE => {
                 self.next_real();
-                Ok(self.finish_split(cursor, InstructionKind::Otherwise, keyword_end))
+                Ok(self.finish_split(
+                    cursor,
+                    InstructionKind::Otherwise,
+                    keyword_end,
+                    Remainder::Instruction,
+                ))
             }
             KW_END => {
                 self.next_real();
@@ -1732,7 +1744,7 @@ impl<'a> Inst<'a> {
         };
         let end_at = self.condition_end();
         let byte = self.clause_byte;
-        let instruction = self.finish_split(cursor, kind, end_at);
+        let instruction = self.finish_split(cursor, kind, end_at, Remainder::Then);
         cursor.expect_then(which, byte);
         Ok(instruction)
     }

@@ -51,15 +51,7 @@ pub(crate) fn split_clauses(tokens: &[Token]) -> Result<Vec<Clause>, ParseError>
         // repeats rather than testing once.
         let mut start = index;
         while start < limit {
-            // A blank never sits between a label and its colon: a blank is
-            // only a token when the next real character starts a symbol, a
-            // literal, a `(` or a `[`, and `:` is none of those. So the colon
-            // is at `start + 1` exactly, which is also where the C++ looks,
-            // with `nextToken` rather than `nextReal`.
-            let labelled = start + 1 < limit
-                && matches!(tokens[start].kind.tag(), Tag::Symbol | Tag::Literal)
-                && tokens[start + 1].kind.tag() == Tag::Colon;
-            if !labelled {
+            if !starts_label(tokens, start, limit) {
                 clauses.push(Clause {
                     tokens: start..limit,
                     span: tokens[start].span.start..span_end,
@@ -67,16 +59,7 @@ pub(crate) fn split_clauses(tokens: &[Token]) -> Result<Vec<Clause>, ParseError>
                 });
                 break;
             }
-            // The label clause's span always stops at the colon, even when the
-            // colon is the last token before a `;` and so does not itself
-            // terminate anything. `labelNew` (`InstructionParser.cpp:2809`)
-            // sets the end unconditionally, and measured, `here: ; nop` traces
-            // as `here:` then `nop`.
-            clauses.push(Clause {
-                tokens: start..start + 1,
-                span: tokens[start].span.start..tokens[start + 1].span.end,
-                label: Some(start..start + 1),
-            });
+            clauses.push(label_clause(tokens, start));
             start += 2;
         }
 
@@ -84,6 +67,43 @@ pub(crate) fn split_clauses(tokens: &[Token]) -> Result<Vec<Clause>, ParseError>
     }
 
     Ok(clauses)
+}
+
+/// Whether tokens `start..limit` open with a label, `name:`.
+fn starts_label(tokens: &[Token], start: usize, limit: usize) -> bool {
+    // A blank never sits between a label and its colon: a blank is only a
+    // token when the next real character starts a symbol, a literal, a `(` or
+    // a `[`, and `:` is none of those. So the colon is at `start + 1` exactly,
+    // which is also where the C++ looks, with `nextToken` rather than
+    // `nextReal`.
+    start + 1 < limit
+        && matches!(tokens[start].kind.tag(), Tag::Symbol | Tag::Literal)
+        && tokens[start + 1].kind.tag() == Tag::Colon
+}
+
+/// The label clause for the `name:` at token `start`.
+fn label_clause(tokens: &[Token], start: usize) -> Clause {
+    // The label clause's span always stops at the colon, even when the colon
+    // is the last token before a `;` and so does not itself terminate
+    // anything. `labelNew` (`InstructionParser.cpp:2809`) sets the end
+    // unconditionally, and measured, `here: ; nop` traces as `here:` then
+    // `nop`.
+    Clause {
+        tokens: start..start + 1,
+        span: tokens[start].span.start..tokens[start + 1].span.end,
+        label: Some(start..start + 1),
+    }
+}
+
+/// What a split remainder may open with.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum Remainder {
+    /// The instruction after a `THEN`, an `ELSE` or an `OTHERWISE`, which
+    /// `nextInstruction` parses and so may be a label.
+    Instruction,
+    /// The `THEN` after an `IF` or `WHEN` condition, which `translateBlock`
+    /// reads as a token and never as a label.
+    Then,
 }
 
 /// Which instruction is still waiting for its `THEN`, and where it is.
@@ -99,9 +119,13 @@ pub(crate) struct ClauseCursor {
     /// Next index in `clauses`, used only when `pending` is None.
     pos: usize,
     /// The remainder of a clause that `split_before` ended early. Yielded
-    /// ahead of `clauses[pos]`. Not necessarily contiguous with the clause it
-    /// was split from: see `split_before`.
+    /// ahead of `peeled` and `clauses[pos]`. Not necessarily contiguous with
+    /// the clause it was split from: see `split_before`.
     pending: Option<Clause>,
+    /// What follows a label `split_before` peeled off a remainder into
+    /// `pending`, last clause first. Yielded after `pending` and ahead of
+    /// `clauses[pos]`.
+    peeled: Vec<Clause>,
     /// Set when the clause just parsed was an `IF` or `WHEN` whose `THEN` has
     /// not been seen yet, with the byte its own clause started at. Read and
     /// cleared by the next clause's parse.
@@ -123,6 +147,7 @@ impl ClauseCursor {
             clauses,
             pos: 0,
             pending: None,
+            peeled: Vec::new(),
             pending_then: None,
         }
     }
@@ -149,14 +174,32 @@ impl ClauseCursor {
         error.echoing(start..self.clauses[index].span.end)
     }
 
+    /// The clause of the source, as `split_clauses` cut it, that holds byte
+    /// `byte`: the clause the C++ parser's position 1 still names after a
+    /// THEN, an ELSE or an OTHERWISE has been trimmed off its front.
+    pub(crate) fn origin(&self, byte: usize) -> &Clause {
+        let index = self
+            .clauses
+            .partition_point(|clause| clause.span.start <= byte)
+            .checked_sub(1)
+            .expect("a parsed byte lies in a clause");
+        &self.clauses[index]
+    }
+
     /// The clause being parsed, without consuming it.
     pub(crate) fn peek(&self) -> Option<&Clause> {
-        self.pending.as_ref().or_else(|| self.clauses.get(self.pos))
+        self.pending
+            .as_ref()
+            .or_else(|| self.peeled.last())
+            .or_else(|| self.clauses.get(self.pos))
     }
 
     /// Consume and return the clause being parsed.
     pub(crate) fn next_clause(&mut self) -> Option<Clause> {
         if let Some(c) = self.pending.take() {
+            return Some(c);
+        }
+        if let Some(c) = self.peeled.pop() {
             return Some(c);
         }
         let c = self.clauses.get(self.pos)?.clone();
@@ -176,8 +219,17 @@ impl ClauseCursor {
     }
 
     /// End the current clause at byte `end_at`, and re-present tokens `at..`
-    /// as the next clause starting at token `at`'s own start byte.
-    pub(crate) fn split_before(&mut self, ctx: &ParseCtx, at: usize, end_at: usize) -> Clause {
+    /// as the next clause starting at token `at`'s own start byte. An
+    /// [`Remainder::Instruction`] has its leading labels peeled off as
+    /// `split_clauses` peels them, because `nextInstruction` finds a label
+    /// in a trimmed clause as it does in a whole one.
+    pub(crate) fn split_before(
+        &mut self,
+        ctx: &ParseCtx,
+        at: usize,
+        end_at: usize,
+        remainder: Remainder,
+    ) -> Clause {
         let cur = self
             .next_clause()
             .expect("split_before with no current clause");
@@ -186,11 +238,32 @@ impl ClauseCursor {
             cur.span.contains(&end_at) || end_at == cur.span.end,
             "split_before end byte outside the clause"
         );
-        self.pending = Some(Clause {
-            tokens: at..cur.tokens.end,
-            span: ctx.tokens[at].span.start..cur.span.end,
-            label: None,
-        });
+        let limit = cur.tokens.end;
+        let mut start = at;
+        if remainder == Remainder::Instruction && starts_label(ctx.tokens, start, limit) {
+            // Pushed in source order and reversed below, so that `peeled`
+            // pops them first to last.
+            let mark = self.peeled.len();
+            while starts_label(ctx.tokens, start, limit) {
+                self.peeled.push(label_clause(ctx.tokens, start));
+                start += 2;
+            }
+            if start < limit {
+                self.peeled.push(Clause {
+                    tokens: start..limit,
+                    span: ctx.tokens[start].span.start..cur.span.end,
+                    label: None,
+                });
+            }
+            self.peeled[mark..].reverse();
+            self.pending = self.peeled.pop();
+        } else {
+            self.pending = Some(Clause {
+                tokens: at..limit,
+                span: ctx.tokens[at].span.start..cur.span.end,
+                label: None,
+            });
+        }
         Clause {
             tokens: cur.tokens.start..at,
             span: cur.span.start..end_at,

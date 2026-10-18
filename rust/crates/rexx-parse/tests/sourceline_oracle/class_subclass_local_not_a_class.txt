@@ -1,0 +1,7 @@
+count 6
+/* A ::CLASS SUBCLASS target is searched as a .NAME is, .local included, and
+   .INPUT there is a stream rather than a class: 99.949, not the 98.909 of a
+   name found nowhere. */
+say 'prolog'
+
+::class t subclass input

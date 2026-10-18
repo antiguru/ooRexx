@@ -16,8 +16,8 @@ use rexx_inventory::errors::{
     E19_915, E19_916, E19_917, E19_918, E19_919, E19_920, E19_921, E19_923, E19_924, E19_925,
     E20_916, E20_919, E20_920, E20_921, E20_924, E20_925, E20_926, E20_929, E20_935, E21_913,
     E21_914, E24_1, E25_11, E25_901, E25_902, E25_903, E25_904, E25_924, E25_925, E25_926, E25_927,
-    E25_928, E25_935, E26_5, E26_6, E35_936, E36_901, E99_916, E99_917, E99_925, E99_933, E99_934,
-    E99_935, E99_936, E99_937, E99_938, E99_939, E99_940, E99_944, E99_946, E99_947, Msg,
+    E25_928, E25_935, E26_5, E26_6, E35_936, E36_901, E99_905, E99_916, E99_917, E99_925, E99_933,
+    E99_934, E99_935, E99_936, E99_937, E99_938, E99_939, E99_940, E99_944, E99_946, E99_947, Msg,
 };
 
 use crate::ast::{
@@ -105,15 +105,17 @@ const SUBKEY_SCIENTIFIC: usize = 37;
 const DEFAULT_RESOURCE_END: &[u8] = b"::END";
 
 /// Parses the `::` clause the cursor is sitting on, advancing it past that
-/// clause.
+/// clause. `in_class` says whether a `::CLASS` directive came before it,
+/// which is the C++ parser's `activeClass` (`DirectiveParser.cpp:355`).
 pub(crate) fn parse_directive(
     ctx: &ParseCtx,
     cursor: &mut ClauseCursor,
+    in_class: bool,
 ) -> Result<Directive, ParseError> {
     let clause = cursor
         .next_clause()
         .expect("parse_directive on an exhausted cursor");
-    let mut parser = Dir::new(ctx, clause);
+    let mut parser = Dir::new(ctx, clause, in_class);
     let kind = parser.dispatch(cursor)?;
     Ok(Directive {
         kind,
@@ -130,10 +132,12 @@ struct Dir<'a> {
     /// The byte offset every error is reported against: the start of the
     /// clause, not of the offending token.
     clause_byte: usize,
+    /// Whether a `::CLASS` directive came before this one.
+    in_class: bool,
 }
 
 impl<'a> Dir<'a> {
-    fn new(ctx: &'a ParseCtx<'a>, clause: Clause) -> Self {
+    fn new(ctx: &'a ParseCtx<'a>, clause: Clause, in_class: bool) -> Self {
         let clause_byte = ctx
             .tokens
             .get(clause.tokens.start)
@@ -143,7 +147,19 @@ impl<'a> Dir<'a> {
             cursor: TokenCursor::new(clause.tokens.clone()),
             clause,
             clause_byte,
+            in_class,
         }
+    }
+
+    /// The CLASS-keyword half of `checkDuplicateMethod`
+    /// (`DirectiveParser.cpp:510`-`516`): a class method needs a `::CLASS`
+    /// above it. The duplicate-key half is checked when the package is
+    /// installed.
+    fn require_class(&self, class_method: bool) -> Result<(), ParseError> {
+        if class_method && !self.in_class {
+            return Err(self.error(E99_905, []));
+        }
+        Ok(())
     }
 
     /// `msg` reported against this clause, with `inserts` for its `&1`,
@@ -538,6 +554,11 @@ impl<'a> Dir<'a> {
             }
         }
 
+        // `checkDuplicateMethod` runs ahead of every shape
+        // (`DirectiveParser.cpp:822`). Measured: `::method m class` with a
+        // body holding a syntax error and no `::CLASS` above it is 99.905.
+        self.require_class(method.class_method)?;
+
         // The shapes, in the C++'s own order, because they are not disjoint:
         // ATTRIBUTE combines with each of EXTERNAL and ABSTRACT, and DELEGATE
         // combines with ATTRIBUTE. Measured, `::method m delegate p attribute`
@@ -654,6 +675,11 @@ impl<'a> Dir<'a> {
         // Measured: `::attribute 3` with a body is 99.925 on line 1, not 99.937
         // on line 2, and `::attribute 3 external "LIBRARY x"` is 99.925 too.
         self.require_variable_name(&attribute.name)?;
+        // Each style's `checkDuplicateMethod` comes next, ahead of its body
+        // check (`DirectiveParser.cpp:1664`, `:1725`, `:1790`). Measured:
+        // `::attribute 'foo' class` with a body and no `::CLASS` above it is
+        // 99.905, not 99.937.
+        self.require_class(attribute.class_method)?;
 
         // Every shape here checks the body BEFORE decoding the external
         // string, unlike `::METHOD`'s plain external shape. Measured:

@@ -637,8 +637,8 @@ impl Interp {
     /// `Interp::resolve_class_target` answers it from the namespace table
     /// instead, which is `ClassResolver::lookup`'s own split.
     ///
-    /// Fails with what the `.environment` lookup raised, which a stored method
-    /// or an `UNKNOWN` method there can.
+    /// Fails with what a directory lookup raised, which a stored method or an
+    /// `UNKNOWN` method there can.
     pub(crate) fn directive_class(
         &mut self,
         installing: ProgramId,
@@ -657,25 +657,41 @@ impl Interp {
             return Ok(Some(*found));
         }
         let parent = data.and_then(|data| data.parent);
+        let local = data.and_then(|data| data.local);
         if let Some(found) = self.chain_public_class(parent, upper) {
             return Ok(Some(found));
         }
-        // `.environment` alone, not `.NAME`'s pair: `ClassDirective`'s own
-        // search is the package's classes and then the environment
-        // directory, and `.local` is not in it.
-        let entry =
-            self.directory_lookup(&[EnvScope::Environment], upper, &env_seam::Access::Direct)?;
+        // The rest of `findClass` (`classes/PackageClass.cpp:1105`-`:1159`):
+        // the REXX package's public classes, then the package's own local
+        // directory, `.local` and `.environment`, the first of them holding
+        // the name deciding. `ClassDirective`'s own search reads the two
+        // directories without the security manager. Measured: `::class t
+        // subclass input` is 99.949, `.INPUT` being `.local`'s stream.
+        if let Some(found) = self.rexx_package_class(upper) {
+            return Ok(Some(found));
+        }
+        let mut entry = match local {
+            Some(local) => self.package_local_entry(local, upper)?,
+            None => hash::DirectoryEntry::Absent,
+        };
+        if matches!(entry, hash::DirectoryEntry::Absent) {
+            entry = self.directory_lookup(
+                &[EnvScope::Local, EnvScope::Environment],
+                upper,
+                &env_seam::Access::Direct,
+            )?;
+        }
         if let hash::DirectoryEntry::Found(found) = entry
             && self.heap.is_class(found)
         {
             return Ok(Some(found));
         }
-        let found_object = matches!(entry, hash::DirectoryEntry::Found(_));
+        let found_object = !matches!(entry, hash::DirectoryEntry::Absent);
         // A name whose directory entry this crate has not built falls through
         // to the native table -- which is where a `::CLASS` target was
-        // resolved before `.environment` was ever consulted, so a miss is the
-        // same 98.909 it was. A name that answers an object which is not a
-        // class and that the native table does not hold either is 99.949:
+        // resolved before the directories were ever consulted, so a miss is
+        // the same 98.909 it was. A name that answers an object which is not
+        // a class and that the native table does not hold either is 99.949:
         // measured, oracle rc 157, `::class k subclass rexxinfo`.
         let native = self.classes().lookup_upper(upper);
         if native.is_none() && found_object {

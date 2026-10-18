@@ -21,6 +21,7 @@ use rexx_inventory::errors::{
 use crate::ProgramSource;
 use crate::ast::{CodeBody, EndStyle, EndTarget, Instruction, InstructionKind, LoopKind};
 use crate::clause::{ClauseCursor, PendingThen};
+use crate::expr::display_value;
 use crate::instruction::{missing_then, parse_instruction};
 use crate::token::{ParseCtx, ParseError, SymbolId, SymbolTable, Tag};
 
@@ -434,10 +435,10 @@ impl<'a> Block<'a> {
         }
     }
 
-    /// The misplaced-label check (`LanguageParser.cpp:1224`-`1244`), naming
-    /// the label.
-    fn label_error(&self, label: &Instruction) -> Option<ParseError> {
-        let msg = match self.top().kind {
+    /// The misplaced-label check (`LanguageParser.cpp:1224`-`1244`): the
+    /// message a label clause raises here, if any.
+    fn label_error(&self) -> Option<Msg<1>> {
+        Some(match self.top().kind {
             Control::IfThen | Control::Else => E47_3,
             Control::Select
             | Control::SelectCase
@@ -446,8 +447,7 @@ impl<'a> Block<'a> {
             | Control::Otherwise => E47_4,
             Control::Do | Control::Loop => E47_2,
             Control::First | Control::EndThen => return None,
-        };
-        Some(misplaced_label(msg, label))
+        })
     }
 
     // ---- matching an END ----
@@ -675,14 +675,23 @@ impl<'a> Block<'a> {
     }
 }
 
-/// `msg` naming the label `label` (`LanguageParser.cpp:1237`-`1242`).
+/// `msg` for a misplaced label (`LanguageParser.cpp:1237`-`1242`), which
+/// names the first token of the source clause holding the label and is
+/// reported against that clause. That token is the label itself unless a
+/// THEN, an ELSE or an OTHERWISE was trimmed off the clause's front, where
+/// it is the IF, WHEN, THEN, ELSE or OTHERWISE keyword. Measured:
+/// `if 1 = 1 then lab: nop` is 47.3 `found "IF"`.
 #[cold]
 #[inline(never)]
-fn misplaced_label(msg: Msg<1>, label: &Instruction) -> ParseError {
-    let InstructionKind::Label { name } = &label.kind else {
-        panic!("a misplaced label is a label, not {:?}", label.kind);
-    };
-    ParseError::raise(msg, label.clause_span.start, [name.to_vec()])
+fn misplaced_label(
+    ctx: &ParseCtx,
+    cursor: &ClauseCursor,
+    msg: Msg<1>,
+    label: &Instruction,
+) -> ParseError {
+    let origin = cursor.origin(label.clause_span.start);
+    let first = &ctx.tokens[origin.tokens.start];
+    ParseError::raise(msg, origin.span.start, [display_value(ctx, Some(first))])
 }
 
 /// Which stack frame a block instruction opens.
@@ -727,8 +736,8 @@ pub(crate) fn translate_block(
                 pending = Some(instruction);
                 break;
             }
-            if let Some(error) = block.label_error(&instruction) {
-                return Err(error);
+            if let Some(msg) = block.label_error() {
+                return Err(misplaced_label(ctx, cursor, msg, &instruction));
             }
             block.add_clause(instruction);
         }

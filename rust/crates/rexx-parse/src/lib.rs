@@ -203,9 +203,11 @@ fn translate(
         return Err(ParseError::raise(E99_914, clause.span.start, []));
     }
 
-    let mut directives = Vec::new();
+    let mut directives: Vec<Directive> = Vec::new();
+    let mut in_class = false;
     while cursor.peek().is_some() {
-        let mut directive = parse_directive(ctx, cursor)?;
+        let mut directive = parse_directive(ctx, cursor, in_class)?;
+        in_class |= matches!(directive.kind, DirectiveKind::Class(_));
         // Only `::METHOD`/`::ATTRIBUTE`/`::ROUTINE` can carry a body, and each
         // already rejects one with its own specific error when its OWN shape
         // does not allow it (`::CONSTANT`'s body is 99.938, for one). Every
