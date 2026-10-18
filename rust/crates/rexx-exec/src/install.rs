@@ -744,10 +744,12 @@ impl Interp {
                 .insert(found.as_slice().into(), required);
         }
         // A `::REQUIRES` prologue runs in the requiring package's installing
-        // activation, and a run-time load's in the running one, which
-        // `NUMERIC INHERIT` inherits from. Measured: a `DIGITS 4` package
-        // requiring an inheriting file reports `digits()` 4 in that file's
-        // prologue, and so does `.Package~new(name)` under `NUMERIC DIGITS 4`.
+        // activation, which starts from that package's `::OPTIONS` and, under
+        // `NUMERIC INHERIT`, from the caller of its install. A run-time load
+        // (`.Package~new(name)`, `loadPackage`) runs in the running
+        // activation. Measured: a `DIGITS 4` package requiring an inheriting
+        // file reports `digits()` 4 in that file's prologue, and so do both
+        // run-time loads under `NUMERIC DIGITS 4`.
         let requirer = match (from, &self.install_caller) {
             (Some(from), Some(caller)) => Some(self.start_settings(from, caller.as_ref())),
             _ => self
@@ -1052,7 +1054,13 @@ impl Interp {
         if let Some(parent) = parent {
             self.set_package_parent(id, parent)?;
         }
-        self.run_loaded(parsed, id, CallType::Requires, None, None)?;
+        // Its prologue runs in the running activation, which `NUMERIC
+        // INHERIT` inherits from. Measured: `.Package~new(name, source)` of an
+        // inheriting source under `NUMERIC DIGITS 4` reports `digits()` 4.
+        let running = self
+            .running_activation()
+            .map(|activation| activation.settings.clone());
+        self.run_loaded(parsed, id, CallType::Requires, None, running)?;
         Ok(id)
     }
 
@@ -2051,7 +2059,18 @@ impl Interp {
         if let Some(parent) = parent {
             self.set_package_parent(id, parent)?;
         }
-        if let Err(failure) = self.install_directives(id, &program) {
+        // The executable's package installs in the running activation, which
+        // `NUMERIC INHERIT` inherits from. Measured: `.Routine~newFile` of a
+        // file with no `::OPTIONS` requiring an inheriting file under
+        // `NUMERIC DIGITS 4` reports 9 in that file's prologue, and with
+        // `::OPTIONS NUMERIC INHERIT` reports 4.
+        let running = self
+            .running_activation()
+            .map(|activation| activation.settings.clone());
+        let outer = self.install_caller.replace(running);
+        let installed = self.install_directives(id, &program);
+        self.install_caller = outer;
+        if let Err(failure) = installed {
             self.seal_package_level(&failure, id);
             return Err(failure);
         }
