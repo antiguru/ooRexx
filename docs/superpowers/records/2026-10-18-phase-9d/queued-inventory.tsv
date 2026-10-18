@@ -1,202 +1,202 @@
 item	kind	probe	proposed	reason	ruled
-2026-09-15-file-split.md	process	-	closed:9956c0ac6	2026-09-15-file-split/progress.md ends "File-split plan complete" at the final-review fix 9956c0ac6	
-2026-09-16-worktree-build-precondition.md	process	-	9d	a test-harness path like arity-harness-ignores-target-dir; dispatch/library/tests.rs:26 canonicalizes ../../../build/lib	
-2026-09-17-crexx-derived-candidates.md	perf	-	phase:9.1	unsized performance candidates; no probe	
-2026-09-17-oracle-deadline-is-wall-clock.md	process	-	9d	no probe; gate rows time out under load and none of the three directions is chosen, which the Phase 9 close gates meet	
-2026-09-19-driver-control-flow-spike.md	perf	-	closed:rejected 2026-09-19	its own "Spike result" section; report .superpowers/sdd/2026-09-19-driver-control-flow-spike-report.md	
-2026-09-20-instructions-per-op.md	perf	-	phase:9.1	a measurement record behind the performance to-do; no probe	
-2026-09-20-performance-todo.md	perf	-	phase:9.1	the open performance queue; no probe	
-2026-09-21-flaky-unstable-row-gate.md	process	-	9d	no probe; tests/support/arity.rs:616-618 still judges a row stable from two oracle runs	
-2026-09-21-parse-message-target-unimplemented.md	divergence	queued-probes/pmt/pmt.rex:1	closed:probe agrees	closed 2026-09-28 by Phase 8 surface Task 8; the witness agrees on all three descriptors	
-2026-09-22-clause-shape-distribution.md	perf	-	phase:9.1	static op-shape evidence for superinstructions; no probe	
-2026-09-22-driver-frame-pressure.md	perf	-	phase:9.1	unrun outlining variant; no probe	
-2026-09-22-tracefunction-ungated.md	perf	-	phase:9.1	no probe; both Op::TraceFunction pushes in ir/compile.rs (:1627, :1645) are still unconditional	
-2026-09-24-arity-harness-ignores-target-dir.md	process	-	9d	no probe; tests/support/arity.rs:399 still joins ../../target/release/rexx where group_runner uses CARGO_BIN_EXE_rexx	
-2026-09-24-mutate-4c-stale-anchor.md	process	-	9d	no probe; scripts/mutate-4c.sh:537 still anchors on a statement parse_template.rs no longer has (:461 is a let binding)	
-2026-09-24-refusal-scanner-test-files.md	process	-	9d	no probe; tests/refusal_sites.rs code_lines (:73) still drops only inline #[cfg(test)] mod blocks, and Task 3 reads that table	
-2026-09-25-pos-window-doc-pointers.md	process	-	9d	no probe; builtin/string.rs:123 and rexx-parse block/references.rs:190,:197 still point at text that is gone	
-2026-09-25-table-c-derivation-literals.md	process	-	9d	no probe; corpus/gate-tables/classes/*.rex line 6 still names tests/gate_table_c.rs	
-2026-09-26-flatloop-spike-comment.md	process	-	closed:4b694fe7c	its own "Closed 2026-09-29" section; no "SPIKE, not for commit" remains under rust/crates	
-2026-09-27-stream-write-visibility.md	divergence	queued-probes/streamflush/streamflush.rex:1	9d	probe still differs: LINES by name sees the open Stream object's write here (0 1, 1) and not on the oracle (0 0, 0)	
-2026-09-28-compiled-source-parse-errors.md	divergence	queued-probes/csp/csp.rex:1	closed:probe agrees	the traceback now prints the source line and the Compiled method "NEW" line on both sides	
-2026-09-28-condition-object-divergences-found-in-fix-round-a.md	divergence	queued-probes/callarg/callarg.rex:1,queued-probes/coorder/coorder.rex:1	9d-cluster:call-on-trap-argument	callarg still 1 1 against 0 0 (the cluster); coorder still lacks RESULT and ADDITIONAL, which stream-notready-names touches	
-2026-09-28-phase-5-refusal-labels.md	process	-	closed:Phase 6.1 Task 7	its own "Closed 2026-10-09" section; closed_phases.rs:37 lists "Phase 5" in CLOSED	
-2026-09-28-rexxqueue-in-function-group.md	divergence	-	phase:10	not probed, it reaches rxapi; roadmap row 10 names FUNCTION TEST_REXXQUEUE	
-2026-09-28-use-arg-message-term.md	divergence	queued-probes/uam/uam.rex:1	closed:probe agrees	stdout x, rc 0 on both	
-2026-09-29-closed-phases-owner-gaps.md	process	-	closed:Phase 6.1 Task 7	its own "Closed 2026-10-09" section; the_row_check_reads_only_a_resolution_that_opens_a_clause is in tests/closed_phases.rs	
-2026-09-29-release-local-reference-memory.md	divergence	-	phase:10	not probed, it needs the forged native library; native-API memory, ruled "do not fix, queue" at the Phase 8 close	
-2026-09-30-drop-unset-stem-symbol.md	divergence	queued-probes/dropstem/dropstem.rex:1	9d	probe still differs: SYMBOL('W.') is VAR on the oracle and LIT here	
-2026-09-30-hash-subclass-init-capacity.md	divergence	queued-probes/hash_subclass_init_capacity/hash_subclass_init_capacity.rex:1	closed:1c0e1d769	closed by Phase 9a Task 8; its witness corpus/lang/hash_subclass_init_capacity.rex agrees	
-2026-09-30-min-with-function-arg.md	divergence	queued-probes/builtin_argument_call/builtin_argument_call.rex:1	closed:Phase 6 Task 9 fix round 1	its witness corpus/lang/builtin_argument_call.rex agrees	
-2026-09-30-stringtable-subclass-new-arg.md	divergence	queued-probes/hash_subclass_init_capacity/hash_subclass_init_capacity.rex:1	closed:1c0e1d769	closed by Phase 9a Task 8; its witness agrees	
-2026-10-01-condition-object-directory-methods.md	divergence	queued-probes/codm/codm.rex:1	closed:probe agrees	items 13 and copy items 13 on both	
-2026-10-01-message-notify-single-slot.md	divergence	queued-probes/re2a/re2a.rex:1,queued-probes/re2b/re2b.rex:1	closed:probe agrees	RESOLVED by Phase 6 S2-S5 Task 7 fix round 1; re2a 1 0 0 and re2b 0 1 0 1 0 on both	
-2026-10-01-message-start-result-traceback.md	divergence	queued-probes/msr/msr.rex:1	9d	traceback and report now agree; the report still names line 3 on the oracle and line 9 here	
-2026-10-01-reply-continuation-state-visibility.md	divergence	queued-probes/replyvis/replyvis.rex:1	closed:probe agrees	own probe from the text: the later guarded send reads the continuation's write on both	
-2026-10-01-routine-call-context-name.md	divergence	queued-probes/rcn/rcn.rex:1	9d	probe still differs: .context~name is RR on the oracle and CALL here; same fix as routine-call-frame-name	
-2026-10-01-setmethod-run-fall-to-unknown.md	divergence	queued-probes/smrun/smrun.rex:1	closed:probe agrees	own probe: setMethod and run answer "m ran" and "run ran" on both	
-2026-10-01-syntax-unwind-superlinear.md	perf	queued-probes/unwind/unwind.rex:1	closed:e8a19b2e6	RESOLVED in its first line; depth 2000 agrees (h 44.1), test appends_and_reads_copy_slots_linearly	
-2026-10-01-time-elapsed-loop-hang.md	divergence	queued-probes/elapsed/elapsed.rex:1	closed:e25925ad8	RESOLVED in its first line; both loops end on both sides	
-2026-10-02-context-executable-setmethod.md	divergence	queued-probes/ctxexe/ctxexe.rex:1	closed:probe agrees	The NIL object, rc 0 on both	
-2026-10-02-do-with-over-refusal.md	divergence	queued-probes/dowith/dowith.rex:1	closed:probe agrees	DO WITH ... OVER and DO COUNTER ... OVER agree; Method TESTDIRECTIVES and MethodArgs TEST_REQUEST_STRING_* passed at the 9c close	
-2026-10-02-exit-in-handler-at-reply.md	divergence	queued-probes/hexit/hexit.rex:1	closed:04c46cb3b	RESOLVED in its first line; rc 165 and the 91.999 report on both	
-2026-10-02-frame-executable-invocation-and-native-levels.md	divergence	queued-probes/fexe1/fexe1.rex:1,queued-probes/fexe2/fexe2.rex:1,queued-probes/fexe3/fexe3.rex:1	9d-cluster:native-stack-frames	fexe1 agrees; fexe2 (1 2 against 3 2) and fexe3 (no METHOD SEND frame) differ; clusters.md names this item as that cluster's parent	
-2026-10-02-halt-after-replied-send.md	divergence	queued-probes/pend4/pend4.rex:1	closed:23716a5ec	RESOLVED in its first line; one run a side agrees, rc 252 and the 4.1 report	
-2026-10-02-halt-site-oracle-yield-cadence.md	divergence	-	closed:Deviation 22	a licensed scheduling observable (rulings P32, P44); not probed, the site varies run to run	
-2026-10-02-kept-context-held-98983-overwritable.md	divergence	-	phase:10	not probed, it needs a forged extension; a native-API path beside Deviation 24	
-2026-10-02-notifier-failure-in-started-activity.md	divergence	queued-probes/notif/notif.rex:1	closed:probe agrees	RESOLVED in its first line; three notifier runs and two reports on both	
-2026-10-02-trace-entry-after-expose.md	divergence	queued-probes/texpose/texpose.rex:1	9d	probe still differs: no >I> or <I< here when TRACE follows EXPOSE	
-2026-10-02-traced-init-routed-sink-silent-exit.md	divergence	queued-probes/tracedinit/tracedinit.rex:1	9d	probe still differs: rc 165 here with an unrouted <I< line, rc 0 and the sink's lines on the oracle	
-2026-10-02-traceobject-variable-and-collector.md	divergence	-	9d-cluster:traceobject-probe-option	no single probe; names TEST_VARIABLE and TEST_TRACEOBJECT_COLLECTOR, which are that cluster's	
-2026-10-02-triggered-exit-trace-line-unrouted.md	divergence	queued-probes/trigexit/trigexit.rex:1	9d	probe still differs: the <I< line of a triggered method reaches stdout here, the sink on the oracle	
-2026-10-02-uninit-reply-at-termination.md	divergence	-	closed:Deviation 21	licensed by ruling P39; not probed, the oracle's third line races process exit	
-2026-10-02-while-condition-failure-traceback.md	divergence	queued-probes/o1/o1.rex:1,queued-probes/o1b/o1b.rex:1	9d	probes still differ: the second traceback line names the END on the oracle and the DO here	
-2026-10-03-interpret-translation-error-traceback.md	divergence	queued-probes/interpguard/interpguard.rex:1	closed:probe agrees	both report 99.912 with the interpreted clause's line	
-2026-10-04-aborted-run-leaks-interp.md	design	-	phase:10	embedding API (ruling P53); no probe	
-2026-10-04-send-site-cache-self-customization.md	perf	-	phase:9.1	design note with ranked items; no probe	
-2026-10-05-call-on-notready-stdin-eof.md	divergence	queued-probes/ntstdin/ntstdin.rex:1	closed:probe agrees	own probe from the text: the handler runs, rc 0 on both	
-2026-10-05-stdin-chars-after-drain.md	divergence	queued-probes/stdindrain/stdindrain.rex:1	9d	probe still differs: chars() and .stdin~chars answer 1 here and 0 on the oracle	
-2026-10-05-stream-fifo-terminal-seek.md	divergence	queued-probes/fifo/fifo.rex:1	9d	probe still differs: CHARIN on a FIFO answers [] ERROR here and [abc] READY on the oracle	
-2026-10-05-two-interpreters-signal-race.md	design	-	phase:10	the second interpreter instance is row 10's; no probe	
-2026-10-07-debug-input-does-not-reach-pauses.md	divergence	queued-probes/di/di.rex:1	closed:probe agrees	typed then after on both; TRACE TEST_TRACE_NUMERIC_DEBUG passed at the 9c close	
-2026-10-07-debug-pause-skipped-after-flowed-clause.md	divergence	queued-probes/pa/pa.rex:1	closed:probe agrees	c1 p1 p2 c3 p3 c4 on both	
-2026-10-07-interpret-syntax-traceback-line.md	divergence	queued-probes/isyntb/isyntb.rex:1	closed:probe agrees	both print 1 *-* y=(; and "at "("" for the INTERPRET form	
-2026-10-07-seeded-random-switch-mode.md	design	-	closed:Phase 6.1	the simulation mode shipped in Phase 6.1 (crates/rexx-exec/src/sim.rs, sim:trace replay)	
-2026-10-07-unjudged-scheduler-mutants.md	process	-	9d	no probe; six scheduler mutants stay green and none is judged observable or not	
-2026-10-09-full-pool-inline-command-hang.md	divergence	-	closed:51782fcb8	RESOLVED in its first line; not re-probed (fills a 64-thread pool); scheduler/tests/pool.rs holds its tests	
-2026-10-09-literals-rows-need-a-test-case.md	process	-	closed:98caea3de	RESOLVED in its first line; tests/assertions.rs:208 EXEMPT is empty	
-2026-10-09-wrong-type-native-rows-name-phase-9.md	process	-	closed:ae86f4d04	RESOLVED in its first line; a_native_row_on_a_receiver_of_another_class_refuses_its_type is in dispatch/tests.rs	
-2026-10-10-array-sort-after-remove.md	divergence	queued-probes/sortrm/sortrm.rex:1	9d	probe still differs: 98.975 rc 158 here, 2 a c rc 0 on the oracle	
-2026-10-10-beep-wrong-type-message.md	divergence	queued-probes/beep/beep.rex:1	9d	probe still differs: the range message and the running REXX line	
-2026-10-10-call-on-nostring-insert.md	divergence	queued-probes/nostr/nostr.rex:1	closed:probe agrees	own probe: 25.1 found "NOSTRING" on both	
-2026-10-10-class-enhanced-skips-new.md	divergence	queued-probes/b7a/b7a.rex:1	closed:70d314bac	closed by Phase 9a Task 8b; both probes agree	
-2026-10-10-compiled-method-package-in-trace.md	divergence	queued-probes/t4c/t4c.rex:1	9d-cluster:dynamic-package-name	probe still differs: the package is "M" on the oracle and the caller's file here, the cluster's mechanism	
-2026-10-10-debug-do-header-notready-order.md	divergence	queued-probes/dh1/dh1.rex:1	9d	probe still differs: the handler runs before the header's pause here	
-2026-10-10-debug-equals-after-iterate-indent.md	divergence	queued-probes/e2/e2.rex:1	9d	probe still differs: the re-executed ITERATE echoes at its static indent here; a KNOWN GAP row in phase-4-exclusions.txt	
-2026-10-10-debug-labelled-block-header-pause.md	divergence	queued-probes/g1/g1.rex:1	9d	probe still differs: no pause after a labelled block DO header; a KNOWN GAP row	
-2026-10-10-debug-reply-pause-and-banner.md	divergence	queued-probes/k3/k3.rex:1	9d	probe still differs: no pause after REPLY and a repeated banner; a KNOWN GAP row	
-2026-10-10-debug-typed-call-sigl.md	divergence	queued-probes/c2call/c2call.rex:1	9d	probe still differs: in sub 1 here, in sub 3 on the oracle	
-2026-10-10-debug-typed-raise-untrapped.md	divergence	queued-probes/t4/t4.rex:1	9d	probe still differs: typed lines keep running after an untrapped RAISE here	
-2026-10-10-debug-typed-signal.md	divergence	queued-probes/c1sig/c1sig.rex:1	9d	probe still differs: a typed SIGNAL does not transfer control here	
-2026-10-10-directory-setmethod-unknown-traceback-line.md	divergence	queued-probes/t4e/t4e.rex:1,queued-probes/stemunk/stemunk.rex:1	9d	both probes still print an extra Compiled method "UNKNOWN" traceback line here	
-2026-10-10-emptyloop-wall-clock.md	perf	-	phase:9.1	unattributed cycles; no probe	
-2026-10-10-enhanced-object-name-in-messages.md	divergence	queued-probes/t4b/t4b.rex:1	closed:70d314bac	closed by Phase 9a Task 8b; "enhanced Object" on both	
-2026-10-10-failed-spawn-runs-inline.md	divergence	-	9d	no probe run (needs a capped address space and a full pool); a hang where the oracle raises 48.1	
-2026-10-10-leave-iterate-error-not-trappable.md	divergence	queued-probes/lv4o/lv4o.rex:1	9d	probe still differs: 28.3 untrapped rc 228 here, trapped 4 on the oracle	
-2026-10-10-list-remove-copies-per-call.md	perf	queued-probes/lr2/lr2.rex:1	phase:9.1	own reduced probe: 2000 removes from a 100000-item List take over 0.5 s here and under it on the oracle	
-2026-10-10-misplaced-class-attribute-error.md	divergence	queued-probes/attrcls/attrcls.rex:1	9d-cluster:attribute-body-error-number	probe still differs (99.937 against 99.905); it is ATTRIBUTE TESTMISPLACEDCLASSMETHOD	
-2026-10-10-native-routine-arguments-not-strings.md	divergence	queued-probes/natargs/natargs.rex:1,queued-probes/natargs2/natargs2.rex:1,queued-probes/natargs3/natargs3.rex:1	9d	FILESPEC and DIRECTORY still render an object where the oracle raises 88.909; SysFileExists now agrees	
-2026-10-10-oracle-judged-seeded-gate.md	design	-	closed:not wanted	its first line: CLOSED as not wanted by Moritz, 2026-10-10	
-2026-10-10-prologue-frames-missing-loading-levels.md	divergence	queued-probes/frames1/frames1.rex:1,queued-probes/frames2/frames2.rex:1	9d-cluster:prolog-trace-lines	both probes still lack a loading frame here; clusters.md names this item as that cluster's parent	
-2026-10-10-propagated-condition-extra-traceback-line.md	divergence	queued-probes/cond3/cond3.rex:1	9d	probe still differs: an extra 9 *-* call s line here	
-2026-10-10-raise-novalue-return-into-call-on-any.md	divergence	queued-probes/rnov/rnov.rex:1	9d	probe still differs: CALL ON ANY traps NOVALUE here; a KNOWN GAP row in phase-4-exclusions.txt	
-2026-10-10-reply-continuation-trace-entry.md	divergence	queued-probes/p7/p7.rex:1	9d-cluster:trace-reply-continuation	probe still lacks the second ONETWO >I>/<I< pair; it is TRACE TEST_TRACE_LABEL_WITH_FORWARD	
-2026-10-10-reply-propagated-condition-traceback-line.md	divergence	queued-probes/rf1d/rf1d.rex:1	9d	probe still lacks the sender's 2 *-* say 'got' o~m line here	
-2026-10-10-rexxcps-task-6-round-2-delta.md	perf	-	closed:6.1 close within budget	a +0.09% delta the 6.1 close absorbed (rexxcps +0.2694% against base61, task-12-evidence/cg-close2/table.txt); no probe	
-2026-10-10-rooting-harness-blind-to-dropped-pushes.md	process	-	9d	no probe; removing either root push left every rooting test green, a test gap in tests/collect_stress.rs	
-2026-10-10-routine-new-no-package-parent.md	divergence	queued-probes/ctx3/ctx3.rex:1	closed:8b95afe79	RESOLVED in its first line; helper found on both	
-2026-10-10-security-manager-command-rc-requires.md	divergence	-	9d	no probe recorded, only a classification table; the manager is consulted where the oracle does not	
-2026-10-10-select-case-value-outlives-construct.md	design	-	not-a-divergence	no program reads the stale value; an unasserted invariant, no probe	
-2026-10-10-sim-pool-seeded-delivery.md	design	-	phase:research	a testing-design proposal for the simulation mode; no probe	
-2026-10-10-sim-shrinker.md	design	-	phase:research	a testing-design proposal for the simulation mode; no probe	
-2026-10-10-string-translate-empty-tables.md	divergence	queued-probes/tre/tre.rex:1	9d	probe still differs: the String method answers [  ] here and [12] on the oracle	
-2026-10-10-subclass-package.md	divergence	queued-probes/b3/b3.rex:1	closed:1c0e1d769	closed by Phase 9a Task 8; 1 and 3 on both	
-2026-10-10-subclass-rexxinfo.md	divergence	queued-probes/b4/b4.rex:1	closed:1c0e1d769	closed by Phase 9a Task 8; 99.949 on both	
-2026-10-10-trace-c-command-echo.md	divergence	queued-probes/cc2/cc2.rex:1	9d	probe still lacks the 3 *-* address command 'false' echo here	
-2026-10-10-translation-error-inserts.md	divergence	queued-probes/cs/cs.rex:1,queued-probes/e103/e103.rex:1	closed:Phase 9c Tasks 3 and 4	CLOSED in its first line; both probes agree	
-2026-10-10-trapped-header-comparison-holds-to-object.md	divergence	queued-probes/lkJ/lkJ.rex:1	not-a-divergence	probe still differs only in when UNINIT runs, which is collection timing (Moritz 2026-09-01: gc ordering is unpredictable)	
-2026-10-10-uninit-drain-signal-interpret-and-trace.md	divergence	-	9d	not probed, its probes were in /tmp and are gone; UNINITs never drain and memory grows to 356 MB against 24 MB	
-2026-10-10-upstream-do-to-identity.md	oracle bug	queued-probes/doto/doto.rex:1	not-a-divergence	upstream report; Deviation 25 is the crate's rule	
-2026-10-10-upstream-zero-pass-do-reexecute.md	oracle bug	queued-probes/z26/z26.rex:1	not-a-divergence	upstream report; Deviation 26 is the crate's rule	
-2026-10-10-variable-reference-concatenation.md	divergence	queued-probes/b1/b1.rex:1	9d	probe still differs: (>zz) || 'x' drops the reference's string value here	
-2026-10-10-whole-groups-differing-rows-that-agree.md	process	-	closed:rows removed	the TIME and CALL rows it names are gone from DIFFERING (tests/concurrency_tests.rs:2664) and REPLY's stay, as it suggested	
-2026-10-11-output-lost-on-kill.md	divergence	-	closed:e4bbcbba4	CLOSED in its first line by Phase 9c Task 7, Deviation 40; not re-probed (needs a kill)	
-2026-10-12-buffer-copy-uncharged.md	perf	-	phase:9.1	collector accounting under memory pressure; no probe	
-2026-10-12-method-source-compile-retention.md	divergence	queued-probes/memcompile/memcompile.rex:1	closed:Phase 9b1 L8	queued-probes/memcompile/rss.txt: 44992 kB at 50000 and 45160 kB at 100000 here, was 921808 kB; flat	
-2026-10-12-package-as-real-object.md	design	-	closed:Phase 9b1	phase-9b1-gate.md: L5 to L7 fixed, TESTRECLAIM01 passed; side-maps.tsv keeps package state on the package object's body	
-2026-10-12-randomised-hash-iteration.md	design	-	phase:research	Moritz's aim beyond the oracle; Deviation 33 already licenses the order; no probe	
-2026-10-13-class-named-drops-raised-condition.md	divergence	-	9d	no probe recorded; dispatch/library/surface.rs:859 still drops the lookup's Err through .ok()?	
-2026-10-13-class-side-string-method-not-sent.md	divergence	queued-probes/clsstr/clsstr.rex:1	closed:0a055271c	CLOSED in its first line; KS on both	
-2026-10-13-error-position-ampersand.md	divergence	queued-probes/imeth/imeth.rex:1	9d-cluster:setmethod-instancemethod-kind	inserts closed in 9c; instanceMethod after setMethod still answers an Object here and a Method on the oracle	
-2026-10-13-lossy-path-sites.md	divergence	queued-probes/lossy/lossy.rex:1	9d	probe still differs: directory(d) answers empty for a directory named d'ff'x here and enters it on the oracle	
-2026-10-13-named-semaphores-design.md	design	-	9d	Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal	
-2026-10-13-passwd-home-ignores-nss.md	divergence	-	phase:11	not probed, no NSS-only account here; a host assumption, which row 11 puts behind the platform seam	
-2026-10-13-phase-9b-carry-in.md	process	-	9d	N1 native-frame memcpy cost is phase:9.1; the unchecked minors m1, m3, m4 are 9d	
-2026-10-13-phase-9b1-uniform-object-model.md	design	-	closed:Phase 9b1	phase-9b1-gate.md: every leak fixed or licensed, SysStemSort as Deviation 37, the addRoutine copy as L10	
-2026-10-13-security-manager-and-library-key.md	divergence	-	9d	no probe recorded; two oracle measurements to make first	
-2026-10-13-stdin-stream-object-queries.md	divergence	queued-probes/stdinq/stdinq.rex:1	9d	own probe: streamtype, query handle, lines, query exists and qualify on STDIN still differ	
-2026-10-13-stdout-write-errors-swallowed.md	divergence	queued-probes/stdoutclosed/stdoutclosed.rex:1	9d	probe with stdout closed: lineout 0 READY: here, 1 ERROR:9 on the oracle	
-2026-10-13-sysfork-design.md	design	-	9d	Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal	
-2026-10-13-yaml-pass-boundary-guard.md	divergence	-	9d	no probe of its own; Task 4 consumes it (ruling 2), yaml TEST35_DIRECTIVES was blocked on this refusal at the 9c close	
-2026-10-14-class-side-defaultname.md	divergence	queued-probes/clsdn/clsdn.rex:1	9d	own probe: DN on the oracle, The WITHNAME class here	
-2026-10-14-filespec-string-arg.md	divergence	queued-probes/fspec/fspec.rex:1	9d	own probe: 88.909 on the oracle, a K rc 0 here; the same fix as native-routine-arguments-not-strings	
-2026-10-14-native-method-frames.md	divergence	-	9d-cluster:native-stack-frames	names StackFrame TESTNATIVECODEFRAME, that cluster's test	
-2026-10-14-routine-start-call-panic.md	divergence	queued-probes/rstart/rstart.rex:1	9d	own probe: a panic "a live activation", rc 101, where the oracle prints 1; its file marks it PRIORITY	
-2026-10-15-9b1-task-8b-review-minors.md	divergence	queued-probes/m1var/m1var.rex:1,queued-probes/m4def/m4def.rex:1	9d	own probes: m1 lists Z here and A on the oracle, m4 answers the new source here and the old one on the oracle	
-2026-10-15-executable-flags-and-result.md	divergence	-	9d	no probe recorded; the oracle is still to be measured	
-2026-10-15-isguarded-copy-and-additional.md	divergence	queued-probes/isg/isg.rex:1,queued-probes/addl/addl.rex:1	9d	the review's probes still differ: isGuarded 1 against 0, additional[1] a against the whole string	
-2026-10-15-routines-table-silent-none.md	process	-	9d	no probe; environment.rs build_package_string_table and identities.rs find_written_routine still answer Ok(None)	
-2026-10-16-bignum-remainder-speed.md	perf	queued-probes/bignum/bignum.rex:1	phase:9.1	probe: output 78 on both, 2000 iterations under 1 s on the oracle and over it here	
-2026-10-16-stream-command-open-missing-file.md	divergence	queued-probes/scopen/scopen.rex:1	9d-cluster:stream-notready-names	probe still differs (91.999 against ERROR:2); the cluster holds the same no-result open command	
-2026-10-17-library-bind-before-options.md	divergence	queued-probes/libbind/libbind.rex:1	9d	probe still differs: 26.5 on line 2 here, 98.903 on line 1 on the oracle	
-2026-10-17-newmethod-parent-package.md	divergence	-	9d	no witness exists, the difference is read from the code; METHOD is a Phase 9 native-API group	
-2026-10-17-oracle-not-op-forwarding-bug-2117.md	oracle bug	queued-probes/notop/notop.rex:1	not-a-divergence	upstream report SF #2117; probe: the oracle answers 1 0 and the crate the right 0 1	
-2026-10-17-phase-10-corpus-and-rxfunc.md	design	-	phase:10	ruled by Moritz 2026-10-17 (9d plan ruling 3)	
-2026-10-17-routine-call-frame-name.md	divergence	queued-probes/rcfn/rcfn.rex:1	9d	probe still differs: ROUTINE MYNAME on the oracle, ROUTINE CALL here	
-2026-10-17-scanner-reports-later-clause-error.md	divergence	queued-probes/scanlater/scanlater.rex:1	9d	probe still differs: 35.1 on line 2 on the oracle, 13.1 on line 3 here	
-2026-10-18-upstream-bag-hasitem.md	oracle bug	queued-probes/baghas/baghas.rex:1	not-a-divergence	upstream report; Deviation 45 is the crate's rule	
-bounds-check-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-21-bounds-check-report.md; item 7 landed (performance-todo.md:1012)	
-category-rollup-brief.md	perf	-	closed:dispatched	a dispatched performance brief: result docs/superpowers/records/2026-09-20-performance-items/2026-09-22-category-rollup.md	
-driver-gap-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-22-driver-gap-report.md	
-o2-survival-brief.md	perf	-	closed:dispatched	a dispatched performance brief: result docs/superpowers/records/2026-09-20-performance-items/2026-09-22-o2-survival.md	
-op-fusion-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-21-op-fusion-report.txt; item 3 landed at 725aa8863	
-parse-contained-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-21-parse-contained-report.txt	
-parse-cost-scout-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-21-parse-cost-scout-report.md	
-parse-in-place-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-21-parse-in-place-report.txt; landed at 5e765dc5a	
-reprofile-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-21-reprofile-report.md	
-store-fusion-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-22-store-fusion-report.md	
-trace-emission-brief.md	perf	-	closed:dispatched	a dispatched performance brief: item 1 landed (performance-todo.md:374, 7a28f68e6 and 7fbadfecb)	
-trace-quickening-brief.md	perf	-	closed:dispatched	a dispatched performance brief: item 2 built and reverted (performance-todo.md:619)	
-gate:phase-9a-gate.md:456	process	-	9d	no probe; dispatch/library/tests.rs:177 still says collect_stress reads phase-8.txt last	
-gate:phase-9a-gate.md:457	process	-	9d	no probe; a harness minor its ledger calls not live	
-gate:phase-9a-gate.md:458	process	-	9d	no probe; tests/support/group_runner.rs:309 still calls windows(needle.len()), which panics on an empty needle	
-gate:phase-9a-gate.md:459	process	-	9d	no probe; harness minors from 9a Task 2, not checked against the tree	
-gate:phase-9a-gate.md:460	process	-	9d	no probe; harness minors from 9a Task 3, not checked against the tree	
-gate:phase-9a-gate.md:461	process	-	9d	no probe; its ledger line says no such row exists yet	
-gate:phase-9a-gate.md:462	process	-	9d	no probe; the ffi.rs texts' owners, not checked against the tree	
-gate:phase-9a-gate.md:463	divergence	queued-probes/ins25/ins25.rex:1,queued-probes/ins35/ins35.rex:1,queued-probes/ins47/ins47.rex:1,queued-probes/rnmsg/rnmsg.rex:1	closed:probe agrees	own probes of the named inserts (25.907, 35.1, 47.2, the Routine~new message) agree; 9c Tasks 2 to 4	
-gate:phase-9a-gate.md:464	divergence	queued-probes/startw/startw.rex:1	closed:Phase 9b1 L9	Method side-map rows are pruned (phase-9b1-gate.md L9); own startWith probe agrees on the header	
-gate:phase-9a-gate.md:465	design	-	closed:Deviation 35	HANDLE:0, 1 and 2 reach the standard streams and any other descriptor is refused	
-gate:phase-9a-gate.md:466	perf	-	9d	no probe; each is for the Phase 9 close callgrind, which is 9d Task 10's	
-gate:phase-9a-gate.md:468	process	-	closed:pin rebuilt	/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run exists and the 9d constraints measure against it	
-gate:phase-9a-gate.md:469	divergence	queued-probes/exttr/exttr.rex:1,queued-probes/t4c/t4c.rex:1	9d-cluster:dynamic-package-name	the external CALL half agrees (exttr); Routine~new's >I> package is that cluster's mechanism	
-gate:phase-9a-gate.md:470	divergence	queued-probes/memcompile/memcompile.rex:1	closed:Phase 9b1	method-source retention is flat (its own row); the gc-trigger file was closed and removed in d81bacfad	
-gate:phase-9a-gate.md:471	divergence	queued-probes/stemunk/stemunk.rex:1	9d	the Stem half of directory-setmethod-unknown-traceback-line; probe still differs	
-gate:phase-9a-gate.md:472	process	-	9d	no probe; the sibling of arity-harness-ignores-target-dir, rexx-bench-suite.rs:591 still joins ../../target	
-gate:phase-9a-gate.md:473	perf	-	phase:9.1	a pointer to 2026-10-12-buffer-copy-uncharged.md	
-gate:phase-9a-gate.md:474	divergence	-	9d	no recorded probe; own probe did not reach the repeated entries, so it is not cited	
-gate:phase-9a-gate.md:475	design	-	phase:research	a pointer to 2026-10-12-randomised-hash-iteration.md	
-gate:phase-9a-gate.md:476	divergence	queued-probes/rexxpkgcopy/rexxpkgcopy.rex:1	9d	the REXX package copy agrees (9b1 L6); the library routine frame's ~executable is not probed	
-gate:phase-9a-gate.md:477	perf	-	phase:9.1	a per-call cold block on Routine~call; no probe	
-gate:phase-9a-gate.md:478	divergence	-	closed:Phase 9b1 L7	packages are collected (phase-9b1-gate.md L7)	
-gate:phase-9a-gate.md:479	design	-	closed:Phase 9b1	a pointer to 2026-10-12-package-as-real-object.md	
-gate:phase-9a-gate.md:480	divergence	queued-probes/dimeth/dimeth.rex:1	9d-cluster:method-object-identity	probe still differs (1 against 0); Object TEST_INSTANCEMETHOD is that cluster's	
-gate:phase-9a-gate.md:481	divergence	-	9d	no probe; a panic its ledger calls unverified	
-gate:phase-9a-gate.md:482	process	-	9d	no probe; sim calibration not re-derived, for the Phase 9 close	
-gate:phase-9a-gate.md:483	process	-	9d	Moritz 2026-10-13: under the simulation clock or licensed, owner 9d; its Flaky row is in suite-licences.txt:8, the S2 list has none	
-gate:phase-9a-gate.md:485	divergence	-	9d-cluster:redirected-command-holds-baton	TEST_MAKESTRING passed at the 9c close; scclient and sfclient are that cluster's	
-gate:phase-9a-gate.md:488	divergence	-	9d	Task 4 owns TEST35_DIRECTIVES and TEST47_MULTILINEFLOWCOLLECTIONS	
-gate:phase-9b1-gate.md:115	divergence	queued-probes/rstart/rstart.rex:1	9d	a pointer to 2026-10-14-routine-start-call-panic.md, which still panics	
-gate:phase-9b1-gate.md:117	process	-	closed:pointer	a list of queued files, each with its own row here	
-gate:phase-9b1-gate.md:121	design	-	9d	Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal	
-gate:phase-9b1-gate.md:123	oracle bug	-	not-a-divergence	upstream reports, not copied (WeakReference to a held .true; oracle-crashes entry 49)	
-gate:phase-9c-gate.md:138	process	-	9d	a pointer to 2026-10-15-routines-table-silent-none.md	
-gate:phase-9c-gate.md:139	divergence	queued-probes/scopen/scopen.rex:1	9d-cluster:stream-notready-names	a pointer to 2026-10-16-stream-command-open-missing-file.md	
-gate:phase-9c-gate.md:140	perf	queued-probes/bignum/bignum.rex:1	phase:9.1	a pointer to 2026-10-16-bignum-remainder-speed.md	
-gate:phase-9c-gate.md:141	oracle bug	queued-probes/notop/notop.rex:1	not-a-divergence	a pointer to 2026-10-17-oracle-not-op-forwarding-bug-2117.md	
-gate:phase-9c-gate.md:142	divergence	queued-probes/libbind/libbind.rex:1	9d	a pointer to 2026-10-17-library-bind-before-options.md	
-gate:phase-9c-gate.md:143	divergence	queued-probes/rcfn/rcfn.rex:1	9d	a pointer to 2026-10-17-routine-call-frame-name.md	
-gate:phase-9c-gate.md:144	divergence	-	9d	a pointer to 2026-10-17-newmethod-parent-package.md	
-gate:phase-9c-gate.md:145	divergence	queued-probes/scanlater/scanlater.rex:1	9d	a pointer to 2026-10-17-scanner-reports-later-clause-error.md	
-gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointer to 2026-10-13-lossy-path-sites.md	
-2026-10-18-command-waits-for-background-child.md	divergence	queued-probes/bgcmd/bgcmd.rex:1	9d	a command whose background child keeps stdout open: crate waits to timeout rc 124, oracle returns at once	
+2026-09-15-file-split.md	process	-	closed:9956c0ac6	2026-09-15-file-split/progress.md ends "File-split plan complete" at the final-review fix 9956c0ac6	closed:9956c0ac6
+2026-09-16-worktree-build-precondition.md	process	-	9d	a test-harness path like arity-harness-ignores-target-dir; dispatch/library/tests.rs:26 canonicalizes ../../../build/lib	9d
+2026-09-17-crexx-derived-candidates.md	perf	-	phase:9.1	unsized performance candidates; no probe	phase:9.1
+2026-09-17-oracle-deadline-is-wall-clock.md	process	-	9d	no probe; gate rows time out under load and none of the three directions is chosen, which the Phase 9 close gates meet	9d
+2026-09-19-driver-control-flow-spike.md	perf	-	closed:rejected 2026-09-19	its own "Spike result" section; report .superpowers/sdd/2026-09-19-driver-control-flow-spike-report.md	closed:rejected 2026-09-19
+2026-09-20-instructions-per-op.md	perf	-	phase:9.1	a measurement record behind the performance to-do; no probe	phase:9.1
+2026-09-20-performance-todo.md	perf	-	phase:9.1	the open performance queue; no probe	phase:9.1
+2026-09-21-flaky-unstable-row-gate.md	process	-	9d	no probe; tests/support/arity.rs:616-618 still judges a row stable from two oracle runs	9d
+2026-09-21-parse-message-target-unimplemented.md	divergence	queued-probes/pmt/pmt.rex:1	closed:probe agrees	closed 2026-09-28 by Phase 8 surface Task 8; the witness agrees on all three descriptors	closed:probe agrees
+2026-09-22-clause-shape-distribution.md	perf	-	phase:9.1	static op-shape evidence for superinstructions; no probe	phase:9.1
+2026-09-22-driver-frame-pressure.md	perf	-	phase:9.1	unrun outlining variant; no probe	phase:9.1
+2026-09-22-tracefunction-ungated.md	perf	-	phase:9.1	no probe; both Op::TraceFunction pushes in ir/compile.rs (:1627, :1645) are still unconditional	phase:9.1
+2026-09-24-arity-harness-ignores-target-dir.md	process	-	9d	no probe; tests/support/arity.rs:399 still joins ../../target/release/rexx where group_runner uses CARGO_BIN_EXE_rexx	9d
+2026-09-24-mutate-4c-stale-anchor.md	process	-	9d	no probe; scripts/mutate-4c.sh:537 still anchors on a statement parse_template.rs no longer has (:461 is a let binding)	9d
+2026-09-24-refusal-scanner-test-files.md	process	-	9d	no probe; tests/refusal_sites.rs code_lines (:73) still drops only inline #[cfg(test)] mod blocks, and Task 3 reads that table	9d
+2026-09-25-pos-window-doc-pointers.md	process	-	9d	no probe; builtin/string.rs:123 and rexx-parse block/references.rs:190,:197 still point at text that is gone	9d
+2026-09-25-table-c-derivation-literals.md	process	-	9d	no probe; corpus/gate-tables/classes/*.rex line 6 still names tests/gate_table_c.rs	9d
+2026-09-26-flatloop-spike-comment.md	process	-	closed:4b694fe7c	its own "Closed 2026-09-29" section; no "SPIKE, not for commit" remains under rust/crates	closed:4b694fe7c
+2026-09-27-stream-write-visibility.md	divergence	queued-probes/streamflush/streamflush.rex:1	9d	probe still differs: LINES by name sees the open Stream object's write here (0 1, 1) and not on the oracle (0 0, 0)	9d
+2026-09-28-compiled-source-parse-errors.md	divergence	queued-probes/csp/csp.rex:1	closed:probe agrees	the traceback now prints the source line and the Compiled method "NEW" line on both sides	closed:probe agrees
+2026-09-28-condition-object-divergences-found-in-fix-round-a.md	divergence	queued-probes/callarg/callarg.rex:1,queued-probes/coorder/coorder.rex:1	9d-cluster:call-on-trap-argument	callarg still 1 1 against 0 0 (the cluster); coorder still lacks RESULT and ADDITIONAL, which stream-notready-names touches	9d-cluster:call-on-trap-argument
+2026-09-28-phase-5-refusal-labels.md	process	-	closed:Phase 6.1 Task 7	its own "Closed 2026-10-09" section; closed_phases.rs:37 lists "Phase 5" in CLOSED	closed:Phase 6.1 Task 7
+2026-09-28-rexxqueue-in-function-group.md	divergence	-	phase:10	not probed, it reaches rxapi; roadmap row 10 names FUNCTION TEST_REXXQUEUE	phase:10
+2026-09-28-use-arg-message-term.md	divergence	queued-probes/uam/uam.rex:1	closed:probe agrees	stdout x, rc 0 on both	closed:probe agrees
+2026-09-29-closed-phases-owner-gaps.md	process	-	closed:Phase 6.1 Task 7	its own "Closed 2026-10-09" section; the_row_check_reads_only_a_resolution_that_opens_a_clause is in tests/closed_phases.rs	closed:Phase 6.1 Task 7
+2026-09-29-release-local-reference-memory.md	divergence	-	phase:10	not probed, it needs the forged native library; native-API memory, ruled "do not fix, queue" at the Phase 8 close	phase:10
+2026-09-30-drop-unset-stem-symbol.md	divergence	queued-probes/dropstem/dropstem.rex:1	9d	probe still differs: SYMBOL('W.') is VAR on the oracle and LIT here	9d
+2026-09-30-hash-subclass-init-capacity.md	divergence	queued-probes/hash_subclass_init_capacity/hash_subclass_init_capacity.rex:1	closed:1c0e1d769	closed by Phase 9a Task 8; its witness corpus/lang/hash_subclass_init_capacity.rex agrees	closed:1c0e1d769
+2026-09-30-min-with-function-arg.md	divergence	queued-probes/builtin_argument_call/builtin_argument_call.rex:1	closed:Phase 6 Task 9 fix round 1	its witness corpus/lang/builtin_argument_call.rex agrees	closed:Phase 6 Task 9 fix round 1
+2026-09-30-stringtable-subclass-new-arg.md	divergence	queued-probes/hash_subclass_init_capacity/hash_subclass_init_capacity.rex:1	closed:1c0e1d769	closed by Phase 9a Task 8; its witness agrees	closed:1c0e1d769
+2026-10-01-condition-object-directory-methods.md	divergence	queued-probes/codm/codm.rex:1	closed:probe agrees	items 13 and copy items 13 on both	closed:probe agrees
+2026-10-01-message-notify-single-slot.md	divergence	queued-probes/re2a/re2a.rex:1,queued-probes/re2b/re2b.rex:1	closed:probe agrees	RESOLVED by Phase 6 S2-S5 Task 7 fix round 1; re2a 1 0 0 and re2b 0 1 0 1 0 on both	closed:probe agrees
+2026-10-01-message-start-result-traceback.md	divergence	queued-probes/msr/msr.rex:1	9d	traceback and report now agree; the report still names line 3 on the oracle and line 9 here	9d
+2026-10-01-reply-continuation-state-visibility.md	divergence	queued-probes/replyvis/replyvis.rex:1	closed:probe agrees	own probe from the text: the later guarded send reads the continuation's write on both	closed:probe agrees
+2026-10-01-routine-call-context-name.md	divergence	queued-probes/rcn/rcn.rex:1	9d	probe still differs: .context~name is RR on the oracle and CALL here; same fix as routine-call-frame-name	9d
+2026-10-01-setmethod-run-fall-to-unknown.md	divergence	queued-probes/smrun/smrun.rex:1	closed:probe agrees	own probe: setMethod and run answer "m ran" and "run ran" on both	closed:probe agrees
+2026-10-01-syntax-unwind-superlinear.md	perf	queued-probes/unwind/unwind.rex:1	closed:e8a19b2e6	RESOLVED in its first line; depth 2000 agrees (h 44.1), test appends_and_reads_copy_slots_linearly	closed:e8a19b2e6
+2026-10-01-time-elapsed-loop-hang.md	divergence	queued-probes/elapsed/elapsed.rex:1	closed:e25925ad8	RESOLVED in its first line; both loops end on both sides	closed:e25925ad8
+2026-10-02-context-executable-setmethod.md	divergence	queued-probes/ctxexe/ctxexe.rex:1	closed:probe agrees	The NIL object, rc 0 on both	closed:probe agrees
+2026-10-02-do-with-over-refusal.md	divergence	queued-probes/dowith/dowith.rex:1	closed:probe agrees	DO WITH ... OVER and DO COUNTER ... OVER agree; Method TESTDIRECTIVES and MethodArgs TEST_REQUEST_STRING_* passed at the 9c close	closed:probe agrees
+2026-10-02-exit-in-handler-at-reply.md	divergence	queued-probes/hexit/hexit.rex:1	closed:04c46cb3b	RESOLVED in its first line; rc 165 and the 91.999 report on both	closed:04c46cb3b
+2026-10-02-frame-executable-invocation-and-native-levels.md	divergence	queued-probes/fexe1/fexe1.rex:1,queued-probes/fexe2/fexe2.rex:1,queued-probes/fexe3/fexe3.rex:1	9d-cluster:native-stack-frames	fexe1 agrees; fexe2 (1 2 against 3 2) and fexe3 (no METHOD SEND frame) differ; clusters.md names this item as that cluster's parent	9d-cluster:native-stack-frames
+2026-10-02-halt-after-replied-send.md	divergence	queued-probes/pend4/pend4.rex:1	closed:23716a5ec	RESOLVED in its first line; one run a side agrees, rc 252 and the 4.1 report	closed:23716a5ec
+2026-10-02-halt-site-oracle-yield-cadence.md	divergence	-	closed:Deviation 22	a licensed scheduling observable (rulings P32, P44); not probed, the site varies run to run	closed:Deviation 22
+2026-10-02-kept-context-held-98983-overwritable.md	divergence	-	phase:10	not probed, it needs a forged extension; a native-API path beside Deviation 24	phase:10
+2026-10-02-notifier-failure-in-started-activity.md	divergence	queued-probes/notif/notif.rex:1	closed:probe agrees	RESOLVED in its first line; three notifier runs and two reports on both	closed:probe agrees
+2026-10-02-trace-entry-after-expose.md	divergence	queued-probes/texpose/texpose.rex:1	9d	probe still differs: no >I> or <I< here when TRACE follows EXPOSE	9d
+2026-10-02-traced-init-routed-sink-silent-exit.md	divergence	queued-probes/tracedinit/tracedinit.rex:1	9d	probe still differs: rc 165 here with an unrouted <I< line, rc 0 and the sink's lines on the oracle	9d
+2026-10-02-traceobject-variable-and-collector.md	divergence	-	9d-cluster:traceobject-probe-option	no single probe; names TEST_VARIABLE and TEST_TRACEOBJECT_COLLECTOR, which are that cluster's	9d-cluster:traceobject-probe-option
+2026-10-02-triggered-exit-trace-line-unrouted.md	divergence	queued-probes/trigexit/trigexit.rex:1	9d	probe still differs: the <I< line of a triggered method reaches stdout here, the sink on the oracle	9d
+2026-10-02-uninit-reply-at-termination.md	divergence	-	closed:Deviation 21	licensed by ruling P39; not probed, the oracle's third line races process exit	closed:Deviation 21
+2026-10-02-while-condition-failure-traceback.md	divergence	queued-probes/o1/o1.rex:1,queued-probes/o1b/o1b.rex:1	9d	probes still differ: the second traceback line names the END on the oracle and the DO here	9d
+2026-10-03-interpret-translation-error-traceback.md	divergence	queued-probes/interpguard/interpguard.rex:1	closed:probe agrees	both report 99.912 with the interpreted clause's line	closed:probe agrees
+2026-10-04-aborted-run-leaks-interp.md	design	-	phase:10	embedding API (ruling P53); no probe	phase:10
+2026-10-04-send-site-cache-self-customization.md	perf	-	phase:9.1	design note with ranked items; no probe	phase:9.1
+2026-10-05-call-on-notready-stdin-eof.md	divergence	queued-probes/ntstdin/ntstdin.rex:1	closed:probe agrees	own probe from the text: the handler runs, rc 0 on both	closed:probe agrees
+2026-10-05-stdin-chars-after-drain.md	divergence	queued-probes/stdindrain/stdindrain.rex:1	9d	probe still differs: chars() and .stdin~chars answer 1 here and 0 on the oracle	9d
+2026-10-05-stream-fifo-terminal-seek.md	divergence	queued-probes/fifo/fifo.rex:1	9d	probe still differs: CHARIN on a FIFO answers [] ERROR here and [abc] READY on the oracle	9d
+2026-10-05-two-interpreters-signal-race.md	design	-	phase:10	the second interpreter instance is row 10's; no probe	phase:10
+2026-10-07-debug-input-does-not-reach-pauses.md	divergence	queued-probes/di/di.rex:1	closed:probe agrees	typed then after on both; TRACE TEST_TRACE_NUMERIC_DEBUG passed at the 9c close	closed:probe agrees
+2026-10-07-debug-pause-skipped-after-flowed-clause.md	divergence	queued-probes/pa/pa.rex:1	closed:probe agrees	c1 p1 p2 c3 p3 c4 on both	closed:probe agrees
+2026-10-07-interpret-syntax-traceback-line.md	divergence	queued-probes/isyntb/isyntb.rex:1	closed:probe agrees	both print 1 *-* y=(; and "at "("" for the INTERPRET form	closed:probe agrees
+2026-10-07-seeded-random-switch-mode.md	design	-	closed:Phase 6.1	the simulation mode shipped in Phase 6.1 (crates/rexx-exec/src/sim.rs, sim:trace replay)	closed:Phase 6.1
+2026-10-07-unjudged-scheduler-mutants.md	process	-	9d	no probe; six scheduler mutants stay green and none is judged observable or not	9d
+2026-10-09-full-pool-inline-command-hang.md	divergence	-	closed:51782fcb8	RESOLVED in its first line; not re-probed (fills a 64-thread pool); scheduler/tests/pool.rs holds its tests	closed:51782fcb8
+2026-10-09-literals-rows-need-a-test-case.md	process	-	closed:98caea3de	RESOLVED in its first line; tests/assertions.rs:208 EXEMPT is empty	closed:98caea3de
+2026-10-09-wrong-type-native-rows-name-phase-9.md	process	-	closed:ae86f4d04	RESOLVED in its first line; a_native_row_on_a_receiver_of_another_class_refuses_its_type is in dispatch/tests.rs	closed:ae86f4d04
+2026-10-10-array-sort-after-remove.md	divergence	queued-probes/sortrm/sortrm.rex:1	9d	probe still differs: 98.975 rc 158 here, 2 a c rc 0 on the oracle	9d
+2026-10-10-beep-wrong-type-message.md	divergence	queued-probes/beep/beep.rex:1	9d	probe still differs: the range message and the running REXX line	9d
+2026-10-10-call-on-nostring-insert.md	divergence	queued-probes/nostr/nostr.rex:1	closed:probe agrees	own probe: 25.1 found "NOSTRING" on both	closed:probe agrees
+2026-10-10-class-enhanced-skips-new.md	divergence	queued-probes/b7a/b7a.rex:1	closed:70d314bac	closed by Phase 9a Task 8b; both probes agree	closed:70d314bac
+2026-10-10-compiled-method-package-in-trace.md	divergence	queued-probes/t4c/t4c.rex:1	9d-cluster:dynamic-package-name	probe still differs: the package is "M" on the oracle and the caller's file here, the cluster's mechanism	9d-cluster:dynamic-package-name
+2026-10-10-debug-do-header-notready-order.md	divergence	queued-probes/dh1/dh1.rex:1	9d	probe still differs: the handler runs before the header's pause here	phase:11.1
+2026-10-10-debug-equals-after-iterate-indent.md	divergence	queued-probes/e2/e2.rex:1	9d	probe still differs: the re-executed ITERATE echoes at its static indent here; a KNOWN GAP row in phase-4-exclusions.txt	phase:11.1
+2026-10-10-debug-labelled-block-header-pause.md	divergence	queued-probes/g1/g1.rex:1	9d	probe still differs: no pause after a labelled block DO header; a KNOWN GAP row	phase:11.1
+2026-10-10-debug-reply-pause-and-banner.md	divergence	queued-probes/k3/k3.rex:1	9d	probe still differs: no pause after REPLY and a repeated banner; a KNOWN GAP row	phase:11.1
+2026-10-10-debug-typed-call-sigl.md	divergence	queued-probes/c2call/c2call.rex:1	9d	probe still differs: in sub 1 here, in sub 3 on the oracle	phase:11.1
+2026-10-10-debug-typed-raise-untrapped.md	divergence	queued-probes/t4/t4.rex:1	9d	probe still differs: typed lines keep running after an untrapped RAISE here	phase:11.1
+2026-10-10-debug-typed-signal.md	divergence	queued-probes/c1sig/c1sig.rex:1	9d	probe still differs: a typed SIGNAL does not transfer control here	phase:11.1
+2026-10-10-directory-setmethod-unknown-traceback-line.md	divergence	queued-probes/t4e/t4e.rex:1,queued-probes/stemunk/stemunk.rex:1	9d	both probes still print an extra Compiled method "UNKNOWN" traceback line here	9d
+2026-10-10-emptyloop-wall-clock.md	perf	-	phase:9.1	unattributed cycles; no probe	phase:9.1
+2026-10-10-enhanced-object-name-in-messages.md	divergence	queued-probes/t4b/t4b.rex:1	closed:70d314bac	closed by Phase 9a Task 8b; "enhanced Object" on both	closed:70d314bac
+2026-10-10-failed-spawn-runs-inline.md	divergence	-	9d	no probe run (needs a capped address space and a full pool); a hang where the oracle raises 48.1	9d
+2026-10-10-leave-iterate-error-not-trappable.md	divergence	queued-probes/lv4o/lv4o.rex:1	9d	probe still differs: 28.3 untrapped rc 228 here, trapped 4 on the oracle	9d
+2026-10-10-list-remove-copies-per-call.md	perf	queued-probes/lr2/lr2.rex:1	phase:9.1	own reduced probe: 2000 removes from a 100000-item List take over 0.5 s here and under it on the oracle	phase:9.1
+2026-10-10-misplaced-class-attribute-error.md	divergence	queued-probes/attrcls/attrcls.rex:1	9d-cluster:attribute-body-error-number	probe still differs (99.937 against 99.905); it is ATTRIBUTE TESTMISPLACEDCLASSMETHOD	9d-cluster:attribute-body-error-number
+2026-10-10-native-routine-arguments-not-strings.md	divergence	queued-probes/natargs/natargs.rex:1,queued-probes/natargs2/natargs2.rex:1,queued-probes/natargs3/natargs3.rex:1	9d	FILESPEC and DIRECTORY still render an object where the oracle raises 88.909; SysFileExists now agrees	9d
+2026-10-10-oracle-judged-seeded-gate.md	design	-	closed:not wanted	its first line: CLOSED as not wanted by Moritz, 2026-10-10	closed:not wanted
+2026-10-10-prologue-frames-missing-loading-levels.md	divergence	queued-probes/frames1/frames1.rex:1,queued-probes/frames2/frames2.rex:1	9d-cluster:prolog-trace-lines	both probes still lack a loading frame here; clusters.md names this item as that cluster's parent	9d-cluster:prolog-trace-lines
+2026-10-10-propagated-condition-extra-traceback-line.md	divergence	queued-probes/cond3/cond3.rex:1	9d	probe still differs: an extra 9 *-* call s line here	9d
+2026-10-10-raise-novalue-return-into-call-on-any.md	divergence	queued-probes/rnov/rnov.rex:1	9d	probe still differs: CALL ON ANY traps NOVALUE here; a KNOWN GAP row in phase-4-exclusions.txt	9d
+2026-10-10-reply-continuation-trace-entry.md	divergence	queued-probes/p7/p7.rex:1	9d-cluster:trace-reply-continuation	probe still lacks the second ONETWO >I>/<I< pair; it is TRACE TEST_TRACE_LABEL_WITH_FORWARD	9d-cluster:trace-reply-continuation
+2026-10-10-reply-propagated-condition-traceback-line.md	divergence	queued-probes/rf1d/rf1d.rex:1	9d	probe still lacks the sender's 2 *-* say 'got' o~m line here	9d
+2026-10-10-rexxcps-task-6-round-2-delta.md	perf	-	closed:6.1 close within budget	a +0.09% delta the 6.1 close absorbed (rexxcps +0.2694% against base61, task-12-evidence/cg-close2/table.txt); no probe	closed:6.1 close within budget
+2026-10-10-rooting-harness-blind-to-dropped-pushes.md	process	-	9d	no probe; removing either root push left every rooting test green, a test gap in tests/collect_stress.rs	9d
+2026-10-10-routine-new-no-package-parent.md	divergence	queued-probes/ctx3/ctx3.rex:1	closed:8b95afe79	RESOLVED in its first line; helper found on both	closed:8b95afe79
+2026-10-10-security-manager-command-rc-requires.md	divergence	-	9d	no probe recorded, only a classification table; the manager is consulted where the oracle does not	9d
+2026-10-10-select-case-value-outlives-construct.md	design	-	not-a-divergence	no program reads the stale value; an unasserted invariant, no probe	not-a-divergence
+2026-10-10-sim-pool-seeded-delivery.md	design	-	phase:research	a testing-design proposal for the simulation mode; no probe	phase:research
+2026-10-10-sim-shrinker.md	design	-	phase:research	a testing-design proposal for the simulation mode; no probe	phase:research
+2026-10-10-string-translate-empty-tables.md	divergence	queued-probes/tre/tre.rex:1	9d	probe still differs: the String method answers [  ] here and [12] on the oracle	9d
+2026-10-10-subclass-package.md	divergence	queued-probes/b3/b3.rex:1	closed:1c0e1d769	closed by Phase 9a Task 8; 1 and 3 on both	closed:1c0e1d769
+2026-10-10-subclass-rexxinfo.md	divergence	queued-probes/b4/b4.rex:1	closed:1c0e1d769	closed by Phase 9a Task 8; 99.949 on both	closed:1c0e1d769
+2026-10-10-trace-c-command-echo.md	divergence	queued-probes/cc2/cc2.rex:1	9d	probe still lacks the 3 *-* address command 'false' echo here	9d
+2026-10-10-translation-error-inserts.md	divergence	queued-probes/cs/cs.rex:1,queued-probes/e103/e103.rex:1	closed:Phase 9c Tasks 3 and 4	CLOSED in its first line; both probes agree	closed:Phase 9c Tasks 3 and 4
+2026-10-10-trapped-header-comparison-holds-to-object.md	divergence	queued-probes/lkJ/lkJ.rex:1	not-a-divergence	probe still differs only in when UNINIT runs, which is collection timing (Moritz 2026-09-01: gc ordering is unpredictable)	not-a-divergence
+2026-10-10-uninit-drain-signal-interpret-and-trace.md	divergence	-	9d	not probed, its probes were in /tmp and are gone; UNINITs never drain and memory grows to 356 MB against 24 MB	9d
+2026-10-10-upstream-do-to-identity.md	oracle bug	queued-probes/doto/doto.rex:1	not-a-divergence	upstream report; Deviation 25 is the crate's rule	not-a-divergence
+2026-10-10-upstream-zero-pass-do-reexecute.md	oracle bug	queued-probes/z26/z26.rex:1	not-a-divergence	upstream report; Deviation 26 is the crate's rule	not-a-divergence
+2026-10-10-variable-reference-concatenation.md	divergence	queued-probes/b1/b1.rex:1	9d	probe still differs: (>zz) || 'x' drops the reference's string value here	9d
+2026-10-10-whole-groups-differing-rows-that-agree.md	process	-	closed:rows removed	the TIME and CALL rows it names are gone from DIFFERING (tests/concurrency_tests.rs:2664) and REPLY's stay, as it suggested	closed:rows removed
+2026-10-11-output-lost-on-kill.md	divergence	-	closed:e4bbcbba4	CLOSED in its first line by Phase 9c Task 7, Deviation 40; not re-probed (needs a kill)	closed:e4bbcbba4
+2026-10-12-buffer-copy-uncharged.md	perf	-	phase:9.1	collector accounting under memory pressure; no probe	phase:9.1
+2026-10-12-method-source-compile-retention.md	divergence	queued-probes/memcompile/memcompile.rex:1	closed:Phase 9b1 L8	queued-probes/memcompile/rss.txt: 44992 kB at 50000 and 45160 kB at 100000 here, was 921808 kB; flat	closed:Phase 9b1 L8
+2026-10-12-package-as-real-object.md	design	-	closed:Phase 9b1	phase-9b1-gate.md: L5 to L7 fixed, TESTRECLAIM01 passed; side-maps.tsv keeps package state on the package object's body	closed:Phase 9b1
+2026-10-12-randomised-hash-iteration.md	design	-	phase:research	Moritz's aim beyond the oracle; Deviation 33 already licenses the order; no probe	phase:research
+2026-10-13-class-named-drops-raised-condition.md	divergence	-	9d	no probe recorded; dispatch/library/surface.rs:859 still drops the lookup's Err through .ok()?	9d
+2026-10-13-class-side-string-method-not-sent.md	divergence	queued-probes/clsstr/clsstr.rex:1	closed:0a055271c	CLOSED in its first line; KS on both	closed:0a055271c
+2026-10-13-error-position-ampersand.md	divergence	queued-probes/imeth/imeth.rex:1	9d-cluster:setmethod-instancemethod-kind	inserts closed in 9c; instanceMethod after setMethod still answers an Object here and a Method on the oracle	9d-cluster:setmethod-instancemethod-kind
+2026-10-13-lossy-path-sites.md	divergence	queued-probes/lossy/lossy.rex:1	9d	probe still differs: directory(d) answers empty for a directory named d'ff'x here and enters it on the oracle	9d
+2026-10-13-named-semaphores-design.md	design	-	9d	Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal	9d
+2026-10-13-passwd-home-ignores-nss.md	divergence	-	phase:11	not probed, no NSS-only account here; a host assumption, which row 11 puts behind the platform seam	phase:11
+2026-10-13-phase-9b-carry-in.md	process	-	9d	N1 native-frame memcpy cost is phase:9.1; the unchecked minors m1, m3, m4 are 9d	9d
+2026-10-13-phase-9b1-uniform-object-model.md	design	-	closed:Phase 9b1	phase-9b1-gate.md: every leak fixed or licensed, SysStemSort as Deviation 37, the addRoutine copy as L10	closed:Phase 9b1
+2026-10-13-security-manager-and-library-key.md	divergence	-	9d	no probe recorded; two oracle measurements to make first	9d
+2026-10-13-stdin-stream-object-queries.md	divergence	queued-probes/stdinq/stdinq.rex:1	9d	own probe: streamtype, query handle, lines, query exists and qualify on STDIN still differ	9d
+2026-10-13-stdout-write-errors-swallowed.md	divergence	queued-probes/stdoutclosed/stdoutclosed.rex:1	9d	probe with stdout closed: lineout 0 READY: here, 1 ERROR:9 on the oracle	9d
+2026-10-13-sysfork-design.md	design	-	9d	Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal	9d
+2026-10-13-yaml-pass-boundary-guard.md	divergence	-	9d	no probe of its own; Task 4 consumes it (ruling 2), yaml TEST35_DIRECTIVES was blocked on this refusal at the 9c close	9d
+2026-10-14-class-side-defaultname.md	divergence	queued-probes/clsdn/clsdn.rex:1	9d	own probe: DN on the oracle, The WITHNAME class here	9d
+2026-10-14-filespec-string-arg.md	divergence	queued-probes/fspec/fspec.rex:1	9d	own probe: 88.909 on the oracle, a K rc 0 here; the same fix as native-routine-arguments-not-strings	9d
+2026-10-14-native-method-frames.md	divergence	-	9d-cluster:native-stack-frames	names StackFrame TESTNATIVECODEFRAME, that cluster's test	9d-cluster:native-stack-frames
+2026-10-14-routine-start-call-panic.md	divergence	queued-probes/rstart/rstart.rex:1	9d	own probe: a panic "a live activation", rc 101, where the oracle prints 1; its file marks it PRIORITY	9d
+2026-10-15-9b1-task-8b-review-minors.md	divergence	queued-probes/m1var/m1var.rex:1,queued-probes/m4def/m4def.rex:1	9d	own probes: m1 lists Z here and A on the oracle, m4 answers the new source here and the old one on the oracle	9d
+2026-10-15-executable-flags-and-result.md	divergence	-	9d	no probe recorded; the oracle is still to be measured	9d
+2026-10-15-isguarded-copy-and-additional.md	divergence	queued-probes/isg/isg.rex:1,queued-probes/addl/addl.rex:1	9d	the review's probes still differ: isGuarded 1 against 0, additional[1] a against the whole string	9d
+2026-10-15-routines-table-silent-none.md	process	-	9d	no probe; environment.rs build_package_string_table and identities.rs find_written_routine still answer Ok(None)	9d
+2026-10-16-bignum-remainder-speed.md	perf	queued-probes/bignum/bignum.rex:1	phase:9.1	probe: output 78 on both, 2000 iterations under 1 s on the oracle and over it here	phase:9.1
+2026-10-16-stream-command-open-missing-file.md	divergence	queued-probes/scopen/scopen.rex:1	9d-cluster:stream-notready-names	probe still differs (91.999 against ERROR:2); the cluster holds the same no-result open command	9d-cluster:stream-notready-names
+2026-10-17-library-bind-before-options.md	divergence	queued-probes/libbind/libbind.rex:1	9d	probe still differs: 26.5 on line 2 here, 98.903 on line 1 on the oracle	9d
+2026-10-17-newmethod-parent-package.md	divergence	-	9d	no witness exists, the difference is read from the code; METHOD is a Phase 9 native-API group	9d
+2026-10-17-oracle-not-op-forwarding-bug-2117.md	oracle bug	queued-probes/notop/notop.rex:1	not-a-divergence	upstream report SF #2117; probe: the oracle answers 1 0 and the crate the right 0 1	not-a-divergence
+2026-10-17-phase-10-corpus-and-rxfunc.md	design	-	phase:10	ruled by Moritz 2026-10-17 (9d plan ruling 3)	phase:10
+2026-10-17-routine-call-frame-name.md	divergence	queued-probes/rcfn/rcfn.rex:1	9d	probe still differs: ROUTINE MYNAME on the oracle, ROUTINE CALL here	9d
+2026-10-17-scanner-reports-later-clause-error.md	divergence	queued-probes/scanlater/scanlater.rex:1	9d	probe still differs: 35.1 on line 2 on the oracle, 13.1 on line 3 here	9d
+2026-10-18-upstream-bag-hasitem.md	oracle bug	queued-probes/baghas/baghas.rex:1	not-a-divergence	upstream report; Deviation 45 is the crate's rule	not-a-divergence
+bounds-check-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-21-bounds-check-report.md; item 7 landed (performance-todo.md:1012)	closed:dispatched
+category-rollup-brief.md	perf	-	closed:dispatched	a dispatched performance brief: result docs/superpowers/records/2026-09-20-performance-items/2026-09-22-category-rollup.md	closed:dispatched
+driver-gap-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-22-driver-gap-report.md	closed:dispatched
+o2-survival-brief.md	perf	-	closed:dispatched	a dispatched performance brief: result docs/superpowers/records/2026-09-20-performance-items/2026-09-22-o2-survival.md	closed:dispatched
+op-fusion-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-21-op-fusion-report.txt; item 3 landed at 725aa8863	closed:dispatched
+parse-contained-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-21-parse-contained-report.txt	closed:dispatched
+parse-cost-scout-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-21-parse-cost-scout-report.md	closed:dispatched
+parse-in-place-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-21-parse-in-place-report.txt; landed at 5e765dc5a	closed:dispatched
+reprofile-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-21-reprofile-report.md	closed:dispatched
+store-fusion-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-22-store-fusion-report.md	closed:dispatched
+trace-emission-brief.md	perf	-	closed:dispatched	a dispatched performance brief: item 1 landed (performance-todo.md:374, 7a28f68e6 and 7fbadfecb)	closed:dispatched
+trace-quickening-brief.md	perf	-	closed:dispatched	a dispatched performance brief: item 2 built and reverted (performance-todo.md:619)	closed:dispatched
+gate:phase-9a-gate.md:456	process	-	9d	no probe; dispatch/library/tests.rs:177 still says collect_stress reads phase-8.txt last	9d
+gate:phase-9a-gate.md:457	process	-	9d	no probe; a harness minor its ledger calls not live	9d
+gate:phase-9a-gate.md:458	process	-	9d	no probe; tests/support/group_runner.rs:309 still calls windows(needle.len()), which panics on an empty needle	9d
+gate:phase-9a-gate.md:459	process	-	9d	no probe; harness minors from 9a Task 2, not checked against the tree	9d
+gate:phase-9a-gate.md:460	process	-	9d	no probe; harness minors from 9a Task 3, not checked against the tree	9d
+gate:phase-9a-gate.md:461	process	-	9d	no probe; its ledger line says no such row exists yet	9d
+gate:phase-9a-gate.md:462	process	-	9d	no probe; the ffi.rs texts' owners, not checked against the tree	9d
+gate:phase-9a-gate.md:463	divergence	queued-probes/ins25/ins25.rex:1,queued-probes/ins35/ins35.rex:1,queued-probes/ins47/ins47.rex:1,queued-probes/rnmsg/rnmsg.rex:1	closed:probe agrees	own probes of the named inserts (25.907, 35.1, 47.2, the Routine~new message) agree; 9c Tasks 2 to 4	closed:probe agrees
+gate:phase-9a-gate.md:464	divergence	queued-probes/startw/startw.rex:1	closed:Phase 9b1 L9	Method side-map rows are pruned (phase-9b1-gate.md L9); own startWith probe agrees on the header	closed:Phase 9b1 L9
+gate:phase-9a-gate.md:465	design	-	closed:Deviation 35	HANDLE:0, 1 and 2 reach the standard streams and any other descriptor is refused	closed:Deviation 35
+gate:phase-9a-gate.md:466	perf	-	9d	no probe; each is for the Phase 9 close callgrind, which is 9d Task 10's	9d
+gate:phase-9a-gate.md:468	process	-	closed:pin rebuilt	/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run exists and the 9d constraints measure against it	closed:pin rebuilt
+gate:phase-9a-gate.md:469	divergence	queued-probes/exttr/exttr.rex:1,queued-probes/t4c/t4c.rex:1	9d-cluster:dynamic-package-name	the external CALL half agrees (exttr); Routine~new's >I> package is that cluster's mechanism	9d-cluster:dynamic-package-name
+gate:phase-9a-gate.md:470	divergence	queued-probes/memcompile/memcompile.rex:1	closed:Phase 9b1	method-source retention is flat (its own row); the gc-trigger file was closed and removed in d81bacfad	closed:Phase 9b1
+gate:phase-9a-gate.md:471	divergence	queued-probes/stemunk/stemunk.rex:1	9d	the Stem half of directory-setmethod-unknown-traceback-line; probe still differs	9d
+gate:phase-9a-gate.md:472	process	-	9d	no probe; the sibling of arity-harness-ignores-target-dir, rexx-bench-suite.rs:591 still joins ../../target	9d
+gate:phase-9a-gate.md:473	perf	-	phase:9.1	a pointer to 2026-10-12-buffer-copy-uncharged.md	phase:9.1
+gate:phase-9a-gate.md:474	divergence	-	9d	no recorded probe; own probe did not reach the repeated entries, so it is not cited	9d
+gate:phase-9a-gate.md:475	design	-	phase:research	a pointer to 2026-10-12-randomised-hash-iteration.md	phase:research
+gate:phase-9a-gate.md:476	divergence	queued-probes/rexxpkgcopy/rexxpkgcopy.rex:1	9d	the REXX package copy agrees (9b1 L6); the library routine frame's ~executable is not probed	9d
+gate:phase-9a-gate.md:477	perf	-	phase:9.1	a per-call cold block on Routine~call; no probe	phase:9.1
+gate:phase-9a-gate.md:478	divergence	-	closed:Phase 9b1 L7	packages are collected (phase-9b1-gate.md L7)	closed:Phase 9b1 L7
+gate:phase-9a-gate.md:479	design	-	closed:Phase 9b1	a pointer to 2026-10-12-package-as-real-object.md	closed:Phase 9b1
+gate:phase-9a-gate.md:480	divergence	queued-probes/dimeth/dimeth.rex:1	9d-cluster:method-object-identity	probe still differs (1 against 0); Object TEST_INSTANCEMETHOD is that cluster's	9d-cluster:method-object-identity
+gate:phase-9a-gate.md:481	divergence	-	9d	no probe; a panic its ledger calls unverified	9d
+gate:phase-9a-gate.md:482	process	-	9d	no probe; sim calibration not re-derived, for the Phase 9 close	9d
+gate:phase-9a-gate.md:483	process	-	9d	Moritz 2026-10-13: under the simulation clock or licensed, owner 9d; its Flaky row is in suite-licences.txt:8, the S2 list has none	9d
+gate:phase-9a-gate.md:485	divergence	-	9d-cluster:redirected-command-holds-baton	TEST_MAKESTRING passed at the 9c close; scclient and sfclient are that cluster's	9d-cluster:redirected-command-holds-baton
+gate:phase-9a-gate.md:488	divergence	-	9d	Task 4 owns TEST35_DIRECTIVES and TEST47_MULTILINEFLOWCOLLECTIONS	9d
+gate:phase-9b1-gate.md:115	divergence	queued-probes/rstart/rstart.rex:1	9d	a pointer to 2026-10-14-routine-start-call-panic.md, which still panics	9d
+gate:phase-9b1-gate.md:117	process	-	closed:pointer	a list of queued files, each with its own row here	closed:pointer
+gate:phase-9b1-gate.md:121	design	-	9d	Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal	9d
+gate:phase-9b1-gate.md:123	oracle bug	-	not-a-divergence	upstream reports, not copied (WeakReference to a held .true; oracle-crashes entry 49)	not-a-divergence
+gate:phase-9c-gate.md:138	process	-	9d	a pointer to 2026-10-15-routines-table-silent-none.md	9d
+gate:phase-9c-gate.md:139	divergence	queued-probes/scopen/scopen.rex:1	9d-cluster:stream-notready-names	a pointer to 2026-10-16-stream-command-open-missing-file.md	9d-cluster:stream-notready-names
+gate:phase-9c-gate.md:140	perf	queued-probes/bignum/bignum.rex:1	phase:9.1	a pointer to 2026-10-16-bignum-remainder-speed.md	phase:9.1
+gate:phase-9c-gate.md:141	oracle bug	queued-probes/notop/notop.rex:1	not-a-divergence	a pointer to 2026-10-17-oracle-not-op-forwarding-bug-2117.md	not-a-divergence
+gate:phase-9c-gate.md:142	divergence	queued-probes/libbind/libbind.rex:1	9d	a pointer to 2026-10-17-library-bind-before-options.md	9d
+gate:phase-9c-gate.md:143	divergence	queued-probes/rcfn/rcfn.rex:1	9d	a pointer to 2026-10-17-routine-call-frame-name.md	9d
+gate:phase-9c-gate.md:144	divergence	-	9d	a pointer to 2026-10-17-newmethod-parent-package.md	9d
+gate:phase-9c-gate.md:145	divergence	queued-probes/scanlater/scanlater.rex:1	9d	a pointer to 2026-10-17-scanner-reports-later-clause-error.md	9d
+gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointer to 2026-10-13-lossy-path-sites.md	9d
+2026-10-18-command-waits-for-background-child.md	divergence	queued-probes/bgcmd/bgcmd.rex:1	9d	a command whose background child keeps stdout open: crate waits to timeout rc 124, oracle returns at once	9d

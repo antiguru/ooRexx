@@ -22,6 +22,12 @@
    environment is missing. Today it raises FAILURE with rc 30. The instance measures that site
    and makes the refusal there.
 
+9. **The queued inventory is ruled** (2026-10-18, "Lgtm"): every row as proposed, except the
+   interactive-debugger items (`2026-10-10-debug-*`), which go to the new optional roadmap row 11.1
+   ("Defer the interactive debugger as an optional later phase. It's not a feature we should
+   block on."). The `ruled` column of `queued-inventory.tsv` holds each row's ruling. The
+   process and harness rows ruled `9d` form one Task 8 instance.
+
 ## Global Constraints
 
 * **Specialization is internal** (`rust/CLAUDE.md`). No refusal of the form "this crate does not
