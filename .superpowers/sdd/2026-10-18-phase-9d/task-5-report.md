@@ -4,8 +4,8 @@
 
 * `Loud::fork_child` and `Loud::named_semaphore` (`rust/crates/rexx-exec/src/lib.rs`) build their message with no owner, as `object_name_of_a_value` does, and are `#[cold]`.
 * Message texts, before and after:
-  * `fork_child`: `routine "SYSFORK", whose forked child cannot continue without the timer thread and the joining main thread, is not implemented (Phase 9)` becomes `... is not implemented (Deviation 42)`.
-  * `named_semaphore`: `routine "SYSOPENEVENTSEM" with a named semaphore, a POSIX sem_open semaphore shared between processes, is not implemented (Phase 9)` becomes `... is not implemented (Deviation 43)`.
+  * `fork_child`: `routine "SYSFORK", whose forked child cannot continue without the timer thread and the joining main thread, is not implemented (Phase 9)` becomes `... is not supported (Deviation 42)`.
+  * `named_semaphore`: `routine "SYSOPENEVENTSEM" with a named semaphore, a POSIX sem_open semaphore shared between processes, is not implemented (Phase 9)` becomes `... is not supported (Deviation 43)`.
 * `rust/corpus/refusal-dispositions.tsv`: one `DEVIATION` row each, in alphabetical position.
 * `rust/corpus/refusal-sites.tsv`: re-derived (line shifts only).
 * Pinned texts updated in `rust/crates/rexx-exec/src/run/tests/directives.rs` (the only place they were pinned).
