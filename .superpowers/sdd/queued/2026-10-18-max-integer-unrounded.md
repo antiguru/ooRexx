@@ -16,3 +16,8 @@ raises LOSTDIGITS for `max(1, '1111111111')`, a quoted string, and stays silent 
 `max(1, 1111111111)`, because it decides "integer" by the object's type. The crate decides by the
 value and stays silent for both. Rule this together with the value question, using what the ANSI
 standard says (the 2026-10-18 spike, `.superpowers/sdd/2026-10-18-phase-9d/spike-ansi-model.md`).
+
+The ANSI spike (`.superpowers/sdd/2026-10-18-phase-9d/spike-ansi-model.md`) found the standard
+answers the rounded `1.11111111E+9` and raises LOSTDIGITS for `2~max(1111111111)` at DIGITS 9. It
+also found the crate inconsistent: the message form rounds, while `max(2, 1111111111)` answers the
+unrounded `1111111111`, as the oracle does.
