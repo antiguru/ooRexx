@@ -1,0 +1,21 @@
+test require::tests::an_extension_is_looked_for_in_the_last_component_alone ... ok
+test require::tests::a_directory_qualified_name_bypasses_the_path ... ok
+test require::tests::the_default_resolve_does_not_try_the_requires_extension ... ok
+test require::tests::a_non_regular_hit_abandons_the_rest_of_its_group ... ok
+test require::tests::the_extension_order_is_cls_then_the_parents_then_the_defaults ... ok
+test require::tests::the_four_routes_are_searched_in_the_oracles_order ... ok
+test require::tests::the_first_byte_is_never_a_directory_separator ... FAILED
+test require::tests::each_extension_is_tried_in_the_written_case_and_then_in_lower_case ... ok
+test require::tests::a_name_with_an_extension_is_searched_once ... ok
+test require::tests::only_the_names_first_byte_is_exempt_from_the_extension_scan ... FAILED
+test require::tests::an_absent_environment_entry_removes_only_itself ... ok
+test require::tests::the_lower_case_pass_is_ascii_only ... ok
+---- require::tests::the_first_byte_is_never_a_directory_separator stdout ----
+thread 'require::tests::the_first_byte_is_never_a_directory_separator' (1335750) panicked at crates/rexx-exec/src/require.rs:461:9:
+  left: Some("/")
+ right: None
+---- require::tests::only_the_names_first_byte_is_exempt_from_the_extension_scan stdout ----
+thread 'require::tests::only_the_names_first_byte_is_exempt_from_the_extension_scan' (1335747) panicked at crates/rexx-exec/src/require.rs:446:9:
+    require::tests::only_the_names_first_byte_is_exempt_from_the_extension_scan
+    require::tests::the_first_byte_is_never_a_directory_separator
+test result: FAILED. 15 passed; 2 failed; 0 ignored; 0 measured; 1135 filtered out; finished in 0.06s

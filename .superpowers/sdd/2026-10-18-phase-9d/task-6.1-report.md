@@ -173,3 +173,73 @@ The table is `t6.1/callgrind-r1.txt`. The previous perf-checked figure is this t
 | parse | -0.0874 | -0.0874 | 0.0000 | +0.0002 |
 | churn | +0.1275 | +0.1276 | -0.0001 | -0.0251 |
 | sayloop | +0.0344 | +0.0346 | -0.0002 | +0.0008 |
+
+## Fix round 2
+
+This round covers the three items of `task-6.1-review.md`.
+
+### Commit
+
+* `ade6fd223` Phase 9d Task 6.1 fix round 2: only a name's first byte is exempt from the directory and extension scans
+
+`require.rs`: `program_directory` and `program_extension`, and through them `has_extension`, now skip
+only the first char of the whole name, as `SysFileSystem::extractDirectory`, `extractExtension` and
+`hasExtension` do (`platform/unix/SysFileSystem.cpp:224`, `:256`, `:322`). The first char is one
+widened byte. The old unit test `a_leading_dot_is_not_an_extension` asserted the per-component rule,
+which was wrong, and is replaced.
+
+### Cases and witnesses
+
+1. A dot-led last component after a directory is an extension. In
+   `external_call_dynamic_search_start.rex`, a routine named `rqx/.zzz` runs `CALL ext_dot`. The binary
+   at `e27a7f843` stops with rc 213 and `43.1 EXT_DOT`, where the oracle prints `dot 1`. The same rule
+   applies to a `::REQUIRES` name. In `requires_dynamic_search_start.rex`, `::requires 'rqd/.hid'`
+   with only `rqd/.hid.cls` present prints `hidden` at `e27a7f843`, where the oracle prints
+   `syntax 43.901`. The review's `prog.rex` now matches the oracle on stdout, stderr and rc 213,
+   including `T18 dot-only ext own-zzz`.
+2. `/x` has no directory. This is covered by the unit test `the_first_byte_is_never_a_directory_separator`,
+   which failed before the change (`left: Some("/") right: None`). The new extension unit test failed too.
+   Both pass after the change.
+3. The current directory comes before the parent package's directory. In
+   `requires_dynamic_search_start.rex`, `rqd_cwd.cls` sits in both the current directory and the parent
+   package's directory. That case is green at `e27a7f843` as well, since the order already held.
+   Under a mutant that walks the chain from the outermost parent inward, it prints
+   `parent directory` instead of `current directory`. Every other line stays the same. The mutant was
+   reversed by an exact edit and checked with `git diff --stat`.
+
+At `ade6fd223` both witnesses match the oracle byte for byte on stdout, stderr and rc. Both sourceline
+expectation files were regenerated. Records are in `t6.1/probes/fix-round-2/`.
+
+### Checks
+
+These ran at `ade6fd223`. Exit statuses were read unpiped.
+
+| command (from `rust/`) | exit |
+|---|---|
+| `cargo fmt --all --check` | 0 |
+| `cargo clippy -p rexx-exec -p rexx-parse --all-targets -- -D warnings` | 0 |
+| `cargo test --release -p rexx-exec --lib require` (17 passed) | 0 |
+| the refusal-table and `package_requires` command above | 0 |
+| `cargo test --release -p rexx-parse --test sourceline_oracle` | 0 |
+| `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus` (`1069 of 1069 matching`) | 0 |
+| whole suite, `REXX_SUITE_TABLE=.../t6.1/suite-r2/table.tsv` | 101 (expected) |
+| `callgrind.sh ... -o .../cg-9d/t6.1-r2` | 0 |
+
+### Whole suite
+
+No row of `t6.1/suite-r2/tests.tsv` differs from `t6.1/suite-r1/tests.tsv`
+(`suite-r2/changed-vs-r1.tsv`).
+
+### Perf
+
+The table is `t6.1/callgrind-r2.txt`. The previous perf-checked figure is fix round 1.
+
+| program | vs pin | round 1 vs pin | own delta | task total vs Task 4 |
+|---|---|---|---|---|
+| startup | +0.0173 | +0.0194 | -0.0021 | -0.0015 |
+| interpret | -2.1860 | -2.1904 | +0.0044 | +0.0062 |
+| parse | -0.0877 | -0.0874 | -0.0003 | -0.0001 |
+| churn | +0.1525 | +0.1275 | +0.0250 | -0.0001 |
+| sayloop | +0.0331 | +0.0344 | -0.0013 | -0.0005 |
+
+Every own delta is at most +0.05%. Churn's +0.0250 returns it to Task 4's figure (+0.1526).

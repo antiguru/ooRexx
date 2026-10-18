@@ -1,0 +1,2 @@
+# Rows of t6.1/suite-r2/tests.tsv that differ from t6.1/suite-r1/tests.tsv (same join): none
+kind	group	test	row	oracle	crate	->	row	oracle	crate
