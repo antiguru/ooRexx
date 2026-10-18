@@ -2338,6 +2338,46 @@ THROUGH `Routine~call` IS NAMED `CALL` (Phase 9c Task 9, queued).
      one's post (5/5). No ooTest test uses a named semaphore
      (.superpowers/sdd/queued/2026-10-13-named-semaphores-design.md).
 
+ 44. `MIN` WITH NO ARGUMENTS ROUNDS A WHOLE NUMBER TO NUMERIC DIGITS (Phase 9d).
+     OWNER: none.
+
+     Ruled by Moritz 2026-10-18: "record deviation." The oracle's
+     `RexxInteger::Min` answers its receiver before the `NUMERIC DIGITS`
+     check, on purpose, "because it gives us the ability to distinguish
+     between RexxInteger and a NumberString from within ooRexx"
+     (interpreter/classes/IntegerClass.cpp:1634). That makes the oracle's
+     internal integer representation observable, which this crate's rule
+     forbids (rust/CLAUDE.md, "Specialization is internal"). This crate
+     answers `n~min` as it answers any number: rounded to the digits in
+     force. ooTest base/class/RexxInteger detects the representation this
+     way in its `isInteger` routine, so the tests that route through it
+     differ (docs/superpowers/records/2026-10-18-phase-9d/clusters.md,
+     `rexxinteger-min-representation`).
+
+ 45. `Bag~hasItem` WITH AN INDEX UNEQUAL TO THE ITEM ANSWERS 0 (Phase 9d).
+     OWNER: none.
+
+     Ruled by Moritz 2026-10-18: "record deviation." The oracle's
+     `BagClass::hasItemRexx` (interpreter/classes/BagClass.cpp:173) answers
+     `.nil` when the index differs from the item, against its own contract
+     ("@return .true if this was found, .false otherwise"). This crate
+     answers 0. `.Bag~of(1,1,1)~hasItem(1, .nil)`: oracle `The NIL object`,
+     this crate `0` (docs/superpowers/records/2026-10-18-phase-9d/clusters.md,
+     `bag-hasitem-nil`).
+
+ 46. `LINEOUT` POSITIONING AND CLOSE ON A BINARY RECORD STREAM DO NOT CLEAR
+     RECORDS (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-18: "record deviation." On a stream opened
+     `BINARY RECLENGTH n`, the oracle's `lineout(name, , 3)` clears record 2
+     instead of only positioning at record 3, and `lineout(name)` clears
+     record 4 instead of only closing. The documentation says positioning
+     writes nothing and closing closes. ooTest base/bif/LINEOUT
+     `TEST_BINARY` marks both `@@BUG` and its final `assertFile` `@@wrong`.
+     Ruled: this crate positions and closes as documented and clears no
+     record. The test's earlier assertions, the five padded records, are
+     not part of this licence.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
