@@ -1,0 +1,28 @@
+# Rows of t6.1/suite/tests.tsv that differ from task-4/suite/tests.tsv, by:
+#   awk join on group and test over columns row, oracle, crate
+kind	group	test	row	oracle	crate	->	row	oracle	crate
+changed	base/class/Package	TEST_NEW01	-	passed	failed	->	-	passed	passed
+changed	base/directives/CLASS	TEST_INHERIT	-	passed	failed	->	-	passed	passed
+changed	base/directives/CLASS	TEST_METACLASS	-	passed	failed	->	-	passed	passed
+changed	base/directives/CLASS	TEST_MIXINCLASS	-	passed	failed	->	-	passed	passed
+changed	base/directives/CLASS	TEST_SUBCLASS	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_ACTIVATE	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_BASIC_GOOD_REQUIRES	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_CASCADED_REQUIRES2	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_CASCADED_REQUIRES3	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_CASCADED_REQUIRES	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_MULTIPLE_NAMESPACE2	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_MULTIPLE_NAMESPACE	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_NAMESPACE_GOOD_REQUIRES	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_CALL	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_CLASS	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_NAMESPACE_NO_PUBLIC_ROUTINE	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_NO_PUBLIC_CLASS	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_NO_PUBLIC_ROUTINE	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_PROLOG2	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_PROLOG3	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_PROLOG	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_SEARCH_ORDER_CLS	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_SEARCH_ORDER_NONE	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_SEARCH_ORDER_REX	-	passed	failed	->	-	passed	passed
+changed	base/directives/REQUIRES	TEST_SEARCH_ORDER_TESTGROUP	-	passed	failed	->	-	passed	passed

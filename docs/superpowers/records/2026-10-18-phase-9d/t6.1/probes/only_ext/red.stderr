@@ -1,0 +1,5 @@
+     2 *-* ::requires 'rqd_ext'
+       *-* Compiled method "NEW" with scope "Routine".
+    18 *-* say .routine~new(dir'/any.zzz', ("return v()", "::requires 'rqd_ext'"))~call
+Error 43 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t61/cases/only_ext.rex line 2:  Routine not found.
+Error 43.901:  Could not find file "rqd_ext" for ::REQUIRES.

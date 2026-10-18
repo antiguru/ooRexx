@@ -1,0 +1,7 @@
+     2 *-* ::requires 'rqd_par'
+       *-* Compiled method "NEW" with scope "Routine".
+     3 *-* return .routine~new("bare", code, .context~package)~call
+       *-* Compiled method "CALL" with scope "Routine".
+    20 *-* say go~call(("return v()", "::requires 'rqd_par'"))
+Error 43 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t61/cases/only_parent.rex line 2:  Routine not found.
+Error 43.901:  Could not find file "rqd_par" for ::REQUIRES.
