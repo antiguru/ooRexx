@@ -1,0 +1,9 @@
+a == b 1
+identity hasItem a 1 b 0
+identity index a x b The NIL object
+identity removeItem b The NIL object leaving 1
+identity removeItem a 1 leaving 0
+equality hasItem b 1
+equality index b x
+equality removeItem b 1 leaving 0
+distinct items 2 hasItem a 1 hasItem b 0

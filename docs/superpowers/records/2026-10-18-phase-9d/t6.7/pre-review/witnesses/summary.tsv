@@ -1,0 +1,11 @@
+# run3.sh: oracle, parent c5b40df87 (/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.6-r2/rexx-head, the code of 01db1850f) and task a40a7262e
+collection_queue_array_index	parent	rc 0/163	stdout differs	stderr differs
+collection_queue_array_index	task	rc 0/0	stdout same	stderr same
+collection_array_index_argument	parent	rc 0/163	stdout differs	stderr differs
+collection_array_index_argument	task	rc 0/0	stdout same	stderr same
+collection_queue_remove_item	parent	rc 0/0	stdout differs	stderr same
+collection_queue_remove_item	task	rc 0/0	stdout same	stderr same
+collection_identity_table_items	parent	rc 0/0	stdout differs	stderr same
+collection_identity_table_items	task	rc 0/0	stdout same	stderr same
+string_compare_nil	parent	rc 0/0	stdout differs	stderr same
+string_compare_nil	task	rc 0/0	stdout same	stderr same

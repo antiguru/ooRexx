@@ -1,0 +1,9 @@
+a == b 1
+identity hasItem a 1 b 1
+identity index a x b x
+identity removeItem b K a leaving 0
+identity removeItem a 0 leaving 0
+equality hasItem b 1
+equality index b x
+equality removeItem b 1 leaving 0
+distinct items 2 hasItem a 1 hasItem b 1

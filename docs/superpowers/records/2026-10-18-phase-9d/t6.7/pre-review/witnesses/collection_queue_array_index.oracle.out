@@ -1,0 +1,40 @@
+Queue
+  at .array~of(2) q r
+  hasIndex .array~of(2) 1
+  put .array~of(2) p z r
+  delete .array~of(1) p z r
+  remove .array~of(1) z r
+  next .array~of(1) 2 previous .array~of(3) 2
+   q~put('a', .array~of(9)) 93.966 Incorrect queue index "9".
+   q~put('a', .array~of(20)) 93.918 Incorrect list index "an Array".
+   q~put('a', .array~of(1, 2)) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+   q~put('a', .array~new) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+   q~put('a', 99) 93.918 Incorrect list index "99".
+   q~put('a', '099') 93.918 Incorrect list index "099".
+   q~at(.array~of(1, 2)) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+   q~at(.array~new) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+   q~at(.array~of('x')) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+   q~at(.array~of(0)) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+   q~delete(.array~of(1, 2)) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+   q~remove(.array~new) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+   q~hasIndex(.array~of(1, 2)) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+CircularQueue
+  at .array~of(2) q r
+  hasIndex .array~of(2) 1
+  put .array~of(2) p z r
+  delete .array~of(1) p z r
+  remove .array~of(1) z r
+  next .array~of(1) 2 previous .array~of(3) 2
+   q~put('a', .array~of(9)) 93.966 Incorrect queue index "9".
+   q~put('a', .array~of(20)) 93.918 Incorrect list index "an Array".
+   q~put('a', .array~of(1, 2)) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+   q~put('a', .array~new) 93.907 Method argument 2 must be a positive whole number; found "an Array".
+   q~put('a', 99) 93.918 Incorrect list index "99".
+   q~put('a', '099') 93.918 Incorrect list index "099".
+   q~at(.array~of(1, 2)) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+   q~at(.array~new) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+   q~at(.array~of('x')) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+   q~at(.array~of(0)) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+   q~delete(.array~of(1, 2)) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+   q~remove(.array~new) 93.907 Method argument 1 must be a positive whole number; found "an Array".
+   q~hasIndex(.array~of(1, 2)) 93.907 Method argument 1 must be a positive whole number; found "an Array".

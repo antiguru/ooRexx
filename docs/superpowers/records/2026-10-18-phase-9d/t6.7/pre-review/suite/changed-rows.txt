@@ -1,0 +1,13 @@
+# diff <(grep -v '^#' t6.7/suite/tests.tsv | sort) <(grep -v '^#' t6.7/pre-review/suite/tests.tsv | sort)
+6980c6980
+< base/class/IdentityTable	TEST_AT01	-	passed	failed
+---
+> base/class/IdentityTable	TEST_AT01	Deviation(4)	passed	failed
+6981a6982
+> base/class/IdentityTable	TEST_[]	Deviation(4)	passed	failed
+6989c6990
+< base/class/IdentityTable	TEST_HASINDEX	-	passed	failed
+---
+> base/class/IdentityTable	TEST_HASINDEX	Deviation(4)	passed	failed
+7011d7011
+< base/class/IdentityTable	TEST_[]	-	passed	failed

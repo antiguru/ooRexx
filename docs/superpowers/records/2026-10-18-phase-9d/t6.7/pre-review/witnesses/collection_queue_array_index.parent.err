@@ -1,0 +1,4 @@
+       *-* Compiled method "PUT" with scope "Queue".
+    12 *-*   q~put('z', .array~of(2))
+Error 93 running DIR/collection_queue_array_index.rex line 12:  Incorrect call to method.
+Error 93.907:  Method argument 2 must be a positive whole number; found "an Array".

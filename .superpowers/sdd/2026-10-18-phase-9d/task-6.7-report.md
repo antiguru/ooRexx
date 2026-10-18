@@ -211,3 +211,74 @@ outside the existing `Raised` constructors.
   queue. Proposed as a queued item.
 * In `t6.7/probes/identity/`, this crate finds a second `"2"||"2"` as the IdentityTable index
   the first one made, while keeping both apart from the literal `"22"`. That is inside Deviation 4's unspecified answers; the mechanism was not traced.
+
+## Pre-review round
+
+Controller rulings at `b43b37eb8`. Code commits `35ad9d68d` and `a40a7262e`; the records commit
+that follows holds `t6.7/pre-review/` and this section.
+
+### Concern 1: the IdentityTable rows
+
+`rust/corpus/suite-licences.txt` gains `Deviation 4` rows for IdentityTable `TEST_AT01`
+(line 78), `TEST_[]` (line 89) and `TEST_HASINDEX` (line 163). Each reason names the one
+assertion and points at `t6.7/probes/identity/`. The three lines leave `suite-9d-set.txt`.
+No witness is added: the licence reader (`suite_rows::check_row`) asks only that Deviation 4
+exist and not be withdrawn, and Deviation 4 states that these answers are not specified, so a
+`licensed_divergences.rs` row pinning this crate's answer would specify them. The
+`licensed_divergences` test passes unchanged.
+
+### Concerns 2 and 3
+
+Queued upstream by the controller. Nothing changed.
+
+### Concern 4: a Queue reads an Array index unspread
+
+`collection::queue_index(receiver, index, position)` is the rule `single_subscript` held for
+`insert` and `section`: an Array index on a Queue is read as its items' lines, so one item
+holding a positive whole number converts and anything else is 93.907 naming the Array. Any other
+receiver or index is answered unchanged. It is applied:
+* in `position_in`, when the one index is an Array: Queue `delete`, `remove`, `hasIndex`,
+  `next` and `previous`;
+* in `native_queue_at` (`at` and `[]`) and `native_queue_put` (`put` and `[]=`);
+* in `single_subscript`, which now calls it.
+
+`queue_bound`'s 93.918 now names the index as given, as `putRexx`'s
+`reportException(Error_Incorrect_method_index, index)` does: `put('a', .array~of(20))` says
+"an Array" and `put('a', '099')` says "099" on both sides, where this crate said "20" and "99".
+
+`a40a7262e` corrects `35ad9d68d`: Queue's AT row is also reached for an Array receiver, and the
+first version applied the queue rule there. That turned the unit test
+`an_expanded_index_of_one_empty_slot_is_loud` (`a~at((,2))` on an Array) from its refusal into
+`2`. `queue_index` now checks the receiver.
+
+Witness `lang/collection_queue_array_index.rex`, in `phase-9.txt` with its `sourceline_oracle/`
+file. For Queue and CircularQueue it runs `at`, `[]`, `hasIndex`, `put`, `delete`, `remove`,
+`next` and `previous` with a one-item Array, then one `try` line per refusal: `put` with
+`.array~of(9)` (93.966), `.array~of(20)` (93.918 "an Array"), `.array~of(1, 2)`, `.array~new`
+(93.907), `99` and `'099'` (93.918), and `at`, `delete`, `remove` and `hasIndex` with Arrays
+that do not convert (93.907). `t6.7/pre-review/witnesses/summary.tsv`: the parent dies at the
+first `put`, rc 163; the task is identical to the oracle. The other witnesses of this task stay
+identical.
+
+### Checks, on `a40a7262e`
+
+* `cargo fmt --all --check`: exit 0.
+* `memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-exec --lib`: exit 0, 1152 passed. On
+  `35ad9d68d` it was exit 101, the one failure named above.
+* `memcap 16G cargo test -j 4 --release -p rexx-exec --test refusal_sites --test owners --test
+  closed_phases --test phase_ten_reasons --test representation_refusals --test
+  refusal_dispositions --test coverage --test rexxc --test licensed_divergences`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-parse`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-core --test unsafe_sites`: exit 0.
+* `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus`: exit 0,
+  1092 of 1092 matching.
+* The whole suite with the table at `t6.7/pre-review/suite/table.tsv`: exit 101 as expected,
+  402 groups, 16 red, 4m39s. Against `t6.7/suite/tests.tsv` the only changed rows are the three
+  IdentityTable tests, now `Deviation(4)`, still `failed` (`t6.7/pre-review/suite/changed-rows.txt`;
+  `TEST_[]` also moves in the sorted listing). The IdentityTable group is green.
+* Perf, `t6.7/pre-review/callgrind.txt`: pin, `599f663ae` (r0) and `a40a7262e` in one run, exit 0.
+  Whole process against the pin, r0 then head: startup +0.0419 / +0.0419, interpret -2.1629 /
+  -2.1663, parse -0.0861 / -0.0861, churn +0.1110 / +0.1111, sayloop +0.0460 / +0.0460. The
+  round's own delta is at most +0.0001% on every program, and the libc-subtracted figures move by
+  at most 0.0001.

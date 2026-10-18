@@ -1,0 +1,15 @@
+removeItem b
+after removeItem items 3 indexes 1 2 3 sorted a b c
+at 2 c at 3 b at 4 The NIL object
+removeItem missing The NIL object
+unchanged items 3 indexes 1 2 3 sorted a b c
+circular removeItem a
+circular after removeItem items 2 indexes 1 2 sorted b c
+Queue difference items 2 indexes 1 2 sorted 1v 2v
+Queue difference reversed items 3 indexes 1 2 3 sorted 3v o2 o2
+Queue xor items 5 indexes 1 2 3 4 5 sorted 1v 2v 3v o2 o2
+Queue intersection items 4 indexes 1 2 3 4 sorted 2v 2v o1 o1
+CircularQueue difference items 2 indexes 1 2 sorted 1v 2v
+CircularQueue difference reversed items 3 indexes 1 2 3 sorted 3v o2 o2
+CircularQueue xor items 5 indexes 1 2 3 4 5 sorted 1v 2v 3v o2 o2
+CircularQueue intersection items 4 indexes 1 2 3 4 sorted 2v 2v o1 o1

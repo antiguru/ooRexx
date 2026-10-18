@@ -1,0 +1,4 @@
+       *-* Compiled method "INSERT" with scope "Array".
+    10 *-* say 'insert after .array~of(2)' a~insert('x', .array~of(2)) a~toString('L', ' ')
+Error 93 running DIR/collection_array_index_argument.rex line 10:  Incorrect call to method.
+Error 93.907:  Method argument 2 must be a positive whole number; found "an Array".
