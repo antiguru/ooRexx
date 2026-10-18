@@ -247,3 +247,103 @@ unpiped:
 * The whole suite, with `REXX_SUITE_TABLE` at `t6.5/r1/suite/table.tsv`: exit 101, 402 groups,
   28 red. Against `t6.5/suite/tests.tsv` no row changed (`t6.5/r1/suite/changed-rows.txt` holds
   only the command).
+
+## Fix round 2
+
+Re-review: `task-6.5-rereview.md`. Code commit `c6fff3e8d`. The records commit that follows it
+holds `t6.5/r2/suite/` and this section.
+
+### Root cause
+
+The crate kept one write position, the one `QUERY POSITION WRITE` reports, and wrote there. The
+oracle reports its position from `SysFile`'s buffer arithmetic, `filePointer - bufferedInput +
+bufferPosition` (`SysFile::getPosition`), and that is not always where bytes go. A read fills a
+4096-byte buffer, and `SysFile::setPosition` to an offset inside it only moves `bufferPosition`. A
+write then `lseek`s to the true offset but keeps `filePointer` at the buffer's end
+(`SysFile::write`). The reported position becomes the buffer's end plus the bytes written.
+`writeSetup` moves only when the reported position differs from `charWritePosition`, so the next
+unplaced write goes on from the true offset. A line-positioned `LINEOUT` hits this because its line
+walk reads the file. The crate wrote that next write at the reported position, past the end of the
+file, and the gap filled with NUL bytes.
+
+### Fix
+
+`OpenFile` (`rexx-core/src/body.rs`) gains three fields. This is a change outside the task's
+listed files: `read_window` is the byte range the oracle's buffer holds, `write_skew` is how far
+the reported write position runs ahead of where the next unplaced write lands, and `oracle_tell`
+is the position the oracle reports. `dispatch/stream.rs` keeps them as the oracle's calls do:
+* `note_read` follows each read, line walk and line count, refilling a buffer at a time.
+  `LINE_POSITIONING_BUFFER` (512) requests decide how far a walk reads.
+* `oracle_seek` is `setPosition`. `read_setup_seek` and `write_setup_seek` move only when
+  `oracle_tell` differs, as `readSetup` and `writeSetup` do.
+* `land_write` places each write. One placed inside the buffer is reported from the buffer's end.
+  An unplaced write while a skew stands lands `write_skew` behind its reported position.
+* A read, `CHARS`, `LINES`, a line count and every explicit position end the skew. `size()`
+  flushes, and the oracle then writes where it reports.
+
+The fuzzing below found three more mechanisms behind the same mismatch, and they are fixed here:
+* A relative `SEEK` (`+n` and `-n`) moves from the reported position (`SysFile::seek`'s
+  `SEEK_CUR`), not from the read or write position. Measured: `charin(f, , 2)` and then
+  `seek -2 write` answers 1.
+* A `SEEK <n ... LINE` uses the cached line count when there is one, and otherwise reads the whole
+  file (`getLineSize`, `countStreamLines(1, 1)`).
+* `LINEOUT` keeps that cache as `StreamInfo::lineout` does. It grows when the stream was opened
+  `APPEND` or when `charWritePosition == size()`, and is dropped otherwise. The crate grew it on
+  any append.
+
+The earlier measured rule, "after a write placed by line number the pointer lands at the end of
+the file plus what was written", was this mechanism seen from one call, and `land_write` replaces
+it.
+
+### The places the controller named
+
+Measured with `t6.5/p/skew.rex`, `skew2.rex` and `skewbin.rex` (scratchpad), all now identical to
+the oracle:
+* CHAROUT after a line-positioned LINEOUT had the same bug, `tail` written past the end. Fixed by
+  the same change.
+* LINEOUT after a char-positioned CHAROUT already matched. The `writeSetup` reseek to the
+  current write position empties the buffer before the charout's own `setPosition`, so no skew
+  arises.
+* Binary record streams already matched. Record line positioning reads nothing, so no buffer is
+  live when it writes.
+
+### Evidence beyond the named cases
+
+Random sequences of LINEOUT, CHAROUT, LINEIN, CHARIN, SEEK, CHARS, LINES and QUERY POSITION, on a
+text file and on a `BINARY RECLENGTH 4` file. They were run on the oracle, the crate at
+`270207ffa` (round 1) and this crate, and compared per scenario. The programs, the comparison
+script and its output are in `t6.5/r2/probes/fuzz/`. Over 640 scenarios there are no
+regressions, 235 scenarios are fixed, and 8 still differ from the oracle on both crates. All 8
+involve a char or line `SEEK` with neither READ nor WRITE (both pointers move, and the oracle
+copies one into the other by `last_op_was_read`), or a position driven negative. These are
+pre-existing and left alone.
+
+### Concerns
+
+* The oracle itself writes NUL bytes in some sequences, and the crate now reproduces them. Two
+  examples are `lineout(f, 'new', 2)` then `linein(f)` then `lineout(f, 'tail')`, and
+  `lineout(f, 'new', 2)` then `chars(f)` then `lineout(f, 'tail')`. In both, the oracle writes at
+  the position it reports, past the end. The witness holds these lines. The crate at `270207ffa`
+  already agreed with them. If they should be a Deviation, Moritz has to rule.
+* The model assumes the buffer is filled by `SysFile`'s 4096-byte reads from the point a read
+  started. No probe covers a file larger than 4096 bytes.
+
+### Witness, red then green
+
+`lang/stream_write_position_skew.rex`, with its `sourceline_oracle` file and a `phase-9.txt`
+entry. Red is the crate at `270207ffa` (git archive, tree touched, `Compiling rexx-exec` seen).
+Its stdout differs in the NUL-padded `tail` for both the LINEOUT and the CHAROUT follow-ups, the
+reported positions after a line SEEK, the second line-positioned write, the relative SEEK and the
+`SEEK <2 READ LINE` follow-up. Green, from `c6fff3e8d`, matches on all three descriptors. Outputs
+are in `t6.5/r2/witnesses/`. I read the green stdout.
+
+### Checks
+
+Each status read unpiped:
+* `cargo fmt --all --check`: exit 0.
+* `memcap 8G cargo clippy -j 4 -p rexx-core -p rexx-exec --all-targets -- -D warnings`: exit 0.
+* `sourceline_oracle`, the refusal tables and `unsafe_sites`: exit 0.
+* `REXX_CORPUS_GATE=1 ... --test corpus`: exit 0, 29 passed, 1 ignored.
+* The whole suite, with the table at `t6.5/r2/suite/table.tsv`: exit 101, 402 groups, 28 red. No
+  row changed against `t6.5/r1/suite/tests.tsv` (`t6.5/r2/suite/changed-rows.txt` holds only the
+  command).
