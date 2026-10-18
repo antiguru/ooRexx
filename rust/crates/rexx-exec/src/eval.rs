@@ -1311,14 +1311,16 @@ impl Interp {
         if let Some(target) = self.operator_message_receiver(left) {
             return self.send_operator(op.spelling(), target, &[Some(right)]);
         }
-        // **A string is never equal to `.nil`, whatever its text.**
-        // `RexxString::primitiveIsEqual` (`classes/StringClass.cpp:674`)
-        // returns false for `TheNilObject` before it looks at any bytes, so
-        // `'The NIL object' == .nil` is `0` where comparing string values
-        // would make it `1`. Only the equality operators do this: measured,
-        // `'a' < .nil` is `0` and `'a' || .nil` is `aThe NIL object`, both of
-        // which do use the string value.
-        if right == ObjRef::NIL && is_equality(op) {
+        // **A string or number compared with `.nil` answers without reading
+        // it.** `RexxString::primitiveIsEqual` (`classes/StringClass.cpp:674`)
+        // returns false for `TheNilObject` before it looks at any bytes, and
+        // every other comparison operator of `String`, `Integer` and
+        // `NumberString` answers `.false` for it (`CompareOperator`,
+        // `StringClass.cpp:1248`), except `\=`, `<>`, `><` and `\==`, which
+        // answer `.true`. So `'The NIL object' == .nil` is `0`, `'a' < .nil`
+        // is `0` with no NOSTRING, and `'a' || .nil`, which is not a
+        // comparison, is `aThe NIL object`.
+        if right == ObjRef::NIL && is_comparison(op) {
             return Ok(logical(is_inequality(op)));
         }
         let right = self.required_string_operand(right, op)?;

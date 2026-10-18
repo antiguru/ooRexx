@@ -217,3 +217,11 @@ lang/class_constant_expression_numeric_inherit.rex
 # the requiring package's own settings, and a .Package~new source from the
 # running activation's under NUMERIC INHERIT.
 lang/class_constant_expression_runtime_requires.rex
+
+# 9d Task 6.7: collections. An IdentityTable compares items by identity, a
+# Queue's removeItem closes the gap, insert and section read an Array index
+# as validateIndex does, and a comparison with .nil reads no string value.
+lang/collection_identity_table_items.rex
+lang/collection_queue_remove_item.rex
+lang/collection_array_index_argument.rex
+lang/string_compare_nil.rex

@@ -633,6 +633,22 @@ fn same_index(
     }
 }
 
+/// Whether `wanted` is the held `item` under the receiver's item protocol:
+/// identity for [`Keys::Identity`] (`HashContents::isItemEqual`,
+/// `HashContents.hpp:190`), and `==` for the equality and string contents
+/// (`EqualityHashContents::isItemEqual`, `:434`).
+fn same_held_item(
+    interp: &mut Interp,
+    keys: Keys,
+    wanted: ObjRef,
+    item: ObjRef,
+) -> Result<bool, Failure> {
+    match keys {
+        Keys::Identity => Ok(wanted == item),
+        Keys::Equality | Keys::StringValue => super::collection::same_item(interp, wanted, item),
+    }
+}
+
 // ---- the store's own operations ----
 
 /// Where `index` belongs, and where it is: the bucket, the slot holding it if
@@ -1429,8 +1445,9 @@ fn native_hash_has_item(
         return Err(not_this_task(interp, receiver, b"HASITEM"));
     }
     let wanted = super::collection::item_argument(args)?;
+    let keys = keys_of(interp, receiver);
     for (_, item) in pairs(interp, receiver)? {
-        if super::collection::same_item(interp, wanted, item)? {
+        if same_held_item(interp, keys, wanted, item)? {
             return Ok(Some(crate::eval::logical(true)));
         }
     }
@@ -1447,8 +1464,9 @@ fn native_hash_index(
         return Err(not_this_task(interp, receiver, b"INDEX"));
     }
     let wanted = super::collection::item_argument(args)?;
+    let keys = keys_of(interp, receiver);
     for (index, item) in pairs(interp, receiver)? {
-        if super::collection::same_item(interp, wanted, item)? {
+        if same_held_item(interp, keys, wanted, item)? {
             return Ok(Some(index));
         }
     }
@@ -1483,8 +1501,9 @@ fn native_hash_remove_item(
         return Err(not_this_task(interp, receiver, b"REMOVEITEM"));
     }
     let wanted = super::collection::item_argument(args)?;
+    let keys = keys_of(interp, receiver);
     for (index, item) in pairs(interp, receiver)? {
-        if super::collection::same_item(interp, wanted, item)? {
+        if same_held_item(interp, keys, wanted, item)? {
             take_merged(interp, receiver, index, Removal::Discarded)?;
             return Ok(Some(item));
         }

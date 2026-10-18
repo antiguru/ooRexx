@@ -1,0 +1,38 @@
+count 37
+/* An IdentityTable compares ITEMS by identity, as it does its indexes:
+   hasItem, index and removeItem do not find an item that is only equal to
+   the one asked for. A Table compares the same items with `==`, and finds
+   it. K's `==` answers 1 for any other K. */
+
+a = .K~new('a')
+b = .K~new('b')
+say 'a == b' (a == b)
+
+t = .IdentityTable~new
+t['x'] = a
+say 'identity hasItem a' t~hasItem(a) 'b' t~hasItem(b)
+say 'identity index a' t~index(a) 'b' t~index(b)
+say 'identity removeItem b' t~removeItem(b) 'leaving' t~items
+say 'identity removeItem a' (t~removeItem(a) == a) 'leaving' t~items
+
+e = .Table~new
+e['x'] = a
+say 'equality hasItem b' e~hasItem(b)
+say 'equality index b' e~index(b)
+say 'equality removeItem b' (e~removeItem(b) == a) 'leaving' e~items
+
+/* Two items equal to each other under one IdentityTable stay distinct. */
+u = .IdentityTable~new
+u[a] = a
+u[b] = .true
+say 'distinct items' u~items 'hasItem a' u~hasItem(a) 'hasItem b' u~hasItem(b)
+
+::class K
+::method init
+  expose name
+  use arg name
+::method "=="
+  return 1
+::method string
+  expose name
+  return 'K' name

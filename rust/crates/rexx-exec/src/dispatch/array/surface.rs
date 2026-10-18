@@ -15,7 +15,7 @@
 
 use super::collection::{
     QUEUE_ITEMS, append_slot, array_grow, array_of, array_splice, array_splice_slot, dimensions_of,
-    item_argument, last_item, new_supplier, occupied, ordered_pairs, position_in, queue_bound,
+    is_queue, item_argument, last_item, new_supplier, occupied, ordered_pairs, position_in,
     read_slots, same_item, slots_of, store_of, store_scope, subscript_object,
 };
 use super::{
@@ -164,7 +164,10 @@ fn native_array_remove(
 }
 
 /// `Array~removeItem(item)`: clears the first slot holding it and answers it,
-/// or `.nil` -- `ArrayClass::removeItemRexx`.
+/// or `.nil` -- `ArrayClass::removeItemRexx`. On a `Queue` the slot is
+/// deleted and the items after it close up, because `removeItem` reaches the
+/// virtual `remove` that `QueueClass::remove` redefines as `deleteItem`
+/// (`classes/QueueClass.cpp:222`).
 fn native_array_remove_item(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -176,7 +179,11 @@ fn native_array_remove_item(
     for (offset, slot) in slots.iter().enumerate() {
         let Some(item) = *slot else { continue };
         if same_item(interp, wanted, item)? {
-            clear_array_slot(interp, receiver, offset)?;
+            if is_queue(interp, receiver) {
+                array_splice(interp, receiver, offset, None)?;
+            } else {
+                clear_array_slot(interp, receiver, offset)?;
+            }
             return Ok(Some(item));
         }
     }
@@ -389,12 +396,17 @@ fn native_array_insert(
         // index at all (`classes/ArrayClass.cpp:755`).
         Some(Some(index)) if index == ObjRef::NIL => 0,
         Some(Some(index)) => {
-            let position = super::positive_index(interp, index, 2)?;
+            let position = single_subscript(interp, receiver, index, 2)?;
             // `QueueClass::checkInsertIndex` (`classes/QueueClass.cpp:113`):
             // "the position must be location of an existing item within the
             // bounds of the queue, unlike an array which can insert at empty
-            // slots or beyond the existing bounds".
-            queue_bound(interp, receiver, position)?;
+            // slots or beyond the existing bounds". `insertRexx` validates
+            // the index under `IndexUpdate`, which extends rather than
+            // refusing, so a position past the queue's extent is 93.966 too
+            // and never `putRexx`'s 93.918.
+            if is_queue(interp, receiver) && position > last_item(interp, receiver)? {
+                return Err(Raised::incorrect_queue_index(position).into());
+            }
             position
         }
         // Omitted: after the last OCCUPIED slot, not the end of the array.
@@ -453,6 +465,56 @@ fn native_array_fill(
     }
 }
 
+/// The one subscript `insert` and `section` take, as
+/// `ArrayClass::validateIndex` (`classes/ArrayClass.cpp:1211`) reads it for a
+/// single-dimensional receiver: an `Array` argument stands for the
+/// subscripts it holds, and exactly one of them is a position. `position` is
+/// the argument's place in the method's argument list.
+///
+/// `QueueClass::validateIndex` (`classes/QueueClass.cpp:98`) does not spread
+/// an `Array`, so a queue reads one as `requestString` does, as its items'
+/// lines, and only a single item holding a position converts.
+fn single_subscript(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    value: ObjRef,
+    position: usize,
+) -> Result<usize, Failure> {
+    if interp.array_slots(value).is_none() {
+        return super::positive_index(interp, value, position);
+    }
+    if is_queue(interp, receiver) {
+        let lines = interp.required_string_value(value)?;
+        if let Some(index) = super::whole_index(interp, lines) {
+            return Ok(index);
+        }
+        let found = interp.string_value_text(value);
+        return Err(Raised::method_argument_not_positive(position, &found).into());
+    }
+    let spread = match interp.array_slots(value) {
+        Some(slots) => {
+            let items = slots.iter().flatten().count();
+            slots[..items].to_vec()
+        }
+        None => Vec::new(),
+    };
+    match spread[..] {
+        [] => Err(Raised::not_enough_method_arguments(position).into()),
+        [Some(only)] => super::positive_index(interp, only, position),
+        [None] => {
+            position_in(interp, receiver, &[Some(value)], IndexUse::Get)?;
+            super::positive_index(interp, value, position)
+        }
+        _ if super::array_is_fixed_dimension(interp, receiver)? => {
+            Err(Raised::too_many_subscripts(1).into())
+        }
+        // An array with no extent yet keeps the plain refusal: the oracle's
+        // `IndexUpdate` makes it multi-dimensional under `insert`, a method
+        // that refuses one, and `IndexAccess` leaves `section`'s start unset.
+        _ => super::positive_index(interp, value, position),
+    }
+}
+
 /// `Array~section(start [, count])`: a new array over that run --
 /// `ArrayClass::sectionRexx`.
 fn native_array_section(
@@ -465,13 +527,13 @@ fn native_array_section(
     // which is the opposite order from `delete` -- `:1502` against `:822`.
     single_dimension_only(interp, receiver, "SECTION")?;
     let start = item_argument(args)?;
-    let start = super::positive_index(interp, start, 1)?;
+    let start = single_subscript(interp, receiver, start, 1)?;
+    // `optionalLengthArgument`, so a count that is not a non-negative whole
+    // number is 93.923 (`classes/ArrayClass.cpp:1512`).
+    let count = super::super::optional_length_argument(interp, args, 1)?;
     let slots = slots_of(interp, receiver)?;
     let available = slots.len().saturating_sub(start.saturating_sub(1));
-    let count = match args.get(1).copied().flatten() {
-        Some(count) => super::array_size_argument(interp, Some(count), 2)?.min(available),
-        None => available,
-    };
+    let count = count.map_or(available, |count| count.min(available));
     let taken: Vec<Option<ObjRef>> = slots
         .into_iter()
         .skip(start.saturating_sub(1))

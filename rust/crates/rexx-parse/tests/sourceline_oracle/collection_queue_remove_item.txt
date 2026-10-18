@@ -1,0 +1,36 @@
+count 35
+/* Queue~removeItem deletes the item's slot and the items after it close up,
+   as Queue~remove does: the indexes stay 1 to items. The set operations
+   that remove items from a copy of the receiver answer queues with no
+   holes for the same reason. Items are listed sorted, as a multiset. */
+
+q = .Queue~of('a', 'b', 'c', 'b')
+say 'removeItem' q~removeItem('b')
+call show 'after removeItem', q
+say 'at 2' q[2] 'at 3' q[3] 'at 4' q[4]
+say 'removeItem missing' q~removeItem('z')
+call show 'unchanged', q
+
+c = .CircularQueue~of('a', 'b', 'c')
+say 'circular removeItem' c~removeItem('a')
+call show 'circular after removeItem', c
+
+do clz over .Queue, .CircularQueue
+  c1 = clz~of('1v', '2v', '2v', '2v', 'o1', 'o1')
+  c2 = clz~of('2v', '2v', 'o1', 'o1', 'o2', 'o2', '3v')
+  call show clz~id 'difference', c1~difference(c2)
+  call show clz~id 'difference reversed', c2~difference(c1)
+  call show clz~id 'xor', c1~xor(c2)
+  call show clz~id 'intersection', c1~intersection(c2)
+end
+exit
+
+show: procedure
+  use arg label, coll
+  indexes = ''
+  do i over coll~allIndexes
+    indexes = indexes i
+  end
+  items = coll~allItems~sortWith(.CaselessComparator~new)
+  say label 'items' coll~items 'indexes' strip(indexes) 'sorted' items~toString('L', ' ')
+  return

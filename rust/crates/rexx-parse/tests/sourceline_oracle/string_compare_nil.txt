@@ -1,0 +1,26 @@
+count 25
+/* A string or a number compared with .nil answers without reading .nil's
+   string value, so NOSTRING is not raised: `\=`, `<>`, `><` and `\==` are 1
+   and every other comparison operator is 0. A concatenation does read it,
+   which raises the trapped NOSTRING. */
+
+signal on nostring
+values = .array~of(.nil~string, 'abc', 120, 120.1, '', .MyString~new('m'))
+ops = '= \= == \== <> >< > < >= <= \> \< << >> >>= <<= \<< \>>'
+do v over values
+  line = ''
+  do w = 1 to words(ops)
+    op = word(ops, w)
+    interpret 'r = v' op '.nil'
+    line = line op || r
+  end
+  say '['v']' line
+end
+say 'concatenation' 'a' || .nil
+exit
+
+nostring:
+  say 'NOSTRING raised at line' sigl
+  exit
+
+::class MyString subclass String

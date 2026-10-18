@@ -5,6 +5,7 @@
 base/bif/CHAROUT	TEST_STDOUT_START	Flaky	common.txt: CHAROUT.testGroup/TEST_STDOUT_START
 base/bif/LINEOUT	TEST_BINARY	Deviation 46	the final assertFile expects the oracle's blank records 2 and 4 from a position-only and a closing LINEOUT
 base/bif/LINEOUT	TEST_LINE_TRANSIENT	Flaky	common.txt: LINEOUT.testGroup/TEST_LINE_TRANSIENT
+base/class/Bag	TEST_HASITEM_VALUE_NOTEQUAL_INDEX	Deviation 45	the test's one assertion expects the oracle's .nil from hasItem with an index unequal to the item
 base/class/RexxInteger	TEST_INTEGER_ADDITION	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
 base/class/RexxInteger	TEST_INTEGER_CONSTANT	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
 base/class/RexxInteger	TEST_INTEGER_D2X	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
