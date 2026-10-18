@@ -2,7 +2,11 @@
    does: QueueClass's validateIndex reads the Array as its items' lines, so
    a single item holding a position converts and any other Array is 93.907
    naming it. put past the queue's extent is 93.918 naming the index as
-   given, and past its last item 93.966. CircularQueue is a Queue. */
+   given, and past its last item 93.966. CircularQueue is a Queue. next and
+   previous step from the unspread index, and section's count reads an
+   Array as its lines on a Queue and an Array alike. CircularQueue's own
+   section compares its count with `<`, which an Array does not
+   understand. */
 
 do clz over .Queue, .CircularQueue
   say clz~id
@@ -28,7 +32,25 @@ do clz over .Queue, .CircularQueue
   call try clz, "q~delete(.array~of(1, 2))"
   call try clz, "q~remove(.array~new)"
   call try clz, "q~hasIndex(.array~of(1, 2))"
+  call try clz, "q~next(.array~of('099'))"
+  call try clz, "q~previous(.array~of('099'))"
+  call try clz, "q~next(.array~of(, 2))"
+  call try clz, "q~previous(.array~of(, 2))"
+  call try clz, "q~next(.array~of(2)~~put(3, 3))"
+  call try clz, "q~section(1, .array~of(2))~makeArray~toString('L', ' ')"
+  call try clz, "q~section(1, .array~of('099'))~items"
+  call try clz, "q~section(1, .array~of('1.0'))~items"
+  call try clz, "q~section(1, .array~of(' 2 '))~items"
+  call try clz, "q~section(1, .array~new(5)~~put(2, 1))~items"
+  call try clz, "q~section(1, .array~of(1, 2))"
 end
+/* An Array and a Queue subclass read section's count the same way. */
+call try .QS, ".QS~of('p', 'q', 'r')~section(1, .array~of(2))~class~id"
+call try .QS, ".QS~of('p', 'q', 'r')~next(.array~of('099'))"
+call try .Array, ".Array~of('p', 'q', 'r')~section(1, .array~of(2))~class~id"
+call try .Array, ".Array~of('p', 'q', 'r')~section(1, .array~of(, 2))~items"
+call try .Array, ".Array~of('p', 'q', 'r')~section(1, .array~of('1.0'))~items"
+call try .Array, ".Array~of('p', 'q', 'r')~section(1, .array~new)"
 exit
 
 try:
@@ -43,3 +65,5 @@ failed:
   c = condition('o')
   say '  ' expression c~code c~message
   return
+
+::class QS subclass Queue

@@ -220,10 +220,12 @@ lang/class_constant_expression_runtime_requires.rex
 
 # 9d Task 6.7: collections. An IdentityTable compares items by identity, a
 # Queue's removeItem closes the gap, insert and section read an Array index
-# as validateIndex does, a Queue reads one without spreading it, and a
-# comparison with .nil reads no string value.
+# as validateIndex does, a Queue reads one without spreading it, an Array
+# growth the allocator refuses is 5.0, and a comparison with .nil reads no
+# string value.
 lang/collection_identity_table_items.rex
 lang/collection_queue_remove_item.rex
 lang/collection_array_index_argument.rex
 lang/string_compare_nil.rex
 lang/collection_queue_array_index.rex
+lang/collection_array_grow_refused.rex

@@ -1,0 +1,24 @@
+count 23
+/* Growing an Array to a length the allocator refuses raises 5.0, the
+   condition, on every path that extends one: insert past the end, put and
+   []= past the end, and a new Array of that size. */
+
+call try ".Array~of('p', 'q', 'r')~insert('z', 999999999999)"
+call try ".Array~new~insert('z', 999999999999)"
+call try ".Array~of('p', 'q', 'r')~put('z', 999999999999)"
+call try "a = .Array~of('p'); a[999999999999] = 'z'"
+call try ".Array~new(999999999999)"
+a = .Array~of('p', 'q', 'r')
+call try "a~insert('z', 999999999999)"
+say 'still' a~size a~items a~toString('L', ' ')
+exit
+
+try:
+  parse arg expression
+  signal on syntax name failed
+  interpret expression
+  say '  ' expression 'raised nothing'
+  return
+failed:
+  say '  ' expression condition('o')~code
+  return

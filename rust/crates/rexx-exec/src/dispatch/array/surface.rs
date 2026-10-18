@@ -314,6 +314,16 @@ fn array_step(
     args: &[Option<ObjRef>],
     forward: bool,
 ) -> Result<Option<ObjRef>, Failure> {
+    // The index is read for the receiver itself, so a `Queue` reads an
+    // Array index by `queue_index` rather than spreading it.
+    let index;
+    let args = match args {
+        [Some(only)] => {
+            index = [Some(queue_index(interp, receiver, *only, 1)?)];
+            &index[..]
+        }
+        _ => args,
+    };
     let receiver = store_of(interp, receiver)?;
     // **An index past the end still steps.** Measured:
     // `.Array~of('a','b')~previous(5)` answers `2`, where bailing out on the
@@ -523,8 +533,22 @@ fn native_array_section(
     let start = item_argument(args)?;
     let start = single_subscript(interp, receiver, start, 1)?;
     // `optionalLengthArgument`, so a count that is not a non-negative whole
-    // number is 93.923 (`classes/ArrayClass.cpp:1512`).
-    let count = super::super::optional_length_argument(interp, args, 1)?;
+    // number is 93.923 (`classes/ArrayClass.cpp:1512`). It reads an `Array`
+    // as `requestString` does, as its items' lines, and a refusal names the
+    // Array.
+    let count = match args.get(1).copied().flatten() {
+        Some(count) if interp.array_slots(count).is_some() => {
+            let lines = interp.required_string_value(count)?;
+            match super::super::optional_length_argument(interp, &[Some(lines)], 0) {
+                Ok(count) => count,
+                Err(_) => {
+                    let found = interp.string_value_text(count);
+                    return Err(Raised::invalid_length(&found).into());
+                }
+            }
+        }
+        _ => super::super::optional_length_argument(interp, args, 1)?,
+    };
     let slots = slots_of(interp, receiver)?;
     let available = slots.len().saturating_sub(start.saturating_sub(1));
     let count = count.map_or(available, |count| count.min(available));
