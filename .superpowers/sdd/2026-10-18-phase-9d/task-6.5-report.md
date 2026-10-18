@@ -35,8 +35,8 @@ outside the cluster.
 2. **A `LINEOUT` with no data (Deviation 46).** On a record stream the oracle pads
    `reclen - (charWritePosition - 1) % reclen` blanks before positioning or closing. On a record
    boundary that is a whole blank record. That is the `@@BUG` in `TEST_BINARY`. `complete_record`
-   pads only a partial record, the part the oracle and the documentation agree on, so positioning
-   and closing clear no record.
+   writes nothing on a record boundary. It pads a partial record, kept as the oracle does,
+   pending Moritz's ruling on Deviation 46's scope.
 
 ### `stream-open-write-only`
 
@@ -169,3 +169,81 @@ Commands from `rust/`, with `CARGO_TARGET_DIR=<scratchpad>/target-9d-t6` and
   l3_core_suite`: exit 101 as expected, 402 groups with 28 red, in 4m36s.
 * Perf check: not run. The dispatch rules it out unless the stdout path changed, and the
   standard-stream write path (`standard_write`) is untouched.
+
+## Fix round 1
+
+Review: `task-6.5-review.md`. Code commit `76acd13a3`. The records commit that follows it holds
+`t6.5/r1/` and this section. Every change is in `dispatch/stream.rs`.
+
+### Findings
+
+1. **No-data LINEOUT pads a partial record.** Unchanged, as directed. Root cause 2 now says the
+   padding is kept as the oracle does, pending Moritz's ruling on Deviation 46's scope. The false
+   documentation claim is gone.
+2. **The read side of a write-only stream.** The causes, from `StreamNative.cpp` and `SysFile.cpp`:
+   * `StreamInfo::chars` and `::lines` answer 0 for a persistent stream that is neither
+     `read_only` nor `read_write`. Both now check the mode.
+   * `readBuffer` raises `notreadyError` with the read's errno. `charin` and the record
+     `LINEIN`/`ARRAYIN` read now carry the errno (`ERROR:9`) where they answered `ERROR:0`.
+   * `getLineWritePosition` and `getLineReadPosition` count lines through `countLines`, which
+     fails with the errno. `line_write_position` and `line_read_position` now return
+     `io::Result`. On an error `query_position` raises NOTREADY with it and leaves the tracker at
+     0, as the oracle does. The state becomes `ERROR:9`.
+   * `SysFile::hasData` answers false when the stream is not `readable`. So `atEof()` is true,
+     `seekForwardLines` treats the failed read as the end of the file, and `LINEIN` is
+     `NOTREADY:EOF`. The crate already agreed on both.
+   * `lineout(f, 'x', 2)` therefore writes at line 1, and the oracle's write position is 3, after
+     the bytes. The crate's measured rule, "end of the file plus what was written" after a
+     line-placed write, now applies only to a stream that can read.
+3. **Implicit read-only open, `QUERY POSITION WRITE LINE` 2 against 1.** This predates Task 6.5.
+   The crate built from `93063dff5` (git archive, its own target dir) prints `abc 1 2 READY:`, the
+   same as `06f0ce3af`. The oracle prints `abc 1 1`. `implicitOpen` zeroes `lineWritePosition` only
+   for a stream that is persistent and not read-only, so a read-only or transient implicit open
+   keeps `resetFields`'s 1. The fix is local: `ensure_open` starts such a stream at write line 1,
+   character 1. Outputs are in `t6.5/r1/probes/readonly_write_line/`. The explicit open was left
+   alone, because no probe covers its transient case.
+4. **`complete_record` swallowed a failed write.** It now answers `Some` of the NOTREADY answer
+   (`1`), and `lineout` and `close_for_write` return it without positioning or closing. This
+   matches `completeLine`'s `notreadyError`, which unwinds. Not probed: a write has to fail on a
+   persistent record stream.
+5. **Device retry.** Not done, because no device could be probed. `isDevice()` there reads
+   `SysFile::device`. A failed `open64` does not reset that flag (`SysFile::open` returns before
+   `getStreamTypeInfo`, and `reset()` does not touch it). So the retry fires only when the same
+   `Stream` last opened a character device and its read-write reopen now fails. That needs a
+   character device that refuses read-write to this user, and none is at hand. `/dev/null` and
+   `/dev/full` open read-write, and a FIFO is not `S_IFCHR`.
+
+### Left divergence (Task 6.9's)
+
+On the write-only stream, `stream(f, 'c', 'query position write line')` answers
+`ERROR:9 Bad file descriptor` on the oracle, and `RESULT` is the same text. Here both are the null
+string. The orx `query` handler is `raise propagate return (self~description)`, and
+`exec_raise_propagate` (`run/condition.rs`) ignores the `RETURN` value. This is the
+`raise-result-entry` cluster ("`RAISE ... EXIT expr` and `RETURN expr` leave the condition object's
+`RESULT` unset"), which Task 6.9 holds. The witness prints only the description and whether the
+condition was raised. The probe is in `t6.5/r1/probes/write_only_query_result/`.
+
+### Witness, red then green
+
+`lang/stream_write_only_reads.rex`, with its `sourceline_oracle` file and a `phase-9.txt` entry.
+Red is the crate built from `06f0ce3af` (git archive, tree touched, `Compiling rexx-exec`
+confirmed). Its stdout differs in `chars 12`, `lines 1`, `ERROR:0`, `NOTREADY:EOF 0` for the
+write-line count, write positions 15 and 17, the file bytes, and `abc 1 2`. Green is the crate
+built from `76acd13a3`, and all three descriptors match. The four witnesses' green runs are in
+`t6.5/r1/witnesses/green/`. I read the green stdout, and every line its header claims is printed.
+
+### Checks
+
+Commands from `rust/` with `CARGO_INCREMENTAL=0` and the task's own target dir, each status read
+unpiped:
+
+* `cargo fmt --all --check`: exit 0.
+* `memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings`: exit 0.
+* `memcap 8G cargo test -j 4 --release -p rexx-parse --test sourceline_oracle`: exit 0.
+* The refusal tables (`refusal_sites`, `owners`, `closed_phases`, `phase_ten_reasons`,
+  `representation_refusals`): exit 0. `rexx-core --test unsafe_sites`: exit 0.
+* `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 --release -p rexx-exec --test corpus`: exit 0, 29
+  passed, 1 ignored.
+* The whole suite, with `REXX_SUITE_TABLE` at `t6.5/r1/suite/table.tsv`: exit 101, 402 groups,
+  28 red. Against `t6.5/suite/tests.tsv` no row changed (`t6.5/r1/suite/changed-rows.txt` holds
+  only the command).

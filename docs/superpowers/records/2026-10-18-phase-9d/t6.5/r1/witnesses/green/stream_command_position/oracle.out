@@ -1,0 +1,15 @@
+linein []
+handle 1 1
+position write 12 2 1
+close READY: []
+open READY:
+close READY:
+seek closed 1
+close READY:
+seek unopened 1 1
+max 0
+over 93.0
+READY:
+forward 3 6 0
+back 2 2 2
+linein 9 [] 3 NOTREADY:EOF

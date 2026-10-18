@@ -1,0 +1,15 @@
+stream(f, 'c', 'open write append') [READY:] READY: 
+charout(f, 'line2') [0] READY: 
+lineout(f, 'line3') [0] READY: 
+stream(f, 'c', 'query position write') [18] READY: 
+stream(f, 'c', 'close') [READY:] UNKNOWN: 
+s~command('open write') [READY:] UNKNOWN: 
+s~lineout('line4') [0] UNKNOWN: 
+s~close [READY:] UNKNOWN: 
+s~open('both') [ERROR:13] UNKNOWN: raised [ERROR:13]
+s~open('read') [ERROR:13] UNKNOWN: raised [ERROR:13]
+s~open [ERROR:13] UNKNOWN: raised [ERROR:13]
+line1
+line2line3
+line4
+
