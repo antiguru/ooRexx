@@ -38,6 +38,8 @@
 11. **This crate's numeric semantics written as Rexx** (2026-10-18: "Can you denote our
     implementation as rexx code, like the standard does? Then we also don't have a copyright
     issue"). Task 6.14 writes it.
+12. **The stream model as Rexx** (2026-10-18: "yes, make it a second executable model"). Task
+    6.15 writes this crate's stream semantics as an executable Rexx model, in Task 6.14's shape.
 
 ## Global Constraints
 
