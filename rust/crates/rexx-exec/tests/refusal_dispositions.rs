@@ -789,8 +789,13 @@ fn the_scanner_reads_each_owner_form() {
     );
     assert_eq!(
         owners.get("named_semaphore").map(|(owner, _)| owner),
-        Some(&Owner::Phase("Phase 9".to_string())),
-        "an `Owner` value"
+        Some(&Owner::None),
+        "a Deviation refusal builds its message with no owner"
+    );
+    assert_eq!(
+        owners.get("fork_child").map(|(owner, _)| owner),
+        Some(&Owner::None),
+        "a Deviation refusal builds its message with no owner"
     );
     assert_eq!(
         owners.get("internal_routine").map(|(owner, _)| owner),

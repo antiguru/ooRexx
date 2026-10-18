@@ -537,15 +537,14 @@ impl Loud {
     /// A `Sys*Sem` routine given a name: on Unix a named semaphore is a POSIX
     /// semaphore from `sem_open`, shared between processes and outliving them
     /// (`.superpowers/sdd/queued/2026-10-13-named-semaphores-design.md`).
+    /// Not supported (Deviation 43).
+    #[cold]
     fn named_semaphore(name: &[u8]) -> Loud {
         let shown = String::from_utf8_lossy(name).to_ascii_uppercase();
         Loud {
-            message: owned_message(
-                &format!(
-                    "routine \"{shown}\" with a named semaphore, a POSIX sem_open semaphore \
-                     shared between processes,"
-                ),
-                Some(Owner::Phase9),
+            message: format!(
+                "routine \"{shown}\" with a named semaphore, a POSIX sem_open semaphore \
+                 shared between processes, is not implemented (Deviation 43)"
             ),
         }
     }
@@ -554,15 +553,14 @@ impl Loud {
     /// has a timer thread and a joining main thread beside it, so the child
     /// cannot continue the program
     /// (`.superpowers/sdd/queued/2026-10-13-sysfork-design.md`).
+    /// Not supported (Deviation 42).
+    #[cold]
     fn fork_child(name: &[u8]) -> Loud {
         let shown = String::from_utf8_lossy(name).to_ascii_uppercase();
         Loud {
-            message: owned_message(
-                &format!(
-                    "routine \"{shown}\", whose forked child cannot continue without the timer \
-                     thread and the joining main thread,"
-                ),
-                Some(Owner::Phase9),
+            message: format!(
+                "routine \"{shown}\", whose forked child cannot continue without the timer \
+                 thread and the joining main thread, is not implemented (Deviation 42)"
             ),
         }
     }

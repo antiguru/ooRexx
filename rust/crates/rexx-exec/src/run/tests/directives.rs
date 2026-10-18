@@ -319,27 +319,27 @@ fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
         (
             b"say SysFork()\n",
             "routine \"SYSFORK\", whose forked child cannot continue without the timer thread and \
-             the joining main thread, is not implemented (Phase 9)",
+             the joining main thread, is not implemented (Deviation 42)",
         ),
         (
             b"say SysOpenEventSem('sem')\n",
             "routine \"SYSOPENEVENTSEM\" with a named semaphore, a POSIX sem_open semaphore \
-             shared between processes, is not implemented (Phase 9)",
+             shared between processes, is not implemented (Deviation 43)",
         ),
         (
             b"say SysOpenMutexSem('/sem')\n",
             "routine \"SYSOPENMUTEXSEM\" with a named semaphore, a POSIX sem_open semaphore \
-             shared between processes, is not implemented (Phase 9)",
+             shared between processes, is not implemented (Deviation 43)",
         ),
         (
             b"say SysCreateEventSem('sem')\n",
             "routine \"SYSCREATEEVENTSEM\" with a named semaphore, a POSIX sem_open semaphore \
-             shared between processes, is not implemented (Phase 9)",
+             shared between processes, is not implemented (Deviation 43)",
         ),
         (
             b"say SysCreateMutexSem('sem')\n",
             "routine \"SYSCREATEMUTEXSEM\" with a named semaphore, a POSIX sem_open semaphore \
-             shared between processes, is not implemented (Phase 9)",
+             shared between processes, is not implemented (Deviation 43)",
         ),
         // A name is a C string, cut at its first NUL before sem_open sees it,
         // so what follows the NUL cannot make it rejected. These are not
@@ -347,12 +347,12 @@ fn an_internal_routine_refuses_loudly_where_an_unknown_name_still_raises() {
         (
             b"say SysCreateEventSem('t8nul' || '0'x || '/b')\n",
             "routine \"SYSCREATEEVENTSEM\" with a named semaphore, a POSIX sem_open semaphore \
-             shared between processes, is not implemented (Phase 9)",
+             shared between processes, is not implemented (Deviation 43)",
         ),
         (
             b"say SysCreateMutexSem('t8nul' || '0'x || copies('z', 300))\n",
             "routine \"SYSCREATEMUTEXSEM\" with a named semaphore, a POSIX sem_open semaphore \
-             shared between processes, is not implemented (Phase 9)",
+             shared between processes, is not implemented (Deviation 43)",
         ),
         (
             b"say rxqueue('G')\n",

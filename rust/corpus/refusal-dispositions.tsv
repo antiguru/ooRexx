@@ -36,6 +36,7 @@ environment_entry	GUARD	-	scout A b18: envx_* (every .environment and .local ind
 environment_symbol	GUARD	-	scout A b16 and b18: c2_stream_first_clause, c2_address_with_stream_first (.STREAM before StreamClasses.orx), envx_*, env_new_activity, env_reply_activity; only STDQUE (Phase 10) refused. Phase 9a Task 5 probes nt1, nt2 (Message~notify after removing MESSAGENOTIFICATION from .environment and .local, and from a ::REQUIRES prolog) and info (.rexxinfo~executable and ~libraryPath, which build a .FILE) answer
 expose_receiver	GUARD	-	Task 4 report, "Kept with owner None": EXPOSE from methods of Directory, .local, .environment and a Directory subclass, a borrowed Object RUN row on an instance; all answer, oracle-identical
 expression	GUARD	-	every ExprKind evaluates (expr_owner answers None for each); each site is a match arm for a form its caller routes elsewhere (census d-guard)
+fork_child	DEVIATION	-	Deviation 42: SysFork, whose forked child cannot continue without the timer thread and the joining main thread; not supported (Moritz 2026-10-17)
 handle_descriptor	DEVIATION	-	Deviation 35: a HANDLE: stream on a descriptor other than 0, 1 or 2 needs unsafe to adopt; the oracle's HANDLE: stream never reaches its descriptor (crates/rexx-exec/tests/stream_handle.rs)
 immovable_reply	LIMIT	-	Deviation 15 (spec 2026-09-29 section 5)
 instruction	GUARD	-	every InstructionKind executes (instruction_owner answers None for each); each site is a match arm for a kind its caller routes elsewhere (census d-guard)
@@ -46,6 +47,7 @@ library_source	GUARD	-	scout A b17: rexx-lib pins each embedded .orx by sha256, 
 loop_op_off_its_node	GUARD	-	compiler invariant: a DO/LOOP op names its own loop (census d-guard)
 metaclass_new_reused_class	DEVIATION	-	Deviation 32: a metaclass NEW answering a class Class~new did not build or a subclass already took, which the oracle rewires into the new subclass in place; Phase 9a Task 8b review probes metaarr, metaold
 missing_body	GUARD	-	every body selector names a directive index the parser fills (refusal-sites.tsv: an instance reading a generated accessor agrees)
+named_semaphore	DEVIATION	-	Deviation 43: a named RexxUtil event or mutex semaphore, which the oracle backs with a POSIX sem_open semaphore shared between processes; not supported (Moritz 2026-10-17)
 numeric_form_without_expression	GUARD	-	parser guarantee: NUMERIC FORM VALUE with no expression is 35.917 at parse time
 object_method	GUARD	-	Task 4 report, "Kept with owner None": .object~define, .string~inherit (98.985), SETMETHOD to an Array or String (97.2), setMethod, unsetMethod and setMethod OBJECT from methods of Directory, .local, .environment and a Directory subclass; all answer or raise, oracle-identical
 object_name_of_a_value	DEVIATION	-	Deviation 36: OBJECTNAME= on a value-based String, which carries no per-object state (spec 2026-10-14-phase-9b1 section 1)
