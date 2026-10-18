@@ -54,3 +54,6 @@ Task 6.5: round 4 ea1c46b06, 9ab50c915, 76644b0a2 (buffer model removed, documen
 Task 6.5 re-review r4 (sonnet): approved, none open; corpus 1083/1083. Task 6.5: complete (06f0ce3af, e1bc7e9f8, 76acd13a3, 270207ffa, c6fff3e8d, 1aacf5967, db010eca6, 5d2bdbcf3, ea1c46b06, 9ab50c915, 76644b0a2). Paused before 6.6 per Moritz.
 Moritz 2026-10-18: push (ebeab2d35), 'do 6.6, then pause'. Task 6.6: dispatched (implementer opus, BASE ebeab2d35).
 Task 6.6: implementer DONE_WITH_CONCERNS (ab941ce38, f568d48c0, 61dccebe8); report task-6.6-report.md. Paused before review on Moritz's word.
+Moritz 2026-10-18: 'Continue. You don't need to pause after each task.' Goal: finish Phase 9d.
+Task 6.6 review (opus): CHANGES REQUESTED, 1 Important (CONSTANT ignores NUMERIC INHERIT from installer), 3 Minor (label-led line names IF not label; phase-5a.txt line 541 width; queued gaps, filed f59ba8f84). directive_options failure confirmed at parent.
+Ruling: fix round 1 also deletes directive_options' stale signal-on-trap row -- the test is red on the branch and blocks the close; the row says it belongs deleted once both sides agree, and they now do -- if wrong, one row restored.
