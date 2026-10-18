@@ -1,0 +1,3 @@
+LINEOUT x    = 0 | S READY | D READY: | 
+CHAROUT y    = 0 | S READY | D READY: | 
+CHARS        = 0 | S READY | D READY: | 

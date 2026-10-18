@@ -1,0 +1,17 @@
+lineout 1 ERROR:29 Illegal seek
+notready wfifo
+1
+notready wfifo2
+position 97.1 Object "The NIL object" does not understand message "CODE".
+1
+notready wfifo3
+charout position 97.1 Object "The NIL object" does not understand message "CODE".
+open READY:
+exists 
+close READY:
+open file READY:
+exists file 1
+lines n 1
+lines Count 1
+lines 2.5 1
+lines  1

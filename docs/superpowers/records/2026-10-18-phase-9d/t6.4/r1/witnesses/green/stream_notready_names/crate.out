@@ -1,0 +1,47 @@
+2F chars [0] hits 1 state ERROR [ERROR:2 No such file or directory] D=2F A=Stream:2F R=[0] I=CALL P=0
+2F lines [0] hits 1 state ERROR [ERROR:2 No such file or directory] D=2F A=Stream:2F R=[0] I=CALL P=0
+2F linesC [0] hits 1 state ERROR [ERROR:2 No such file or directory] D=2F A=Stream:2F R=[0] I=CALL P=0
+2F linein [] hits 1 state ERROR [ERROR:2 No such file or directory] D=2F A=Stream:2F R=[] I=CALL P=0
+2F charin [] hits 1 state ERROR [ERROR:2 No such file or directory] D=2F A=Stream:2F R=[] I=CALL P=0
+2F lineout [1] hits 1 state ERROR [ERROR:21 Is a directory] D=2F A=Stream:2F R=[1] I=CALL P=0
+2F charout [2] hits 1 state ERROR [ERROR:21 Is a directory] D=2F A=Stream:2F R=[2] I=CALL P=0
+2F close [1] hits 1 state UNKNOWN [UNKNOWN:] D=2F A=Stream:2F R=[1] I=CALL P=0
+2A chars [0] hits 1 state ERROR [ERROR:2 No such file or directory] D=2A A=Stream:2A R=[0] I=CALL P=0
+2A lines [0] hits 0 state READY [READY:] 
+2A linesC [0] hits 0 state READY [READY:] 
+2A linein [] hits 1 state NOTREADY [NOTREADY:EOF] D=2A A=Stream:2A R=[] I=CALL P=0
+2A charin [] hits 1 state ERROR [ERROR:0] D=2A A=Stream:2A R=[] I=CALL P=0
+2A lineout [0] hits 0 state READY [READY:] 
+2A charout [0] hits 0 state READY [READY:] 
+2A close [0] hits 0 state UNKNOWN [UNKNOWN:] 
+6E6F6E2D6578697374696E672D66696C65 chars [0] hits 1 state ERROR [ERROR:2 No such file or directory] D=6E6F6E2D6578697374696E672D66696C65 A=Stream:6E6F6E2D6578697374696E672D66696C65 R=[0] I=CALL P=0
+6E6F6E2D6578697374696E672D66696C65 lines [0] hits 0 state READY [READY:] 
+6E6F6E2D6578697374696E672D66696C65 linesC [0] hits 0 state READY [READY:] 
+6E6F6E2D6578697374696E672D66696C65 linein [] hits 1 state NOTREADY [NOTREADY:EOF] D=6E6F6E2D6578697374696E672D66696C65 A=Stream:6E6F6E2D6578697374696E672D66696C65 R=[] I=CALL P=0
+6E6F6E2D6578697374696E672D66696C65 charin [] hits 1 state ERROR [ERROR:0] D=6E6F6E2D6578697374696E672D66696C65 A=Stream:6E6F6E2D6578697374696E672D66696C65 R=[] I=CALL P=0
+6E6F6E2D6578697374696E672D66696C65 lineout [0] hits 0 state READY [READY:] 
+6E6F6E2D6578697374696E672D66696C65 charout [0] hits 0 state READY [READY:] 
+6E6F6E2D6578697374696E672D66696C65 close [0] hits 0 state UNKNOWN [UNKNOWN:] 
+626164806E616D65 chars [0] hits 1 state ERROR [ERROR:2 No such file or directory] D=626164806E616D65 A=Stream:626164806E616D65 R=[0] I=CALL P=0
+626164806E616D65 lines [0] hits 0 state READY [READY:] 
+626164806E616D65 linesC [0] hits 0 state READY [READY:] 
+626164806E616D65 linein [] hits 1 state NOTREADY [NOTREADY:EOF] D=626164806E616D65 A=Stream:626164806E616D65 R=[] I=CALL P=0
+626164806E616D65 charin [] hits 1 state ERROR [ERROR:0] D=626164806E616D65 A=Stream:626164806E616D65 R=[] I=CALL P=0
+626164806E616D65 lineout [0] hits 0 state READY [READY:] 
+626164806E616D65 charout [0] hits 0 state READY [READY:] 
+626164806E616D65 close [0] hits 0 state UNKNOWN [UNKNOWN:] 
+6E6F6469722F78 chars [0] hits 1 state ERROR [ERROR:2 No such file or directory] D=6E6F6469722F78 A=Stream:6E6F6469722F78 R=[0] I=CALL P=0
+6E6F6469722F78 lines [0] hits 1 state ERROR [ERROR:2 No such file or directory] D=6E6F6469722F78 A=Stream:6E6F6469722F78 R=[0] I=CALL P=0
+6E6F6469722F78 linesC [0] hits 1 state ERROR [ERROR:2 No such file or directory] D=6E6F6469722F78 A=Stream:6E6F6469722F78 R=[0] I=CALL P=0
+6E6F6469722F78 linein [] hits 1 state ERROR [ERROR:2 No such file or directory] D=6E6F6469722F78 A=Stream:6E6F6469722F78 R=[] I=CALL P=0
+6E6F6469722F78 charin [] hits 1 state ERROR [ERROR:2 No such file or directory] D=6E6F6469722F78 A=Stream:6E6F6469722F78 R=[] I=CALL P=0
+6E6F6469722F78 lineout [1] hits 1 state ERROR [ERROR:2 No such file or directory] D=6E6F6469722F78 A=Stream:6E6F6469722F78 R=[1] I=CALL P=0
+6E6F6469722F78 charout [2] hits 1 state ERROR [ERROR:2 No such file or directory] D=6E6F6469722F78 A=Stream:6E6F6469722F78 R=[2] I=CALL P=0
+6E6F6469722F78 close [1] hits 1 state UNKNOWN [UNKNOWN:] D=6E6F6469722F78 A=Stream:6E6F6469722F78 R=[1] I=CALL P=0
+direct NOTREADY / 1 0 ERROR:2 No such file or directory
+open read READY:
+charout read-only 3 ERROR:13 Permission denied
+handler 1 D=726F2E747874 A=Stream:726F2E747874 R=[3] I=CALL P=0
+close read-only 0 UNKNOWN:
+content abc
+created by close 1 0

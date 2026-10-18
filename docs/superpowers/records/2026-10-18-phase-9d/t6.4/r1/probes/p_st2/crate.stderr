@@ -1,0 +1,4 @@
+       *-* Compiled method "LINEOUT" with scope "Stream".
+     8 *-* r = lineout(n, 'z', 1);
+Error 93 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t64/runs/rv_p_st2-1792342889159412108/c/p.rex line 8:  Incorrect call to method.
+Error 93.958:  Positioning of transient streams is not valid.

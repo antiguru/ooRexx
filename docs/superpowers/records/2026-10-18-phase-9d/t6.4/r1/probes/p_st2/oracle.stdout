@@ -1,0 +1,3 @@
+LINEOUT x    = 0 | S READY | D READY: | 
+CHAROUT y    = 1 | S ERROR | D ERROR:29 Illegal seek | NR d= wfifo add= The Stream class res= 1 inst= CALL prop= 0
+CHARS        = 1 | S ERROR | D ERROR:29 Illegal seek | 

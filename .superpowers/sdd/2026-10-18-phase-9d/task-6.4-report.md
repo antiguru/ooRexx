@@ -161,3 +161,106 @@ Perf (`t6.4/callgrind.txt`, whole process against the pin; the delta is against
    task, and `stream_position_arguments.rex` prints only the code for those rows.
 4. `LINEOUT`/`CHAROUT` with no data now create a missing file, as the oracle does. A test that
    closes a name it never wrote leaves an empty file behind on both sides.
+
+## Fix round 1
+
+Review: `task-6.4-review.md`. Code commit `aa9bc799c`, then the records commit that follows it.
+Records are in `docs/superpowers/records/2026-10-18-phase-9d/t6.4/r1/`.
+
+### Fixes
+
+* **I1.** In `propagate_unreportable` (`run/condition.rs`), an untrapped HALT is now `Raised::halt()`,
+  searched from the top. An untrapped NOMETHOD is 97.1, built from the object's `ADDITIONAL` and
+  the description, and 97.5 without them. This is the `if (!trapped)` block,
+  `RexxActivation.cpp:1866`-`:1890`. It applies whether or not a caller exists. The probe
+  `g2/nested_halt_none` now matches: Error 4.1 at line 18, rc 252.
+* **I2.** When the first activation that is not an internal call has replied, the propagate looks
+  for no caller trap, because the sender already has its answer. A `RESULT` then raises
+  `Raised::return_after_reply()` (98.936), which is the `returnFrom` check. A condition with no
+  `RESULT` (NOVALUE, USER) returns quietly. The probes `g2/reply_{error,failure,notready}_{sig,call,none}`
+  now match.
+* **M3 (partly fixed).** A transient stream is now written without a seek, so the first write to a
+  FIFO answers 0 READY. A write position on a transient stream is 93.958 in both `LINEOUT` and
+  `CHAROUT`.
+  * **Not fixed, and not local: the second write.** In the oracle, every write after a write
+    that is still buffered fails with `ERROR:29`. `SysFile::getPosition` answers the buffer
+    offset (`SysFile.cpp:1038`-`:1041`). `StreamInfo` never advances `charWritePosition` for a
+    transient stream. So `writeSetup` (`StreamNative.cpp:918`) finds the two unequal and calls
+    `setPosition`, and the `lseek` fails on the pipe. The next write then succeeds. `p/st2.rex`
+    still differs at `CHAROUT y` and at the CHARS after it, and a close after a buffered write
+    raises NOTREADY the same way. I read this as an oracle defect rather than a rule to copy, and
+    I did not emulate it.
+  * **Not fixed, and not local: CHARS and LINES on a FIFO.** Emulating `SysFile::hasData` (read
+    one byte, which is consumed) matched the review's probe, where the buffer had already been
+    flushed. It did not match the case where the earlier write is still buffered: the oracle
+    answered 0 there, then blocked on the next LINES and was HALTed by the timeout. The answer
+    depends on that same write buffer, so I reverted the change. CHARS and LINES on a FIFO still
+    answer from the size.
+* **M4.** `query_exists` on an open stream answers without a lookup, as `StreamInfo::streamExists`
+  does: a character or block device answers the name as written, and anything else its
+  qualified name.
+* **M5.** The `LINES` method's option is read by its first letter. Anything but N or C is
+  `method_option_not_recognised("CN", option)` (93.915). That covers the empty string, which the
+  oracle also rejects.
+* **M6.** `read_from` reads through `take(len).read_to_end`, so the buffer grows only as bytes
+  arrive. `charin(f, 1, 1E10)` no longer allocates 10 GB up front. `p5/v4` still dies at the cap.
+  Its `linein` of a 10 GB sparse line goes through `read_line_from`, which this round did not
+  touch (licensed OOM area).
+* M7 is left to Task 6.9.
+
+### Witnesses, red then green
+
+The red binary was built from `8b0400019` (`git archive`, in its own target dir), and the green
+one at `aa9bc799c`. Outputs are in `t6.4/r1/witnesses/{red,green}/`. I read each green stdout.
+
+* `rust/corpus/lang/raise_propagate_unreportable.rex` (Review Focus 4). Each case is a `::routine`
+  whose SIGNAL ON ERROR handler runs `interpret 'raise propagate'`, called first under the
+  caller's CALL ON, then untrapped (the answer is the object's RESULT, 3), then under SIGNAL ON.
+  The witness adds a replied method that propagates a command's ERROR (98.936 on stderr, while
+  the main program carries on), and a replied method that propagates NOVALUE, which has no
+  RESULT and stays quiet. It ends with a HALT propagated through two routines to no trap
+  (4.1 at the outer `raise propagate`, rc 252).
+  * Red: stdout prints `not reached` after the HALT, both errors are missing from stderr, and rc
+    is 0 against 252.
+  * Green: stdout, stderr and rc are identical.
+* `rust/corpus/lang/stream_transient_queries.rex`. It covers the first write to a FIFO, LINEOUT and
+  CHAROUT with a position on a FIFO, QUERY EXISTS on `/dev/null` and on a file opened WRITE, and
+  the LINES method's options `n`, `Count`, `2.5` and `''`. Each FIFO sees exactly one write, and
+  none is closed, because of the oracle defect above.
+  * Red: `lineout 1 ERROR:29`; the positions raise NOTREADY instead of 93.958; `exists` is
+    empty; `2.5` and `''` answer 1.
+  * Green: stdout, stderr and rc are identical.
+* The four witnesses from the first round are still identical on green.
+
+### Review probes
+
+`t6.4/r1/probes/review-probes.tsv` compares every review probe under `rev64/{g2,p,p3,p4,p5}` on the
+oracle and on `aa9bc799c`. Every `g2` program matches. The differences that remain:
+* `p/st2` (M3, above);
+* `p3/b_nomethod` (M7);
+* `p5/v4` and `p4/b_args` (the 10 GB `linein`, OOM-killed under `memcap`);
+* `p5/v5`, `v6`, `v9` and `v13` (the bare-93 `MESSAGE`, Concern 3).
+
+### Checks
+
+| command (from `rust/`, task target dir, `CARGO_INCREMENTAL=0`, `-j 4`, `memcap 8G`) | exit |
+| --- | --- |
+| `cargo fmt --all --check` | 0 |
+| `cargo clippy -p rexx-exec -p rexx-parse --all-targets -- -D warnings` | 0 |
+| `cargo test --release -p rexx-exec --lib --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions --test stream_handle --test loud --test licensed_divergences` | 0 |
+| `cargo test --release -p rexx-parse --test sourceline_oracle` | 0 |
+| `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus` (29 passed, 1 ignored) | 0 |
+| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../t6.4/r1/suite/table.tsv cargo test --release -p rexx-exec --test suite l3_core_suite` | 101 (expected) |
+| `bench-programs/callgrind.sh -B 0.5 -p "startup interpret parse churn sayloop" -o .../cg-9d/t6.4-r1 pin=.../rexx-run head=.../cg-9d/t6.4-r1/rexx-head` | 0 |
+
+The whole suite shows no changed row against `t6.4/suite/tests.tsv`: the sorted `diff` is empty.
+
+Perf (`t6.4/r1/callgrind.txt`, whole process against the pin; the delta is against `t6.4/callgrind.txt`):
+
+| program | t6.4 vs pin | r1 vs pin | delta |
+| --- | --- | --- | --- |
+| startup | +0.0145 | +0.0134 | -0.0011 |
+| interpret | -2.1898 | -2.1783 | +0.0115 |
+| parse | -0.0878 | -0.0879 | -0.0001 |
+| churn | +0.1266 | +0.1262 | -0.0004 |
+| sayloop | +0.0309 | +0.0298 | -0.0011 |

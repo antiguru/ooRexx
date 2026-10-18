@@ -1,0 +1,3 @@
+    21 *-* raise propagate
+Error 98 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t64/runs/rv_g2_reply_error_none-1792342870004815860/c/p.rex line 21:  Execution error.
+Error 98.936:  RETURN cannot return a value after a REPLY.

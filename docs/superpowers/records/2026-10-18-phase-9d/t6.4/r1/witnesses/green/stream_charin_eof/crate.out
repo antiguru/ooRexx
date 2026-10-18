@@ -1,0 +1,17 @@
+s~charin(9, 6) [90] NOTREADY:EOF raised f.txt [90]
+s~charin(, 2) [] ERROR:0 raised f.txt []
+s~charin(30) [] NOTREADY:EOF raised f.txt []
+s~charin(11) [] NOTREADY:EOF raised f.txt []
+s~charin(5) [5] READY: 
+s~charin(1, 0) [] READY: 
+s~charin(10, 1) [0] READY: 
+s~charin(11, 1) [] NOTREADY:EOF raised f.txt []
+s~charin(4, 3) [456] READY: 
+charin('f.txt', 8, 5) [890] UNKNOWN: raised f.txt [890]
+stream('f.txt', 'S') [NOTREADY] UNKNOWN: 
+charin('f.txt', 1, 2) [12] UNKNOWN: 
+stream('f.txt', 'S') [READY] UNKNOWN: 
+g~linein [one] READY: 
+g~linein [] NOTREADY:EOF raised g.txt []
+g~linein(1) [one] READY: 
+signal f.txt 890 NOTREADY:EOF

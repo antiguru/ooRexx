@@ -1,0 +1,12 @@
+lineout 0 READY:
+position 93.958 Positioning of transient streams is not valid.
+charout position 93.958 Positioning of transient streams is not valid.
+open READY:
+exists /dev/null
+close READY:
+open file READY:
+exists file 1
+lines n 1
+lines Count 1
+lines 2.5 93.915 Method option must be one of "CN"; found "2.5".
+lines  93.915 Method option must be one of "CN"; found "".

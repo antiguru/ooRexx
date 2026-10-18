@@ -1,0 +1,4 @@
+    18 *-* raise propagate
+     2 *-* call r
+Error 4 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t64/runs/rv_g2_nested_halt_none-1792342867916648853/c/p.rex line 18:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.

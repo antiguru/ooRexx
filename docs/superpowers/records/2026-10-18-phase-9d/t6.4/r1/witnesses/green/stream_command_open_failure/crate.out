@@ -1,0 +1,11 @@
+directory ERROR:2
+directory write ERROR:21
+missing ERROR:2
+missing path ERROR:2
+method ERROR:2
+call on ERROR:2
+caught NOTREADY / CALL 1 ERROR:2 Stream /
+signalled NOTREADY / SIGNAL 1 ERROR:2 Stream /
+routine inner 1 ERROR:2
+method returns 7
+open method, CALL OFF in force ERROR:2
