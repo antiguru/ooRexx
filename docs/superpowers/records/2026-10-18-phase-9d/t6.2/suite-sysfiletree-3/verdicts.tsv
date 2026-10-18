@@ -1,0 +1,4 @@
+# ootest revision 13178
+group	verdict	crate	oracle denominator
+base/class/RexxInteger	green		equal
+base/rexxutil/SysFileTree	red	not passed: TEST_TREE_DIRECTORY	equal
