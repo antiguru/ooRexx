@@ -1,0 +1,11 @@
+count 10
+/* Under ::OPTIONS NUMERIC INHERIT, a ::CONSTANT expression and a ::REQUIRES
+   prologue start from the activation that installs their package: the
+   requiring package's DIGITS 4, and a caller's NUMERIC DIGITS 6. */
+say .c~third
+numeric digits 6
+call 'inherit_called.rex'
+say .package~new('inherit_loaded.cls')~findClass('L')~third
+
+::requires 'inherit_required.cls'
+::options digits 4

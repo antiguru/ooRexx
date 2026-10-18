@@ -174,16 +174,26 @@ impl ClauseCursor {
         error.echoing(start..self.clauses[index].span.end)
     }
 
-    /// The clause of the source, as `split_clauses` cut it, that holds byte
-    /// `byte`: the clause the C++ parser's position 1 still names after a
-    /// THEN, an ELSE or an OTHERWISE has been trimmed off its front.
-    pub(crate) fn origin(&self, byte: usize) -> &Clause {
-        let index = self
+    /// Where the clause of the source holding byte `byte` starts, and the
+    /// index of its first token: what the C++ parser's position 1 still
+    /// names after a THEN, an ELSE or an OTHERWISE has been trimmed off its
+    /// front. The start is that of the clause `split_clauses` cut, and the
+    /// token steps back over labels that open the same source clause, which
+    /// `split_clauses` cut off as clauses of their own.
+    pub(crate) fn origin(&self, byte: usize) -> (usize, usize) {
+        let mut index = self
             .clauses
             .partition_point(|clause| clause.span.start <= byte)
             .checked_sub(1)
             .expect("a parsed byte lies in a clause");
-        &self.clauses[index]
+        let start = self.clauses[index].span.start;
+        while let Some(previous) = index.checked_sub(1).map(|i| &self.clauses[i])
+            && previous.label.is_some()
+            && self.clauses[index].tokens.start == previous.tokens.end + 1
+        {
+            index -= 1;
+        }
+        (start, self.clauses[index].tokens.start)
     }
 
     /// The clause being parsed, without consuming it.

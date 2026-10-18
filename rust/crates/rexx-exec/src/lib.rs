@@ -1742,6 +1742,12 @@ struct Interp {
     /// Whether [`Interp::install_directives`] stops after its first walk:
     /// a translation that runs nothing, as `rexxc` makes.
     translate_only: bool,
+    /// While [`Interp::run_loaded`] installs a program's directives, the
+    /// settings `::OPTIONS NUMERIC INHERIT` inherits from there: the outer
+    /// `Some` says an install is running, the inner value is its caller's.
+    /// The install runs in the activation that then runs the main body, so
+    /// a `::CONSTANT` expression and a `::REQUIRES` prologue start from it.
+    install_caller: Option<Option<Settings>>,
     /// The threads native calls and blocking operations run on; last, so
     /// that every island value is dropped before its threads end.
     pool: crate::scheduler::Pool,
@@ -2312,6 +2318,7 @@ impl Interp {
             required_packages: FxHashMap::default(),
             untranslated: rustc_hash::FxHashSet::default(),
             translate_only: false,
+            install_caller: None,
             pool: new_pool(),
         }
     }
@@ -2531,6 +2538,13 @@ impl Interp {
         })
     }
 
+    /// The numeric settings an activation of `program`'s code starts with,
+    /// called from where `caller` is in force.
+    fn start_settings(&self, program: ProgramId, caller: Option<&Settings>) -> Settings {
+        self.package_start(program, caller)
+            .map_or_else(Settings::default, |start| start.settings)
+    }
+
     /// Whether the running activation turns an untrapped raise of `condition`
     /// into a SYNTAX error -- `::OPTIONS <condition> SYNTAX`, and `ALL` for
     /// all six at once.
@@ -2575,7 +2589,10 @@ impl Interp {
         {
             return Err(Raised::insufficient_stack().into());
         }
-        if let Err(failure) = self.install_directives(program_id, &program) {
+        let outer = self.install_caller.replace(caller_settings.clone());
+        let installed = self.install_directives(program_id, &program);
+        self.install_caller = outer;
+        if let Err(failure) = installed {
             if called {
                 let arguments = Rc::clone(&self.activity.call_context.arguments);
                 let name = Rc::clone(&self.activity.call_context.name);
@@ -3191,6 +3208,7 @@ impl Interp {
             required_packages: _,
             untranslated: _,
             translate_only: _,
+            install_caller: _,
             // Bytes and paths, no `ObjRef` in any of them: the interpreter's
             // own environment, current directory and `SETLOCAL` snapshots are
             // not the collector's.

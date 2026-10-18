@@ -743,7 +743,19 @@ impl Interp {
             self.required_packages
                 .insert(found.as_slice().into(), required);
         }
-        if let Err(failure) = self.run_loaded(parsed, required, CallType::Requires, None, None) {
+        // A `::REQUIRES` prologue runs in the requiring package's installing
+        // activation, and a run-time load's in the running one, which
+        // `NUMERIC INHERIT` inherits from. Measured: a `DIGITS 4` package
+        // requiring an inheriting file reports `digits()` 4 in that file's
+        // prologue, and so does `.Package~new(name)` under `NUMERIC DIGITS 4`.
+        let requirer = match (from, &self.install_caller) {
+            (Some(from), Some(caller)) => Some(self.start_settings(from, caller.as_ref())),
+            _ => self
+                .running_activation()
+                .map(|activation| activation.settings.clone()),
+        };
+        if let Err(failure) = self.run_loaded(parsed, required, CallType::Requires, None, requirer)
+        {
             // `getRequiresFile` caches a package only once it has translated
             // (`package/PackageManager.cpp:828-836`), so a later ask for one
             // whose translation raised translates it again; a package that
@@ -2645,13 +2657,16 @@ impl Interp {
     ) -> Result<ObjRef, Failure> {
         let empty_body = CodeBody::default();
         // Taken before the frame is pushed, as every activation's is.
-        let start = self.package_start(id, None);
+        let caller = self.install_caller.clone().flatten();
+        let start = self.package_start(id, caller.as_ref());
         let frame = self.push_directive_activation(id, program);
         // `resolveConstants` runs the expression as a method of the package
         // (`instructions/ClassDirective.cpp:257`), so it starts from the
-        // package's `::OPTIONS` numeric and condition settings. Measured:
+        // package's `::OPTIONS` numeric and condition settings, and under
+        // `NUMERIC INHERIT` from the installing activation's. Measured:
         // `::constant k (1+b)` under `::OPTIONS NOVALUE SYNTAX` is 98.986,
-        // and `(1/3)` under `::OPTIONS DIGITS 5` is `0.33333`.
+        // `(1/3)` under `::OPTIONS DIGITS 5` is `0.33333`, and under
+        // `NUMERIC INHERIT` in a file a `DIGITS 4` package requires, `0.3333`.
         if let Some(start) = start {
             let activation = self.activation_mut();
             activation.settings = start.settings;

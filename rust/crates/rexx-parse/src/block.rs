@@ -676,11 +676,12 @@ impl<'a> Block<'a> {
 }
 
 /// `msg` for a misplaced label (`LanguageParser.cpp:1237`-`1242`), which
-/// names the first token of the source clause holding the label and is
-/// reported against that clause. That token is the label itself unless a
-/// THEN, an ELSE or an OTHERWISE was trimmed off the clause's front, where
-/// it is the IF, WHEN, THEN, ELSE or OTHERWISE keyword. Measured:
-/// `if 1 = 1 then lab: nop` is 47.3 `found "IF"`.
+/// names the first token of the source clause holding the label. That token
+/// is the label itself, unless a THEN, an ELSE or an OTHERWISE was trimmed
+/// off the clause's front. Then it is the IF, WHEN, THEN, ELSE or OTHERWISE
+/// keyword, or a label opening the source clause ahead of it. Measured:
+/// `if 1 = 1 then lab: nop` is 47.3 `found "IF"`, and
+/// `a: if 1 = 1 then b: nop` is 47.3 `found "A"`.
 #[cold]
 #[inline(never)]
 fn misplaced_label(
@@ -689,9 +690,9 @@ fn misplaced_label(
     msg: Msg<1>,
     label: &Instruction,
 ) -> ParseError {
-    let origin = cursor.origin(label.clause_span.start);
-    let first = &ctx.tokens[origin.tokens.start];
-    ParseError::raise(msg, origin.span.start, [display_value(ctx, Some(first))])
+    let (start, first) = cursor.origin(label.clause_span.start);
+    let first = &ctx.tokens[first];
+    ParseError::raise(msg, start, [display_value(ctx, Some(first))])
 }
 
 /// Which stack frame a block instruction opens.

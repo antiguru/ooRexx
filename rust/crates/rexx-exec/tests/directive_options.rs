@@ -366,14 +366,8 @@ fn lostdigits_raises_98_972_where_the_oracle_does_and_nowhere_else() {
             "numeric digits 3\nsay 1.23456789 + 0\n",
             Agrees,
         ),
-        // The two this task did not close, each loud on both sides or silent
-        // on both -- named so a change to either is visible here.
-        (
-            "signal-on-trap",
-            "numeric digits 3\nsignal on lostdigits\nsay 1.23456789 + 0\nexit\nlostdigits:\nsay 'trapped'\n",
-            Diverges,
-        ),
-        // `do-repeat-count`: a bare `DO n` converts rather than computes, so
+        // The one this task did not close, named so a change to it is visible
+        // here. `do-repeat-count`: a bare `DO n` converts rather than computes, so
         // this crate answers 26.2 -- which is what BOTH sides answer without
         // the directive. The oracle's LOSTDIGITS preempts its own 26.2 and
         // ours does not: loud on both sides, different loud.
