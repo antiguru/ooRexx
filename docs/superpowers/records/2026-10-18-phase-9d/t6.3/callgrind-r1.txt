@@ -1,0 +1,11 @@
+# head = cc1285116, binary at /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.3-r1/rexx-head
+# rust/bench-programs/callgrind.sh -B 0.5 -p "startup interpret parse churn sayloop" -o /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.3-r1 pin=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run head=/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.3-r1/rexx-head   (exit 0)
+# pin c4b4e8c4ce7f1f12e4a73fa37cb15eca262717092c2c1aed727febf437523c67
+# head fdd0c00b6521cba226dedbd1be31469e4e6204dfe30cc9ca0da4822e39118ee2
+program	pin	head	head d%	pin -libc	head -libc	head -libc d%	pin spread%	head spread%
+startup	119093092	119110231	+0.0144	57372505	57273399	-0.1727	0.0002	0.0000
+interpret	4206982166	4115307175	-2.1791	1785211722	1702051348	-4.6583	0.0000	0.0000
+parse	1654596767	1653143074	-0.0879	1552802803	1551173811	-0.1049	0.0000	0.0000
+churn	631332775	632131636	+0.1265	378751201	379006887	+0.0675	0.0000	0.0000
+sayloop	179661226	179716848	+0.0310	107723764	107624974	-0.0917	0.0000	0.0023
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.3-r1
