@@ -1,0 +1,5 @@
+     1 *-* call ext_par
+       *-* Compiled method "CALL" with scope "Routine".
+    23 *-* say r~call
+Error 43 running bare line 1:  Routine not found.
+Error 43.1:  Could not find routine "EXT_PAR".

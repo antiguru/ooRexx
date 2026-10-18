@@ -1,0 +1,5 @@
+     1 *-* call ext_own
+       *-* Compiled method "CALL" with scope "Routine".
+    19 *-* say r~call (r~package~findProgram('ext_own') \== .nil)
+Error 43 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t61/x-red/rqx/any.zzz line 1:  Routine not found.
+Error 43.1:  Could not find routine "EXT_OWN".

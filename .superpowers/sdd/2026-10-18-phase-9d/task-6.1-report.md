@@ -108,12 +108,68 @@ perf run were taken there.
 
 ## Concerns
 
-* **The same rule fails in two more paths, and this task does not widen to them.** A `CALL` of an
-  external routine from source-built code (`Interp::external_program`, `lib.rs`) and `Package~findProgram`
-  on a source-built package (`Interp::resolve_program_name`, `environment/identities.rs`) still search
-  from the main program's path, or from the global context, and never walk the parent chain. Probe
-  `t6.1/probes/same-rule-other-paths/`: the oracle prints `findProgram 1` and `call external`, while
-  the crate at `37f18b39f` prints `findProgram 0` and `syntax 43.1`. The oracle reaches both through
-  `PackageClass::resolveProgramName` and `findProgramRexx` with the same chain. The fix would reuse
-  `resolve_requires`' walk with `requires = false`. The `resolve_program_name` doc comment ("A package
-  compiled from source text has no directory") holds only for a bare name.
+None open. The two other paths of the same rule are fixed in fix round 1.
+
+## Fix round 1
+
+The controller ruled that `Interp::external_program` (an external `CALL`) and
+`Interp::resolve_program_name` (`Package~findProgram`) belong here, because they follow the same oracle
+rule. The probe in `t6.1/probes/same-rule-other-paths/` shows them diverging at `37f18b39f`.
+
+### Commit
+
+* `325afb5b7` Phase 9d Task 6.1 fix round 1: an external CALL and findProgram search from the package chain too
+
+`resolve_requires`' walk is now `Interp::resolve_in_package(id, name, requires)` (`install.rs`).
+`external_program` (`lib.rs`) and `resolve_program_name` (`environment/identities.rs`) call it with
+`requires = false`. `resolve_program_name` with no package keeps the global search, which
+`call_program` (`dispatch/library/surface.rs`) uses. The old doc's `compiled_method_names` test is
+gone. Its measured fact, that a package built under a bare name searches the current directory first,
+still holds under the new rule and stays in the doc.
+
+### Witness
+
+`rust/corpus/lang/external_call_dynamic_search_start.rex`, added to `phase-9.txt`, with its
+sourceline expectation file. Each of the cases (own directory, own extension, bare name through the
+parent) does an external `CALL` and a `findProgram`. A miss gives `findProgram` `.nil` and 43.1 on both
+sides. Records are in `t6.1/probes/fix-round-1/`.
+
+* Red (binary at `37f18b39f`): rc 213, `Error 43.1: Could not find routine "EXT_OWN".`
+  `findprogram_only` prints `0` for each of the three cases, where the oracle prints `1`.
+  `call_parent_only` stops with rc 213 on `EXT_PAR`.
+* Green (binary at `325afb5b7`): all three runs match the oracle byte for byte on stdout, stderr and rc.
+  The first witness, `requires_dynamic_search_start.rex`, also still matches.
+
+### Checks
+
+These ran at `325afb5b7` with the same environment as above. Exit statuses were read unpiped.
+
+| command (from `rust/`) | exit |
+|---|---|
+| `cargo fmt --all --check` | 0 |
+| `cargo clippy -p rexx-exec -p rexx-parse --all-targets -- -D warnings` | 0 |
+| `cargo test --release -p rexx-exec --lib require` (16 passed) | 0 |
+| the refusal-table and `package_requires` command above | 0 |
+| `cargo test --release -p rexx-parse --test sourceline_oracle` | 0 |
+| `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus` (`1069 of 1069 matching`) | 0 |
+| whole suite, `REXX_SUITE_TABLE=.../t6.1/suite-r1/table.tsv` | 101 (expected) |
+| `callgrind.sh ... -o .../cg-9d/t6.1-r1` | 0 |
+
+### Whole suite
+
+No row of `t6.1/suite-r1/tests.tsv` differs from `t6.1/suite/tests.tsv`
+(`suite-r1/changed-vs-t6.1.tsv`). So against Task 4 the changed rows are still exactly the 25
+cluster tests.
+
+### Perf
+
+The table is `t6.1/callgrind-r1.txt`. The previous perf-checked figure is this task's first round
+(`t6.1/callgrind.txt`).
+
+| program | vs pin | round 0 vs pin | own delta | task total vs Task 4 |
+|---|---|---|---|---|
+| startup | +0.0194 | +0.0198 | -0.0004 | +0.0006 |
+| interpret | -2.1904 | -2.1904 | 0.0000 | +0.0018 |
+| parse | -0.0874 | -0.0874 | 0.0000 | +0.0002 |
+| churn | +0.1275 | +0.1276 | -0.0001 | -0.0251 |
+| sayloop | +0.0344 | +0.0346 | -0.0002 | +0.0008 |
