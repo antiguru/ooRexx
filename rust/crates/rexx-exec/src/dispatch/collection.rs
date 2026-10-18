@@ -454,8 +454,8 @@ pub(super) fn array_grow(
     let grown = match interp.heap.get_mut(receiver).map(|object| &mut object.body) {
         Some(Body::Array { slots, .. }) => {
             let before = slots.capacity();
-            // A length the allocator refuses is 5.0, as the oracle's
-            // `ArrayClass::extend` raises, and not an abort.
+            // A length the allocator refuses is 5.0, as on the oracle, and
+            // not an abort.
             if let Some(extra) = length.checked_sub(slots.len()) {
                 slots
                     .try_reserve(extra)
