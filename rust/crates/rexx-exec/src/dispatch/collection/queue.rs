@@ -134,7 +134,7 @@ fn native_queue_put(
         let written = interp.string_value_text(index);
         Failure::from(Raised::incorrect_list_index(&written))
     };
-    let subscript = queue_index(interp, index, 2)?;
+    let subscript = queue_index(interp, receiver, index, 2)?;
     // `putRexx` calls `checkInsertIndex` (`classes/QueueClass.cpp:205`)
     // before anything else can refuse, so an index past the last item is
     // 93.966 and never the 93.918 an unheld index would answer.
@@ -162,7 +162,7 @@ fn native_queue_at(
 ) -> Result<Option<ObjRef>, Failure> {
     let store = store_of(interp, receiver)?;
     if let [Some(only)] = args {
-        let index = queue_index(interp, *only, 1)?;
+        let index = queue_index(interp, receiver, *only, 1)?;
         return super::native_array_at_for(interp, cleared, store, &[Some(index)]);
     }
     super::native_array_at_for(interp, cleared, store, args)

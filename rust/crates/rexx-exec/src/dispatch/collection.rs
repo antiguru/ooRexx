@@ -75,26 +75,27 @@ pub(super) fn position_in(
     let store = store_of(interp, receiver)?;
     if let [Some(only)] = args
         && interp.array_slots(*only).is_some()
-        && is_queue(interp, receiver)
     {
-        let index = queue_index(interp, *only, index_use.arg_position())?;
+        let index = queue_index(interp, receiver, *only, index_use.arg_position())?;
         return array_position(interp, store, &[Some(index)], index_use);
     }
     array_position(interp, store, args, index_use)
 }
 
-/// The one index a `Queue` method validates, as `QueueClass::validateIndex`
-/// (`classes/QueueClass.cpp:98`) reads it: an `Array` is not spread into
-/// subscripts but read as `requestString` reads it, as its items' lines, so
-/// only a single item holding a positive whole number converts, and anything
-/// else is 93.907 naming the Array. Any other index is answered unchanged.
-/// `position` is the argument's place in the method's argument list.
+/// The one index a method validates for `receiver`: `index` itself, except
+/// an `Array` index on a `Queue`. `QueueClass::validateIndex`
+/// (`classes/QueueClass.cpp:98`) does not spread that into subscripts but
+/// reads it as `requestString` does, as its items' lines, so only a single
+/// item holding a positive whole number converts, and anything else is
+/// 93.907 naming the Array. `position` is the argument's place in the
+/// method's argument list.
 pub(super) fn queue_index(
     interp: &mut Interp,
+    receiver: ObjRef,
     index: ObjRef,
     position: usize,
 ) -> Result<ObjRef, Failure> {
-    if interp.array_slots(index).is_none() {
+    if interp.array_slots(index).is_none() || !is_queue(interp, receiver) {
         return Ok(index);
     }
     let lines = interp.required_string_value(index)?;

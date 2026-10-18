@@ -482,7 +482,7 @@ fn single_subscript(
         return super::positive_index(interp, value, position);
     }
     if is_queue(interp, receiver) {
-        let index = queue_index(interp, value, position)?;
+        let index = queue_index(interp, receiver, value, position)?;
         return super::positive_index(interp, index, position);
     }
     let spread = match interp.array_slots(value) {
