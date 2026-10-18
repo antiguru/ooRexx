@@ -664,10 +664,17 @@ impl Interp {
         // The rest of `findClass` (`classes/PackageClass.cpp:1105`-`:1159`):
         // the REXX package's public classes, then the package's own local
         // directory, `.local` and `.environment`, the first of them holding
-        // the name deciding. `ClassDirective`'s own search reads the two
-        // directories without the security manager. Measured: `::class t
-        // subclass input` is 99.949, `.INPUT` being `.local`'s stream.
-        if let Some(found) = self.rexx_package_class(upper) {
+        // the name deciding. Uncached, because a directive's target is
+        // resolved once. `ClassDirective`'s own search reads the two
+        // directories without the security manager.
+        //
+        // The directory model is built here even when the REXX package
+        // answers, so that the bootstrap's first directive builds it. Built at
+        // a later read, its allocations shift the heap for the rest of the
+        // run: measured, `bench-programs/interpret.rex` +0.06% whole process,
+        // all of it in malloc.
+        let _ = self.environment_model();
+        if let Some(found) = self.rexx_package_class_uncached(upper) {
             return Ok(Some(found));
         }
         let mut entry = match local {
@@ -681,23 +688,15 @@ impl Interp {
                 &env_seam::Access::Direct,
             )?;
         }
-        if let hash::DirectoryEntry::Found(found) = entry
-            && self.heap.is_class(found)
-        {
-            return Ok(Some(found));
+        // A name that answers an object which is not a class is 99.949,
+        // `ClassResolver::lookup` (`expression/ExpressionClassResolver.cpp:159`).
+        // Measured, oracle rc 157: `::class k subclass rexxinfo`, and
+        // `::class t subclass input`, `.INPUT` being `.local`'s stream.
+        match entry {
+            hash::DirectoryEntry::Absent => Ok(None),
+            hash::DirectoryEntry::Found(found) if self.heap.is_class(found) => Ok(Some(found)),
+            _ => Err(crate::error::Raised::not_a_valid_class(upper).into()),
         }
-        let found_object = !matches!(entry, hash::DirectoryEntry::Absent);
-        // A name whose directory entry this crate has not built falls through
-        // to the native table -- which is where a `::CLASS` target was
-        // resolved before the directories were ever consulted, so a miss is
-        // the same 98.909 it was. A name that answers an object which is not
-        // a class and that the native table does not hold either is 99.949:
-        // measured, oracle rc 157, `::class k subclass rexxinfo`.
-        let native = self.classes().lookup_upper(upper);
-        if native.is_none() && found_object {
-            return Err(crate::error::Raised::not_a_valid_class(upper).into());
-        }
-        Ok(native)
     }
 
     /// What the first of `scopes` whose directory holds `bare` answers for it.

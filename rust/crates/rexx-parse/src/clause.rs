@@ -239,24 +239,8 @@ impl ClauseCursor {
             "split_before end byte outside the clause"
         );
         let limit = cur.tokens.end;
-        let mut start = at;
-        if remainder == Remainder::Instruction && starts_label(ctx.tokens, start, limit) {
-            // Pushed in source order and reversed below, so that `peeled`
-            // pops them first to last.
-            let mark = self.peeled.len();
-            while starts_label(ctx.tokens, start, limit) {
-                self.peeled.push(label_clause(ctx.tokens, start));
-                start += 2;
-            }
-            if start < limit {
-                self.peeled.push(Clause {
-                    tokens: start..limit,
-                    span: ctx.tokens[start].span.start..cur.span.end,
-                    label: None,
-                });
-            }
-            self.peeled[mark..].reverse();
-            self.pending = self.peeled.pop();
+        if remainder == Remainder::Instruction && starts_label(ctx.tokens, at, limit) {
+            self.peel_labels(ctx.tokens, at, limit, cur.span.end);
         } else {
             self.pending = Some(Clause {
                 tokens: at..limit,
@@ -269,6 +253,30 @@ impl ClauseCursor {
             span: cur.span.start..end_at,
             label: cur.label,
         }
+    }
+
+    /// [`ClauseCursor::split_before`]'s remainder `start..limit`, which opens
+    /// with a label: each leading label becomes a clause of its own, then
+    /// whatever follows them, ending at byte `end`.
+    #[cold]
+    #[inline(never)]
+    fn peel_labels(&mut self, tokens: &[Token], mut start: usize, limit: usize, end: usize) {
+        // Pushed in source order and reversed below, so that `peeled` pops
+        // them first to last.
+        let mark = self.peeled.len();
+        while starts_label(tokens, start, limit) {
+            self.peeled.push(label_clause(tokens, start));
+            start += 2;
+        }
+        if start < limit {
+            self.peeled.push(Clause {
+                tokens: start..limit,
+                span: tokens[start].span.start..end,
+                label: None,
+            });
+        }
+        self.peeled[mark..].reverse();
+        self.pending = self.peeled.pop();
     }
 }
 
