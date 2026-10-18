@@ -1,0 +1,23 @@
+READY:
+lineout 3 0
+lineout 2 0
+lineout 1 0
+too long 93.0
+charout 0
+too long after charout 93.0
+lineout 0
+charout 0
+close 0
+[1    xyabcz    ]
+READY:
+lines 3 chars 10 lines N 3
+linein [0123] READY: chars 6 lines 2 
+linein [4567] READY: chars 2 lines 1 
+linein [89] NOTREADY:EOF chars 0 lines 0 raised d.txt [89]
+linein [] ERROR:0 chars 0 lines 0 raised d.txt []
+linein 2 [4567] 3
+charin [0] lines 3 linein [123]
+seek 3 [89]
+arrayin 3 0123,4567,89
+arrayin after charin 3 3,4567,89
+whole [0123456789] READY:

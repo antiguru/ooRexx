@@ -1,0 +1,59 @@
+/* A stream opened BINARY RECLENGTH n reads and writes records. LINEOUT pads a
+   short record with blanks and refuses one that does not fit what is left of
+   the record with 93, LINEIN reads the rest of the current record, LINES
+   counts records and ARRAYIN splits by record. A partial last record is
+   NOTREADY:EOF and a read past it ERROR:0. BINARY with no RECLENGTH takes the
+   file's size as the record. */
+call on notready name caught
+f = 'r.bin'
+say stream(f, 'c', 'open write replace binary reclength 5')
+do n = 3 to 1 by -1
+  say 'lineout' n lineout(f, n~copies(n), n)
+end
+say 'too long' tryout(f, 'abcdef')
+say 'charout' charout(f, 'xy')
+say 'too long after charout' tryout(f, 'abcd')
+say 'lineout' lineout(f, 'abc')
+say 'charout' charout(f, 'z')
+say 'close' lineout(f)
+say '[' || charin(f, 1, 30) || ']'
+call stream f, 'c', 'close'
+
+call charout 'd.txt', '0123456789'
+call charout 'd.txt'
+s = .Stream~new('d.txt')
+say s~open('read binary reclength 4')
+say 'lines' s~lines 'chars' s~chars 'lines N' s~lines('N')
+do 4
+  hits = ''
+  r = s~linein
+  say 'linein [' || r || ']' s~description 'chars' s~chars 'lines' s~lines hits
+end
+say 'linein 2 [' || s~linein(2) || ']' s~query('position read line')
+say 'charin [' || s~charin(1, 1) || '] lines' s~lines 'linein [' || s~linein || ']'
+say 'seek' s~seek('=3 read line') '[' || s~linein || ']'
+s~close
+s~open('read binary reclength 4')
+a = s~arrayin
+say 'arrayin' a~items a~toString('L', ',')
+s~close
+s~open('read binary reclength 4')
+discard = s~charin( , 3)
+a = s~arrayin
+say 'arrayin after charin' a~items a~toString('L', ',')
+s~close
+s~open('read binary')
+say 'whole [' || s~linein || ']' s~description
+s~close
+exit
+
+tryout: procedure
+  signal on syntax
+  call lineout arg(1), arg(2)
+  return 'no error'
+syntax:
+  return condition('O')~code
+
+caught:
+  hits = 'raised' condition('D') '[' || condition('O')~result || ']'
+  return

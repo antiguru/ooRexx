@@ -1,0 +1,34 @@
+/* OPEN WRITE on a file that grants write and not read retries the open write
+   only, and the stream writes at the end. OPEN BOTH has no such retry and
+   answers ERROR:13, as does READ. */
+call on notready name caught
+f = 'w.txt'
+call lineout f, 'line1'
+call lineout f
+'chmod a+w,a-r' f
+call t "stream(f, 'c', 'open write append')"
+call t "charout(f, 'line2')"
+call t "lineout(f, 'line3')"
+call t "stream(f, 'c', 'query position write')"
+call t "stream(f, 'c', 'close')"
+s = .Stream~new(f)
+call t "s~command('open write')"
+call t "s~lineout('line4')"
+call t "s~close"
+call t "s~open('both')"
+call t "s~open('read')"
+call t "s~open"
+s~close
+'chmod a+r' f
+say charin(f, 1, 40)
+exit
+
+t:
+  hits = ''
+  interpret 'r =' arg(1)
+  say arg(1) '[' || r || ']' stream(f, 'd') hits
+  return
+
+caught:
+  hits = 'raised [' || condition('O')~result || ']'
+  return

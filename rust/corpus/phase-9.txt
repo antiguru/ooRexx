@@ -187,3 +187,9 @@ lang/stream_position_arguments.rex
 # writes, QUERY EXISTS on an open device and the LINES method option.
 lang/raise_propagate_unreportable.rex
 lang/stream_transient_queries.rex
+
+# 9d Task 6.5: BINARY RECLENGTH record reads, writes and counts, OPEN WRITE
+# retrying write-only, and stream positions after an implicit open.
+lang/stream_binary_records.rex
+lang/stream_open_write_only.rex
+lang/stream_command_position.rex

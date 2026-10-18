@@ -1,0 +1,38 @@
+Searching for test containers
+Executing automated test suite
+
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.9+deb14-amd64
+
+Tests ran:          16
+Assertions:         43
+Failures:           2
+Errors:             0
+
+[failure] 20261018 19:20:50.969101
+  Test:   TEST_BINARY
+  Class:  LINEOUT.TESTGROUP
+  File:   .../ooRexx/base/bif/LINEOUT.testGroup
+  Line:   233
+  Failed: assertSame
+    Expected: 1         three     55555
+    Actual:   1    22   three4444 55555
+
+[failure] 20261018 19:20:50.970179
+  Test:   TEST_LINE_TRANSIENT
+  Class:  LINEOUT.TESTGROUP
+  File:   .../ooRexx/base/bif/LINEOUT.testGroup
+  Line:   -1
+  Failed: expectSyntax
+    Expected: SYNTAX 93.958
+    Actual:   Not raised
+
+File search:        00:00:00.001577
+Suite construction: 00:00:00.001054
+Test execution:     00:00:00.003133
+Total time:         00:00:00.007004
+

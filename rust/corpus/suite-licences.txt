@@ -3,6 +3,7 @@
 # reason. A Deviation or Environment row is added only by Moritz's ruling.
 # ootest revision 13178
 base/bif/CHAROUT	TEST_STDOUT_START	Flaky	common.txt: CHAROUT.testGroup/TEST_STDOUT_START
+base/bif/LINEOUT	TEST_BINARY	Deviation 46	the final assertFile expects the oracle's blank records 2 and 4 from a position-only and a closing LINEOUT
 base/bif/LINEOUT	TEST_LINE_TRANSIENT	Flaky	common.txt: LINEOUT.testGroup/TEST_LINE_TRANSIENT
 base/class/RexxInteger	TEST_INTEGER_ADDITION	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min
 base/class/RexxInteger	TEST_INTEGER_CONSTANT	Deviation 44	the group's isInteger reads the oracle's integer representation through n~min

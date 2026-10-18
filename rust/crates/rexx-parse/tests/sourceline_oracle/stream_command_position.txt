@@ -1,0 +1,36 @@
+count 35
+/* Stream positions after an implicit open. A read opens read-write and puts
+   the write position at the end. QUERY HANDLE answers the descriptor of an
+   open stream. A line SEEK on a closed or never opened stream opens it and
+   lands. A SEEK offset is an int64_t, so 2**63 is 93. A forward line SEEK
+   counts line ends, so it stops on an unterminated last line. */
+f = 'p.txt'
+call lineout f, '1234567890'
+call lineout f
+say 'linein [' || linein(f, 1, 0) || ']'
+h = stream(f, 'c', 'query handle')
+say 'handle' datatype(h, 'W') (h > 2)
+say 'position write' stream(f, 'c', 'query position write') ,
+  stream(f, 'c', 'query position write line') stream(f, 'c', 'query position read')
+say 'close' stream(f, 'c', 'close') '[' || stream(f, 'c', 'query handle') || ']'
+say 'open' stream(f, 'c', 'open both')
+say 'close' stream(f, 'c', 'close')
+say 'seek closed' stream(f, 'c', 'seek =1 line')
+say 'close' stream(f, 'c', 'close')
+s = .Stream~new(f)
+say 'seek unopened' s~seek('=1 line') s~query('position write')
+s~close
+n = .Stream~new('no-such-file')
+say 'max' n~seek(9223372036854775807)
+signal on syntax
+say 'over' n~seek(9223372036854775808)
+syntax:
+say 'over' condition('O')~code
+call charout 'c.txt', '1' || '0a'x || '2' || '0a'x || '3'
+call charout 'c.txt'
+c = .Stream~new('c.txt')
+say c~open('read')
+say 'forward' c~seek('+99 read line') c~query('position read') c~lines
+say 'back' c~seek('-1 read line') c~lines c~linein
+say 'linein 9 [' || c~linein(9) || ']' c~query('position read line') c~description
+c~close
