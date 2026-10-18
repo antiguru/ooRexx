@@ -1644,3 +1644,18 @@ Effect: SIGSEGV, rc 139, 3 of 3, measured 2026-10-15 by the Phase 9b1 Task 8b re
 (`.superpowers/sdd/2026-10-14-phase-9b1/task-8b-review-files/refs/p11_objpool_assign_oracle_segv.rex`).
 This crate answers `p10a 26 ovo`, `p10b 14 nwn`, `p10c 26`, rc 0, pinned crate-only by
 `collect_stress`'s `an_instance_variable_reference_outlives_its_object`.
+
+## 50. `Class~new` sent to a hash class with `.Class` as the message scope
+
+    s = .Message~new(.Stem, .array~of('NEW', .Class))~send
+    say 'built' s~class~id
+    say s~items
+
+Effect: SIGSEGV, rc 139. On Stem it first prints `built Stem`, so the crash comes at the first
+method the object answers. The same shape on Set crashes before printing. Measured 2026-10-18 by
+the Phase 9d Task 3 review and again by the controller, 1 run each, under the standard wrapper
+from a fresh empty directory. The review found the same crash on Set, Bag, Table, Directory,
+StringTable, Relation, IdentityTable and Properties. `Class~new` builds an object without the
+hash class's own allocation, and the class's native methods then read a layout it lacks. This
+crate refuses `ITEMS` on the Stem with `method "ITEMS" of class "Stem" is not implemented`
+(rc 120), and answers on Set (`0`, rc 0). No upstream ticket.
