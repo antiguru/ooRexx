@@ -2292,8 +2292,8 @@ DEVIATIONS -- permanent, chosen
      rust/crates/rexx-exec/tests/compiled.rs
      `a_foreign_or_damaged_image_is_refused` pins this crate's 3.903.
 
-KNOWN GAP BESIDE DEVIATION 41, not a deviation: AN ACTIVATION ENTERED
-THROUGH `Routine~call` IS NAMED `CALL` (Phase 9c Task 9, queued).
+     KNOWN GAP BESIDE DEVIATION 41, not a deviation: AN ACTIVATION ENTERED
+     THROUGH `Routine~call` IS NAMED `CALL` (Phase 9c Task 9, queued).
      The oracle names it for the routine (`RoutineClass::callRexx`,
      interpreter/classes/RoutineClass.cpp:209), so `StackFrame~name` answers
      `ROUTINE MYNAME` for `.Routine~new('MYNAME', ...)~call` where this crate
