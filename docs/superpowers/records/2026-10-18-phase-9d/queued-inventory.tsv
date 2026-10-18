@@ -1,6 +1,6 @@
 item	kind	probe	proposed	reason	ruled
 2026-09-15-file-split.md	process	-	closed:9956c0ac6	2026-09-15-file-split/progress.md ends "File-split plan complete" at the final-review fix 9956c0ac6	
-2026-09-16-worktree-build-precondition.md	process	-	phase:10	no probe run (needs a fresh checkout); dispatch/library/tests.rs:26 still canonicalizes ../../../build/lib, the worktree extension build row 10 recompiles	
+2026-09-16-worktree-build-precondition.md	process	-	9d	a test-harness path like arity-harness-ignores-target-dir; dispatch/library/tests.rs:26 canonicalizes ../../../build/lib	
 2026-09-17-crexx-derived-candidates.md	perf	-	phase:9.1	unsized performance candidates; no probe	
 2026-09-17-oracle-deadline-is-wall-clock.md	process	-	9d	no probe; gate rows time out under load and none of the three directions is chosen, which the Phase 9 close gates meet	
 2026-09-19-driver-control-flow-spike.md	perf	-	closed:rejected 2026-09-19	its own "Spike result" section; report .superpowers/sdd/2026-09-19-driver-control-flow-spike-report.md	
@@ -118,15 +118,15 @@ item	kind	probe	proposed	reason	ruled
 2026-10-13-class-named-drops-raised-condition.md	divergence	-	9d	no probe recorded; dispatch/library/surface.rs:859 still drops the lookup's Err through .ok()?	
 2026-10-13-class-side-string-method-not-sent.md	divergence	queued-probes/clsstr/clsstr.rex:1	closed:0a055271c	CLOSED in its first line; KS on both	
 2026-10-13-error-position-ampersand.md	divergence	queued-probes/imeth/imeth.rex:1	9d-cluster:setmethod-instancemethod-kind	inserts closed in 9c; instanceMethod after setMethod still answers an Object here and a Method on the oracle	
-2026-10-13-lossy-path-sites.md	divergence	queued-probes/lossy/lossy.rex:1	9d	probe still differs: DIRECTORY() after entering a directory named d'ff'x ends 72 here and FF on the oracle	
-2026-10-13-named-semaphores-design.md	design	-	closed:Deviation 43	ruled by Moritz 2026-10-17; Task 5 relabels it	
+2026-10-13-lossy-path-sites.md	divergence	queued-probes/lossy/lossy.rex:1	9d	probe still differs: directory(d) answers empty for a directory named d'ff'x here and enters it on the oracle	
+2026-10-13-named-semaphores-design.md	design	-	9d	Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal	
 2026-10-13-passwd-home-ignores-nss.md	divergence	-	phase:11	not probed, no NSS-only account here; a host assumption, which row 11 puts behind the platform seam	
-2026-10-13-phase-9b-carry-in.md	process	-	phase:9.1	N1 native-frame memcpy cost is the open part; item 2 ruled, m2 now propagates (environment.rs:597), m1, m3, m4 not checked	
+2026-10-13-phase-9b-carry-in.md	process	-	9d	N1 native-frame memcpy cost is phase:9.1; the unchecked minors m1, m3, m4 are 9d	
 2026-10-13-phase-9b1-uniform-object-model.md	design	-	closed:Phase 9b1	phase-9b1-gate.md: every leak fixed or licensed, SysStemSort as Deviation 37, the addRoutine copy as L10	
 2026-10-13-security-manager-and-library-key.md	divergence	-	9d	no probe recorded; two oracle measurements to make first	
 2026-10-13-stdin-stream-object-queries.md	divergence	queued-probes/stdinq/stdinq.rex:1	9d	own probe: streamtype, query handle, lines, query exists and qualify on STDIN still differ	
 2026-10-13-stdout-write-errors-swallowed.md	divergence	queued-probes/stdoutclosed/stdoutclosed.rex:1	9d	probe with stdout closed: lineout 0 READY: here, 1 ERROR:9 on the oracle	
-2026-10-13-sysfork-design.md	design	-	closed:Deviation 42	ruled by Moritz 2026-10-17; Task 5 relabels it	
+2026-10-13-sysfork-design.md	design	-	9d	Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal	
 2026-10-13-yaml-pass-boundary-guard.md	divergence	-	9d	no probe of its own; Task 4 consumes it (ruling 2), yaml TEST35_DIRECTIVES was blocked on this refusal at the 9c close	
 2026-10-14-class-side-defaultname.md	divergence	queued-probes/clsdn/clsdn.rex:1	9d	own probe: DN on the oracle, The WITHNAME class here	
 2026-10-14-filespec-string-arg.md	divergence	queued-probes/fspec/fspec.rex:1	9d	own probe: 88.909 on the oracle, a K rc 0 here; the same fix as native-routine-arguments-not-strings	
@@ -188,7 +188,7 @@ gate:phase-9a-gate.md:485	divergence	-	9d-cluster:redirected-command-holds-baton
 gate:phase-9a-gate.md:488	divergence	-	9d	Task 4 owns TEST35_DIRECTIVES and TEST47_MULTILINEFLOWCOLLECTIONS	
 gate:phase-9b1-gate.md:115	divergence	queued-probes/rstart/rstart.rex:1	9d	a pointer to 2026-10-14-routine-start-call-panic.md, which still panics	
 gate:phase-9b1-gate.md:117	process	-	closed:pointer	a list of queued files, each with its own row here	
-gate:phase-9b1-gate.md:121	design	-	closed:Deviations 42 and 43	ruled by Moritz 2026-10-17; Task 5 relabels the refusals	
+gate:phase-9b1-gate.md:121	design	-	9d	Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal	
 gate:phase-9b1-gate.md:123	oracle bug	-	not-a-divergence	upstream reports, not copied (WeakReference to a held .true; oracle-crashes entry 49)	
 gate:phase-9c-gate.md:138	process	-	9d	a pointer to 2026-10-15-routines-table-silent-none.md	
 gate:phase-9c-gate.md:139	divergence	queued-probes/scopen/scopen.rex:1	9d-cluster:stream-notready-names	a pointer to 2026-10-16-stream-command-open-missing-file.md	
@@ -199,3 +199,4 @@ gate:phase-9c-gate.md:143	divergence	queued-probes/rcfn/rcfn.rex:1	9d	a pointer 
 gate:phase-9c-gate.md:144	divergence	-	9d	a pointer to 2026-10-17-newmethod-parent-package.md	
 gate:phase-9c-gate.md:145	divergence	queued-probes/scanlater/scanlater.rex:1	9d	a pointer to 2026-10-17-scanner-reports-later-clause-error.md	
 gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointer to 2026-10-13-lossy-path-sites.md	
+2026-10-18-command-waits-for-background-child.md	divergence	queued-probes/bgcmd/bgcmd.rex:1	9d	a command whose background child keeps stdout open: crate waits to timeout rc 124, oracle returns at once	
