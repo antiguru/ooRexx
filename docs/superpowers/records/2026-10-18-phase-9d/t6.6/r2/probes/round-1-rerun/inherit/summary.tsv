@@ -1,0 +1,12 @@
+program	oracle rc	parent rc	parent stdout	parent stderr	t6.6 rc	t6.6 stdout	t6.6 stderr
+C22	0	0	differs	same	0	same	same
+C23	0	0	differs	same	0	same	same
+C25	0	0	differs	same	0	same	same
+C27	0	0	same	same	0	same	same
+C28	0	0	same	same	0	same	same
+C29	0	0	differs	same	0	same	same
+C30	0	0	differs	same	0	same	same
+C31	0	0	differs	same	0	same	same
+C32	0	0	differs	same	0	same	same
+C33	0	0	differs	same	0	same	same
+C34	0	0	differs	same	0	same	same

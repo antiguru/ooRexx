@@ -1,0 +1,3 @@
+     1 *-*     c: nop
+Error 98 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t66/r2/r1sets/label/lead_4.rex line 1:  Execution error.
+Error 98.987:  Namespace "C" not found in package "/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t66/r2/r1sets/label/lead_4.rex".

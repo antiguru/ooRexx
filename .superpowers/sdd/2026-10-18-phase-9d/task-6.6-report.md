@@ -303,3 +303,74 @@ comment over the remaining `do-repeat-count` row says one row is left.
   pin is at or below round 0 on every program: startup +0.0416 against +0.0454, interpret -2.1635
   against -2.1602, parse -0.0861 against -0.0859, churn +0.1079 against +0.1085, and sayloop
   +0.0462 against +0.0483. So this round's own delta is not positive.
+
+## Fix round 2
+
+Re-review: `task-6.6-rereview.md`. The code commit is `c5b40df87`. The records commit that follows
+holds `t6.6/r2/` and this section.
+
+### New finding 1 and minor 2
+
+Round 1 gave every `::REQUIRES` outside an install the running activation's settings. That was
+right for `.Package~new(name)` and `loadPackage`, and wrong for a package an executable builds
+(`.Routine~new`, `~newFile`, `.Method~new`, `~newFile`). There the prologue starts from the
+executable's own package: its `::OPTIONS`, and the running activation's settings only under its
+`NUMERIC INHERIT`.
+
+The re-review's one-arm fix, `start_settings(from, running)` for `(Some(from), None)`, also
+caught `loadPackage`. I tried it first, and round 1's C34 (`loadPackage` under `NUMERIC DIGITS 4`)
+moved to `prolog 9` where the oracle prints 4. The fix that landed puts the rule where the
+executable installs instead:
+* `Interp::new_executable`'s `install_directives` runs with `install_caller` set to the running
+  activation's settings, as `run_loaded` sets its caller's.
+* So its `::REQUIRES` take `start_settings(executable package, running)`, and its own constants
+  inherit under INHERIT.
+* `find_requires` keeps two arms: inside an install, the requirer's start settings; otherwise,
+  the running activation's.
+* Minor 2: `package_from_program` (`.Package~new(name, source)` and the API buffer loads) passes
+  the running activation's settings to `run_loaded` as its caller.
+
+### Witness
+
+`lang/class_constant_expression_runtime_requires.rex`, with fixtures in its `.d/`. It is
+registered in `phase-9.txt`, with its `sourceline_oracle/` file. It covers:
+* `.Routine~newFile` of an options-less file that requires an inheriting file with a constant;
+* `.Routine~new` with `::OPTIONS DIGITS 6`;
+* `.Method~newFile` and `.Method~new`, each requiring an inheriting file;
+* an inheriting `.Package~new(name, source)`.
+
+The oracle prints `prolog 9`, `rtn 9 0.666666667`, `prolog6 6`, `r 6 0.666667`, `prologm 9`,
+`prologn 9`, `z 4`, `src 4`. The parent `ebeab2d35` and round 1 `adf05e2ff` each differ; round 2
+is identical (`t6.6/r2/witnesses/summary.tsv`, which also reruns round 1's witness: identical).
+
+### Probes, rerun before committing
+
+`t6.6/r2/probes/runtime-and-settings/` (`summary.tsv`, run by `probe-dirs.sh`, a fresh copy per
+side). It holds the re-review's shapes rebuilt from its text:
+* r1-r8, l1, l3 with its control, prologues p1-p3, caching q1 and q2, and nested requires n1;
+* external CALL e1-e4 (defaults, a requirer's options not reaching the callee, a function call);
+* INTERPRET i1;
+* condition and TRACE settings t1, t2, t3, t5 and t7.
+
+Plus r9 (an executable's own inheriting constant) and lp (`loadPackage`). All 29 match the
+oracle in rc, stdout and stderr on round 2. Round 1 differed on r2, r4, r5, r6, r7, r8 and l3.
+
+`t6.6/r2/probes/round-1-rerun/`: round 1's inherit set (C22-C34) and the leading-label set match.
+
+### Checks, on `c5b40df87`
+
+* `cargo fmt --all --check`: exit 0.
+* `memcap 8G cargo clippy -j 4 -p rexx-parse -p rexx-exec --all-targets -- -D warnings`: exit 0.
+* `memcap 8G cargo test -j 4 --release -p rexx-parse`: exit 0.
+* `memcap 8G cargo test -j 4 --release -p rexx-exec --lib`: exit 0, 1152 passed.
+* `memcap 8G cargo test -j 4 --release -p rexx-exec --test directive_options --test
+  package_requires --test refusal_sites --test owners --test closed_phases --test
+  phase_ten_reasons --test representation_refusals --test rexxc --test coverage --test
+  refusal_dispositions`: exit 0, no failures.
+* `REXX_CORPUS_GATE=1 memcap 8G cargo test -j 4 --release -p rexx-exec --test corpus`: exit 0,
+  1087 of 1087 matching.
+* The whole suite with the table at `t6.6/r2/suite/table.tsv`: exit 101 as expected, 402 groups,
+  24 red. Against `t6.6/r1/suite/tests.tsv` no row changed (`t6.6/r2/suite/changed-rows.txt`).
+* Perf, `t6.6/r2/callgrind.txt`, pin, round 1 and round 2 in one run, exit 0. Round 2 is within
+  +0.0018% of round 1 on every program whole process (startup +0.0434 against +0.0416), and the
+  libc-subtracted figures are identical.

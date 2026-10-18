@@ -1,0 +1,3 @@
+probe	oracle rc	parent rc	parent vs oracle	r1 rc	r1 vs oracle	r2 rc	r2 vs oracle
+inherit	0	0	DIFFERS	0	same	0	same
+runtime	0	0	DIFFERS	0	DIFFERS	0	same
