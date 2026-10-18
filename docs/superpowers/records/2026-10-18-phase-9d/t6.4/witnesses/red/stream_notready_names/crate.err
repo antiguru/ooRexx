@@ -1,0 +1,3 @@
+    34 *-* say 'direct' condition('C') condition('D') (condition('A') == s) condition('O')~result s~description
+Error 97 running /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/stream_notready_names.rex line 34:  Object method not found.
+Error 97.1:  Object "The NIL object" does not understand message "RESULT".

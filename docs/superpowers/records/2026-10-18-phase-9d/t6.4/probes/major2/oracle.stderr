@@ -1,0 +1,4 @@
+       *-* Compiled method "CHARIN" with scope "Stream".
+     2 *-* s~charin(1, -1)
+Error 88 running REXX:  Invalid argument.
+Error 88.907:  Argument 2 must be in the range 0 to 18446744073709551615; found "-1".

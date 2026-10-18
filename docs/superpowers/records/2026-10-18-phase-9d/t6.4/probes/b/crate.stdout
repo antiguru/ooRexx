@@ -1,0 +1,22 @@
+[90
+] NOTREADY:EOF
+[] ERROR:0
+[] NOTREADY:EOF
+[
+] READY:
+[] NOTREADY:EOF
+[] READY:
+[5] READY:
+[0] READY:
+[1234567890] READY:
+[2] READY:
+e1 93.907 Method argument 1 must be a positive whole number; found "0".
+e2 93.907 Method argument 1 must be a positive whole number; found "-3".
+e3 93.907 Method argument 1 must be a positive whole number; found "-3".
+e4 88.907 Argument 1 must be in the range -9223372036854775808 to 9223372036854775807; found "The NIL object".
+e5 88.907 Argument 1 must be in the range -9223372036854775808 to 9223372036854775807; found "abc".
+e6 88.907 Argument 2 must be in the range -9223372036854775808 to 9223372036854775807; found "x".
+e7 88.907 Argument 2 must be in the range -9223372036854775808 to 9223372036854775807; found "1.5".
+[] READY:
+e8 88.907 Argument 2 must be in the range -9223372036854775808 to 9223372036854775807; found "1.5".
+e9 88.907 Argument 1 must be in the range -9223372036854775808 to 9223372036854775807; found "99999999999999999999".

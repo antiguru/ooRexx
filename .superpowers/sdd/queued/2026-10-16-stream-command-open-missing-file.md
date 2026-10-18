@@ -1,4 +1,4 @@
-**OPEN: ruled 9d, cluster stream-notready-names (Phase 9d inventory).** probe still differs (91.999 against ERROR:2); the cluster holds the same no-result open command.
+**CLOSED 2026-10-18 by Phase 9d Task 6.4 (a735033de).**
 
 # STREAM(name, 'C', 'OPEN READ') on a missing file raises 91.999
 

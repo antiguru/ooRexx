@@ -1,0 +1,4 @@
+       *-* Compiled method "LINEIN" with scope "Stream".
+     2 *-* s~lineIn(.nil)
+Error 88 running REXX:  Invalid argument.
+Error 88.907:  Argument 1 must be in the range -9223372036854775808 to 9223372036854775807; found "The NIL object".

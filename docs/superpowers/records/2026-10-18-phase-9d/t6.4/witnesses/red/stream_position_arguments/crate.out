@@ -1,0 +1,102 @@
+lineout('w.txt', , v) [line] error 93.907 Method argument 2 must be a positive whole number; found "line".
+linein('r.txt', v) [line] error 93.907 Method argument 1 must be a positive whole number; found "line".
+linein('r.txt', 1, v) [line] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "line".
+charin('r.txt', v) [line] error 93.907 Method argument 1 must be a positive whole number; found "line".
+charin('r.txt', 1, v) [line] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "line".
+charout('w.txt', , v) [line] error 93.907 Method argument 2 must be a positive whole number; found "line".
+charout('w.txt', 'q', v) [line] error 93.907 Method argument 2 must be a positive whole number; found "line".
+.Stream~new('r.txt')~lineIn(v) [line] error 93.907 Method argument 1 must be a positive whole number; found "line".
+.Stream~new('r.txt')~charIn(1, v) [line] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "line".
+.Stream~new('w.txt')~lineOut('q', v) [line] error 93.907 Method argument 2 must be a positive whole number; found "line".
+.Stream~new('w.txt')~charOut('q', v) [line] error 93.907 Method argument 2 must be a positive whole number; found "line".
+lineout('w.txt', , v) [1.5] error 93.907 Method argument 2 must be a positive whole number; found "1.5".
+linein('r.txt', v) [1.5] error 93.907 Method argument 1 must be a positive whole number; found "1.5".
+linein('r.txt', 1, v) [1.5] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "1.5".
+charin('r.txt', v) [1.5] error 93.907 Method argument 1 must be a positive whole number; found "1.5".
+charin('r.txt', 1, v) [1.5] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "1.5".
+charout('w.txt', , v) [1.5] error 93.907 Method argument 2 must be a positive whole number; found "1.5".
+charout('w.txt', 'q', v) [1.5] error 93.907 Method argument 2 must be a positive whole number; found "1.5".
+.Stream~new('r.txt')~lineIn(v) [1.5] error 93.907 Method argument 1 must be a positive whole number; found "1.5".
+.Stream~new('r.txt')~charIn(1, v) [1.5] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "1.5".
+.Stream~new('w.txt')~lineOut('q', v) [1.5] error 93.907 Method argument 2 must be a positive whole number; found "1.5".
+.Stream~new('w.txt')~charOut('q', v) [1.5] error 93.907 Method argument 2 must be a positive whole number; found "1.5".
+lineout('w.txt', , v) [ 2 ] error 93.907 Method argument 2 must be a positive whole number; found " 2 ".
+linein('r.txt', v) [ 2 ] error 93.907 Method argument 1 must be a positive whole number; found " 2 ".
+linein('r.txt', 1, v) [ 2 ] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found " 2 ".
+charin('r.txt', v) [ 2 ] error 93.907 Method argument 1 must be a positive whole number; found " 2 ".
+charin('r.txt', 1, v) [ 2 ] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found " 2 ".
+charout('w.txt', , v) [ 2 ] error 93.907 Method argument 2 must be a positive whole number; found " 2 ".
+charout('w.txt', 'q', v) [ 2 ] error 93.907 Method argument 2 must be a positive whole number; found " 2 ".
+.Stream~new('r.txt')~lineIn(v) [ 2 ] error 93.907 Method argument 1 must be a positive whole number; found " 2 ".
+.Stream~new('r.txt')~charIn(1, v) [ 2 ] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found " 2 ".
+.Stream~new('w.txt')~lineOut('q', v) [ 2 ] error 93.907 Method argument 2 must be a positive whole number; found " 2 ".
+.Stream~new('w.txt')~charOut('q', v) [ 2 ] error 93.907 Method argument 2 must be a positive whole number; found " 2 ".
+lineout('w.txt', , v) [1E1] error 93.907 Method argument 2 must be a positive whole number; found "1E1".
+linein('r.txt', v) [1E1] error 93.907 Method argument 1 must be a positive whole number; found "1E1".
+linein('r.txt', 1, v) [1E1] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "1E1".
+charin('r.txt', v) [1E1] error 93.907 Method argument 1 must be a positive whole number; found "1E1".
+charin('r.txt', 1, v) [1E1] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "1E1".
+charout('w.txt', , v) [1E1] error 93.907 Method argument 2 must be a positive whole number; found "1E1".
+charout('w.txt', 'q', v) [1E1] error 93.907 Method argument 2 must be a positive whole number; found "1E1".
+.Stream~new('r.txt')~lineIn(v) [1E1] error 93.907 Method argument 1 must be a positive whole number; found "1E1".
+.Stream~new('r.txt')~charIn(1, v) [1E1] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "1E1".
+.Stream~new('w.txt')~lineOut('q', v) [1E1] error 93.907 Method argument 2 must be a positive whole number; found "1E1".
+.Stream~new('w.txt')~charOut('q', v) [1E1] error 93.907 Method argument 2 must be a positive whole number; found "1E1".
+lineout('w.txt', , v) [-1] error 93.907 Method argument 2 must be a positive whole number; found "-1".
+linein('r.txt', v) [-1] error 93.907 Method argument 1 must be a positive whole number; found "-1".
+linein('r.txt', 1, v) [-1] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "-1".
+charin('r.txt', v) [-1] error 93.907 Method argument 1 must be a positive whole number; found "-1".
+charin('r.txt', 1, v) [-1] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "-1".
+charout('w.txt', , v) [-1] error 93.907 Method argument 2 must be a positive whole number; found "-1".
+charout('w.txt', 'q', v) [-1] error 93.907 Method argument 2 must be a positive whole number; found "-1".
+.Stream~new('r.txt')~lineIn(v) [-1] error 93.907 Method argument 1 must be a positive whole number; found "-1".
+.Stream~new('r.txt')~charIn(1, v) [-1] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "-1".
+.Stream~new('w.txt')~lineOut('q', v) [-1] error 93.907 Method argument 2 must be a positive whole number; found "-1".
+.Stream~new('w.txt')~charOut('q', v) [-1] error 93.907 Method argument 2 must be a positive whole number; found "-1".
+lineout('w.txt', , v) [0] error 93.907 Method argument 2 must be a positive whole number; found "0".
+linein('r.txt', v) [0] error 93.907 Method argument 1 must be a positive whole number; found "0".
+linein('r.txt', 1, v) [0] []
+charin('r.txt', v) [0] error 93.907 Method argument 1 must be a positive whole number; found "0".
+charin('r.txt', 1, v) [0] []
+charout('w.txt', , v) [0] error 93.907 Method argument 2 must be a positive whole number; found "0".
+charout('w.txt', 'q', v) [0] error 93.907 Method argument 2 must be a positive whole number; found "0".
+.Stream~new('r.txt')~lineIn(v) [0] error 93.907 Method argument 1 must be a positive whole number; found "0".
+.Stream~new('r.txt')~charIn(1, v) [0] []
+.Stream~new('w.txt')~lineOut('q', v) [0] error 93.907 Method argument 2 must be a positive whole number; found "0".
+.Stream~new('w.txt')~charOut('q', v) [0] error 93.907 Method argument 2 must be a positive whole number; found "0".
+lineout('w.txt', , v) [The NIL object] error 93.907 Method argument 2 must be a positive whole number; found "The NIL object".
+linein('r.txt', v) [The NIL object] error 93.907 Method argument 1 must be a positive whole number; found "The NIL object".
+linein('r.txt', 1, v) [The NIL object] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "The NIL object".
+charin('r.txt', v) [The NIL object] error 93.907 Method argument 1 must be a positive whole number; found "The NIL object".
+charin('r.txt', 1, v) [The NIL object] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "The NIL object".
+charout('w.txt', , v) [The NIL object] error 93.907 Method argument 2 must be a positive whole number; found "The NIL object".
+charout('w.txt', 'q', v) [The NIL object] error 93.907 Method argument 2 must be a positive whole number; found "The NIL object".
+.Stream~new('r.txt')~lineIn(v) [The NIL object] error 93.907 Method argument 1 must be a positive whole number; found "The NIL object".
+.Stream~new('r.txt')~charIn(1, v) [The NIL object] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "The NIL object".
+.Stream~new('w.txt')~lineOut('q', v) [The NIL object] error 93.907 Method argument 2 must be a positive whole number; found "The NIL object".
+.Stream~new('w.txt')~charOut('q', v) [The NIL object] error 93.907 Method argument 2 must be a positive whole number; found "The NIL object".
+lineout('w.txt', , v) [99999999999999999999] error 93.907 Method argument 2 must be a positive whole number; found "99999999999999999999".
+linein('r.txt', v) [99999999999999999999] error 93.907 Method argument 1 must be a positive whole number; found "99999999999999999999".
+linein('r.txt', 1, v) [99999999999999999999] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "99999999999999999999".
+charin('r.txt', v) [99999999999999999999] error 93.907 Method argument 1 must be a positive whole number; found "99999999999999999999".
+charin('r.txt', 1, v) [99999999999999999999] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "99999999999999999999".
+charout('w.txt', , v) [99999999999999999999] error 93.907 Method argument 2 must be a positive whole number; found "99999999999999999999".
+charout('w.txt', 'q', v) [99999999999999999999] error 93.907 Method argument 2 must be a positive whole number; found "99999999999999999999".
+.Stream~new('r.txt')~lineIn(v) [99999999999999999999] error 93.907 Method argument 1 must be a positive whole number; found "99999999999999999999".
+.Stream~new('r.txt')~charIn(1, v) [99999999999999999999] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "99999999999999999999".
+.Stream~new('w.txt')~lineOut('q', v) [99999999999999999999] error 93.907 Method argument 2 must be a positive whole number; found "99999999999999999999".
+.Stream~new('w.txt')~charOut('q', v) [99999999999999999999] error 93.907 Method argument 2 must be a positive whole number; found "99999999999999999999".
+lineout('w.txt', , v) [1.0] error 93.907 Method argument 2 must be a positive whole number; found "1.0".
+linein('r.txt', v) [1.0] error 93.907 Method argument 1 must be a positive whole number; found "1.0".
+linein('r.txt', 1, v) [1.0] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "1.0".
+charin('r.txt', v) [1.0] error 93.907 Method argument 1 must be a positive whole number; found "1.0".
+charin('r.txt', 1, v) [1.0] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "1.0".
+charout('w.txt', , v) [1.0] error 93.907 Method argument 2 must be a positive whole number; found "1.0".
+charout('w.txt', 'q', v) [1.0] error 93.907 Method argument 2 must be a positive whole number; found "1.0".
+.Stream~new('r.txt')~lineIn(v) [1.0] error 93.907 Method argument 1 must be a positive whole number; found "1.0".
+.Stream~new('r.txt')~charIn(1, v) [1.0] error 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "1.0".
+.Stream~new('w.txt')~lineOut('q', v) [1.0] error 93.907 Method argument 2 must be a positive whole number; found "1.0".
+.Stream~new('w.txt')~charOut('q', v) [1.0] error 93.907 Method argument 2 must be a positive whole number; found "1.0".
+.Stream~new('/')~charIn(0) [1.0] error 93.907 Method argument 1 must be a positive whole number; found "0".
+.Stream~new('/')~lineIn(-1) [1.0] error 93.907 Method argument 1 must be a positive whole number; found "-1".
+.Stream~new('nodir/x')~lineOut('q', 0) [1.0] error 93.907 Method argument 2 must be a positive whole number; found "0".

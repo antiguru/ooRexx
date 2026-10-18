@@ -1,0 +1,76 @@
+1
+1
+READY:
+charout-ro 3 ERROR:13 Permission denied
+  notready ro.txt 3
+lineout-ro 1 ERROR:13 Permission denied
+  notready ro.txt 1
+linein-after abc READY:
+close-ro 0 UNKNOWN:
+READY:
+m-lineout-pos 1 ERROR:13 Permission denied
+  notready ro.txt 1
+lineout('w.txt', , v) [line] -> E 40.12 LINEOUT argument 3 must be a whole number; found "line".
+linein('ro.txt', v) [line] -> E 40.12 LINEIN argument 2 must be a whole number; found "line".
+linein('ro.txt', 1, v) [line] -> E 40.12 LINEIN argument 3 must be a whole number; found "line".
+charin('ro.txt', v) [line] -> E 40.12 CHARIN argument 2 must be a whole number; found "line".
+charin('ro.txt', 1, v) [line] -> E 40.12 CHARIN argument 3 must be a whole number; found "line".
+charout('w.txt', , v) [line] -> E 40.12 CHAROUT argument 3 must be a whole number; found "line".
+charout('w.txt', 'q', v) [line] -> E 40.12 CHAROUT argument 3 must be a whole number; found "line".
+lineout('w.txt', , v) [1.5] -> E 40.12 LINEOUT argument 3 must be a whole number; found "1.5".
+linein('ro.txt', v) [1.5] -> E 40.12 LINEIN argument 2 must be a whole number; found "1.5".
+linein('ro.txt', 1, v) [1.5] -> E 40.12 LINEIN argument 3 must be a whole number; found "1.5".
+charin('ro.txt', v) [1.5] -> E 40.12 CHARIN argument 2 must be a whole number; found "1.5".
+charin('ro.txt', 1, v) [1.5] -> E 40.12 CHARIN argument 3 must be a whole number; found "1.5".
+charout('w.txt', , v) [1.5] -> E 40.12 CHAROUT argument 3 must be a whole number; found "1.5".
+charout('w.txt', 'q', v) [1.5] -> E 40.12 CHAROUT argument 3 must be a whole number; found "1.5".
+lineout('w.txt', , v) [ 2 ] -> [0]
+linein('ro.txt', v) [ 2 ] -> []
+linein('ro.txt', 1, v) [ 2 ] -> E 93.0 The NIL object
+charin('ro.txt', v) [ 2 ] -> [b]
+charin('ro.txt', 1, v) [ 2 ] -> [ab]
+charout('w.txt', , v) [ 2 ] -> [0]
+charout('w.txt', 'q', v) [ 2 ] -> [0]
+lineout('w.txt', , v) [1E1] -> [0]
+linein('ro.txt', v) [1E1] -> []
+linein('ro.txt', 1, v) [1E1] -> E 93.0 The NIL object
+charin('ro.txt', v) [1E1] -> []
+charin('ro.txt', 1, v) [1E1] -> [abc
+]
+charout('w.txt', , v) [1E1] -> [0]
+charout('w.txt', 'q', v) [1E1] -> [0]
+lineout('w.txt', , v) [-1] -> E 93.907 Method argument 1 must be a positive whole number; found "-1".
+linein('ro.txt', v) [-1] -> E 93.907 Method argument 1 must be a positive whole number; found "-1".
+linein('ro.txt', 1, v) [-1] -> E 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "-1".
+charin('ro.txt', v) [-1] -> E 93.907 Method argument 1 must be a positive whole number; found "-1".
+charin('ro.txt', 1, v) [-1] -> E 88.907 Argument 2 must be in the range 0 to 18446744073709551615; found "-1".
+charout('w.txt', , v) [-1] -> E 93.907 Method argument 1 must be a positive whole number; found "-1".
+charout('w.txt', 'q', v) [-1] -> E 93.907 Method argument 1 must be a positive whole number; found "-1".
+lineout('w.txt', , v) [0] -> E 93.907 Method argument 1 must be a positive whole number; found "0".
+linein('ro.txt', v) [0] -> E 93.907 Method argument 1 must be a positive whole number; found "0".
+linein('ro.txt', 1, v) [0] -> []
+charin('ro.txt', v) [0] -> E 93.907 Method argument 1 must be a positive whole number; found "0".
+charin('ro.txt', 1, v) [0] -> []
+charout('w.txt', , v) [0] -> E 93.907 Method argument 1 must be a positive whole number; found "0".
+charout('w.txt', 'q', v) [0] -> E 93.907 Method argument 1 must be a positive whole number; found "0".
+lineout('w.txt', , v) [The NIL object] -> E 40.12 LINEOUT argument 3 must be a whole number; found "The NIL object".
+linein('ro.txt', v) [The NIL object] -> E 40.12 LINEIN argument 2 must be a whole number; found "The NIL object".
+linein('ro.txt', 1, v) [The NIL object] -> E 40.12 LINEIN argument 3 must be a whole number; found "The NIL object".
+charin('ro.txt', v) [The NIL object] -> E 40.12 CHARIN argument 2 must be a whole number; found "The NIL object".
+charin('ro.txt', 1, v) [The NIL object] -> E 40.12 CHARIN argument 3 must be a whole number; found "The NIL object".
+charout('w.txt', , v) [The NIL object] -> E 40.12 CHAROUT argument 3 must be a whole number; found "The NIL object".
+charout('w.txt', 'q', v) [The NIL object] -> E 40.12 CHAROUT argument 3 must be a whole number; found "The NIL object".
+lineout('w.txt', , v) [99999999999999999999] -> E 40.12 LINEOUT argument 3 must be a whole number; found "99999999999999999999".
+linein('ro.txt', v) [99999999999999999999] -> E 40.12 LINEIN argument 2 must be a whole number; found "99999999999999999999".
+linein('ro.txt', 1, v) [99999999999999999999] -> E 40.12 LINEIN argument 3 must be a whole number; found "99999999999999999999".
+charin('ro.txt', v) [99999999999999999999] -> E 40.12 CHARIN argument 2 must be a whole number; found "99999999999999999999".
+charin('ro.txt', 1, v) [99999999999999999999] -> E 40.12 CHARIN argument 3 must be a whole number; found "99999999999999999999".
+charout('w.txt', , v) [99999999999999999999] -> E 40.12 CHAROUT argument 3 must be a whole number; found "99999999999999999999".
+charout('w.txt', 'q', v) [99999999999999999999] -> E 40.12 CHAROUT argument 3 must be a whole number; found "99999999999999999999".
+lineout('w.txt', , v) [1.0] -> [0]
+linein('ro.txt', v) [1.0] -> [abc]
+linein('ro.txt', 1, v) [1.0] -> [abc]
+charin('ro.txt', v) [1.0] -> [a]
+charin('ro.txt', 1, v) [1.0] -> [a]
+charout('w.txt', , v) [1.0] -> [0]
+charout('w.txt', 'q', v) [1.0] -> [0]

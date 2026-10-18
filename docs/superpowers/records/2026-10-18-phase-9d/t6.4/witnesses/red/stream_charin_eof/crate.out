@@ -1,0 +1,17 @@
+s~charin(9, 6) [90] ERROR:0 raised f.txt [The NIL object]
+s~charin(, 2) [] ERROR:0 raised f.txt [The NIL object]
+s~charin(30) [] ERROR:0 raised f.txt [The NIL object]
+s~charin(11) [] ERROR:0 raised f.txt [The NIL object]
+s~charin(5) [5] ERROR:0 
+s~charin(1, 0) [] ERROR:0 
+s~charin(10, 1) [0] ERROR:0 
+s~charin(11, 1) [] ERROR:0 raised f.txt [The NIL object]
+s~charin(4, 3) [456] ERROR:0 
+charin('f.txt', 8, 5) [890] UNKNOWN: raised f.txt [The NIL object]
+stream('f.txt', 'S') [ERROR] UNKNOWN: 
+charin('f.txt', 1, 2) [12] UNKNOWN: 
+stream('f.txt', 'S') [ERROR] UNKNOWN: 
+g~linein [one] READY: 
+g~linein [] NOTREADY:EOF raised g.txt [The NIL object]
+g~linein(1) [one] NOTREADY:EOF 
+signal f.txt The NIL object ERROR:0
