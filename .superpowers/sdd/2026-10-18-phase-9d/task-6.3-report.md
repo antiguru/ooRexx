@@ -7,7 +7,7 @@ Clusters `lostdigits-not-raised` and `datatype-whole-wide-numbers`. Status: DONE
 
 * `9095627aa` Phase 9d Task 6.3: LOSTDIGITS reaches a SIGNAL ON trap; DATATYPE W at any width.
   This commit holds the code, the two witnesses, their `sourceline_oracle` files and `phase-9.txt`.
-* The records commit holds `suite-9d-set.txt`, `docs/superpowers/records/2026-10-18-phase-9d/t6.3/`
+* `a65279c10` records: holds `suite-9d-set.txt`, `docs/superpowers/records/2026-10-18-phase-9d/t6.3/`
   and this report.
 
 ## Root causes
