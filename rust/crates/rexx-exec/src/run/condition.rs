@@ -152,6 +152,7 @@ impl Interp {
                     queued_during_delivery: false,
                     request: false,
                     fragment_depth: self.activity.fragment_depth,
+                    trace_failure: None,
                 });
                 Ok(())
             }
@@ -534,6 +535,9 @@ impl Interp {
                 .remove(at)
                 .expect("position answered an index inside the queue");
             owed -= 1;
+            if let Some(failure) = pending.trace_failure {
+                return Err(failure);
+            }
             if pending.request {
                 self.raise_requested_halt(pending.description)?;
                 continue;
@@ -1008,6 +1012,7 @@ impl Interp {
                     // `Interpret` arm maintains it. A tail-less raise leaves
                     // the fragments of every level it unwinds.
                     fragment_depth: self.sender_fragment_depth(&sender),
+                    trace_failure: None,
                 });
                 Ok(finish(result))
             }
@@ -1179,6 +1184,7 @@ impl Interp {
                     queued_during_delivery: false,
                     request: false,
                     fragment_depth: self.sender_fragment_depth(&sender),
+                    trace_failure: None,
                 });
                 Ok(finish(result))
             }

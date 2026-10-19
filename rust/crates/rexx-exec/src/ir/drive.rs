@@ -410,6 +410,12 @@ macro_rules! region_ops {
                         let indent =
                             $self.activity.clause_state.current_value_indent;
                         $self.echo_compiled_clause($source, $clause, indent);
+                        // A failed delivery abandons the clause it echoes.
+                        if !$self.activity.pending_traps.is_empty()
+                            && let Some(failure) = $self.take_trace_failure()
+                        {
+                            break $cold Err(failure);
+                        }
                     }
                 }
                 // **The one thing this does that `EvalExpr`
@@ -1811,7 +1817,13 @@ macro_rules! open_clause {
             );
             false
         };
-        $from = $pc + 1;
+        // An abandoned clause runs none of its ops, and its boundary raises
+        // what abandoned it.
+        $from = if $entry.abandoned {
+            $region_end
+        } else {
+            $pc + 1
+        };
     };
 }
 

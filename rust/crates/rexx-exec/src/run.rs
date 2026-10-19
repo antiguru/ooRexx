@@ -166,6 +166,9 @@ pub(crate) struct SteppedClause {
     frame: FrameId,
     /// `ActivityRoots::temps_len` as the clause was opened.
     temps_at_entry: usize,
+    /// Whether the clause's own echo failed to deliver, which abandons the
+    /// clause before its work runs.
+    pub(crate) abandoned: bool,
 }
 
 /// What a called name resolved to: a label or a builtin before the arguments
@@ -3040,8 +3043,10 @@ impl Interp {
         // the second arm is that a chunk compiled under a setting that does
         // not echo pays nothing at all for the decision -- no gate, no
         // `clause_site`, no op.
+        let mut abandoned = false;
         if matches!(echo, Echo::Gated) {
             self.echo_stepped_clause(source, instruction, indent);
+            abandoned = !self.activity.pending_traps.is_empty() && self.trace_failure_queued();
         }
         // The debug tripwire I22 asks for, alongside `ActivityRoots::temps_len`, its
         // one prerequisite. `SteppedClause` carries the watermark and the
@@ -3054,6 +3059,7 @@ impl Interp {
             entry,
             frame,
             temps_at_entry,
+            abandoned,
         }
     }
 

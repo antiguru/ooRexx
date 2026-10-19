@@ -172,6 +172,10 @@ impl Interp {
         if self.activity.routing_trace {
             return;
         }
+        if self.trace_failure_queued() {
+            self.trace.truncate(start);
+            return;
+        }
         let Ok(Some(route)) = self.local_route(b"TRACEOUTPUT") else {
             return;
         };
@@ -214,9 +218,62 @@ impl Interp {
             self.activity.region_procedure_permitted,
         ) = permitted;
         self.activity.routing_trace = false;
-        if delivered.is_err() {
-            self.write_out_line(&line);
+        if let Err(failure) = delivered {
+            self.queue_trace_failure(failure, &line);
         }
+    }
+
+    /// Whether a trace line's failed delivery is waiting to be raised in the
+    /// running activation, which traces nothing more until it is.
+    pub(crate) fn trace_failure_queued(&self) -> bool {
+        let Some(running) = self.running_activation() else {
+            return false;
+        };
+        let here = running.id;
+        self.activity
+            .pending_traps
+            .iter()
+            .any(|pending| pending.trace_failure.is_some() && pending.activation == here)
+    }
+
+    /// The failure [`Interp::queue_trace_failure`] queued for the running
+    /// activation, taken off the queue.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn take_trace_failure(&mut self) -> Option<Failure> {
+        let here = self.running_activation()?.id;
+        let at =
+            self.activity.pending_traps.iter().position(|pending| {
+                pending.trace_failure.is_some() && pending.activation == here
+            })?;
+        self.activity
+            .pending_traps
+            .remove(at)
+            .and_then(|pending| pending.trace_failure)
+    }
+
+    /// `Activity::traceOutput`'s failed `LINEOUT`: raised in the traced
+    /// activation at its clause's end. With no activation running, the line
+    /// is written to standard error instead.
+    #[cold]
+    #[inline(never)]
+    fn queue_trace_failure(&mut self, failure: Failure, line: &[u8]) {
+        let Some(running) = self.running_activation() else {
+            self.write_out_line(line);
+            return;
+        };
+        let activation = running.id;
+        self.activity.pending_traps.push_back(crate::PendingTrap {
+            condition: b"SYNTAX".as_slice().into(),
+            rc: None,
+            description: None,
+            object: None,
+            activation,
+            queued_during_delivery: true,
+            request: false,
+            fragment_depth: self.activity.fragment_depth,
+            trace_failure: Some(failure),
+        });
     }
 
     /// Each line of an error report, delivered the way a trace line is:

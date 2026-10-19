@@ -598,6 +598,7 @@ impl Interp {
                     queued_during_delivery: false,
                     request: false,
                     fragment_depth: self.activity.fragment_depth,
+                    trace_failure: None,
                 });
                 Ok(result)
             }
