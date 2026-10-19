@@ -3148,41 +3148,24 @@ impl Interp {
         }
     }
 
-    /// [`Interp::echo_compiled_clause`] for its op, a failed delivery kept in
-    /// [`crate::activity::Activity::trace_failure`].
-    #[inline(never)]
+    /// The clause echo with **no gate at all**, for
+    /// [`crate::ir::Op::TraceClause`], whose presence in a chunk is that
+    /// decision; a failed delivery is kept in
+    /// [`crate::activity::Activity::trace_failure`]. It owes the banner the
+    /// stepped path owes too: it is the first traced clause of the activation
+    /// that carries it.
     pub(crate) fn echo_compiled_clause_kept(
         &mut self,
         source: Option<&ProgramSource>,
         instruction: &Instruction,
         indent: usize,
     ) {
-        if let Err(failure) = self.echo_compiled_clause(source, instruction, indent) {
-            self.activity.trace_failure = Some(failure);
-        }
-    }
-
-    /// The same echo with **no gate at all**, for a caller that has already
-    /// decided ([`crate::ir::Op::TraceClause`], whose presence in a chunk is
-    /// that decision).
-    pub(crate) fn echo_compiled_clause(
-        &mut self,
-        source: Option<&ProgramSource>,
-        instruction: &Instruction,
-        indent: usize,
-    ) -> Result<(), Failure> {
-        // The banner the stepped path owes too, and this path owes it for the
-        // same reason: it is the first traced clause of the activation that
-        // carries it. Reached when the setting was already `?R` at compile
-        // time -- `RXTRACE=ON` is the case, where a `TRACE ?R` instruction
-        // leaves the chunk stale and takes the stepped path instead.
-        self.trace_debug_source()?;
+        self.trace_debug_source_kept();
         if let Some((line, text)) = self.clause_site(source, instruction) {
             let start = self.trace.len();
             crate::trace::push_clause(&mut self.trace, line, indent, &text);
-            self.route_trace_line(start)?;
+            self.route_trace_line_kept(start);
         }
-        Ok(())
     }
 
     /// Resolves `instruction`'s own clause (and its statically-derived

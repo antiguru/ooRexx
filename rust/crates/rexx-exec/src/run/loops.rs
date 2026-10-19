@@ -590,10 +590,9 @@ impl Interp {
     /// failed delivery kept in [`crate::activity::Activity::trace_failure`]
     /// for the op to raise.
     #[inline(never)]
-    pub(crate) fn echo_header_value_kept(&mut self, role: HeaderRole, value: ObjRef) {
-        if let Err(failure) = self.echo_header_value(role, value) {
-            self.activity.trace_failure = Some(failure);
-        }
+    pub(crate) fn echo_header_value_kept(&mut self, role: HeaderRole, value: ObjRef) -> bool {
+        let traced = self.echo_header_value(role, value);
+        self.kept(traced)
     }
 
     /// One header value's own `>K>` line, at the `DO`/`LOOP` clause's own
@@ -1969,7 +1968,7 @@ impl Interp {
                     && let Some((line, text)) =
                         self.clause_site(source, &code.body.instructions[flat.end_index])
                 {
-                    self.trace_clause(line, flat.do_indent, &text)?;
+                    self.trace_clause_kept(line, flat.do_indent, &text);
                 }
             }
         }
@@ -1984,7 +1983,7 @@ impl Interp {
                 && let Some((line, text)) =
                     self.clause_site(source, &code.body.instructions[flat.do_index])
             {
-                self.trace_clause(line, flat.do_indent, &text)?;
+                self.trace_clause_kept(line, flat.do_indent, &text);
             }
             // The clock is stale after the pass boundary, as `run_repeating`'s
             // own store says. Only an `UNTIL` or a `WHILE` re-evaluates an
@@ -2009,7 +2008,7 @@ impl Interp {
             && let Some((line, text)) =
                 self.clause_site(source, &code.body.instructions[flat.do_index])
         {
-            self.trace_clause(line, flat.do_indent, &text)?;
+            self.trace_clause_kept(line, flat.do_indent, &text);
         }
         let counted = counted(self)?;
         match self.flat_loop_header(code, source, flat, counted)? {

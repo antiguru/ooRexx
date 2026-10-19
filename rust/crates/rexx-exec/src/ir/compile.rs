@@ -1782,7 +1782,7 @@ fn push_echo(ops: &mut Vec<Op>, echo: bool, may_stale: bool, index: u32) {
     if echo {
         ops.push(Op::TraceClause { index });
     } else if may_stale {
-        ops.push(Op::TraceStale { index });
+        let _ = index;
     }
 }
 

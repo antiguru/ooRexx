@@ -143,11 +143,15 @@ impl Interp {
             .any(|level| level.fragment.is_some())
     }
 
-    /// [`Interp::trace_stepped_clause`] for a stale clause entry in the
-    /// driver: a failed delivery is kept in
-    /// [`crate::activity::Activity::trace_failure`] for the clause's first op
-    /// to raise.
-    #[inline(never)]
+    /// [`Interp::trace_clause`] for the code the driver inlines: a failed
+    /// delivery is kept in [`crate::activity::Activity::trace_failure`] for
+    /// the driver to raise, and the shape is the one the driver was tuned
+    /// with.
+    pub(crate) fn trace_clause_kept(&mut self, line: usize, indent: usize, text: &[u8]) {
+        self.trace_stepped_clause_kept(false, false, line, indent, text);
+    }
+
+    /// [`Interp::trace_stepped_clause`], its failure kept.
     pub(crate) fn trace_stepped_clause_kept(
         &mut self,
         is_label: bool,
@@ -156,7 +160,19 @@ impl Interp {
         indent: usize,
         text: &[u8],
     ) {
-        if let Err(failure) = self.trace_stepped_clause(is_label, is_command, line, indent, text) {
+        if !self.tracing_clause(is_label, is_command) {
+            return;
+        }
+        self.trace_debug_source_kept();
+        let start = self.trace.len();
+        push_clause(&mut self.trace, line, indent, text);
+        self.route_trace_line_kept(start);
+    }
+
+    /// [`Interp::trace_debug_source`], its failure kept.
+    #[inline(never)]
+    pub(crate) fn trace_debug_source_kept(&mut self) {
+        if let Err(failure) = self.trace_debug_source() {
             self.activity.trace_failure = Some(failure);
         }
     }
@@ -164,35 +180,44 @@ impl Interp {
     /// [`Interp::echo_literal`] for the driver's `Op::TraceLiteral`, a failed
     /// delivery kept for the op to raise.
     #[inline(always)]
-    pub(crate) fn echo_literal_kept(&mut self, value: ObjRef) {
+    pub(crate) fn echo_literal_kept(&mut self, value: ObjRef) -> bool {
         if !self.tracing_intermediates() {
-            return;
+            return false;
         }
-        self.echo_literal_line_kept(value);
+        self.echo_literal_line_kept(value)
     }
 
     #[inline(never)]
-    fn echo_literal_line_kept(&mut self, value: ObjRef) {
-        if let Err(failure) = self.echo_literal_line(value) {
-            self.activity.trace_failure = Some(failure);
-        }
+    fn echo_literal_line_kept(&mut self, value: ObjRef) -> bool {
+        let traced = self.echo_literal_line(value);
+        self.kept(traced)
     }
 
     /// [`Interp::echo_operator`] for the driver's `Op::TraceOperator`, a
     /// failed delivery kept for the op to raise.
     #[inline(never)]
-    pub(crate) fn echo_operator_kept(&mut self, op: Operator, value: ObjRef) {
-        if let Err(failure) = self.echo_operator(op, value) {
-            self.activity.trace_failure = Some(failure);
-        }
+    pub(crate) fn echo_operator_kept(&mut self, op: Operator, value: ObjRef) -> bool {
+        let traced = self.echo_operator(op, value);
+        self.kept(traced)
     }
 
     /// [`Interp::echo_prefix_op`] for the driver's `Op::TracePrefix`, a failed
     /// delivery kept for the op to raise.
     #[inline(never)]
-    pub(crate) fn echo_prefix_op_kept(&mut self, op: PrefixOp, value: ObjRef) {
-        if let Err(failure) = self.echo_prefix_op(op, value) {
-            self.activity.trace_failure = Some(failure);
+    pub(crate) fn echo_prefix_op_kept(&mut self, op: PrefixOp, value: ObjRef) -> bool {
+        let traced = self.echo_prefix_op(op, value);
+        self.kept(traced)
+    }
+
+    /// Whether `traced` failed, its failure kept in
+    /// [`crate::activity::Activity::trace_failure`] for the driver to raise.
+    pub(crate) fn kept(&mut self, traced: Result<(), Failure>) -> bool {
+        match traced {
+            Ok(()) => false,
+            Err(failure) => {
+                self.activity.trace_failure = Some(failure);
+                true
+            }
         }
     }
 

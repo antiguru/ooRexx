@@ -92,11 +92,6 @@ pub(crate) enum Op {
     LoopNext { index: u32 },
     /// Echoes the `*-*` line of the clause of the instruction at `index`.
     TraceClause { index: u32 },
-    /// The first op of a clause that echoes nothing under the chunk's own
-    /// setting but may run under another, whose echo the clause entry then
-    /// made: where that echo's delivery failed, the clause runs none of its
-    /// work.
-    TraceStale { index: u32 },
     /// Evaluates expression `slot` of the instruction at `index` into
     /// register `dst`, still dispatched through `eval.rs` rather than
     /// reimplemented here (the plan's Decisions section: trace ops land

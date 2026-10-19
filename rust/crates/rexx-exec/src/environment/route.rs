@@ -170,6 +170,25 @@ impl Interp {
         self.route_trace_line_as(start, false)
     }
 
+    /// [`Interp::route_trace_line`] for code the driver inlines, which keeps
+    /// a failed delivery in [`crate::activity::Activity::trace_failure`] for
+    /// the driver to raise.
+    #[inline(never)]
+    pub(crate) fn route_trace_line_kept(&mut self, start: usize) {
+        if let Err(failure) = self.route_trace_line(start) {
+            self.activity.trace_failure = Some(failure);
+        }
+    }
+
+    /// The failure a kept trace line left, for its raiser.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn take_trace_failure(&mut self) -> Failure {
+        self.activity.trace_failure.take().unwrap_or_else(|| {
+            crate::Loud::op_not_driven("a trace failure that was not kept").into()
+        })
+    }
+
     /// [`Interp::route_trace_line`] for a `>I>` (`entry`) or `<I<` line,
     /// whose `TraceObject` names the caller's frame for `>I>`. Standard error
     /// is handed over after it. Not gated on the source: the oracle's

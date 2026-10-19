@@ -62,7 +62,6 @@ impl ValidOps {
                 | Op::LoopRun { .. }
                 | Op::LoopNext { .. }
                 | Op::TraceClause { .. }
-                | Op::TraceStale { .. }
                 | Op::EndBranch
                 | Op::EndWhen
                 | Op::EnterWhen { .. }
