@@ -697,16 +697,10 @@ impl Interp {
         self.trace.extend_from_slice(package);
         self.trace.extend_from_slice(b"\".\n");
         make_displayable(&mut self.trace, line_start);
-        // Not raised: an entry or exit line stands outside any clause, so a
-        // destination that cannot take it leaves it to standard error.
-        let line = self.trace[line_start..].to_vec();
-        if self
-            .route_trace_line_as(line_start, prefix == ">I>")
-            .is_err()
-        {
-            self.trace.extend_from_slice(&line);
-            self.hand_over_stderr();
-        }
+        // Not raised: an entry or exit line stands outside any clause. A
+        // destination that cannot take it loses it, as the oracle loses the
+        // `<I<` of an activation a failed delivery ends.
+        let _lost = self.route_trace_line_as(line_start, prefix == ">I>");
     }
 }
 
