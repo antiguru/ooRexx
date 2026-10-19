@@ -1760,7 +1760,7 @@ and its `.txt`), under the standard wrapper from a fresh empty directory. rexxre
 the stream target, so this crate answers the same 97.1, leaves the file alone and exits 0
 (`tests/security_replacements.rs`). No upstream ticket.
 
-## 55. A security manager's REQUIRES `NAME` replacement that is not a string
+## 55. An untrapped `loadPackage` whose REQUIRES `NAME` the security manager replaces with `.object~new`
 
     mgr = .Mgr~new
     r = .Routine~new("", "return .Package~new('', '')~loadPackage('present.cls')~name")
@@ -1775,7 +1775,9 @@ the stream target, so this crate answers the same 97.1, leaves the file alone an
 
 with `present.cls` an existing file beside the program. Effect: SIGSEGV, rc 139, on 3 of 3 runs of
 this program and 8 of 8 of `t6.12/r1/probes/requires_object_name.rex`, with nothing written. Cause: the unchecked `(RexxString *)` cast of the entry at
-`SecurityManager.cpp:343`. A string or `.nil` replacement answers 3.1 naming its string value. This
+`SecurityManager.cpp:343`. A string or `.nil` replacement answers 3.1 naming its string value. A
+run that traps the load with `SIGNAL ON SYNTAX`, after a `.nil` replacement in the same loop, can
+answer 3.1 naming `an Object` instead (Task 6.12 re-review r1, 3 of 3). This
 crate reads the object's string value too, which is 3.1 naming `an Object`
 (`tests/security_replacements.rs`). Measured 2026-10-19 by Phase 9d Task 6.12 round 1
 (`t6.12/r1/probes/requires_object_name.rex`). No upstream ticket.

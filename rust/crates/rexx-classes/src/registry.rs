@@ -436,6 +436,17 @@ impl ClassRegistry {
         self.graph.has_own_instance_method(class, name)
     }
 
+    /// See [`ClassGraph::repoint_instance_method`].
+    pub fn repoint_instance_method(
+        &mut self,
+        class: ObjRef,
+        name: &str,
+        old: MethodId,
+        new: MethodId,
+    ) {
+        self.graph.repoint_instance_method(class, name, old, new);
+    }
+
     /// See [`ClassGraph::held_elsewhere`].
     pub fn held_elsewhere(&self, method: MethodId, class: ObjRef) -> bool {
         self.graph.held_elsewhere(method, class)

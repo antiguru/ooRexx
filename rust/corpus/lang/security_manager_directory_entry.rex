@@ -16,6 +16,10 @@ call show "unknown", "return .d~nosuch"
 call show "unknown brackets", "return .d['NOSUCH']"
 call show "run", "return .Holder~new~runit(.m)"
 call show "object setMethod", "o = .Holder~new; o~hold(.m); return o~foo"
+n = .Method~new('bar', 'if arg(1) == 2 then return "inner"; return "outer" self~bar(2)')
+n~setProtected
+.local['N'] = n
+call show "run then send", "o = .Holder~new; o~hold(.n, 'BAR'); return o~runit(.n, 1)"
 exit
 
 show: procedure
@@ -28,11 +32,11 @@ show: procedure
 
 ::class Holder
 ::method hold
-  use arg m
-  self~setMethod('FOO', m)
+  use arg m, name = 'FOO'
+  self~setMethod(name, m)
 ::method runit
-  use arg m
-  return self~run(m)
+  use arg m, a = ''
+  return self~run(m, 'I', a)
 
 ::class Mgr
 ::method init

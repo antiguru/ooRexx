@@ -296,3 +296,6 @@ lang/security_manager_donated_flags.rex
 lang/security_manager_directory_entry.rex
 lang/security_manager_requires_replacement.rex
 lang/security_manager_command_rc_condition.rex
+# 9d Task 6.12 fix round 2: a shared primitive's flags reach the instances
+# made before the setter.
+lang/security_manager_existing_instances.rex

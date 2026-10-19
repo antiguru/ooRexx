@@ -634,6 +634,8 @@ impl Interp {
     /// class's dictionary entry shares the identity with another class's
     /// (`InheritInstanceMethods`): the oracle keeps one method object per
     /// class there, so a flag one of them is given leaves the others alone.
+    /// The class's existing behaviours are repointed, so instances made
+    /// before see the flag too.
     pub(crate) fn unshared_identity(&mut self, object: ObjRef) -> Option<rexx_classes::MethodId> {
         let record = *self.executable_sources.get(&object)?;
         let method = record.installed?;
@@ -663,8 +665,8 @@ impl Interp {
             return Some(method);
         }
         let copy = self.copy_method_identity(method);
-        self.classes().define_instance_method(scope, &name, copy);
-        self.charge_retired_behaviours();
+        self.classes()
+            .repoint_instance_method(scope, &name, method, copy);
         let shared: Vec<ObjRef> = self
             .executable_sources
             .iter()

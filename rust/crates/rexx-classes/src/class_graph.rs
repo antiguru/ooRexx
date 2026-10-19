@@ -1103,6 +1103,29 @@ impl ClassGraph {
         })
     }
 
+    /// Repoint `class`'s own instance entry `name` from `old` to `new`, and
+    /// the same entry in every behaviour already built from it, retired ones
+    /// included: the instances that exist keep their behaviours, and each
+    /// then dispatches `new`.
+    pub fn repoint_instance_method(
+        &mut self,
+        class: ObjRef,
+        name: &str,
+        old: MethodId,
+        new: MethodId,
+    ) {
+        self.classes
+            .get_mut(&class)
+            .expect("repoint_instance_method: unknown class")
+            .own_instance_methods
+            .repoint(name, class, old, new);
+        for behaviour in &mut self.behaviours {
+            if behaviour.dict.repoint(name, class, old, new) {
+                behaviour.version += 1;
+            }
+        }
+    }
+
     /// Oracle's `isRexxDefined` -- see [`ClassDef::rexx_defined`].
     pub fn is_rexx_defined(&self, class: ObjRef) -> bool {
         self.classes[&class].rexx_defined

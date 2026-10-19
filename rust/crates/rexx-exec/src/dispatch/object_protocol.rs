@@ -900,9 +900,9 @@ pub(super) fn invoke_executable(
 }
 
 /// [`invoke_executable`] once a manager has been installed.
-/// `MethodClass::run` is not a send, so the seam does not ask the manager: a
-/// protection is lifted for the seam's test alone, and a Rexx body has only
-/// been entered when `begin_invoke` returns.
+/// `MethodClass::run` is not a send, so this call's pass through the seam
+/// asks no manager. The seam consumes the mark on this call's own pass, so
+/// it reaches no other send.
 #[cold]
 #[inline(never)]
 fn invoke_armed_executable(
@@ -913,11 +913,9 @@ fn invoke_armed_executable(
     name: &[u8],
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let lifted = interp.lift_protection(resolution.method);
+    interp.unasked_run = true;
     let started = interp.begin_invoke(resolution, None, receiver, name, args);
-    if lifted {
-        interp.restore_protection(resolution.method);
-    }
+    interp.unasked_run = false;
     let started = started?;
     if let Started::Entered = started
         && interp.method_bodies.contains_key(&resolution.method)

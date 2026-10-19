@@ -63,7 +63,10 @@ mod seam {
         let cleared = Cleared(());
         // `security_armed` first: a process that never installed a manager
         // pays one flag test per send and no row lookup.
-        if interp.security_armed && interp.method_is_protected(method) {
+        if interp.security_armed
+            && !std::mem::take(&mut interp.unasked_run)
+            && interp.method_is_protected(method)
+        {
             if let Some(result) = interp.check_protected_method(receiver, name, args)? {
                 return Ok(Clearance::Answered(result));
             }
@@ -2328,22 +2331,6 @@ impl Interp {
     fn method_is_protected(&self, method: MethodId) -> bool {
         self.access_scope_of(method)
             .is_some_and(|scope| scope.protected)
-    }
-
-    /// Clears `method`'s protection for a run that is not a send
-    /// (`MethodClass::run`), so the seam does not ask the manager about it,
-    /// and answers whether there was one to clear.
-    fn lift_protection(&mut self, method: MethodId) -> bool {
-        self.special_methods
-            .get_mut(method)
-            .is_some_and(|scope| std::mem::replace(&mut scope.protected, false))
-    }
-
-    /// Puts back a protection [`Interp::lift_protection`] cleared.
-    fn restore_protection(&mut self, method: MethodId) {
-        if let Some(scope) = self.special_methods.get_mut(method) {
-            scope.protected = true;
-        }
     }
 
     /// The security manager's `checkProtectedMethod`

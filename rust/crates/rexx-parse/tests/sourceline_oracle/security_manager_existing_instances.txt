@@ -1,0 +1,67 @@
+count 66
+/* setProtected and setPrivate on a method a class shares reach the
+   instances made before the call, those already sent a message, and a
+   subclass's, as they reach the ones made after. */
+b0 = .Bag~new
+b1 = .Bag~new; b1~put('a')
+b2 = .Bag~new; b2~put('b'); say "b2 items before" b2~items
+mb = .MyBag~new
+a0 = .Array~new
+t0 = .Table~new
+.local['B0'] = b0; .local['B1'] = b1; .local['B2'] = b2
+.local['MB'] = mb; .local['A0'] = a0; .local['T0'] = t0
+.Bag~method('PUT')~setProtected
+.Bag~method('ITEMS')~setProtected
+.Array~method('APPEND')~setProtected
+call show "b0 put", ".b0~put(2)"
+call show "b1 put", ".b1~put(2)"
+call show "b2 items", "return .b2~items"
+call show "subclass put", ".mb~put(3)"
+call show "new bag put", "x = .Bag~new; x~put(1); return x~items"
+call show "array append", ".a0~append(4)"
+call show "table put", ".t0~put(5, 'k')"
+p0 = .Bag~new
+p1 = .Bag~new; p1~remove('z')
+t1 = .Table~new
+.Bag~method('REMOVE')~setPrivate
+say "set remove private" .Set~method('REMOVE')~isPrivate .Bag~method('REMOVE')~isPrivate
+call try "p0", p0
+call try "p1", p1
+call try "new bag", .Bag~new
+call try "table", t1
+exit
+
+try: procedure
+  use arg label, coll
+  signal on syntax
+  coll~remove('z')
+  say label "remove ran"
+  return
+syntax:
+  say label "remove" condition('o')~code
+  return
+
+show: procedure
+  use arg label, code
+  mgr = .Mgr~new
+  r = .Routine~new("", code)
+  r~setSecurityManager(mgr)
+  r~call
+  say label "events:" mgr~log~makeString(, " | ")
+  return
+
+::class MyBag subclass Bag
+
+::class Mgr
+::method init
+  expose log
+  log = .Array~new
+::method log
+  expose log
+  return log
+::method unknown
+  expose log
+  use arg name, args
+  info = args[1]
+  if name = "METHOD" then log~append(name info['NAME'] info['OBJECT']~class~id)
+  return 0

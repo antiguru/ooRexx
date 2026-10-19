@@ -107,6 +107,22 @@ impl MethodDict {
             .insert(key, vec![MethodSlot::Defined { scope, method }]);
     }
 
+    /// Repoint the entry under `name` that `scope` defines as `old` to
+    /// `new`, leaving its place in the list, and answer whether there was one.
+    pub fn repoint(&mut self, name: &str, scope: ObjRef, old: MethodId, new: MethodId) -> bool {
+        let Some(list) = self.entries.get_mut(&name.to_ascii_uppercase()) else {
+            return false;
+        };
+        let mut found = false;
+        for entry in list.iter_mut() {
+            if *entry == (MethodSlot::Defined { scope, method: old }) {
+                *entry = MethodSlot::Defined { scope, method: new };
+                found = true;
+            }
+        }
+        found
+    }
+
     /// Add a tombstone under `name` as its highest-priority entry, leaving
     /// whatever was already there behind it -- `addMethod`'s own no-method
     /// branch, which is an unconditional `addFront(TheNilObject, name)`
