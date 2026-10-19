@@ -24,3 +24,9 @@ selectors to the back (`InstructionParser.cpp:4495` and `:4523`), so every selec
 reverse order. `drop list (list)` drops `X` on the oracle and `LIST` here. The crate runs the list
 in source order, as the documentation describes. The `PROCEDURE EXPOSE` handler split above
 follows from this ordering, so both can take one ruling.
+
+The Task 6.8 round-2 re-review (`task-6.8-rereview-r2.md`, Minor 1) adds a third. After
+`say q.` and `call r >q.`, with `r: procedure; use arg >z.`, the oracle's `.context~variables`
+lists the alias under the owner's name (`hasIndex('Z.')` 0, `hasIndex('Q.')` 1), although the
+alias is reachable only as `Z.`. The crate lists it as `Z.`. The simple-variable form behaves the
+same way. This predates Task 6.8.
