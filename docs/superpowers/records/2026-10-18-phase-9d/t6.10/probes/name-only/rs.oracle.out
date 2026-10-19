@@ -1,0 +1,15 @@
+       >I> Routine "testCallerStackFrame_ReplyStart" in package "testCallerStackFrame_ReplyStart". | 1 0
+       <I< Routine "testCallerStackFrame_ReplyStart" in package "testCallerStackFrame_ReplyStart". | 
+       >I> Routine "testCallerStackFrame_ReplyStart" in package "testCallerStackFrame_ReplyStart". | 1 0
+       >I> Method "INIT" with scope "TEST" in package "testCallerStackFrame_ReplyStart". | 1 0
+       <I< Method "INIT" with scope "TEST" in package "testCallerStackFrame_ReplyStart". | 
+       >I> Method "M_REPLY" with scope "TEST" in package "testCallerStackFrame_ReplyStart". | 1 0
+       <I< Method "M_REPLY" with scope "TEST" in package "testCallerStackFrame_ReplyStart". | 
+       >I> Method "M_REPLY" with scope "TEST" in package "testCallerStackFrame_ReplyStart". | 1 1
+       <I< Method "M_REPLY" with scope "TEST" in package "testCallerStackFrame_ReplyStart". | 
+       >I> Method "M_WAIT" with scope "TEST" in package "testCallerStackFrame_ReplyStart". | 1 0
+       >I> Method "M_S" with scope "TEST" in package "testCallerStackFrame_ReplyStart". | 1 1
+       <I< Method "M_S" with scope "TEST" in package "testCallerStackFrame_ReplyStart". | 
+       <I< Method "M_WAIT" with scope "TEST" in package "testCallerStackFrame_ReplyStart". | 
+       <I< Routine "testCallerStackFrame_ReplyStart" in package "testCallerStackFrame_ReplyStart". | 
+threads 2

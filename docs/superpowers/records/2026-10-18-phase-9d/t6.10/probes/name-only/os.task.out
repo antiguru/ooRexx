@@ -1,0 +1,20 @@
+19
+       >I> Routine "myTestRoutine" in package "os.rex". | ROUTINE | 1 | 1
+     2 *-* t1=.test~new | ROUTINE | 1 | 1
+       >I> Method "INIT" with scope "TEST" in package "os.rex". | METHOD | 0 | 0
+    18 *-* b=.context~name":" self~identityHash | METHOD | 0 | 0
+    19 *-* info="initialized by .TEST's init" | METHOD | 0 | 0
+       <I< Method "INIT" with scope "TEST" in package "os.rex". | METHOD | 0 | 0
+     3 *-* t1~setMethod1("m1float",.methods~fm,'float')   -- scope=FLOAT (hence .nil) | ROUTINE | 1 | 1
+     4 *-* t1~m1float  -- OBJECTID, SCOPE=.nil | ROUTINE | 1 | 1
+       >I> Method "M1FLOAT" with scope ".NIL" in package "os.rex". | METHOD | 0 | 1
+    11 *-* a1=.context~name":" self~identityHash "(floating method)" | METHOD | 0 | 1
+    12 *-* a2="self:" self "hello, world, scope:" .context~executable~scope "| info:" info | METHOD | 0 | 1
+       <I< Method "M1FLOAT" with scope ".NIL" in package "os.rex". | METHOD | 0 | 1
+     5 *-* t1~setMethod1("m1object",.methods~fm,'object') -- scope=OBJECT's scope | ROUTINE | 1 | 1
+     6 *-* t1~m1object -- OBJECTID, SCOPE=.TEST | ROUTINE | 1 | 1
+       >I> Method "M1OBJECT" with scope "TEST" in package "os.rex". | METHOD | 0 | 0
+    11 *-* a1=.context~name":" self~identityHash "(floating method)" | METHOD | 0 | 0
+    12 *-* a2="self:" self "hello, world, scope:" .context~executable~scope "| info:" info | METHOD | 0 | 0
+       <I< Method "M1OBJECT" with scope "TEST" in package "os.rex". | METHOD | 0 | 0
+       <I< Routine "myTestRoutine" in package "os.rex". | ROUTINE | 1 | 1

@@ -1,17 +1,16 @@
-    37 *-* say 'r1 say ran'
-       >>>   "r1 say ran"
-r1 say ran
+    38 *-* x = 'r1'
+       >>>   "r1"
        <I< Routine "R1" in package "trace_output_invalid_destination.rex".
 not reached
 97.1 Object "The NIL object" does not understand message "CODE".
-    42 *-* a = 2
+    43 *-* a = 2
        >>>   "2"
-    43 *-* say 'r2 a' a
+    44 *-* say 'r2 a' a
        >>>   "r2 a 2"
 r2 a 2
 not reached
 97.1 Object "The NIL object" does not understand message "CODE".
-    49 *-* trace n
+    50 *-* trace n
 m ended
 not reached
 97.1 Object "The NIL object" does not understand message "CODE".

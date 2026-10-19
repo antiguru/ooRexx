@@ -1,0 +1,5 @@
+  1457 *-* Method UNKNOWN with scope "Monitor" in package "REXX" (no source available).
+     6 *-* a = 1
+     1 *-* call r
+Error 97 running REXX line 1457:  Object method not found.
+Error 97.1:  Object "" does not understand message "LINEOUT".

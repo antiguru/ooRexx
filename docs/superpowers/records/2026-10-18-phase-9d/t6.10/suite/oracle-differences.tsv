@@ -86,7 +86,6 @@ base/keyword/TRACE	TEST_TRACE_OTHER_ENTRYPOINT	passed	failed
 base/keyword/TRACE_TraceObject	TEST_CALLER_STACK_FRAME_REPLY_START	passed	failed
 base/keyword/TRACE_TraceObject	TEST_OBJECT_AND_SCOPE	passed	failed
 base/keyword/TRACE_TraceObject	TEST_TRACEOBJECT_COLLECTOR	passed	failed
-base/rexxutil/SysFileTree	TEST_TREE_DIRECTORY	passed	failed
 base/security.manager/SecurityManager	TEST_ENVIRONMENT_HANDLE	passed	failed
 base/security.manager/SecurityManager	TEST_METHOD_HANDLE_NO_RESULT	passed	failed
 base/security.manager/SecurityManager	TEST_METHOD_HANDLE_RESULT	passed	failed

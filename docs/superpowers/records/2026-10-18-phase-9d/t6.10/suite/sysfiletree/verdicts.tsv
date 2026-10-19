@@ -1,3 +1,0 @@
-# ootest revision 13178
-group	verdict	crate	oracle denominator
-base/rexxutil/SysFileTree	green		equal

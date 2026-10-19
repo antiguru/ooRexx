@@ -1,0 +1,4 @@
+# parent, without the stale-clause abandon or the compiled-echo check
+program	base	vB	vB d%	base -libc	vB -libc	vB -libc d%	base spread%	vB spread%
+sayloop	179750513	179857851	+0.0597	107650174	107751583	+0.0942	0.0000	0.0000
+parse	1653205243	1655203438	+0.1209	1551199962	1553200261	+0.1290	0.0000	0.0000

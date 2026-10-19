@@ -25,10 +25,6 @@
 < base/keyword/TRACE_TraceObject	TEST_VARIABLE	-	passed	failed
 ---
 > base/keyword/TRACE_TraceObject	TEST_VARIABLE	-	passed	passed
-23232c23232
-< base/rexxutil/SysFileTree	TEST_TREE_DIRECTORY	-	passed	passed
----
-> base/rexxutil/SysFileTree	TEST_TREE_DIRECTORY	-	passed	failed
 23355c23355
 < base/runtime.objects/environmentEntries	TEST_ZZZ_TRACEOUTPUT_INVALID	-	passed	failed
 ---

@@ -1,2 +1,2 @@
-7540e967f Phase 9d Task 6.10: a trace line whose TraceObject cannot be made on the default route goes to standard error
+a5266a662 (the code; HEAD was 2dc239a9d, a controller commit touching only .superpowers/)
 exit 101

@@ -1,0 +1,4 @@
+# parent, the stale-clause abandon out of line
+program	base	vC	vC d%	base -libc	vC -libc	vC -libc d%	base spread%	vC spread%
+sayloop	179754674	180659458	+0.5033	107650579	108552328	+0.8377	0.0000	0.0000
+parse	1653205243	1661610520	+0.5084	1551199962	1559602691	+0.5417	0.0000	0.0000

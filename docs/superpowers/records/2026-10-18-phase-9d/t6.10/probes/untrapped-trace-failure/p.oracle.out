@@ -1,0 +1,6 @@
+     6 *-* a = 1
+       >>>   "1"
+     7 *-* say 'routine end'
+       >>>   "routine end"
+routine end
+not reached

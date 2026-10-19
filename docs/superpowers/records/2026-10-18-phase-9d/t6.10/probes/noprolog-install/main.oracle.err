@@ -1,0 +1,28 @@
+       >I> Routine "req2.rex" in package "req2.rex".
+       <I< Routine "req2.rex" in package "req2.rex".
+       >I> Routine "rn" in package "rn".
+       <I< Routine "rn" in package "rn".
+       >I> Routine "rn" in package "rn".
+     1 *-* say 'body'
+       >>>   "body"
+       <I< Routine "rn" in package "rn".
+       >I> Routine "mn" in package "mn".
+       <I< Routine "mn" in package "mn".
+       >I> Routine "pn" in package "pn".
+     1 *-* say 'pbody'
+       >>>   "pbody"
+       <I< Routine "pn" in package "pn".
+       >I> Routine "pn2" in package "pn2".
+       <I< Routine "pn2" in package "pn2".
+       >I> Routine "pn3" in package "pn3".
+       <I< Routine "pn3" in package "pn3".
+       >I> Routine "rn2" in package "rn2".
+     1 *-* say 'r2body'
+       >>>   "r2body"
+       <I< Routine "rn2" in package "rn2".
+       >I> Routine "rn3" in package "rn3".
+       <I< Routine "rn3" in package "rn3".
+       >I> Routine "req1.rex" in package "req1.rex".
+     1 *-* say 'req1 prolog'
+       >>>   "req1 prolog"
+       <I< Routine "req1.rex" in package "req1.rex".

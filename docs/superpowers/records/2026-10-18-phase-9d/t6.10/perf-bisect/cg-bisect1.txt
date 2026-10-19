@@ -1,0 +1,4 @@
+# parent, f7eacd9b3 (mid), 306331c9b+ (head)
+program	base	mid	head	mid d%	head d%	base -libc	mid -libc	head -libc	mid -libc d%	head -libc d%	base spread%	mid spread%	head spread%
+sayloop	179756328	180754216	180753856	+0.5551	+0.5549	107650251	108651312	108651126	+0.9299	+0.9297	0.0000	0.0000	0.0000
+parse	1653180405	1662574733	1662578650	+0.5683	+0.5685	1551199182	1560600124	1560600318	+0.6060	+0.6061	0.0000	0.0000	0.0000

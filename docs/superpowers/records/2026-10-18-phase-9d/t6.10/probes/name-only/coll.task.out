@@ -1,0 +1,23 @@
+       <I< Method "A" with scope "MYTESTTO" in package "coll.rex".
+       <I< Method "A" with scope "MYTESTTO" in package "coll.rex".
+       <I< Method "B" with scope "MYTESTTO" in package "coll.rex".
+       <I< Method "B" with scope "MYTESTTO" in package "coll.rex".
+       <I< Method "TEST" with scope "MYTESTTO" in package "coll.rex".
+       <I< Method "TEST" with scope "MYTESTTO" in package "coll.rex".
+       <I< Routine "PP" in package "coll.rex".
+       >I> Method "A" with scope "MYTESTTO" in package "coll.rex".
+       >I> Method "A" with scope "MYTESTTO" in package "coll.rex".
+       >I> Method "B" with scope "MYTESTTO" in package "coll.rex".
+       >I> Method "B" with scope "MYTESTTO" in package "coll.rex".
+       >I> Method "TEST" with scope "MYTESTTO" in package "coll.rex".
+       >I> Method "TEST" with scope "MYTESTTO" in package "coll.rex".
+       >I> Routine "PP" in package "coll.rex".
+    17 *-* a=19                  -- method: # 17
+    18 *-* b=32                  -- method: # 18
+    22 *-* reply  a              -- method: # 22
+    23 *-* a=a                   -- method: # 23
+    27 *-* reply  b              -- method: # 27
+    28 *-* b=b                   -- method: # 28
+    33 *-* reply                 -- method: # 33
+    34 *-* abc=pp(.myTestTO~a*.myTestTO~b)   -- method: # 34
+    37 *-* return "["arg(1)"]"   -- routine: # 37

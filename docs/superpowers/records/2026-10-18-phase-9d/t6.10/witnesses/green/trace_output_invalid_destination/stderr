@@ -1,2 +1,2 @@
        >I> Routine "R1" in package "trace_output_invalid_destination.rex".
-    36 *-* .traceOutput~destination("")
+    37 *-* .traceOutput~destination("")
