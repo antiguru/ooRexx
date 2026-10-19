@@ -1151,36 +1151,6 @@ impl Interp {
     /// and ended `ended`.
     #[inline(always)]
     pub(crate) fn finish_call(&mut self, ended: Result<Ended, Failure>) -> Result<Ended, Failure> {
-        let Some(kind) = self.activity.call_tails.last().map(|tail| tail.kind) else {
-            return Err(Loud::op_not_driven("a call with no saved level state").into());
-        };
-        if let Err(failure) = &ended {
-            self.capture_activation_frame(failure);
-        }
-
-        // `RexxActivation::termination` releases the guard lock first. With one
-        // activity there is nothing to release; a `<I<` drops the flag first.
-        if kind == TailKind::Method {
-            if self.activities.guards.is_live() || !self.activity.guard_waits.is_empty() {
-                self.guard_off_at_end();
-            }
-            // Filed while the replier is still the running level, whose frame
-            // the continuation's `>I>` names as its caller's.
-            if self.split_owed()
-                && let Err(failure) = self.file_empty_continuation()
-            {
-                return Err(failure);
-            }
-        }
-        // Before the pop, because both halves of `<I<`'s gate are the
-        // callee's own -- its `trace_entry` state and its `TRACE` setting.
-        // `RexxActivation::termination` is where the C++ puts it, which is
-        // likewise inside the activation. **And before the call tail is
-        // popped**: the line's delivery sends messages, and a primitive
-        // method among them parks its tail at the depth the call tails stand
-        // at, which with this tail gone is the depth of the one this call's
-        // own sender parked.
-        self.trace_invocation_exit();
         let Some(CallTail {
             kind,
             saved_clause_state,
@@ -1193,6 +1163,22 @@ impl Interp {
         else {
             return Err(Loud::op_not_driven("a call with no saved level state").into());
         };
+        if let Err(failure) = &ended {
+            self.capture_activation_frame(failure);
+        }
+
+        // `RexxActivation::termination` releases the guard lock first. With one
+        // activity there is nothing to release; a `<I<` drops the flag first.
+        if kind == TailKind::Method
+            && (self.activities.guards.is_live() || !self.activity.guard_waits.is_empty())
+        {
+            self.guard_off_at_end();
+        }
+        // Before the pop, because both halves of `<I<`'s gate are the
+        // callee's own -- its `trace_entry` state and its `TRACE` setting.
+        // `RexxActivation::termination` is where the C++ puts it, which is
+        // likewise inside the activation.
+        self.trace_invocation_exit();
 
         // Popped on both paths, and unconditionally: `run_activation`'s own
         // loop asserts the activation stack is where it found it after every

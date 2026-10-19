@@ -3100,14 +3100,27 @@ impl Interp {
         Ok(())
     }
 
-    /// The continuation of a replied activation whose body ended before its
-    /// next clause: an activity with no level to resume, which the oracle
-    /// still spawns and which announces its `>I>` and `<I<` there
-    /// (`RexxActivation::run`'s `REPLIED` arm).
+    /// The continuation of `callee`, a replied activation just popped whose
+    /// body ended before its next clause: an activity with no level to
+    /// resume, which announces its `>I>` and `<I<` there
+    /// (`RexxActivation::run`'s `REPLIED` arm). `callee` is the running
+    /// level again while its frame is recorded as the spawner's.
     #[cold]
     #[inline(never)]
-    pub(crate) fn file_empty_continuation(&mut self) -> Result<(), Failure> {
-        let spawner = self.spawner_of_running()?;
+    pub(crate) fn empty_continuation(
+        &mut self,
+        callee: Box<crate::activation::Activation>,
+    ) -> (
+        Box<crate::activation::Activation>,
+        Option<Box<crate::scheduler::Idle>>,
+    ) {
+        let caller = self.activity.running.replace(callee);
+        let spawner = self.spawner_of_running();
+        let callee = std::mem::replace(&mut self.activity.running, caller)
+            .expect("the callee was made the running level");
+        let Ok(spawner) = spawner else {
+            return (callee, None);
+        };
         let mut idle = self.new_activity();
         idle.activity.spawner = Some(spawner);
         let continuation = &mut idle.activity;
@@ -3115,11 +3128,8 @@ impl Interp {
         continuation.activation_indent = self.activity.activation_indent;
         continuation.indent_offset = self.activity.indent_offset;
         continuation.clause_line_override = self.activity.clause_line_override;
-        if let Some(replied) = self.activation_mut().replied.as_mut() {
-            replied.continuation = Some(idle);
-        }
         self.activity.splits_owed -= 1;
-        Ok(())
+        (callee, Some(idle))
     }
 
     /// Parks the level [`Interp::split_level`] moved, its registers now in

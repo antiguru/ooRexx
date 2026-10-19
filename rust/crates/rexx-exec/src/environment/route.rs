@@ -394,100 +394,115 @@ impl Interp {
             _ => None,
         };
 
-        let caller_ref = self.caller();
-        let Some(object) = self.send_message(class, b"NEW", None, &[], caller_ref)? else {
-            return Err(Failure::Raised(Box::new(crate::error::Raised::syntax(
-                97,
-                1,
-                vec![b"TraceObject".to_vec()],
-            ))));
-        };
-        self.roots.activity_mut().push_temp(object);
-        let traced = self.text(line);
-        self.trace_object_put(object, b"TRACELINE", traced)?;
-        let interpreter = self.counted(1);
-        self.trace_object_put(object, b"INTERPRETER", interpreter)?;
-        let thread = self.counted(thread as usize);
-        self.trace_object_put(object, b"THREAD", thread)?;
-        let invocation = self.counted(invocation as usize);
-        self.trace_object_put(object, b"INVOCATION", invocation)?;
-        let stack_frame = match frame {
-            Some(frame) => self.frame_table(Some(frame))?,
-            None => ObjRef::NIL,
-        };
-        self.trace_object_put(object, b"STACKFRAME", stack_frame)?;
-        if let Some(caller) = caller {
-            let table = match caller {
-                CallerFrame::Of(frame) => self.frame_table(Some(frame))?,
-                CallerFrame::Spawner => self.spawner_table()?,
-            };
-            self.trace_object_put(object, b"CALLERSTACKFRAME", table)?;
-        }
-        if let Some((key, guarded, reserved)) = method {
-            let pool = self.activities.guards.pool_number(key);
-            let pool = self.counted(pool as usize);
-            self.trace_object_put(object, b"ATTRIBUTEPOOL", pool)?;
-            self.trace_object_put(object, b"ISGUARDED", crate::eval::logical(guarded))?;
-            let count = self.guard_count(key);
-            let count = self.counted(count as usize);
-            self.trace_object_put(object, b"SCOPELOCKCOUNT", count)?;
-            self.trace_object_put(object, b"HASSCOPELOCK", crate::eval::logical(reserved))?;
-            self.trace_object_put(object, b"RECEIVER", key.object)?;
-            if let Some(waiting) = waiting {
-                self.trace_object_put(object, b"ISWAITING", crate::eval::logical(waiting))?;
-            }
-        }
-        if let Some(variable) = variable {
-            self.trace_object_variable(object, variable)?;
-        }
-        let caller_ref = self.caller();
-        let notify = self
-            .send_message(class, b"NOTIFY", None, &[], caller_ref)?
-            .unwrap_or(ObjRef::NIL);
-        if notify != ObjRef::NIL {
-            let caller_ref = self.caller();
-            self.send_message(notify, b"APPEND", None, &[Some(object)], caller_ref)?;
-        }
-        // `Activity::traceOutput`: the option the object was made under.
-        let index = self.text(b"OPTION");
-        self.roots.activity_mut().push_temp(index);
-        let caller_ref = self.caller();
-        let option = self
-            .send_message(object, b"[]", None, &[Some(index)], caller_ref)?
-            .unwrap_or(ObjRef::NIL);
-        let letter = if option == ObjRef::NIL {
-            b'N'
-        } else {
-            self.to_text(option).first().copied().unwrap_or(b'N')
-        };
-        if letter == b'P' {
-            return Ok(Delivered::KeptBack);
-        }
-        if self.routes_to_standard_error() {
-            // The error stream writes the object's string, which is the line
-            // itself under option `N` and `makeStringImpl`'s format otherwise.
-            if letter == b'N' {
-                return Ok(Delivered::ToStandardError);
-            }
-            let caller_ref = self.caller();
-            let shown = self
-                .send_message(object, b"MAKESTRING", None, &[], caller_ref)?
-                .unwrap_or(ObjRef::NIL);
-            let shown = self.to_text(shown).to_vec();
-            return Ok(Delivered::ToStandardErrorAs(shown));
-        }
-        let Some(route) = self.local_route(b"TRACEOUTPUT")? else {
-            return Ok(Delivered::ToStandardError);
-        };
-        let caller_ref = self.caller();
-        self.send_message(
-            route,
-            crate::dispatch::LINEOUT,
+        // **A call tail of the delivery's own**, so that a primitive method
+        // the delivery sends parks its tail above every tail the traced code
+        // parked: a `<I<` is delivered after its call tail is popped, at the
+        // depth where the sender's primitive `NEW` waits.
+        self.activity.call_tails.push(crate::run::CallTail::method(
+            crate::CallContext::default(),
+            self.save_clause_state(),
+            0,
+            0,
             None,
-            &[Some(object)],
-            caller_ref,
-        )?;
-        Ok(Delivered::Sent)
+        ));
+        let delivered = (|| -> Result<Delivered, Failure> {
+            let caller_ref = self.caller();
+            let Some(object) = self.send_message(class, b"NEW", None, &[], caller_ref)? else {
+                return Err(Failure::Raised(Box::new(crate::error::Raised::syntax(
+                    97,
+                    1,
+                    vec![b"TraceObject".to_vec()],
+                ))));
+            };
+            self.roots.activity_mut().push_temp(object);
+            let traced = self.text(line);
+            self.trace_object_put(object, b"TRACELINE", traced)?;
+            let interpreter = self.counted(1);
+            self.trace_object_put(object, b"INTERPRETER", interpreter)?;
+            let thread = self.counted(thread as usize);
+            self.trace_object_put(object, b"THREAD", thread)?;
+            let invocation = self.counted(invocation as usize);
+            self.trace_object_put(object, b"INVOCATION", invocation)?;
+            let stack_frame = match frame {
+                Some(frame) => self.frame_table(Some(frame))?,
+                None => ObjRef::NIL,
+            };
+            self.trace_object_put(object, b"STACKFRAME", stack_frame)?;
+            if let Some(caller) = caller {
+                let table = match caller {
+                    CallerFrame::Of(frame) => self.frame_table(Some(frame))?,
+                    CallerFrame::Spawner => self.spawner_table()?,
+                };
+                self.trace_object_put(object, b"CALLERSTACKFRAME", table)?;
+            }
+            if let Some((key, guarded, reserved)) = method {
+                let pool = self.activities.guards.pool_number(key);
+                let pool = self.counted(pool as usize);
+                self.trace_object_put(object, b"ATTRIBUTEPOOL", pool)?;
+                self.trace_object_put(object, b"ISGUARDED", crate::eval::logical(guarded))?;
+                let count = self.guard_count(key);
+                let count = self.counted(count as usize);
+                self.trace_object_put(object, b"SCOPELOCKCOUNT", count)?;
+                self.trace_object_put(object, b"HASSCOPELOCK", crate::eval::logical(reserved))?;
+                self.trace_object_put(object, b"RECEIVER", key.object)?;
+                if let Some(waiting) = waiting {
+                    self.trace_object_put(object, b"ISWAITING", crate::eval::logical(waiting))?;
+                }
+            }
+            if let Some(variable) = variable {
+                self.trace_object_variable(object, variable)?;
+            }
+            let caller_ref = self.caller();
+            let notify = self
+                .send_message(class, b"NOTIFY", None, &[], caller_ref)?
+                .unwrap_or(ObjRef::NIL);
+            if notify != ObjRef::NIL {
+                let caller_ref = self.caller();
+                self.send_message(notify, b"APPEND", None, &[Some(object)], caller_ref)?;
+            }
+            // `Activity::traceOutput`: the option the object was made under.
+            let index = self.text(b"OPTION");
+            self.roots.activity_mut().push_temp(index);
+            let caller_ref = self.caller();
+            let option = self
+                .send_message(object, b"[]", None, &[Some(index)], caller_ref)?
+                .unwrap_or(ObjRef::NIL);
+            let letter = if option == ObjRef::NIL {
+                b'N'
+            } else {
+                self.to_text(option).first().copied().unwrap_or(b'N')
+            };
+            if letter == b'P' {
+                return Ok(Delivered::KeptBack);
+            }
+            if self.routes_to_standard_error() {
+                // The error stream writes the object's string, which is the line
+                // itself under option `N` and `makeStringImpl`'s format otherwise.
+                if letter == b'N' {
+                    return Ok(Delivered::ToStandardError);
+                }
+                let caller_ref = self.caller();
+                let shown = self
+                    .send_message(object, b"MAKESTRING", None, &[], caller_ref)?
+                    .unwrap_or(ObjRef::NIL);
+                let shown = self.to_text(shown).to_vec();
+                return Ok(Delivered::ToStandardErrorAs(shown));
+            }
+            let Some(route) = self.local_route(b"TRACEOUTPUT")? else {
+                return Ok(Delivered::ToStandardError);
+            };
+            let caller_ref = self.caller();
+            self.send_message(
+                route,
+                crate::dispatch::LINEOUT,
+                None,
+                &[Some(object)],
+                caller_ref,
+            )?;
+            Ok(Delivered::Sent)
+        })();
+        self.activity.call_tails.pop();
+        delivered
     }
 
     /// The `VARIABLE` entry of a `>V>` or `>=>` line's `TraceObject`: a

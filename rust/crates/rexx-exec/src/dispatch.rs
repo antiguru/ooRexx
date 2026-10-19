@@ -3473,12 +3473,16 @@ impl Interp {
             value,
             continuation,
         } = *replied;
+        // The body ended before its next clause, so no split ran. The
+        // oracle still spawns the empty rest, which announces itself again.
+        let (callee, continuation) = match continuation {
+            Some(continuation) => (callee, Some(continuation)),
+            None => self.empty_continuation(callee),
+        };
         match continuation {
             Some(continuation) => self.spawn_continuation(callee, callee_context, continuation),
-            // No continuation filed, which `Interp::finish_call` never
-            // leaves: it files an empty one for a body that ended before its
-            // next clause. The rest is dropped with the numbering a spawn
-            // would have made (`Activity.cpp:1206`).
+            // A rest that could not be filed is dropped with the numbering a
+            // spawn would have made (`Activity.cpp:1206`).
             None => {
                 self.activity_number();
                 self.rotate_pooled();

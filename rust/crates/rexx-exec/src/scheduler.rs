@@ -2275,13 +2275,14 @@ impl Interp {
             self.slice_deferred = false;
             return Err(Failure::Slice);
         }
-        // Not while a trace line is delivered: its `TraceObject` is made under
-        // the class's guard, which another activity's delivery would wait
-        // for under a pin of its own.
+        // Not while a trace line's delivery holds a guard, such as the
+        // TraceObject class's while its object is made: another activity's
+        // delivery would wait for that guard under a pin of its own. A
+        // delivery's clauses that hold none may yield.
         if fresh
             && self.slice_deferred
             && self.activity.pin_depth > 0
-            && !self.activity.routing_trace
+            && !self.delivery_holds_a_guard()
         {
             self.slice_deferred = false;
             return self.pinned_yield();
@@ -2292,6 +2293,15 @@ impl Interp {
         }
         self.clause_countdown = 1;
         Ok(())
+    }
+
+    /// Whether a trace line is being delivered while the running activation
+    /// holds its receiver's guard.
+    fn delivery_holds_a_guard(&self) -> bool {
+        self.activity.routing_trace
+            && self
+                .running_activation()
+                .is_some_and(|activation| activation.flags.reserved())
     }
 
     /// One round of the other ready activities, where a started activity
