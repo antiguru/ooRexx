@@ -1,4 +1,4 @@
-**OPEN: found by the Phase 9d Task 6.10 review, not yet ruled.** Building a TraceObject in Rexx code makes tracing several times slower than the oracle.
+**CLOSED, ruled by Moritz 2026-10-19: the performance of traced programs is irrelevant. There are no targets for it and no need to match the oracle.** Found by the Phase 9d Task 6.10 review. Building a TraceObject in Rexx code makes tracing several times slower than the oracle.
 
 # The cost of a Rexx-built TraceObject
 
