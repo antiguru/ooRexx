@@ -1,0 +1,6 @@
+program	red vs oracle	green vs oracle
+condition_call_on_argument	differs: stdout stderr rc	identical
+signal_on_missing_label	differs: stdout stderr	identical
+raise_result_and_sender	differs: stdout stderr rc	identical
+error_report_line_ends	differs: stdout	identical
+condition_object_origin	differs: stdout stderr	identical

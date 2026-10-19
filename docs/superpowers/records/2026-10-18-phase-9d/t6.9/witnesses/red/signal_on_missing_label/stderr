@@ -1,0 +1,3 @@
+     6 *-* a = novalue
+Error 16 running signal_on_missing_label.rex line 6:  Label not found.
+Error 16.1:  Label "NOVALUE" not found.

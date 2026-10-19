@@ -1,0 +1,16 @@
+s1 SYNTAX result=(none) propagated=0
+s2 SYNTAX result=(none) propagated=0
+s3 SYNTAX result=(none) propagated=0
+s4 SYNTAX result=(none) propagated=1
+s5 SYNTAX result=(none) propagated=1
+c6 USER U result=(none) propagated=1
+returned RESULT
+c6 USER U result=(none) propagated=1
+exited RESULT
+s7 USER U result=(none) propagated=1
+untrapped RESULT
+interpreted return from-interpret
+interpreted exit from-interpret-exit
+main_handler USER U result=(none) propagated=0
+own_handler USER U result=(none) propagated=0
+internal return internal fell through

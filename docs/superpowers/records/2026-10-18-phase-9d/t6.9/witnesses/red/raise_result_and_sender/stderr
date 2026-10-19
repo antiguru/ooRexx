@@ -1,0 +1,3 @@
+    36 *-* say 'interpreted propagate' interpreted_propagate()
+Error 44 running raise_result_and_sender.rex line 36:  Function or message did not return data.
+Error 44.1:  No data returned from function "INTERPRETED_PROPAGATE".

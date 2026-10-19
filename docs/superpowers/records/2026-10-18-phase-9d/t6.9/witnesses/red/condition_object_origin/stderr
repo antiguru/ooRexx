@@ -1,0 +1,5 @@
+    74 *-* .nil~zork
+    44 *-* call propagate_nomethod
+    42 *-* x = open_in_routine()
+Error 97 running condition_object_origin.rex line 44:  Object method not found.
+Error 97.1:  Object "The NIL object" does not understand message "ZORK".

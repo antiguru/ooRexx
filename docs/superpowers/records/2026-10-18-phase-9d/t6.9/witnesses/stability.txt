@@ -1,0 +1,17 @@
+# per run: md5 of stdout, of stderr, and the rc, on the oracle and on the task binary, run from /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t69/stab
+raise_result_and_sender run1 oracle=0/5285f9c2e3dc/65ad83768fa6 crate=0/5285f9c2e3dc/65ad83768fa6
+raise_result_and_sender run2 oracle=0/5285f9c2e3dc/65ad83768fa6 crate=0/5285f9c2e3dc/65ad83768fa6
+raise_result_and_sender run3 oracle=0/5285f9c2e3dc/65ad83768fa6 crate=0/5285f9c2e3dc/65ad83768fa6
+raise_result_and_sender run4 oracle=0/5285f9c2e3dc/65ad83768fa6 crate=0/5285f9c2e3dc/65ad83768fa6
+raise_result_and_sender run5 oracle=0/5285f9c2e3dc/65ad83768fa6 crate=0/5285f9c2e3dc/65ad83768fa6
+raise_result_and_sender run6 oracle=0/5285f9c2e3dc/65ad83768fa6 crate=0/5285f9c2e3dc/65ad83768fa6
+raise_result_and_sender run7 oracle=0/5285f9c2e3dc/65ad83768fa6 crate=0/5285f9c2e3dc/65ad83768fa6
+raise_result_and_sender run8 oracle=0/5285f9c2e3dc/65ad83768fa6 crate=0/5285f9c2e3dc/65ad83768fa6
+error_report_line_ends run1 oracle=243/f4c42cb51dad/d41d8cd98f00 crate=243/f4c42cb51dad/d41d8cd98f00
+error_report_line_ends run2 oracle=243/f4c42cb51dad/d41d8cd98f00 crate=243/f4c42cb51dad/d41d8cd98f00
+error_report_line_ends run3 oracle=243/f4c42cb51dad/d41d8cd98f00 crate=243/f4c42cb51dad/d41d8cd98f00
+error_report_line_ends run4 oracle=243/f4c42cb51dad/d41d8cd98f00 crate=243/f4c42cb51dad/d41d8cd98f00
+error_report_line_ends run5 oracle=243/f4c42cb51dad/d41d8cd98f00 crate=243/f4c42cb51dad/d41d8cd98f00
+error_report_line_ends run6 oracle=243/f4c42cb51dad/d41d8cd98f00 crate=243/f4c42cb51dad/d41d8cd98f00
+error_report_line_ends run7 oracle=243/f4c42cb51dad/d41d8cd98f00 crate=243/f4c42cb51dad/d41d8cd98f00
+error_report_line_ends run8 oracle=243/f4c42cb51dad/d41d8cd98f00 crate=243/f4c42cb51dad/d41d8cd98f00

@@ -1,0 +1,33 @@
+# diff <(grep -v '^#' t6.8/r2/suite/tests.tsv | sort) <(grep -v '^#' t6.9/suite/tests.tsv | sort)
+1963,1965c1963,1965
+< base/bif/CONDITION	TEST_CONDITION_CALL_BIF	-	passed	failed
+< base/bif/CONDITION	TEST_CONDITION_CALL_EXTERNAL	-	passed	failed
+< base/bif/CONDITION	TEST_CONDITION_CALL	-	passed	failed
+---
+> base/bif/CONDITION	TEST_CONDITION_CALL_BIF	-	passed	passed
+> base/bif/CONDITION	TEST_CONDITION_CALL_EXTERNAL	-	passed	passed
+> base/bif/CONDITION	TEST_CONDITION_CALL	-	passed	passed
+1969c1969
+< base/bif/CONDITION	TEST_CONDITION_SIGNAL	-	passed	failed
+---
+> base/bif/CONDITION	TEST_CONDITION_SIGNAL	-	passed	passed
+22670c22670
+< base/keyword/RAISE	TEST_RAISE_INSERT_CRLF	-	passed	failed
+---
+> base/keyword/RAISE	TEST_RAISE_INSERT_CRLF	-	passed	passed
+22675c22675
+< base/keyword/RAISE	TEST_RAISE_PROPAGATE	-	passed	failed
+---
+> base/keyword/RAISE	TEST_RAISE_PROPAGATE	-	passed	passed
+22685c22685
+< base/keyword/RAISE	TEST_RAISE_SYNTAX_EXIT_02	-	passed	failed
+---
+> base/keyword/RAISE	TEST_RAISE_SYNTAX_EXIT_02	-	passed	passed
+22687c22687
+< base/keyword/RAISE	TEST_RAISE_SYNTAX_RETURN_02	-	passed	failed
+---
+> base/keyword/RAISE	TEST_RAISE_SYNTAX_RETURN_02	-	passed	passed
+22788c22788
+< base/keyword/SIGNAL	TEST_BUG_1877	-	passed	failed
+---
+> base/keyword/SIGNAL	TEST_BUG_1877	-	passed	passed

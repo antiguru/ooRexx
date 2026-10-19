@@ -1,0 +1,4 @@
+    25 *-*   say 'label' arg() arg(1)~class~id arg(1)~condition arg(1)~instruction,    arg(1)~equivalent(object) (arg(1) == object) condition('S')
+     4 *-* call raise_in 'user u'
+Error 97 running condition_call_on_argument.rex line 25:  Object method not found.
+Error 97.1:  Object "" does not understand message "CONDITION".

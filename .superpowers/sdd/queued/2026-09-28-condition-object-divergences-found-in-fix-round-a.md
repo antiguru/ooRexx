@@ -1,4 +1,4 @@
-**OPEN: ruled 9d, cluster call-on-trap-argument (Phase 9d inventory).** callarg still 1 1 against 0 0 (the cluster); coorder still lacks RESULT and ADDITIONAL, which stream-notready-names touches.
+**CLOSED 2026-10-19 by Phase 9d Task 6.9 (94b09da09).** `queued-probes/callarg` and `queued-probes/coorder` are identical to the oracle on stdout, stderr and rc (`docs/superpowers/records/2026-10-18-phase-9d/t6.9/queued/`).
 
 # Condition-object divergences found by Task 8 fix round A, not fixed (owner: not assigned)
 
