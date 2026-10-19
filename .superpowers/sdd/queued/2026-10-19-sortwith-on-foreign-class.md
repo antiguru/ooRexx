@@ -10,3 +10,5 @@ Found 2026-10-19 (`task-6.11-rereview.md`, Minor 4); Task 6.11's parent gives th
 * `.OrderedCollection~method('SORTWITH')~source~items` answers 0 on the oracle, whose method is
   native, and 1 here, where it is a Rexx stub
   (`forward message('STABLESORTWITH') -- just use the stable variety`).
+* `.array~new(3)~sortWith(.numericComparator~new)`, a sort of an array with no items, answers on
+  the oracle and raises 98.975 here (Task 6.11 fix round 2 report; the task's parent the same).
