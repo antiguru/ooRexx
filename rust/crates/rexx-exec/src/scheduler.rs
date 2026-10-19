@@ -764,6 +764,10 @@ impl Scheduler for Interp {
     }
 }
 
+/// The oracle's `yieldInstructions` (`RexxActivation.hpp:591`): the clauses
+/// an activation runs before it may give up the kernel.
+const DELIVERY_YIELD_CLAUSES: u32 = 50;
+
 impl Interp {
     /// A record for a new activity, with an empty arena of the running one's
     /// block size and the oldest pooled number.
@@ -1956,6 +1960,10 @@ impl Interp {
             Err(Failure::Exited(value)) => Ok(value),
             other => other,
         };
+        let sent = match self.activity.trace_refusal.take() {
+            Some(refusal) => Err(refusal),
+            None => sent,
+        };
         let untrapped = match &sent {
             Err(Failure::Raised(raised)) => Some(raised.clone()),
             _ => None,
@@ -2275,14 +2283,10 @@ impl Interp {
             self.slice_deferred = false;
             return Err(Failure::Slice);
         }
-        // Not while a trace line's `TraceObject` is made, nor while its
-        // destination holds a guard: another activity's delivery would wait
-        // for that guard under a pin of its own. A destination holding none
-        // may yield.
-        if fresh
-            && self.slice_deferred
-            && self.activity.pin_depth > 0
-            && !self.delivery_holds_a_guard()
+        if self.slice_deferred && self.activity.routing_trace {
+            self.count_delivery_clause();
+        }
+        if fresh && self.slice_deferred && self.activity.pin_depth > 0 && self.delivery_may_yield()
         {
             self.slice_deferred = false;
             return self.pinned_yield();
@@ -2295,24 +2299,48 @@ impl Interp {
         Ok(())
     }
 
-    /// Whether a trace line's delivery may not yield: its `TraceObject` is
-    /// being made, or an activation its destination runs holds its
-    /// receiver's guard.
-    fn delivery_holds_a_guard(&self) -> bool {
+    /// Whether a pinned yield may be taken here, which outside a trace line's
+    /// delivery it always may. Inside one it may not while the line's
+    /// `TraceObject` is made, nor while an activation the destination runs
+    /// holds its receiver's guard: another activity's delivery would wait for
+    /// that guard under a pin of its own. Otherwise it may once the running
+    /// activation has run more than [`DELIVERY_YIELD_CLAUSES`] clauses in a
+    /// row since the slice fell due. The oracle yields only in an activation
+    /// past `yieldInstructions` or at a native call
+    /// (`RexxActivation.cpp:616`, `NativeActivation.cpp:1304`), so a short
+    /// destination's clauses never let another activity's lines in between.
+    fn delivery_may_yield(&self) -> bool {
         let activity = &self.activity;
         if !activity.routing_trace {
-            return false;
+            return true;
         }
         let Some(floor) = activity.delivery_floor else {
-            return true;
+            return false;
         };
-        activity
+        let holds_a_guard = activity
             .suspended
             .iter()
             .map(Box::as_ref)
             .chain(activity.running.as_deref())
             .skip(floor)
-            .any(|activation| activation.flags.reserved())
+            .any(|activation| activation.flags.reserved());
+        !holds_a_guard
+            && activity
+                .delivery_streak
+                .is_some_and(|(_, clauses)| clauses > DELIVERY_YIELD_CLAUSES)
+    }
+
+    /// Counts a clause of a trace line's delivery toward
+    /// [`Activity::delivery_streak`], starting again when another activation
+    /// runs.
+    fn count_delivery_clause(&mut self) {
+        let Some(running) = self.running_activation().map(|activation| activation.id) else {
+            return;
+        };
+        self.activity.delivery_streak = match self.activity.delivery_streak {
+            Some((id, clauses)) if id == running => Some((id, clauses + 1)),
+            _ => Some((running, 1)),
+        };
     }
 
     /// One round of the other ready activities, where a started activity

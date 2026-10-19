@@ -299,3 +299,85 @@ fn a_class_search_from_a_program_refuses_an_owed_entry() {
         );
     }
 }
+
+/// A trace destination whose `n`th `LINEOUT` sends `ITEMS` to a Stem built
+/// without its own allocation, which this crate refuses (rc 120): the
+/// `corpus/oracle-crashes.txt` shape the oracle segfaults on, so these runs
+/// have no oracle half.
+fn refusing_destination(n: u32) -> String {
+    format!(
+        "::class refusing\n\
+         ::method init\n  expose n\n  n = 0\n\
+         ::method lineout\n  expose n\n  n = n + 1\n\
+         \x20 if n = {n} then do\n\
+         \x20   s = .Message~new(.Stem, .array~of('NEW', .Class))~send\n\
+         \x20   x = s~items\n\
+         \x20 end\n  return 0\n"
+    )
+}
+
+/// Runs `source` with [`refusing_destination`] appended, and asserts the
+/// refusal ends the run: its exit status, its stderr line, and no `after`.
+fn assert_delivery_refusal_ends_the_run(source: &str, n: u32) {
+    let source = format!("{source}{}", refusing_destination(n));
+    let outcome = crate::run_program("/t.rex", source.into_bytes(), crate::Invocation::none());
+    let stdout = String::from_utf8_lossy(&outcome.stdout);
+    let stderr = String::from_utf8_lossy(&outcome.stderr);
+    assert_eq!(
+        outcome.exit_code,
+        crate::NOT_IMPLEMENTED_EXIT,
+        "stdout {stdout:?} stderr {stderr:?}"
+    );
+    assert_eq!(stdout, "");
+    assert_eq!(
+        stderr,
+        "rexx-exec: method \"ITEMS\" of class \"Stem\" is not implemented (Phase 9)\n"
+    );
+}
+
+/// The refusal meets a routine's `<I<`, after its last clause: its caller
+/// raises it.
+#[test]
+fn a_refusal_delivering_an_exit_line_reaches_the_caller() {
+    assert_delivery_refusal_ends_the_run(
+        ".traceOutput~destination(.refusing~new)\n\
+         call r\n\
+         say 'after'\n\
+         ::routine r\n\
+         trace l\n\
+         return\n",
+        2,
+    );
+}
+
+/// The refusal meets the `<I<` of a started activity's own method, which
+/// has no caller there: the activity ends with it.
+#[test]
+fn a_refusal_delivering_a_started_methods_exit_line_ends_its_activity() {
+    assert_delivery_refusal_ends_the_run(
+        ".traceOutput~destination(.refusing~new)\n\
+         m = .k~new~start('m')\n\
+         r = m~result\n\
+         say 'after'\n\
+         ::class k\n\
+         ::method m\n  trace l\n  return 1\n",
+        2,
+    );
+}
+
+/// The refusal meets the `>I>` of a REPLY's empty rest, which runs no
+/// clause at all.
+#[test]
+fn a_refusal_delivering_an_empty_rests_entry_line_ends_its_activity() {
+    assert_delivery_refusal_ends_the_run(
+        ".traceOutput~destination(.refusing~new)\n\
+         t = .k~new\n\
+         t~one\n\
+         call syssleep 0.1\n\
+         say 'after'\n\
+         ::class k\n\
+         ::method one\n  forward message \"onetwo\"\n\
+         ::method onetwo\n  trace l\n  reply\n",
+        3,
+    );
+}

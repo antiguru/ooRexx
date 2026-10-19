@@ -2809,6 +2809,11 @@ impl Interp {
             self.activity.indent_offset = offset;
             self.activity.clause_line_override = line;
         }
+        let exit = if !nested && let Some(refusal) = self.activity.trace_refusal.take() {
+            Err(refusal)
+        } else {
+            exit
+        };
         if own_level && exit.is_err() {
             self.seal_site_level();
         }

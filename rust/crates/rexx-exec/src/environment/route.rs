@@ -206,6 +206,7 @@ impl Interp {
         }
         self.activity.routing_trace = true;
         self.activity.delivery_floor = None;
+        self.activity.delivery_streak = None;
         // **The nested-send protocol, not a bare send**, and around the whole
         // delivery because `NEW`, each `PUT` and the `LINEOUT` all run Rexx
         // clauses. A clause boundary clears the shared argument stack, so
@@ -301,14 +302,25 @@ impl Interp {
     /// `Activity::traceOutput`'s failed `LINEOUT`: raised in the traced
     /// activation at its clause's end. With no activation running, the line
     /// is left on stdout, as `corpus/oracle-crashes.txt` entry 11 licenses.
+    /// A refusal is never dropped: an activation that ends before a clause
+    /// end raises it passes it to its caller ([`Interp::carry_trace_refusals`]).
     #[cold]
     #[inline(never)]
     fn queue_trace_failure(&mut self, failure: Failure, line: &[u8]) {
+        let refusal = !matches!(failure, Failure::Raised(_));
         let Some(running) = self.running_activation() else {
             self.write_out_line(line);
+            if refusal {
+                self.activity.trace_refusal.get_or_insert(failure);
+            }
             return;
         };
         let activation = running.id;
+        if refusal {
+            // So that its end runs `Interp::end_cold`, which carries the
+            // refusal on.
+            self.activation_mut().cold_mut();
+        }
         self.activity.pending_traps.push_back(crate::PendingTrap {
             condition: b"SYNTAX".as_slice().into(),
             rc: None,
@@ -320,6 +332,51 @@ impl Interp {
             fragment_depth: self.activity.fragment_depth,
             trace_failure: Some(failure),
         });
+    }
+
+    /// Moves each refusal [`Interp::queue_trace_failure`] queued for the
+    /// activation now ending onto its caller, which raises it at its own
+    /// clause's end, or with no caller onto the activity, which ends with it
+    /// ([`Activity::trace_refusal`]).
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn carry_trace_refusals(&mut self) {
+        let Some(ending) = self.running_activation().map(|activation| activation.id) else {
+            return;
+        };
+        let caller = self
+            .activity
+            .suspended
+            .last()
+            .map(|activation| activation.id);
+        let depth = self.activity.fragment_depth;
+        let mut index = 0;
+        while index < self.activity.pending_traps.len() {
+            let pending = &mut self.activity.pending_traps[index];
+            let refused = pending.activation == ending
+                && pending
+                    .trace_failure
+                    .as_ref()
+                    .is_some_and(|failure| !matches!(failure, Failure::Raised(_)));
+            if !refused {
+                index += 1;
+                continue;
+            }
+            if let Some(caller) = caller {
+                pending.activation = caller;
+                pending.fragment_depth = depth;
+                index += 1;
+                continue;
+            }
+            let failure = self
+                .activity
+                .pending_traps
+                .remove(index)
+                .and_then(|pending| pending.trace_failure);
+            if let Some(failure) = failure {
+                self.activity.trace_refusal.get_or_insert(failure);
+            }
+        }
     }
 
     /// Each line of an error report, delivered the way a trace line is:

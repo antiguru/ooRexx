@@ -1364,6 +1364,9 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn end_cold(&mut self) {
+        if !self.activity.pending_traps.is_empty() {
+            self.carry_trace_refusals();
+        }
         let Some(ending) = self.activity.running.as_deref_mut() else {
             return;
         };

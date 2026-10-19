@@ -230,6 +230,13 @@ pub(crate) struct Activity {
     /// when its destination was sent `LINEOUT`: those above are the
     /// destination's.
     pub(crate) delivery_floor: Option<usize>,
+    /// While [`Activity::routing_trace`] and a slice waits, the activation
+    /// running and how many clauses it has run in a row since the slice fell
+    /// due.
+    pub(crate) delivery_streak: Option<(crate::activation::ActivationId, u32)>,
+    /// A refusal a trace line's delivery met where no clause end of the
+    /// activity is left to raise it: the activity ends with it.
+    pub(crate) trace_refusal: Option<Failure>,
     /// Current `eval` recursion depth, and the deepest it has reached.
     pub(crate) depth: usize,
     pub(crate) max_depth: usize,
@@ -455,6 +462,8 @@ impl Activity {
             fragment_clause: 0,
             routing_trace: false,
             delivery_floor: None,
+            delivery_streak: None,
+            trace_refusal: None,
             depth: 0,
             max_depth: 0,
             stack_entry: 0,
@@ -604,6 +613,8 @@ impl Activity {
             fragment_clause: _,
             routing_trace: _,
             delivery_floor: _,
+            delivery_streak: _,
+            trace_refusal: _,
             depth: _,
             max_depth: _,
             stack_entry: _,
