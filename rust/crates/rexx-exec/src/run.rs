@@ -1451,7 +1451,7 @@ impl Interp {
                 VariableRef::Indirect(id) => {
                     let name = code.symbols.name(*id).as_bytes().into();
                     self.bind_exposed(owner, scope, name)?;
-                    let (value, _novalue) = self.read(code, *id);
+                    let value = self.read_list_selector(code, *id)?;
                     // `IndirectVariableReference::evaluate`'s own
                     // `value->requestString()`
                     // (`expression/IndirectVariableReference.cpp:132`), so a
@@ -1595,7 +1595,7 @@ impl Interp {
                 VariableRef::Indirect(id) => {
                     // The selector itself, then the names its value spells.
                     names.push(code.symbols.name(*id).as_bytes().into());
-                    let (value, _novalue) = self.read(code, *id);
+                    let value = self.read_list_selector(code, *id)?;
                     let value = self.required_string_value(value)?;
                     let text = self.to_text(value).into_owned();
                     for word in split_indirect_words(&text) {
@@ -1940,8 +1940,12 @@ impl Interp {
     }
 
     /// Whether a `USE ARG >name` target is in the uninitialised state the
-    /// oracle requires of it.
+    /// oracle requires of it: a local variable (`RexxVariable::isAliasable`),
+    /// so never one an `EXPOSE` or `USE LOCAL` bound to the object's pool.
     fn target_is_uninitialised(&self, name: &[u8], frame: SlotFrame, index: usize) -> bool {
+        if self.exposure(frame, index).is_some() {
+            return false;
+        }
         match self.variable(frame, index) {
             None => true,
             Some(value) => shape_of(name) == NameShape::Stem && self.is_uninitialised_stem(value),

@@ -1,0 +1,96 @@
+/* USE ARG >name refuses with 98.995 a target that is not an uninitialised
+   local variable: one EXPOSE or USE LOCAL bound to the object's pool, set or
+   not, one already assigned, and one an earlier reference bound to the
+   object's pool. An unset local target, a USE LOCAL name, and a second
+   reference to an unset local variable bind. */
+o = .k~new
+a = 1; a. = 'stem default'; a.1 = 'one'; b. = 'b default'
+call try o, 'refExposed', >a
+call try o, 'refAutoExposed', >a
+call try o, 'refLocal', >a
+call try o, 'refExposedStem', >a.
+call try o, 'refAutoExposedStem', >a.
+call try o, 'refLocalStem', >a.
+call try o, 'doubleArgStem', b., >a.
+call try o, 'doubleArg', 7, >a
+call try o, 'refTwice', >a
+call try o, 'refTwiceUnset', >unset
+call try o, 'kindFirst', >a.
+call try o, 'unsetPool', >unset
+call try o, 'setPool', >unset
+o~twiceExposed
+say 'a' a 'a.1' a.1
+exit
+
+try: procedure
+  use arg o, message, first, second
+  signal on syntax name caught
+  if arg() = 3 then answer = o~send(message, first)
+  else answer = o~send(message, first, second)
+  say message 'answers' answer
+  return
+caught:
+  say message condition('o')~code condition('o')~message
+  return
+
+::class k
+::method refExposed
+  expose abc
+  use arg >abc
+  return abc
+::method refAutoExposed
+  use local
+  use arg >abc
+  return abc
+::method refLocal
+  use local abc
+  use arg >abc
+  return abc
+::method refExposedStem
+  expose abc.
+  use arg >abc.
+  return abc.1
+::method refAutoExposedStem
+  use local
+  use arg >abc.
+  return abc.1
+::method refLocalStem
+  use local abc.
+  use arg >abc.
+  return abc.1
+::method doubleArgStem
+  use arg abc., >abc.
+  return abc.1
+::method doubleArg
+  use arg abc, >abc
+  return abc
+::method refTwice
+  use arg >abc
+  use arg >abc
+  return abc
+::method refTwiceUnset
+  use arg >abc
+  use arg >abc
+  return 'bound twice'
+::method kindFirst
+  expose abc
+  use arg >abc
+::method unsetPool
+  expose pooled
+  use arg >pooled
+::method setPool
+  expose pooled
+  pooled = 'object value'
+  use arg >pooled
+::method twiceExposed
+  expose v
+  signal on syntax name caught
+  say 'twiceExposed answers' self~bindTwice(>v)
+  return
+caught:
+  say 'twiceExposed' condition('o')~code condition('o')~message
+  return
+::method bindTwice
+  use arg >q
+  use arg >q
+  return 'bound twice'

@@ -1,0 +1,62 @@
+count 61
+/* An unset (name) selector in DROP, PROCEDURE EXPOSE and EXPOSE is subject to
+   NOVALUE: 98.986 under ::OPTIONS NOVALUE SYNTAX, and a raised NOVALUE when
+   SIGNAL ON NOVALUE is in force. A set selector raises nothing. */
+o = .k~new
+call try o, 'dropUnset'
+call try o, 'procedureUnset'
+call try o, 'exposeUnset'
+call try o, 'dropSet'
+call try o, 'procedureSet'
+call try o, 'setNames'
+call try o, 'exposeSet'
+call try o, 'dropTrapped'
+exit
+
+try: procedure
+  use arg o, message
+  signal on syntax name caught
+  say message 'answers' o~send(message)
+  return
+caught:
+  say message condition('o')~code condition('o')~message
+  return
+
+::class k
+::method dropUnset
+  drop (nolist)
+  return 'nothing'
+::method procedureUnset
+  call pe
+  return 'nothing'
+pe: procedure expose (nolist2)
+  return
+::method exposeUnset
+  expose (nolist3)
+  return 'nothing'
+::method dropSet
+  names = 'v'; v = 1
+  drop (names)
+  return symbol('v')
+::method procedureSet
+  names = 'v'; v = 1
+  call ps
+  return v
+ps: procedure expose (names)
+  v = 'set in ps'
+  return
+::method setNames
+  expose names
+  names = 'v'
+  return names
+::method exposeSet
+  expose (names)
+  v = 'object v'
+  return v
+::method dropTrapped
+  signal on novalue name novalue
+  drop (nolist4)
+  return 'nothing'
+novalue:
+  return 'NOVALUE' condition('d') sigl
+::options novalue syntax

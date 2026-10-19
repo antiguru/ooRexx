@@ -229,3 +229,10 @@ lang/collection_array_index_argument.rex
 lang/string_compare_nil.rex
 lang/collection_queue_array_index.rex
 lang/collection_array_grow_refused.rex
+
+# 9d Task 6.8: variable references. A variable list's (name) selector is read
+# as an expression reads it, with its NOVALUE check and trace lines, and
+# USE ARG >name refuses a target bound to the object's pool.
+lang/variable_list_selector_trace.rex
+lang/variable_list_selector_novalue.rex
+lang/use_arg_reference_exposed.rex

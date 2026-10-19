@@ -171,7 +171,7 @@ impl Interp {
                 }
             }
             VariableRef::Indirect(id) => {
-                let (value, _novalue) = self.read(code, *id);
+                let value = self.read_list_selector(code, *id)?;
                 let value = self.required_string_value(value)?;
                 let text = self.to_text(value).into_owned();
                 let mut names = Vec::new();

@@ -13,8 +13,9 @@
 //! to, and the scope pools.
 
 use crate::activation::{Activation, InstanceVar};
+use crate::eval::SymbolRead;
 use crate::run::{NameShape, shape_of};
-use crate::{Code, Interp, Novalue};
+use crate::{Code, Failure, Interp, Novalue};
 use rexx_core::{BehaviourId, Body, ObjRef, SlotFrame, SlotRef};
 use rexx_parse::SymbolId;
 
@@ -318,6 +319,24 @@ impl Interp {
             Some(Body::Instance { pools, .. }) => Some(pools),
             _ => None,
         }
+    }
+
+    /// The value of a `(name)` selector in a variable list, read as an
+    /// expression reads the symbol (`RexxVariableReference::list`), with its
+    /// `NOVALUE` check and its `TRACE I` lines.
+    pub(super) fn read_list_selector(
+        &mut self,
+        code: &Code<'_>,
+        id: SymbolId,
+    ) -> Result<ObjRef, Failure> {
+        let read = match shape_of(code.symbols.name(id).as_bytes()) {
+            NameShape::Simple => SymbolRead::Simple,
+            NameShape::Stem => SymbolRead::Stem,
+            NameShape::Compound => SymbolRead::Compound,
+        };
+        let value = self.read_symbol(code, read, id, None)?;
+        self.echo_symbol_read(code, id, value);
+        Ok(value)
     }
 
     /// Reads a variable, resolving its slot here.

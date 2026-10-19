@@ -1064,9 +1064,9 @@ pub(crate) fn compile(
             }
             // `EXPOSE`. No register and no expression slot: the names come
             // out of the instruction, and a `VariableRef::Indirect` reads its
-            // selector through `Interp::read`, so what this promotion decides
-            // is the clause
-            // region around it and nothing about the binding.
+            // selector through `Interp::read_list_selector`, so what this
+            // promotion decides is the clause region around it and nothing
+            // about the binding.
             InstructionKind::Expose { .. } => {
                 let at = op_index(&ops)?;
                 let echo = echoes(trace, instruction);
