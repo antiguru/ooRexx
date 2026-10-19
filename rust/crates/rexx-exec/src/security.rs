@@ -72,8 +72,14 @@ impl Interp {
         if !self.security_armed {
             return None;
         }
-        // A started message's activity runs no activation, and the oracle
-        // finds no manager for it.
+        self.armed_security_manager()
+    }
+
+    /// [`Interp::effective_security_manager`] once any manager has been
+    /// installed. A started message's activity runs no activation, and the
+    /// oracle finds no manager for it.
+    #[inline(never)]
+    fn armed_security_manager(&self) -> Option<ObjRef> {
         let program = self.activity.running.as_deref()?.program_id;
         self.program_data(program)?.security_manager
     }

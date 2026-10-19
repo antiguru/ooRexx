@@ -1357,10 +1357,6 @@ struct Interp {
     /// Whether any package has ever carried a security manager, which is
     /// the one test a checkpoint makes while none has.
     security_armed: bool,
-    /// Set while a method object runs without a send asking the security
-    /// manager about it: a `Directory` entry's method and `Object~run`.
-    /// Read only while [`Interp::security_armed`] holds.
-    runs_unchecked: bool,
     /// Whether any package has ever carried settings, which is the one test
     /// an activation's start makes while none has.
     options_armed: bool,
@@ -2217,7 +2213,6 @@ impl Interp {
             programs: plan::Programs::default(),
             option_writes: crate::options::OptionWrites::default(),
             security_armed: false,
-            runs_unchecked: false,
             options_armed: false,
             plans: NameMap::default(),
             last_plan: None,
@@ -3104,7 +3099,6 @@ impl Interp {
             programs: _,
             option_writes: _,
             security_armed: _,
-            runs_unchecked: _,
             options_armed: _,
             plans: _,
             last_plan: _,

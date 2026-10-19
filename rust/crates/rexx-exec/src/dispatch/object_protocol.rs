@@ -887,13 +887,38 @@ pub(super) fn invoke_executable(
         scope: ObjRef::NIL,
         method,
     };
-    // `MethodClass::run` itself, not a send: no protected-method check.
-    interp.runs_unchecked = interp.security_armed;
-    let started = interp.begin_invoke(resolution, None, receiver, name, args);
-    interp.runs_unchecked = false;
-    let started = started?;
+    if interp.security_armed && interp.method_is_protected(method) {
+        return invoke_protected_executable(interp, resolution, executable, receiver, name, args);
+    }
+    let started = interp.begin_invoke(resolution, None, receiver, name, args)?;
     if let Started::Entered = started
         && interp.method_bodies.contains_key(&method)
+    {
+        interp.activation_mut().cold_mut().executable = Some(executable);
+    }
+    interp.complete_send(started)
+}
+
+/// [`invoke_executable`] for a protected method once a manager has been
+/// installed. `MethodClass::run` is not a send, so the seam does not ask the
+/// manager: the protection is lifted for the seam's test alone, and a Rexx
+/// body has only been entered when `begin_invoke` returns.
+#[cold]
+#[inline(never)]
+fn invoke_protected_executable(
+    interp: &mut Interp,
+    resolution: Resolution,
+    executable: ObjRef,
+    receiver: ObjRef,
+    name: &[u8],
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    interp.set_method_protected(resolution.method, false);
+    let started = interp.begin_invoke(resolution, None, receiver, name, args);
+    interp.set_method_protected(resolution.method, true);
+    let started = started?;
+    if let Started::Entered = started
+        && interp.method_bodies.contains_key(&resolution.method)
     {
         interp.activation_mut().cold_mut().executable = Some(executable);
     }

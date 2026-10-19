@@ -63,10 +63,7 @@ mod seam {
         let cleared = Cleared(());
         // `security_armed` first: a process that never installed a manager
         // pays one flag test per send and no row lookup.
-        if interp.security_armed
-            && !std::mem::take(&mut interp.runs_unchecked)
-            && interp.method_is_protected(method)
-        {
+        if interp.security_armed && interp.method_is_protected(method) {
             if let Some(result) = interp.check_protected_method(receiver, name, args)? {
                 return Ok(Clearance::Answered(result));
             }
@@ -2327,10 +2324,17 @@ impl Interp {
     }
 
     /// `MethodClass::isProtected` (`classes/MethodClass.hpp:116`), asked by
-    /// the security-manager seam and by nothing else.
+    /// the security-manager seam.
     fn method_is_protected(&self, method: MethodId) -> bool {
         self.access_scope_of(method)
             .is_some_and(|scope| scope.protected)
+    }
+
+    /// Sets `method`'s protection, for a method that has a row.
+    fn set_method_protected(&mut self, method: MethodId, protected: bool) {
+        if let Some(scope) = self.special_methods.get_mut(method) {
+            scope.protected = protected;
+        }
     }
 
     /// The security manager's `checkProtectedMethod`
