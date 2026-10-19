@@ -317,18 +317,14 @@ impl Interp {
     /// Offers a failure escaping the running activation to that activation's
     /// trap table, and either transfers control or hands the failure back to
     /// keep unwinding.
-    pub(crate) fn offer_to_trap(
-        &mut self,
-        code: &Code<'_>,
-        failure: Failure,
-    ) -> Result<Flow, Failure> {
+    pub(crate) fn offer_to_trap(&mut self, failure: Failure) -> Result<Flow, Failure> {
         let Failure::Raised(raised) = &failure else {
             return Err(failure);
         };
         if raised.condition == "SYNTAX"
             && let Some(replaced) = self.notify_slot_failure(raised)
         {
-            return self.offer_to_trap(code, replaced);
+            return self.offer_to_trap(replaced);
         }
         match raised.delivery.search {
             Search::Here => {}
@@ -351,7 +347,7 @@ impl Interp {
                     unreachable!("matched Failure::Raised immediately above")
                 };
                 raised.delivery.search = Search::Here;
-                return self.offer_to_trap(code, Failure::Raised(raised));
+                return self.offer_to_trap(Failure::Raised(raised));
             }
             Search::AboveTop if self.activation().entry == Entry::InternalCall => {
                 return Err(failure);
@@ -412,7 +408,7 @@ impl Interp {
                     Some(_) => traps.remove(raised.condition.as_bytes()),
                     None => traps.remove(b"ANY".as_slice()),
                 }
-                return self.offer_to_trap(code, missing);
+                return self.offer_to_trap(missing);
             }
         };
         let Failure::Raised(raised) = failure else {

@@ -2934,7 +2934,7 @@ impl Interp {
                                     if self.activity.frames.len() > base {
                                         self.unwind_frames(base);
                                     }
-                                    match self.offer_to_trap(code, failure) {
+                                    match self.offer_to_trap(failure) {
                                         Ok(flow) => flow,
                                         Err(failure) => break 'ended Err(failure),
                                     }
