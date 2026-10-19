@@ -156,56 +156,77 @@ pub(super) fn class_install_order(
     program: &Program,
     declared: &FxHashMap<Box<[u8]>, usize>,
 ) -> Result<Vec<usize>, usize> {
-    // Where every class names only classes above it, each round takes the
-    // first class left, which is source order.
-    let in_source_order = program
+    let mut order: Vec<usize> = program
         .directives
         .iter()
         .enumerate()
-        .all(|(index, directive)| match &directive.kind {
-            DirectiveKind::Class(class) => {
-                class_dependencies(class, declared).all(|target| target < index)
-            }
-            _ => true,
-        });
-    if in_source_order {
-        return Ok(program
-            .directives
-            .iter()
-            .enumerate()
-            .filter(|(_, directive)| matches!(directive.kind, DirectiveKind::Class(_)))
-            .map(|(index, _)| index)
-            .collect());
-    }
-    // Each class still to install: its directive, the `declared` entry its
-    // name answers, and the entries it waits on.
-    let mut pending: Vec<(usize, Option<usize>, Vec<usize>)> = program
-        .directives
-        .iter()
-        .enumerate()
-        .filter_map(|(index, directive)| match &directive.kind {
-            DirectiveKind::Class(class) => Some((
-                index,
-                declared
-                    .get(class.name.to_ascii_uppercase().as_slice())
-                    .copied(),
-                class_dependencies(class, declared).collect(),
-            )),
-            _ => None,
-        })
+        .filter(|(_, directive)| matches!(directive.kind, DirectiveKind::Class(_)))
+        .map(|(index, _)| index)
         .collect();
-    let mut order = Vec::with_capacity(pending.len());
-    while let Some(first) = pending.first() {
-        let Some(next) = pending.iter().position(|(_, _, waits)| waits.is_empty()) else {
-            return Err(first.0);
+    let installed = resolve_in_place(program, declared, &mut order);
+    match order.get(installed) {
+        None => Ok(order),
+        Some(&blamed) => Err(blamed),
+    }
+}
+
+/// Reorders `classes`, which holds class directives in source order, into
+/// install order in place, and answers how many of them could be installed.
+fn resolve_in_place(
+    program: &Program,
+    declared: &FxHashMap<Box<[u8]>, usize>,
+    classes: &mut [usize],
+) -> usize {
+    const WORDS: usize = 64;
+    let mut small = [0u64; WORDS];
+    let mut large = Vec::new();
+    let bits: &mut [u64] = if program.directives.len() <= WORDS * 64 {
+        &mut small
+    } else {
+        large.resize(program.directives.len().div_ceil(64), 0);
+        &mut large
+    };
+    let is_set = |bits: &[u64], index: usize| bits[index / 64] & (1 << (index % 64)) != 0;
+    // With every name declared once, a class's `declared` entry is its own
+    // directive.
+    let unique = declared.len() == classes.len();
+    for done in 0..classes.len() {
+        let next = classes[done..].iter().position(|&index| {
+            let DirectiveKind::Class(class) = &program.directives[index].kind else {
+                return false;
+            };
+            class_dependencies(class, declared).all(|target| is_set(bits, target))
+        });
+        let Some(next) = next else {
+            return done;
         };
-        let (index, name, _) = pending.remove(next);
-        order.push(index);
-        for (_, _, waits) in &mut pending {
-            waits.retain(|target| Some(*target) != name);
+        classes[done..=done + next].rotate_right(1);
+        let index = classes[done];
+        let entry = if unique {
+            Some(index)
+        } else {
+            match &program.directives[index].kind {
+                DirectiveKind::Class(class) => first_named(program, &class.name),
+                _ => None,
+            }
+        };
+        if let Some(entry) = entry {
+            bits[entry / 64] |= 1 << (entry % 64);
         }
     }
-    Ok(order)
+    classes.len()
+}
+
+/// The first `::CLASS` directive named `name`, ignoring case, which is the
+/// one a file's `declared` table names.
+fn first_named(program: &Program, name: &[u8]) -> Option<usize> {
+    program
+        .directives
+        .iter()
+        .position(|directive| match &directive.kind {
+            DirectiveKind::Class(class) => class.name.eq_ignore_ascii_case(name),
+            _ => false,
+        })
 }
 
 /// The dictionary keys a `::METHOD` directive claims, each with what a send
