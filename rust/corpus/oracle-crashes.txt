@@ -1697,7 +1697,7 @@ upstream ticket.
 
 Effect: SIGSEGV, rc 139. Before it, stdout holds `3 *-* x = 1` and its `>>>   "1"` line; stderr
 is empty. Measured 2026-10-19 by Phase 9d Task 6.10 fix round 3, 1 run, under the standard
-wrapper from a fresh empty directory, after its review measured the same crash. The same
-recursion outside a destination ends in 11.1. This crate is killed at a 2G memory cap after about
-7 s (rc 137), where the task's parent printed `after`, rc 0: queued as
+wrapper from a fresh empty directory, after its review measured the same crash. This crate is
+killed at a 2G memory cap after about 7 s (rc 137), where the task's parent printed `after`,
+rc 0: queued as
 `.superpowers/sdd/queued/2026-10-19-trace-destination-recursion-oom.md`. No upstream ticket.
