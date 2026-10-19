@@ -1,0 +1,22 @@
+A.
+H.
+G.
+K.
+M.
+N.
+O.
+innerThenOuter answers ok
+a.1 set
+innerTwiceOuter answers ok
+h.1 set
+deep1 answers ok
+g.1 set
+outerThenInner answers ok
+k.1 set
+interpTwice answers ok
+m.1 set
+NAME 98.995 Unable to reference variable "ABC."; it must be an uninitialized local variable.
+dropThenRebind answers RESULT
+n.1 ABC.1
+deepInner answers ok
+o.1 set

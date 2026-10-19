@@ -1,0 +1,27 @@
+A.
+H.
+G.
+K.
+M.
+N.
+O.
+NAME 98.995 Unable to reference variable "ABC."; it must be an uninitialized local variable.
+innerThenOuter answers RESULT
+a.1 A.1
+NAME 98.995 Unable to reference variable "ABC."; it must be an uninitialized local variable.
+innerTwiceOuter answers RESULT
+h.1 H.1
+NAME 98.995 Unable to reference variable "Z."; it must be an uninitialized local variable.
+deep1 answers RESULT
+g.1 G.1
+NAME 98.995 Unable to reference variable "ABC."; it must be an uninitialized local variable.
+outerThenInner answers ok
+k.1 set
+interpTwice answers ok
+m.1 set
+NAME 98.995 Unable to reference variable "ABC."; it must be an uninitialized local variable.
+dropThenRebind answers RESULT
+n.1 ABC.1
+NAME 98.995 Unable to reference variable "W."; it must be an uninitialized local variable.
+deepInner answers RESULT
+o.1 O.1

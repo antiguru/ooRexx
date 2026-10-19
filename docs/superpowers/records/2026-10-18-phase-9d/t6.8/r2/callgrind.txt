@@ -1,0 +1,6 @@
+# head = f48b4d866 at /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.8-r2/rexx-head; r1 = a88871bb3 at /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.8-r1/rexx-head
+# rust/bench-programs/callgrind.sh -r 1 -B 0.5 -p "interpret churn" -o /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.8-r2-run pin=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run r1=/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.8-r1/rexx-head head=/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.8-r2/rexx-head   (exit 0)
+program	pin	r1	head	r1 d%	head d%	pin -libc	r1 -libc	head -libc	r1 -libc d%	head -libc d%	pin spread%	r1 spread%	head spread%
+interpret	4207371705	4116115937	4116270461	-2.1689	-2.1653	1785212077	1702536861	1702536877	-4.6311	-4.6311	0.0000	0.0000	0.0000
+churn	631489428	632208966	632211070	+0.1139	+0.1143	378751556	379071881	379072287	+0.0846	+0.0847	0.0000	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.8-r2-run

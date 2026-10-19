@@ -1,0 +1,1 @@
+# diff <(grep -v '^#' t6.8/r1/suite/tests.tsv | sort) <(grep -v '^#' t6.8/r2/suite/tests.tsv | sort)

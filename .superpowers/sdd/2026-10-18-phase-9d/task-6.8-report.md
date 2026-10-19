@@ -238,3 +238,66 @@ The task is identical to the oracle on all three.
   ledger's own delta against `t6.8/callgrind.txt`'s head figures: startup +0.0019, interpret
   -0.0069, parse +0.0001, churn +0.0004, sayloop +0.0014. Every one is under +0.05%, and the
   libc-subtracted figures move by at most 0.0001.
+
+## Fix round 2
+
+Re-review: `task-6.8-rereview.md`. Code commit `f48b4d866`; the records commit that follows holds
+`t6.8/r2/` and this section. Round 1 is `0b405bf1e` (code `a88871bb3`).
+
+### Importants 1 and 2: the name comes from the cell, not from an activation
+
+`ActivationCold::reference_names` is deleted. `Body::Cell` (`rexx-core/src/body.rs`) is now
+`Cell(u32, Box<[u8]>)`: the cell's storage index and the name of the variable whose slot
+`promote_slot` moved into it. `promote_slot` takes that name from its two callers, the `>name`
+term (`run/call.rs`) and the native API's reference (`dispatch/library/surface.rs`). It creates a
+cell only when the slot does not already resolve to one, so the name is always the owning
+variable's own: a slot that resolves to frame storage is either the variable itself or a
+`PROCEDURE EXPOSE` alias of the same name. `cell_owner_name` (`variables.rs`) follows every alias
+from the target slot to its cell and answers that name. `target_is_uninitialised` compares the
+stem with it, and with the target's own name when the slot resolves to frame storage. The name is
+bytes inside a heap object, so there is nothing new to root. The collector's three `Body::Cell`
+arms (`heap.rs`) ignore the name.
+
+Measured on `t6.8/r2/probes/s1` (oracle, round 1 `r`, task `t`, pre-task `p`). The caller has run
+`say` on each stem:
+* `innerThenOuter` (a frame-sharing internal call binds, then the procedure binds).
+* `innerTwiceOuter` (the internal call binds twice).
+* `deep1` (a reference passed on through three procedures, bound twice at the bottom).
+* `deepInner` (a passed-on reference bound in a frame-sharing call, then by its caller).
+* `outerThenInner`, `interpTwice`.
+
+Each of these binds and the caller reads `set`, on the oracle and the task. Round 1 gave 98.995
+for the first four. `dropThenRebind` still gives 98.995 and `n.1 ABC.1` as on the oracle; the
+pre-task binary bound.
+
+### Witnesses
+
+`use_arg_reference_exposed` gains `innerThenOuter`, `innerTwiceOuter`, `passedOnTwice` (three
+procedures down, bound twice) and `innerOfPassedOn`. Each answers its bound line, and the caller
+reads `set` in all four. On round 1 each is 98.995 and the caller reads its own derived names.
+The `sourceline_oracle/` file is regenerated. `t6.8/r2/witnesses/summary.tsv` (oracle, round-1
+binary, task): the task is identical to the oracle on all three witnesses. Round 1 differs only
+on `use_arg_reference_exposed`'s stdout; the other two witnesses do not reach this change.
+
+Round 0's and round 1's probes (`t6.8/probes/`, `t6.8/r1/probes/`) rerun on `f48b4d866`. Every
+stdout and stderr is identical to the task output those rounds recorded. `p12` and `p13` have
+only oracle records: `p12` matches the oracle, and `p13`'s stderr is the `>I>` package name
+`dynamic-package-name` owns.
+
+### Checks, on `f48b4d866`
+
+* `cargo fmt --all --check`: exit 0.
+* `memcap 8G cargo clippy -j 4 -p rexx-exec -p rexx-core --all-targets -- -D warnings`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-exec --lib`: exit 0, 1152 passed.
+* `memcap 16G cargo test -j 4 --release -p rexx-core`: exit 0 (includes `unsafe_sites`, `roots`
+  and `collect`).
+* The refusal tables and `licensed_divergences` (same command as above): exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-parse`: exit 0.
+* `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus`: exit 0,
+  1096 of 1096 matching.
+* The whole suite with the table at `t6.8/r2/suite/table.tsv`: exit 101 as expected, 402 groups,
+  15 red, 4m37s. Against `t6.8/r1/suite/tests.tsv` no row changed.
+* Perf spot check, `t6.8/r2/callgrind.txt`: `-r 1 -p "interpret churn"`, pin, round 1 and
+  `f48b4d866`, exit 0. Against the pin, r1 then head: interpret -2.1689 / -2.1653, churn +0.1139 /
+  +0.1143. The round's delta is +0.0036% and +0.0004%. The libc-subtracted figures move by at
+  most 0.0001.

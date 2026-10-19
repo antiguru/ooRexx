@@ -1,0 +1,6 @@
+variable_list_selector_trace	r1	rc 0/0	stdout same	stderr same
+variable_list_selector_trace	task	rc 0/0	stdout same	stderr same
+variable_list_selector_novalue	r1	rc 0/0	stdout same	stderr same
+variable_list_selector_novalue	task	rc 0/0	stdout same	stderr same
+use_arg_reference_exposed	r1	rc 0/0	stdout differs	stderr same
+use_arg_reference_exposed	task	rc 0/0	stdout same	stderr same
