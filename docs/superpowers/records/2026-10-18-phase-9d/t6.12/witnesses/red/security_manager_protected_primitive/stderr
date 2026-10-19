@@ -1,0 +1,5 @@
+     1 *-* return .Directory~new~setMethod('unknown')
+    53 *-* return self~runMethod
+    26 *-* say "method result:" .Runner~new~run(m)
+Error 91 running  line 1:  No result object.
+Error 91.999:  Message "SETMETHOD" did not return a result.

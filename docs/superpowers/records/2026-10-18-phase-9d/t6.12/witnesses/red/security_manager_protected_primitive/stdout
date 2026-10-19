@@ -1,0 +1,22 @@
+setMethod no result
+setMethod events: 
+unsetMethod no result
+unsetMethod events: 
+superclasses result: 1
+superclasses events: 
+setSecurityManager result: 1
+setSecurityManager events: LOCAL NAME=CONTEXT | ENVIRONMENT NAME=CONTEXT
+define result: 1
+define events: 
+define handled result: 0
+define handled events: 
+superclass result: The Object class
+superclass events: 
+metaClass result: Class
+metaClass events: 
+plain result: 0
+plain events: 
+plain class result: Array
+plain class events: 
+package result: prolog
+package events: 

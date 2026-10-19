@@ -1,0 +1,20 @@
+before 0
+copy 1 original 0
+defined 1
+copy append result: 1
+copy append events: 
+copy append handled result: 1
+copy append handled events: 
+array append result: 1
+array append events: 
+rexx 1 0
+rexx foo result: foo ran
+rexx foo events: 
+rexx foo handled result: foo ran
+rexx foo handled events: 
+rexx foo no result result: 1
+rexx foo no result events: 
+rexx bar result: bar ran
+rexx bar events: 
+directive result: intercepted
+directive events: METHOD ARGUMENTS=[0:] NAME=BAZ OBJECT=K

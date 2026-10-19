@@ -1,0 +1,10 @@
+environment nil result: a RexxInfo
+environment nil events: LOCAL ENVIRONMENT
+environment value result: replaced
+environment value events: LOCAL ENVIRONMENT
+environment unset result: RexxInfo
+environment unset events: LOCAL ENVIRONMENT
+local nil result: STDOUT
+local nil events: LOCAL
+local unset result: Stream
+local unset events: LOCAL

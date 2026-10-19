@@ -1,0 +1,4 @@
+program	red vs oracle	green vs oracle
+security_manager_protected_primitive	differs: stdout stderr rc	identical
+security_manager_set_protected	differs: stdout	identical
+security_manager_nil_entry	differs: stdout stderr rc	identical

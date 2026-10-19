@@ -1,0 +1,8 @@
+call-nil result: The NIL object
+call-nil events: CALL
+cmd-failure-nil result: failure 0
+cmd-failure-nil events: COMMAND
+cmd-error-nil result: error 0
+cmd-error-nil events: COMMAND
+cmd-rc-nil result: The NIL object
+cmd-rc-nil events: COMMAND

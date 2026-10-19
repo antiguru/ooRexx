@@ -1,0 +1,13 @@
+copy 1 0
+copy-append result: 1
+copy-append events: METHOD ARGUMENTS=[1:x] NAME=APPEND OBJECT=MYARR
+setprotected-rexx result: ran
+setprotected-rexx events: METHOD ARGUMENTS=[0:] NAME=FOO OBJECT=K
+setprotected-rexx-handled result: intercepted
+setprotected-rexx-handled events: METHOD ARGUMENTS=[0:] NAME=FOO OBJECT=K
+env-nil result: The NIL object
+env-nil events: LOCAL NAME=REXXINFO | ENVIRONMENT NAME=REXXINFO
+env-value result: replaced
+env-value events: LOCAL NAME=REXXINFO | ENVIRONMENT NAME=REXXINFO
+local-nil result: The NIL object
+local-nil events: LOCAL NAME=STDOUT

@@ -1,0 +1,11 @@
+setMethod no result
+setMethod events: METHOD ARGUMENTS=[1:unknown] NAME=SETMETHOD OBJECT=Directory
+superclasses result: 0
+superclasses events: METHOD ARGUMENTS=[0:] NAME=SUPERCLASSES OBJECT=Class
+setSecurityManager result: intercepted
+setSecurityManager events: LOCAL NAME=CONTEXT | ENVIRONMENT NAME=CONTEXT | METHOD ARGUMENTS=[0:] NAME=SETSECURITYMANAGER OBJECT=Routine
+define no result
+define events: METHOD ARGUMENTS=[2:FOO,return 1] NAME=DEFINE OBJECT=Class
+plain no result
+plain events: 
+flags 1 1 1 1 0

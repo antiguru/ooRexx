@@ -1,0 +1,19 @@
+# diff <(sort t6.11/r2/suite/tests.tsv) <(sort t6.12/suite/tests.tsv)
+23232c23232
+< base/rexxutil/SysFileTree	TEST_TREE_DIRECTORY	-	failed	passed
+---
+> base/rexxutil/SysFileTree	TEST_TREE_DIRECTORY	-	passed	failed
+23365c23365
+< base/security.manager/SecurityManager	TEST_ENVIRONMENT_HANDLE	-	passed	failed
+---
+> base/security.manager/SecurityManager	TEST_ENVIRONMENT_HANDLE	-	passed	passed
+23369,23370c23369,23370
+< base/security.manager/SecurityManager	TEST_METHOD_HANDLE_NO_RESULT	-	passed	failed
+< base/security.manager/SecurityManager	TEST_METHOD_HANDLE_RESULT	-	passed	failed
+---
+> base/security.manager/SecurityManager	TEST_METHOD_HANDLE_NO_RESULT	-	passed	passed
+> base/security.manager/SecurityManager	TEST_METHOD_HANDLE_RESULT	-	passed	passed
+23372c23372
+< base/security.manager/SecurityManager	TEST_METHOD_PASS	-	passed	failed
+---
+> base/security.manager/SecurityManager	TEST_METHOD_PASS	-	passed	passed

@@ -1,0 +1,6 @@
+     1 *-* return .Directory~new~setMethod('x')
+       *-* Compiled method "CALL" with scope "Routine".
+    23 *-*   r~call
+     9 *-* call show "method nil", "return .Directory~new~setMethod('x')", "METHOD", "RESULT", .nil
+Error 91 running  line 1:  No result object.
+Error 91.999:  Message "SETMETHOD" did not return a result.
