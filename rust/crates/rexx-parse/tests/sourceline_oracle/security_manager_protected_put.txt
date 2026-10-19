@@ -1,0 +1,24 @@
+count 23
+/* With Directory's PUT itself protected, every checkpoint still builds its
+   information directory and the manager sees each event once. */
+.Directory~method('PUT')~setProtected
+mgr = .Mgr~new
+r = .Routine~new("", "say 'in routine'; x = .stdout~class~id; d = .Directory~new; d~put(1, 'A'); return .Array~superclass~id x")
+r~setSecurityManager(mgr)
+say "result" r~call
+say "events:" mgr~log~makeString(, " | ")
+exit
+
+::class Mgr
+::method init
+  expose log
+  log = .Array~new
+::method log
+  expose log
+  return log
+::method unknown
+  expose log
+  use arg name, args
+  info = args[1]
+  log~append(name info~allIndexes~sort~makeString(, ",") info['NAME'])
+  return 0

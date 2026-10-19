@@ -1,0 +1,42 @@
+count 41
+/* setProtected and setPrivate on a method Setup.cpp shares between classes
+   mark only the class asked about, and its subclasses. */
+.Bag~method('PUT')~setProtected
+do c over .array~of(.Directory, .Table, .IdentityTable, .Relation, .Set, .StringTable, .Bag)
+  say c~id c~method('PUT')~isProtected
+end
+.Array~method('APPEND')~setProtected
+say "Queue" .Queue~method('APPEND')~isProtected "Array" .Array~method('APPEND')~isProtected
+mgr = .Mgr~new
+r = .Routine~new("", "b = .Bag~new; b~put(1); .MyBag~new~put(5); t = .Table~new; t~put(2, 'k'); q = .Queue~new; q~append(3); a = .Array~new; a~append(4); return b~items t~items q~items a~items")
+r~setSecurityManager(mgr)
+say "result" r~call
+say "events:" mgr~log~makeString(, " | ")
+.Bag~method('PUT')~setPrivate
+t = .Table~new
+t~put(1, 'a')
+say "table put" t['a']
+say "bag private" .Bag~method('PUT')~isPrivate "table private" .Table~method('PUT')~isPrivate
+signal on syntax
+b = .Bag~new
+b~put(1)
+say "bag put ran"
+exit
+syntax: say "bag put" condition('o')~code
+exit
+
+::class MyBag subclass Bag
+
+::class Mgr
+::method init
+  expose log
+  log = .Array~new
+::method log
+  expose log
+  return log
+::method unknown
+  expose log
+  use arg name, args
+  info = args[1]
+  log~append(name info['NAME'] info['OBJECT']~class~id)
+  return 0

@@ -287,3 +287,12 @@ lang/class_setmethod_instance_methods.rex
 lang/security_manager_protected_primitive.rex
 lang/security_manager_set_protected.rex
 lang/security_manager_nil_entry.rex
+# 9d Task 6.12 fix round 1: a started message, a protected PUT, a shared
+# primitive's flags, a Directory entry method, the REQUIRES replacement
+# and a manager-raised command condition's RC.
+lang/security_manager_started_message.rex
+lang/security_manager_protected_put.rex
+lang/security_manager_donated_flags.rex
+lang/security_manager_directory_entry.rex
+lang/security_manager_requires_replacement.rex
+lang/security_manager_command_rc_condition.rex

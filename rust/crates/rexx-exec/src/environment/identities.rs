@@ -630,6 +630,60 @@ impl Interp {
         Some(object)
     }
 
+    /// The method identity `object` stands for, made its own first where its
+    /// class's dictionary entry shares the identity with another class's
+    /// (`InheritInstanceMethods`): the oracle keeps one method object per
+    /// class there, so a flag one of them is given leaves the others alone.
+    pub(crate) fn unshared_identity(&mut self, object: ObjRef) -> Option<rexx_classes::MethodId> {
+        let record = *self.executable_sources.get(&object)?;
+        let method = record.installed?;
+        if record.owns_installed {
+            return Some(method);
+        }
+        let Some(scope) = (match self.heap.get(object).map(|held| &held.body) {
+            Some(Body::Native(native)) => native.scope(),
+            _ => None,
+        }) else {
+            return Some(method);
+        };
+        let Some(name) = self
+            .method_objects
+            .iter()
+            .find(|((_, class_side, _), held)| **held == object && !class_side)
+            .map(|((_, _, name), _)| String::from_utf8_lossy(name).into_owned())
+        else {
+            return Some(method);
+        };
+        let owned = self.heap.is_class(scope)
+            && matches!(
+                self.classes().own_instance_slot(scope, &name),
+                Some(rexx_classes::MethodSlot::Defined { method: held, .. }) if held == method
+            );
+        if !owned || !self.classes().held_elsewhere(method, scope) {
+            return Some(method);
+        }
+        let copy = self.copy_method_identity(method);
+        self.classes().define_instance_method(scope, &name, copy);
+        self.charge_retired_behaviours();
+        let shared: Vec<ObjRef> = self
+            .executable_sources
+            .iter()
+            .filter(|(_, held)| held.installed == Some(method) && !held.owns_installed)
+            .map(|(held, _)| *held)
+            .filter(|held| {
+                matches!(self.heap.get(*held).map(|h| &h.body),
+                    Some(Body::Native(native)) if native.scope() == Some(scope))
+            })
+            .collect();
+        for held in shared {
+            if let Some(record) = self.executable_sources.get_mut(&held) {
+                record.installed = Some(copy);
+            }
+        }
+        self.executable_objects.insert(copy, object);
+        Some(copy)
+    }
+
     /// `~define` with a method object: install it in `class`'s own instance
     /// dictionary under `name` and make [`Interp::method_object`] answer it.
     pub(crate) fn define_method_object(

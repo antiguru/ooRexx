@@ -887,7 +887,11 @@ pub(super) fn invoke_executable(
         scope: ObjRef::NIL,
         method,
     };
-    let started = interp.begin_invoke(resolution, None, receiver, name, args)?;
+    // `MethodClass::run` itself, not a send: no protected-method check.
+    interp.runs_unchecked = interp.security_armed;
+    let started = interp.begin_invoke(resolution, None, receiver, name, args);
+    interp.runs_unchecked = false;
+    let started = started?;
     if let Started::Entered = started
         && interp.method_bodies.contains_key(&method)
     {

@@ -1089,6 +1089,20 @@ impl ClassGraph {
         self.classes[&class].own_instance_methods.slot(name)
     }
 
+    /// Whether a class other than `class` holds `method` in its own
+    /// instance or class dictionary: an identity `InheritInstanceMethods`
+    /// donated, which the oracle keeps as a separate method object per class.
+    pub fn held_elsewhere(&self, method: MethodId, class: ObjRef) -> bool {
+        self.classes.iter().any(|(id, def)| {
+            *id != class
+                && (def
+                    .own_instance_methods
+                    .methods()
+                    .any(|held| held == method)
+                    || def.own_class_methods.methods().any(|held| held == method))
+        })
+    }
+
     /// Oracle's `isRexxDefined` -- see [`ClassDef::rexx_defined`].
     pub fn is_rexx_defined(&self, class: ObjRef) -> bool {
         self.classes[&class].rexx_defined

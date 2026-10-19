@@ -936,15 +936,11 @@ impl Interp {
         } else {
             ReturnStatus::Normal
         };
-        // No `RC` entry is `IntegerZero`, and the object is left behind so
-        // that the ordinary rendering answers for it.
-        let Some(object) = self.security_entry(info, key::RC)? else {
-            return Ok(CommandOutcome {
-                rc: 0,
-                status,
-                supplied: None,
-                condition: None,
-            });
+        // No `RC` entry is `IntegerZero`. Either object is what `RC` and a
+        // raised condition's `RC` carry.
+        let object = match self.security_entry(info, key::RC)? {
+            Some(object) => object,
+            None => self.counted(0),
         };
         self.roots.activity_mut().push_temp(object);
         let text = self.required_string_value(object)?;
@@ -1193,7 +1189,8 @@ impl Interp {
             }
             None => {
                 if let Some(condition) = outcome.status.condition() {
-                    self.raise_command_condition(condition, command, outcome.rc)?;
+                    let supplied = outcome.supplied.as_ref().map(|supplied| supplied.object);
+                    self.raise_command_condition(condition, command, outcome.rc, supplied)?;
                 }
             }
         }
@@ -1287,11 +1284,16 @@ impl Interp {
     /// `ERROR` is silent -- measured, a command exiting 127 reaches a
     /// `SIGNAL ON ERROR` handler with no failure trap anywhere, and one
     /// exiting 3 reaches a lone `SIGNAL ON FAILURE` handler not at all.
+    ///
+    /// `supplied` is the `RC` a security manager set: the condition carries
+    /// that object as its `RC` and no `RESULT`, as `checkCommand`'s
+    /// `createConditionObject` builds it.
     fn raise_command_condition(
         &mut self,
         condition: &'static str,
         command: &[u8],
         rc: i32,
+        supplied: Option<ObjRef>,
     ) -> Result<(), Failure> {
         // **Ahead of the traps**, which is where `RexxActivation::command`
         // checks it. That cannot overtake a handler: arming one clears the
@@ -1311,13 +1313,16 @@ impl Interp {
         // carries `RESULT` under `SIGNAL ON` and under `CALL ON` alike, where
         // `raise error 5` carries `RC` alone.
         let raised = Raised {
-            rc: Some(rendered),
+            // A supplied `RC` is already the variable's value, and
+            // `pending_rc` carries it into the condition object.
+            rc: supplied.is_none().then_some(rendered),
             result_is_rc: true,
             description: Some(command.to_vec()),
             ..Raised::condition(std::borrow::Cow::Borrowed(condition))
         };
         match self.trap_for(condition.as_bytes()) {
             Some(trap) if trap.call => {
+                self.activity.pending_rc = supplied;
                 // Built now, not at delivery: by then this clause has
                 // finished and `POSITION` and `STACKFRAMES` no longer exist
                 // to be read.
@@ -1335,8 +1340,13 @@ impl Interp {
                 });
                 Ok(())
             }
-            Some(_) => Err(raised.into()),
-            None if condition == "FAILURE" => self.raise_command_condition("ERROR", command, rc),
+            Some(_) => {
+                self.activity.pending_rc = supplied;
+                Err(raised.into())
+            }
+            None if condition == "FAILURE" => {
+                self.raise_command_condition("ERROR", command, rc, supplied)
+            }
             None => Ok(()),
         }
     }

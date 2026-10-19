@@ -63,7 +63,10 @@ mod seam {
         let cleared = Cleared(());
         // `security_armed` first: a process that never installed a manager
         // pays one flag test per send and no row lookup.
-        if interp.security_armed && interp.method_is_protected(method) {
+        if interp.security_armed
+            && !std::mem::take(&mut interp.runs_unchecked)
+            && interp.method_is_protected(method)
+        {
             if let Some(result) = interp.check_protected_method(receiver, name, args)? {
                 return Ok(Clearance::Answered(result));
             }

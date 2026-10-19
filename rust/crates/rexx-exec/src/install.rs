@@ -710,12 +710,11 @@ impl Interp {
         let Some(resolved) = resolved else {
             return Err(Raised::requires_file_not_found(original).into());
         };
-        // The search already answered that this names a regular file, so a
-        // read failing here is a permission or a race rather than a miss --
-        // and the oracle reports the same 43.901 for it, since
-        // `PackageManager::loadRequires` answers `OREF_NULL` either way.
+        // `getRequiresFile` translates the name it was given, the manager's
+        // replacement included, and an unreadable one is 3.1 naming it
+        // (`LanguageParser::createPackage`).
         let Ok(text) = std::fs::read(OsStr::from_bytes(&resolved)) else {
-            return Err(Raised::requires_file_not_found(original).into());
+            return Err(Raised::executable_file_unreadable(&resolved).into());
         };
         let parsed = Rc::new(self.parse_file(text, &resolved)?);
         let required = self.load_program(Rc::clone(&parsed));
@@ -801,10 +800,7 @@ impl Interp {
         {
             *inherited = Some(manager);
         }
-        let Some(replaced) = self
-            .security_entry(info, crate::security::key::NAME)?
-            .filter(|name| *name != ObjRef::NIL)
-        else {
+        let Some(replaced) = self.security_entry(info, crate::security::key::NAME)? else {
             return Ok(None);
         };
         self.roots.activity_mut().push_temp(replaced);
@@ -2593,11 +2589,7 @@ impl Interp {
     /// `Method~setPrivate`'s half that a send can see: the dictionary entry
     /// this object *is* stops answering a sender outside its scope.
     pub(crate) fn make_method_private(&mut self, object: ObjRef) {
-        let Some(method) = self
-            .executable_sources
-            .get(&object)
-            .and_then(|record| record.installed)
-        else {
+        let Some(method) = self.unshared_identity(object) else {
             return;
         };
         let package = self

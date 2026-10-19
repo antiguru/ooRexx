@@ -1,0 +1,28 @@
+count 27
+/* A FAILURE or ERROR the security manager raises for a command carries the
+   RC entry it set as the condition's RC and as the variable, whatever the
+   object, and no RESULT. */
+do v over .array~of(.nil, 'abc', 7)
+  do cond over .array~of('FAILURE', 'ERROR')
+    mgr = .Mgr~new(v, cond)
+    r = .Routine~new("", "signal on failure; signal on error; address system 'true'; return 'none'; failure: error: c = condition('o'); return condition('c') (rc == .nil) rc c~rc c~hasIndex('RESULT') c['RESULT']")
+    r~setSecurityManager(mgr)
+    say cond r~call
+    mgr = .Mgr~new(v, cond)
+    r = .Routine~new("", "call on failure; call on error; address system 'true'; return 'after' rc; failure: error: c = condition('o'); say '  call' condition('c') (rc == .nil) rc c~rc c~hasIndex('RESULT') c['RESULT']; return")
+    r~setSecurityManager(mgr)
+    say cond r~call
+  end
+end
+::class Mgr
+::method init
+  expose v cond
+  use arg v, cond
+::method unknown
+  expose v cond
+  use arg name, args
+  info = args[1]
+  if name \= 'COMMAND' then return 0
+  info['RC'] = v
+  info[cond] = 1
+  return 1

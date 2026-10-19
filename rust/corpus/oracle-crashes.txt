@@ -1740,3 +1740,42 @@ Effect: SIGSEGV, rc 139, on 8 of 8 runs. Before it, stdout holds `halt 1` and
 `    24 *-* a = 1`; stderr is empty. Measured 2026-10-19 by the Phase 9d Task 6.10 round-3
 re-review, under the standard wrapper from a fresh empty directory. This crate raises HALT in
 the halted activity, prints `result error 4.1` and `main lines 1`, rc 0. No upstream ticket.
+
+## 54. A security manager's STREAM replacement that does not support the Stream methods
+
+    mgr = .Mgr~new
+    r = .Routine~new("", "signal on syntax; call lineout 'secret.txt', 'written'; return 'wrote'; syntax: return condition('o')~code")
+    r~setSecurityManager(mgr)
+    say r~call
+    ::class Mgr
+    ::method unknown
+      use arg name, args
+      if name \= 'STREAM' then return 0
+      args[1]~stream = .nil      -- or .object~new
+      return 1
+
+Effect: SIGSEGV, rc 139, at program exit, on 3 of 3 runs. Before it, stdout holds `97.1` and the
+file is never created. Measured 2026-10-19 by Phase 9d Task 6.12 round 1 (`t6.12/r1/probes/stream_replacement.rex`
+and its `.txt`), under the standard wrapper from a fresh empty directory. rexxref makes the entry
+the stream target, so this crate answers the same 97.1, leaves the file alone and exits 0
+(`tests/security_replacements.rs`). No upstream ticket.
+
+## 55. A security manager's REQUIRES `NAME` replacement that is not a string
+
+    mgr = .Mgr~new
+    r = .Routine~new("", "return .Package~new('', '')~loadPackage('present.cls')~name")
+    r~setSecurityManager(mgr)
+    say r~call
+    ::class Mgr
+    ::method unknown
+      use arg name, args
+      if name \= 'REQUIRES' then return 0
+      args[1]['NAME'] = .object~new
+      return 1
+
+with `present.cls` an existing file beside the program. Effect: SIGSEGV, rc 139, on 3 of 3 runs of
+this program and 8 of 8 of `t6.12/r1/probes/requires_object_name.rex`, with nothing written. Cause: the unchecked `(RexxString *)` cast of the entry at
+`SecurityManager.cpp:343`. A string or `.nil` replacement answers 3.1 naming its string value. This
+crate reads the object's string value too, which is 3.1 naming `an Object`
+(`tests/security_replacements.rs`). Measured 2026-10-19 by Phase 9d Task 6.12 round 1
+(`t6.12/r1/probes/requires_object_name.rex`). No upstream ticket.

@@ -436,6 +436,11 @@ impl ClassRegistry {
         self.graph.has_own_instance_method(class, name)
     }
 
+    /// See [`ClassGraph::held_elsewhere`].
+    pub fn held_elsewhere(&self, method: MethodId, class: ObjRef) -> bool {
+        self.graph.held_elsewhere(method, class)
+    }
+
     /// What `~method` actually reads -- see [`ClassGraph::own_instance_slot`].
     pub fn own_instance_slot(&self, class: ObjRef, name: &str) -> Option<MethodSlot> {
         self.graph.own_instance_slot(class, name)

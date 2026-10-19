@@ -66,14 +66,16 @@ impl Interp {
     /// `RexxActivation::getEffectiveSecurityManager`
     /// (`execution/RexxActivation.cpp:4977`): the running code's own package's
     /// manager. There is no instance-level manager here, so that arm's
-    /// fallback is `None`.
+    /// fallback is `None`, as it is with no running activation.
     #[inline]
     pub(crate) fn effective_security_manager(&self) -> Option<ObjRef> {
         if !self.security_armed {
             return None;
         }
-        self.program_data(self.activation().program_id)?
-            .security_manager
+        // A started message's activity runs no activation, and the oracle
+        // finds no manager for it.
+        let program = self.activity.running.as_deref()?.program_id;
+        self.program_data(program)?.security_manager
     }
 
     /// One checkpoint: `SecurityManager::callSecurityManager`
@@ -128,22 +130,14 @@ impl Interp {
         }
     }
 
-    /// The info directory one checkpoint hands its manager.
+    /// The info directory one checkpoint hands its manager, filled by
+    /// `DirectoryClass::put` itself rather than a sent `PUT`.
     fn security_arguments(&mut self, entries: &[(&[u8], ObjRef)]) -> Result<ObjRef, Failure> {
         let directory = crate::dispatch::hash::new_directory(self, 0)?;
         self.roots.activity_mut().push_temp(directory);
         let frame = self.roots.activity_mut().push_frame();
         for (name, value) in entries {
-            let index = self.text(name);
-            self.roots.activity_mut().push_temp(index);
-            let caller = self.caller();
-            self.send_message(
-                directory,
-                b"PUT",
-                None,
-                &[Some(*value), Some(index)],
-                caller,
-            )?;
+            crate::dispatch::hash::directory_put(self, directory, name, *value)?;
         }
         self.roots.activity_mut().pop_frame(frame);
         Ok(directory)
@@ -179,11 +173,7 @@ impl Interp {
     /// `MethodClass::setProtected` on the method `object` stands for, which
     /// the dispatch seam then asks the manager about.
     pub(crate) fn make_method_protected(&mut self, object: ObjRef) {
-        let Some(method) = self
-            .executable_sources
-            .get(&object)
-            .and_then(|record| record.installed)
-        else {
+        let Some(method) = self.unshared_identity(object) else {
             return;
         };
         let package = self
