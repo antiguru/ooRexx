@@ -1,0 +1,8 @@
+program	red vs oracle	green vs oracle
+trace_compiled_package_name	differs: stderr	identical
+class_activate_dependency_order	differs: stdout	identical
+method_object_identity_through_subclass	differs: stdout	identical
+setmethod_instance_method	differs: stdout stderr rc	identical
+uninit_defined_on_superclass_later	differs: stdout	identical
+package_prolog_of_compiled_executable	differs: stdout	identical
+stackframes_sortwith_comparator	differs: stdout stderr rc	identical

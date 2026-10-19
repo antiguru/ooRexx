@@ -1,0 +1,50 @@
+count 49
+/* Object~instanceMethod reads the object's own methods first: the Method a
+   setMethod installed from a string, an array or a Method, and .nil once
+   setMethod hides the name. instanceMethods lists the own entry beside the
+   class's entry it overrides. */
+o = .tester~new
+o~put('FOO', 'return 123')
+m = o~instanceMethod('foo')
+say 'string' m~class~id m~source~makeString scope(m) (m == find(o~instanceMethods(.nil), 'FOO'))
+o~put('FOO', .array~of('return 456'))
+say 'array' o~instanceMethod('foo')~source~makeString o~foo
+o~put('FOO', .method~new('given', 'return 789'))
+say 'method' o~instanceMethod('foo')~source~makeString o~foo
+o~hide('FOO')
+say 'hidden' o~instanceMethod('foo') o~hasMethod('foo')
+o~put('BAR', 'return "own"')
+say 'override' o~instanceMethod('bar')~source~makeString count(o~instanceMethods, 'BAR')
+say 'class entry' (.tester~new~instanceMethod('bar') == .tester~method('BAR'))
+exit
+
+scope: procedure
+  use arg m
+  return m~scope~string
+
+find: procedure
+  use arg s, name
+  do while s~available
+    if s~index == name then return s~item
+    s~next
+  end
+  return .nil
+
+count: procedure
+  use arg s, name
+  n = 0
+  do while s~available
+    if s~index == name then n = n + 1
+    s~next
+  end
+  return n
+
+::class tester
+::method put
+  use arg name, method
+  self~setMethod(name, method)
+::method hide
+  use arg name
+  self~setMethod(name)
+::method bar
+  return 'class'

@@ -1,0 +1,18 @@
+/* An UNINIT that ~define gives a superclass after its subclass exists makes
+   the subclass's new instances finalizable; deleting it again stops that. */
+first = .Object~subclass('First')
+second = first~subclass('Second')
+first~define('UNINIT', "say 'uninit ran for' self~class~id")
+o = second~new
+say 'built' o~class~id
+pad = 'keep the new object out of the last ten allocations'
+drop o
+call gc 'force'
+say 'after first collection'
+first~delete('UNINIT')
+o = second~new
+say 'built' o~class~id
+pad = 'keep the new object out of the last ten allocations'
+drop o
+call gc 'force'
+say 'after second collection'

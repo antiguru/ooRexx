@@ -270,3 +270,11 @@ lang/trace_destinations_two_threads.rex
 # label on each pass.
 lang/trace_destination_waits_calling_a_method.rex
 lang/trace_destination_waits_calling_a_label.rex
+# 9d Task 6.11: classes, methods and packages.
+lang/trace_compiled_package_name.rex
+lang/class_activate_dependency_order.rex
+lang/method_object_identity_through_subclass.rex
+lang/setmethod_instance_method.rex
+lang/uninit_defined_on_superclass_later.rex
+lang/package_prolog_of_compiled_executable.rex
+lang/stackframes_sortwith_comparator.rex

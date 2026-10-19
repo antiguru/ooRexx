@@ -1,0 +1,44 @@
+count 43
+/* A method object is the one its defining class answers, whichever class or
+   instance it is reached through, and Class~methods and
+   Object~instanceMethods list an entry for every scope that defines a name,
+   the ones a subclass overrides included. Collection order is not specified,
+   so only counts and memberships print. */
+say 'same copy' (.object~method('COPY') == .object~method('COPY'))
+say 'object through sub' (find(.sub~methods, 'COPY') == .object~method('COPY'))
+say 'base through sub' (find(.sub~methods, 'FOO') == .base~method('FOO'))
+say 'instanceMethod' (.sub~new~instanceMethod('FOO') == .base~method('FOO'))
+say 'scoped supplier' (find(.sub~new~instanceMethods(.base), 'FOO') == .base~method('FOO'))
+say 'own' (.sub~new~instanceMethod('BAR') == .sub~method('BAR'))
+say 'INIT entries' count(.sub~methods, 'INIT') count(.sub~new~instanceMethods, 'INIT')
+say 'BAR entries' count(.sub~methods, 'BAR') count(.sub~methods(.nil), 'BAR') count(.sub~methods(.base), 'BAR')
+a = .object~methods(.nil)~allItems~items
+b = .base~methods(.nil)~allItems~items
+c = .sub~methods(.nil)~allItems~items
+say 'sum' (.sub~methods~allItems~items == a + b + c)
+exit
+
+find: procedure
+  use arg s, name
+  do while s~available
+    if s~index == name then return s~item
+    s~next
+  end
+  return .nil
+
+count: procedure
+  use arg s, name
+  n = 0
+  do while s~available
+    if s~index == name then n = n + 1
+    s~next
+  end
+  return n
+
+::class base
+::method init
+::method foo
+::method bar
+::class sub subclass base
+::method init
+::method bar

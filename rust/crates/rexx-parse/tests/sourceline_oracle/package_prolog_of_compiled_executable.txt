@@ -1,0 +1,11 @@
+count 10
+/* Package~prolog answers .nil for the package of a Method or Routine built
+   from source text, whose code became that executable, and a Routine for a
+   package built from source, even an empty one. */
+say 'method' .Method~new('m', 'return 1')~package~prolog
+say 'routine' .Routine~new('r', 'return 1')~package~prolog
+say 'routine with class' .Routine~new('rc', ('return 1', '::class k'))~package~prolog
+p = .Package~new('p', ('return 123', '::class pk'))
+say 'package' p~prolog~class~id p~prolog~call
+say 'empty package' .Package~new('e', '')~prolog~class~id
+say 'rexx' .Object~package~prolog

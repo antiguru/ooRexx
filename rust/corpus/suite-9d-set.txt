@@ -7,21 +7,8 @@
 #   awk -F'\t' '$3=="-" && $4=="passed" && $5=="failed" {print $1"\t"$2}' tests.tsv
 #
 # ootest revision 13178
-base/class/Class	TEST_ACTIVATE
-base/class/Class	TEST_METHODS
-base/class/Object	TEST_INSTANCEMETHOD
-base/class/Object	TEST_SETMETHOD
-base/class/Object	TEST_UNINIT
-base/class/Package	TEST_PROLOG
 base/class/RexxContext	TESTRS01
-base/class/StackFrame	TESTNATIVECODEFRAME
-base/directives/OPTIONS	TEST_TRACE_LABELS
 base/keyword/SIGNAL	TEST_SIGNAL_ANY_CONDITION_HALT
-base/keyword/TRACE	TEST_TRACE_EXIT
-base/keyword/TRACE	TEST_TRACE_OTHER_ENTRYPOINT
-base/keyword/TRACE_TraceObject	TEST_CALLER_STACK_FRAME_REPLY_START
-base/keyword/TRACE_TraceObject	TEST_OBJECT_AND_SCOPE
-base/keyword/TRACE_TraceObject	TEST_TRACEOBJECT_COLLECTOR
 base/security.manager/SecurityManager	TEST_ENVIRONMENT_HANDLE
 base/security.manager/SecurityManager	TEST_METHOD_HANDLE_NO_RESULT
 base/security.manager/SecurityManager	TEST_METHOD_HANDLE_RESULT
