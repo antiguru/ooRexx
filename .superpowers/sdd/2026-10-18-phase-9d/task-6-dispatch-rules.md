@@ -31,6 +31,13 @@
   `/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/`.
   Never leave `.rex` files in the scratchpad root: it is on the oracle's search path.
 * Per-task checks are bounded to 10 minutes each. No full gates.
+* **Concurrent witnesses (REPLY, `START`, guards) run the crate in the simulation mode**
+  (Moritz 2026-10-19): `REXX_SWITCH_MODE=sim:SEED[,policy]`, grammar in
+  `crates/rexx-exec/src/sim.rs`'s module doc. A seed fixes the schedule, so the crate's output is
+  deterministic per seed. Check the witness over several seeds and policies (`fifo`, `uniform:0.2`,
+  `pct:3,k=40`), and pin the expected output to a seed when the program's output depends on the
+  schedule. The oracle cannot be seeded: establish its answer from at least 8 runs and accept only
+  a stable one, or record its outcome set the way `corpus/sim-gate.tsv` and `corpus/sim-oracle/` do.
 
 ## Git and code
 * Never `git add -A`, never `git reset --hard`, never `git checkout -- <file>`. `rm` only with

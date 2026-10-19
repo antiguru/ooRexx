@@ -77,3 +77,5 @@ Task 6.9: dispatched (implementer opus, BASE after this commit).
 Task 6.9: implementer DONE_WITH_CONCERNS (fe1e7d9e0, 312d2c64c, 4fca20885, 94b09da09, 688f592ed, 2402bc7c7, 046fa0ac5). 13 red groups. Review dispatched (opus).
 Task 6.9 review (opus): CHANGES REQUESTED, 2 Important (REPLY+INTERPRET RAISE RETURN 98.936: raise_sender replied false in fragments; missing SIGNAL ON NOTREADY label in native stream method gives wrong 16.1 object), Minors 3 and 7 folded into round 1, 4-5 queued as Deviation candidates, 6 appended to scanner item. DisplayCondition native-only: Phase 10.
 Task 6.9 r1 (856b6c7f1, 36b4aa010, 7936f3ca1, bd88a6239): re-review (opus) APPROVED; Minor (16.1 frame name in INTERPRET) appended to condition Deviation candidates. Task 6.9: complete (fe1e7d9e0, 312d2c64c, 4fca20885, 94b09da09, 688f592ed, 2402bc7c7, 046fa0ac5, 856b6c7f1, 36b4aa010, 7936f3ca1, bd88a6239).
+Task 6.10: dispatched (implementer opus, BASE d2e55befa).
+Moritz 2026-10-19: 'Use DST to make the reply output deterministic.' Rules file: concurrent witnesses run the crate under REXX_SWITCH_MODE=sim:SEED; oracle still 8+ runs or an outcome set. Sent to 6.10 implementer.
