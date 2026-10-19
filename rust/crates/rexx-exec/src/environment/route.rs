@@ -205,8 +205,7 @@ impl Interp {
             line.pop();
         }
         self.activity.routing_trace = true;
-        self.activity.delivery_floor =
-            self.activity.suspended.len() + usize::from(self.activity.running.is_some());
+        self.activity.delivery_floor = None;
         // **The nested-send protocol, not a bare send**, and around the whole
         // delivery because `NEW`, each `PUT` and the `LINEOUT` all run Rexx
         // clauses. A clause boundary clears the shared argument stack, so
@@ -493,6 +492,8 @@ impl Interp {
             let Some(route) = self.local_route(b"TRACEOUTPUT")? else {
                 return Ok(Delivered::ToStandardError);
             };
+            self.activity.delivery_floor =
+                Some(self.activity.suspended.len() + usize::from(self.activity.running.is_some()));
             let caller_ref = self.caller();
             self.send_message(
                 route,
