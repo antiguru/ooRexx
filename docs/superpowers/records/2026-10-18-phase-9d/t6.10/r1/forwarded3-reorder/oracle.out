@@ -1,0 +1,13 @@
+res 42
+       >I> Method "ONE" with scope "TEST"
+       >I> Method "ONETWO" with scope "TEST"
+       <I< Method "ONETWO" with scope "TEST"
+       <I< Method "ONE" with scope "TEST"
+       >I> Method "ONETWO" with scope "TEST"
+       <I< Method "ONETWO" with scope "TEST"
+       >I> Method "THREE" with scope "TEST"
+       <I< Method "THREE" with scope "TEST"
+       >I> Method "THREE" with scope "TEST"
+       >I> Method "THREEFOUR" with scope "TEST"
+       <I< Method "THREEFOUR" with scope "TEST"
+       <I< Method "THREE" with scope "TEST"

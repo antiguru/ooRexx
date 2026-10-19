@@ -1,0 +1,4 @@
+       >I> Routine "R" in package "s1.rex".
+    10 *-* .traceOutput~destination("")
+syntax 97.1 c=1
+rc 0

@@ -1,19 +1,60 @@
 # trace_reply_continuation: md5 of stdout, stderr and rc, per run, from a fresh directory
 # oracle, 8 runs:
       8 569e21ceec8870494d21bd1bd834e726  -
-# task 306331c9b, 8 wall-clock runs:
+# task 952e1788d, 8 wall-clock runs:
       8 569e21ceec8870494d21bd1bd834e726  -
 # task, REXX_SWITCH_MODE per run (the rexx-sim summary line dropped from stderr):
 sim:1 569e21ceec8870494d21bd1bd834e726  -
 sim:7 569e21ceec8870494d21bd1bd834e726  -
 sim:42 569e21ceec8870494d21bd1bd834e726  -
-sim:7,uniform:0.2 569e21ceec8870494d21bd1bd834e726  -
-sim:9,uniform:1 569e21ceec8870494d21bd1bd834e726  -
-sim:7,pct:3,k=40 569e21ceec8870494d21bd1bd834e726  -
-sim:3,pre:2,k=40 569e21ceec8870494d21bd1bd834e726  -
+sim:3,uniform:0.2 569e21ceec8870494d21bd1bd834e726  -
+sim:9,uniform:0.2 569e21ceec8870494d21bd1bd834e726  -
+sim:5,uniform:1 a173ed8c3198835ee853c5c9fa7bf907  -
+sim:8,uniform:0.5 a173ed8c3198835ee853c5c9fa7bf907  -
 sim:11,uniform:0.01 569e21ceec8870494d21bd1bd834e726  -
-sim:5,pct:3,k=200 569e21ceec8870494d21bd1bd834e726  -
+sim:7,pct:3,k=40 a173ed8c3198835ee853c5c9fa7bf907  -
+sim:11,pct:3,k=200 a173ed8c3198835ee853c5c9fa7bf907  -
+sim:2,pre:2,k=40 569e21ceec8870494d21bd1bd834e726  -
 sim:13,pre:1,k=40 569e21ceec8870494d21bd1bd834e726  -
 sim:21,pre:3,k=65 569e21ceec8870494d21bd1bd834e726  -
-sim:8,uniform:0.5 569e21ceec8870494d21bd1bd834e726  -
-# the seeded gate row's 70 runs: sim/trace_reply_continuation.report.txt
+# the seeded gate row's 70 runs: r1/sim/trace_reply_continuation.report.txt
+# trace_destination_waits_on_thread: md5 of stdout, stderr and rc, per run, from a fresh directory
+# oracle, 8 runs:
+      8 162a42e83fe5d8c37cb051428292633b  -
+# task 952e1788d, 8 wall-clock runs:
+      8 162a42e83fe5d8c37cb051428292633b  -
+# task, REXX_SWITCH_MODE per run (the rexx-sim summary line dropped from stderr):
+sim:1 162a42e83fe5d8c37cb051428292633b  -
+sim:7 162a42e83fe5d8c37cb051428292633b  -
+sim:42 162a42e83fe5d8c37cb051428292633b  -
+sim:3,uniform:0.2 162a42e83fe5d8c37cb051428292633b  -
+sim:9,uniform:0.2 162a42e83fe5d8c37cb051428292633b  -
+sim:5,uniform:1 162a42e83fe5d8c37cb051428292633b  -
+sim:8,uniform:0.5 162a42e83fe5d8c37cb051428292633b  -
+sim:11,uniform:0.01 162a42e83fe5d8c37cb051428292633b  -
+sim:7,pct:3,k=40 162a42e83fe5d8c37cb051428292633b  -
+sim:11,pct:3,k=200 162a42e83fe5d8c37cb051428292633b  -
+sim:2,pre:2,k=40 162a42e83fe5d8c37cb051428292633b  -
+sim:13,pre:1,k=40 162a42e83fe5d8c37cb051428292633b  -
+sim:21,pre:3,k=65 162a42e83fe5d8c37cb051428292633b  -
+# the seeded gate row's 70 runs: r1/sim/trace_destination_waits_on_thread.report.txt
+# trace_destinations_two_threads: md5 of stdout, stderr and rc, per run, from a fresh directory
+# oracle, 8 runs:
+      8 05ff6a68b3842a043d3d1d325ccb2eb4  -
+# task 952e1788d, 8 wall-clock runs:
+      8 05ff6a68b3842a043d3d1d325ccb2eb4  -
+# task, REXX_SWITCH_MODE per run (the rexx-sim summary line dropped from stderr):
+sim:1 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:7 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:42 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:3,uniform:0.2 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:9,uniform:0.2 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:5,uniform:1 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:8,uniform:0.5 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:11,uniform:0.01 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:7,pct:3,k=40 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:11,pct:3,k=200 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:2,pre:2,k=40 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:13,pre:1,k=40 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:21,pre:3,k=65 05ff6a68b3842a043d3d1d325ccb2eb4  -
+# the seeded gate row's 70 runs: r1/sim/trace_destinations_two_threads.report.txt

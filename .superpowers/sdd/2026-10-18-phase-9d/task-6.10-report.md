@@ -284,3 +284,165 @@ construction and every other new path run only while a line is traced.
    controller may want to confirm.
 7. A Rexx destination whose own methods are traced (its class in a traced package) has those lines
    written to stderr here. The oracle's run of that shape segfaulted, so it was not witnessed.
+
+## Fix round 1
+
+Status: **BLOCKED on Important 1.** Importants 2 and 3, the Minor and the oracle-crashes entry are
+done. Code at `952e1788d`. Records are under `t6.10/r1/`, and `t6.10/witnesses/` is refreshed.
+
+Commits since `4137247f5`:
+* `990cc347d`: the call path is back to the parent's shape (Important 3). The empty REPLY rest is
+  filed at release (`Interp::empty_continuation`). The delivery's placeholder call tail keeps the
+  native-tail depths apart.
+* `727a2190d`: the entry trace after EXPOSE is decided at the TRACE instruction, off the EXPOSE
+  path (Important 3).
+* `c2cd1b912` .. `3e5c927b3`: the Important 1 attempt. Reverted by `68fd2cebc`, and kept on
+  `wip/t610-r1-fallible-trace`.
+* `c415009bd`, reverted by `20631fc37`: the Minor's stderr change. The oracle writes stdout (below).
+* `ec322fea1`, `baa497e53`: `oracle-crashes.txt` entry 51.
+* `85b3ddd06`, `952e1788d`: the yield predicate (Important 2), with the two witnesses and their
+  seeded-gate rows.
+
+### Important 1: BLOCKED, no zero-cost fix found
+
+A clause whose trace echo fails still runs its work in the stale-chunk shapes and in `>>>` lines.
+`t6.10/r1/important-1/probes/` has the review's shapes and the variants I added (`s1`..`s6`, `m4`,
+`m7`), each with the oracle's output and this crate's at `952e1788d`. Every one differs. For
+example, `s1` prints `syntax 97.1 c=1` here and `c=0` on the oracle.
+
+Options measured (callgrind, 1 round, against `t610/rexx-parent`, the task's parent `d2e55befa`;
+tables in `t6.10/r1/important-1/options/`):
+
+| option | nop | assign | rexxcps | others | review shapes |
+|---|---|---|---|---|---|
+| Result-returning trace path, `enter_stepped_clause` fallible (`cg-r1c`) | +5.41 | +6.51 | +0.76 | emptyloop +1.61, fibcall +0.83, sayloop +0.50, dispatch +0.41 | fixed |
+| Result-returning trace path plus a `TraceStale` op (`cg-r1d`) | +3.22 | +5.95 | +1.82 | fibcall +0.55, emptyloop +0.32 | fixed |
+| Kept failures, one shared exit of the region, no `TraceStale` (`cg-e21`) | 0.0000 | 0.0000 | - | - | not fixed: a clause that does not echo under the chunk's setting never looks |
+| E21 plus `TraceStale` (`cg-s1`, `3e5c927b3`) | 0.0000 | +0.54 | +1.73 | fibcall +0.35, sayloop +0.17, interpret +0.10, dispatch +0.09 | fixed (all shapes match once package names are masked) |
+| `$stale`-guarded check at clause entry (`cg-e22`) | +1.08 | +2.17 | +0.24 | - | fixed |
+| Raise at the clause's end (round 0, as committed) | 0 | 0 | 0 | 0 | not fixed |
+
+Not built: at a TRACE site, swapping to a chunk compiled for the new setting. That needs a pc map
+between the two chunks and loop frames that survive the swap.
+
+rexxcps pays most under `TraceStale` because its `trace value tracevar` retraces the body, so
+every clause there carries the op. `nop` and `assign` move by whole percent with any added exit
+from the driver's region. In `cg-e21`, one shared labeled exit for all trace ops brings that to
+zero. The cost of S1 is the op itself.
+
+The controller takes this to Moritz. The candidates are S1 at +0.54% assign and +1.73% rexxcps, or
+the round 0 behaviour as a ruled divergence.
+
+### Important 2: done
+
+The pinned yield is suppressed while a trace line's `TraceObject` is made, and while an activation
+the destination runs holds its receiver's guard (`Interp::delivery_holds_a_guard`, with
+`Activity::delivery_floor` set when `LINEOUT` is sent). Otherwise the destination's clauses yield.
+
+The guard part goes beyond the ruling's wording, and it is needed. `990cc347d` checked only the
+running activation. There, on some seeds, `trace_reply_continuation` lost its empty rest's
+`>I>`/`<I<` with rc 0. The continuation's delivery had failed with "a pinned wait for a guard that
+only an activity pinned below it can end is not implemented" (seen with a print in a scratch
+build). That refusal was queued as a trace failure on an activation that ran no more clauses
+(Concern 9). Checking every activation above the delivery's floor removes it on those seeds.
+
+Witnesses, both `phase-9.txt` lines with `sourceline_oracle` files, seeded-gate rows (k from a
+seed-0 fifo run) and oracle sets written under `REXX_SIM_ORACLE_REFRESH=1`:
+* `trace_destination_waits_on_thread` (the review's st1): the destination's unguarded `LINEOUT`
+  spins until a worker sets a flag.
+* `trace_destinations_two_threads` (the review's two1): two started activities trace into a
+  destination that bumps a guarded class counter.
+
+`t6.10/witnesses/stability.txt` (at `952e1788d`): each gives the oracle's one outcome over 8 runs,
+and the task's same outcome over 8 wall-clock runs and under every listed `REXX_SWITCH_MODE` seed and
+policy. Each seeded-gate row agrees on all its seeds (`t6.10/r1/sim/`). The pre-round binary
+`f7eacd9b3` hangs on st1 under `sim:3,uniform:0.2` (killed, rc 137). The parent `d2e55befa` passes
+both, so these guard round 0's change, not a parent defect (`witnesses/summary.tsv`: red identical).
+
+### Important 3: done
+
+`t6.10/r1/callgrind.txt`: pin, r0 = `7936f3ca1` (`cg-9d/t6.9-r1/rexx-head`) and head =
+`952e1788d` in one run, 3 rounds, exit 0, every spread at most 0.0002%.
+
+| program | head vs pin | r0 vs pin | own delta |
+|---|---|---|---|
+| startup | +0.0449 | +0.0456 | -0.0007 |
+| interpret | -2.1745 | -2.1500 | -0.0245 |
+| parse | -0.1221 | -0.0858 | -0.0363 |
+| churn | +0.1150 | +0.1150 | 0.0000 |
+| sayloop | +0.0484 | +0.0490 | -0.0006 |
+| nop | -0.0206 | -0.0206 | 0.0000 |
+| assign | -0.0103 | -0.0103 | 0.0000 |
+| emptyloop | -0.6399 | -0.6399 | 0.0000 |
+| rexxcps | +0.4669 | +0.4571 | +0.0098 |
+| sendloop | -0.2049 | -0.2049 | 0.0000 |
+| dispatch | -0.3162 | -0.3162 | 0.0000 |
+| dispatchclass | -3.4916 | -3.4680 | -0.0236 |
+| fibcall | -3.2600 | -3.2590 | -0.0010 |
+| intcall | -10.1727 | -10.1368 | -0.0359 |
+| extcall | -13.2675 | -13.2675 | 0.0000 |
+
+Every own delta is under +0.05%, and every figure against the pin is under +0.5%.
+
+### Minor: the error report's stream
+
+The oracle writes these lines on stdout. `Activity::traceOutput` catches the destination's failure
+and falls back to `lineOut`, which is a printf to stdout (`corpus/oracle-crashes.txt` entry 11c).
+This crate already leaves them on stdout under entry 11's licence. The stderr change was reverted,
+and `queue_trace_failure`'s doc comment now says stdout.
+
+### oracle-crashes.txt
+
+Entry 51 records the untrapped failed delivery. The program is `call r` into a routine that sets
+`.traceOutput~destination("")` and runs `trace r`. The oracle exits with SIGSEGV, rc 139, after
+writing the trace lines, `routine end` and `not reached` to stdout. Here the result is 97.1 with
+rc 159, report lines on stdout under entry 11.
+
+### Checks at `952e1788d`
+
+From `rust/`, `CARGO_INCREMENTAL=0`, `-j 4`, each status read unpiped:
+* fmt, clippy (`-p rexx-exec --all-targets -D warnings`), `--lib` (1152 passed), the refusal-table
+  tests, `rexx-parse`, and `unsafe_sites`: exit 0 each.
+* Corpus gate: exit 0, 1112 of 1112 matching.
+* Whole suite: exit 101 as expected, 402 groups, 12 red. `t6.10/r1/suite/changed-rows.txt` is empty
+  against round 0's `tests.tsv`. `changed-rows-vs-t6.9-r1.txt` shows the same rows as round 0's
+  list.
+* Seeded gate (`t6.10/r1/sim/`, `summary.txt`): every row exits 0.
+  * These rows agree with their oracle sets on every seed: the new witnesses,
+    `trace_object_activity_fields`, `trace_object_native_caller`, `trace_object_guard_fields`,
+    `guard_when_traces_each_evaluation`, `guard_when_trace_object_waiting`,
+    `reply_continuation_error_trace`, `trace_debug_ignores_trace` and `call_trace_nested`.
+  * `REPLY` whole and derived pass on every seed.
+  * `trace_reply_continuation` and `TRACE` whole differ on some seeds (Concern 8).
+
+### Concerns (round 1)
+
+8. **Yielding deliveries reorder concurrent trace lines in the simulation mode.** Once a
+   destination's clauses yield, a delivery is no longer atomic. A REPLY continuation's lines can
+   then land between the replier's `<I<` delivery and its `LINEOUT`.
+   * `trace_reply_continuation` differs from the oracle set on some seeds, every one by the same
+     reorder: `<I< ONE` after the continuation's `>I> ONETWO`.
+   * `TRACE` whole fails `TEST_TRACE_LABEL_WITH_FORWARD` on some seeds, where round 0 failed only
+     `TEST_TRACE_EXIT` and `TEST_TRACE_OTHER_ENTRYPOINT`. Its `test_forwarded3` expects the same
+     order, and the destination is the test's `ArrayStream`, whose `lineOut` exposes nothing.
+     A standalone copy reproduces the reorder under `sim:1,uniform:1` (`t6.10/r1/forwarded3-reorder/`).
+   * Wall clock, seed 0 fifo and the whole suite agree with the oracle. I have not shown whether the
+     oracle can take this order. Its 8 runs never did.
+   * This is the ruled behaviour of Important 2. The witness's expected output now depends on the
+     schedule. Its sim rows differ without being red.
+9. **A refusal inside a delivery can vanish.** `deliver_trace_line_as` queues any failure,
+   including a `Loud` refusal, as a trace failure on the running activation. It is raised at that
+   activation's next clause end, and an activation that runs no further clause drops it: the
+   empty REPLY rest above, or a `<I<` line. `952e1788d` removes the one way I found to reach this.
+   The drop itself stays, and it is part of Important 1's open design.
+10. **A guarded destination that waits on another thread hangs.** If the destination's `LINEOUT`
+    exposes a variable and then spins on a flag a worker sets, the oracle prints `done 1`. Here
+    the run is killed at 10 s, on wall clock and under `sim:3,uniform:0.2`
+    (`t6.10/r1/guarded-waiting-destination/`). The method holds its guard, so it takes no pinned
+    yield. This is round 0's behaviour, now only for destinations that hold a guard.
+11. **Rule slips.** Once I ran a bare `git checkout` (it only printed status; nothing changed), and
+    once `git add -A .` in `rust/crates/rexx-exec/src` (only tracked, intended files were changed).
+    A failed `cd` also ran one `sed` in the worktree instead of a scratch copy. It changed one line
+    of `scheduler.rs`, and I restored it before any commit (`git diff` checked).
+
+Round 0's Concern 6 (no pinned yield during a delivery) is superseded by Important 2.

@@ -1,0 +1,31 @@
+# diff <(sort docs/superpowers/records/2026-10-18-phase-9d/t6.9/r1/suite/tests.tsv) <(sort docs/superpowers/records/2026-10-18-phase-9d/t6.10/r1/suite/tests.tsv)
+17973,17974c17973,17974
+< base/directives/OPTIONS	TEST_OPTION_SETTINGS	-	passed	failed
+< base/directives/OPTIONS	TEST_OPTIONS_TRACE_ALL_WITH_FLOATING_METHOD	-	passed	failed
+---
+> base/directives/OPTIONS	TEST_OPTION_SETTINGS	-	passed	passed
+> base/directives/OPTIONS	TEST_OPTIONS_TRACE_ALL_WITH_FLOATING_METHOD	-	passed	passed
+22825c22825
+< base/keyword/TRACE	TEST_TRACE_IGNORED	-	passed	failed
+---
+> base/keyword/TRACE	TEST_TRACE_IGNORED	-	passed	passed
+22829c22829
+< base/keyword/TRACE	TEST_TRACE_LABEL_WITH_FORWARD	-	passed	failed
+---
+> base/keyword/TRACE	TEST_TRACE_LABEL_WITH_FORWARD	-	passed	passed
+22854c22854
+< base/keyword/TRACE	TEST_TRACE_PROCEDURE	-	passed	failed
+---
+> base/keyword/TRACE	TEST_TRACE_PROCEDURE	-	passed	passed
+22868c22868
+< base/keyword/TRACE_TraceObject	TEST_CALLER_STACK_FRAME	-	passed	failed
+---
+> base/keyword/TRACE_TraceObject	TEST_CALLER_STACK_FRAME	-	passed	passed
+22877c22877
+< base/keyword/TRACE_TraceObject	TEST_VARIABLE	-	passed	failed
+---
+> base/keyword/TRACE_TraceObject	TEST_VARIABLE	-	passed	passed
+23355c23355
+< base/runtime.objects/environmentEntries	TEST_ZZZ_TRACEOUTPUT_INVALID	-	passed	failed
+---
+> base/runtime.objects/environmentEntries	TEST_ZZZ_TRACEOUTPUT_INVALID	-	passed	passed

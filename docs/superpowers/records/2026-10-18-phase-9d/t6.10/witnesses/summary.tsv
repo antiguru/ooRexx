@@ -6,3 +6,5 @@ trace_output_invalid_destination	differs: stdout	identical
 trace_object_probe_collect	differs: stdout stderr	identical
 trace_reply_continuation	differs: stdout	identical
 trace_object_format_default_route	differs: stdout stderr	identical
+trace_destination_waits_on_thread	identical	identical
+trace_destinations_two_threads	identical	identical

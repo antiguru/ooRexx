@@ -1,0 +1,7 @@
+# 2026-10-19T09:50:08Z rounds=1 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib
+# valgrind-3.27.1
+# base /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t610/rexx-parent 753424fbb23926ae8aec5cd5897daf32bd33110286d04efbc9afc4df883f4ddb
+# e21 /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t610/rexx-e21 f8e5e9154e1ddab358fa9d91b2c51cbfa0d77fa48658d22aa75a74d4f01f838b
+program	base	e21	e21 d%	base -libc	e21 -libc	e21 -libc d%	base spread%	e21 spread%
+nop	9241483322	9241481445	-0.0000	9179539037	9179538635	-0.0000	0.0000	0.0000
+assign	18441817826	18441821921	+0.0000	18379800809	18379800565	-0.0000	0.0000	0.0000

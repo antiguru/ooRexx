@@ -1,0 +1,5 @@
+       >I> Routine "g" in package "m7.rex".
+     1 *-* say .h~f 'tail'
+5 tail
+syntax 97.1
+rc 0

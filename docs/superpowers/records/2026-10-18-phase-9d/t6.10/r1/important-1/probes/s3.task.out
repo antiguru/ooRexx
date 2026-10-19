@@ -1,0 +1,4 @@
+       >I> Routine "R" in package "s3.rex".
+     9 *-* .traceOutput~destination("");
+syntax 97.1 c=1
+rc 0

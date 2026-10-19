@@ -1,0 +1,4 @@
+       >I> Routine "g" in package "g".
+     1 *-* say .h~f 'tail'
+syntax 97.1
+rc 0
