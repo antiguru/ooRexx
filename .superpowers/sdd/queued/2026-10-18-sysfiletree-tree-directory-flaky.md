@@ -1,3 +1,5 @@
+**RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** flaky test.
+
 **OPEN: found by Phase 9d Task 6.2, not yet ruled.** `base/rexxutil/SysFileTree TEST_TREE_DIRECTORY` passes and fails between runs, on either side.
 
 # `SysFileTree TEST_TREE_DIRECTORY` is intermittent on both sides

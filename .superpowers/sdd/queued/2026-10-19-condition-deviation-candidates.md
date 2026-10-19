@@ -1,3 +1,5 @@
+**RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** derive the semantics; follow the model; Deviation where the oracle departs.
+
 **OPEN: Deviation candidates for Moritz, found by the Phase 9d Task 6.9 review.** Both predate Task 6.9.
 
 # Conditions: two oracle behaviours to rule on

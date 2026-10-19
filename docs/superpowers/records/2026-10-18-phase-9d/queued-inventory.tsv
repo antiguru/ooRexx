@@ -200,3 +200,23 @@ gate:phase-9c-gate.md:144	divergence	-	9d	a pointer to 2026-10-17-newmethod-pare
 gate:phase-9c-gate.md:145	divergence	queued-probes/scanlater/scanlater.rex:1	9d	a pointer to 2026-10-17-scanner-reports-later-clause-error.md	9d
 gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointer to 2026-10-13-lossy-path-sites.md	9d
 2026-10-18-command-waits-for-background-child.md	divergence	queued-probes/bgcmd/bgcmd.rex:1	9d	a command whose background child keeps stdout open: crate waits to timeout rc 124, oracle returns at once	9d
+2026-10-18-max-integer-unrounded.md	divergence	-	9d	Task 6.14 owns it	9d
+2026-10-18-fuzz-comparison-lostdigits.md	divergence	-	9d	Task 6.14 owns it	9d
+2026-10-18-do-count-wider-than-digits.md	divergence	-	closed:Deviation 47	Deviation 47 licenses it	closed:Deviation 47
+2026-10-19-trace-chunk-swap.md	design	-	later	closes Deviation 50 at no per-clause cost	later
+2026-10-19-drive-rs-macros.md	design	-	later	after the 9d close	later
+2026-10-19-variable-reference-deviation-candidates.md	divergence	-	9d	derive the semantics; follow the model; Deviation where the oracle departs	9d
+2026-10-19-condition-deviation-candidates.md	divergence	-	9d	derive the semantics; follow the model; Deviation where the oracle departs	9d
+2026-10-18-duplicate-member-checked-at-install.md	divergence	-	9d	gap	9d
+2026-10-18-install-error-names-caller-file.md	divergence	-	9d	gap	9d
+2026-10-19-context-name-during-install.md	divergence	-	9d	gap	9d
+2026-10-18-options-trace-constant-expression.md	divergence	-	9d	gap	9d
+2026-10-19-index-argument-string-conversion.md	divergence	-	9d	gap	9d
+2026-10-19-variable-reference-gaps.md	divergence	-	9d	gap	9d
+2026-10-19-local-novalue-hook.md	divergence	-	9d	gap	9d
+2026-10-19-sortwith-on-foreign-class.md	divergence	-	9d	gap	9d
+2026-10-18-class-methods-no-argument.md	divergence	-	9d	gap	9d
+2026-10-19-sigterm-in-trace-delivery.md	divergence	-	9d	gap	9d
+2026-10-19-guarded-trace-destination-spin.md	divergence	-	9d	9d if lifting the pinned-guard-wait limit is tractable, else Phase 10	9d
+2026-10-19-trace-destination-recursion-oom.md	divergence	-	9d	Task 6.10 regression	9d
+2026-10-18-sysfiletree-tree-directory-flaky.md	process	-	9d	flaky test	9d

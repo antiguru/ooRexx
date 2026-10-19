@@ -1,3 +1,5 @@
+**RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** gap.
+
 **OPEN: found by Phase 9d Task 6.6, not yet ruled.** An install error in a called program names the caller's file in `Error N running <file>`.
 
 # An install error in a called program names the caller's file

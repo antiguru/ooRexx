@@ -1,3 +1,5 @@
+**RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** gap.
+
 **OPEN: found by the Phase 9d Task 6.10 review, not yet ruled.** A crate process looping inside a trace delivery ignores SIGTERM.
 
 # SIGTERM is not acted on inside a trace delivery

@@ -1,3 +1,5 @@
+**RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** gap.
+
 **OPEN: found by the Phase 9d Task 6.6 re-review, not yet ruled.** `.context~name` names the wrong context in an install activation.
 
 # `.context~name` during an install

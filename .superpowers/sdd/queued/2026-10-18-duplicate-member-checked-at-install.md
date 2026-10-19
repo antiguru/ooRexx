@@ -1,3 +1,5 @@
+**RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** gap.
+
 **OPEN: found by Phase 9d Task 6.6, not yet ruled.** Duplicate class members (99.902, 99.931, 99.932) are checked at install, not while parsing, so a later error wins.
 
 # Duplicate members are checked at install

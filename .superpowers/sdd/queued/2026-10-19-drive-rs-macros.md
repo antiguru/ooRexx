@@ -1,3 +1,5 @@
+**RULED: later, ruled by Moritz 2026-10-19 ("proposal ok").** after the 9d close.
+
 **OPEN: requested by Moritz 2026-10-19, not yet scheduled.** Replace the IR driver's macros with functions rustfmt can format.
 
 # The IR driver's macros

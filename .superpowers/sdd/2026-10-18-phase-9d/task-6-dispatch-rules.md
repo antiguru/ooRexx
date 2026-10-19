@@ -15,8 +15,7 @@
   rows may change. Known flake: SysFileTree `TEST_TREE_DIRECTORY`.
 
 ## Oracle bugs and Deviations
-* Never copy an oracle bug. Never write a new numbered Deviation: stop that item and report it.
-  The controller takes it to Moritz.
+* Never copy an oracle bug. A new numbered Deviation follows the Semantics section below.
 * Licence rows under an already-ruled Deviation go in `rust/corpus/suite-licences.txt` only when
   your brief or the controller says so.
 * Hash order is unspecified. Never match the oracle's bucket order; compare unordered results as
@@ -50,3 +49,9 @@
 Write `task-6.N-report.md` in this directory: what changed per cluster, witnesses, commands run
 with results, suite delta, perf, concerns. Commit it with `git add -f`. Return only status (DONE,
 DONE_WITH_CONCERNS, BLOCKED or NEEDS_CONTEXT), shas, a one-line test summary and concerns.
+
+## Semantics (Moritz 2026-10-19, plan Ruled 13)
+Derive the rule from the documentation and the language before matching the oracle, and follow
+what you can model. Where the oracle departs from that rule, follow the rule and write a Deviation
+citing Ruled 13. Any other new Deviation (a cost trade, or the crate departing from the rule) still
+stops for Moritz.

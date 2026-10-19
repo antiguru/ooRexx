@@ -1,3 +1,5 @@
+**RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** Task 6.14 owns it.
+
 **OPEN: found by the Phase 9d ANSI spike, not yet ruled.** Under `NUMERIC FUZZ 1`, a comparison of operands wider than DIGITS minus FUZZ raises LOSTDIGITS on the oracle and not here.
 
 # LOSTDIGITS from a comparison under NUMERIC FUZZ

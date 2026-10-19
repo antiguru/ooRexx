@@ -1,3 +1,5 @@
+**RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** gap.
+
 **OPEN: found by Phase 9d Task 6.8, not yet ruled.** Two variable-reference shapes differ from the oracle, both before and after Task 6.8.
 
 # Variable references: two gaps outside Task 6.8's clusters

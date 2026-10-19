@@ -1,3 +1,5 @@
+**RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** Task 6.10 regression.
+
 **OPEN: found by the Phase 9d Task 6.10 round-2 re-review, a regression of Task 6.10 against `d2e55befa`.** A trace destination that recurses to the control-stack limit on every line is OOM-killed instead of ending.
 
 # Recursion to the stack limit inside a trace destination

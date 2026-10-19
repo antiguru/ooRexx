@@ -1,3 +1,5 @@
+**RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** gap.
+
 **OPEN: found by the Phase 9d Task 6.11 re-review, not yet ruled.** Two `SORTWITH` differences that predate Task 6.11.
 
 # `SORTWITH` defined elsewhere, and OrderedCollection's stub

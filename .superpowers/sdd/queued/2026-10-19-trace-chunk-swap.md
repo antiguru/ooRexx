@@ -1,3 +1,5 @@
+**RULED: later, ruled by Moritz 2026-10-19 ("proposal ok").** closes Deviation 50 at no per-clause cost.
+
 **OPEN: queued by Moritz's ruling 2026-10-19 (Deviation 50).** Close Deviation 50 at no per-clause cost.
 
 # Swap to a chunk compiled for the new trace setting

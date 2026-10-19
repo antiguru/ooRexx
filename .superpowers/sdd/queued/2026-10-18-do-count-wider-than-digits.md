@@ -1,3 +1,5 @@
+**RULED: closed:Deviation 47, ruled by Moritz 2026-10-19 ("proposal ok").** Deviation 47 licenses it.
+
 **OPEN: found by the Phase 9d Task 6.3 review, not yet ruled.** A `DO` repetitor or `FOR` count wider than DIGITS raises 26.2 or 26.3 here, while the oracle runs the loop.
 
 # A loop count wider than NUMERIC DIGITS

@@ -40,6 +40,13 @@
     issue"). Task 6.14 writes it.
 12. **The stream model as Rexx** (2026-10-18: "yes, make it a second executable model"). Task
     6.15 writes this crate's stream semantics as an executable Rexx model, in Task 6.14's shape.
+13. **Derive the semantics; the oracle is not the authority** (2026-10-19: "Always try to derive
+    the semantics, and follow what you could model. The oracle doesn't always get it right.").
+    Every instance derives the rule from the documentation and the language before matching the
+    oracle, and follows the rule it could model. Where the oracle departs from that rule, the
+    crate follows the rule and the instance writes a Deviation citing this ruling. The queued
+    items filed after Task 2 are ruled with it ("proposal ok"): their rows end
+    `queued-inventory.tsv`, and the Deviation candidates among them are 9d on this rule.
 
 ## Global Constraints
 

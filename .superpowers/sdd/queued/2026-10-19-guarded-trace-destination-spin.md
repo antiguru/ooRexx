@@ -1,3 +1,5 @@
+**RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** 9d if lifting the pinned-guard-wait limit is tractable, else Phase 10.
+
 **OPEN: found by the Phase 9d Task 6.10 re-review, a regression of Task 6.10 against `d2e55befa`.** A guarded trace destination that spins waiting on another thread hangs.
 
 # A guarded trace destination that spins

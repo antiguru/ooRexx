@@ -1,3 +1,5 @@
+**RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** gap.
+
 **OPEN: found by the Phase 9d Task 6.8 review, not yet ruled.** The `.local~novalue` hook is not implemented.
 
 # The NOVALUE environment hook

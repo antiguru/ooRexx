@@ -1,3 +1,5 @@
+**RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** gap.
+
 **OPEN: found by Phase 9d Task 3, not yet ruled.** `.Array~methods` with no argument lists fewer methods here than on the oracle.
 
 # `Class~methods` with no argument lists fewer methods than the oracle

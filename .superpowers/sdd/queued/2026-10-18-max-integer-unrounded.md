@@ -1,3 +1,5 @@
+**RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** Task 6.14 owns it.
+
 **OPEN: found by Phase 9d Task 6.3, not yet ruled.** `2~max(1111111111)` at DIGITS 9 answers the unrounded integer on the oracle and a rounded number here.
 
 # `MAX` with a whole-number argument wider than DIGITS
