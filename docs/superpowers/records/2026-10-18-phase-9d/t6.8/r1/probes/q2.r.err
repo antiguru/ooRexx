@@ -1,0 +1,8 @@
+     3 *-* call pr2
+     6 *-*   pr2:
+     6 *-*   procedure expose (a.i)
+       >C>     A.I => "A.2"
+       >V>     A.I => "p q"
+       >C>     A.I => "A.2"
+     7 *-*   return
+     4 *-* trace off

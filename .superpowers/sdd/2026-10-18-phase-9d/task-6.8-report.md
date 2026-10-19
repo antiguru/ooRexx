@@ -162,3 +162,79 @@ error construction was added: 98.986 and 98.995 use the existing `Raised` constr
   `assertTraceOutput` ignores the package token on a Method `>I>`/`<I<` line
   (`TRACE.testGroup:185`). The `>I>` difference itself
   stays with `dynamic-package-name`.
+
+## Fix round 1
+
+Review: `task-6.8-review.md`. Code commit `a88871bb3`; the records commit that follows holds
+`t6.8/r1/` and this section. Round 0 is `8b344309d` (its `rust/` is `33298eb3b`'s).
+
+### Important 1: a compound PROCEDURE EXPOSE selector reads in the procedure's frame
+
+`RexxVariableReference::procedureExpose` (`IndirectVariableReference.cpp:199`) exposes the selector,
+then reads it with `list(context)` in the new activation. `expose_names` read it in the caller's
+frame. Now a compound selector is first exposed as a tail and its `>C>` traced at that point,
+then `procedure_selector_value` (`run.rs`) reads it as the new frame sees it. A tail variable has
+a value only if an earlier name in the list exposed it. The compound has a value only if the
+list already exposed its stem or the same resolved tail, which includes the selector itself.
+Otherwise it is unset, with the NOVALUE check and the `>C>`/`>V>` lines. The later tail pass skips
+the line already traced. A simple or stem selector is exposed before it is read, so reading it in
+either frame gives the same value, and it keeps `read_list_selector`. DROP and EXPOSE still read
+in the current frame. Rerunning round 0's probes (`t6.8/probes/`) leaves every output as round 0
+recorded it.
+
+Measured on `t6.8/r1/probes/q1`-`q3` (oracle, round 0, task). `i = 2; a.2 = 'p q'; a.I = 'r'`:
+* `procedure expose (a.i)` gives `LIT LIT VAR LIT` (round 0: `LIT VAR VAR LIT`).
+* `(a.i) i` gives `LIT LIT VAR 2`.
+* `(a.2)` gives `LIT VAR`.
+* `(a.i.i)` and `(a.k)` with `k` unset match.
+* The trace is `>C> A.I => "A.2"`, `>C> A.I => "A.I"`, `>V> A.I => "A.I"`, `>C> A.I => "A.2"`.
+* Under `::OPTIONS NOVALUE SYNTAX` it is 98.986 for `"A.I"` (round 0: no condition).
+
+Each of these is identical to the oracle. `procedure expose i (a.i)` and `a. (a.i)` still differ.
+In source order the earlier `i` or `a.` is exposed before the read, and the oracle runs the
+selector first (review Minor 3, the queued Deviation candidate). The visible-tail branch can only
+be reached through that ordering, so no witness reaches it against the oracle.
+
+### Important 2: a second `>stem.` compares the aliased variable's name
+
+`isAliasable` compares the stem with the name of the variable in the slot, which after `use arg
+>abc.` is the caller's. `bind_use_target` now records, in `ActivationCold::reference_names`, the
+caller variable's name for each slot it aliases to a cell. `target_is_uninitialised` compares
+the stem with that name when the slot has one, and with the target's name otherwise. Measured on
+`t6.8/r1/probes/q4`, against both the oracle and round 0. A second `use arg >abc.` binds after the
+caller's `say a.`, `drop c.` and a dropped tail; round 0 gave 98.995. It still refuses for a caller
+`z. = e.`. A record is lost when an internal call that does not isolate its frame returns, so a
+caller's later `use arg >x.` on that slot compares with its own name again. Not measured.
+
+### Witnesses
+
+* `variable_list_selector_trace` gains `procedure expose (a.i)`, `(a.i) i` and `(a.2)` with their
+  `symbol` lines and trace.
+* `variable_list_selector_novalue` gains 98.986 for `"A.I"` and `procedure expose (a.2)`
+  answering `set in pn`.
+* `use_arg_reference_exposed` gains `twiceStem` after `say c.`, `drop d.` and a dropped tail, each
+  `bound twice` with the caller reading `set`, and the refusal for `f. = g.`.
+
+`sourceline_oracle/` files regenerated. `t6.8/r1/witnesses/summary.tsv` (oracle, round-0 binary
+`33298eb3b`, task): round 0 differs on stdout for all three and on stderr for the trace witness.
+The task is identical to the oracle on all three.
+
+### Checks, on `a88871bb3`
+
+* `cargo fmt --all --check`: exit 0.
+* `memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-exec --lib`: exit 0, 1152 passed.
+* The refusal tables and `licensed_divergences` (same command as above): exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-parse`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-core --test unsafe_sites`: exit 0.
+* `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus`: exit 0,
+  1096 of 1096 matching.
+* The whole suite with the table at `t6.8/r1/suite/table.tsv`: exit 101 as expected, 402 groups,
+  15 red, 4m40s. Against `t6.8/suite/tests.tsv` no row changed (`t6.8/r1/suite/changed-rows.txt`
+  holds only its command).
+* Perf, `t6.8/r1/callgrind.txt`: pin, round 0 (`33298eb3b`) and `a88871bb3` in one run, exit 0.
+  Whole process against the pin, r0 then head: startup +0.0415 / +0.0433, interpret -2.1620 /
+  -2.1689, parse -0.0861 / -0.0860, churn +0.1142 / +0.1146, sayloop +0.0459 / +0.0473. The
+  ledger's own delta against `t6.8/callgrind.txt`'s head figures: startup +0.0019, interpret
+  -0.0069, parse +0.0001, churn +0.0004, sayloop +0.0014. Every one is under +0.05%, and the
+  libc-subtracted figures move by at most 0.0001.

@@ -1,0 +1,9 @@
+A.
+twiceStem 98.995 Unable to reference variable "ABC."; it must be an uninitialized local variable.
+a.1 A.1
+twiceStem 98.995 Unable to reference variable "ABC."; it must be an uninitialized local variable.
+c.1 C.1
+twiceStem 98.995 Unable to reference variable "ABC."; it must be an uninitialized local variable.
+twiceStem answers ok
+twiceStem 98.995 Unable to reference variable "ABC."; it must be an uninitialized local variable.
+twiceRenamed 98.995 Unable to reference variable "ABC."; it must be an uninitialized local variable.
