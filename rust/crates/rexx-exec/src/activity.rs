@@ -320,6 +320,9 @@ pub(crate) struct Activity {
     pub(crate) waiting_traced: Option<bool>,
     /// For a `>V>` or `>=>` line being routed, the variable it names.
     pub(crate) traced_variable: Option<crate::trace::TracedVariable>,
+    /// Whether the line being routed is an error report's, whose failed
+    /// delivery goes to the error stream rather than being raised.
+    pub(crate) routing_report: bool,
     #[cfg(feature = "pinning")]
     pub(crate) pins: crate::pinning::PinStack,
     /// The heap's tag for this activity, `Heap::sharing_tag`.
@@ -485,6 +488,7 @@ impl Activity {
             semaphore_wait: None,
             waiting_traced: None,
             traced_variable: None,
+            routing_report: false,
             trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
             #[cfg(feature = "pinning")]
             pins: crate::pinning::PinStack::default(),
@@ -637,6 +641,7 @@ impl Activity {
             semaphore_wait: _,
             waiting_traced: _,
             traced_variable,
+            routing_report: _,
             #[cfg(feature = "pinning")]
                 pins: _,
             #[cfg(feature = "sharing")]

@@ -190,7 +190,7 @@ impl Interp {
         if self.activity.routing_trace {
             return;
         }
-        if self.trace_failure_queued() {
+        if !self.activity.routing_report && self.trace_failure_queued() {
             self.trace.truncate(start);
             return;
         }
@@ -303,8 +303,14 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn queue_trace_failure(&mut self, failure: Failure, line: &[u8]) {
-        let Some(running) = self.running_activation() else {
-            self.write_out_line(line);
+        let running = self
+            .running_activation()
+            .filter(|_| !self.activity.routing_report);
+        let Some(running) = running else {
+            // An error report's line, or a line no activation traced, is not
+            // raised: it goes to the error stream.
+            self.trace.extend_from_slice(line);
+            self.trace.push(b'\n');
             return;
         };
         let activation = running.id;
@@ -343,7 +349,9 @@ impl Interp {
         let start = self.trace.len();
         self.trace.extend_from_slice(line);
         self.trace.push(b'\n');
+        let reporting = std::mem::replace(&mut self.activity.routing_report, true);
         self.route_trace_line(start);
+        self.activity.routing_report = reporting;
     }
 
     /// The `TraceObject` carrying `line` and where it was traced
