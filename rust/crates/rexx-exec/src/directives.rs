@@ -156,6 +156,27 @@ pub(super) fn class_install_order(
     program: &Program,
     declared: &FxHashMap<Box<[u8]>, usize>,
 ) -> Result<Vec<usize>, usize> {
+    // Where every class names only classes above it, each round takes the
+    // first class left, which is source order.
+    let in_source_order = program
+        .directives
+        .iter()
+        .enumerate()
+        .all(|(index, directive)| match &directive.kind {
+            DirectiveKind::Class(class) => {
+                class_dependencies(class, declared).all(|target| target < index)
+            }
+            _ => true,
+        });
+    if in_source_order {
+        return Ok(program
+            .directives
+            .iter()
+            .enumerate()
+            .filter(|(_, directive)| matches!(directive.kind, DirectiveKind::Class(_)))
+            .map(|(index, _)| index)
+            .collect());
+    }
     // Each class still to install: its directive, the `declared` entry its
     // name answers, and the entries it waits on.
     let mut pending: Vec<(usize, Option<usize>, Vec<usize>)> = program

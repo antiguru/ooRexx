@@ -678,17 +678,21 @@ impl ClassGraph {
     }
 
     /// Oracle's `updateInstanceSubClasses` (`:1071`): rebuild only the
-    /// instance behaviour, in place, run `checkUninit`, then cascade. This is what
+    /// instance behaviour, in place, run `checkUninit` where `uninit` says
+    /// the change touched `UNINIT` (no other change can make it resolve),
+    /// then cascade. This is what
     /// [`define`](Self::define) calls **after** repointing `class` itself
     /// at a fresh handle, so only the cascaded subclasses' behaviours are
     /// rebuilt in place -- the direct recipient's old handle is never
     /// touched again.
-    fn update_instance_sub_classes(&mut self, class: ObjRef) {
+    fn update_instance_sub_classes(&mut self, class: ObjRef, uninit: bool) {
         self.rebuild_behaviour(class, Side::Instance);
-        self.check_uninit(class);
+        if uninit {
+            self.check_uninit(class);
+        }
         let subclasses = self.classes[&class].subclasses.clone();
         for sub in subclasses {
-            self.update_instance_sub_classes(sub);
+            self.update_instance_sub_classes(sub, uninit);
         }
     }
 
@@ -708,7 +712,7 @@ impl ClassGraph {
             def.has_uninit = true;
         }
         self.copy_instance_behaviour(class);
-        self.update_instance_sub_classes(class);
+        self.update_instance_sub_classes(class, name.eq_ignore_ascii_case("UNINIT"));
     }
 
     /// `~define` with the method argument omitted, and `Setup.cpp`'s
@@ -722,7 +726,7 @@ impl ClassGraph {
             .own_instance_methods
             .hide_method(name);
         self.copy_instance_behaviour(class);
-        self.update_instance_sub_classes(class);
+        self.update_instance_sub_classes(class, name.eq_ignore_ascii_case("UNINIT"));
     }
 
     /// `~delete`, and `Setup.cpp`'s `RemoveMethod`: take `name` out of
@@ -740,7 +744,7 @@ impl ClassGraph {
             .remove_method(name);
         self.copy_instance_behaviour(class);
         if removed {
-            self.update_instance_sub_classes(class);
+            self.update_instance_sub_classes(class, name.eq_ignore_ascii_case("UNINIT"));
         } else {
             // The oracle's copy carries the old contents across; this one is
             // built empty, so the class's own behaviour is rebuilt into it
@@ -775,8 +779,11 @@ impl ClassGraph {
                 None => def.own_instance_methods.hide_method(name),
             }
         }
+        let uninit = methods
+            .iter()
+            .any(|(name, _)| name.eq_ignore_ascii_case("UNINIT"));
         self.copy_instance_behaviour(class);
-        self.update_instance_sub_classes(class);
+        self.update_instance_sub_classes(class, uninit);
     }
 
     /// Point `class` at a fresh, empty [`BehaviourHandle`] -- the
