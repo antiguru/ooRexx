@@ -656,7 +656,7 @@ impl Interp {
                 self.novalue_check(novalue, value)?;
                 if self.tracing_intermediates() {
                     let text = self.to_text(value).to_vec();
-                    self.trace_variable(indent, name, &text);
+                    self.trace_variable(indent, name, &text, value);
                 }
                 Ok(value)
             }
@@ -666,7 +666,7 @@ impl Interp {
                 let value = self.read_stem(name);
                 if self.tracing_intermediates() {
                     let text = self.to_text(value).to_vec();
-                    self.trace_variable(indent, name, &text);
+                    self.trace_variable(indent, name, &text, value);
                 }
                 Ok(value)
             }
@@ -687,7 +687,7 @@ impl Interp {
                 self.novalue_check(novalue, value)?;
                 if self.tracing_intermediates() {
                     let text = self.to_text(value).to_vec();
-                    self.trace_variable(indent, name, &text);
+                    self.trace_variable(indent, name, &text, value);
                 }
                 Ok(value)
             }

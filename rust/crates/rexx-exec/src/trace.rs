@@ -30,6 +30,32 @@ pub(crate) use format::{
 };
 use format::{make_displayable, push_operator, push_tagged, push_value};
 
+/// The variable a `>V>` or `>=>` line names while the line is routed, which
+/// its `TraceObject` carries as `VARIABLE` (`createTraceObject`). A compound
+/// is traced with neither its name nor its value (`traceCompoundValue`).
+pub(crate) struct TracedVariable {
+    pub(crate) name: Option<Box<[u8]>>,
+    pub(crate) value: Option<ObjRef>,
+    pub(crate) assignment: bool,
+}
+
+impl TracedVariable {
+    fn of(tag: &[u8], object: ObjRef, assignment: bool) -> Self {
+        if crate::run::shape_of(tag) == crate::run::NameShape::Compound {
+            return Self {
+                name: None,
+                value: None,
+                assignment,
+            };
+        }
+        Self {
+            name: Some(tag.into()),
+            value: Some(object),
+            assignment,
+        }
+    }
+}
+
 impl Interp {
     /// Whether a `*-*` line would print for a clause of this kind -- the
     /// **one** decision behind both formatters below, and behind the
@@ -337,21 +363,30 @@ impl Interp {
     /// `>V>` (`TRACE_PREFIX_VARIABLE`): a simple variable or bare stem's own
     /// read value, tagged with its own name, unquoted
     /// (`traceVariable`/`RexxActivation.hpp:341`-`342`, `quoteTag = false`).
+    /// `object` is the value read.
     #[inline(always)]
-    pub(crate) fn trace_variable(&mut self, indent: usize, tag: &[u8], value: &[u8]) {
+    pub(crate) fn trace_variable(
+        &mut self,
+        indent: usize,
+        tag: &[u8],
+        value: &[u8],
+        object: ObjRef,
+    ) {
         if !self.traced_mode().intermediates {
             return;
         }
-        self.trace_variable_line(indent, tag, value);
+        self.trace_variable_line(indent, tag, value, object);
     }
 
     /// The line itself, out of line: the gate above is what every call site
     /// pays when tracing is off, and it is one load and a branch.
     #[inline(never)]
-    fn trace_variable_line(&mut self, indent: usize, tag: &[u8], value: &[u8]) {
+    fn trace_variable_line(&mut self, indent: usize, tag: &[u8], value: &[u8], object: ObjRef) {
         let start = self.trace.len();
         push_tagged(&mut self.trace, ">V>", indent, false, tag, " => ", value);
+        self.activity.traced_variable = Some(TracedVariable::of(tag, object, false));
         self.route_trace_line(start);
+        self.activity.traced_variable = None;
     }
 
     /// `>E>` (`TRACE_PREFIX_DOTVARIABLE`): `.NIL`/`.TRUE`/`.FALSE`, tagged
@@ -440,13 +475,22 @@ impl Interp {
     /// which for each target shape). Gated on `intermediates`: measured,
     /// `trace r` alone shows `>>>` for an assignment's own value but never
     /// `>=>` (this task's report, `trace_results.rex`'s own transcript).
-    pub(crate) fn trace_assignment(&mut self, indent: usize, tag: &[u8], value: &[u8]) {
+    /// `object` is the value written.
+    pub(crate) fn trace_assignment(
+        &mut self,
+        indent: usize,
+        tag: &[u8],
+        value: &[u8],
+        object: ObjRef,
+    ) {
         if !self.traced_mode().intermediates {
             return;
         }
         let start = self.trace.len();
         push_tagged(&mut self.trace, ">=>", indent, false, tag, " <= ", value);
+        self.activity.traced_variable = Some(TracedVariable::of(tag, object, true));
         self.route_trace_line(start);
+        self.activity.traced_variable = None;
     }
 
     /// `>A>` (`TRACE_PREFIX_ARGUMENT`): one call argument's own evaluated

@@ -362,7 +362,7 @@ impl Interp {
         let indent = self.activity.clause_state.current_value_indent;
         let tag = code.symbols.name(id).as_bytes().to_vec();
         let text = self.string_value_text(value);
-        self.trace_variable(indent, &tag, &text);
+        self.trace_variable(indent, &tag, &text, value);
     }
 
     pub(crate) fn eval_node(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Failure> {

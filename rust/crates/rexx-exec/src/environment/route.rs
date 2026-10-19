@@ -14,6 +14,16 @@
 
 use super::{Body, EnvScope, Failure, Interp, ObjRef, env_seam, hash};
 
+/// Where a `TraceObject` went.
+enum Delivered {
+    /// To the `.TRACEOUTPUT` destination, by `LINEOUT`.
+    Sent,
+    /// Nowhere, under `.TraceObject~option` `P`.
+    KeptBack,
+    /// To standard error, as the line.
+    ToStandardError,
+}
+
 impl Interp {
     /// What `.local` holds for one of the route names, or `None` when it holds
     /// nothing.
@@ -168,18 +178,18 @@ impl Interp {
         self.hand_over_stderr();
     }
 
+    /// `RexxActivation::processTraceInfo`: every line becomes a `TraceObject`,
+    /// which `Activity::traceOutput` sends to `.TRACEOUTPUT`, writes to
+    /// standard error where that is the error stream, or keeps back under
+    /// `.TraceObject~option` `P`. Without the class the line goes to
+    /// standard error as it is.
     fn deliver_trace_line_as(&mut self, start: usize, entry: bool) {
+        let variable = self.activity.traced_variable.take();
         if self.activity.routing_trace {
             return;
         }
         if self.trace_failure_queued() {
             self.trace.truncate(start);
-            return;
-        }
-        let Ok(Some(route)) = self.local_route(b"TRACEOUTPUT") else {
-            return;
-        };
-        if route == ObjRef::NIL || self.route_ends_at(route, self.bootstrap_stderr) {
             return;
         }
         let Some(class) = self.rexx_package_class(b"TRACEOBJECT") else {
@@ -188,7 +198,8 @@ impl Interp {
         // Only the line end the formatter appended: measured, a traced clause
         // ending in `'0a'x` is delivered with it.
         let mut line = self.trace.split_off(start);
-        if line.last() == Some(&b'\n') {
+        let ended = line.last() == Some(&b'\n');
+        if ended {
             line.pop();
         }
         self.activity.routing_trace = true;
@@ -210,7 +221,7 @@ impl Interp {
         let delivered = pinned!(
             self,
             crate::pinning::PinKind::TraceWrapper,
-            self.deliver_trace_line(class, route, &line, entry)
+            self.deliver_trace_line(class, &line, entry, variable)
         );
         self.give_value_buffer(values, mark);
         (
@@ -218,8 +229,15 @@ impl Interp {
             self.activity.region_procedure_permitted,
         ) = permitted;
         self.activity.routing_trace = false;
-        if let Err(failure) = delivered {
-            self.queue_trace_failure(failure, &line);
+        match delivered {
+            Ok(Delivered::Sent | Delivered::KeptBack) => {}
+            Ok(Delivered::ToStandardError) => {
+                self.trace.extend_from_slice(&line);
+                if ended {
+                    self.trace.push(b'\n');
+                }
+            }
+            Err(failure) => self.queue_trace_failure(failure, &line),
         }
     }
 
@@ -301,16 +319,16 @@ impl Interp {
         self.route_trace_line(start);
     }
 
-    /// The send itself: a `TraceObject` carrying `line` and where it was
-    /// traced, then `LINEOUT` to `route` (`RexxActivation::createTraceObject`,
-    /// `execution/RexxActivation.cpp:5160`).
+    /// The `TraceObject` carrying `line` and where it was traced
+    /// (`RexxActivation::createTraceObject`,
+    /// `execution/RexxActivation.cpp:5160`), then its delivery.
     fn deliver_trace_line(
         &mut self,
         class: ObjRef,
-        route: ObjRef,
         line: &[u8],
         entry: bool,
-    ) -> Result<(), Failure> {
+        variable: Option<crate::trace::TracedVariable>,
+    ) -> Result<Delivered, Failure> {
         let waiting = self.activity.waiting_traced.take();
         let thread = self.activity_number();
         let invocation = self.invocation_of(0).unwrap_or(0);
@@ -392,6 +410,34 @@ impl Interp {
                 self.trace_object_put(object, b"ISWAITING", crate::eval::logical(waiting))?;
             }
         }
+        if let Some(variable) = variable {
+            self.trace_object_variable(object, variable)?;
+        }
+        let caller_ref = self.caller();
+        let notify = self
+            .send_message(class, b"NOTIFY", None, &[], caller_ref)?
+            .unwrap_or(ObjRef::NIL);
+        if notify != ObjRef::NIL {
+            let caller_ref = self.caller();
+            self.send_message(notify, b"APPEND", None, &[Some(object)], caller_ref)?;
+        }
+        // `Activity::traceOutput`: the option the object was made under.
+        let index = self.text(b"OPTION");
+        self.roots.activity_mut().push_temp(index);
+        let caller_ref = self.caller();
+        let option = self
+            .send_message(object, b"[]", None, &[Some(index)], caller_ref)?
+            .unwrap_or(ObjRef::NIL);
+        if option != ObjRef::NIL && self.to_text(option).first() == Some(&b'P') {
+            return Ok(Delivered::KeptBack);
+        }
+        let route = match self.local_route(b"TRACEOUTPUT")? {
+            Some(route) if route != ObjRef::NIL => route,
+            _ => return Ok(Delivered::ToStandardError),
+        };
+        if self.route_ends_at(route, self.bootstrap_stderr) {
+            return Ok(Delivered::ToStandardError);
+        }
         let caller_ref = self.caller();
         self.send_message(
             route,
@@ -400,7 +446,33 @@ impl Interp {
             &[Some(object)],
             caller_ref,
         )?;
-        Ok(())
+        Ok(Delivered::Sent)
+    }
+
+    /// The `VARIABLE` entry of a `>V>` or `>=>` line's `TraceObject`: a
+    /// `StringTable` of `NAME`, `VALUE` and `ASSIGNMENT`.
+    fn trace_object_variable(
+        &mut self,
+        object: ObjRef,
+        variable: crate::trace::TracedVariable,
+    ) -> Result<(), Failure> {
+        let table = crate::dispatch::hash::new_string_table(self)?;
+        self.roots.activity_mut().push_temp(table);
+        self.trace_object_put(object, b"VARIABLE", table)?;
+        let name = match &variable.name {
+            Some(name) => self.text(name),
+            None => ObjRef::NIL,
+        };
+        self.roots.activity_mut().push_temp(name);
+        crate::dispatch::hash::directory_put(self, table, b"NAME", name)?;
+        let value = variable.value.unwrap_or(ObjRef::NIL);
+        crate::dispatch::hash::directory_put(self, table, b"VALUE", value)?;
+        crate::dispatch::hash::directory_put(
+            self,
+            table,
+            b"ASSIGNMENT",
+            crate::eval::logical(variable.assignment),
+        )
     }
 
     /// `PUT` of `value` under `name` on the `TraceObject` being built. A

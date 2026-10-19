@@ -2679,7 +2679,7 @@ impl Interp {
         // either and drops neither.
         if let Some(rendered) = self.result_text(previous) {
             let name = code.symbols.name(control).as_bytes();
-            self.trace_variable(loop_indent, name, &rendered);
+            self.trace_variable(loop_indent, name, &rendered, previous);
             self.trace_result(loop_indent, &rendered);
         }
         Ok(previous)
@@ -2947,7 +2947,7 @@ impl Interp {
                 if self.tracing_intermediates() {
                     let name = code.symbols.name(control).as_bytes().to_vec();
                     let rendered = self.string_value_text(value);
-                    self.trace_assignment(indent, &name, &rendered);
+                    self.trace_assignment(indent, &name, &rendered, value);
                 }
                 Ok(())
             }

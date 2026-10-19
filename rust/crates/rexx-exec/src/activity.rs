@@ -318,6 +318,8 @@ pub(crate) struct Activity {
     /// For a `>K>` line of a `GUARD`'s `WHEN` being routed, whether its value
     /// starts with `0`: the `TraceObject`'s `ISWAITING`.
     pub(crate) waiting_traced: Option<bool>,
+    /// For a `>V>` or `>=>` line being routed, the variable it names.
+    pub(crate) traced_variable: Option<crate::trace::TracedVariable>,
     #[cfg(feature = "pinning")]
     pub(crate) pins: crate::pinning::PinStack,
     /// The heap's tag for this activity, `Heap::sharing_tag`.
@@ -482,6 +484,7 @@ impl Activity {
             woken_by_halt: false,
             semaphore_wait: None,
             waiting_traced: None,
+            traced_variable: None,
             trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
             #[cfg(feature = "pinning")]
             pins: crate::pinning::PinStack::default(),
@@ -633,6 +636,7 @@ impl Activity {
             woken_by_halt: _,
             semaphore_wait: _,
             waiting_traced: _,
+            traced_variable,
             #[cfg(feature = "pinning")]
                 pins: _,
             #[cfg(feature = "sharing")]
@@ -655,6 +659,7 @@ impl Activity {
         out.extend(*failure_frame);
         out.extend(failure_frames.iter().copied());
         out.extend(failed_sends.iter().copied());
+        out.extend(traced_variable.as_ref().and_then(|traced| traced.value));
         match spawner {
             Some(Spawner::Frame {
                 frame: Some((frame, executable)),

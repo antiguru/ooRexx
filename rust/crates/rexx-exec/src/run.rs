@@ -1677,7 +1677,7 @@ impl Interp {
         if self.tracing_intermediates() {
             let indent = self.activity.clause_state.current_value_indent;
             let text = self.string_value_text(value);
-            self.trace_variable(indent, &spelling, &text);
+            self.trace_variable(indent, &spelling, &text, value);
         }
         Ok(value)
     }
@@ -1992,7 +1992,7 @@ impl Interp {
                 }
                 self.assign_by_name(&name, value);
                 if let Some(rendered) = &rendered {
-                    self.trace_assignment(indent, &name, rendered);
+                    self.trace_assignment(indent, &name, rendered, value);
                 }
                 Ok(())
             }
@@ -2728,7 +2728,7 @@ impl Interp {
         // The name is reached only where a line will print it, which is what
         // the general path below pays on every call.
         if let Some(rendered) = rendered {
-            self.trace_assignment(indent, code.symbols.name(id).as_bytes(), rendered);
+            self.trace_assignment(indent, code.symbols.name(id).as_bytes(), rendered, value);
         }
     }
 
@@ -2753,7 +2753,7 @@ impl Interp {
                 let frame = self.activation().frame;
                 self.set_variable(frame, slot, value);
                 if let Some(rendered) = rendered {
-                    self.trace_assignment(indent, name, rendered);
+                    self.trace_assignment(indent, name, rendered, value);
                 }
             }
             // `stem. = expr`: replace-and-rebind (D15a), through the
@@ -2774,7 +2774,7 @@ impl Interp {
                 let at = code.compound(*id).and_then(|entry| entry.stem_at);
                 self.stem_assign_at(name, at, value);
                 if let Some(rendered) = rendered {
-                    self.trace_assignment(indent, name, rendered);
+                    self.trace_assignment(indent, name, rendered, value);
                 }
             }
             // `a.b = expr`: resolve the tail key the same way reading
@@ -2821,7 +2821,7 @@ impl Interp {
                     self.trace_compound_name(indent, tag, &resolved);
                 }
                 if let Some(rendered) = rendered {
-                    self.trace_assignment(indent, tag, rendered);
+                    self.trace_assignment(indent, tag, rendered, value);
                 }
                 self.give_key_buffer(key);
             }
@@ -2871,8 +2871,10 @@ impl Interp {
                     crate::pinning::PinKind::TreeSend,
                     self.send_message(receiver, &setter, scope, &values, caller)
                 )?;
-                if let Some(shown) = answer.and_then(|answer| self.intermediate_text(answer)) {
-                    self.trace_assignment(indent, &setter, &shown);
+                if let Some(answer) = answer
+                    && let Some(shown) = self.intermediate_text(answer)
+                {
+                    self.trace_assignment(indent, &setter, &shown, answer);
                 }
             }
             other => return Err(Loud::expression(other).into()),
