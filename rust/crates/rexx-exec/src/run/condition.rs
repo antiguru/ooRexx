@@ -468,9 +468,8 @@ impl Interp {
                 name: raised.condition.as_bytes().into(),
                 // Only a `SYNTAX` condition has a `CODE` item at all
                 // (`Activity::createExceptionObject` is the one place it is put
-                // in), so the name and not `reportable()` is the test: measured,
-                // a trapped `HALT` reports `E` as the null string, and `HALT` is
-                // the one non-`SYNTAX` condition this crate numbers.
+                // in), so the name and not the number is the test: measured,
+                // a trapped `HALT` reports `E` as the null string.
                 code_sub: (raised.condition == "SYNTAX").then_some(raised.sub),
                 call: false,
                 description: raised.description.clone(),
@@ -943,11 +942,7 @@ impl Interp {
         // RexxActivation.cpp:1741`) leaves every internal call, and the first
         // activation that is not one raises it as `RETURN` does, from there.
         let exits = !returns;
-        let top = if exits {
-            self.first_non_internal_depth()
-        } else {
-            0
-        };
+        let sender = self.raise_sender(returns);
         let finish = |result| match exits {
             true => Flow::Exit(result),
             false => Flow::Return(result),
@@ -956,7 +951,7 @@ impl Interp {
         // This routine returns `result`, and the condition is offered to the
         // caller -- the input reader's dispatcher, where the caller is the one
         // that sent the reader's `LINEIN`.
-        let caller = self.frame_at(top + 1).map(|activation| activation.id);
+        let (caller, replied) = (sender.activation, sender.replied);
         if self.input_dispatcher_takes(caller) {
             return Ok(finish(result));
         }
@@ -968,7 +963,8 @@ impl Interp {
             b"ERROR" | b"FAILURE" => rc_text,
             _ => None,
         };
-        match self.trap_at_depth(top + 1, &name) {
+        let trap = caller.and_then(|_| self.trap_at_depth(sender.depth, &name));
+        match trap {
             // A `CALL ON` trap resumes, so the condition waits for the
             // caller's current clause to finish -- `deliver_pending_traps`
             // has the two transcripts that pin the wait.
@@ -1008,10 +1004,7 @@ impl Interp {
                     // here -- so it is read straight off `Interp`, where the
                     // `Interpret` arm maintains it. A tail-less raise leaves
                     // the fragments of every level it unwinds.
-                    fragment_depth: match exits {
-                        true => self.activity.fragment_depth - self.fragments_within(top),
-                        false => self.activity.fragment_depth,
-                    },
+                    fragment_depth: self.sender_fragment_depth(&sender),
                 });
                 Ok(finish(result))
             }
@@ -1034,11 +1027,7 @@ impl Interp {
                 // array)` gives a directory carrying `ADDITIONAL`, and this
                 // arm built the condition without it.
                 raised.additional = additional;
-                raised.delivery.search = if top == 0 {
-                    Search::Caller
-                } else {
-                    Search::AboveTop
-                };
+                raised.delivery.search = sender.search();
                 Err(raised.into())
             }
             // Nothing traps it. `HALT` and `NOMETHOD` report; everything else
@@ -1063,6 +1052,8 @@ impl Interp {
                 raised.delivery.search = if exits { Search::Top } else { Search::Here };
                 Err(raised.into())
             }
+            // `returnFrom`'s check (`RexxActivation::raise`).
+            None if replied && result.is_some() => Err(Raised::return_after_reply().into()),
             None => Ok(finish(result)),
         }
     }
@@ -1103,8 +1094,11 @@ impl Interp {
         {
             self.condition_put(object, b"RESULT", result)?;
         }
-        if !active.raised.reportable() {
-            return self.propagate_unreportable(&active.raised);
+        // By name: a trapped NOMETHOD carries its 97.1 for the untrapped
+        // report, and is still re-raised as a condition.
+        let returns = raise.result.as_ref().is_some_and(|result| !result.exit);
+        if active.raised.condition != "SYNTAX" {
+            return self.propagate_unreportable(&active.raised, returns);
         }
         let mut raised = active.raised.clone();
         raised.delivery.search = Search::Nobody;
@@ -1121,21 +1115,17 @@ impl Interp {
         self.activity.failure_sites = sites;
         // `RexxActivation::raise` pops the level and `Activity::
         // reraiseException`s the same object (`execution/RexxActivation.cpp:
-        // 1840`). Measured: from an internal call it is trapped neither by
-        // that call's parent nor by the first activation that is not one,
-        // but by the caller of that activation.
-        let top = self.first_non_internal_depth();
-        if self.frame_at(top + 1).is_some() {
-            raised.delivery.search = if top == 0 {
-                Search::Caller
-            } else {
-                Search::AboveTop
-            };
+        // 1840`). Measured: without a `RETURN` tail, from an internal call it
+        // is trapped neither by that call's parent nor by the first
+        // activation that is not one, but by the caller of that activation.
+        let sender = self.raise_sender(returns);
+        if self.frame_at(sender.depth).is_some() {
+            raised.delivery.search = sender.search();
             raised.delivery.positionless = false;
             raised.position = 0;
             self.reraise_failure_levels();
             self.activity.reraised_object = self.activation().condition().and_then(|c| c.object);
-            self.activity.reraise_leaving = top + 1;
+            self.activity.reraise_leaving = sender.depth;
         }
         Err(raised.into())
     }
@@ -1149,25 +1139,24 @@ impl Interp {
     /// object's `RESULT`, which after a `REPLY` is 98.936
     /// (`RexxActivation::raise`, `execution/RexxActivation.cpp:1801`-`:1805`
     /// and `:1866`-`:1895`).
-    fn propagate_unreportable(&mut self, raised: &Raised) -> Result<Flow, Failure> {
+    fn propagate_unreportable(&mut self, raised: &Raised, returns: bool) -> Result<Flow, Failure> {
         let object = self.activation().condition().and_then(|c| c.object);
         let result = object.and_then(|object| self.condition_entry(object, b"RESULT"));
         if let Some(result) = result {
             self.roots.activity_mut().push_temp(result);
         }
-        let top = self.first_non_internal_depth();
-        let replied = self
-            .frame_at(top)
-            .is_some_and(|activation| activation.reply != ReplyState::None);
-        let caller = self
-            .frame_at(top + 1)
-            .map(|activation| activation.id)
-            .filter(|_| !replied);
+        let sender = self.raise_sender(returns);
+        let finish = |result| match returns {
+            true => Flow::Return(result),
+            false => Flow::Exit(result),
+        };
+        let (caller, replied) = (sender.activation, sender.replied);
         if caller.is_some() && self.input_dispatcher_takes(caller) {
-            return Ok(Flow::Exit(result));
+            return Ok(finish(result));
         }
         let name = raised.condition.as_bytes();
-        let trap = caller.and_then(|caller| Some((caller, self.trap_at_depth(top + 1, name)?)));
+        let trap =
+            caller.and_then(|caller| Some((caller, self.trap_at_depth(sender.depth, name)?)));
         match trap {
             Some((caller, trap)) if trap.call => {
                 if let Some(object) = object {
@@ -1181,28 +1170,24 @@ impl Interp {
                     activation: caller,
                     queued_during_delivery: false,
                     request: false,
-                    fragment_depth: self.activity.fragment_depth - self.fragments_within(top),
+                    fragment_depth: self.sender_fragment_depth(&sender),
                 });
-                Ok(Flow::Exit(result))
+                Ok(finish(result))
             }
             Some(_) => {
                 let mut raised = raised.clone();
-                raised.delivery.search = if top == 0 {
-                    Search::Caller
-                } else {
-                    Search::AboveTop
-                };
+                raised.delivery.search = sender.search();
                 self.activity.reraised_object = object;
                 Err(raised.into())
             }
             None if name == b"HALT" => {
                 let mut raised = Raised::halt();
-                raised.delivery.search = Search::Top;
+                raised.delivery.search = if returns { Search::Here } else { Search::Top };
                 Err(raised.into())
             }
             None if name == b"NOMETHOD" => {
                 let receiver =
-                    object.and_then(|object| self.condition_entry(object, b"ADDITIONAL"));
+                    object.and_then(|object| self.condition_entry_held(object, b"ADDITIONAL"));
                 let mut raised = match (receiver, raised.description.clone()) {
                     (Some(receiver), Some(description)) => {
                         let receiver = self.string_value_text(receiver);
@@ -1210,11 +1195,58 @@ impl Interp {
                     }
                     _ => Raised::syntax(97, 5, Vec::new()),
                 };
-                raised.delivery.search = Search::Top;
+                raised.delivery.search = if returns { Search::Here } else { Search::Top };
                 Err(raised.into())
             }
             None if replied && result.is_some() => Err(Raised::return_after_reply().into()),
-            None => Ok(Flow::Exit(result)),
+            None => Ok(finish(result)),
+        }
+    }
+
+    /// The activation a `RAISE` of a condition other than SYNTAX, or any
+    /// `RAISE PROPAGATE`, offers its condition to (`RexxActivation::raise`
+    /// and `raiseExit`). With a `RETURN` tail that is the raising level's
+    /// sender: an internal call's caller, or, from an `INTERPRET` fragment,
+    /// the activation running it -- measured, `interpret "raise user u
+    /// return 1"` in a routine runs that routine's own `CALL ON USER U`
+    /// handler. Otherwise it is the caller of the first activation that is
+    /// not an internal call. After a `REPLY` the sender has its answer and
+    /// nothing is offered it.
+    fn raise_sender(&self, returns: bool) -> Sender {
+        let in_fragment = returns && self.fragments_within(0) > 0;
+        let top = if returns {
+            0
+        } else {
+            self.first_non_internal_depth()
+        };
+        let depth = if in_fragment { 0 } else { top + 1 };
+        let replied = !in_fragment
+            && self
+                .frame_at(top)
+                .is_some_and(|activation| activation.reply != ReplyState::None);
+        let activation = self
+            .frame_at(depth)
+            .map(|activation| activation.id)
+            .filter(|_| !replied);
+        Sender {
+            top,
+            depth,
+            in_fragment,
+            returns,
+            replied,
+            activation,
+        }
+    }
+
+    /// Which `INTERPRET` fragment's queue a `CALL ON` condition offered to
+    /// `sender` joins: the levels the raise leaves take their fragments
+    /// with them.
+    fn sender_fragment_depth(&self, sender: &Sender) -> usize {
+        let depth = self.activity.fragment_depth;
+        match (sender.in_fragment, sender.returns) {
+            (true, _) => depth - self.fragments_within(0),
+            (false, true) => depth,
+            (false, false) => depth - self.fragments_within(sender.top),
         }
     }
 
@@ -1275,6 +1307,34 @@ impl Interp {
         match activation_body.labels.get(name) {
             Some(target) => Ok(*target),
             None => Err(Raised::label_not_found(name).into()),
+        }
+    }
+}
+
+/// Where [`Interp::raise_sender`] offers a raised condition.
+struct Sender {
+    /// The level the raise leaves from: the running one, or the first that
+    /// is not an internal call.
+    top: usize,
+    /// The level whose traps are asked.
+    depth: usize,
+    /// Whether that level is the running one, which an `INTERPRET` fragment
+    /// with a `RETURN` tail offers it to.
+    in_fragment: bool,
+    returns: bool,
+    /// Whether `top` has replied, so nothing is offered the condition.
+    replied: bool,
+    /// The identity of the level at `depth`, unless `replied`.
+    activation: Option<crate::activation::ActivationId>,
+}
+
+impl Sender {
+    /// How a `SIGNAL ON` trap at the sender is reached.
+    fn search(&self) -> Search {
+        match (self.in_fragment, self.top) {
+            (true, _) => Search::Here,
+            (false, 0) => Search::Caller,
+            (false, _) => Search::AboveTop,
         }
     }
 }

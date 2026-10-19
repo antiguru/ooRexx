@@ -543,8 +543,15 @@ impl Interp {
             let errortext = self.text_built(errortext);
             self.roots.activity_mut().push_temp(errortext);
             entries.push((key::ERRORTEXT, errortext));
-            let message = raised.message(raised.number, raised.sub);
-            let message = self.text_built(message);
+            // A code with no sub has no secondary message: measured, `raise
+            // syntax 93` carries `MESSAGE` `.nil`.
+            let message = match raised.sub {
+                0 => ObjRef::NIL,
+                sub => {
+                    let message = raised.message(raised.number, sub);
+                    self.text_built(message)
+                }
+            };
             self.roots.activity_mut().push_temp(message);
             entries.push((key::MESSAGE, message));
         }
@@ -707,6 +714,14 @@ impl Interp {
             .ok()
             .flatten()
             .filter(|answer| *answer != ObjRef::NIL)
+    }
+
+    /// `object`'s entry for `name`, `.nil` included, or `None` where it has
+    /// none.
+    pub(crate) fn condition_entry_held(&mut self, object: ObjRef, name: &[u8]) -> Option<ObjRef> {
+        let index = self.text(name);
+        self.roots.activity_mut().push_temp(index);
+        crate::dispatch::hash::store_item(self, object, index)
     }
 
     /// `ADDITIONAL`: an Array of the raise's substitutions, empty for a

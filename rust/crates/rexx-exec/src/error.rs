@@ -160,11 +160,6 @@ impl Raised {
         }
     }
 
-    /// Whether this condition would *report* if nothing traps it.
-    pub(crate) fn reportable(&self) -> bool {
-        self.number != 0
-    }
-
     /// 4.1, `HALT`'s own untrapped default action: "Program interrupted with
     /// HALT condition", measured at rc 252 for `raise halt` with no trap
     /// enabled, and measured *again* with `signal on halt` enabled in the
