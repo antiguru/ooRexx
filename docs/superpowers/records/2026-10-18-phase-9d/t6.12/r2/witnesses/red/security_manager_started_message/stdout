@@ -1,0 +1,5 @@
+superclass via start: Object
+setMethod via start: 0 x ran
+message start: Object
+protected Rexx method: foo ran
+inside a managed routine: Object events: 

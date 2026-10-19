@@ -1,0 +1,13 @@
+Directory 0
+Table 0
+IdentityTable 0
+Relation 0
+Set 0
+StringTable 0
+Bag 1
+Queue 0 Array 1
+result 1 1 1 1
+events: METHOD PUT Bag | METHOD PUT MYBAG | METHOD APPEND Array
+table put 1
+bag private 1 table private 0
+bag put 97.2

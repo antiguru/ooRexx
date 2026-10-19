@@ -1,0 +1,13 @@
+b2 items before 1
+b0 put events: METHOD PUT Bag
+b1 put events: METHOD PUT Bag
+b2 items events: METHOD ITEMS Bag
+subclass put events: METHOD PUT MYBAG
+new bag put events: METHOD PUT Bag | METHOD ITEMS Bag
+array append events: METHOD APPEND Array
+table put events: 
+set remove private 0 1
+p0 remove 97.2
+p1 remove 97.2
+new bag remove 97.2
+table remove ran

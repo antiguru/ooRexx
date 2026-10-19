@@ -1,0 +1,1 @@
+# diff <(sort t6.12/r1/suite/tests.tsv) <(sort t6.12/r2/suite/tests.tsv)

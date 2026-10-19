@@ -307,3 +307,64 @@ The first shape (`174c357be`) cost 3 Ir per send, all of it counted in `begin_in
 2. A manager-raised condition carries no `RESULT`, as the oracle's does not. An ordinary command's
    condition carries one (`result_is_rc`). rexxref names `RC` for both and does not mention
    `RESULT`, so I followed the oracle.
+
+## Fix round 2
+
+Re-review: `task-6.12-rereview.md`. Code and witness commit `45bd0c3ba`; the records commit that
+follows holds `t6.12/r2/` and this section.
+
+### Important 1: instances made before the setter
+
+`unshared_identity` installed the copy with `define`, which gives the class a new behaviour and
+leaves every existing instance on the old one, still dispatching the shared identity. It now calls
+`ClassGraph::repoint_instance_method`, which repoints the class's own entry and the same entry
+(that name, that scope, that identity) in every behaviour already built, retired ones included,
+and bumps each changed behaviour's version. Instances made before the setter, those already sent a
+message, and a subclass's instances now dispatch the marked copy. Other classes' entries for the
+shared identity have other scopes and stay untouched.
+
+Witness `lang/security_manager_existing_instances.rex`, in `phase-9.txt` with its
+`sourceline_oracle/` file. Bags are made before `setProtected` on `PUT` and `ITEMS`, two of them
+already sent a message, alongside a `MyBag`, an Array (with `APPEND` set) and a Table. A managed
+routine's `put`, `items` and `append` to each send `METHOD` for every Bag, the `MyBag` and the
+Array, and none for the Table. Bags made before `setPrivate` on `REMOVE` give 97.2, and a Table's
+`remove` runs. On round 1's binary the three Bag lines send no event and the two Bags made before
+remove without error (`t6.12/r2/witnesses/summary.tsv`, red is `d995b8f17`).
+
+### Important 2: a per-call decision
+
+`lift_protection` and `restore_protection` are gone, so no method's flags change during a run.
+`invoke_armed_executable` sets `Interp::unasked_run` around its `begin_invoke`. The seam reads the
+mark after `security_armed` with `std::mem::take`, so it consumes the mark on that call's own pass
+and asks no manager for it. `method_is_protected` is still called only inside the seam
+(`tests/dispatch_seam.rs` passes). The unarmed send path tests `security_armed` alone, as before.
+`lang/security_manager_directory_entry.rex` gains a protected method that, run with `Object~run`,
+sends itself: identical to the oracle.
+
+### Minor 3: entry 55
+
+The heading names the measured shape, an untrapped `loadPackage` with `NAME` replaced by
+`.object~new`. The entry adds that a trapped run after a `.nil` replacement can answer 3.1 naming
+`an Object`.
+
+### Checks, on `45bd0c3ba`
+
+* `cargo fmt --all --check`: exit 0.
+* `memcap 8G cargo clippy -j 4 -p rexx-exec -p rexx-classes --all-targets -- -D warnings`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-exec --lib`: exit 0, 1155 passed.
+* The table and seam set of round 1 (`dispatch_seam`, `environment_seam`, `security_replacements`,
+  the refusal tables, `licensed_divergences`, `package_requires`): exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-parse -p rexx-classes`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-core --test unsafe_sites`: exit 0.
+* `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus`: exit 0,
+  1133 of 1133 matching.
+* The whole suite with the table at `t6.12/r2/suite/table.tsv`: exit 101 as expected, 402 groups,
+  4 red, 288 s. Against `t6.12/r1/suite/tests.tsv` no row changed (`t6.12/r2/suite/changed-rows.txt`
+  holds only its command).
+* Every witness of this task: identical to the oracle (`t6.12/r2/witnesses/summary.tsv`).
+
+### Perf
+
+`t6.12/r2/callgrind.txt`: pin, round 1 (`d995b8f17`) and `45bd0c3ba` in one run, exit 0. With
+libc and ld-linux subtracted, head minus parent is 0.0000% on all eight programs, sendloop and
+dispatch included (at most 1 Ir per program). Raw, it is at most +0.0002% (interpret).

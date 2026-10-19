@@ -1,0 +1,9 @@
+nil 3.1 Failure during initialization: File "The NIL object" is unreadable.
+nil events: 2
+missing 3.1 Failure during initialization: File "nosuchfile.cls" is unreadable.
+missing events: 2
+removed 43.901 Could not find file "smreq.cls" for ::REQUIRES.
+removed events: 1
+smreq loaded
+unchanged smreq.cls
+unchanged events: 2
