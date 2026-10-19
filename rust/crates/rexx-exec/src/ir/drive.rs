@@ -3106,6 +3106,28 @@ impl Interp {
         Ok(())
     }
 
+    /// The continuation of a replied activation whose body ended before its
+    /// next clause: an activity with no level to resume, which the oracle
+    /// still spawns and which announces its `>I>` and `<I<` there
+    /// (`RexxActivation::run`'s `REPLIED` arm).
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn file_empty_continuation(&mut self) -> Result<(), Failure> {
+        let spawner = self.spawner_of_running()?;
+        let mut idle = self.new_activity();
+        idle.activity.spawner = Some(spawner);
+        let continuation = &mut idle.activity;
+        continuation.clause_state = self.save_clause_state().into_state();
+        continuation.activation_indent = self.activity.activation_indent;
+        continuation.indent_offset = self.activity.indent_offset;
+        continuation.clause_line_override = self.activity.clause_line_override;
+        if let Some(replied) = self.activation_mut().replied.as_mut() {
+            replied.continuation = Some(idle);
+        }
+        self.activity.splits_owed -= 1;
+        Ok(())
+    }
+
     /// Parks the level [`Interp::split_level`] moved, its registers now in
     /// this activity's arena, for the continuation's first slice to resume.
     #[cold]

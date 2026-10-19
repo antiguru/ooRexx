@@ -1923,8 +1923,13 @@ impl Interp {
                         self.activity.first = first;
                         return Ok(Stopped::Parked);
                     }
+                    let empty = self.activity.replied_level.is_none();
                     self.open_replied_level();
                     self.trace_invocation_entry();
+                    // A rest with no clause ends where it starts.
+                    if empty {
+                        break 'resumed self.finish_send(Ok(crate::run::Ended::Exited(None)));
+                    }
                 } else if !self.activity.guard_waits.is_empty() {
                     self.take_granted_guard();
                 }

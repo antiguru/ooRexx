@@ -3475,10 +3475,10 @@ impl Interp {
         } = *replied;
         match continuation {
             Some(continuation) => self.spawn_continuation(callee, callee_context, continuation),
-            // The body ended before its next clause, so nothing is left to
-            // move. The oracle still spawns the empty rest, which numbers the
-            // replier (`Activity.cpp:1206`) and takes the oldest pooled
-            // thread back to the pool's tail.
+            // No continuation filed, which `Interp::finish_call` never
+            // leaves: it files an empty one for a body that ended before its
+            // next clause. The rest is dropped with the numbering a spawn
+            // would have made (`Activity.cpp:1206`).
             None => {
                 self.activity_number();
                 self.rotate_pooled();
