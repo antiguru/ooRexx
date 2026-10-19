@@ -2324,16 +2324,25 @@ impl Interp {
     }
 
     /// `MethodClass::isProtected` (`classes/MethodClass.hpp:116`), asked by
-    /// the security-manager seam.
+    /// the security-manager seam and by nothing else.
     fn method_is_protected(&self, method: MethodId) -> bool {
         self.access_scope_of(method)
             .is_some_and(|scope| scope.protected)
     }
 
-    /// Sets `method`'s protection, for a method that has a row.
-    fn set_method_protected(&mut self, method: MethodId, protected: bool) {
+    /// Clears `method`'s protection for a run that is not a send
+    /// (`MethodClass::run`), so the seam does not ask the manager about it,
+    /// and answers whether there was one to clear.
+    fn lift_protection(&mut self, method: MethodId) -> bool {
+        self.special_methods
+            .get_mut(method)
+            .is_some_and(|scope| std::mem::replace(&mut scope.protected, false))
+    }
+
+    /// Puts back a protection [`Interp::lift_protection`] cleared.
+    fn restore_protection(&mut self, method: MethodId) {
         if let Some(scope) = self.special_methods.get_mut(method) {
-            scope.protected = protected;
+            scope.protected = true;
         }
     }
 
