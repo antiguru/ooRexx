@@ -13,3 +13,12 @@ yield while another delivery waits for the same guard reaches the refusal "a pin
 guard that only an activity pinned below it can end" (`rexx-exec/src/lib.rs`). That suppression
 fixed a two-thread trace deadlock and lost REPLY trace lines the parent had. Closing this needs
 the pinned-guard-wait limitation lifted.
+
+The round-3 re-review (`task-6.10-rereview-r3.md`, Minor 1) found a second shape with the same
+root. Two started activities trace two lines each into one destination whose default, guarded
+LINEOUT calls `syssleep 0.01`. The oracle prints `lines 10 results A B` on 8 of 8 runs. Since Task
+6.10 round 1 the crate ends with rc 120, `rexx-exec: a pinned wait for a guard that only an
+activity pinned below it can end is not implemented`, in every mode. The parent printed `lines 5`,
+rc 0: it failed the second activity's deliveries too, but swallowed the failure. This is an
+ordinary shape (a guarded logging destination, two threads, a blocking call in LINEOUT), so the
+pinned-guard-wait limitation is worth weighing for 9d.
