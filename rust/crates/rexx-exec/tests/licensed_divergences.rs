@@ -197,6 +197,28 @@ const LICENSED_DIVERGENCES: &[LicensedDivergence] = &[
         crate_stdout: "both: <1 write 18, read 1, +3 read 4, =5 write 5, -2 write 3\n\
                        both nobuffer: <1 write 18, read 1, +3 read 4, =5 write 5, -2 write 3\n",
     },
+    LicensedDivergence {
+        name: "undelivered-trace-clause-runs-first",
+        // The routine's chunk is compiled untraced, so after `trace r` its
+        // next clause is echoed from a stale chunk. That echo cannot be
+        // delivered: the oracle raises 97.1 before the clause runs, and this
+        // crate after it, so the counter is 0 there and 1 here.
+        program: ".local~c = 0\n\
+              signal on syntax\n\
+              call r\n\
+              exit\n\
+              syntax:\n\
+              x = .traceOutput~destination\n\
+              say 'syntax' condition('o')~code 'c='.local~c\n\
+              ::routine r\n\
+              .traceOutput~destination('')\n\
+              trace r\n\
+              .local~c = .local~c + 1\n",
+        exit_code: 0,
+        stderr: "",
+        oracle_stdout: "syntax 97.1 c=0\n",
+        crate_stdout: "syntax 97.1 c=1\n",
+    },
 ];
 
 /// Where the prose half lives. `builtin_status.rs`'s own `exclusions_path`,

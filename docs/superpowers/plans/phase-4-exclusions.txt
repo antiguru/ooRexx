@@ -2466,6 +2466,7 @@ DEVIATIONS -- permanent, chosen
      The divergence is reachable only with a destination that refuses
      lines. The design that closes it at no per-clause cost is queued
      (.superpowers/sdd/queued/2026-10-19-trace-chunk-swap.md).
+     LICENSED DIVERGENCE WITNESS: undelivered-trace-clause-runs-first
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
