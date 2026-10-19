@@ -1,0 +1,12 @@
+nil FL Method return 1
+t HIDE Method   self~setMethod(arg(1))
+t PUT Method   use arg n, m, sc|  self~setMethod(n, m, sc)
+t PUT Method return 5
+t PUT2 Method return 123
+t ZAP Method   return 0
+all FL Method return 1
+all HIDE Method   self~setMethod(arg(1))
+all PUT Method   use arg n, m, sc|  self~setMethod(n, m, sc)
+all PUT Method return 5
+all PUT2 Method return 123
+all ZAP Method   return 0

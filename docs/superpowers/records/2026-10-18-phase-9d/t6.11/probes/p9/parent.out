@@ -1,0 +1,9 @@
+nil FL Method return 1
+nil PUT Method 
+nil PUT2 Method 
+t HIDE Method   self~setMethod(arg(1))
+t PUT Method 
+t ZAP Method   return 0
+all HIDE Method   self~setMethod(arg(1))
+all PUT Method 
+all ZAP Method   return 0

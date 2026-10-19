@@ -1,0 +1,15 @@
+# The parent binary (/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.10-r3/rexx-head, sha256
+# 753424fbb23926ae8aec5cd5897daf32bd33110286d04efbc9afc4df883f4ddb, unchanged across these runs),
+# its whole-process Ir under callgrind.sh in four runs that differ only in the -o directory and
+# the program list. Read by:
+#   for d in t6.11-r-run t6.11-y-run t6.11-x-run t6.11-run; do for pg in interpret sendloop; do
+#     grep '^summary' /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/$d/$pg.parent.r1.cg; done; done
+# The parent -libc figures of those runs differ by under 0.0001%; the difference is in glibc.
+t6.11-r-run interpret parent summary: 4115983694
+t6.11-r-run sendloop parent summary: 14555027297
+t6.11-y-run interpret parent summary: 4115983959
+t6.11-y-run sendloop parent summary: 14555027297
+t6.11-x-run interpret parent summary: 4135197304
+t6.11-x-run sendloop parent summary: 14625033731
+t6.11-run interpret parent summary: 4115983753
+t6.11-run sendloop parent summary: 14555027370

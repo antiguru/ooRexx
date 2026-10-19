@@ -1,0 +1,5 @@
+# diff <(sort docs/superpowers/records/2026-10-18-phase-9d/t6.11/suite/tests.tsv) <(sort docs/superpowers/records/2026-10-18-phase-9d/t6.11/suite2/tests.tsv)
+23232c23232
+< base/rexxutil/SysFileTree	TEST_TREE_DIRECTORY	-	passed	passed
+---
+> base/rexxutil/SysFileTree	TEST_TREE_DIRECTORY	-	passed	failed

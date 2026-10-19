@@ -1,0 +1,6 @@
+     4 *-* ::constant k ('a' + 1)
+     2 *-* ::class c
+       *-* Compiled method "NEW" with scope "Routine".
+     1 *-* r = .Routine~new('x', ('return .c~k', '::class c', '', "::constant k ('a' + 1)"))
+Error 41 running x line 4:  Bad arithmetic conversion.
+Error 41.1:  Nonnumeric value ("a") used in arithmetic operation.
