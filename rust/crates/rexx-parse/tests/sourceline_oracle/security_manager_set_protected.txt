@@ -1,0 +1,67 @@
+count 66
+/* setProtected marks the method its Method object stands for: a send of it
+   then asks the security manager, whether it is a Rexx method or a copy of a
+   primitive defined into a subclass. The copied-from primitive stays
+   unprotected. */
+m = .Array~method('APPEND')~copy
+say "before" m~isProtected
+m~setProtected
+say "copy" m~isProtected "original" .Array~method('APPEND')~isProtected
+.MyArr~define('APPEND', m)
+say "defined" .MyArr~method('APPEND')~isProtected
+call show "copy append", "a = .MyArr~new; a~append('x'); return a~items", "pass"
+call show "copy append handled", "a = .MyArr~new; a~append('x'); return a~items", "result"
+call show "array append", "a = .Array~new; a~append('x'); return a~items", "pass"
+
+.K~method('FOO')~setProtected
+say "rexx" .K~method('FOO')~isProtected .K~method('BAR')~isProtected
+call show "rexx foo", "return .K~new~foo", "pass"
+call show "rexx foo handled", "return .K~new~foo", "result"
+call show "rexx foo no result", "o = .K~new; o~foo; return var('result')", "handle"
+call show "rexx bar", "return .K~new~bar", "result"
+call show "directive", "return .K~new~baz", "result"
+exit
+
+show: procedure
+  use arg label, code, mode
+  mgr = .Mgr~new(mode)
+  r = .Routine~new("", code)
+  r~setSecurityManager(mgr)
+  r~call
+  if var("RESULT") then say label "result:" result
+  else say label "no result"
+  say label "events:" mgr~log~makeString(, " | ")
+  return
+
+::class MyArr subclass Array
+::class K
+::method foo
+  return "foo ran"
+::method bar
+  return "bar ran"
+::method baz protected
+  return "baz ran"
+
+::class Mgr
+::method init
+  expose log mode
+  use arg mode
+  log = .Array~new
+::method log
+  expose log
+  return log
+::method unknown
+  expose log mode
+  use arg name, args
+  info = args[1]
+  line = name
+  do k over info~allIndexes~sort
+    v = info[k]
+    if k = "OBJECT" then line = line k"="v~class~id
+    else if v~isA(.Array) then line = line k"=["v~items":"v~makeString(, ",")"]"
+    else line = line k"="v
+  end
+  log~append(line)
+  if name \= "METHOD" | mode = "pass" then return 0
+  if mode = "result" then info~result = "intercepted"
+  return 1

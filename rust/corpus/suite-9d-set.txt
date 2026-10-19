@@ -9,9 +9,5 @@
 # ootest revision 13178
 base/class/RexxContext	TESTRS01
 base/keyword/SIGNAL	TEST_SIGNAL_ANY_CONDITION_HALT
-base/security.manager/SecurityManager	TEST_ENVIRONMENT_HANDLE
-base/security.manager/SecurityManager	TEST_METHOD_HANDLE_NO_RESULT
-base/security.manager/SecurityManager	TEST_METHOD_HANDLE_RESULT
-base/security.manager/SecurityManager	TEST_METHOD_PASS
 samples/scclient	TEST_04_SCCLIENT.REX
 samples/sfclient	TEST_04_SFCLIENT.REX

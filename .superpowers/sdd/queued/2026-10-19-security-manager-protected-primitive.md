@@ -1,4 +1,4 @@
-**OPEN: found by the Phase 9d Task 6.11 round-2 re-review, not yet ruled.** A security manager is not consulted for a protected built-in method.
+**CLOSED by Phase 9d Task 6.12** (`security-manager-method-event`): `setProtected` marks the method its object stands for, and a copy and `define` carry it. Witness `corpus/lang/security_manager_set_protected.rex`, identical to the oracle.
 
 # Protected built-in methods skip the security manager
 
