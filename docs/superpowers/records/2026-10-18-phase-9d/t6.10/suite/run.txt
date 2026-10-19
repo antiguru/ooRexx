@@ -1,0 +1,2 @@
+e5f54ba1d Phase 9d Task 6.10: trace exit before the call tail pops, EXPOSE keeps the entry trace allowed, an empty REPLY rest is spawned
+exit 101

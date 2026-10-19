@@ -1,0 +1,16 @@
+trace:        >I> Method "ONE" with scope "TEST"
+trace:        >I> Method "ONETWO" with scope "TEST"
+trace:        <I< Method "ONETWO" with scope "TEST"
+trace:        <I< Method "ONE" with scope "TEST"
+trace:        >I> Method "THREE" with scope "TEST"
+trace:        <I< Method "THREE" with scope "TEST"
+three 42
+trace:        >I> Method "THREE" with scope "TEST"
+trace:        >I> Method "THREEFOUR" with scope "TEST"
+trace:        <I< Method "THREEFOUR" with scope "TEST"
+trace:        <I< Method "THREE" with scope "TEST"
+trace:        >I> Method "M_REPLY" with scope "TEST"
+trace:        <I< Method "M_REPLY" with scope "TEST"
+trace:        >I> Method "M_REPLY" with scope "TEST"
+trace:        <I< Method "M_REPLY" with scope "TEST"
+count 0

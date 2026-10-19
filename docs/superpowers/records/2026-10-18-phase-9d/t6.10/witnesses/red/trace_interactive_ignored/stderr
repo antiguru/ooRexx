@@ -1,0 +1,3 @@
+    11 *-* trace ("*invalid*")
+Error 24 running trace_interactive_ignored.rex line 11:  Invalid TRACE request.
+Error 24.1:  TRACE request letter must be one of "ACEFILNOR"; found "*".

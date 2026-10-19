@@ -253,10 +253,12 @@ lang/signal_on_missing_label_native.rex
 # 9d Task 6.10: trace. PROCEDURE after a traced label with a Rexx trace
 # destination, TRACE in interactive debug, prologue and install entry lines,
 # a trace destination with no LINEOUT, TraceObject collection under option P,
-# and a REPLY continuation's entry and exit lines.
+# a REPLY continuation's entry and exit lines, and the T, S and F formats on
+# the default route.
 lang/trace_procedure_after_label.rex
 lang/trace_interactive_ignored.rex
 lang/trace_prologue_entry.rex
 lang/trace_output_invalid_destination.rex
 lang/trace_object_probe_collect.rex
 lang/trace_reply_continuation.rex
+lang/trace_object_format_default_route.rex

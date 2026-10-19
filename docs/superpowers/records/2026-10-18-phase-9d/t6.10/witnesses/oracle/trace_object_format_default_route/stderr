@@ -1,0 +1,15 @@
+    14 *-1*     a = 1
+       >>1>       "1"
+    15 *-1*     trace off
+[T1  I2 ]                   14 *-*     a = 1
+[T1  I2 ]                      >>>       "1"
+[T1  I2 ]                   15 *-*     trace off
+[R1   T1   I3   ]                      14 *-*     a = 1
+[R1   T1   I3   ]                         >>>       "1"
+[R1   T1   I3   ]                      15 *-*     trace off
+    14 *-*     a = 1
+       >>>       "1"
+    15 *-*     trace off
+[R1   T1   I5    G  A1    L1   * ]     21 *-* b = 2
+[R1   T1   I5    G  A1    L1   * ]        >>>   "2"
+[R1   T1   I5    G  A1    L1   * ]     22 *-* trace off

@@ -1,0 +1,31 @@
+package with code
+trace:        >I> Routine 
+trace:      1 *-* say 'pa prologue'
+trace:        >>>   "pa prologue"
+pa prologue
+trace:        <I< Routine 
+package with a class only
+trace:        >I> Routine 
+trace:        <I< Routine 
+package traced normally
+pc prologue
+routine with a class
+trace:        >I> Routine 
+trace:        <I< Routine 
+call
+trace:        >I> Routine 
+trace:      1 *-* say 'ra body'
+ra body
+trace:        <I< Routine 
+routine with no directive
+call
+trace:        >I> Routine 
+trace:      1 *-* say 'rb body'
+trace:        >>>   "rb body"
+rb body
+trace:        <I< Routine 
+method with a class
+trace:        >I> Routine 
+trace:        <I< Routine 
+routine with a class, not traced
+done

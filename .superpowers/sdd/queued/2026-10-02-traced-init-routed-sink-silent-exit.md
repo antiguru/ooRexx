@@ -1,4 +1,4 @@
-**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: rc 165 here with an unrouted <I< line, rc 0 and the sink's lines on the oracle.
+**CLOSED 2026-10-19 by Phase 9d Task 6.10.** `queued-probes/tracedinit` is identical to the oracle on stdout, stderr and rc (`docs/superpowers/records/2026-10-18-phase-9d/t6.10/queued/`).
 
 # A traced INIT with .traceOutput routed to a Rexx sink ends the program silently
 

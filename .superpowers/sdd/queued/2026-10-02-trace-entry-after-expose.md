@@ -1,4 +1,4 @@
-**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: no >I> or <I< here when TRACE follows EXPOSE.
+**CLOSED 2026-10-19 by Phase 9d Task 6.10.** `queued-probes/texpose` is identical to the oracle on stdout, stderr and rc (`docs/superpowers/records/2026-10-18-phase-9d/t6.10/queued/`).
 
 # `>I>` missing for a method whose `TRACE` follows its `EXPOSE`
 

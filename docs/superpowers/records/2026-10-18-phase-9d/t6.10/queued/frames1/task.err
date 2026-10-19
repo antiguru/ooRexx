@@ -1,0 +1,4 @@
+       *-* Compiled method "NEW" with scope "Package".
+     1 *-* p = .Package~new('frames1/p.cls')
+Error 43 running frames1.rex line 1:  Routine not found.
+Error 43.901:  Could not find file "frames1/p.cls" for ::REQUIRES.

@@ -1,4 +1,4 @@
-**OPEN: ruled 9d, cluster prolog-trace-lines (Phase 9d inventory).** both probes still lack a loading frame here; clusters.md names this item as that cluster's parent.
+**CLOSED 2026-10-19 by Phase 9d Task 6.10.** `queued-probes/frames1` and `queued-probes/frames2` are identical to the oracle on stdout, stderr and rc (`docs/superpowers/records/2026-10-18-phase-9d/t6.10/queued/`).
 
 # A loaded file's prologue sees no frames for the levels that loaded it
 

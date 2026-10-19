@@ -1,4 +1,4 @@
-**OPEN: ruled 9d, cluster traceobject-probe-option (Phase 9d inventory).** no single probe; names TEST_VARIABLE and TEST_TRACEOBJECT_COLLECTOR, which are that cluster's.
+**CLOSED 2026-10-19 by Phase 9d Task 6.10.** its VARIABLE entry, the TraceObject made for every line (collector, notify, option `P`) and the `T`, `S` and `F` formats on the default route are witnessed by `trace_object_probe_collect` and `trace_object_format_default_route`; `TEST_VARIABLE` passes, and `TEST_TRACEOBJECT_COLLECTOR` fails only on the package name, which is `dynamic-package-name`'s. The EXECUTABLE bullet stays under the class-methods.txt exclusion.
 
 # TraceObject: the VARIABLE entry, and TraceObjects off the routed path
 

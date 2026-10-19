@@ -1,4 +1,4 @@
-**OPEN: ruled 9d, cluster trace-reply-continuation (Phase 9d inventory).** probe still lacks the second ONETWO >I>/<I< pair; it is TRACE TEST_TRACE_LABEL_WITH_FORWARD.
+**CLOSED 2026-10-19 by Phase 9d Task 6.10.** `queued-probes/p7` is identical to the oracle on stdout, stderr and rc (`docs/superpowers/records/2026-10-18-phase-9d/t6.10/queued/`), and TRACE `TEST_TRACE_LABEL_WITH_FORWARD` passes.
 
 # A REPLY continuation that runs to its end is not announced with `>I>`/`<I<`
 

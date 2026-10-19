@@ -1,0 +1,8 @@
+program	red vs oracle	green vs oracle
+trace_procedure_after_label	differs: stdout rc	identical
+trace_interactive_ignored	differs: stdout stderr rc	identical
+trace_prologue_entry	differs: stdout	identical
+trace_output_invalid_destination	differs: stdout	identical
+trace_object_probe_collect	differs: stdout stderr	identical
+trace_reply_continuation	differs: stdout	identical
+trace_object_format_default_route	differs: stdout stderr	identical

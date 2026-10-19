@@ -1,0 +1,7 @@
+97.1 Object "" does not understand message "LINEOUT".
+97.1 Object "" does not understand message "LINEOUT".
+97.1 Object "" does not understand message "LINEOUT".
+trace:        >I> Routine 
+trace:      1 *-* .traceOutput~destination("")
+97.1 Object "" does not understand message "LINEOUT".
+done

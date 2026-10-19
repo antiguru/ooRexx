@@ -1,0 +1,24 @@
+count 23
+/* .TraceObject~option T, S and F format trace lines written to the default
+   error route, as the error stream writes each TraceObject's string; N
+   writes the line. A method's line carries its guard fields under F. */
+do opt over 'T', 'S', 'F', 'N'
+  .traceObject~option = opt
+  call r
+end
+.traceObject~option = 'N'
+.o~new~m
+say .traceObject~counter > 0
+exit
+r:
+  trace r
+  a = 1
+  trace off
+  return
+::class o
+::method m
+  .traceObject~option = 'F'
+  trace r
+  b = 2
+  trace off
+  .traceObject~option = 'N'

@@ -1,0 +1,19 @@
+# trace_reply_continuation: md5 of stdout, stderr and rc, per run, from a fresh directory
+# oracle, 8 runs:
+      8 569e21ceec8870494d21bd1bd834e726  -
+# task 306331c9b, 8 wall-clock runs:
+      8 569e21ceec8870494d21bd1bd834e726  -
+# task, REXX_SWITCH_MODE per run (the rexx-sim summary line dropped from stderr):
+sim:1 569e21ceec8870494d21bd1bd834e726  -
+sim:7 569e21ceec8870494d21bd1bd834e726  -
+sim:42 569e21ceec8870494d21bd1bd834e726  -
+sim:7,uniform:0.2 569e21ceec8870494d21bd1bd834e726  -
+sim:9,uniform:1 569e21ceec8870494d21bd1bd834e726  -
+sim:7,pct:3,k=40 569e21ceec8870494d21bd1bd834e726  -
+sim:3,pre:2,k=40 569e21ceec8870494d21bd1bd834e726  -
+sim:11,uniform:0.01 569e21ceec8870494d21bd1bd834e726  -
+sim:5,pct:3,k=200 569e21ceec8870494d21bd1bd834e726  -
+sim:13,pre:1,k=40 569e21ceec8870494d21bd1bd834e726  -
+sim:21,pre:3,k=65 569e21ceec8870494d21bd1bd834e726  -
+sim:8,uniform:0.5 569e21ceec8870494d21bd1bd834e726  -
+# the seeded gate row's 70 runs: sim/trace_reply_continuation.report.txt
