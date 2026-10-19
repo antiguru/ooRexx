@@ -1,2 +1,2 @@
-e5f54ba1d Phase 9d Task 6.10: trace exit before the call tail pops, EXPOSE keeps the entry trace allowed, an empty REPLY rest is spawned
+7540e967f Phase 9d Task 6.10: a trace line whose TraceObject cannot be made on the default route goes to standard error
 exit 101

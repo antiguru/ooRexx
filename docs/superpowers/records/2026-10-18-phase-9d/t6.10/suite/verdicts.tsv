@@ -331,7 +331,7 @@ base/rexxutil/Macrospace	green		equal
 base/rexxutil/SysDumpVariables	green		equal
 base/rexxutil/SysFileDateTime	green		equal
 base/rexxutil/SysFileSearch	green		equal
-base/rexxutil/SysFileTree	green		equal
+base/rexxutil/SysFileTree	red	not passed: TEST_TREE_DIRECTORY	equal
 base/rexxutil/SysFileXXX	green		equal
 base/rexxutil/SysFormatMessage	green		equal
 base/rexxutil/SysSearchPath	green		equal

@@ -1817,13 +1817,7 @@ macro_rules! open_clause {
             );
             false
         };
-        // An abandoned clause runs none of its ops, and its boundary raises
-        // what abandoned it.
-        $from = if $entry.abandoned {
-            $region_end
-        } else {
-            $pc + 1
-        };
+        $from = $pc + 1;
     };
 }
 

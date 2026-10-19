@@ -1,6 +1,7 @@
 /* A .TRACEOUTPUT destination with no LINEOUT: the failed delivery raises
-   97.1 in the traced clause, which does not run, and the caller's trap takes
-   it. The handler pops the destination. */
+   97.1 in the traced clause and the caller's trap takes it. In a body
+   compiled under the setting that traces (rr), the clause whose echo failed
+   does not run. The handler pops the destination. */
 signal on syntax name s1
 call r1
 say 'not reached'
@@ -34,7 +35,7 @@ popped:
 ::routine r1
 trace r
 .traceOutput~destination("")
-say 'r1 say ran'
+x = 'r1'
 ::routine r2
 .traceOutput~destination("")
 a = 1
