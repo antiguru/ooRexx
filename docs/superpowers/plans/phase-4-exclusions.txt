@@ -2450,6 +2450,23 @@ DEVIATIONS -- permanent, chosen
      LICENSED DIVERGENCE WITNESS: write-position-after-buffered-read
      LICENSED DIVERGENCE WITNESS: relative-seek-from-named-position
 
+ 50. A CLAUSE WHOSE TRACE LINE CANNOT BE DELIVERED MAY RUN BEFORE ITS
+     97.1 (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-19. When the trace destination cannot take a
+     line, for example after `.traceOutput~destination("")`, the oracle
+     raises 97.1 before the clause does any of its own work. This crate
+     raises the same 97.1, but a clause in a chunk compiled under another
+     trace setting, or a `>>>` result line inside a traced body, may run
+     its own work first: probe `s1` sets a counter in the failing clause and
+     prints `syntax 97.1 c=1` here and `c=0` on the oracle. Every measured
+     fix adds work to clauses of untraced programs (assign +0.54% and
+     rexxcps +1.73% for the cheapest, Phase 9d Task 6.10 fix round 1,
+     docs/superpowers/records/2026-10-18-phase-9d/t6.10/r1/important-1/).
+     The divergence is reachable only with a destination that refuses
+     lines. The design that closes it at no per-clause cost is queued
+     (.superpowers/sdd/queued/2026-10-19-trace-chunk-swap.md).
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
