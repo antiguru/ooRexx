@@ -11,3 +11,8 @@ same selection happens inside `INTERPRET` strings: `"trace -;" || "0a"x`, `say (
 The pre-9c binary `ooRexx-p9-pin/rexx-run-9c-t2-cdbbc1568` makes the same choice, so 9c did not
 introduce it. The fix is to defer the scanner's invalid-character error until the parse reaches
 that clause, and add the shapes as `parse-errors.tsv` rows.
+
+The Task 6.9 review (`task-6.9-review.md`, Minor 6) found another instance. `x = 1 + ;` followed by
+a later clause holding an invalid character (`'01'x` in the source, or a LF inside an INTERPRET
+string): the oracle reports `35.1 ... "+"` at the first clause, and the crate reports 13.1 for the
+later character.
