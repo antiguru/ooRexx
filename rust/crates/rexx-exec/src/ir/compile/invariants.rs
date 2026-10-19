@@ -13,11 +13,12 @@
 
 use super::super::Op;
 
-/// **Every [`Op::TraceClause`] is the first op of a [`Op::Clause`] region**,
-/// which is both halves of that op's own contract at once.
+/// **Every [`Op::TraceClause`] and [`Op::TraceStale`] is the first op of a
+/// [`Op::Clause`] region**, which is both halves of that op's own contract at
+/// once.
 pub(super) fn assert_trace_ops_open_a_clause_region(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
-        if !matches!(op, Op::TraceClause { .. }) {
+        if !matches!(op, Op::TraceClause { .. } | Op::TraceStale { .. }) {
             continue;
         }
         let opens_here = at
@@ -206,7 +207,8 @@ pub(super) fn assert_keyword_echoes_precede_their_value(ops: &[Op]) {
 }
 
 /// Every [`Op::Exec`] region holds nothing but its own [`Op::Clause`], the
-/// optional [`Op::TraceClause`] between them, and the `Exec` itself.
+/// optional [`Op::TraceClause`] or [`Op::TraceStale`] between them, and the
+/// `Exec` itself.
 pub(super) fn assert_exec_regions_hold_nothing_else(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         let (Op::Clause { end, .. } | Op::CallingClause { end, .. }) = op else {
@@ -218,7 +220,10 @@ pub(super) fn assert_exec_regions_hold_nothing_else(ops: &[Op]) {
         }
         for (offset, op) in inside.iter().enumerate() {
             assert!(
-                matches!(op, Op::Exec { .. } | Op::TraceClause { .. }),
+                matches!(
+                    op,
+                    Op::Exec { .. } | Op::TraceClause { .. } | Op::TraceStale { .. }
+                ),
                 "op {} sits in the Exec region of clause {at}, which may hold                  nothing but its echo and the Exec itself",
                 at + 1 + offset
             );
@@ -239,6 +244,7 @@ pub(super) fn assert_region_ops_name_their_clause(ops: &[Op]) {
         {
             let named = match op {
                 Op::TraceClause { index }
+                | Op::TraceStale { index }
                 | Op::EvalExpr { index, .. }
                 | Op::Store { index, .. }
                 | Op::Say { index, .. }

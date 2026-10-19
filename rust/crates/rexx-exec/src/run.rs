@@ -2954,7 +2954,7 @@ impl Interp {
         source: Option<&ProgramSource>,
         position: (bool, crate::ir::ClausePosition),
         counted: crate::clause::DeadlineCounted,
-    ) -> Result<SteppedClause, Failure> {
+    ) -> SteppedClause {
         // `DATE`/`TIME`'s per-clause clock cache (`activation.rs`'s own doc
         // on `Activation::clock_stale`) is invalidated **unconditionally,
         // once per call, on whichever activation is executing right now**,
@@ -3053,11 +3053,8 @@ impl Interp {
         // the second arm is that a chunk compiled under a setting that does
         // not echo pays nothing at all for the decision -- no gate, no
         // `clause_site`, no op.
-        // A failed delivery of the echo leaves the clause before its work.
-        if matches!(echo, Echo::Gated)
-            && let Err(failure) = self.echo_stepped_clause(source, instruction, indent)
-        {
-            return Err(self.abandoned_clause(failure, code, index, source, instruction));
+        if matches!(echo, Echo::Gated) {
+            self.echo_gated_clause(source, instruction, indent);
         }
         // The debug tripwire I22 asks for, alongside `ActivityRoots::temps_len`, its
         // one prerequisite. `SteppedClause` carries the watermark and the
@@ -3066,27 +3063,27 @@ impl Interp {
         // there rather than in `pop_frame`.
         let temps_at_entry = self.roots.activity().temps_len();
         let frame = self.roots.activity_mut().push_frame();
-        Ok(SteppedClause {
+        SteppedClause {
             entry,
             frame,
             temps_at_entry,
-        })
+        }
     }
 
-    /// The failure a clause's echo raised, with the clause recorded as the
-    /// failure's site, as [`Interp::leave_stepped_clause`] records it.
-    #[cold]
+    /// A stale chunk's clause echo, out of line. A failed delivery is kept
+    /// for the clause's first op ([`crate::ir::Op::TraceClause`] or
+    /// [`crate::ir::Op::TraceStale`]), which raises it before the clause's
+    /// work runs.
     #[inline(never)]
-    fn abandoned_clause(
+    fn echo_gated_clause(
         &mut self,
-        failure: Failure,
-        code: &Code<'_>,
-        index: usize,
         source: Option<&ProgramSource>,
         instruction: &Instruction,
-    ) -> Failure {
-        self.record_failure_site(code, index, source, instruction);
-        failure
+        indent: usize,
+    ) {
+        if let Err(failure) = self.echo_stepped_clause(source, instruction, indent) {
+            self.activity.stale_echo_failure = Some(failure);
+        }
     }
 
     /// Closes the stepped clause `entry` opened, around `ran` -- everything

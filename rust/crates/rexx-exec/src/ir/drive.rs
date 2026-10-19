@@ -304,6 +304,7 @@ fn undriven_op_name(op: &Op) -> &'static str {
         Op::Clause { .. } => "Clause",
         Op::CallingClause { .. } => "CallingClause",
         Op::TraceClause { .. } => "TraceClause",
+        Op::TraceStale { .. } => "TraceStale",
         Op::EvalExpr { .. } => "EvalExpr",
         Op::CallExpr { .. } => "CallExpr",
         Op::PushArg { .. } => "PushArg",
@@ -412,6 +413,17 @@ macro_rules! region_ops {
                         if let Err(failure) = $self.echo_compiled_clause($source, $clause, indent) {
                             break $cold Err(failure);
                         }
+                    } else if let Some(failure) = $self.activity.stale_echo_failure.take() {
+                        break $cold Err(failure);
+                    }
+                }
+                // The stale clause's echo was made at its entry.
+                Op::TraceStale { $index } => {
+                    debug_assert_names_the_clause($code, *$index, $clause, "TraceStale");
+                    if $stale
+                        && let Some(failure) = $self.activity.stale_echo_failure.take()
+                    {
+                        break $cold Err(failure);
                     }
                 }
                 // **The one thing this does that `EvalExpr`
@@ -1804,7 +1816,7 @@ macro_rules! open_clause {
         // `crate::ir::Op::Clause` is itself defined in
         // terms of -- so a promoted clause and an unpromoted one
         // discharge the same list from the same code.
-        $entry = match $self.enter_stepped_clause(
+        $entry = $self.enter_stepped_clause(
             echo,
             $code,
             $index,
@@ -1812,10 +1824,7 @@ macro_rules! open_clause {
             $source,
             $chunk.position_at($index),
             counted,
-        ) {
-            Ok(entry) => entry,
-            Err(failure) => return Err(failure),
-        };
+        );
         // Taken on entry exactly as `step` takes it, because a
         // promoted clause is a clause and the permission is spent
         // by whichever clause the activation granted it to.

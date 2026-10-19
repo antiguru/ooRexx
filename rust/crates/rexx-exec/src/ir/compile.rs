@@ -260,6 +260,9 @@ pub(crate) fn compile(
         // and the oracle prints `>K>` under `R` and `I` and under neither `A`
         // nor `N` (measured, `do i = 1 to 2`).
         let pool = super::trace_flow::for_emission(plan, index, settings[index]);
+        // A clause the analysis cannot place under the chunk's own setting
+        // may run stale, echoed by its entry rather than by an op.
+        let may_stale = settings[index] != super::trace_flow::Setting::Known(trace);
         let echoes_values = pool.echoes_values();
         let echoes_keyword = pool.echoes_keyword();
         match &instruction.kind {
@@ -295,7 +298,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 for (slot, &(role, dst)) in header.iter().enumerate() {
                     let slot = instruction_index(slot)?;
                     // The counter's reset value, filed before any header
@@ -398,7 +401,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 let jump = if native_shape(condition, Some(NodePath::ROOT)) {
                     push_native(
                         &mut ops,
@@ -483,7 +486,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 if let Some(dst) = case_reg {
                     ops.push(Op::EvalExpr {
                         index: instruction_index(index)?,
@@ -583,7 +586,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 // **Only a plain `WHEN`'s condition promotes.** A `WhenCase`
                 // holds a list of values the enclosing `SELECT CASE`'s value
                 // is sent `==` with through `Interp::test_case_when`, which is
@@ -660,7 +663,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 push_value(
                     &mut ops,
                     echoes_values,
@@ -694,7 +697,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 let src = match expression {
                     Some(expression) => {
                         let dst = registers.alloc()?;
@@ -735,7 +738,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 let src = match &**signal {
                     rexx_parse::Signal::Value(expression) => {
                         let dst = registers.alloc()?;
@@ -779,7 +782,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 let src = match &parse.source {
                     ParseSource::Value(Some(expression)) => {
                         let dst = registers.alloc()?;
@@ -824,7 +827,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 let src = match expression {
                     Some(expression) => {
                         let dst = registers.alloc()?;
@@ -868,7 +871,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 let src = match expression {
                     Some(expression) => {
                         let dst = registers.alloc()?;
@@ -914,7 +917,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 // **The arguments become ops of their own where they can**,
                 // exactly as `ExprKind::Call`'s arm does it. Argument `k` is
                 // the instruction's expression slot `k`.
@@ -971,7 +974,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 let recv = registers.alloc()?;
                 push_native(
                     &mut ops,
@@ -1056,7 +1059,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 ops.push(Op::Message {
                     index: instruction_index(index)?,
                 });
@@ -1074,7 +1077,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 ops.push(Op::Expose {
                     index: instruction_index(index)?,
                 });
@@ -1090,7 +1093,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 ops.push(Op::Escape {
                     index: instruction_index(index)?,
                 });
@@ -1111,7 +1114,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 close_region(&mut ops, at)?;
             }
             // The `END` of a repeating loop, which the flattened
@@ -1150,7 +1153,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 ops.push(Op::Exec {
                     index: instruction_index(index)?,
                 });
@@ -1167,7 +1170,7 @@ pub(crate) fn compile(
                     index: instruction_index(index)?,
                     end: 0,
                 });
-                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_echo(&mut ops, echo, may_stale, instruction_index(index)?);
                 ops.push(Op::Exec {
                     index: instruction_index(index)?,
                 });
@@ -1772,9 +1775,14 @@ fn echoes(trace: ChunkTrace, instruction: &Instruction) -> bool {
 /// Pushes the clause echo op, if `echo`, as the **first** op of the region
 /// that follows -- the position clause unit echoes at,
 /// before anything the clause computes.
-fn push_echo(ops: &mut Vec<Op>, echo: bool, index: u32) {
+///
+/// A clause that echoes nothing here but `may_stale` gets
+/// [`Op::TraceStale`] in that position instead.
+fn push_echo(ops: &mut Vec<Op>, echo: bool, may_stale: bool, index: u32) {
     if echo {
         ops.push(Op::TraceClause { index });
+    } else if may_stale {
+        ops.push(Op::TraceStale { index });
     }
 }
 
