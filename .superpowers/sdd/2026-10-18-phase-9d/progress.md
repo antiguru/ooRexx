@@ -99,3 +99,4 @@ Task 6.11 r1 (feeca3405, ef78325e5): re-review (opus) CHANGES REQUESTED, 1 Impor
 Task 6.11 r2 (28645a0d8, 7efdf2dc5, 1511ee814, 3f5eaef22): re-review r2 APPROVED; minors queued. Task 6.11: complete (58902b630, 3d5768bf7, a0be77243, a22a686d0, 8f749b048, feeca3405, ef78325e5, 28645a0d8, 7efdf2dc5, 1511ee814, 3f5eaef22). 5 red groups.
 Task 6.12: dispatched (implementer opus).
 Moritz 2026-10-19: post-Task-2 queued batch 'proposal ok'; principle 'derive the semantics, follow what you could model; the oracle doesn't always get it right' -> plan Ruled 13, inventory rows appended, queued items marked RULED, dispatch rules updated, global-constraints regenerated.
+Moritz 2026-10-19: 'new deviations should come to me first.' Ruled 13 and the dispatch rules corrected: the crate follows the derived rule, every new Deviation goes to Moritz before it is written.

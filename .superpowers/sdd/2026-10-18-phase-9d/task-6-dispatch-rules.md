@@ -52,6 +52,6 @@ DONE_WITH_CONCERNS, BLOCKED or NEEDS_CONTEXT), shas, a one-line test summary and
 
 ## Semantics (Moritz 2026-10-19, plan Ruled 13)
 Derive the rule from the documentation and the language before matching the oracle, and follow
-what you can model. Where the oracle departs from that rule, follow the rule and write a Deviation
-citing Ruled 13. Any other new Deviation (a cost trade, or the crate departing from the rule) still
-stops for Moritz.
+what you can model. Where the oracle departs from that rule, follow the rule. Never write a new
+numbered Deviation yourself: stop that item and report it, with the derived rule and the oracle's
+departure. The controller takes every new Deviation to Moritz first.

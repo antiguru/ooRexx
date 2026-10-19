@@ -44,9 +44,11 @@
     the semantics, and follow what you could model. The oracle doesn't always get it right.").
     Every instance derives the rule from the documentation and the language before matching the
     oracle, and follows the rule it could model. Where the oracle departs from that rule, the
-    crate follows the rule and the instance writes a Deviation citing this ruling. The queued
+    crate follows the rule, and the instance stops and brings the Deviation to Moritz before
+    writing it: every new Deviation is his to rule first (2026-10-19). The queued
     items filed after Task 2 are ruled with it ("proposal ok"): their rows end
-    `queued-inventory.tsv`, and the Deviation candidates among them are 9d on this rule.
+    `queued-inventory.tsv`. The Deviation candidates among them are 9d on this rule, each
+    Deviation brought to Moritz before it is written.
 
 ## Global Constraints
 
