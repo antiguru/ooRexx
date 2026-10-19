@@ -245,7 +245,26 @@ impl Interp {
                     self.trace.push(b'\n');
                 }
             }
+            // A failure before the line reached a destination of the
+            // program's own, such as making the `TraceObject` with the stack
+            // exhausted, leaves the line to the error stream.
+            Err(_) if self.routes_to_standard_error() => {
+                self.trace.extend_from_slice(&line);
+                if ended {
+                    self.trace.push(b'\n');
+                }
+            }
             Err(failure) => self.queue_trace_failure(failure, &line),
+        }
+    }
+
+    /// Whether `.TRACEOUTPUT` writes to standard error, or is not there.
+    fn routes_to_standard_error(&mut self) -> bool {
+        match self.local_route(b"TRACEOUTPUT") {
+            Ok(Some(route)) if route != ObjRef::NIL => {
+                self.route_ends_at(route, self.bootstrap_stderr)
+            }
+            _ => true,
         }
     }
 
@@ -444,12 +463,7 @@ impl Interp {
         if letter == b'P' {
             return Ok(Delivered::KeptBack);
         }
-        let route = match self.local_route(b"TRACEOUTPUT")? {
-            Some(route) if route != ObjRef::NIL => Some(route),
-            _ => None,
-        };
-        let Some(route) = route.filter(|&route| !self.route_ends_at(route, self.bootstrap_stderr))
-        else {
+        if self.routes_to_standard_error() {
             // The error stream writes the object's string, which is the line
             // itself under option `N` and `makeStringImpl`'s format otherwise.
             if letter == b'N' {
@@ -461,6 +475,9 @@ impl Interp {
                 .unwrap_or(ObjRef::NIL);
             let shown = self.to_text(shown).to_vec();
             return Ok(Delivered::ToStandardErrorAs(shown));
+        }
+        let Some(route) = self.local_route(b"TRACEOUTPUT")? else {
+            return Ok(Delivered::ToStandardError);
         };
         let caller_ref = self.caller();
         self.send_message(
