@@ -2595,12 +2595,13 @@ impl Interp {
             return Ok(Started::Entered);
         }
         let outcome = match invocable {
-            Invocable::Native(entry) => {
+            // A leveled primitive is run by `run_other`, off this path.
+            Invocable::Native(entry) if !matches!(entry.body, NativeBody::Leveled(_)) => {
                 let outcome = match (entry.arity, entry.body) {
                     (Arity::Fixed(arity), _) if args.len() > arity => {
                         Err(Raised::too_many_method_arguments(arity).into())
                     }
-                    (_, NativeBody::Run(run)) => {
+                    (_, NativeBody::Run(run) | NativeBody::Leveled(run)) => {
                         let ran = pinned!(
                             self,
                             crate::pinning::PinKind::native(name),
@@ -2610,9 +2611,6 @@ impl Interp {
                         ran.map(NativeStarted::Ran)
                     }
                     (_, NativeBody::Begin(begin)) => begin(self, cleared, receiver, args),
-                    (_, NativeBody::Leveled(run)) => self
-                        .run_leveled(run, cleared, resolution, receiver, name, args)
-                        .map(NativeStarted::Ran),
                 };
                 match outcome {
                     Ok(NativeStarted::Ran(value)) => Ok(value),
@@ -2847,6 +2845,22 @@ impl Interp {
                     }
                 }
             },
+            Invocable::Native(NativeEntry {
+                arity,
+                body: NativeBody::Leveled(run),
+            }) => {
+                let ran = match arity {
+                    Arity::Fixed(arity) if args.len() > arity => {
+                        Err(Raised::too_many_method_arguments(arity).into())
+                    }
+                    _ => self.run_leveled(run, cleared, resolution, receiver, name, args),
+                };
+                if ran.is_err() {
+                    let scope = self.scope_id(resolution.scope);
+                    self.blame_native_method(name, &scope, receiver, args);
+                }
+                return ran.map(Started::Ran);
+            }
             Invocable::Rexx(_) | Invocable::Native(_) => return Err(Loud::missing_body().into()),
             Invocable::Library(binding) => {
                 let outcome = match self
