@@ -304,6 +304,7 @@ fn undriven_op_name(op: &Op) -> &'static str {
         Op::Clause { .. } => "Clause",
         Op::CallingClause { .. } => "CallingClause",
         Op::TraceClause { .. } => "TraceClause",
+        Op::TraceStale { .. } => "TraceStale",
         Op::EvalExpr { .. } => "EvalExpr",
         Op::CallExpr { .. } => "CallExpr",
         Op::PushArg { .. } => "PushArg",
@@ -416,6 +417,14 @@ macro_rules! region_ops {
                     }
                     // The compiled echo's failure, or the stale echo's the
                     // clause entry kept.
+                    if $self.activity.trace_failure.is_some() {
+                        break 'trace_failed;
+                    }
+                }
+                // A stale clause's echo was made at its entry, which kept a
+                // failed delivery here.
+                Op::TraceStale { $index } => {
+                    debug_assert_names_the_clause($code, *$index, $clause, "TraceStale");
                     if $self.activity.trace_failure.is_some() {
                         break 'trace_failed;
                     }
