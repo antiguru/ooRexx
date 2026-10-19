@@ -7,13 +7,6 @@
   `2026-10-18-command-waits-for-background-child.md` sits near this mechanism. The instance
   reports whether its fix closes it, and does not widen to it otherwise.
 
-### Task 7 (template): a batch of reached refusals
-
-The controller writes each instance as `Task 7.<n>: <site or area>`, carrying its `refusals.tsv`
-rows whose `disposition` is `implement`. Each instance has these steps:
-
-- [ ] **Step 1:** Write a witness for the batch, one program per class or area, and show it red.
-
 ## The Task 6 steps
 ### Task 6 (template): one 9d set cluster
 
