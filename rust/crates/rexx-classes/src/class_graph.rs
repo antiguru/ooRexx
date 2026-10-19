@@ -678,13 +678,14 @@ impl ClassGraph {
     }
 
     /// Oracle's `updateInstanceSubClasses` (`:1071`): rebuild only the
-    /// instance behaviour, in place, then cascade. This is what
+    /// instance behaviour, in place, run `checkUninit`, then cascade. This is what
     /// [`define`](Self::define) calls **after** repointing `class` itself
     /// at a fresh handle, so only the cascaded subclasses' behaviours are
     /// rebuilt in place -- the direct recipient's old handle is never
     /// touched again.
     fn update_instance_sub_classes(&mut self, class: ObjRef) {
         self.rebuild_behaviour(class, Side::Instance);
+        self.check_uninit(class);
         let subclasses = self.classes[&class].subclasses.clone();
         for sub in subclasses {
             self.update_instance_sub_classes(sub);
@@ -1127,6 +1128,16 @@ impl ClassGraph {
     /// assertion `ancestors` cannot substitute for.
     pub fn method_names_at(&self, handle: BehaviourHandle) -> BTreeSet<String> {
         self.behaviours[handle.index()].dict.method_names()
+    }
+
+    /// Every defined entry of a specific handle's dictionary, as
+    /// [`MethodDict::defined_entries`] lists them.
+    pub fn defined_entries_at(&self, handle: BehaviourHandle) -> Vec<(String, ObjRef, MethodId)> {
+        self.behaviours[handle.index()]
+            .dict
+            .defined_entries()
+            .map(|(name, scope, method)| (name.to_owned(), scope, method))
+            .collect()
     }
 
     /// True once `scope` has been folded into a specific handle's dictionary

@@ -153,6 +153,11 @@ fn instance_method(
     };
     let argument = super::required_string_named_argument(interp, argument, "method name")?;
     let name = interp.to_text(argument).to_ascii_uppercase();
+    // The object's own dictionary answers first: the object `setMethod`
+    // installed, or `.nil` for a name it hides.
+    if let Some(entry) = interp.own_method_entry(receiver, &name) {
+        return Ok(Some(entry.map_or(ObjRef::NIL, |entry| entry.executable)));
+    }
     let selection = receiver_selection(interp, receiver)?;
     let owner = interp.class_of_value(receiver).unwrap_or(ObjRef::NIL);
     let Some((scope, method)) = lookup(interp, selection, &String::from_utf8_lossy(&name)) else {
@@ -174,17 +179,8 @@ fn instance_methods(
     let scope = args.first().copied().flatten();
     let selection = receiver_selection(interp, receiver)?;
     let owner = interp.class_of_value(receiver).unwrap_or(ObjRef::NIL);
-    let entries = if scope == Some(ObjRef::NIL) {
-        let mut entries = object_level_entries(interp, receiver);
-        for entry in behaviour_entries(interp, selection, scope) {
-            if !entries.iter().any(|(name, ..)| *name == entry.0) {
-                entries.push(entry);
-            }
-        }
-        entries
-    } else {
-        behaviour_entries(interp, selection, scope)
-    };
+    let mut entries = object_level_entries(interp, receiver, scope);
+    entries.extend(behaviour_entries(interp, selection, scope));
     supplier_of(interp, selection, owner, entries)
 }
 
@@ -215,30 +211,42 @@ fn lookup(interp: &mut Interp, selection: Selection, name: &str) -> Option<(ObjR
     }
 }
 
-/// Every name `selection` resolves, filtered to `scope` when one is given.
+/// One method a supplier lists: its name, its scope and its method, and the
+/// `Method` object it already has, where it has one.
+struct Listed {
+    name: Vec<u8>,
+    scope: ObjRef,
+    method: MethodId,
+    object: Option<ObjRef>,
+}
+
+/// Every method entry of `selection`, shadowed ones included, filtered to
+/// `scope` when one is given: `MethodDictionary::getMethods`
+/// (`behaviour/MethodDictionary.cpp:507`).
 fn behaviour_entries(
     interp: &mut Interp,
     selection: Selection,
     scope: Option<ObjRef>,
-) -> Vec<(Vec<u8>, ObjRef, MethodId)> {
-    let names = match selection {
-        Selection::Behaviour(handle) => interp.classes().method_names_at(handle),
-        Selection::ClassSide(class) => interp.classes().class_method_names(class),
+) -> Vec<Listed> {
+    let entries = match selection {
+        Selection::Behaviour(handle) => interp.classes().defined_entries_at(handle),
+        Selection::ClassSide(class) => interp.classes().class_defined_entries(class),
     };
-    let mut entries = Vec::new();
-    for name in names {
-        let Some((found, method)) = lookup(interp, selection, &name) else {
-            continue;
-        };
-        if scope.is_none_or(|wanted| wanted == found) {
-            entries.push((name.into_bytes(), found, method));
-        }
-    }
     entries
+        .into_iter()
+        .filter(|(_, found, _)| scope.is_none_or(|wanted| wanted == *found))
+        .map(|(name, scope, method)| Listed {
+            name: name.into_bytes(),
+            scope,
+            method,
+            object: None,
+        })
+        .collect()
 }
 
-/// The receiver's own `setMethod` level, which a `.nil` scope selects.
-fn object_level_entries(interp: &Interp, receiver: ObjRef) -> Vec<(Vec<u8>, ObjRef, MethodId)> {
+/// The methods `setMethod` gave the receiver itself, filtered to `scope` when
+/// one is given, each with the object `setMethod` installed.
+fn object_level_entries(interp: &Interp, receiver: ObjRef, scope: Option<ObjRef>) -> Vec<Listed> {
     let Some(rexx_core::Object {
         body: rexx_core::Body::Instance { own: Some(own), .. },
         ..
@@ -250,7 +258,14 @@ fn object_level_entries(interp: &Interp, receiver: ObjRef) -> Vec<(Vec<u8>, ObjR
         .into_iter()
         .filter_map(|name| {
             let entry = own.get(&name)??;
-            Some((name.into_vec(), entry.scope, entry.method))
+            scope
+                .is_none_or(|wanted| wanted == entry.scope)
+                .then(|| Listed {
+                    name: name.into_vec(),
+                    scope: entry.scope,
+                    method: entry.method,
+                    object: Some(entry.executable),
+                })
         })
         .collect()
 }
@@ -262,15 +277,24 @@ fn supplier_of(
     interp: &mut Interp,
     selection: Selection,
     owner: ObjRef,
-    entries: Vec<(Vec<u8>, ObjRef, MethodId)>,
+    entries: Vec<Listed>,
 ) -> Result<Option<ObjRef>, Failure> {
     let mut items = Vec::with_capacity(entries.len());
     let mut indexes = Vec::with_capacity(entries.len());
-    for (name, scope, method) in entries {
+    for Listed {
+        name,
+        scope,
+        method,
+        object,
+    } in entries
+    {
         // Rooted as each is built rather than at the end: every allocation
         // below can collect, and a handle held only by these `Vec`s is one
         // the collector cannot see.
-        let object = method_object_for(interp, selection, owner, &name, scope, method)?;
+        let object = match object {
+            Some(object) => object,
+            None => method_object_for(interp, selection, owner, &name, scope, method)?,
+        };
         interp.roots.activity_mut().push_temp(object);
         items.push(object);
         let index = interp.text_built(name);
@@ -285,9 +309,9 @@ fn supplier_of(
 }
 
 /// The `Method` object for one resolved entry, built the way `Class~method`
-/// builds its own. A class-side entry is keyed by the class that defines it,
-/// so two classes' class methods of one name are two objects and a subclass
-/// reaches its superclass's.
+/// builds its own. An entry is keyed by the class that defines it, so two
+/// classes' methods of one name are two objects and a subclass reaches its
+/// superclass's.
 fn method_object_for(
     interp: &mut Interp,
     selection: Selection,
@@ -311,6 +335,9 @@ fn method_object_for(
     };
     match selection {
         Selection::ClassSide(_) => interp.method_object(scope, true, name, scope, record),
+        Selection::Behaviour(_) if interp.heap.is_class(scope) => {
+            interp.method_object(scope, false, name, scope, record)
+        }
         Selection::Behaviour(_) => interp.method_object(owner, false, name, scope, record),
     }
 }

@@ -273,6 +273,18 @@ impl MethodDict {
             .collect()
     }
 
+    /// Every defined entry under every name, shadowed ones and ones behind a
+    /// tombstone included -- what `MethodDictionary::getMethods`
+    /// (`behaviour/MethodDictionary.cpp:507`) walks.
+    pub fn defined_entries(&self) -> impl Iterator<Item = (&str, ObjRef, MethodId)> + '_ {
+        self.entries.iter().flat_map(|(name, list)| {
+            list.iter().filter_map(move |slot| match *slot {
+                MethodSlot::Defined { scope, method } => Some((name.as_str(), scope, method)),
+                MethodSlot::Hidden => None,
+            })
+        })
+    }
+
     /// The highest-priority method for an ordinary (unscoped) send --
     /// index 0 of `name`'s entry list.
     pub fn lookup(&self, name: &str) -> Option<(ObjRef, MethodId)> {

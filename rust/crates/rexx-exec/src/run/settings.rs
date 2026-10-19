@@ -182,7 +182,9 @@ impl Interp {
         }
         self.activation_mut().trace_entry = TraceEntry::Done;
         self.activation_mut().debug.source_traced = true;
-        let package = self.package_path(self.activation().program_id).to_vec();
+        let package = self
+            .program_display_name(self.activation().program_id)
+            .to_vec();
         self.trace_invocation(">I>", &subject, &package);
     }
 
@@ -197,7 +199,9 @@ impl Interp {
         };
         self.activation_mut().trace_entry = TraceEntry::Done;
         self.activation_mut().debug.source_traced = true;
-        let package = self.package_path(self.activation().program_id).to_vec();
+        let package = self
+            .program_display_name(self.activation().program_id)
+            .to_vec();
         self.trace_invocation(">I>", &subject, &package);
     }
 
@@ -215,7 +219,9 @@ impl Interp {
         if !self.trace_mode().labels {
             return;
         }
-        let package = self.package_path(self.activation().program_id).to_vec();
+        let package = self
+            .program_display_name(self.activation().program_id)
+            .to_vec();
         self.trace_invocation("<I<", &subject, &package);
     }
 
@@ -229,7 +235,7 @@ impl Interp {
                 scope: self.class_id_text(identity.scope).as_bytes().to_vec(),
             });
         }
-        // A program called as a routine is announced under its own path, and
+        // A program called as a routine is announced under its package name, and
         // so is a prologue, which `runProlog` calls as an `EXTERNALCALL`.
         if self.activation().entry == crate::activation::Entry::TopLevel
             && matches!(
@@ -239,7 +245,7 @@ impl Interp {
                     | crate::activation::CallType::Requires
             )
         {
-            let path = self.package_path(self.activation().program_id);
+            let path = self.program_display_name(self.activation().program_id);
             return Some(Announced::Routine {
                 name: path.to_vec(),
             });

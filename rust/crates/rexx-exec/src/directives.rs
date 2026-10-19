@@ -141,8 +141,11 @@ fn class_dependencies<'a>(
         .filter_map(|target| declared.get(target.name.as_ref()).copied())
 }
 
-/// The order a file's `::CLASS` directives install in: each class after every
-/// class it names, when that target is declared in the same file.
+/// The order a file's `::CLASS` directives install in: each round takes the
+/// first class in source order whose targets declared in the same file are
+/// all installed (`LanguageParser::resolveDependencies`,
+/// `parser/LanguageParser.cpp:1801`). `Err` is the first class left when no
+/// class qualifies, which is the one a cycle blames.
 /// ```text
 /// blame the LAST ::CLASS directive in the file:
 ///     directive_constant_blames_the_last_installed_class.rex differs, 105 of 106
@@ -153,55 +156,32 @@ pub(super) fn class_install_order(
     program: &Program,
     declared: &FxHashMap<Box<[u8]>, usize>,
 ) -> Result<Vec<usize>, usize> {
-    /// Where a directive is in the walk. Absent from the map is "not yet
-    /// looked at".
-    enum Visit {
-        OnStack,
-        Done,
-    }
-    let mut state: FxHashMap<usize, Visit> = FxHashMap::default();
-    let mut order = Vec::new();
-    for root in 0..program.directives.len() {
-        if !matches!(program.directives[root].kind, DirectiveKind::Class(_)) {
-            continue;
-        }
-        // The walk from this root, innermost pending class last.
-        let mut stack = vec![root];
-        while let Some(index) = stack.last().copied() {
-            if matches!(state.get(&index), Some(Visit::Done)) {
-                stack.pop();
-                continue;
-            }
-            let DirectiveKind::Class(class) = &program.directives[index].kind else {
-                state.insert(index, Visit::Done);
-                stack.pop();
-                continue;
-            };
-            // The classes this one names that the file declares. A target the
-            // file does not declare is the registry's and is nobody's
-            // predecessor here.
-            let mut waiting = false;
-            for target in class_dependencies(class, declared) {
-                match state.get(&target) {
-                    // Already on this walk without having finished, so every
-                    // class from it up to here is waiting on it. A class
-                    // naming itself reaches this on its second visit, which
-                    // is the one-entry case of the same thing.
-                    Some(Visit::OnStack) => return Err(root),
-                    Some(Visit::Done) => {}
-                    None => {
-                        stack.push(target);
-                        waiting = true;
-                    }
-                }
-            }
-            if waiting {
-                state.insert(index, Visit::OnStack);
-            } else {
-                state.insert(index, Visit::Done);
-                order.push(index);
-                stack.pop();
-            }
+    // Each class still to install: its directive, the `declared` entry its
+    // name answers, and the entries it waits on.
+    let mut pending: Vec<(usize, Option<usize>, Vec<usize>)> = program
+        .directives
+        .iter()
+        .enumerate()
+        .filter_map(|(index, directive)| match &directive.kind {
+            DirectiveKind::Class(class) => Some((
+                index,
+                declared
+                    .get(class.name.to_ascii_uppercase().as_slice())
+                    .copied(),
+                class_dependencies(class, declared).collect(),
+            )),
+            _ => None,
+        })
+        .collect();
+    let mut order = Vec::with_capacity(pending.len());
+    while let Some(first) = pending.first() {
+        let Some(next) = pending.iter().position(|(_, _, waits)| waits.is_empty()) else {
+            return Err(first.0);
+        };
+        let (index, name, _) = pending.remove(next);
+        order.push(index);
+        for (_, _, waits) in &mut pending {
+            waits.retain(|target| Some(*target) != name);
         }
     }
     Ok(order)

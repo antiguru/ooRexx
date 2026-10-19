@@ -343,6 +343,34 @@ impl NativeTail {
 }
 
 impl Interp {
+    /// Runs `body`, the primitive method `name` sent to `receiver` with
+    /// `arguments`, as a level of its own that `.context~stackFrames` lists
+    /// while the Rexx code it calls runs.
+    pub(crate) fn in_method_level<T>(
+        &mut self,
+        name: &'static [u8],
+        receiver: ObjRef,
+        arguments: &[Option<ObjRef>],
+        body: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let caller = self.running_activation().map(|activation| activation.id);
+        let scope = self
+            .lookup(receiver, name, None)
+            .map_or(ObjRef::NIL, |resolution| resolution.scope);
+        self.activity
+            .method_levels
+            .push(crate::activity::MethodLevel {
+                caller,
+                name,
+                scope,
+                receiver,
+                arguments: arguments.into(),
+            });
+        let answer = body(self);
+        self.activity.method_levels.pop();
+        answer
+    }
+
     /// The `StackFrame` of the primitive method that entered the running
     /// activation (`InternalActivationFrame::createStackFrame`,
     /// `concurrency/ActivationFrame.cpp:100`) and its `Method` object (`.nil`

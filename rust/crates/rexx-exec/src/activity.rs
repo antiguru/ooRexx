@@ -89,6 +89,9 @@ pub(crate) struct Activity {
     pub(crate) internal_levels: Vec<InternalLevel>,
     /// How many of [`Activity::internal_levels`] are running.
     pub(crate) internal_depth: usize,
+    /// The primitive methods running Rexx code on this Rust stack, innermost
+    /// last.
+    pub(crate) method_levels: Vec<MethodLevel>,
     /// The thread context every native call and package hook is handed,
     /// which an extension may keep for as long as this interpreter runs;
     /// made by the first ([`crate::Interp::thread_context`]).
@@ -338,6 +341,18 @@ pub(crate) struct Activity {
     pub(crate) sharing_tag: u32,
 }
 
+/// A primitive method that is running Rexx code, which the oracle runs under
+/// an `InternalActivationFrame` (`concurrency/ActivationFrame.cpp:100`).
+pub(crate) struct MethodLevel {
+    /// The activation the method was sent from.
+    pub(crate) caller: Option<crate::activation::ActivationId>,
+    pub(crate) name: &'static [u8],
+    /// The class the method was found at.
+    pub(crate) scope: ObjRef,
+    pub(crate) receiver: ObjRef,
+    pub(crate) arguments: Box<[Option<ObjRef>]>,
+}
+
 /// A routine of an internal package that is running, which the oracle runs
 /// as a `NativeActivation`.
 pub(crate) struct InternalLevel {
@@ -424,6 +439,7 @@ impl Activity {
             native_spares: Vec::new(),
             internal_levels: Vec::new(),
             internal_depth: 0,
+            method_levels: Vec::new(),
             clause_state: ClauseState::new(),
             flat_loops: Vec::new(),
             flat_top: None,
@@ -560,6 +576,7 @@ impl Activity {
             // above the depth holds an emptied buffer.
             internal_levels: _,
             internal_depth: _,
+            method_levels,
             clause_state: _,
             // The `DO OVER` snapshot sits in a register held for the loop's
             // lifetime, and `RootSet` reaches a register as a temp.
@@ -683,6 +700,10 @@ impl Activity {
         }
         for tail in native_tails {
             tail.object_roots(out);
+        }
+        for level in method_levels {
+            out.push(level.receiver);
+            out.extend(level.arguments.iter().flatten().copied());
         }
         if let Some(park) = native_park {
             park.object_roots(out);

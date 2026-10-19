@@ -510,6 +510,17 @@ impl ClassRegistry {
         self.graph.method_names_at(handle)
     }
 
+    /// See [`ClassGraph::defined_entries_at`].
+    pub fn defined_entries_at(&self, handle: BehaviourHandle) -> Vec<(String, ObjRef, MethodId)> {
+        self.graph.defined_entries_at(handle)
+    }
+
+    /// [`Self::defined_entries_at`] for `class`'s class-side behaviour.
+    pub fn class_defined_entries(&self, class: ObjRef) -> Vec<(String, ObjRef, MethodId)> {
+        self.graph
+            .defined_entries_at(self.graph.class_behaviour_handle(class))
+    }
+
     /// True once `scope` is folded into a behaviour a receiver holds -- what
     /// `RexxObject::validateScopeOverride` (`classes/ObjectClass.cpp:1950`)
     /// asks before a `target~name:scope` send may start its lookup at

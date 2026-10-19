@@ -314,16 +314,38 @@ fn native_array_sort(
     sort_by(interp, receiver, &Order::CompareTo)
 }
 
-/// `Array~sortWith(comparator)` and `Array~stableSortWith(comparator)`, both
-/// `ArrayClass::stableSortWithRexx`.
+/// `Array~sortWith(comparator)`, `ArrayClass::stableSortWithRexx`.
 fn native_array_sort_with(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    sort_with(interp, b"SORTWITH", receiver, args)
+}
+
+/// `Array~stableSortWith(comparator)`, also `ArrayClass::stableSortWithRexx`.
+fn native_array_stable_sort_with(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    sort_with(interp, b"STABLESORTWITH", receiver, args)
+}
+
+/// The `sortWith` pair, sent as `name`: the comparator's `compare` runs
+/// under the method's own stack frame.
+fn sort_with(
+    interp: &mut Interp,
+    name: &'static [u8],
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
     let comparator = item_argument(args)?;
-    sort_by(interp, receiver, &Order::With(comparator))
+    interp.in_method_level(name, receiver, args, |interp| {
+        sort_by(interp, receiver, &Order::With(comparator))
+    })
 }
 
 /// `Array`'s sort methods, chained into `ObjectModel::build` ahead of the
@@ -336,6 +358,6 @@ pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod
         "Array",
         "STABLESORTWITH",
         Arity::Fixed(1),
-        native_array_sort_with,
+        native_array_stable_sort_with,
     ),
 ];

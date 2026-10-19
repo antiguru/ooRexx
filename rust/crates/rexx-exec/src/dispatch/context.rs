@@ -558,6 +558,8 @@ pub(crate) enum LiveLevel {
     Activation(usize),
     /// This row of [`Activity::native_handles`].
     Native(usize),
+    /// This row of [`Activity::method_levels`].
+    Method(usize),
     /// This row of [`Activity::internal_levels`].
     Internal(usize),
     /// This row of [`Activity::fragments`].
@@ -582,6 +584,11 @@ pub(crate) fn live_levels(interp: &Interp) -> Vec<LiveLevel> {
                 levels.push(LiveLevel::Native(row));
             }
         }
+        for (row, level) in interp.activity.method_levels.iter().enumerate().rev() {
+            if level.caller == Some(id) {
+                levels.push(LiveLevel::Method(row));
+            }
+        }
         for (row, level) in interp.activity.fragments.iter().enumerate().rev() {
             if level.owner == id {
                 levels.push(LiveLevel::Fragment(row));
@@ -597,9 +604,30 @@ pub(crate) fn build_live_frame(interp: &mut Interp, level: LiveLevel) -> Result<
     match level {
         LiveLevel::Activation(depth) => build_frame(interp, depth),
         LiveLevel::Native(row) => build_native_frame_at(interp, row),
+        LiveLevel::Method(row) => build_method_level_frame(interp, row),
         LiveLevel::Internal(row) => build_internal_frame_at(interp, row),
         LiveLevel::Fragment(row) => build_fragment_frame(interp, row),
     }
+}
+
+/// The `StackFrame` of the primitive method in row `row` of
+/// [`Activity::method_levels`]: no line, no invocation and no context, and
+/// its `Compiled method` line as its traceback.
+fn build_method_level_frame(interp: &mut Interp, row: usize) -> Result<ObjRef, Failure> {
+    let level = &interp.activity.method_levels[row];
+    let (name, scope, receiver) = (level.name, level.scope, level.receiver);
+    let arguments = level.arguments.clone();
+    let scope_name = interp.scope_id(scope);
+    let executable = interp.method_executable(scope, name).ok();
+    Ok(build_native_level_frame(
+        interp,
+        None,
+        name,
+        receiver,
+        &arguments,
+        &Raised::compiled_method_line(name, &scope_name),
+        executable,
+    ))
 }
 
 /// The `StackFrame` of the running fragment in row `row`, stopped on its

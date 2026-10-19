@@ -508,8 +508,11 @@ fn source_lines(interp: &Interp, program: Option<ProgramId>) -> Result<Vec<Vec<u
 }
 
 /// `PackageClass::getMainRexx`: the `Routine` a package's leading code
-/// section became, and `.nil` for the REXX package and for a package whose
-/// translation raised.
+/// section became, and `.nil` for the REXX package, for a package whose
+/// translation raised, and for the package of a `Method` or `Routine` built
+/// from source, whose leading section became that executable and which keeps
+/// no init code (`LanguageParser::generateMethod` and `generateRoutine`,
+/// `parser/LanguageParser.cpp:599`, `:633`).
 fn prolog(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -520,6 +523,16 @@ fn prolog(
         return Ok(Some(ObjRef::NIL));
     };
     if interp.untranslated.contains(&program) {
+        return Ok(Some(ObjRef::NIL));
+    }
+    // That executable's body is the package's synthetic directive.
+    let generated = interp.programs.get(program).is_some_and(|source| {
+        source
+            .directives
+            .iter()
+            .any(|directive| directive.clause_span.is_empty())
+    });
+    if generated {
         return Ok(Some(ObjRef::NIL));
     }
     Ok(Some(interp.program_routine_object(program)?))
