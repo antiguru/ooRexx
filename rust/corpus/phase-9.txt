@@ -250,3 +250,13 @@ lang/condition_object_origin.rex
 # a missing SIGNAL ON label reached from a native stream method.
 lang/raise_after_reply_interpreted.rex
 lang/signal_on_missing_label_native.rex
+# 9d Task 6.10: trace. PROCEDURE after a traced label with a Rexx trace
+# destination, TRACE in interactive debug, prologue and install entry lines,
+# a trace destination with no LINEOUT, TraceObject collection under option P,
+# and a REPLY continuation's entry and exit lines.
+lang/trace_procedure_after_label.rex
+lang/trace_interactive_ignored.rex
+lang/trace_prologue_entry.rex
+lang/trace_output_invalid_destination.rex
+lang/trace_object_probe_collect.rex
+lang/trace_reply_continuation.rex

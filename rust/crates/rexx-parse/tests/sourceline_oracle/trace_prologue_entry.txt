@@ -1,0 +1,35 @@
+count 34
+/* A package's prologue is announced with >I> and <I< under its ::OPTIONS
+   TRACE, and so is the empty routine that installs a .Routine~new or
+   .Method~new package with a class. The lines are printed without names. */
+.traceOutput~destination(.shown~new)
+say 'package with code'
+p = .package~new('pa', .array~of("say 'pa prologue'", '::options trace r'))
+say 'package with a class only'
+p = .package~new('pb', .array~of('::class pbc', '::options trace l'))
+say 'package traced normally'
+p = .package~new('pc', .array~of("say 'pc prologue'", '::options trace n'))
+say 'routine with a class'
+r = .routine~new('ra', .array~of("say 'ra body'", '::class rac', '::options trace a'))
+say 'call'
+r~call
+say 'routine with no directive'
+r = .routine~new('rb', .array~of("say 'rb body'", '::options trace r'))
+say 'call'
+r~call
+say 'method with a class'
+m = .method~new('ma', .array~of('return 7', '::class mac', '::options trace l'))
+say 'routine with a class, not traced'
+r = .routine~new('rc', .array~of('return 1', '::class rcc'))
+.traceOutput~destination
+say 'done'
+::class shown
+::method lineout
+  use arg traced
+  line = traced~makeString
+  at = pos(' Routine "', line)
+  if at > 0 then line = left(line, at + 8)
+  at = pos(' in package', line)
+  if at > 0 then line = left(line, at - 1)
+  say 'trace:' line
+  return 0

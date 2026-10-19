@@ -1,0 +1,43 @@
+count 42
+/* PROCEDURE as the first instruction after a traced label, while .TRACEOUTPUT
+   is a Rexx object: the clauses the delivery runs leave the callee's
+   permission alone. */
+s = .lines~new
+.traceOutput~destination(s)
+call m
+r = .o~new~n
+.traceOutput~destination
+do l over s~lines
+  say l
+end
+say 'result' r
+exit
+m:
+  trace i
+  a = 1
+  a = p()
+  trace off
+  return
+p: procedure expose a
+  return a + 1
+::class o
+::method n
+  trace r
+  b = q(4)
+  trace off
+  return b
+q: procedure
+  use arg x
+  return x * 2
+::class lines
+::method init
+  expose lines
+  lines = .array~new
+::method lines
+  expose lines
+  return lines
+::method lineout
+  expose lines
+  use arg traced
+  lines~append(traced~makeString)
+  return 0
