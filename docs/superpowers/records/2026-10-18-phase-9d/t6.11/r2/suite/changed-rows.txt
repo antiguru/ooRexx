@@ -1,0 +1,5 @@
+# diff <(sort t6.11/r1/suite/tests.tsv) <(sort t6.11/r2/suite/tests.tsv)
+23232c23232
+< base/rexxutil/SysFileTree	TEST_TREE_DIRECTORY	-	passed	passed
+---
+> base/rexxutil/SysFileTree	TEST_TREE_DIRECTORY	-	failed	passed

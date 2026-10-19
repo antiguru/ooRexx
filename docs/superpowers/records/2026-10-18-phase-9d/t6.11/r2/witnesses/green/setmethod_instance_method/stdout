@@ -1,0 +1,6 @@
+string Method return 123 The NIL object 1
+array return 456 456
+method return 789 789
+hidden The NIL object 0
+override return "own" 2
+class entry 1

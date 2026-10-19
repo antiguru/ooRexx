@@ -272,3 +272,73 @@ own delta, head -libc d% minus parent -libc d%:
 | dispatch | -0.1454 | -0.1454 | 0.0000 |
 
 The new lookup runs only when a `sortWith` starts.
+
+## Fix round 2
+
+Re-review: `task-6.11-rereview.md`. Code commits `28645a0d8` and `7efdf2dc5`; the records commit that
+follows holds `t6.11/r2/` and this section.
+
+### The level carries the method the dispatch ran (Important 1, Minors 2 and 3)
+
+`SORTWITH` and `STABLESORTWITH` are a `NativeBody::Leveled` primitive (`array::sort::LEVELED_METHODS`,
+one shared function). `begin_invoke`'s native arm passes a leveled body to `run_other`, which runs
+it through `run_leveled`: the level is pushed with the `Resolution` the dispatch ran and the message
+name it ran under, and the primitive runs inside it, with the arity refusal and the
+`Compiled method` blame of the ordinary native arm. Nothing re-derives the method from the
+receiver: `primitive_scope` and the `defined_named` lookups of round 1 are gone. The frame's
+executable is `running_native_executable`: the receiver's own entry when it is the method that
+ran, else the scope's dictionary entry when it is, else the object standing for the identity. A
+`define` copy carries the leveled body, since `copy_method_identity` copies the primitive row.
+
+`lang/stackframes_sortwith_dispatched_scope.rex` now covers, each matched against the oracle:
+forwarding to super one and two deep, `define` in `ACTIVATE`, a run-time `define` reached through
+`forward class (super)` and through an intermediate subclass, `forward class (.array)` past that
+`define` (`Array`, Array's executable), a mixin that defines Array's method (`WITHMIX`),
+`setMethod` with `OBJECT` (`MYARR2`) and with `FLOAT` (`.NIL`, its executable the own entry's
+Method), `run` (`METHOD *UNNAMED*`, `scope ".NIL"`), and `sendWith` on Array and on the defining
+class. On round 1's binary it differs from the forward-to-`.array` case on and aborts at the
+`FLOAT` executable, rc 120 (`t6.11/r2/witnesses/summary.tsv`, red is round 1).
+
+### Perf
+
+`t6.11/r2/callgrind.txt` (binaries in `t6.11/r2/binaries.txt`): pin, round 1 (`feeca3405`) and
+`7efdf2dc5` in one run, exit 0. The round's own delta with libc subtracted:
+
+| program | parent -libc | head -libc | own |
+|---|---|---|---|
+| startup | -0.1238 | -0.1227 | +0.0011 |
+| interpret | -4.6298 | -4.6298 | 0.0000 |
+| parse | -0.1418 | -0.1417 | +0.0001 |
+| churn | +0.0851 | +0.1169 | +0.0318 |
+| sayloop | -0.0657 | -0.0651 | +0.0006 |
+| rexxcps | +0.5192 | +0.5192 | 0.0000 |
+| sendloop | -0.2176 | -0.2176 | 0.0000 |
+| dispatch | -0.1454 | -0.1454 | 0.0000 |
+
+Ordinary sends pay nothing. churn's +0.0318 is under the +0.05 budget; it is the code-layout
+shuffle of `begin_invoke`'s inlined callees, not the level, which runs only for a sort with a
+comparator. Two other shapes were measured and dropped: the leveled arm inside `begin_invoke`'s
+native match (`28645a0d8`: sendloop +0.036, dispatch +0.024, churn +0.037), and a separate
+leveled table read last in `invocable` (sendloop +0.0725, dispatch +0.0484, churn 0.0000, with
+the lookup inline or out of line). Neither was committed past measurement but `28645a0d8`.
+
+### Checks, on `7efdf2dc5`
+
+* `cargo fmt --all --check`: exit 0.
+* `memcap 8G cargo clippy -j 4 -p rexx-exec -p rexx-classes --all-targets -- -D warnings`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-exec --lib`: exit 0, 1155 passed.
+* The refusal-table set as above: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-parse -p rexx-classes`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-core --test unsafe_sites`: exit 0.
+* `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus`: exit 0,
+  1123 of 1123 matching.
+* The whole suite with the table at `t6.11/r2/suite/table.tsv`: exit 101 as expected, 402 groups,
+  5 red, 277 s. Against `t6.11/r1/suite/tests.tsv` the only changed row is SysFileTree
+  `TEST_TREE_DIRECTORY`, the known flake, here on the oracle side
+  (`t6.11/r2/suite/changed-rows.txt`).
+* Every earlier witness of this task: identical to the oracle on `7efdf2dc5`.
+
+### For the queue
+
+`.array~new(3)~sortWith(.numericComparator~new)` answers on the oracle and raises 98.975 here;
+the task's parent and round 1 raise it too (`t6.11/r2/probes/src.rex`).

@@ -1,0 +1,26 @@
+forwarded METHOD SORTWITH        *-* Compiled method "SORTWITH" with scope "Array".
+forwarded array 1 0 scope The Array class
+forwarded METHOD STABLESORTWITH        *-* Compiled method "STABLESORTWITH" with scope "Array".
+forwarded array 0 1 scope The Array class
+two deep METHOD SORTWITH        *-* Compiled method "SORTWITH" with scope "Array".
+two deep array 1 0 scope The Array class
+defined METHOD SORTWITH        *-* Compiled method "SORTWITH" with scope "OTHER".
+defined array 0 0 scope The OTHER class
+super of defined METHOD STABLESORTWITH        *-* Compiled method "STABLESORTWITH" with scope "OTHER2".
+super of defined array 0 0 scope The OTHER2 class
+through mid METHOD STABLESORTWITH        *-* Compiled method "STABLESORTWITH" with scope "OTHER2".
+through mid array 0 0 scope The OTHER2 class
+forward to .array METHOD SORTWITH        *-* Compiled method "SORTWITH" with scope "Array".
+forward to .array array 1 0 scope The Array class
+mixin METHOD SORTWITH        *-* Compiled method "SORTWITH" with scope "WITHMIX".
+mixin array 0 0 scope The WITHMIX class
+object scope METHOD SORTWITH        *-* Compiled method "SORTWITH" with scope "MYARR2".
+object scope array 0 0 scope The MYARR2 class
+float scope METHOD SORTWITH        *-* Compiled method "SORTWITH" with scope ".NIL".
+float scope array 0 0 scope The NIL object
+run METHOD *UNNAMED*        *-* Compiled method "*UNNAMED*" with scope ".NIL".
+run array 0 0 scope The NIL object
+sendWith METHOD SORTWITH        *-* Compiled method "SORTWITH" with scope "Array".
+sendWith array 1 0 scope The Array class
+sendWith defined METHOD SORTWITH        *-* Compiled method "SORTWITH" with scope "OTHER".
+sendWith defined array 0 0 scope The OTHER class

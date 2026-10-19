@@ -1,0 +1,4 @@
+       *-* Compiled method "SORTWITH" with scope "Array".
+     8 *-* .array~new(3)~sortWith(.numericcomparator~new)
+Error 98 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t611/r2/src.rex line 8:  Execution error.
+Error 98.975:  Missing array element at position 1.

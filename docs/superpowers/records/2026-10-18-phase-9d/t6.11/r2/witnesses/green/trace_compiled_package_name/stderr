@@ -1,0 +1,23 @@
+       >I> Routine "rnamed" in package "rnamed".
+     1 *-* return 1
+       >L>   "1"
+       >>>   "1"
+       <I< Routine "rnamed" in package "rnamed".
+       >I> Method "M1" with scope ".NIL" in package "mnamed".
+     1 *-* return 2
+       >L>   "2"
+       >>>   "2"
+       <I< Method "M1" with scope ".NIL" in package "mnamed".
+       >I> Method "M2" with scope ".NIL" in package "optnamed".
+     1 *-* return 3;
+       >L>   "3"
+       >>>   "3"
+       <I< Method "M2" with scope ".NIL" in package "optnamed".
+       >I> Routine "pnamed" in package "pnamed".
+     2 *-* nop
+       <I< Routine "pnamed" in package "pnamed".
+       >I> Routine "Q" in package "pnamed".
+     5 *-* return 4
+       >L>   "4"
+       >>>   "4"
+       <I< Routine "Q" in package "pnamed".

@@ -1,0 +1,17 @@
+forwarded METHOD SORTWITH        *-* Compiled method "SORTWITH" with scope "Array".
+forwarded array 1 0 scope The Array class
+forwarded METHOD STABLESORTWITH        *-* Compiled method "STABLESORTWITH" with scope "Array".
+forwarded array 0 1 scope The Array class
+two deep METHOD SORTWITH        *-* Compiled method "SORTWITH" with scope "Array".
+two deep array 1 0 scope The Array class
+defined METHOD SORTWITH        *-* Compiled method "SORTWITH" with scope "OTHER".
+defined array 0 0 scope The OTHER class
+super of defined METHOD STABLESORTWITH        *-* Compiled method "STABLESORTWITH" with scope "OTHER2".
+super of defined array 0 0 scope The OTHER2 class
+through mid METHOD STABLESORTWITH        *-* Compiled method "STABLESORTWITH" with scope "OTHER2".
+through mid array 0 0 scope The OTHER2 class
+forward to .array METHOD SORTWITH        *-* Compiled method "SORTWITH" with scope "OTHER2".
+forward to .array array 0 0 scope The OTHER2 class
+mixin METHOD SORTWITH        *-* Compiled method "SORTWITH" with scope "WITHMIX".
+mixin array 0 0 scope The WITHMIX class
+object scope METHOD SORTWITH        *-* Compiled method "SORTWITH" with scope "MYARR2".

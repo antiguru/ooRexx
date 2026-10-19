@@ -1,0 +1,10 @@
+program	red vs oracle	green vs oracle
+stackframes_sortwith_dispatched_scope	differs: stdout stderr rc	identical
+stackframes_sortwith_comparator	identical	identical
+class_setmethod_instance_methods	identical	identical
+setmethod_instance_method	identical	identical
+method_object_identity_through_subclass	identical	identical
+uninit_defined_on_superclass_later	identical	identical
+trace_compiled_package_name	identical	identical
+class_activate_dependency_order	identical	identical
+package_prolog_of_compiled_executable	identical	identical

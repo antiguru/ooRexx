@@ -1,0 +1,8 @@
+sortWith METHOD SORTWITH The NIL object 1 1 1
+sortWith 1        *-* Compiled method "SORTWITH" with scope "Array".
+sortWith next PROGRAM
+stableSortWith METHOD STABLESORTWITH The NIL object 1 1 1
+stableSortWith 1        *-* Compiled method "STABLESORTWITH" with scope "Array".
+stableSortWith next PROGRAM
+condition METHOD COMPARE 2     37 *-* return 1 + 'x'
+condition METHOD SORTWITH 1        *-* Compiled method "SORTWITH" with scope "Array".
