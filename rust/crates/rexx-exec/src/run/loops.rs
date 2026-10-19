@@ -586,6 +586,16 @@ pub(crate) struct LoopHeaderValues {
 }
 
 impl Interp {
+    /// [`Interp::echo_header_value`] for the driver's `Op::TraceKeyword`, a
+    /// failed delivery kept in [`crate::activity::Activity::trace_failure`]
+    /// for the op to raise.
+    #[inline(never)]
+    pub(crate) fn echo_header_value_kept(&mut self, role: HeaderRole, value: ObjRef) {
+        if let Err(failure) = self.echo_header_value(role, value) {
+            self.activity.trace_failure = Some(failure);
+        }
+    }
+
     /// One header value's own `>K>` line, at the `DO`/`LOOP` clause's own
     /// indent, for the roles the oracle echoes one for.
     pub(crate) fn echo_header_value(

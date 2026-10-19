@@ -410,20 +410,20 @@ macro_rules! region_ops {
                         // for one clause.
                         let indent =
                             $self.activity.clause_state.current_value_indent;
-                        if let Err(failure) = $self.echo_compiled_clause($source, $clause, indent) {
-                            break $cold Err(failure);
-                        }
-                    } else if let Some(failure) = $self.activity.stale_echo_failure.take() {
-                        break $cold Err(failure);
+                        $self.echo_compiled_clause_kept($source, $clause, indent);
+                    }
+                    // The compiled echo's failure, or the stale echo's the
+                    // clause entry kept.
+                    if $self.activity.trace_failure.is_some() {
+                        break $cold Err($self.take_trace_failure());
                     }
                 }
-                // The stale clause's echo was made at its entry.
+                // A stale clause's echo was made at its entry, which kept a
+                // failed delivery here.
                 Op::TraceStale { $index } => {
                     debug_assert_names_the_clause($code, *$index, $clause, "TraceStale");
-                    if $stale
-                        && let Some(failure) = $self.activity.stale_echo_failure.take()
-                    {
-                        break $cold Err(failure);
+                    if $self.activity.trace_failure.is_some() {
+                        break $cold Err($self.take_trace_failure());
                     }
                 }
                 // **The one thing this does that `EvalExpr`
@@ -483,8 +483,9 @@ macro_rules! region_ops {
                     if !$self.tracing_intermediates() {
                         continue 'region_loop;
                     }
-                    if let Err(failure) = $self.trace_call_arg($registers, *src) {
-                        break $cold Err(failure);
+                    $self.trace_call_arg($registers, *src);
+                    if $self.activity.trace_failure.is_some() {
+                        break $cold Err($self.take_trace_failure());
                     }
                 }
                 Op::CallArgs {
@@ -562,8 +563,9 @@ macro_rules! region_ops {
                         break $cold Err(Loud::call_op_off_its_node().into());
                     };
                     let value = $registers.get(*src);
-                    if let Err(failure) = $self.trace_intermediate($code, expr, value) {
-                        break $cold Err(failure);
+                    $self.trace_intermediate_kept($code, expr, value);
+                    if $self.activity.trace_failure.is_some() {
+                        break $cold Err($self.take_trace_failure());
                     }
                 }
                 // A send whose receiver and arguments ops of this region
@@ -731,8 +733,9 @@ macro_rules! region_ops {
                         continue 'region_loop;
                     }
                     let value = $registers.get(*src);
-                    if let Err(failure) = $self.echo_literal(value) {
-                        break $cold Err(failure);
+                    $self.echo_literal_kept(value);
+                    if $self.activity.trace_failure.is_some() {
+                        break $cold Err($self.take_trace_failure());
                     }
                 }
                 // **The second native expression op**: one bare
@@ -825,8 +828,9 @@ macro_rules! region_ops {
                         continue 'region_loop;
                     }
                     let value = $registers.get(*src);
-                    if let Err(failure) = $self.echo_symbol_read($code, *symbol, value) {
-                        break $cold Err(failure);
+                    $self.echo_symbol_read_kept($code, *symbol, value);
+                    if $self.activity.trace_failure.is_some() {
+                        break $cold Err($self.take_trace_failure());
                     }
                 }
                 // **A native expression op**: one arithmetic
@@ -956,8 +960,9 @@ macro_rules! region_ops {
                         continue 'region_loop;
                     }
                     let value = $registers.get(*src);
-                    if let Err(failure) = $self.echo_operator(*op, value) {
-                        break $cold Err(failure);
+                    $self.echo_operator_kept(*op, value);
+                    if $self.activity.trace_failure.is_some() {
+                        break $cold Err($self.take_trace_failure());
                     }
                 }
                 // **A prefix operator**: `+`, `-` or `\`
@@ -1016,8 +1021,9 @@ macro_rules! region_ops {
                         continue 'region_loop;
                     }
                     let value = $registers.get(*src);
-                    if let Err(failure) = $self.echo_prefix_op(*op, value) {
-                        break $cold Err(failure);
+                    $self.echo_prefix_op_kept(*op, value);
+                    if $self.activity.trace_failure.is_some() {
+                        break $cold Err($self.take_trace_failure());
                     }
                 }
                 // The write, through `Interp::assign_evaluated`
@@ -1578,8 +1584,9 @@ macro_rules! region_ops {
                      reserved"
                     );
                     let value = $registers.get(*src);
-                    if let Err(failure) = $self.echo_header_value(*role, value) {
-                        break $cold Err(failure);
+                    $self.echo_header_value_kept(*role, value);
+                    if $self.activity.trace_failure.is_some() {
+                        break $cold Err($self.take_trace_failure());
                     }
                 }
                 // One header value's own validation, in front of
@@ -1963,10 +1970,27 @@ impl Interp {
         self.activity.value_buffer.push(value);
     }
 
+    /// The failure a trace op's line kept, for the op to raise.
+    #[cold]
+    #[inline(never)]
+    fn take_trace_failure(&mut self) -> Failure {
+        self.activity
+            .trace_failure
+            .take()
+            .unwrap_or_else(|| Loud::op_not_driven("a trace failure that was not kept").into())
+    }
+
     /// One [`crate::ir::Op::TraceArgument`]'s `>A>` line, its gate already
     /// answered by the caller.
     #[inline(never)]
-    fn trace_call_arg(&mut self, registers: RegFrame<'_>, src: u16) -> Result<(), Failure> {
+    fn trace_call_arg(&mut self, registers: RegFrame<'_>, src: u16) {
+        if let Err(failure) = self.trace_call_arg_line(registers, src) {
+            self.activity.trace_failure = Some(failure);
+        }
+    }
+
+    /// [`Interp::trace_call_arg`]'s line, with its delivery's failure.
+    fn trace_call_arg_line(&mut self, registers: RegFrame<'_>, src: u16) -> Result<(), Failure> {
         let indent = self.activity.clause_state.current_value_indent;
         if src == Op::ARG_OMITTED {
             self.trace_argument(indent, b"")?;

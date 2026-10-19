@@ -398,6 +398,41 @@ impl Interp {
         Ok(())
     }
 
+    /// [`Interp::echo_symbol_read`] for the driver's `Op::TraceRead`, a
+    /// failed delivery kept in [`crate::activity::Activity::trace_failure`]
+    /// for the op to raise.
+    #[inline(always)]
+    pub(crate) fn echo_symbol_read_kept(&mut self, code: &Code<'_>, id: SymbolId, value: ObjRef) {
+        if !self.tracing_intermediates() {
+            return;
+        }
+        self.echo_symbol_read_line_kept(code, id, value);
+    }
+
+    #[inline(never)]
+    fn echo_symbol_read_line_kept(&mut self, code: &Code<'_>, id: SymbolId, value: ObjRef) {
+        if let Err(failure) = self.echo_symbol_read_line(code, id, value) {
+            self.activity.trace_failure = Some(failure);
+        }
+    }
+
+    /// [`Interp::trace_intermediate`] for the driver's `Op::TraceFunction`, a
+    /// failed delivery kept for the op to raise.
+    #[inline]
+    pub(crate) fn trace_intermediate_kept(&mut self, code: &Code<'_>, expr: &Expr, value: ObjRef) {
+        if !self.tracing_intermediates() {
+            return;
+        }
+        self.trace_intermediate_event_kept(code, expr, value);
+    }
+
+    #[inline(never)]
+    fn trace_intermediate_event_kept(&mut self, code: &Code<'_>, expr: &Expr, value: ObjRef) {
+        if let Err(failure) = self.trace_intermediate_event(code, expr, value) {
+            self.activity.trace_failure = Some(failure);
+        }
+    }
+
     pub(crate) fn eval_node(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Failure> {
         match &expr.kind {
             ExprKind::Literal(bytes) => Ok(self.literal(bytes)),

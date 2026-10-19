@@ -143,6 +143,59 @@ impl Interp {
             .any(|level| level.fragment.is_some())
     }
 
+    /// [`Interp::trace_stepped_clause`] for a stale clause entry in the
+    /// driver: a failed delivery is kept in
+    /// [`crate::activity::Activity::trace_failure`] for the clause's first op
+    /// to raise.
+    #[inline(never)]
+    pub(crate) fn trace_stepped_clause_kept(
+        &mut self,
+        is_label: bool,
+        is_command: bool,
+        line: usize,
+        indent: usize,
+        text: &[u8],
+    ) {
+        if let Err(failure) = self.trace_stepped_clause(is_label, is_command, line, indent, text) {
+            self.activity.trace_failure = Some(failure);
+        }
+    }
+
+    /// [`Interp::echo_literal`] for the driver's `Op::TraceLiteral`, a failed
+    /// delivery kept for the op to raise.
+    #[inline(always)]
+    pub(crate) fn echo_literal_kept(&mut self, value: ObjRef) {
+        if !self.tracing_intermediates() {
+            return;
+        }
+        self.echo_literal_line_kept(value);
+    }
+
+    #[inline(never)]
+    fn echo_literal_line_kept(&mut self, value: ObjRef) {
+        if let Err(failure) = self.echo_literal_line(value) {
+            self.activity.trace_failure = Some(failure);
+        }
+    }
+
+    /// [`Interp::echo_operator`] for the driver's `Op::TraceOperator`, a
+    /// failed delivery kept for the op to raise.
+    #[inline(never)]
+    pub(crate) fn echo_operator_kept(&mut self, op: Operator, value: ObjRef) {
+        if let Err(failure) = self.echo_operator(op, value) {
+            self.activity.trace_failure = Some(failure);
+        }
+    }
+
+    /// [`Interp::echo_prefix_op`] for the driver's `Op::TracePrefix`, a failed
+    /// delivery kept for the op to raise.
+    #[inline(never)]
+    pub(crate) fn echo_prefix_op_kept(&mut self, op: PrefixOp, value: ObjRef) {
+        if let Err(failure) = self.echo_prefix_op(op, value) {
+            self.activity.trace_failure = Some(failure);
+        }
+    }
+
     /// Appends `*-*`'s own line for a clause that is **never** a `LABEL`:
     /// the loop drivers' own re-echo of a `DO`/`LOOP`/`END`, and a
     /// `WHEN`/`OTHERWISE` header (see `run/loops.rs`'s own doc comments on those

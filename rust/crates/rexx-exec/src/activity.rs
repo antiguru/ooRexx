@@ -320,9 +320,9 @@ pub(crate) struct Activity {
     pub(crate) waiting_traced: Option<bool>,
     /// For a `>V>` or `>=>` line being routed, the variable it names.
     pub(crate) traced_variable: Option<crate::trace::TracedVariable>,
-    /// What a stale chunk's clause echo raised, until the clause's first op
-    /// raises it.
-    pub(crate) stale_echo_failure: Option<Failure>,
+    /// What a trace line the driver's own ops or a stale clause entry made
+    /// raised, until the op that keeps it raises it.
+    pub(crate) trace_failure: Option<Failure>,
     #[cfg(feature = "pinning")]
     pub(crate) pins: crate::pinning::PinStack,
     /// The heap's tag for this activity, `Heap::sharing_tag`.
@@ -488,7 +488,7 @@ impl Activity {
             semaphore_wait: None,
             waiting_traced: None,
             traced_variable: None,
-            stale_echo_failure: None,
+            trace_failure: None,
             trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
             #[cfg(feature = "pinning")]
             pins: crate::pinning::PinStack::default(),
@@ -641,7 +641,7 @@ impl Activity {
             semaphore_wait: _,
             waiting_traced: _,
             traced_variable,
-            stale_echo_failure,
+            trace_failure,
             #[cfg(feature = "pinning")]
                 pins: _,
             #[cfg(feature = "sharing")]
@@ -665,7 +665,7 @@ impl Activity {
         out.extend(failure_frames.iter().copied());
         out.extend(failed_sends.iter().copied());
         out.extend(traced_variable.as_ref().and_then(|traced| traced.value));
-        if let Some(Failure::Exited(value)) = stale_echo_failure {
+        if let Some(Failure::Exited(value)) = trace_failure {
             out.extend(*value);
         }
         match spawner {

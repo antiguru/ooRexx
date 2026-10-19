@@ -3054,7 +3054,7 @@ impl Interp {
         // not echo pays nothing at all for the decision -- no gate, no
         // `clause_site`, no op.
         if matches!(echo, Echo::Gated) {
-            self.echo_gated_clause(source, instruction, indent);
+            self.echo_stepped_clause(source, instruction, indent);
         }
         // The debug tripwire I22 asks for, alongside `ActivityRoots::temps_len`, its
         // one prerequisite. `SteppedClause` carries the watermark and the
@@ -3067,22 +3067,6 @@ impl Interp {
             entry,
             frame,
             temps_at_entry,
-        }
-    }
-
-    /// A stale chunk's clause echo, out of line. A failed delivery is kept
-    /// for the clause's first op ([`crate::ir::Op::TraceClause`] or
-    /// [`crate::ir::Op::TraceStale`]), which raises it before the clause's
-    /// work runs.
-    #[inline(never)]
-    fn echo_gated_clause(
-        &mut self,
-        source: Option<&ProgramSource>,
-        instruction: &Instruction,
-        indent: usize,
-    ) {
-        if let Err(failure) = self.echo_stepped_clause(source, instruction, indent) {
-            self.activity.stale_echo_failure = Some(failure);
         }
     }
 
@@ -3154,15 +3138,28 @@ impl Interp {
         source: Option<&ProgramSource>,
         instruction: &Instruction,
         indent: usize,
-    ) -> Result<(), Failure> {
+    ) {
         let is_label = matches!(instruction.kind, InstructionKind::Label { .. });
         let is_command = matches!(instruction.kind, InstructionKind::Command { .. });
         if self.tracing_clause(is_label, is_command)
             && let Some((line, text)) = self.clause_site(source, instruction)
         {
-            self.trace_stepped_clause(is_label, is_command, line, indent, &text)?;
+            self.trace_stepped_clause_kept(is_label, is_command, line, indent, &text);
         }
-        Ok(())
+    }
+
+    /// [`Interp::echo_compiled_clause`] for its op, a failed delivery kept in
+    /// [`crate::activity::Activity::trace_failure`].
+    #[inline(never)]
+    pub(crate) fn echo_compiled_clause_kept(
+        &mut self,
+        source: Option<&ProgramSource>,
+        instruction: &Instruction,
+        indent: usize,
+    ) {
+        if let Err(failure) = self.echo_compiled_clause(source, instruction, indent) {
+            self.activity.trace_failure = Some(failure);
+        }
     }
 
     /// The same echo with **no gate at all**, for a caller that has already
