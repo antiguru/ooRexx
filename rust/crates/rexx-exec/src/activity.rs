@@ -22,6 +22,19 @@ use crate::error::{Failure, FailureSite};
 use crate::plan::Package;
 use crate::{CallContext, FragmentLevel, NativeFrame, PendingTrap};
 
+/// One trace line's delivery, on [`Interp::deliveries`](crate::Interp).
+#[derive(Default)]
+pub(crate) struct Delivery {
+    /// `None` until the line's `TraceObject` is made, then how many
+    /// activations the activity held when its destination was sent `LINEOUT`:
+    /// those above are the destination's.
+    pub(crate) floor: Option<usize>,
+    /// While a slice waits, how many clauses each activation of the stack has
+    /// run since the slice fell due, outermost first. A caller's count is kept
+    /// while its callees run.
+    pub(crate) counts: Vec<(crate::activation::ActivationId, u32)>,
+}
+
 /// What each execution of the interpreter needs its own copy of.
 pub(crate) struct Activity {
     /// A buffer lent out for a builtin call's evaluated argument values.
@@ -225,18 +238,6 @@ pub(crate) struct Activity {
     /// again: the oracle SIGSEGVs in the one shape that reaches this
     /// (`corpus/oracle-crashes.txt` entry 14), and this crate must terminate.
     pub(crate) routing_trace: bool,
-    /// While [`Activity::routing_trace`], `None` until the line's
-    /// `TraceObject` is made, then how many activations the activity held
-    /// when its destination was sent `LINEOUT`: those above are the
-    /// destination's.
-    pub(crate) delivery_floor: Option<usize>,
-    /// While [`Activity::routing_trace`] and a slice waits, how many clauses
-    /// each activation of the stack has run since the slice fell due,
-    /// outermost first. A caller's count is kept while its callees run.
-    pub(crate) delivery_counts: Vec<(crate::activation::ActivationId, u32)>,
-    /// A refusal a trace line's delivery met where no clause end of the
-    /// activity is left to raise it: the activity ends with it.
-    pub(crate) trace_refusal: Option<Failure>,
     /// Current `eval` recursion depth, and the deepest it has reached.
     pub(crate) depth: usize,
     pub(crate) max_depth: usize,
@@ -330,8 +331,6 @@ pub(crate) struct Activity {
     /// For a `>K>` line of a `GUARD`'s `WHEN` being routed, whether its value
     /// starts with `0`: the `TraceObject`'s `ISWAITING`.
     pub(crate) waiting_traced: Option<bool>,
-    /// For a `>V>` or `>=>` line being routed, the variable it names.
-    pub(crate) traced_variable: Option<crate::trace::TracedVariable>,
     #[cfg(feature = "pinning")]
     pub(crate) pins: crate::pinning::PinStack,
     /// The heap's tag for this activity, `Heap::sharing_tag`.
@@ -461,9 +460,6 @@ impl Activity {
             fragments: Vec::new(),
             fragment_clause: 0,
             routing_trace: false,
-            delivery_floor: None,
-            delivery_counts: Vec::new(),
-            trace_refusal: None,
             depth: 0,
             max_depth: 0,
             stack_entry: 0,
@@ -499,7 +495,6 @@ impl Activity {
             woken_by_halt: false,
             semaphore_wait: None,
             waiting_traced: None,
-            traced_variable: None,
             trace_cache: crate::trace::TraceCache::of(crate::trace::TraceMode::OFF, false),
             #[cfg(feature = "pinning")]
             pins: crate::pinning::PinStack::default(),
@@ -612,9 +607,6 @@ impl Activity {
             fragments: _,
             fragment_clause: _,
             routing_trace: _,
-            delivery_floor: _,
-            delivery_counts: _,
-            trace_refusal: _,
             depth: _,
             max_depth: _,
             stack_entry: _,
@@ -654,7 +646,6 @@ impl Activity {
             woken_by_halt: _,
             semaphore_wait: _,
             waiting_traced: _,
-            traced_variable,
             #[cfg(feature = "pinning")]
                 pins: _,
             #[cfg(feature = "sharing")]
@@ -677,7 +668,6 @@ impl Activity {
         out.extend(*failure_frame);
         out.extend(failure_frames.iter().copied());
         out.extend(failed_sends.iter().copied());
-        out.extend(traced_variable.as_ref().and_then(|traced| traced.value));
         match spawner {
             Some(Spawner::Frame {
                 frame: Some((frame, executable)),

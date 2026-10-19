@@ -1930,9 +1930,8 @@ impl Interp {
                     let empty = self.activity.replied_level.is_none();
                     self.open_replied_level();
                     self.trace_invocation_entry();
-                    // A rest with no clause ends where it starts.
                     if empty {
-                        break 'resumed self.finish_send(Ok(crate::run::Ended::Exited(None)));
+                        break 'resumed self.finish_empty_rest();
                     }
                 } else if !self.activity.guard_waits.is_empty() {
                     self.take_granted_guard();
@@ -1960,9 +1959,10 @@ impl Interp {
             Err(Failure::Exited(value)) => Ok(value),
             other => other,
         };
-        let sent = match self.activity.trace_refusal.take() {
-            Some(refusal) => Err(refusal),
-            None => sent,
+        let sent = if self.trace_refusal.is_some() {
+            self.ended_with_trace_refusal(sent)
+        } else {
+            sent
         };
         let untrapped = match &sent {
             Err(Failure::Raised(raised)) => Some(raised.clone()),
@@ -2298,13 +2298,37 @@ impl Interp {
         }
         if fresh && !self.slice_deferred {
             if self.activity.routing_trace {
-                self.activity.delivery_counts.clear();
+                if let Some(delivery) = self.deliveries.last_mut() {
+                    delivery.counts.clear();
+                }
             }
             self.slice_deferred = true;
             deferred_slice!(self);
         }
         self.clause_countdown = 1;
         Ok(())
+    }
+
+    /// A REPLY rest with no clause, which ends where it starts.
+    #[cold]
+    #[inline(never)]
+    fn finish_empty_rest(&mut self) -> Result<Option<ObjRef>, Failure> {
+        self.finish_send(Ok(crate::run::Ended::Exited(None)))
+    }
+
+    /// The outcome of an activity that ends with
+    /// [`Interp::trace_refusal`]: the refusal, which replaces `sent`.
+    #[cold]
+    #[inline(never)]
+    fn ended_with_trace_refusal(
+        &mut self,
+        sent: Result<Option<ObjRef>, Failure>,
+    ) -> Result<Option<ObjRef>, Failure> {
+        drop(sent);
+        Err(self
+            .trace_refusal
+            .take()
+            .expect("the caller saw the refusal"))
     }
 
     /// Whether a pinned yield may be taken here, which outside a trace line's
@@ -2324,7 +2348,10 @@ impl Interp {
         if !activity.routing_trace {
             return true;
         }
-        let Some(floor) = activity.delivery_floor else {
+        let Some(delivery) = self.deliveries.last() else {
+            return false;
+        };
+        let Some(floor) = delivery.floor else {
             return false;
         };
         let holds_a_guard = activity
@@ -2336,22 +2363,22 @@ impl Interp {
             .any(|activation| activation.flags.reserved());
         let running = activity.running.as_deref().map(|activation| activation.id);
         !holds_a_guard
-            && activity
-                .delivery_counts
-                .last()
-                .is_some_and(|&(id, clauses)| {
-                    Some(id) == running && clauses > DELIVERY_YIELD_CLAUSES
-                })
+            && delivery.counts.last().is_some_and(|&(id, clauses)| {
+                Some(id) == running && clauses > DELIVERY_YIELD_CLAUSES
+            })
     }
 
     /// Counts a clause of the running activation toward
-    /// [`Activity::delivery_counts`]. The counts above its own belong to
+    /// [`Delivery::counts`](crate::activity::Delivery::counts). The counts above its own belong to
     /// callees that have returned, and are dropped.
     fn count_delivery_clause(&mut self) {
         let Some(running) = self.running_activation().map(|activation| activation.id) else {
             return;
         };
-        let counts = &mut self.activity.delivery_counts;
+        let Some(delivery) = self.deliveries.last_mut() else {
+            return;
+        };
+        let counts = &mut delivery.counts;
         match counts.iter().rposition(|&(id, _)| id == running) {
             Some(at) => {
                 counts.truncate(at + 1);

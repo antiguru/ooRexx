@@ -186,7 +186,7 @@ impl Interp {
     /// `.TraceObject~option` `P`. Without the class the line goes to
     /// standard error as it is.
     fn deliver_trace_line_as(&mut self, start: usize, entry: bool) {
-        let variable = self.activity.traced_variable.take();
+        let variable = self.traced_variable.take();
         if self.activity.routing_trace {
             return;
         }
@@ -205,8 +205,7 @@ impl Interp {
             line.pop();
         }
         self.activity.routing_trace = true;
-        self.activity.delivery_floor = None;
-        self.activity.delivery_counts.clear();
+        self.deliveries.push(crate::activity::Delivery::default());
         // **The nested-send protocol, not a bare send**, and around the whole
         // delivery because `NEW`, each `PUT` and the `LINEOUT` all run Rexx
         // clauses. A clause boundary clears the shared argument stack, so
@@ -233,6 +232,7 @@ impl Interp {
             self.activity.region_procedure_permitted,
         ) = permitted;
         self.activity.routing_trace = false;
+        self.deliveries.pop();
         match delivered {
             Ok(Delivered::Sent | Delivered::KeptBack) => {}
             Ok(Delivered::ToStandardError) => {
@@ -311,7 +311,7 @@ impl Interp {
         let Some(running) = self.running_activation() else {
             self.write_out_line(line);
             if refusal {
-                self.activity.trace_refusal.get_or_insert(failure);
+                self.trace_refusal.get_or_insert(failure);
             }
             return;
         };
@@ -337,7 +337,7 @@ impl Interp {
     /// Moves each refusal [`Interp::queue_trace_failure`] queued for the
     /// activation now ending onto its caller, which raises it at its own
     /// clause's end, or with no caller onto the activity, which ends with it
-    /// ([`Activity::trace_refusal`]).
+    /// ([`Interp::trace_refusal`]).
     #[cold]
     #[inline(never)]
     pub(crate) fn carry_trace_refusals(&mut self) {
@@ -374,7 +374,7 @@ impl Interp {
                 .remove(index)
                 .and_then(|pending| pending.trace_failure);
             if let Some(failure) = failure {
-                self.activity.trace_refusal.get_or_insert(failure);
+                self.trace_refusal.get_or_insert(failure);
             }
         }
     }
@@ -549,8 +549,11 @@ impl Interp {
             let Some(route) = self.local_route(b"TRACEOUTPUT")? else {
                 return Ok(Delivered::ToStandardError);
             };
-            self.activity.delivery_floor =
+            let floor =
                 Some(self.activity.suspended.len() + usize::from(self.activity.running.is_some()));
+            if let Some(delivery) = self.deliveries.last_mut() {
+                delivery.floor = floor;
+            }
             let caller_ref = self.caller();
             self.send_message(
                 route,

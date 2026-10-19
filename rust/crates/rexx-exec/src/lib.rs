@@ -1502,6 +1502,16 @@ struct Interp {
     /// For a stem some other stem's `EXPOSE` made tails of, a weak reference
     /// to each such stem. The stems are not roots through this.
     stem_exposers: FxHashMap<ObjRef, Vec<ObjRef>>,
+    /// The trace lines being delivered, innermost last. Kept here and not on
+    /// the activity, which every switch moves: a delivery is pinned, so
+    /// another activity's runs only inside this one's pinned yield, and the
+    /// innermost is the running activity's whenever it is routing.
+    deliveries: Vec<crate::activity::Delivery>,
+    /// A refusal a trace line's delivery met where no clause end of its
+    /// activity is left to raise it: that activity, ending next, ends with it.
+    trace_refusal: Option<Failure>,
+    /// For a `>V>` or `>=>` line being routed, the variable it names.
+    traced_variable: Option<crate::trace::TracedVariable>,
     /// What `Method`'s four setters have written on each object they have
     /// been sent to, over what its directive declared -- see
     /// [`dispatch::executable::MethodFlagWrites`].
@@ -2247,6 +2257,9 @@ impl Interp {
             executable_objects: FxHashMap::default(),
             executable_sources: FxHashMap::default(),
             stem_exposers: FxHashMap::default(),
+            deliveries: Vec::new(),
+            trace_refusal: None,
+            traced_variable: None,
             method_flag_writes: FxHashMap::default(),
             message_outcomes: FxHashMap::default(),
             started_messages: rustc_hash::FxHashSet::default(),
@@ -2809,7 +2822,7 @@ impl Interp {
             self.activity.indent_offset = offset;
             self.activity.clause_line_override = line;
         }
-        let exit = if !nested && let Some(refusal) = self.activity.trace_refusal.take() {
+        let exit = if !nested && let Some(refusal) = self.trace_refusal.take() {
             Err(refusal)
         } else {
             exit
@@ -3168,6 +3181,10 @@ impl Interp {
             // miss, because the generation bump makes the handle unequal.
             executable_sources: _,
             stem_exposers,
+            // Plain counts, and a failure no other root set holds either.
+            deliveries: _,
+            trace_refusal: _,
+            traced_variable,
             method_flag_writes: _,
             message_outcomes: _,
             started_messages: _,
@@ -3262,6 +3279,7 @@ impl Interp {
         activity.object_roots(out);
         activities.object_roots(out);
         out.extend(stem_exposers.values().flatten().copied());
+        out.extend(traced_variable.as_ref().and_then(|traced| traced.value));
         out.extend(global_references.roots());
     }
 

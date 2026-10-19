@@ -384,9 +384,9 @@ impl Interp {
     fn trace_variable_line(&mut self, indent: usize, tag: &[u8], value: &[u8], object: ObjRef) {
         let start = self.trace.len();
         push_tagged(&mut self.trace, ">V>", indent, false, tag, " => ", value);
-        self.activity.traced_variable = Some(TracedVariable::of(tag, object, false));
+        self.traced_variable = Some(TracedVariable::of(tag, object, false));
         self.route_trace_line(start);
-        self.activity.traced_variable = None;
+        self.traced_variable = None;
     }
 
     /// `>E>` (`TRACE_PREFIX_DOTVARIABLE`): `.NIL`/`.TRUE`/`.FALSE`, tagged
@@ -488,9 +488,9 @@ impl Interp {
         }
         let start = self.trace.len();
         push_tagged(&mut self.trace, ">=>", indent, false, tag, " <= ", value);
-        self.activity.traced_variable = Some(TracedVariable::of(tag, object, true));
+        self.traced_variable = Some(TracedVariable::of(tag, object, true));
         self.route_trace_line(start);
-        self.activity.traced_variable = None;
+        self.traced_variable = None;
     }
 
     /// `>A>` (`TRACE_PREFIX_ARGUMENT`): one call argument's own evaluated
