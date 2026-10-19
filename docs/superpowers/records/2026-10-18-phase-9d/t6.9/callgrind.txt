@@ -1,0 +1,9 @@
+# head = 94b09da09 at /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.9/rexx-head; parent = f48b4d866 at /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.8-r2/rexx-head
+# rust/bench-programs/callgrind.sh -B 0.5 -p "startup interpret parse churn sayloop" -o /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.9-run pin=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run parent=/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.8-r2/rexx-head head=/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.9/rexx-head   (exit 0)
+program	pin	parent	head	parent d%	head d%	pin -libc	parent -libc	head -libc	parent -libc d%	head -libc d%	pin spread%	parent spread%	head spread%
+startup	119095347	119145061	119148819	+0.0417	+0.0449	57372808	57298645	57298490	-0.1293	-0.1295	0.0000	0.0000	0.0035
+interpret	4207371705	4116270461	4116334433	-2.1653	-2.1638	1785212077	1702536877	1702536690	-4.6311	-4.6311	0.0000	0.0001	0.0001
+parse	1654599053	1653174270	1653178894	-0.0861	-0.0858	1552803158	1551199197	1551199118	-0.1033	-0.1033	0.0000	0.0000	0.0000
+churn	631489428	632211070	632214831	+0.1143	+0.1149	378751556	379072287	379072365	+0.0847	+0.0847	0.0000	0.0000	0.0000
+sayloop	179667315	179750761	179754102	+0.0464	+0.0483	107724067	107650236	107650223	-0.0685	-0.0685	0.0014	0.0001	0.0023
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.9-run
