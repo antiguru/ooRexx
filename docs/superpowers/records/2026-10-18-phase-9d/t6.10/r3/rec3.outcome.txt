@@ -1,0 +1,6 @@
+# oracle, standard wrapper, timeout -k 5 60, fresh directory: rc 139 (SIGSEGV)
+## stdout
+     3 *-* x = 1
+       >>>   "1"
+## stderr (empty)
+# crate b2aa64331, memcap 2G timeout -s KILL 30: rc 137 after about 7 s (memcap's OOM kill at the 2G cap)

@@ -583,3 +583,64 @@ Checks at `24da8a29b`:
   | +0.0136 | 0.0000 | 0.0000 | -0.0236 | -0.0011 | -0.0360 | 0.0000 |
 
   Every own delta is under +0.05%, and every figure against the pin is under +0.5% (rexxcps +0.4707%).
+
+## Fix round 3
+
+Status: done. Code at `414fa3bf4`, records under `t6.10/r3/`. The recursion OOM is queued by the
+controller and not touched.
+
+**Finding 1: untraced concurrent programs paid for the delivery bookkeeping.** Two causes, measured with
+instruction-level callgrind of `pingguard` against the parent `d2e55befa`:
+* `Interp::switch_to` swaps the whole `Activity`, and the fields this task added made it 8 bytes larger
+  (1272 against 1264, `size_of`).
+  * Fix (`b2aa64331`): the delivery's floor and per-activation counts, the trace refusal and the traced
+    variable live on `Interp`. They are `Interp::deliveries` (one `Delivery` pushed per routed line,
+    popped at its end), `Interp::trace_refusal` and `Interp::traced_variable`.
+  * This is sound because a delivery is pinned. Another activity's delivery runs only inside this one's
+    pinned yield, so the innermost delivery is the running activity's whenever it routes.
+  * `Activity` is back to the parent's layout, and `switch_to`'s cost returns to the parent's.
+  * A first try that boxed the fields on `Activity` left 8 bytes there, and pingguard at +0.22%.
+* `run_started`, inlined into `run_round`, grew with the trace-refusal check and its drop of the replaced
+  outcome. The larger body made `run_round` hoist six more field addresses to the stack on every call,
+  about 13 instructions a round.
+  * Fix: the check calls `#[cold] ended_with_trace_refusal(sent)`, which drops `sent` itself, and the
+    empty REPLY rest's `finish_send` is `#[cold] finish_empty_rest`.
+
+Each step, one round each against the parent:
+
+| variant | pingguard | pingmsg | pingsem |
+|---|---|---|---|
+| fields boxed on `Activity` | +0.2202 | +0.0510 | +0.2381 |
+| fields on `Interp` | +0.1288 | +0.0223 | +0.1458 |
+| plus the cold helpers | +0.1062 | +0.0259 | +0.1227 |
+| plus `sent` dropped in the helper (final) | +0.0069 | -0.0032 | +0.0226 |
+
+`t6.10/r3/callgrind.txt`: pin, parent = `d2e55befa`, head = `414fa3bf4`; 3 rounds; exit 0; every spread
+at most 0.0034%. Own deltas, head against parent:
+
+| startup | interpret | parse | churn | sayloop | nop | assign | emptyloop | rexxcps |
+|---|---|---|---|---|---|---|---|---|
+| -0.0036 | -0.0226 | -0.0366 | -0.0010 | -0.0031 | -0.0001 | 0.0000 | -0.0001 | +0.0212 |
+
+| sendloop | dispatch | dispatchclass | fibcall | intcall | extcall | pingguard | pingmsg | pingsem |
+|---|---|---|---|---|---|---|---|---|
+| 0.0000 | 0.0000 | -0.0245 | -0.0011 | -0.0404 | -0.0001 | +0.0073 | -0.0097 | +0.0226 |
+
+Every own delta is under +0.05%. Against the pin every program is under +0.5%: the largest are rexxcps
++0.4784% and pingguard +0.1884%. `pingguard`, `pingmsg` and `pingsem` are the only bench programs that
+start or reply (`grep -il "start(\|reply"`).
+
+**Finding 2: `rec3`.** It is `oracle-crashes.txt` entry 52 (`b87eb8798`, `3c27b9ac8`). One oracle run gives
+rc 139 with the two trace lines on stdout. This crate is killed at the 2G cap after about 7 s
+(`t6.10/r3/rec3.outcome.txt`).
+
+Checks at `414fa3bf4`:
+* fmt, clippy (after `414fa3bf4` collapsed one `if`), `--lib` (1155 passed, including the three refusal
+  tests), the refusal tables, `rexx-parse`, `unsafe_sites`, `licensed_divergences`, `sim_processes` and
+  `trace_delivery_schedule`: exit 0 each.
+* Corpus gate: 1114 of 1114.
+* Whole suite: 402 groups, 12 red. `t6.10/r3/suite/changed-rows.txt` against round 0 is empty.
+* Seeded gate (`t6.10/r3/sim/summary.txt`): every row exits 0, and every corpus row agrees on every seed.
+  `TRACE` whole fails only `TEST_TRACE_EXIT` and `TEST_TRACE_OTHER_ENTRYPOINT`, and `REPLY` passes.
+* `t6.10/r3/modes.txt`: `sp1`, `sp3`, `st1`, `two1`, `trace_reply_continuation` and `test_forwarded3` each
+  give the oracle's outcome under all of the re-review's 13 modes.
