@@ -373,7 +373,7 @@ impl Interp {
         for arg in args {
             let value = match arg {
                 None => {
-                    self.trace_argument(self.activity.clause_state.current_value_indent, b"")?;
+                    self.trace_argument(self.activity.clause_state.current_value_indent, b"");
                     None
                 }
                 Some(expr) if self.leaf_argument(expr) => {
@@ -438,7 +438,7 @@ impl Interp {
                     // An omitted position traces an **empty** value line, not
                     // no line: `traceArgument(GlobalNames::NULLSTRING)`,
                     // `RexxInstruction.cpp:161`, and measured above.
-                    self.trace_argument(self.activity.clause_state.current_value_indent, b"")?;
+                    self.trace_argument(self.activity.clause_state.current_value_indent, b"");
                     arguments.push(None);
                 }
                 Some(expr) if self.leaf_argument(expr) => {
@@ -1376,7 +1376,7 @@ impl Interp {
         let argument = self.eval(code, expr)?;
         self.roots.activity_mut().push_temp(argument);
         if let Some(rendered) = self.intermediate_text(argument) {
-            self.trace_argument(self.activity.clause_state.current_value_indent, &rendered)?;
+            self.trace_argument(self.activity.clause_state.current_value_indent, &rendered);
         }
         Ok(argument)
     }
@@ -1414,10 +1414,7 @@ impl Interp {
         for arg in args {
             let raised = match arg {
                 None => {
-                    let indent = self.activity.clause_state.current_value_indent;
-                    if let Err(raised) = self.trace_argument(indent, b"") {
-                        return raised;
-                    }
+                    self.trace_argument(self.activity.clause_state.current_value_indent, b"");
                     continue;
                 }
                 Some(expr) if self.leaf_argument(expr) => self.eval_leaf_argument(code, expr).err(),
@@ -1512,7 +1509,7 @@ impl Interp {
                 // `base_indent`, saved before the callee overwrote
                 // `current_value_indent` with its own clauses'.
                 if let Some(rendered) = self.result_text(value) {
-                    self.trace_result(base_indent, &rendered)?;
+                    self.trace_result(base_indent, &rendered);
                 }
                 self.set_variable(frame, slot, value);
             }

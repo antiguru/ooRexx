@@ -346,7 +346,7 @@ impl Interp {
             NameShape::Compound => SymbolRead::Compound,
         };
         let value = self.read_symbol(code, read, id, None)?;
-        self.echo_symbol_read(code, id, value)?;
+        self.echo_symbol_read(code, id, value);
         Ok(value)
     }
 

@@ -162,31 +162,12 @@ impl Interp {
     /// ([`Interp::untraceable_code`]).
     // Inlined into `loop_advance`, it cost sayloop +0.31% against +0.14%.
     #[inline(never)]
-    pub(crate) fn route_trace_line(&mut self, start: usize) -> Result<(), Failure> {
+    pub(crate) fn route_trace_line(&mut self, start: usize) {
         if self.untraceable_code() {
             self.trace.truncate(start);
-            return Ok(());
+            return;
         }
-        self.route_trace_line_as(start, false)
-    }
-
-    /// [`Interp::route_trace_line`] for code the driver inlines, which keeps
-    /// a failed delivery in [`crate::activity::Activity::trace_failure`] for
-    /// the driver to raise.
-    #[inline(never)]
-    pub(crate) fn route_trace_line_kept(&mut self, start: usize) {
-        if let Err(failure) = self.route_trace_line(start) {
-            self.activity.trace_failure = Some(failure);
-        }
-    }
-
-    /// The failure a kept trace line left, for its raiser.
-    #[cold]
-    #[inline(never)]
-    pub(crate) fn take_trace_failure(&mut self) -> Failure {
-        self.activity.trace_failure.take().unwrap_or_else(|| {
-            crate::Loud::op_not_driven("a trace failure that was not kept").into()
-        })
+        self.route_trace_line_as(start, false);
     }
 
     /// [`Interp::route_trace_line`] for a `>I>` (`entry`) or `<I<` line,
@@ -194,10 +175,9 @@ impl Interp {
     /// is handed over after it. Not gated on the source: the oracle's
     /// `traceEntryOrExit` (`RexxActivation.cpp:3678`) writes these for a
     /// restored program too (measured).
-    pub(crate) fn route_trace_line_as(&mut self, start: usize, entry: bool) -> Result<(), Failure> {
-        let delivered = self.deliver_trace_line_as(start, entry);
+    pub(crate) fn route_trace_line_as(&mut self, start: usize, entry: bool) {
+        self.deliver_trace_line_as(start, entry);
         self.hand_over_stderr();
-        delivered
     }
 
     /// `RexxActivation::processTraceInfo`: every line becomes a `TraceObject`,
@@ -205,13 +185,17 @@ impl Interp {
     /// standard error where that is the error stream, or keeps back under
     /// `.TraceObject~option` `P`. Without the class the line goes to
     /// standard error as it is.
-    fn deliver_trace_line_as(&mut self, start: usize, entry: bool) -> Result<(), Failure> {
+    fn deliver_trace_line_as(&mut self, start: usize, entry: bool) {
         let variable = self.activity.traced_variable.take();
         if self.activity.routing_trace {
-            return Ok(());
+            return;
+        }
+        if self.trace_failure_queued() {
+            self.trace.truncate(start);
+            return;
         }
         let Some(class) = self.rexx_package_class(b"TRACEOBJECT") else {
-            return Ok(());
+            return;
         };
         // Only the line end the formatter appended: measured, a traced clause
         // ending in `'0a'x` is delivered with it.
@@ -270,17 +254,8 @@ impl Interp {
                     self.trace.push(b'\n');
                 }
             }
-            // `Activity::traceOutput` lets a failed `LINEOUT` raise in the
-            // traced activation, so the clause it traces runs no further.
-            Err(failure) if self.running_activation().is_some() => return Err(failure),
-            Err(_) => {
-                self.trace.extend_from_slice(&line);
-                if ended {
-                    self.trace.push(b'\n');
-                }
-            }
+            Err(failure) => self.queue_trace_failure(failure, &line),
         }
-        Ok(())
     }
 
     /// Whether `.TRACEOUTPUT` writes to standard error, or is not there.
@@ -291,6 +266,59 @@ impl Interp {
             }
             _ => true,
         }
+    }
+
+    /// Whether a trace line's failed delivery is waiting to be raised in the
+    /// running activation, which traces nothing more until it is.
+    pub(crate) fn trace_failure_queued(&self) -> bool {
+        let Some(running) = self.running_activation() else {
+            return false;
+        };
+        let here = running.id;
+        self.activity
+            .pending_traps
+            .iter()
+            .any(|pending| pending.trace_failure.is_some() && pending.activation == here)
+    }
+
+    /// The failure [`Interp::queue_trace_failure`] queued for the running
+    /// activation, taken off the queue.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn take_trace_failure(&mut self) -> Option<Failure> {
+        let here = self.running_activation()?.id;
+        let at =
+            self.activity.pending_traps.iter().position(|pending| {
+                pending.trace_failure.is_some() && pending.activation == here
+            })?;
+        self.activity
+            .pending_traps
+            .remove(at)
+            .and_then(|pending| pending.trace_failure)
+    }
+
+    /// `Activity::traceOutput`'s failed `LINEOUT`: raised in the traced
+    /// activation at its clause's end. With no activation running, the line
+    /// is written to standard error instead.
+    #[cold]
+    #[inline(never)]
+    fn queue_trace_failure(&mut self, failure: Failure, line: &[u8]) {
+        let Some(running) = self.running_activation() else {
+            self.write_out_line(line);
+            return;
+        };
+        let activation = running.id;
+        self.activity.pending_traps.push_back(crate::PendingTrap {
+            condition: b"SYNTAX".as_slice().into(),
+            rc: None,
+            description: None,
+            object: None,
+            activation,
+            queued_during_delivery: true,
+            request: false,
+            fragment_depth: self.activity.fragment_depth,
+            trace_failure: Some(failure),
+        });
     }
 
     /// Each line of an error report, delivered the way a trace line is:
@@ -311,17 +339,11 @@ impl Interp {
         }
     }
 
-    /// A line the destination fails to take goes to standard error: a report
-    /// is not itself raised.
     fn write_trace_report_line(&mut self, line: &[u8]) {
         let start = self.trace.len();
         self.trace.extend_from_slice(line);
         self.trace.push(b'\n');
-        if self.route_trace_line(start).is_err() {
-            self.trace.extend_from_slice(line);
-            self.trace.push(b'\n');
-            self.hand_over_stderr();
-        }
+        self.route_trace_line(start);
     }
 
     /// The `TraceObject` carrying `line` and where it was traced

@@ -367,13 +367,13 @@ impl Interp {
             // `merge` answers `None` for both, so neither reaches here.
             Redirection::Default | Redirection::Normal => Vec::new(),
             Redirection::Stem(id) => {
-                let object = self.redirect_stem(code, *id, Stream::Input)?;
+                let object = self.redirect_stem(code, *id, Stream::Input);
                 self.stem_input_lines(object)?
             }
             Redirection::Using(expression) => {
                 let object = self.eval(code, expression)?;
                 self.roots.activity_mut().push_temp(object);
-                self.trace_redirect_target(Stream::Input, object)?;
+                self.trace_redirect_target(Stream::Input, object);
                 self.using_input_lines(object)?
             }
             Redirection::Stream(expression) => {
@@ -474,13 +474,13 @@ impl Interp {
                 unreachable!("a stream `merge` answered `None` for reached the target builder")
             }
             Redirection::Stem(id) => {
-                let object = self.redirect_stem(code, *id, stream)?;
+                let object = self.redirect_stem(code, *id, stream);
                 Ok(Target::Stem { object, append })
             }
             Redirection::Using(expression) => {
                 let object = self.eval(code, expression)?;
                 self.roots.activity_mut().push_temp(object);
-                self.trace_redirect_target(stream, object)?;
+                self.trace_redirect_target(stream, object);
                 self.using_output_target(object, option)
             }
             Redirection::Stream(expression) => {
@@ -553,31 +553,25 @@ impl Interp {
     /// The read echoes as an ordinary variable read before the `>K>` line --
     /// measured under `trace i`, `>V> OO. => "OO."` then
     /// `>K> "OUTPUT" => "OO."`.
-    fn redirect_stem(
-        &mut self,
-        code: &Code<'_>,
-        id: SymbolId,
-        stream: Stream,
-    ) -> Result<ObjRef, Failure> {
+    fn redirect_stem(&mut self, code: &Code<'_>, id: SymbolId, stream: Stream) -> ObjRef {
         let name = code.symbols.name(id).as_bytes().to_vec();
         let object = self.read_stem(&name);
         self.roots.activity_mut().push_temp(object);
-        self.echo_symbol_read(code, id, object)?;
-        self.trace_redirect_target(stream, object)?;
-        Ok(object)
+        self.echo_symbol_read(code, id, object);
+        self.trace_redirect_target(stream, object);
+        object
     }
 
     /// `traceKeywordResult`: the `>K>` line naming an evaluated target.
     /// Gated on the same flag [`Interp::trace_keyword`] is, because the
     /// string value it shows can cost a `makeString` send.
-    fn trace_redirect_target(&mut self, stream: Stream, value: ObjRef) -> Result<(), Failure> {
+    fn trace_redirect_target(&mut self, stream: Stream, value: ObjRef) {
         if !self.trace_mode().results {
-            return Ok(());
+            return;
         }
         let text = self.string_value_text(value);
         let indent = self.activity.clause_state.current_value_indent;
-        self.trace_keyword(indent, stream.keyword(), &text)?;
-        Ok(())
+        self.trace_keyword(indent, stream.keyword(), &text);
     }
 
     /// Writes one target's lines.
@@ -632,7 +626,7 @@ impl Interp {
     ) -> Result<Vec<u8>, Failure> {
         let value = self.eval(code, expression)?;
         self.roots.activity_mut().push_temp(value);
-        self.trace_redirect_target(stream, value)?;
+        self.trace_redirect_target(stream, value);
         let value = self.required_string_value(value)?;
         let name = self.to_text(value).into_owned();
         Ok(crate::builtin::platform::qualify_name(self, &name))

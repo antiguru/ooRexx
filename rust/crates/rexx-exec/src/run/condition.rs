@@ -152,6 +152,7 @@ impl Interp {
                     queued_during_delivery: false,
                     request: false,
                     fragment_depth: self.activity.fragment_depth,
+                    trace_failure: None,
                 });
                 Ok(())
             }
@@ -534,6 +535,9 @@ impl Interp {
                 .remove(at)
                 .expect("position answered an index inside the queue");
             owed -= 1;
+            if let Some(failure) = pending.trace_failure {
+                return Err(failure);
+            }
             if pending.request {
                 self.raise_requested_halt(pending.description)?;
                 continue;
@@ -760,7 +764,7 @@ impl Interp {
                 // `>K>   "SYNTAX" => "an Array"`.
                 let traced = self.string_value_text(value);
                 let keyword = String::from_utf8_lossy(&raise.condition).into_owned();
-                self.trace_keyword(indent, &keyword, &traced)?;
+                self.trace_keyword(indent, &keyword, &traced);
                 Some(self.to_text(value).to_vec())
             }
             None => None,
@@ -778,7 +782,7 @@ impl Interp {
             // `trace i` over `raise syntax 93.900 description (1,2)
             // additional 'x'`: `>K>   "DESCRIPTION" => "an Array"`.
             let traced = self.string_value_text(value);
-            self.trace_keyword(indent, "DESCRIPTION", &traced)?;
+            self.trace_keyword(indent, "DESCRIPTION", &traced);
             description = Some(self.to_text(value).to_vec());
         }
         // `ADDITIONAL expr` and `ARRAY (a, b)` produce the identical
@@ -821,7 +825,7 @@ impl Interp {
             // take. Measured, `trace i` over `raise syntax 93.900 additional
             // (1,2)`: `>K>   "ADDITIONAL" => "an Array"`.
             let traced = self.string_value_text(value);
-            self.trace_keyword(indent, "ADDITIONAL", &traced)?;
+            self.trace_keyword(indent, "ADDITIONAL", &traced);
             if converted && slots.is_none() && self.operator_operand_gap(value).is_some() {
                 // `requestArray`, and 98.939 for `TheNilObject` or a
                 // multi-dimensional answer.
@@ -876,7 +880,7 @@ impl Interp {
                     // reports "maximum expected is ." on the oracle (`&2` is
                     // the hole) where closing up reported "maximum expected
                     // is X." here.
-                    self.trace_argument(indent, b"")?;
+                    self.trace_argument(indent, b"");
                     additional.push(Vec::new());
                     held.push(None);
                     continue;
@@ -895,8 +899,8 @@ impl Interp {
                 // and byte-identical here. A check on this arm refused all
                 // three.
                 let rendered = self.string_value_text(value);
-                self.trace_argument(indent, &rendered)?;
-                self.trace_argument(indent, &rendered)?;
+                self.trace_argument(indent, &rendered);
+                self.trace_argument(indent, &rendered);
                 additional.push(rendered);
             }
             // The condition object's `ADDITIONAL` is the array of the items
@@ -908,7 +912,7 @@ impl Interp {
             // ('ZORKROUTINE', 7)`). This crate has no array object to render,
             // and building one purely to print a constant would be the
             // longer way to the same two words.
-            self.trace_keyword(indent, "ARRAY", b"an Array")?;
+            self.trace_keyword(indent, "ARRAY", b"an Array");
         }
         // The `RETURN`/`EXIT` value, and its own `>K>` line -- measured for
         // both tails: `raise user foo return 'ONEVAL'` under `trace r`
@@ -1008,6 +1012,7 @@ impl Interp {
                     // `Interpret` arm maintains it. A tail-less raise leaves
                     // the fragments of every level it unwinds.
                     fragment_depth: self.sender_fragment_depth(&sender),
+                    trace_failure: None,
                 });
                 Ok(finish(result))
             }
@@ -1076,7 +1081,7 @@ impl Interp {
         self.roots.activity_mut().push_temp(value);
         if let Some(rendered) = self.result_text(value) {
             let indent = self.activity.clause_state.current_value_indent;
-            self.trace_keyword(indent, "RESULT", &rendered)?;
+            self.trace_keyword(indent, "RESULT", &rendered);
         }
         Ok(Some(value))
     }
@@ -1179,6 +1184,7 @@ impl Interp {
                     queued_during_delivery: false,
                     request: false,
                     fragment_depth: self.sender_fragment_depth(&sender),
+                    trace_failure: None,
                 });
                 Ok(finish(result))
             }
@@ -1299,7 +1305,7 @@ impl Interp {
             self.activity.clause_state.current_value_indent,
             "VALUE",
             &text,
-        )?;
+        );
         let converted = self.required_string_or_nil(value)?;
         if converted == value {
             return self.signal_to_label(&text);

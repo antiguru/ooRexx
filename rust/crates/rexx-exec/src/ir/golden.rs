@@ -58,9 +58,6 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             Op::TraceClause { index: at } => {
                 out.push_str(&format!("{index}: TraceClause index={at}\n"));
             }
-            Op::TraceStale { index: at } => {
-                out.push_str(&format!("{index}: TraceStale index={at}\n"));
-            }
             Op::EvalExpr {
                 index: at,
                 slot,
