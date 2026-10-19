@@ -2286,12 +2286,20 @@ impl Interp {
         if self.slice_deferred && self.activity.routing_trace {
             self.count_delivery_clause();
         }
-        if fresh && self.slice_deferred && self.activity.pin_depth > 0 && self.delivery_may_yield()
+        // Inside a delivery the slice is taken at the first clause that may
+        // yield, as the oracle's own count is checked at each instruction.
+        if (fresh || self.activity.routing_trace)
+            && self.slice_deferred
+            && self.activity.pin_depth > 0
+            && self.delivery_may_yield()
         {
             self.slice_deferred = false;
             return self.pinned_yield();
         }
         if fresh && !self.slice_deferred {
+            if self.activity.routing_trace {
+                self.activity.delivery_counts.clear();
+            }
             self.slice_deferred = true;
             deferred_slice!(self);
         }
@@ -2304,11 +2312,13 @@ impl Interp {
     /// `TraceObject` is made, nor while an activation the destination runs
     /// holds its receiver's guard: another activity's delivery would wait for
     /// that guard under a pin of its own. Otherwise it may once the running
-    /// activation has run more than [`DELIVERY_YIELD_CLAUSES`] clauses in a
-    /// row since the slice fell due. The oracle yields only in an activation
-    /// past `yieldInstructions` or at a native call
-    /// (`RexxActivation.cpp:616`, `NativeActivation.cpp:1304`), so a short
-    /// destination's clauses never let another activity's lines in between.
+    /// activation has run more than [`DELIVERY_YIELD_CLAUSES`] clauses of its
+    /// own since the slice fell due, its callees' not counted and not
+    /// restarting its count. The oracle yields only in an activation past
+    /// `yieldInstructions`, a count each `RexxActivation` keeps, or at a
+    /// native call (`RexxActivation.cpp:616`, `NativeActivation.cpp:1304`),
+    /// so a short destination's clauses never let another activity's lines
+    /// in between.
     fn delivery_may_yield(&self) -> bool {
         let activity = &self.activity;
         if !activity.routing_trace {
@@ -2324,23 +2334,31 @@ impl Interp {
             .chain(activity.running.as_deref())
             .skip(floor)
             .any(|activation| activation.flags.reserved());
+        let running = activity.running.as_deref().map(|activation| activation.id);
         !holds_a_guard
             && activity
-                .delivery_streak
-                .is_some_and(|(_, clauses)| clauses > DELIVERY_YIELD_CLAUSES)
+                .delivery_counts
+                .last()
+                .is_some_and(|&(id, clauses)| {
+                    Some(id) == running && clauses > DELIVERY_YIELD_CLAUSES
+                })
     }
 
-    /// Counts a clause of a trace line's delivery toward
-    /// [`Activity::delivery_streak`], starting again when another activation
-    /// runs.
+    /// Counts a clause of the running activation toward
+    /// [`Activity::delivery_counts`]. The counts above its own belong to
+    /// callees that have returned, and are dropped.
     fn count_delivery_clause(&mut self) {
         let Some(running) = self.running_activation().map(|activation| activation.id) else {
             return;
         };
-        self.activity.delivery_streak = match self.activity.delivery_streak {
-            Some((id, clauses)) if id == running => Some((id, clauses + 1)),
-            _ => Some((running, 1)),
-        };
+        let counts = &mut self.activity.delivery_counts;
+        match counts.iter().rposition(|&(id, _)| id == running) {
+            Some(at) => {
+                counts.truncate(at + 1);
+                counts[at].1 += 1;
+            }
+            None => counts.push((running, 1)),
+        }
     }
 
     /// One round of the other ready activities, where a started activity

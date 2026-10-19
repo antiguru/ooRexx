@@ -206,7 +206,7 @@ impl Interp {
         }
         self.activity.routing_trace = true;
         self.activity.delivery_floor = None;
-        self.activity.delivery_streak = None;
+        self.activity.delivery_counts.clear();
         // **The nested-send protocol, not a bare send**, and around the whole
         // delivery because `NEW`, each `PUT` and the `LINEOUT` all run Rexx
         // clauses. A clause boundary clears the shared argument stack, so

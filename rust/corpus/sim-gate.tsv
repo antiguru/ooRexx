@@ -220,3 +220,7 @@ corpus/lang/trace_reply_continuation.rex	program	65	70	0	60	0	-	-
 # deliveries into one guarded counter both finish.
 corpus/lang/trace_destination_waits_on_thread.rex	program	827789	70	0	110	0	-	-
 corpus/lang/trace_destinations_two_threads.rex	program	15220	70	0	60	0	-	-
+# 9d Task 6.10 fix round 2: a waiting destination's own clause count survives its
+# calls.
+corpus/lang/trace_destination_waits_calling_a_method.rex	program	414098	70	0	110	0	-	-
+corpus/lang/trace_destination_waits_calling_a_label.rex	program	414097	70	0	110	0	-	-

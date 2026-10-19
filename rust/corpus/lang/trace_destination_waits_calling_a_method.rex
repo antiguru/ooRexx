@@ -1,0 +1,22 @@
+/* A .TRACEOUTPUT destination whose LINEOUT waits for another thread's flag
+   through an unguarded method it calls on each pass: the waiting activation's
+   own clause count, not reset by its callees, lets it yield. */
+.local~flag = 0
+w = .worker~new
+w~start('run')
+.traceOutput~destination(.waiting~new)
+trace r
+x = 1
+trace off
+.traceOutput~destination
+say 'done' .local~flag
+::class worker
+::method run
+  do i = 1 to 100; nop; end
+  .local~flag = 1
+::class waiting
+::method lineout unguarded
+  do while \self~ready; end
+  return 0
+::method ready unguarded
+  return .local~flag = 1
