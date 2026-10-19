@@ -510,17 +510,6 @@ impl ClassRegistry {
         self.graph.method_names_at(handle)
     }
 
-    /// See [`ClassGraph::defined_named_at`].
-    pub fn defined_named_at(&self, handle: BehaviourHandle, name: &str) -> Vec<(ObjRef, MethodId)> {
-        self.graph.defined_named_at(handle, name)
-    }
-
-    /// [`Self::defined_named_at`] for `class`'s class-side behaviour.
-    pub fn class_defined_named(&self, class: ObjRef, name: &str) -> Vec<(ObjRef, MethodId)> {
-        self.graph
-            .defined_named_at(self.graph.class_behaviour_handle(class), name)
-    }
-
     /// See [`ClassGraph::defined_entries_at`].
     pub fn defined_entries_at(&self, handle: BehaviourHandle) -> Vec<(String, ObjRef, MethodId)> {
         self.graph.defined_entries_at(handle)

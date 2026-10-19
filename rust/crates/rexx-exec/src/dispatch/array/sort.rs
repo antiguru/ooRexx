@@ -314,50 +314,33 @@ fn native_array_sort(
     sort_by(interp, receiver, &Order::CompareTo)
 }
 
-/// `Array~sortWith(comparator)`, `ArrayClass::stableSortWithRexx`.
+/// `Array~sortWith(comparator)` and `Array~stableSortWith(comparator)`, both
+/// `ArrayClass::stableSortWithRexx`.
 fn native_array_sort_with(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    sort_with(interp, b"SORTWITH", receiver, args)
-}
-
-/// `Array~stableSortWith(comparator)`, also `ArrayClass::stableSortWithRexx`.
-fn native_array_stable_sort_with(
-    interp: &mut Interp,
-    _cleared: Cleared,
-    receiver: ObjRef,
-    args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
-    sort_with(interp, b"STABLESORTWITH", receiver, args)
-}
-
-/// The `sortWith` pair, sent as `name`: the comparator's `compare` runs
-/// under the method's own stack frame.
-fn sort_with(
-    interp: &mut Interp,
-    name: &'static [u8],
-    receiver: ObjRef,
-    args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
     let comparator = item_argument(args)?;
-    interp.in_method_level(name, receiver, args, |interp| {
-        sort_by(interp, receiver, &Order::With(comparator))
-    })
+    sort_by(interp, receiver, &Order::With(comparator))
 }
 
 /// `Array`'s sort methods, chained into `ObjectModel::build` ahead of the
 /// rest of `Array`'s collection surface.
 pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("Array", "SORT", Arity::Fixed(0), native_array_sort),
-    ("Array", "SORTWITH", Arity::Fixed(1), native_array_sort_with),
     ("Array", "STABLESORT", Arity::Fixed(0), native_array_sort),
+];
+
+/// The sort methods whose comparator's `compare` runs under the method's own
+/// stack frame.
+pub(in crate::dispatch) const LEVELED_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
+    ("Array", "SORTWITH", Arity::Fixed(1), native_array_sort_with),
     (
         "Array",
         "STABLESORTWITH",
         Arity::Fixed(1),
-        native_array_stable_sort_with,
+        native_array_sort_with,
     ),
 ];

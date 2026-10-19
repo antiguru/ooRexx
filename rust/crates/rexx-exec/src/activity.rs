@@ -346,9 +346,11 @@ pub(crate) struct Activity {
 pub(crate) struct MethodLevel {
     /// The activation the method was sent from.
     pub(crate) caller: Option<crate::activation::ActivationId>,
-    pub(crate) name: &'static [u8],
-    /// The class the method was found at.
+    /// The message the method runs under.
+    pub(crate) name: Box<[u8]>,
+    /// The scope and identity of the method the dispatch ran.
     pub(crate) scope: ObjRef,
+    pub(crate) method: rexx_classes::MethodId,
     pub(crate) receiver: ObjRef,
     pub(crate) arguments: Box<[Option<ObjRef>]>,
 }

@@ -615,17 +615,17 @@ pub(crate) fn build_live_frame(interp: &mut Interp, level: LiveLevel) -> Result<
 /// its `Compiled method` line as its traceback.
 fn build_method_level_frame(interp: &mut Interp, row: usize) -> Result<ObjRef, Failure> {
     let level = &interp.activity.method_levels[row];
-    let (name, scope, receiver) = (level.name, level.scope, level.receiver);
-    let arguments = level.arguments.clone();
+    let (scope, method, receiver) = (level.scope, level.method, level.receiver);
+    let (name, arguments) = (level.name.clone(), level.arguments.clone());
     let scope_name = interp.scope_id(scope);
-    let executable = interp.method_executable(scope, name).ok();
+    let executable = interp.running_native_executable(scope, method, &name, receiver);
     Ok(build_native_level_frame(
         interp,
         None,
-        name,
+        &name,
         receiver,
         &arguments,
-        &Raised::compiled_method_line(name, &scope_name),
+        &Raised::compiled_method_line(&name, &scope_name),
         executable,
     ))
 }

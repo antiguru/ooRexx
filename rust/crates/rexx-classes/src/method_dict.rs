@@ -285,19 +285,6 @@ impl MethodDict {
         })
     }
 
-    /// Every defined entry under `name`, highest priority first.
-    pub fn defined_named(&self, name: &str) -> Vec<(ObjRef, MethodId)> {
-        self.entries
-            .get(&name.to_ascii_uppercase())
-            .into_iter()
-            .flatten()
-            .filter_map(|slot| match *slot {
-                MethodSlot::Defined { scope, method } => Some((scope, method)),
-                MethodSlot::Hidden => None,
-            })
-            .collect()
-    }
-
     /// The highest-priority method for an ordinary (unscoped) send --
     /// index 0 of `name`'s entry list.
     pub fn lookup(&self, name: &str) -> Option<(ObjRef, MethodId)> {

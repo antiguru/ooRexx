@@ -301,6 +301,47 @@ impl Interp {
         }
     }
 
+    /// The `Method` object of the primitive method `method`, which the
+    /// dispatch ran at `scope` under `name` for `receiver`: the object's own
+    /// entry, the scope's dictionary entry, or the object standing for the
+    /// identity; `None` where there is none.
+    pub(crate) fn running_native_executable(
+        &mut self,
+        scope: ObjRef,
+        method: rexx_classes::MethodId,
+        name: &[u8],
+        receiver: ObjRef,
+    ) -> Option<ObjRef> {
+        if let Some(Some(entry)) = self.own_method_entry(receiver, name)
+            && entry.method == method
+        {
+            return Some(entry.executable);
+        }
+        if self.heap.is_class(scope)
+            && let Some(rexx_classes::MethodSlot::Defined {
+                scope: defined,
+                method: found,
+            }) = self
+                .classes()
+                .own_instance_slot(scope, &String::from_utf8_lossy(name))
+            && found == method
+        {
+            let record = crate::ExecutableRecord {
+                source: self.installed_executable_source(method),
+                installed: Some(method),
+                routine: None,
+                owns_installed: false,
+            };
+            return self
+                .method_object(defined, false, name, defined, record)
+                .ok();
+        }
+        self.executable_objects
+            .get(&method)
+            .copied()
+            .filter(|object| self.heap.get(*object).is_some())
+    }
+
     /// What `RexxContext~executable` answers from a method activation
     /// running `body` for a send to `receiver` under `name` at `scope`: the
     /// `Method` object the send ran, which is not always one a class

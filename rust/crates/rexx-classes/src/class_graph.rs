@@ -1137,12 +1137,6 @@ impl ClassGraph {
         self.behaviours[handle.index()].dict.method_names()
     }
 
-    /// Every defined entry under `name` of a specific handle's dictionary,
-    /// highest priority first.
-    pub fn defined_named_at(&self, handle: BehaviourHandle, name: &str) -> Vec<(ObjRef, MethodId)> {
-        self.behaviours[handle.index()].dict.defined_named(name)
-    }
-
     /// Every defined entry of a specific handle's dictionary, as
     /// [`MethodDict::defined_entries`] lists them.
     pub fn defined_entries_at(&self, handle: BehaviourHandle) -> Vec<(String, ObjRef, MethodId)> {
