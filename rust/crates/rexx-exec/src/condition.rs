@@ -339,7 +339,12 @@ impl Interp {
 
     /// `put` of `value` under `name` on a condition object, rooting `value`
     /// across the index's allocation.
-    fn condition_put(&mut self, object: ObjRef, name: &[u8], value: ObjRef) -> Result<(), Failure> {
+    pub(crate) fn condition_put(
+        &mut self,
+        object: ObjRef,
+        name: &[u8],
+        value: ObjRef,
+    ) -> Result<(), Failure> {
         self.roots.activity_mut().push_temp(value);
         crate::dispatch::hash::directory_put(self, object, name, value)
     }

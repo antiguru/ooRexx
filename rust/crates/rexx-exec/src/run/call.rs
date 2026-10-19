@@ -452,6 +452,19 @@ impl Interp {
             }
         }
         let resolved = self.settle_after_arguments(resolution, name)?;
+        self.begin_evaluated_call(resolved, name, arguments, call_type, entry)
+    }
+
+    /// [`Interp::begin_invoke_call`] past its argument loop, over `arguments`
+    /// already evaluated, for any callee but a builtin.
+    fn begin_evaluated_call(
+        &mut self,
+        resolved: Resolved,
+        name: &[u8],
+        mut arguments: Vec<Option<ObjRef>>,
+        call_type: CallType,
+        entry: CallEntry,
+    ) -> Result<Begun, Failure> {
         // An internal-package routine runs no activation, and neither does a
         // library routine, so they take the builtin discipline over the values.
         if let Resolved::Internal(_) | Resolved::LibraryRoutine(_) = resolved {
@@ -1267,26 +1280,31 @@ impl Interp {
         }
     }
 
-    /// [`Interp::resolve_fixed_call`] followed by [`Interp::invoke_call`], with
-    /// nothing remembered.
-    pub(crate) fn resolve_and_run_call(
+    /// [`Interp::resolve_fixed_call`], then the routine search, then the call,
+    /// over `arguments` already evaluated, as a `CALL ON` trap passes its
+    /// condition object.
+    pub(crate) fn resolve_and_run_call_over(
         &mut self,
-        code: &Code<'_>,
         name: &[u8],
         search_labels: bool,
-        args: &[Option<Expr>],
+        arguments: Vec<Option<ObjRef>>,
         call_type: CallType,
         entry: CallEntry,
     ) -> Result<Ended, Failure> {
-        let fixed = self.resolve_fixed_call(name, search_labels)?;
-        self.invoke_call(
-            code,
-            Self::unkept_resolution(fixed),
-            name,
-            args,
-            call_type,
-            entry,
-        )
+        let resolved = match self.resolve_fixed_call(name, search_labels)? {
+            Some(resolved) => resolved,
+            None => self.resolve_routine_call(name)?,
+        };
+        if let Resolved::Builtin(target) = resolved {
+            let mark = self.activity.value_buffer.len();
+            self.activity.value_buffer.extend(arguments);
+            let value = self.run_over_pushed_args(mark, |interp, values| {
+                builtin::run(interp, name, target, values)
+            })?;
+            return Ok(Ended::Returned(Some(value)));
+        }
+        let begun = self.begin_evaluated_call(resolved, name, arguments, call_type, entry)?;
+        self.complete_call(begun)
     }
 
     /// Builds the object a `>name` or `<name` term answers: the variable

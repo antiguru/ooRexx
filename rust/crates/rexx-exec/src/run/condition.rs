@@ -390,7 +390,21 @@ impl Interp {
         // -- the raising clause's own site, which is still the one
         // `Op::Clause`'s region recorded a moment ago and which the clearing
         // below would have thrown away.
-        let target = self.resolve_signal_target(&trap.label)?;
+        // `RexxInstructionSignalOn::trap` turns the trap off before it raises
+        // 16.1, so the 16.1 is offered to this same table: measured, `signal
+        // on novalue` with no `NOVALUE:` label is trapped by `signal on
+        // syntax` at the raising clause (upstream bug 1877).
+        let target = match self.resolve_signal_target(&trap.label) {
+            Ok(target) => target,
+            Err(missing) => {
+                let traps = &mut self.activation_mut().traps;
+                match traps.get(raised.condition.as_bytes()) {
+                    Some(_) => traps.remove(raised.condition.as_bytes()),
+                    None => traps.remove(b"ANY".as_slice()),
+                }
+                return self.offer_to_trap(code, missing);
+            }
+        };
         let Failure::Raised(raised) = failure else {
             unreachable!("matched Failure::Raised immediately above")
         };
@@ -478,9 +492,11 @@ impl Interp {
     /// Runs every handler this clause boundary owes, in the order the
     /// conditions were queued, and stops early only if one of them ends the
     /// program.
+    /// `_code` is the body the boundary is in; a handler resolves against the
+    /// running activation instead.
     pub(crate) fn deliver_pending_traps(
         &mut self,
-        code: &Code<'_>,
+        _code: &Code<'_>,
     ) -> Result<Option<HandlerExit>, Failure> {
         // Snapshotted rather than re-read, so that anything a handler queues
         // lands beyond the prefix this boundary is answering for.
@@ -516,7 +532,7 @@ impl Interp {
                 self.raise_requested_halt(pending.description)?;
                 continue;
             }
-            if let Some(exit) = self.deliver_one_pending_trap(code, pending)? {
+            if let Some(exit) = self.deliver_one_pending_trap(pending)? {
                 return Ok(Some(exit));
             }
         }
@@ -526,7 +542,6 @@ impl Interp {
     /// One queued condition's handler, run at the boundary that owes it.
     fn deliver_one_pending_trap(
         &mut self,
-        code: &Code<'_>,
         pending: PendingTrap,
     ) -> Result<Option<HandlerExit>, Failure> {
         let Some(trap) = self.trap_for(&pending.condition) else {
@@ -636,14 +651,17 @@ impl Interp {
         // `internalCallTrap` passes `OREF_NULL` where `internalCall` passes
         // the caller's receiver, so the handler's calling convention carries
         // none -- `entered_receiver` has the measurement for both.
+        // The condition object is the handler's one argument
+        // (`RexxInstructionCallOn::trap`), whether it is a label, a builtin or
+        // an external routine.
+        let arguments = pending.object.map(Some).into_iter().collect();
         let ended = pinned!(
             self,
             crate::pinning::PinKind::TrapHandler,
-            self.resolve_and_run_call(
-                code,
+            self.resolve_and_run_call_over(
                 &trap.label,
                 true,
-                &[],
+                arguments,
                 CallType::Subroutine,
                 CallEntry::Trap,
             )
@@ -706,7 +724,7 @@ impl Interp {
     /// ```
     pub(super) fn exec_raise(&mut self, code: &Code<'_>, raise: &Raise) -> Result<Flow, Failure> {
         if raise.propagate {
-            return self.exec_raise_propagate();
+            return self.exec_raise_propagate(code, raise);
         }
         // Each option traces a `>K>` line as it is evaluated, in source
         // order, at this clause's own indent. Measured, all five spellings:
@@ -891,20 +909,7 @@ impl Interp {
         // traces `>K>     "RESULT" => "ONEVAL"`, and the same with `exit`
         // traces the identical line. `RETURN`'s own instruction arm traces
         // `>>>` instead, so this is not that path with a different indent.
-        let result = match &raise.result {
-            Some(result) => match &result.value {
-                Some(expr) => {
-                    let value = self.eval(code, expr)?;
-                    self.roots.activity_mut().push_temp(value);
-                    if let Some(rendered) = self.result_text(value) {
-                        self.trace_keyword(indent, "RESULT", &rendered);
-                    }
-                    Some(value)
-                }
-                None => None,
-            },
-            None => None,
-        };
+        let result = self.raise_result(code, raise)?;
         let returns = raise.result.as_ref().is_some_and(|result| !result.exit);
 
         if raise.condition.as_ref() == b"SYNTAX" {
@@ -919,6 +924,8 @@ impl Interp {
             // and travels like one.
             raised.position = u32::try_from(self.activity.clause_state.line()).unwrap_or(0);
             raised.delivery.search = if returns { Search::Here } else { Search::Top };
+            // The condition object's `RESULT` (`Activity::raiseException`).
+            self.activity.pending_result = result;
             return Err(raised.into());
         }
 
@@ -1053,8 +1060,29 @@ impl Interp {
         }
     }
 
-    /// `RAISE PROPAGATE`: re-raise the condition whose handler is running.
-    fn exec_raise_propagate(&mut self) -> Result<Flow, Failure> {
+    /// The value of a `RAISE`'s `RETURN` or `EXIT` expression, traced.
+    fn raise_result(&mut self, code: &Code<'_>, raise: &Raise) -> Result<Option<ObjRef>, Failure> {
+        let Some(expr) = raise
+            .result
+            .as_ref()
+            .and_then(|result| result.value.as_ref())
+        else {
+            return Ok(None);
+        };
+        let value = self.eval(code, expr)?;
+        self.roots.activity_mut().push_temp(value);
+        if let Some(rendered) = self.result_text(value) {
+            let indent = self.activity.clause_state.current_value_indent;
+            self.trace_keyword(indent, "RESULT", &rendered);
+        }
+        Ok(Some(value))
+    }
+
+    /// `RAISE PROPAGATE`: re-raise the condition whose handler is running. A
+    /// `RETURN` or `EXIT` value replaces the condition object's `RESULT`
+    /// (`RexxActivation::raise`).
+    fn exec_raise_propagate(&mut self, code: &Code<'_>, raise: &Raise) -> Result<Flow, Failure> {
+        let result = self.raise_result(code, raise)?;
         let Some(active) = self
             .activation()
             .cold
@@ -1063,6 +1091,11 @@ impl Interp {
         else {
             return Err(Raised::syntax(98, 918, Vec::new()).into());
         };
+        if let Some(result) = result
+            && let Some(object) = self.activation().condition().and_then(|c| c.object)
+        {
+            self.condition_put(object, b"RESULT", result)?;
+        }
         if !active.raised.reportable() {
             return self.propagate_unreportable(&active.raised);
         }
