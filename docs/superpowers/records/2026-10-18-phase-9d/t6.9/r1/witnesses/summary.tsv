@@ -1,0 +1,8 @@
+program	red vs oracle	green vs oracle
+raise_after_reply_interpreted	differs: stdout stderr	identical
+signal_on_missing_label_native	differs: stdout stderr	identical
+condition_call_on_argument	identical	identical
+signal_on_missing_label	identical	identical
+raise_result_and_sender	identical	identical
+error_report_line_ends	identical	identical
+condition_object_origin	identical	identical

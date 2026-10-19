@@ -1,0 +1,4 @@
+syntax A 16 SYNTAX 6 6 Label "NOVALUE" not found.
+novalue trap OFF
+any SYNTAX 16 13 Label "NO_SUCH_LABEL" not found.
+inner syntax 16 25 Label "MISSING_NOTREADY_LABEL" not found.

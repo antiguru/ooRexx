@@ -1,0 +1,8 @@
+    19 *-* raise user u description 'ia' return 'x'
+    19 *-* interpret "raise user u description 'ia' return 'x'"
+Error 98 running raise_after_reply_interpreted.rex line 19:  Execution error.
+Error 98.936:  RETURN cannot return a value after a REPLY.
+    37 *-* raise user u description 'ic' return 'x'
+    37 *-* interpret "raise user u description 'ic' return 'x'"
+Error 98 running raise_after_reply_interpreted.rex line 37:  Execution error.
+Error 98.936:  RETURN cannot return a value after a REPLY.

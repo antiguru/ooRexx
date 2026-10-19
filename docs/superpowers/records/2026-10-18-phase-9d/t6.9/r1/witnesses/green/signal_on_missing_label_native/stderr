@@ -1,0 +1,4 @@
+    23 *-*   x = linein('/nonexistent-t69/qq')
+    20 *-* call r
+Error 16 running signal_on_missing_label_native.rex line 23:  Label not found.
+Error 16.1:  Label "GONE_LBL" not found.

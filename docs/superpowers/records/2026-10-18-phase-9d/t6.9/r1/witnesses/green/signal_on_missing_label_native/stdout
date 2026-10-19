@@ -1,0 +1,4 @@
+16.1 7 signal_on_missing_label_native.rex Array 0 1
+tb      7 *-* x = linein('/nonexistent-t69/qq')
+16.1 14 Array 0 1
+16.1 18 Array 0 1

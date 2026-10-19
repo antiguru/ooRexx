@@ -1,0 +1,5 @@
+16.1 The NIL object REXX Stream 1 2
+tb        *-* Compiled method "LINEIN" with scope "Stream".
+tb      7 *-* x = linein('/nonexistent-t69/qq')
+16.1 The NIL object Stream 1 2
+16.1 The NIL object Stream 1 2

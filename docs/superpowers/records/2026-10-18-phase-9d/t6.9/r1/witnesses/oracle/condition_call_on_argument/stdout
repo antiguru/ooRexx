@@ -1,0 +1,8 @@
+label 1 Directory USER U CALL 1 0 DELAY
+label 1 Directory ERROR CALL 1 0 DELAY
+label 1 Directory NOTREADY CALL 1 0 DELAY
+reverse ran
+routine 1 USER W CALL d-w
+routine 1 ERROR CALL exit 4
+routine 1 HALT CALL d-halt
+done

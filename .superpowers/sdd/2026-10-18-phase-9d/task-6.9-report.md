@@ -214,3 +214,70 @@ libc-subtracted figures move by at most 0.0002. The new error paths (`settle_nat
    witnessed, and changes no suite row.
 3. `display_condition` (native API `DisplayCondition`, `dispatch/library/surface.rs`) still splits its
    report on line ends through `write_trace_report`. No witness reaches it, and it was not changed.
+
+## Fix round 1
+
+Review: `task-6.9-review.md`. Code commits are `856b6c7f1` and `7936f3ca1`, and witnesses are in
+`36b4aa010`. The records commit that follows holds `t6.9/r1/` and this section. Minors 4, 5 and 6 are
+queued by the controller and left unchanged.
+
+### Important 1: a replied activation's interpreted RAISE RETURN
+
+`raise_sender` computed `replied` only for a sender beyond the raising level, so a fragment's raise
+never saw the reply. `Sender::reply_issued` now records whether `top` replied, which a fragment's
+sender (the same activation) inherits. With a RETURN value, a CALL ON trap there is 98.936 before it
+is queued, and no trap is 98.936 too (`returnFrom`). A SIGNAL ON trap still takes the condition
+first, and a valueless RETURN stays quiet. The `RAISE PROPAGATE` path takes the same arms.
+
+### Important 2 and Minor 3: 16.1 from inside a native stream method
+
+The 16.1 inherited the NOTREADY's `pending_additional`, `pending_result` and the native level's
+recorded frame, site and origin. `offer_to_trap`'s missing-label arm now keeps only the raising
+clause's own site, then clears the other failure levels and the pending ADDITIONAL, RESULT and RC
+before offering the 16.1. The object therefore has the clause's POSITION, the program as PROGRAM,
+an Array ADDITIONAL, no RESULT and one frame. The untrapped report loses the `Compiled method
+"LINEIN"` line.
+
+### Minor 7
+
+`deliver_pending_traps` has no parameter now. Dropping it left `code` unused in turn on
+`leave_clause`, `in_clause`, `in_counted_clause`, `end_promoted_branch` and `offer_to_trap`, so all
+of them drop it too, together with their call sites in `clause.rs`, `run.rs`, `run/loops.rs` and
+`ir/drive.rs`. No caller needed the parameter.
+
+### Witnesses
+
+Red is `94b09da09`, the code `046fa0ac5` carries. Green is `856b6c7f1`, which `7936f3ca1` changes
+only by the parameter removal. `t6.9/r1/witnesses/summary.tsv` comes from `r1/witnesses/run.sh`:
+* `lang/raise_after_reply_interpreted.rex`, new: replied methods doing an interpreted
+  `raise ... return 'x'` under CALL ON (98.936, handler not run), a valueless return (handler runs),
+  SIGNAL ON (handler runs), and no trap (98.936). Each send waits for the previous replied thread.
+  Red is missing both 98.936 reports and runs the `a` handler. Green is identical. Over 8 runs the
+  oracle and the task gave the same stdout, stderr and rc every time (`r1/witnesses/stability.txt`).
+* `lang/signal_on_missing_label_native.rex`, new: a missing NOTREADY label from LINEIN, CHARS and
+  `Stream~linein` (the last under SIGNAL ON ANY), each taken by a SYNTAX or ANY trap, then untrapped in
+  an internal call. Red prints the Stream ADDITIONAL, RESULT, the REXX program and the LINEIN frame
+  and line. Green is identical.
+* The five first-round witnesses are still identical on green.
+
+### Checks, on `7936f3ca1`
+
+Commands as in the first round, each exit status read unpiped:
+* `cargo fmt --all --check`: exit 0.
+* clippy: exit 0. At `36b4aa010` it was exit 101 (`offer_to_trap`'s `code` used only in recursion),
+  which `7936f3ca1` fixes.
+* lib: exit 0, 1152 passed.
+* refusal tables: exit 0. `refusal-sites.tsv` is unchanged.
+* rexx-parse and unsafe_sites: exit 0.
+* corpus: exit 0, 1103 of 1103 matching.
+* suite with the table at `t6.9/r1/suite/table.tsv`: exit 101 as expected, 402 groups, 13 red.
+  Against `t6.9/suite/tests.tsv` no row changed (`t6.9/r1/suite/changed-rows.txt` holds only its
+  command).
+
+### Perf
+
+`t6.9/r1/callgrind.txt`: pin, `94b09da09` (r0) and `7936f3ca1` in one run, exit 0. Own delta against
+r0: startup +0.0009, interpret +0.0138, parse 0.0000, churn +0.0001, sayloop +0.0006. Every delta is
+under +0.05%, and every figure against the pin is under +0.5%. The libc-subtracted figures are
+unchanged to four places on every program, so interpret's move is in libc rather than this crate's
+code.

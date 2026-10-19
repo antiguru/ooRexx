@@ -1,0 +1,63 @@
+nomethod string: ADDITIONAL=object CONDITION=NOMETHOD DESCRIPTION=NO_METHOD INSTRUCTION=SIGNAL PACKAGE=n.rex POSITION=8 PROGRAM=condition_object_origin.rex PROPAGATED=0 STACKFRAMES=1 TRACEBACK=1
+   frame PROGRAM condition_object_origin.rex 8 Object
+   tb      8 *-* 'object'~no_method
+nomethod nil: ADDITIONAL=Object:The NIL object CONDITION=NOMETHOD DESCRIPTION=NO_METHOD INSTRUCTION=SIGNAL PACKAGE=n.rex POSITION=11 PROGRAM=condition_object_origin.rex PROPAGATED=0 STACKFRAMES=1 TRACEBACK=1
+   frame PROGRAM condition_object_origin.rex 11 Object
+   tb     11 *-* .nil~no_method
+nostring: ADDITIONAL=RexxInfo:a RexxInfo CONDITION=NOSTRING DESCRIPTION=a RexxInfo INSTRUCTION=SIGNAL PACKAGE=n.rex POSITION=14 PROGRAM=condition_object_origin.rex PROPAGATED=0 STACKFRAMES=1 TRACEBACK=1
+   frame PROGRAM condition_object_origin.rex 14 Object
+   tb     14 *-* call datatype .RexxInfo
+notready call: ADDITIONAL=Stream:/nonexistent-t69/zz CONDITION=NOTREADY DESCRIPTION=/nonexistent-t69/zz INSTRUCTION=CALL PACKAGE= REXX PROGRAM=REXX PROPAGATED=0 RESULT= STACKFRAMES=2 TRACEBACK=2
+   frame METHOD LINEIN The NIL object Stream
+   frame PROGRAM condition_object_origin.rex 17 Object
+   tb        *-* Compiled method "LINEIN" with scope "Stream".
+   tb     17 *-* x = linein('/nonexistent-t69/zz')
+notready call: ADDITIONAL=Stream:/ CONDITION=NOTREADY DESCRIPTION=/ INSTRUCTION=CALL PACKAGE= REXX PROGRAM=REXX PROPAGATED=0 RESULT=0 STACKFRAMES=2 TRACEBACK=2
+   frame METHOD CHARS The NIL object Stream
+   frame PROGRAM condition_object_origin.rex 18 Object
+   tb        *-* Compiled method "CHARS" with scope "Stream".
+   tb     18 *-* x = chars('/')
+notready call: ADDITIONAL=Stream:/ CONDITION=NOTREADY DESCRIPTION=/ INSTRUCTION=CALL PACKAGE= REXX PROGRAM=REXX PROPAGATED=0 RESULT=0 STACKFRAMES=2 TRACEBACK=2
+   frame METHOD LINES The NIL object Stream
+   frame PROGRAM condition_object_origin.rex 19 Object
+   tb        *-* Compiled method "LINES" with scope "Stream".
+   tb     19 *-* x = .stream~new('/')~lines
+notready signal: ADDITIONAL=Stream:/nonexistent-t69/zz CONDITION=NOTREADY DESCRIPTION=/nonexistent-t69/zz INSTRUCTION=SIGNAL PACKAGE= REXX PROGRAM=REXX PROPAGATED=0 RESULT= STACKFRAMES=2 TRACEBACK=2
+   frame METHOD CHARIN The NIL object Stream
+   frame PROGRAM condition_object_origin.rex 22 Object
+   tb        *-* Compiled method "CHARIN" with scope "Stream".
+   tb     22 *-* x = charin('/nonexistent-t69/zz')
+notready propagated: ADDITIONAL=Stream:/ CONDITION=NOTREADY DESCRIPTION=/ INSTRUCTION=SIGNAL PACKAGE= REXX PROGRAM=REXX PROPAGATED=1 RESULT=ERROR:2 STACKFRAMES=3 TRACEBACK=3
+   frame METHOD OPEN The NIL object Stream
+   frame METHOD COMMAND 270 Stream
+   frame PROGRAM condition_object_origin.rex 25 Object
+   tb        *-* Compiled method "OPEN" with scope "Stream".
+   tb    270 *-*       Method COMMAND with scope "Stream" in package "REXX" (no source available).
+   tb     25 *-* x = stream('/', 'c', 'open read')
+library syntax: ADDITIONAL=Array:an Array CODE=88.902 CONDITION=SYNTAX DESCRIPTION= ERRORTEXT=Invalid argument. INSTRUCTION=SIGNAL MESSAGE=The LENGTH argument must be a number; found "abc". PACKAGE= REXX POSITION=3700 PROGRAM=REXX PROPAGATED=1 RC=88 STACKFRAMES=2 TRACEBACK=2
+   frame METHOD NUMBER 3700 Class
+   frame PROGRAM condition_object_origin.rex 28 Object
+   tb   3700 *-*       Method NUMBER with scope "Validate" in package "REXX" (no source available).
+   tb     28 *-* say .Validate~number('LENGTH', 'abc')
+library arguments: ADDITIONAL=Array:an Array CODE=88.922 CONDITION=SYNTAX DESCRIPTION= ERRORTEXT=Invalid argument. INSTRUCTION=SIGNAL MESSAGE=Too many arguments in invocation; 2 expected. PACKAGE= REXX PROGRAM=REXX PROPAGATED=0 RC=88 STACKFRAMES=2 TRACEBACK=2
+   frame METHOD CHARIN The NIL object Stream
+   frame PROGRAM condition_object_origin.rex 31 Object
+   tb        *-* Compiled method "CHARIN" with scope "Stream".
+   tb     31 *-* .stream~new('/tmp/t69-none')~charin(1, 2, 3)
+bare code: ADDITIONAL=Array:an Array CODE=93.0 CONDITION=SYNTAX DESCRIPTION= ERRORTEXT=Incorrect call to method. INSTRUCTION=SIGNAL MESSAGE=Object:The NIL object PACKAGE=n.rex POSITION=34 PROGRAM=condition_object_origin.rex PROPAGATED=0 RC=93 STACKFRAMES=1 TRACEBACK=1
+   frame PROGRAM condition_object_origin.rex 34 Object
+   tb     34 *-* raise syntax 93
+linein code: ADDITIONAL=Array:an Array CODE=93.0 CONDITION=SYNTAX DESCRIPTION= ERRORTEXT=Incorrect call to method. INSTRUCTION=SIGNAL MESSAGE=Object:The NIL object PACKAGE=n.rex POSITION=37 PROGRAM=condition_object_origin.rex PROPAGATED=1 RC=93 STACKFRAMES=2 TRACEBACK=2
+   frame METHOD LINEIN The NIL object Stream
+   frame PROGRAM condition_object_origin.rex 37 Object
+   tb        *-* Compiled method "LINEIN" with scope "Stream".
+   tb     37 *-* x = linein('/tmp/t69-none', 1, 2)
+notready propagated twice: ADDITIONAL=Stream:/ CONDITION=NOTREADY DESCRIPTION=/ INSTRUCTION=SIGNAL PACKAGE= REXX PROGRAM=REXX PROPAGATED=1 RESULT=ERROR:2 STACKFRAMES=4 TRACEBACK=4
+   frame METHOD OPEN The NIL object Stream
+   frame METHOD COMMAND 270 Stream
+   frame INTERNALCALL OPEN_IN_ROUTINE 70 Object
+   frame PROGRAM condition_object_origin.rex 42 Object
+   tb        *-* Compiled method "OPEN" with scope "Stream".
+   tb    270 *-*       Method COMMAND with scope "Stream" in package "REXX" (no source available).
+   tb     70 *-*   return stream('/', 'c', 'open read')
+   tb     42 *-* x = open_in_routine()
