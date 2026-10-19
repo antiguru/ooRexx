@@ -329,7 +329,7 @@ fn referenced_cell(heap: &mut Heap, roots: &mut RootSet, value: ObjRef) -> (Slot
     let frame = roots.push_slots(1);
     roots.set_frame_slot(frame, 0, value);
     let cell = roots.new_cell();
-    let object = heap.alloc(Body::Cell(cell));
+    let object = heap.alloc(Body::Cell(cell, b"V".as_slice().into()));
     let slot = roots.promote(frame, 0, object, cell);
     let reference = heap.alloc(Body::VarRef(Box::new(VarRef {
         name: b"V".to_vec().into_boxed_slice(),

@@ -266,7 +266,7 @@ impl Heap {
                     0
                 }
                 // A cell's value is in the root set, which `trace` cannot see.
-                Body::Cell(cell) => {
+                Body::Cell(cell, _) => {
                     work.extend(roots.cell_value(*cell));
                     0
                 }
@@ -360,7 +360,7 @@ impl Heap {
             survivor_bytes += object.body.held_bytes();
             reached.clear();
             object.body.trace(&mut reached);
-            if let Body::Cell(cell) = object.body {
+            if let Body::Cell(cell, _) = object.body {
                 reached.extend(roots.cell_value(cell));
             }
             resurrect.extend(reached.iter().copied());
@@ -395,7 +395,7 @@ impl Heap {
                     );
                     freed_classes.push(ObjRef::heap(slot as u32, generation));
                 }
-                Body::Cell(cell) => freed_cells.push(*cell),
+                Body::Cell(cell, _) => freed_cells.push(*cell),
                 _ => {
                     #[cfg(debug_assertions)]
                     {

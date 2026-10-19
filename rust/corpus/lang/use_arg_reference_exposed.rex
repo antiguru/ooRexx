@@ -4,7 +4,8 @@
    earlier reference bound to the object's pool. An unset local target, a
    USE LOCAL name, a dropped stem, and a second reference to an unset local
    variable bind. A second >stem. compares the stem with the name of the
-   caller's variable the first one bound. */
+   variable that owns the storage, however many references and internal
+   calls lie between. */
 o = .k~new
 a = 1; a. = 'stem default'; a.1 = 'one'; b. = 'b default'
 call try o, 'refExposed', >a
@@ -35,6 +36,12 @@ call try o, 'twiceStem', >e.
 say 'e.1' e.1
 f. = g.
 call try o, 'twiceStem', >f.
+say h. j. k. l.
+call try o, 'innerThenOuter', >h.
+call try o, 'innerTwiceOuter', >j.
+call try o, 'passedOnTwice', >k.
+call try o, 'innerOfPassedOn', >l.
+say 'h.1' h.1 'j.1' j.1 'k.1' k.1 'l.1' l.1
 say 'a' a 'a.1' a.1
 exit
 
@@ -108,6 +115,54 @@ caught:
   use arg >abc.
   abc.1 = 'set'
   return 'bound twice'
+::method innerThenOuter
+  call bindOnce arg(1)
+  use arg >abc.
+  abc.1 = 'set'
+  return 'bound after the internal call'
+bindOnce:
+  use arg >abc.
+  return
+::method innerTwiceOuter
+  call bindTwice arg(1)
+  use arg >abc.
+  abc.1 = 'set'
+  return 'bound after the internal call'
+bindTwice:
+  use arg >abc.
+  use arg >abc.
+  return
+::method passedOnTwice
+  call first arg(1)
+  return result
+first: procedure
+  use arg >x.
+  call second >x.
+  return result
+second: procedure
+  use arg >y.
+  call third >y.
+  return result
+third: procedure
+  use arg >z.
+  use arg >z.
+  z.1 = 'set'
+  return 'bound three levels down'
+::method innerOfPassedOn
+  call outer arg(1)
+  return result
+outer: procedure
+  use arg >x.
+  call middle >x.
+  return result
+middle: procedure
+  call innermost arg(1)
+  use arg >w.
+  w.1 = 'set'
+  return 'bound after the passed-on internal call'
+innermost:
+  use arg >w.
+  return
 ::method twiceExposed
   expose v
   signal on syntax name caught

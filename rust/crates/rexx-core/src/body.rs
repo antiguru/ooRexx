@@ -136,8 +136,9 @@ pub enum Body {
     VarRef(Box<VarRef>),
     /// What keeps the storage of a variable a `>name` reference was taken
     /// to: the index of that storage in [`crate::RootSet`]'s cells, which the
-    /// collector frees with this object.
-    Cell(u32),
+    /// collector frees with this object, and the name of the variable that
+    /// owned it.
+    Cell(u32, Box<[u8]>),
 }
 
 // A heap value names no borrowed frame (spec 2026-09-29 section 5, D3).
@@ -1379,7 +1380,7 @@ impl Body {
             },
             // The value is in the root set's cell, which `Heap::collect`
             // marks when it marks this object.
-            Body::Cell(_) => {}
+            Body::Cell(..) => {}
         }
     }
 }

@@ -29,7 +29,7 @@ fn body_variant_name(body: &Body) -> &'static str {
         Body::Class { .. } => "Body::Class",
         Body::Native(_) => "Body::Native",
         Body::VarRef(_) => "Body::VarRef",
-        Body::Cell(_) => "Body::Cell",
+        Body::Cell(..) => "Body::Cell",
     }
 }
 

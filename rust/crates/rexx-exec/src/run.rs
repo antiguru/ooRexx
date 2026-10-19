@@ -1888,17 +1888,7 @@ impl Interp {
                 return Err(Raised::variable_reference_not_uninitialised(&name).into());
             }
             match slot {
-                VarRefHome::Cell(cell) => {
-                    self.roots.activity_mut().alias_slot(frame, index, cell);
-                    let names = &mut self.activation_mut().cold_mut().reference_names;
-                    match names
-                        .iter_mut()
-                        .find(|(at, slot, _)| (*at, *slot) == (frame, index))
-                    {
-                        Some(bound) => bound.2 = reference.clone(),
-                        None => names.push((frame, index, reference.clone())),
-                    }
-                }
+                VarRefHome::Cell(cell) => self.roots.activity_mut().alias_slot(frame, index, cell),
                 // The same binding `EXPOSE` makes, on this activation's own
                 // slot: the target names the caller's object variable rather
                 // than any frame storage, so there is nothing to alias to.
@@ -2023,7 +2013,8 @@ impl Interp {
 
     /// Whether a `USE ARG >name` target is in the uninitialised state the
     /// oracle requires of it: a local variable (`RexxVariable::isAliasable`),
-    /// so never one an `EXPOSE` or `USE LOCAL` bound to the object's pool.
+    /// so never one an `EXPOSE` or `USE LOCAL` bound to the object's pool, and
+    /// for a stem one named as the variable that owns the slot's storage.
     fn target_is_uninitialised(&self, name: &[u8], frame: SlotFrame, index: usize) -> bool {
         if self.exposure(frame, index).is_some() {
             return false;
@@ -2031,13 +2022,7 @@ impl Interp {
         match self.variable(frame, index) {
             None => true,
             Some(value) => {
-                let own = (self.activation().cold.as_deref())
-                    .and_then(|cold| {
-                        cold.reference_names
-                            .iter()
-                            .find(|(at, slot, _)| (*at, *slot) == (frame, index))
-                    })
-                    .map_or(name, |(_, _, aliased)| aliased);
+                let own = self.cell_owner_name(frame, index).unwrap_or(name);
                 shape_of(name) == NameShape::Stem && self.is_uninitialised_stem(value, own)
             }
         }
@@ -2548,7 +2533,7 @@ impl Interp {
             // instruction over `v` itself is rc 0 -- so this arm may not
             // chase the way the string conversion beside it does.
             Some(Body::VarRef(_)) => Conversion::Refused,
-            Some(Body::Native(_) | Body::WeakRef(_) | Body::Cell(_)) | None => {
+            Some(Body::Native(_) | Body::WeakRef(_) | Body::Cell(..)) | None => {
                 Conversion::Requested
             }
         }

@@ -3,7 +3,7 @@ use rexx_core::{Body, Heap, ObjRef, RootSet, SlotFrame, SlotRef};
 /// [`RootSet::promote`] with the cell `Interp::promote_slot` allocates.
 fn promote(roots: &mut RootSet, heap: &mut Heap, frame: SlotFrame, index: usize) -> SlotRef {
     let cell = roots.new_cell();
-    let object = heap.alloc(Body::Cell(cell));
+    let object = heap.alloc(Body::Cell(cell, b"V".as_slice().into()));
     roots.promote(frame, index, object, cell)
 }
 

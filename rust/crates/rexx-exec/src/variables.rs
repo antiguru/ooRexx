@@ -56,15 +56,26 @@ impl Interp {
 
     /// The cell slot `slot` of `frame` resolves to, moving the variable into a
     /// fresh one if it has none yet, so that a reference to it survives the
-    /// frame.
-    pub(crate) fn promote_slot(&mut self, frame: SlotFrame, slot: usize) -> SlotRef {
+    /// frame. `name` is the variable's own name, which a fresh cell keeps.
+    pub(crate) fn promote_slot(&mut self, frame: SlotFrame, slot: usize, name: &[u8]) -> SlotRef {
         let target = self.roots.activity().slot_ref(frame, slot);
         if target.cell().is_some() {
             return target;
         }
         let cell = self.roots.new_cell();
-        let object = self.alloc_with(BehaviourId::OBJECT, Body::Cell(cell));
+        let object = self.alloc_with(BehaviourId::OBJECT, Body::Cell(cell, name.into()));
         self.roots.promote(frame, slot, object, cell)
+    }
+
+    /// The name of the variable that owns the cell slot `slot` of `frame`
+    /// resolves to, following every alias, or `None` when it resolves to frame
+    /// storage.
+    pub(crate) fn cell_owner_name(&self, frame: SlotFrame, slot: usize) -> Option<&[u8]> {
+        let cell = self.roots.activity().slot_ref(frame, slot).cell()?;
+        match &self.heap.get(cell)?.body {
+            Body::Cell(_, name) => Some(name),
+            _ => None,
+        }
     }
 
     /// Whether the running activation has bound any name at all to a scope

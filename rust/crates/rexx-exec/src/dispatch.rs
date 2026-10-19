@@ -1867,7 +1867,7 @@ impl Interp {
                         behaviour: *behaviour,
                     }),
                     Body::WeakRef(_) => Err("a weak reference"),
-                    Body::Cell(_) => Err("a variable's cell"),
+                    Body::Cell(..) => Err("a variable's cell"),
                     // `>name`'s own object. Its behaviour is `Setup.cpp`'s
                     // whole set, hidden operators included, so a name it
                     // does not hold reaches `UNKNOWN` on both sides.
