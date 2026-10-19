@@ -125,14 +125,21 @@ fn replay(
             Op::AddClassMethod(name) => {
                 registry.add_class_method(class, name);
             }
-            Op::AddInstanceMethod(name) => {
+            Op::AddInstanceMethod(name) | Op::AddProtectedInstanceMethod(name) => {
                 if !keep_setup_methods
                     && def.name == "Class"
                     && REMOVED_BY_IMAGE_SAVE.contains(name)
                 {
                     continue;
                 }
-                registry.add_instance_method(class, name);
+                let method = registry.add_instance_method(class, name);
+                if matches!(op, Op::AddProtectedInstanceMethod(_)) {
+                    registry.mark_protected_native(method);
+                }
+            }
+            Op::AddProtectedClassMethod(name) => {
+                let method = registry.add_class_method(class, name);
+                registry.mark_protected_native(method);
             }
             Op::AddPrivateInstanceMethod(name) => {
                 registry.add_private_instance_method(class, name);

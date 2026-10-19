@@ -13,8 +13,11 @@
 //! send every checkpoint makes, and the info directory it is handed.
 
 use rexx_core::{BehaviourId, Body, ObjRef};
+use rexx_parse::Access;
 
+use crate::dispatch::AccessScope;
 use crate::error::Raised;
+use crate::plan::Package;
 use crate::{Failure, Interp};
 
 /// The message one checkpoint sends, and the entries its info directory
@@ -157,7 +160,8 @@ impl Interp {
 
     /// One entry of an info directory the manager has answered, or `None`
     /// where it left the name unset. `DirectoryClass::get`, which is an
-    /// exact-string lookup and not `ENTRY`'s upcasing one.
+    /// exact-string lookup and not `ENTRY`'s upcasing one. An entry the
+    /// manager set to `.nil` is `Some(.nil)`: `get` answers the object stored.
     pub(crate) fn security_entry(
         &mut self,
         directory: ObjRef,
@@ -165,8 +169,46 @@ impl Interp {
     ) -> Result<Option<ObjRef>, Failure> {
         let index = self.text(name);
         self.roots.activity_mut().push_temp(index);
-        let caller = self.caller();
-        let answer = self.send_message(directory, b"AT", None, &[Some(index)], caller)?;
-        Ok(answer.filter(|value| *value != ObjRef::NIL))
+        let answer = crate::dispatch::hash::store_get(self, directory, index)?;
+        if let Some(value) = answer {
+            self.roots.activity_mut().push_temp(value);
+        }
+        Ok(answer)
+    }
+
+    /// `MethodClass::setProtected` on the method `object` stands for, which
+    /// the dispatch seam then asks the manager about.
+    pub(crate) fn make_method_protected(&mut self, object: ObjRef) {
+        let Some(method) = self
+            .executable_sources
+            .get(&object)
+            .and_then(|record| record.installed)
+        else {
+            return;
+        };
+        let package = self
+            .source_package(self.installed_executable_source(method))
+            .unwrap_or(Package::Rexx);
+        match self.special_methods.get_mut(method) {
+            Some(existing) => existing.protected = true,
+            None => self.special_methods.insert(
+                method,
+                AccessScope {
+                    access: Access::Default,
+                    protected: true,
+                    package,
+                },
+            ),
+        }
+    }
+
+    /// Whether the method `object` stands for is protected: a `Setup.cpp`
+    /// protected primitive, or one `setProtected` was sent to.
+    pub(crate) fn installed_is_protected(&self, object: ObjRef) -> bool {
+        self.executable_sources
+            .get(&object)
+            .and_then(|record| record.installed)
+            .and_then(|method| self.special_methods.get(method))
+            .is_some_and(|scope| scope.protected)
     }
 }

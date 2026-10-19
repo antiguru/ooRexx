@@ -61,7 +61,9 @@ mod seam {
         method: MethodId,
     ) -> Result<Clearance, Failure> {
         let cleared = Cleared(());
-        if interp.method_is_protected(method) {
+        // `security_armed` first: a process that never installed a manager
+        // pays one flag test per send and no row lookup.
+        if interp.security_armed && interp.method_is_protected(method) {
             if let Some(result) = interp.check_protected_method(receiver, name, args)? {
                 return Ok(Clearance::Answered(result));
             }
@@ -1697,7 +1699,7 @@ impl Interp {
     }
 
     /// Stores a freshly built object model and files the access scopes of
-    /// the natives `Setup.cpp` declares private.
+    /// the natives `Setup.cpp` declares private or protected.
     pub(crate) fn install_object_model(&mut self, model: ObjectModel) {
         debug_assert!(
             self.special_methods.is_empty(),
@@ -1710,6 +1712,16 @@ impl Interp {
                 AccessScope {
                     access: Access::Private,
                     protected: false,
+                    package: Package::Rexx,
+                },
+            );
+        }
+        for &method in model.classes.protected_native_methods() {
+            self.special_methods.insert(
+                method,
+                AccessScope {
+                    access: Access::Default,
+                    protected: true,
                     package: Package::Rexx,
                 },
             );

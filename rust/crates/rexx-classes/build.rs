@@ -42,6 +42,11 @@ fn generate(src: &str) -> String {
          \x20   /// `AddPrivateMethod`, whose method the ordinary private\n\
          \x20   /// check refuses from a program context.\n\
          \x20   AddPrivateInstanceMethod(&'static str),\n\
+         \x20   /// `AddProtectedMethod`, whose method the security manager\n\
+         \x20   /// is asked about.\n\
+         \x20   AddProtectedInstanceMethod(&'static str),\n\
+         \x20   /// `AddClassProtectedMethod`.\n\
+         \x20   AddProtectedClassMethod(&'static str),\n\
          \x20   InheritInstanceMethods(&'static str),\n\
          \x20   RemoveInstanceMethod(&'static str),\n\
          \x20   HideInstanceMethod(&'static str),\n\
@@ -74,6 +79,12 @@ fn generate(src: &str) -> String {
                 Op::AddPrivateInstanceMethod(n) => {
                     format!("Op::AddPrivateInstanceMethod({n:?})")
                 }
+                Op::AddProtectedInstanceMethod(n) => {
+                    format!("Op::AddProtectedInstanceMethod({n:?})")
+                }
+                Op::AddProtectedClassMethod(n) => {
+                    format!("Op::AddProtectedClassMethod({n:?})")
+                }
                 Op::InheritInstanceMethods(n) => format!("Op::InheritInstanceMethods({n:?})"),
                 Op::RemoveInstanceMethod(n) => format!("Op::RemoveInstanceMethod({n:?})"),
                 Op::HideInstanceMethod(n) => format!("Op::HideInstanceMethod({n:?})"),
@@ -103,6 +114,8 @@ enum Op {
     AddClassMethod(String),
     AddInstanceMethod(String),
     AddPrivateInstanceMethod(String),
+    AddProtectedInstanceMethod(String),
+    AddProtectedClassMethod(String),
     InheritInstanceMethods(String),
     RemoveInstanceMethod(String),
     HideInstanceMethod(String),
@@ -163,16 +176,18 @@ fn parse_definitions(src: &str) -> Vec<ClassDef> {
         let Some(def) = current.as_mut() else {
             continue;
         };
-        if let Some(n) = macro_string_arg(line, "AddClassMethod")
-            .or_else(|| macro_string_arg(line, "AddClassProtectedMethod"))
+        if let Some(n) = macro_string_arg(line, "AddClassProtectedMethod") {
+            def.ops.push(Op::AddProtectedClassMethod(n));
+        } else if let Some(n) = macro_string_arg(line, "AddClassMethod")
             .or_else(|| macro_string_arg(line, "AddClassPrivateMethod"))
             .or_else(|| macro_string_arg(line, "AddClassUnguardedMethod"))
         {
             def.ops.push(Op::AddClassMethod(n));
         } else if let Some(n) = macro_string_arg(line, "AddPrivateMethod") {
             def.ops.push(Op::AddPrivateInstanceMethod(n));
-        } else if let Some(n) = macro_string_arg(line, "AddProtectedMethod")
-            .or_else(|| macro_string_arg(line, "AddUnguardedMethod"))
+        } else if let Some(n) = macro_string_arg(line, "AddProtectedMethod") {
+            def.ops.push(Op::AddProtectedInstanceMethod(n));
+        } else if let Some(n) = macro_string_arg(line, "AddUnguardedMethod")
             .or_else(|| macro_string_arg(line, "AddMethod"))
         {
             def.ops.push(Op::AddInstanceMethod(n));

@@ -41,6 +41,9 @@ pub struct ClassRegistry {
     /// `Setup.cpp`'s `AddPrivateMethod` rows, in mint order -- see
     /// [`ClassRegistry::private_native_methods`].
     private_native_methods: Vec<MethodId>,
+    /// `Setup.cpp`'s `AddProtectedMethod` and `AddClassProtectedMethod`
+    /// rows, in mint order -- see [`ClassRegistry::protected_native_methods`].
+    protected_native_methods: Vec<MethodId>,
 }
 
 impl Default for ClassRegistry {
@@ -60,6 +63,7 @@ impl ClassRegistry {
             by_name: NameMap::default(),
             by_system_name: NameMap::default(),
             private_native_methods: Vec::new(),
+            protected_native_methods: Vec::new(),
         }
     }
 
@@ -324,6 +328,7 @@ impl ClassRegistry {
             by_name,
             by_system_name,
             private_native_methods: _,
+            protected_native_methods: _,
         } = self;
         graph.expunge(dead);
         for class in dead {
@@ -601,6 +606,17 @@ impl ClassRegistry {
     /// The native methods `Setup.cpp` marks private, in mint order.
     pub fn private_native_methods(&self) -> &[MethodId] {
         &self.private_native_methods
+    }
+
+    /// Records `method` as one of `Setup.cpp`'s `AddProtectedMethod` or
+    /// `AddClassProtectedMethod` rows.
+    pub fn mark_protected_native(&mut self, method: MethodId) {
+        self.protected_native_methods.push(method);
+    }
+
+    /// The native methods `Setup.cpp` marks protected, in mint order.
+    pub fn protected_native_methods(&self) -> &[MethodId] {
+        &self.protected_native_methods
     }
 
     /// Install a directly-added class (static) method -- oracle's

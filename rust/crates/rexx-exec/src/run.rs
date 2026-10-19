@@ -4164,7 +4164,9 @@ impl Interp {
     /// place of a new `Stream`, or `None` where the manager declined or none
     /// is installed.
     ///
-    /// **The manager's entry is `STREAM`, not `RESULT`.**
+    /// **The manager's entry is `STREAM`, not `RESULT`.** A `.nil` entry is
+    /// read as no replacement: the oracle uses `.nil` as the stream and then
+    /// fails at exit (rc 139), which this crate does not copy.
     fn check_stream_access(&mut self, qualified: &[u8]) -> Result<Option<ObjRef>, Failure> {
         if self.effective_security_manager().is_none() {
             return Ok(None);
@@ -4175,7 +4177,8 @@ impl Interp {
         let Some(info) = self.security_check(crate::security::message::STREAM, &entries)? else {
             return Ok(None);
         };
-        self.security_entry(info, crate::security::key::STREAM)
+        let stream = self.security_entry(info, crate::security::key::STREAM)?;
+        Ok(stream.filter(|stream| *stream != ObjRef::NIL))
     }
 
     /// Drops `name`'s entry from the owning activation's table, which is what

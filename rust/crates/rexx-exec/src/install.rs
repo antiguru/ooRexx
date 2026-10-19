@@ -795,11 +795,16 @@ impl Interp {
         let Some(info) = self.security_check(crate::security::message::REQUIRES, &entries)? else {
             return Ok(Some(name.to_vec()));
         };
-        if let Some(manager) = self.security_entry(info, crate::security::key::SECURITYMANAGER)? {
-            self.roots.activity_mut().push_temp(manager);
+        // `secObject != TheNilObject` (`SecurityManager.cpp:339`).
+        if let Some(manager) = self.security_entry(info, crate::security::key::SECURITYMANAGER)?
+            && manager != ObjRef::NIL
+        {
             *inherited = Some(manager);
         }
-        let Some(replaced) = self.security_entry(info, crate::security::key::NAME)? else {
+        let Some(replaced) = self
+            .security_entry(info, crate::security::key::NAME)?
+            .filter(|name| *name != ObjRef::NIL)
+        else {
             return Ok(None);
         };
         self.roots.activity_mut().push_temp(replaced);

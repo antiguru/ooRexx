@@ -112,7 +112,8 @@ fn source_of(interp: &Interp, receiver: ObjRef) -> Result<ExecutableSource, Fail
 /// One flag's value for this receiver: what the directive declared, with any
 /// write the setters have made over it.
 fn flag(interp: &Interp, receiver: ObjRef, which: Flag) -> Result<bool, Failure> {
-    let declared = declared_flag(interp, source_of(interp, receiver)?, which);
+    let declared = declared_flag(interp, source_of(interp, receiver)?, which)
+        || (which == Flag::Protected && interp.installed_is_protected(receiver));
     let written = interp.method_flag_writes.get(&receiver).copied();
     Ok(match (which, written) {
         (Flag::Unguarded, Some(writes)) => writes.unguarded.unwrap_or(declared),
@@ -302,16 +303,18 @@ fn set_private(
     Ok(None)
 }
 
-/// See [`set_guarded`]. `PROTECTED` is read only by the security-manager
-/// seam, which nothing in this phase installs, so the readback is the whole
-/// of what changes here -- D12 owns the rest.
+/// See [`set_guarded`]. Like `setPrivate`, this changes the method the
+/// object stands for, which the security-manager seam then asks about:
+/// [`Interp::make_method_protected`].
 fn set_protected(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    write_flag(interp, receiver, |writes| writes.protected = true)
+    write_flag(interp, receiver, |writes| writes.protected = true)?;
+    interp.make_method_protected(receiver);
+    Ok(None)
 }
 
 /// Records one setter's write, after checking the receiver is an executable
