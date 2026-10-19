@@ -22,6 +22,8 @@ enum Delivered {
     KeptBack,
     /// To standard error, as the line.
     ToStandardError,
+    /// To standard error, as the object's string.
+    ToStandardErrorAs(Vec<u8>),
 }
 
 impl Interp {
@@ -237,6 +239,12 @@ impl Interp {
                     self.trace.push(b'\n');
                 }
             }
+            Ok(Delivered::ToStandardErrorAs(shown)) => {
+                self.trace.extend_from_slice(&shown);
+                if ended {
+                    self.trace.push(b'\n');
+                }
+            }
             Err(failure) => self.queue_trace_failure(failure, &line),
         }
     }
@@ -428,16 +436,32 @@ impl Interp {
         let option = self
             .send_message(object, b"[]", None, &[Some(index)], caller_ref)?
             .unwrap_or(ObjRef::NIL);
-        if option != ObjRef::NIL && self.to_text(option).first() == Some(&b'P') {
+        let letter = if option == ObjRef::NIL {
+            b'N'
+        } else {
+            self.to_text(option).first().copied().unwrap_or(b'N')
+        };
+        if letter == b'P' {
             return Ok(Delivered::KeptBack);
         }
         let route = match self.local_route(b"TRACEOUTPUT")? {
-            Some(route) if route != ObjRef::NIL => route,
-            _ => return Ok(Delivered::ToStandardError),
+            Some(route) if route != ObjRef::NIL => Some(route),
+            _ => None,
         };
-        if self.route_ends_at(route, self.bootstrap_stderr) {
-            return Ok(Delivered::ToStandardError);
-        }
+        let Some(route) = route.filter(|&route| !self.route_ends_at(route, self.bootstrap_stderr))
+        else {
+            // The error stream writes the object's string, which is the line
+            // itself under option `N` and `makeStringImpl`'s format otherwise.
+            if letter == b'N' {
+                return Ok(Delivered::ToStandardError);
+            }
+            let caller_ref = self.caller();
+            let shown = self
+                .send_message(object, b"MAKESTRING", None, &[], caller_ref)?
+                .unwrap_or(ObjRef::NIL);
+            let shown = self.to_text(shown).to_vec();
+            return Ok(Delivered::ToStandardErrorAs(shown));
+        };
         let caller_ref = self.caller();
         self.send_message(
             route,
