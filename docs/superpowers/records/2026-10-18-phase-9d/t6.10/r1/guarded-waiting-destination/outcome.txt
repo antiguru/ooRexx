@@ -1,3 +1,4 @@
 # oracle: stdout 'done 1', rc 0
 # task 952e1788d, wall clock under timeout -s KILL 10: killed, rc 137
 # task 952e1788d, REXX_SWITCH_MODE=sim:3,uniform:0.2 under timeout -s KILL 10: killed, rc 137
+# task 9a3431a0b, wall clock under timeout -s KILL 10: killed, rc 137

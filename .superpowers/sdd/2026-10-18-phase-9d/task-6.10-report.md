@@ -446,3 +446,89 @@ From `rust/`, `CARGO_INCREMENTAL=0`, `-j 4`, each status read unpiped:
     of `scheduler.rs`, and I restored it before any commit (`git diff` checked).
 
 Round 0's Concern 6 (no pinned yield during a delivery) is superseded by Important 2.
+
+### Fix round 1, after the Deviation 50 ruling
+
+Moritz ruled Important 1 as Deviation 50 (`4a5e7083d`). The round-0 behaviour stays, and the
+chunk swap is queued.
+
+1. **Deviation 50's witness** (`894c0d372`): `undelivered-trace-clause-runs-first` in
+   `tests/licensed_divergences.rs`, with its marker line in Deviation 50's row. It is probe `s1`
+   with the destination set before `trace r`, so neither side's stderr names a path. The oracle
+   prints `syntax 97.1 c=0` (3 runs) and this crate `c=1`, both rc 0 with empty stderr. Changing
+   the crate's expected line turns the test red. `licensed_divergences`, `closed_phases`,
+   `builtin_status`, `signals`, `api_group_tests`, `keyword_assertions`, `rexxc`,
+   `bif_assertions`, `owners` and `coverage` (the tests that read `phase-4-exclusions.txt`) exit
+   0.
+2. **A refusal a delivery meets is never dropped** (`9a3431a0b`). A refusal queued for the
+   running activation is raised at that activation's clause end as before.
+   * Queuing one also allocates the activation's cold state, so its pop runs `Interp::end_cold`,
+     and `Interp::carry_trace_refusals` moves the refusal from there. With a caller, the caller
+     raises it at its own clause end, the way the 97.1 is raised.
+   * With no caller in the activity (a started activity's own method, an empty REPLY rest, a
+     main body), the refusal goes to `Activity::trace_refusal`. The activity ends with it: the
+     scheduler's end of a started or continued activity and the main body's end check that
+     slot.
+   * The ordinary call path is unchanged. Only a refusal reaches the cold state, and the main
+     body's check sits behind `!nested`.
+   * Witnesses (`environment/tests.rs`, `t6.10/r1/delivery-refusal/`): a routine's `<I<`, a
+     started method's `<I<`, and an empty REPLY rest's `>I>`. The destination's `n`th `LINEOUT`
+     sends `ITEMS` to a Stem built without its allocation, which is refused at rc 120. At
+     `952e1788d` each printed `after` at rc 0. Now each ends at rc 120 with the refusal on stderr.
+     Without the `carry_trace_refusals` call all three tests go red.
+   * There is no oracle half: the oracle segfaults on that Stem shape (`oracle-crashes.txt`).
+3. **The reorder of Concern 8 was this crate's alone, and is fixed** (`9a3431a0b`). The oracle has
+   two ways to hand the kernel to another thread during a delivery:
+   * The run loop's check, which runs only after `yieldInstructions` (50) instructions in one
+     activation. `instructionCount` is a `RexxActivation` member, zeroed by `clearObject`
+     (`RexxActivation.cpp:616`, `RexxActivation.hpp:591`).
+   * A native method call, whose `releaseAccess` (dispatch defaults to true) hands the lock to a
+     waiting thread (`NativeActivation.cpp:1304`, `Activity.cpp:2204`, `ActivityManager.cpp:782`).
+
+   The TraceObject is a C++ `StringTable` and needs no clauses.
+   * `trace_reply_continuation`'s destination SAYs. That goes to `.output`'s `SAY`, which is the
+     native `stream_lineout`, so its reorder is one the oracle's scheduler can produce.
+   * `test_forwarded3`'s `ArrayStream` `lineOut` runs three clauses and no native method. Nothing
+     in the replier's path between its `<I< ONETWO` and `<I< ONE` releases the kernel either. So
+     the order this crate printed there (`t6.10/r1/forwarded3-reorder/`, at `952e1788d`) is one
+     the oracle cannot produce.
+
+   Fix: inside a delivery, the pinned yield also requires the running activation to have run
+   more than 50 clauses in a row while the slice waits (`Activity::delivery_streak`,
+   `DELIVERY_YIELD_CLAUSES`). The count starts when the slice falls due, so this switches no
+   more often than the oracle could. Everything is on the deferred-slice path.
+   * `tests/trace_delivery_schedule.rs` runs `test_forwarded3` under 60 sim modes and requires
+     the oracle's output, which is one outcome over 8 runs. With the threshold at 0 it goes red,
+     and it failed on 92 of 120 runs in a scratch sweep.
+   * st1 and two1 keep their oracle outcome under every listed mode.
+
+   Since this crate now switches less inside deliveries, `trace_reply_continuation` also agrees on
+   all its seeds. Concern 8 is closed.
+
+Checks at `9a3431a0b`:
+* fmt, clippy, `--lib` (1155 passed), the refusal tables, `rexx-parse`, `unsafe_sites`,
+  `licensed_divergences`, `sim_processes` and `trace_delivery_schedule`: exit 0 each.
+* Corpus gate: 1112 of 1112.
+* Whole suite: 402 groups, 12 red. `changed-rows.txt` against round 0 is empty.
+* Seeded gate (`t6.10/r1/sim/summary.txt`): every row exits 0.
+  * Every corpus row agrees with its oracle set on every seed.
+  * `TRACE` whole fails only `TEST_TRACE_EXIT` and `TEST_TRACE_OTHER_ENTRYPOINT` on every seed,
+    as in round 0.
+  * `REPLY` passes on every seed.
+* `t6.10/witnesses/stability.txt` and `summary.tsv` are refreshed at `9a3431a0b`. Every run of
+  the three concurrent witnesses gives the oracle's outcome.
+* Concern 10 stands: `t6.10/r1/guarded-waiting-destination/` is still killed at `9a3431a0b`.
+* Perf: `t6.10/r1/callgrind.txt` now holds the run at `9a3431a0b` (pin, r0 = `7936f3ca1`, head; 3
+  rounds; exit 0; every spread at most 0.0023%). The Important 3 table above was measured at
+  `952e1788d`. Own deltas against r0 at `9a3431a0b`:
+
+  | startup | interpret | parse | churn | sayloop | nop | assign | emptyloop |
+  |---|---|---|---|---|---|---|---|
+  | -0.0053 | -0.0225 | -0.0367 | -0.0009 | -0.0043 | -0.0001 | 0.0000 | 0.0000 |
+
+  | rexxcps | sendloop | dispatch | dispatchclass | fibcall | intcall | extcall |
+  |---|---|---|---|---|---|---|
+  | +0.0136 | -0.0001 | 0.0000 | -0.0236 | -0.0011 | -0.0367 | -0.0001 |
+
+  Every own delta is under +0.05%, and every figure against the pin is under +0.5% (rexxcps
+  +0.4707%).

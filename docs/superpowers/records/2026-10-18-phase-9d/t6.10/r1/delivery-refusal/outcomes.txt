@@ -1,0 +1,24 @@
+# rf.rex on 952e1788d: rc 0
+after
+# rf.rex on 9a3431a0b: rc 120
+rexx-exec: method "ITEMS" of class "Stem" is not implemented (Phase 9)
+# st.rex on 952e1788d: rc 0
+after
+# st.rex on 9a3431a0b: rc 120
+rexx-exec: method "ITEMS" of class "Stem" is not implemented (Phase 9)
+# rp.rex on 952e1788d: rc 0
+after
+# log.txt
+1 >I> Method "ONE"
+2 >I> Method "ONETWO"
+3 <I< Method "ONETWO"
+4 <I< Method "ONE"
+5 >I> Method "ONETWO"
+# rp.rex on 9a3431a0b: rc 120
+rexx-exec: method "ITEMS" of class "Stem" is not implemented (Phase 9)
+# log.txt
+1 >I> Method "ONE"
+2 >I> Method "ONETWO"
+3 <I< Method "ONETWO"
+4 <I< Method "ONE"
+5 >I> Method "ONETWO"
