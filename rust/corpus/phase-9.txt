@@ -236,3 +236,13 @@ lang/collection_array_grow_refused.rex
 lang/variable_list_selector_trace.rex
 lang/variable_list_selector_novalue.rex
 lang/use_arg_reference_exposed.rex
+
+# 9d Task 6.9: conditions. A CALL ON handler's condition-object argument, a
+# SIGNAL ON trap with a missing label, RAISE RESULT values and the sender a
+# RETURN tail offers to, report lines holding line ends, and the condition
+# object's origin entries.
+lang/condition_call_on_argument.rex
+lang/signal_on_missing_label.rex
+lang/raise_result_and_sender.rex
+lang/error_report_line_ends.rex
+lang/condition_object_origin.rex

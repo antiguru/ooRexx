@@ -1,0 +1,127 @@
+count 126
+/* RAISE SYNTAX ... RETURN or EXIT expr puts the value in the condition
+   object's RESULT, and RAISE PROPAGATE RETURN or EXIT expr replaces it. A
+   RETURN tail offers the condition to the raising level's sender, which for
+   an INTERPRET fragment is the activation running it. After a REPLY a raise
+   that returns a value is 98.936. */
+signal on syntax name s1
+raise syntax 40.12 additional (1, 'x', '3B') exit ('abc')
+s1: call show 's1', condition('C'), condition('O')
+signal on syntax name s2
+raise syntax 40.12 additional (1, 'x', '3B') return ('def')
+s2: call show 's2', condition('C'), condition('O')
+signal on syntax name s3
+raise syntax 40.12 additional (1, 'x', '3B') return
+s3: call show 's3', condition('C'), condition('O')
+signal on syntax name s4
+call syntax_propagated
+s4: call show 's4', condition('C'), condition('O')
+signal on syntax name s5
+call syntax_propagated_with 'exit'
+s5: call show 's5', condition('C'), condition('O')
+call on user u name c6
+call user_propagated_with 'return'
+say 'returned' result
+call user_propagated_with 'exit'
+say 'exited' result
+call off user u
+signal on user u name s7
+call user_propagated_with 'return'
+s7: call show 's7', condition('C'), condition('O')
+call user_propagated_with 'return'
+say 'untrapped' result
+call on user u name main_handler
+say 'interpreted return' interpreted_return()
+say 'interpreted exit' interpreted_exit()
+say 'internal return' internal_return()
+say 'interpreted propagate' interpreted_propagate()
+call off user u
+say 'syntax interpreted' syntax_interpreted()
+say 'syntax internal' syntax_internal()
+o = .replier~new
+say 'replied' o~raise_after_reply('none')
+say 'replied' o~raise_after_reply('value')
+call SysSleep 0.2
+say 'main done'
+exit
+
+c6: call show 'c6', condition('C'), condition('O'); return
+main_handler: call show 'main_handler', condition('C'), condition('O'); return
+
+
+::routine show
+use arg tag, name, o
+if o~hasIndex('RESULT') then value = o~result
+else value = '(none)'
+say tag name 'result='value 'propagated='o~propagated
+
+::routine syntax_propagated
+signal on syntax
+raise syntax 40.12 additional (1, 'x', '3B') return ('ghi')
+syntax: raise propagate
+
+::routine syntax_propagated_with
+signal on syntax
+raise syntax 40.12 additional (1, 'x', '3B') return ('ghi')
+syntax: interpret 'raise propagate' arg(1) "'jkl-" || arg(1) || "'"
+
+::routine user_propagated_with
+signal on user u
+call raise_user
+return 'not this'
+u: interpret 'raise propagate' arg(1) "'mno-" || arg(1) || "'"
+
+::routine raise_user
+raise user u return 'raiser'
+
+::routine interpreted_return
+call on user u name own_handler
+interpret "raise user u return 'from-interpret'"
+return 'fell through'
+own_handler: call show 'own_handler', condition('C'), condition('O'); return
+
+::routine interpreted_exit
+call on user u name own_handler
+interpret "raise user u exit 'from-interpret-exit'"
+return 'fell through'
+own_handler: call show 'own_handler', condition('C'), condition('O'); return
+
+::routine internal_return
+call on user u name own_handler
+call inner
+return 'internal fell through'
+own_handler: call show 'own_handler', condition('C'), condition('O'); return
+inner: raise user u return 'from-inner'
+
+::routine interpreted_propagate
+signal on user u
+call raise_user
+return 'not this'
+u: interpret "raise propagate return 'pqr'"
+
+::routine syntax_interpreted
+signal on syntax name first
+say 1 / 0
+first:
+signal on syntax name second
+interpret "raise propagate return 'p1'"
+return 'fell through'
+second: call show 'second', condition('C'), condition('O'); return 'from second'
+
+::routine syntax_internal
+signal on syntax name first
+say 1 / 0
+first:
+signal on syntax name second
+call inner
+return 'fell through'
+second: call show 'second', condition('C'), condition('O'); return 'from second'
+inner: signal on syntax name inner_syntax; say 2 / 0
+inner_syntax: raise propagate return 'p2'
+
+::class replier
+::method raise_after_reply
+reply 'answered' arg(1)
+if arg(1) = 'none' then raise user x return
+raise user x return 5
+say 'after the raise'
