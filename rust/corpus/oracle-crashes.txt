@@ -1680,3 +1680,24 @@ untrapped 97.1 at `a = 1`, rc 159, and writes the report's lines, which the dest
 take either, on stdout under entry 11's licence
 (`docs/superpowers/records/2026-10-18-phase-9d/t6.10/probes/untrapped-trace-failure/`). No
 upstream ticket.
+
+## 52. A `.TRACEOUTPUT` destination whose `LINEOUT` recurses without end
+
+    .traceOutput~destination(.deep~new)
+    trace r
+    x = 1
+    trace off
+    .traceOutput~destination
+    say 'after'
+    ::class deep
+    ::method lineout unguarded
+      call spin
+      return 0
+    spin: call spin
+
+Effect: SIGSEGV, rc 139. Before it, stdout holds `3 *-* x = 1` and its `>>>   "1"` line; stderr
+is empty. Measured 2026-10-19 by Phase 9d Task 6.10 fix round 3, 1 run, under the standard
+wrapper from a fresh empty directory, after its review measured the same crash. The same
+recursion outside a destination ends in 11.1. This crate is killed at a 2G memory cap after about
+7 s (rc 137), where the task's parent printed `after`, rc 0: queued as
+`.superpowers/sdd/queued/2026-10-19-trace-destination-recursion-oom.md`. No upstream ticket.
