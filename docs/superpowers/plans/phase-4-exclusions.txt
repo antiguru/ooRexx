@@ -2457,8 +2457,9 @@ DEVIATIONS -- permanent, chosen
      line, for example after `.traceOutput~destination("")`, the oracle
      raises the condition the delivery raised, such as 97.1 or a 40.1 from
      the destination's own code, before the clause does any of its own work.
-     This crate raises the same condition, but a clause in a chunk compiled under another
-     trace setting, or a `>>>` result line inside a traced body, may run
+     This crate raises the same condition, but a clause in a chunk
+     compiled under another trace setting, or a `>>>` result line inside a
+     traced body, may run
      its own work first: probe `s1` sets a counter in the failing clause and
      prints `syntax 97.1 c=1` here and `c=0` on the oracle. Every measured
      fix adds work to clauses of untraced programs (assign +0.54% and
