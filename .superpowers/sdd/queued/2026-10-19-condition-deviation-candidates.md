@@ -18,3 +18,12 @@ Found 2026-10-19 by the Task 6.9 review (`task-6.9-review.md`, Minors 4 and 5).
   (`RexxActivation.cpp:1827`) passes the member `result`, not `resultObj`, to
   `createConditionObject`. The crate currently reproduces this. Following the documentation would
   add the entry and diverge from the oracle.
+
+The Task 6.9 re-review (`task-6.9-rereview.md`, Minor 1) adds a third. A 16.1 raised from a
+SIGNAL trap inside INTERPRET reports one stack frame, labelled PROGRAM, with an empty name on the
+oracle: `signal on syntax; interpret "signal on novalue name gone_x; y = qq"` gives
+`sf PROGRAM 2 []`, where the crate gives `sf PROGRAM 2 [i2.rex]`. A NOTREADY from `linein` in the
+fragment, and `signal on notready name gone_x` set before the INTERPRET, behave the same. For an
+ordinary failure, `interpret "x = 1/0"`, both sides give `sf INTERPRET 2 []` and
+`sf PROGRAM 2 [i1.rex]`. The oracle's frame takes the INTERPRET activation's name under the
+PROGRAM label.
