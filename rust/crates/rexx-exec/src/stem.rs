@@ -732,8 +732,9 @@ impl Interp {
         }
     }
 
-    /// Whether `value` is a stem holding no content: no default, and no tail
-    /// that still has a value.
+    /// Whether `value` is a stem named `name` holding no content: no default,
+    /// and no tail that still has a value (`RexxVariable::isAliasable`, whose
+    /// stem's value is its own name).
     /// ```text
     /// (nothing)                    -> referenceable   (slot is None)
     /// say q.                       -> referenceable   (read_stem vivifies an empty stem)
@@ -745,16 +746,18 @@ impl Interp {
     /// q.='dflt'                    -> 98.995
     /// q.1='x'; q.2='y'; drop q.1   -> 98.995          (one live tail left)
     /// q.='dflt'; drop q.1          -> 98.995          (the default is content)
+    /// q. = p.                      -> 98.995          (named P.)
     /// ```
-    pub(crate) fn is_uninitialised_stem(&self, value: ObjRef) -> bool {
+    pub(crate) fn is_uninitialised_stem(&self, value: ObjRef, name: &[u8]) -> bool {
         match value.decode() {
             Decoded::Heap { .. } => matches!(
                 self.heap.get(value).map(|object| &object.body),
                 Some(Body::Stem {
+                    name: own,
                     default: None,
                     tails,
                     ..
-                }) if tails.values().all(|(_, tail)| tail.is_none())
+                }) if **own == *name && tails.values().all(|(_, tail)| tail.is_none())
             ),
             _ => false,
         }

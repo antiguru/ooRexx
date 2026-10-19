@@ -1,9 +1,10 @@
-count 96
+count 105
 /* USE ARG >name refuses with 98.995 a target that is not an uninitialised
    local variable: one EXPOSE or USE LOCAL bound to the object's pool, set or
-   not, one already assigned, and one an earlier reference bound to the
-   object's pool. An unset local target, a USE LOCAL name, and a second
-   reference to an unset local variable bind. */
+   not, one already assigned, an empty stem of another name, and one an
+   earlier reference bound to the object's pool. An unset local target, a
+   USE LOCAL name, a dropped stem, and a second reference to an unset local
+   variable bind. */
 o = .k~new
 a = 1; a. = 'stem default'; a.1 = 'one'; b. = 'b default'
 call try o, 'refExposed', >a
@@ -13,6 +14,9 @@ call try o, 'refExposedStem', >a.
 call try o, 'refAutoExposedStem', >a.
 call try o, 'refLocalStem', >a.
 call try o, 'doubleArgStem', b., >a.
+call try o, 'doubleArgStem', unset., >a.
+call try o, 'doubleArgStem', .stem~new('XYZ.'), >a.
+call try o, 'refAfterDrop', b., >a.
 call try o, 'doubleArg', 7, >a
 call try o, 'refTwice', >a
 call try o, 'refTwiceUnset', >unset
@@ -61,6 +65,11 @@ caught:
   return abc.1
 ::method doubleArgStem
   use arg abc., >abc.
+  return abc.1
+::method refAfterDrop
+  use arg abc.
+  drop abc.
+  use arg , >abc.
   return abc.1
 ::method doubleArg
   use arg abc, >abc

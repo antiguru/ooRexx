@@ -1948,7 +1948,9 @@ impl Interp {
         }
         match self.variable(frame, index) {
             None => true,
-            Some(value) => shape_of(name) == NameShape::Stem && self.is_uninitialised_stem(value),
+            Some(value) => {
+                shape_of(name) == NameShape::Stem && self.is_uninitialised_stem(value, name)
+            }
         }
     }
 
