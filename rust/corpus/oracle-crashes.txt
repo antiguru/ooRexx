@@ -1670,11 +1670,13 @@ crate refuses `ITEMS` on the Stem with `method "ITEMS" of class "Stem" is not im
     a = 1
     say 'routine end'
 
-Effect: SIGSEGV, rc 139, at exit, after printing `routine end` and `not reached` on stdout and
-the later trace lines on stderr. Measured 2026-10-19 by Phase 9d Task 6.10, and again by its
-review. The failed `LINEOUT` raises 97.1 with no trap anywhere, so `Activity::raiseException`
-pops the traced activation and `raisePropagate` reaches the base frame, where `traceOutput`'s
-`catch (NativeActivation *)` writes the line and returns into the popped activation, which runs
-on. This crate reports the untrapped 97.1 at `a = 1`, rc 159
+Effect: SIGSEGV, rc 139, at exit. Before it, stdout holds every trace line from `6 *-* a = 1` on,
+then `routine end` and `not reached`; stderr is empty. Measured 2026-10-19 by Phase 9d Task 6.10,
+and again by its review. The failed `LINEOUT` raises 97.1 with no trap anywhere, so
+`Activity::raiseException` pops the traced activation and `raisePropagate` reaches the base frame,
+where `traceOutput`'s `catch (NativeActivation *)` writes the line with `lineOut` (stdout, as in
+entry 11c) and returns into the popped activation, which runs on. This crate reports the
+untrapped 97.1 at `a = 1`, rc 159, and writes the report's lines, which the destination cannot
+take either, on stdout under entry 11's licence
 (`docs/superpowers/records/2026-10-18-phase-9d/t6.10/probes/untrapped-trace-failure/`). No
 upstream ticket.
