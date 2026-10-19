@@ -1,0 +1,5 @@
+       *-* Compiled method "METHOD" with scope "Class".
+    18 *-*   say tag (f~executable == .Array~method(f~name)) f~executable~scope~id
+    12 *-* call show 'defined', c~frames[2], o
+Error 97 running stackframes_sortwith_dispatched_scope.rex line 18:  Object method not found.
+Error 97.1:  Object "The Array class" does not understand message "/HOME/MORITZ/DEV/REPOS/OOREXX-RUST-REWRITE/DOCS/SUPERPOWERS/RECORDS/2026-10-18-PHASE-9D/T6.11/R1/RUN.SQDOSR/STACKFRAMES_SORTWITH_DISPATCHED_SCOPE.REX".

@@ -200,3 +200,75 @@ and -0.0999 -libc, and pingguard and pingsem, which are below zero on both.
 3. The `sortWith` level's scope is found by `lookup(receiver, name)` when it is pushed, so a
    subclass that overrides `SORTWITH` and forwards to `super` reports the subclass's scope in the
    frame's traceback line. Not measured against the oracle.
+
+## Fix round 1
+
+Review: `task-6.11-review.md`. Code and witness commit `feeca3405`; the records commit that follows
+holds `t6.11/r1/` and this section. Perf is judged with libc and ld-linux subtracted (controller
+ruling).
+
+### Important 1: the sortWith frame names the method dispatched
+
+`in_method_level` took its scope from `lookup(receiver, name)`, which finds a subclass's Rexx
+override. It now takes `primitive_scope`: the scope of the highest-priority entry under the name
+that is a primitive method, the receiver's own entries first (`MethodDict::defined_named`,
+`ClassGraph::defined_named_at`, `Registry::defined_named_at`/`class_defined_named`). The frame's
+executable is that scope's dictionary entry. Measured (`t6.11/r1/probes/r1`): a subclass whose
+`sortWith` and `stableSortWith` forward to super gives scope `Array` and
+`.Array~method(name)` as executable, and `.other~define('SORTWITH', .array~method('SORTWITH'))`
+gives `OTHER` with an executable that is not Array's, on both sides. Before the round the forwarded
+case gave `MYARR` and executable `0`.
+
+### Minor 2: a class object's own instanceMethods
+
+`object_level_entries` reads a class object's own methods from the object holding its variable
+pools, where `own_method_entry` reads them. `.sub~instanceMethods` and `instanceMethods(.nil)` now
+list a class-level `setMethod` entry (`1 1`, as the oracle); before, `0 0`.
+
+### Minor 3: the UNINIT witness
+
+`lang/uninit_defined_on_superclass_later.rex` now records each finalized object's `identityHash`,
+drives collections until its object's hash is recorded or a bound is reached, and prints only
+whether it ran: `defined: 1`, `deleted: 0`. Eight oracle runs gave that output each time. The
+parent gives `defined: 0`.
+
+### Witnesses
+
+New, in `phase-9.txt` with their `sourceline_oracle/` files: `stackframes_sortwith_dispatched_scope`
+(Important 1) and `class_setmethod_instance_methods` (Minor 2). `t6.11/r1/witnesses/summary.tsv`:
+red on the parent and identical on `feeca3405` for both, for the rewritten UNINIT witness, and for
+the earlier sortWith, setMethod and identity witnesses. Both new witnesses also differ from the
+oracle on the round's own parent `a22a686d0` (`t6.11/r1/witnesses/pre-r1/`, stdout and stderr
+together).
+
+### Checks, on `feeca3405`
+
+* `cargo fmt --all --check`: exit 0.
+* `memcap 8G cargo clippy -j 4 -p rexx-exec -p rexx-classes --all-targets -- -D warnings`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-exec --lib`: exit 0, 1155 passed.
+* The refusal-table set as above: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-parse -p rexx-classes`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-core --test unsafe_sites`: exit 0.
+* `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus`: exit 0,
+  1123 of 1123 matching.
+* The whole suite with the table at `t6.11/r1/suite/table.tsv`: exit 101 as expected, 402 groups,
+  5 red, 337 s. Against `t6.11/suite/tests.tsv` no row changed (`t6.11/r1/suite/changed-rows.txt`
+  holds only its command).
+
+### Perf
+
+`t6.11/r1/callgrind.txt`: pin, `a22a686d0` (parent) and `feeca3405` in one run, exit 0. The round's
+own delta, head -libc d% minus parent -libc d%:
+
+| program | parent -libc | head -libc | own |
+|---|---|---|---|
+| startup | -0.1239 | -0.1240 | -0.0001 |
+| interpret | -4.6298 | -4.6298 | 0.0000 |
+| parse | -0.1418 | -0.1418 | 0.0000 |
+| churn | +0.0850 | +0.0851 | +0.0001 |
+| sayloop | -0.0657 | -0.0657 | 0.0000 |
+| rexxcps | +0.5192 | +0.5192 | 0.0000 |
+| sendloop | -0.2176 | -0.2176 | 0.0000 |
+| dispatch | -0.1454 | -0.1454 | 0.0000 |
+
+The new lookup runs only when a `sortWith` starts.

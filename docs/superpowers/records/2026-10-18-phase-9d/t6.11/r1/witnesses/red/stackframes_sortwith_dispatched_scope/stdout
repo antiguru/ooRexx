@@ -1,0 +1,5 @@
+forwarded METHOD SORTWITH 1     29 *-* forward class (super)
+forwarded 0 MYARR
+forwarded METHOD STABLESORTWITH 1     31 *-* forward class (super)
+forwarded 0 MYARR
+defined PROGRAM stackframes_sortwith_dispatched_scope.rex 0     11 *-* o~sortWith(c)

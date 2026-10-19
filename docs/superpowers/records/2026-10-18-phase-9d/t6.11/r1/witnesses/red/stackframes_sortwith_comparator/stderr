@@ -1,0 +1,5 @@
+       *-* Compiled method "METHOD" with scope "Class".
+    25 *-*   say tag (f~executable == .Array~method(f~name)) f~traceLine
+     8 *-* call show 'sortWith', c~frames, test, c
+Error 97 running stackframes_sortwith_comparator.rex line 25:  Object method not found.
+Error 97.1:  Object "The Array class" does not understand message "/HOME/MORITZ/DEV/REPOS/OOREXX-RUST-REWRITE/DOCS/SUPERPOWERS/RECORDS/2026-10-18-PHASE-9D/T6.11/R1/RUN.LSKHM9/STACKFRAMES_SORTWITH_COMPARATOR.REX".

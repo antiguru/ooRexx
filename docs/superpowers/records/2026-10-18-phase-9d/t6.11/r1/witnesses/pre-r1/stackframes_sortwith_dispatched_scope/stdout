@@ -1,0 +1,6 @@
+forwarded METHOD SORTWITH 1        *-* Compiled method "SORTWITH" with scope "MYARR".
+forwarded 0 MYARR
+forwarded METHOD STABLESORTWITH 1        *-* Compiled method "STABLESORTWITH" with scope "MYARR".
+forwarded 0 MYARR
+defined METHOD SORTWITH 1        *-* Compiled method "SORTWITH" with scope "OTHER".
+defined 0 OTHER

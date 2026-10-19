@@ -1,0 +1,112 @@
+# ootest revision 13178
+group	test	oracle	crate
+API/classic/CLASSIC	TEST_31A_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_31B_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_31C_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_31_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_32A_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_32_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_33A_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_33B_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_33C_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_33D_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_33_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_34A_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_34B_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_34_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_35A_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_35B_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_35_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_37A_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_37B_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_37_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_38A_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_38_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_39A_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_39B_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_39C_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_39D_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_39E_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_39_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_40A_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_40B_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_40C_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_40_VARIABLEPOOL	passed	failed
+API/classic/CLASSIC	TEST_70_MACROSPACE	passed	failed
+API/classic/CLASSIC	TEST_71_MACROSPACE	passed	failed
+API/classic/CLASSIC	TEST_77_FUNCTION	passed	failed
+API/classic/CLASSIC	TEST_SHV_DROP_DIRECT	passed	failed
+API/classic/CLASSIC	TEST_SHV_DROP_SYMBOLIC	passed	failed
+API/classic/CLASSIC	TEST_SHV_FETCH_DIRECT	passed	failed
+API/classic/CLASSIC	TEST_SHV_FETCH_SYMBOLIC	passed	failed
+API/classic/CLASSIC	TEST_SHV_NEXT	passed	failed
+API/classic/CLASSIC	TEST_SHV_RC	passed	failed
+API/classic/CLASSIC	TEST_SHV_SET_DIRECT	passed	failed
+API/classic/CLASSIC	TEST_SHV_SET_SYMBOLIC	passed	failed
+base/bif/LINEOUT	TEST_BINARY	passed	failed
+base/bif/LINEOUT	TEST_QUEUE	passed	blocked: rexx-exec: environment symbol ".STDQUE" is not implemented (Phase 10 Rxapi)
+base/class/Bag	TEST_HASITEM_VALUE_NOTEQUAL_INDEX	passed	failed
+base/class/IdentityTable	TEST_AT01	passed	failed
+base/class/IdentityTable	TEST_HASINDEX	passed	failed
+base/class/IdentityTable	TEST_[]	passed	failed
+base/class/RexxContext	TESTRS01	passed	failed
+base/class/RexxInteger	TEST_INTEGER_ADDITION	passed	failed
+base/class/RexxInteger	TEST_INTEGER_CONSTANT	passed	failed
+base/class/RexxInteger	TEST_INTEGER_D2X	passed	failed
+base/class/RexxInteger	TEST_INTEGER_DATE	passed	failed
+base/class/RexxInteger	TEST_INTEGER_DIVISION	passed	failed
+base/class/RexxInteger	TEST_INTEGER_INTEGERDIVIDE	passed	failed
+base/class/RexxInteger	TEST_INTEGER_MODULO	passed	failed
+base/class/RexxInteger	TEST_INTEGER_MULTIPLICATION	passed	failed
+base/class/RexxInteger	TEST_INTEGER_POWER	passed	failed
+base/class/RexxInteger	TEST_INTEGER_REMAINDER	passed	failed
+base/class/RexxInteger	TEST_INTEGER_REXXINFO	passed	failed
+base/class/RexxInteger	TEST_INTEGER_SUBTRACTION	passed	failed
+base/class/RexxInteger	TEST_INTEGER_TIME	passed	failed
+base/class/RexxInteger	TEST_INTEGER_UNARY_MINUS	passed	failed
+base/class/RexxInteger	TEST_INTEGER_UNARY_PLUS	passed	failed
+base/class/RexxInteger	TEST_NUMBERSTRING_CEIL_FLOOR_ROUND_TRUNC	passed	failed
+base/class/RexxInteger	TEST_NUMBERSTRING_INTEGERDIVIDE	passed	failed
+base/class/RexxInteger	TEST_STRING_C2D	passed	failed
+base/class/RexxInteger	TEST_STRING_X2D	passed	failed
+base/class/RexxQueue	TEST_BUG_1379	passed	blocked: rexx-exec: the LIBRARY REXX entry point "rexx_query_queue" is not implemented (Phase 10 Rxapi)
+base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADLIBRARYNAME	passed	blocked: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)
+base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADNAME	passed	blocked: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)
+base/keyword/SIGNAL	TEST_SIGNAL_ANY_CONDITION_HALT	passed	failed
+base/security.manager/SecurityManager	TEST_ENVIRONMENT_HANDLE	passed	failed
+base/security.manager/SecurityManager	TEST_METHOD_HANDLE_NO_RESULT	passed	failed
+base/security.manager/SecurityManager	TEST_METHOD_HANDLE_RESULT	passed	failed
+base/security.manager/SecurityManager	TEST_METHOD_PASS	passed	failed
+extensions/hostemu/hostemu	TEST_EXECIO_DISKR_DEFAULT	passed	blocked: rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10 Rxapi)
+extensions/hostemu/hostemu	TEST_EXECIO_DISKR_FIFO	passed	blocked: rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10 Rxapi)
+extensions/hostemu/hostemu	TEST_EXECIO_DISKR_LIFO	passed	blocked: rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10 Rxapi)
+extensions/hostemu/hostemu	TEST_EXECIO_DISKR_SKIP_THEN_STEM	passed	failed
+extensions/hostemu/hostemu	TEST_EXECIO_DISKR_START_AT_THREE_READ_FOUR_FIFO	passed	blocked: rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10 Rxapi)
+extensions/hostemu/hostemu	TEST_EXECIO_DISKR_START_AT_THREE_READ_FOUR_STEM	passed	failed
+extensions/hostemu/hostemu	TEST_EXECIO_DISKR_START_AT_TWO_FIFO	passed	blocked: rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10 Rxapi)
+extensions/hostemu/hostemu	TEST_EXECIO_DISKR_START_AT_TWO_STEM	passed	failed
+extensions/hostemu/hostemu	TEST_EXECIO_DISKR_STEM	passed	failed
+extensions/hostemu/hostemu	TEST_EXECIO_DISKR_STEM_SKIP	passed	failed
+extensions/hostemu/hostemu	TEST_EXECIO_DISKR_TWO_LINES_FIFO	passed	blocked: rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10 Rxapi)
+extensions/hostemu/hostemu	TEST_EXECIO_DISKR_TWO_LINES_STEM	passed	failed
+extensions/hostemu/hostemu	TEST_EXECIO_DISKW_DEFAULT	passed	blocked: rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10 Rxapi)
+extensions/hostemu/hostemu	TEST_EXECIO_DISKW_STEM	passed	failed
+extensions/hostemu/hostemu	TEST_HI	passed	failed
+extensions/hostemu/hostemu	TEST_TE	passed	failed
+extensions/rxsock/socketClass	TEST_005	passed	blocked: timeout after 60 s
+extensions/rxsock/socketClass	TEST_006	passed	blocked: timeout after 60 s
+extensions/rxsock/socketClass	TEST_007	passed	blocked: timeout after 60 s
+utilities/rexx/rexx_command	TEST_PASSINGARGS7	passed	failed
+utilities/rxapi	TEST_RXAPI_LOCKED	passed	failed
+utilities/rxqueue/rxQueue	TEST_CURRENT_DIR_FILTER	passed	failed
+utilities/rxqueue/rxQueue	TEST_RXQUEUE_MAXIMUM_LINE_LENGTH	passed	blocked: rexx-exec: environment symbol ".STDQUE" is not implemented (Phase 10 Rxapi)
+utilities/rxqueue/rxQueue	TEST_STDERR_TO_RXQUEUE	passed	failed
+utilities/rxsubcom/rxsubcom	TEST_ACTIONS_ENVIRONMENT_CASELESS	passed	failed
+utilities/rxsubcom/rxsubcom	TEST_DROP_TWICE	passed	failed
+utilities/rxsubcom/rxsubcom	TEST_INVALID_ARGS	passed	failed
+utilities/rxsubcom/rxsubcom	TEST_REGISTER_INVALID_HANDLER	passed	failed
+utilities/rxsubcom/rxsubcom	TEST_REGISTER_INVALID_LIBRARY	passed	failed
+utilities/rxsubcom/rxsubcom	TEST_REGISTER_TWICE	passed	failed
+utilities/rxsubcom/rxsubcom	TEST_UNREGISTERED	passed	failed
+samples/scclient	TEST_04_SCCLIENT.REX	passed	failed
+samples/sfclient	TEST_04_SFCLIENT.REX	passed	failed

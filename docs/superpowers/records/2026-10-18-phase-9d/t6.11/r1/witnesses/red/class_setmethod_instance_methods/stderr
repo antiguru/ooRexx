@@ -1,0 +1,3 @@
+     5 *-* say 'instance' s~instanceMethod('OWN')~source~makeString cnt(s~instanceMethods, 'OWN') cnt(s~instanceMethods(.nil), 'OWN')
+Error 97 running class_setmethod_instance_methods.rex line 5:  Object method not found.
+Error 97.1:  Object "The NIL object" does not understand message "SOURCE".

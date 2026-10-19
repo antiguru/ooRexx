@@ -1,0 +1,3 @@
+     8 *-* say 'string' m~class~id m~source~makeString scope(m) (m == find(o~instanceMethods(.nil), 'FOO'))
+Error 97 running setmethod_instance_method.rex line 8:  Object method not found.
+Error 97.1:  Object "The NIL object" does not understand message "SOURCE".

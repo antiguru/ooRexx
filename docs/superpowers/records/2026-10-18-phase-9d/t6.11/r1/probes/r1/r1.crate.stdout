@@ -1,0 +1,8 @@
+sub METHOD SORTWITH 1        *-* Compiled method "SORTWITH" with scope "Array".
+sub 1 Array
+substable METHOD STABLESORTWITH 1        *-* Compiled method "STABLESORTWITH" with scope "Array".
+substable 1 Array
+other METHOD SORTWITH 1        *-* Compiled method "SORTWITH" with scope "OTHER".
+other 0 OTHER
+instance own return 2 1 1
+class own return 2 1 1
