@@ -246,3 +246,7 @@ lang/signal_on_missing_label.rex
 lang/raise_result_and_sender.rex
 lang/error_report_line_ends.rex
 lang/condition_object_origin.rex
+# 9d Task 6.9 fix round 1: a replied method's interpreted RAISE RETURN, and
+# a missing SIGNAL ON label reached from a native stream method.
+lang/raise_after_reply_interpreted.rex
+lang/signal_on_missing_label_native.rex

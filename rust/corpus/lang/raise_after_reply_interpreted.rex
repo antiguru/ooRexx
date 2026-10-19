@@ -1,0 +1,38 @@
+/* After a REPLY, a RAISE with a RETURN value inside INTERPRET is 98.936,
+   with or without a CALL ON trap in the method; a valueless RETURN and a
+   SIGNAL ON trap are not. */
+o = .t~new
+/* Each replied method finishes before the next send. */
+say 'a' o~a
+call SysSleep 0.2
+say 'b' o~b
+call SysSleep 0.2
+say 'e' o~e
+call SysSleep 0.2
+say 'c' o~c
+call SysSleep 0.2
+say 'done'
+::class t
+::method a
+reply 'ra'
+call on user u name h
+interpret "raise user u description 'ia' return 'x'"
+say 'a after'
+return
+h: say ' a own h' condition('D'); return
+::method b
+reply 'rb'
+call on user u name h
+interpret "raise user u description 'ib' return"
+return
+h: say ' b own h' condition('D'); return
+::method e
+reply 're'
+signal on user u name h
+interpret "raise user u description 'ie' return 'x'"
+return
+h: say ' e own sig h' condition('D'); return
+::method c
+reply 'rc'
+interpret "raise user u description 'ic' return 'x'"
+say 'c after'

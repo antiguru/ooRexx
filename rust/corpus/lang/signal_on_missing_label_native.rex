@@ -1,0 +1,23 @@
+/* A missing SIGNAL ON NOTREADY label reached from inside a native stream
+   method raises 16.1 at the Rexx clause: the object has the clause's
+   POSITION and program, an Array ADDITIONAL, no RESULT and no method frame,
+   and the untrapped report has no method line. */
+signal on syntax
+signal on notready name gone_lbl
+x = linein('/nonexistent-t69/qq')
+syntax:
+o = condition('O')
+say o~code o~position filespec('N', o~program) o~additional~class~id o~hasIndex('RESULT') o~stackframes~items
+do t over o~traceback; say 'tb' t; end
+signal on syntax name s2
+signal on notready name gone2
+x = chars('/nonexistent-t69/qq')
+s2: o = condition('O'); say o~code o~position o~additional~class~id o~hasIndex('RESULT') o~stackframes~items
+signal on any name s3
+signal on notready name gone3
+x = .stream~new('/nonexistent-t69/qq')~linein
+s3: o = condition('O'); say o~code o~position o~additional~class~id o~hasIndex('RESULT') o~stackframes~items
+call r
+exit
+r: signal on notready name gone_lbl
+x = linein('/nonexistent-t69/qq')
