@@ -216,3 +216,7 @@ crates/rexx-exec/tests/sim_gate/timer_post_wakes_every_waiter.rex	program	4	70	1
 # 9d Task 6.10: a REPLY continuation's trace entry and exit lines, the empty rest
 # after a forwarded REPLY included.
 corpus/lang/trace_reply_continuation.rex	program	65	70	0	60	0	-	-
+# 9d Task 6.10 fix round 1: a trace destination's own clauses yield, and two
+# deliveries into one guarded counter both finish.
+corpus/lang/trace_destination_waits_on_thread.rex	program	827789	70	0	110	0	-	-
+corpus/lang/trace_destinations_two_threads.rex	program	15220	70	0	60	0	-	-

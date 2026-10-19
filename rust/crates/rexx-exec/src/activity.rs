@@ -225,6 +225,9 @@ pub(crate) struct Activity {
     /// again: the oracle SIGSEGVs in the one shape that reaches this
     /// (`corpus/oracle-crashes.txt` entry 14), and this crate must terminate.
     pub(crate) routing_trace: bool,
+    /// While [`Activity::routing_trace`], how many activations the activity
+    /// held when the delivery began: those above it are the delivery's.
+    pub(crate) delivery_floor: usize,
     /// Current `eval` recursion depth, and the deepest it has reached.
     pub(crate) depth: usize,
     pub(crate) max_depth: usize,
@@ -449,6 +452,7 @@ impl Activity {
             fragments: Vec::new(),
             fragment_clause: 0,
             routing_trace: false,
+            delivery_floor: 0,
             depth: 0,
             max_depth: 0,
             stack_entry: 0,
@@ -597,6 +601,7 @@ impl Activity {
             fragments: _,
             fragment_clause: _,
             routing_trace: _,
+            delivery_floor: _,
             depth: _,
             max_depth: _,
             stack_entry: _,

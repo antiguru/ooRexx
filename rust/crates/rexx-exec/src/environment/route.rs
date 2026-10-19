@@ -205,6 +205,8 @@ impl Interp {
             line.pop();
         }
         self.activity.routing_trace = true;
+        self.activity.delivery_floor =
+            self.activity.suspended.len() + usize::from(self.activity.running.is_some());
         // **The nested-send protocol, not a bare send**, and around the whole
         // delivery because `NEW`, each `PUT` and the `LINEOUT` all run Rexx
         // clauses. A clause boundary clears the shared argument stack, so
@@ -299,7 +301,7 @@ impl Interp {
 
     /// `Activity::traceOutput`'s failed `LINEOUT`: raised in the traced
     /// activation at its clause's end. With no activation running, the line
-    /// is written to standard error instead.
+    /// is left on stdout, as `corpus/oracle-crashes.txt` entry 11 licenses.
     #[cold]
     #[inline(never)]
     fn queue_trace_failure(&mut self, failure: Failure, line: &[u8]) {
