@@ -154,3 +154,156 @@ whole-process figures against the pin stay under +0.5%. No error construction wa
 4. The parent binary is this task's own build of `b41fc9257`, not Task 6.11's `t6.11-r2/rexx-head`.
    The code is the same (`git diff 7efdf2dc5 b41fc9257 -- rust/crates` is empty), but the sha256
    differs.
+
+## Fix round 1
+
+Review: `task-6.12-review.md`; ruling at the end of `progress.md`. Code commits `174c357be`,
+`3f3dea5f8` and `d995b8f17`; the records commit that follows holds `t6.12/r1/` and this section.
+Every change follows rexxref's rule for its checkpoint, and no Deviation arises.
+
+### Critical 1: a started message
+
+`effective_security_manager` read `self.activation()`, which panics on an activity running no
+activation, which is what a started message's activity is. It now answers `None` there, as the
+oracle sends no event (`start -> Object events:` empty). The lookup past `security_armed` is an
+out-of-line `armed_security_manager`, which keeps it out of the send path (Perf below).
+
+### Critical 2: a protected `PUT`
+
+`security_arguments` filled the info directory by sending `PUT`, so a protected `PUT` asked the
+manager again for each checkpoint. It now calls `hash::directory_put`, `DirectoryClass::put`
+itself, as `SecurityManager.cpp`'s `securityArgs->put` does.
+
+### Important 3: a shared primitive's flags
+
+`setProtected` and `setPrivate` marked the `MethodId` that `InheritInstanceMethods` shares between
+the hash collections, and `Array` shares with `Queue`. `Interp::unshared_identity`
+(`environment/identities.rs`) finds the dictionary entry the method object stands for, at its
+scope. Where another class's own dictionary holds the same identity
+(`ClassGraph::held_elsewhere`), it mints a copy, installs it in the asked class's entry, and repoints
+that class's method objects. The class asked about and its subclasses change, and nothing else does.
+Both setters use it.
+
+### Important 4: a Directory entry method and `Object~run`
+
+`MethodClass::run` is not a send, so the seam must not ask about it. `invoke_executable`, which a
+Directory entry read and `Object~run` share, takes a cold `invoke_armed_executable` once a manager
+is installed. That function clears the method's protection row around `begin_invoke` and puts it
+back after. A Rexx body has only been entered by then, and a native body runs inside it.
+`method_is_protected` keeps its one caller, the seam (`tests/dispatch_seam.rs`).
+
+### Important 5 and Minor 6: STREAM and REQUIRES replacements
+
+The `.nil` filters in `check_stream_access` and on the REQUIRES `NAME` entry are gone. A STREAM
+replacement that is not a Stream, `.nil` included, is the target of the builtin's message, so the
+builtin raises 97.1 and never writes the file. A REQUIRES file that cannot be read is 3.1 naming the
+file that was to be loaded, the manager's replacement included (`LanguageParser::createPackage`).
+This replaces 43.901 naming the original. An unreadable original file is 3.1 on the oracle as well
+(`t6.12/r1/probes/requires_unreadable.*`, a mode-000 file).
+
+### Minor 7: a manager-raised command condition
+
+`command_from_manager` now always supplies the RC object: the manager's entry, or 0 where it set
+none. `raise_command_condition` takes that object. The condition carries it as `RC`
+(`pending_rc`) with no `RESULT`, which is how `checkCommand`'s `createConditionObject` builds it.
+The `RC` variable keeps the object.
+
+### oracle-crashes.txt
+
+Entry 54 is a STREAM replacement that does not support the Stream methods: 97.1, then SIGSEGV at
+exit. Entry 55 is a REQUIRES `NAME` replacement that is not a string: SIGSEGV, 8 of 8. The oracle
+cannot answer either case, so `tests/security_replacements.rs` holds both, run on this crate alone.
+A non-string `NAME` is read as its string value, which gives 3.1 naming `an Object`.
+
+### Witnesses
+
+New in `phase-9.txt`, each with its `sourceline_oracle/` file: `security_manager_started_message`,
+`security_manager_protected_put`, `security_manager_donated_flags`,
+`security_manager_directory_entry`, `security_manager_requires_replacement` and
+`security_manager_command_rc_condition`. `t6.12/r1/witnesses/summary.tsv`, red is `7fba9068c`'s
+binary and green is `d995b8f17`'s:
+
+| program | red vs oracle | green vs oracle |
+|---|---|---|
+| `security_manager_started_message` | differs: stdout stderr rc (panic, rc 101) | identical |
+| `security_manager_protected_put` | differs: stdout stderr rc (stack overflow, rc 134) | identical |
+| `security_manager_donated_flags` | differs: stdout stderr rc | identical |
+| `security_manager_directory_entry` | differs: stdout | identical |
+| `security_manager_requires_replacement` | differs: stdout | identical |
+| `security_manager_command_rc_condition` | differs: stdout | identical |
+| the three round-0 witnesses | identical | identical |
+
+What each witness's stdout shows:
+* `started_message` shows `superclass`, `setMethod` and a `Message~start` of `superclass` through
+  `~start` after a manager was installed elsewhere. It shows a protected Rexx method run by
+  `~start`, and a start inside a managed routine, which sends no event. The crate's stdout is
+  identical under `sim:1`, `sim:2`, `sim:7,fifo`, `sim:3,uniform:0.2`, `sim:5,pct:3,k=40`,
+  `sim:11,uniform:0.2` and `sim:13,pct:3,k=40`. The oracle gave the same stdout on 8 of 8 runs
+  (`t6.12/r1/witnesses/sim.txt`).
+* `protected_put` makes Directory's `PUT` protected. A routine then sends `LOCAL`, a `PUT` and
+  `SUPERCLASS`, and the manager sees each event once, with its entries.
+* `donated_flags`: after `.Bag~method('PUT')~setProtected`, Bag alone is 1 of the seven classes,
+  and Queue's `APPEND` stays 0 after Array's is set. A managed routine's sends ask about Bag, MyBag
+  and Array, not Table or Queue. After `setPrivate` on Bag's `PUT`, a Table `put` succeeds and a
+  Bag `put` is 97.2.
+* `directory_entry`: a protected method read as a Directory entry runs with no `METHOD` event,
+  through the message, `at`, `[]`, `entry`, `UNKNOWN` and `[]` of an unknown name. Run with
+  `Object~run`, it also sends none. Installed by `setMethod` on an object, it is intercepted. The
+  last two lines also pass on red.
+* `requires_replacement`: `.nil` and a missing name each give 3.1 naming the replacement, after
+  two events. Removing the entry gives 43.901 naming the original after one event. An unchanged
+  entry loads the file.
+* `command_rc_condition`: RC `.nil`, `abc` and 7 with FAILURE and with ERROR, under `SIGNAL ON` and
+  `CALL ON`. In each, `rc == .nil`, `rc`, the condition's `rc` and the absence of `RESULT` match the
+  oracle, as does `rc` after the call handler returns.
+
+`tests/security_replacements.rs` covers the two crash shapes. On red, the STREAM probe writes the
+file and answers `wrote` (`t6.12/r1/probes/stream_replacement.txt`, which also holds the oracle's
+97.1 and rc 139).
+
+### Checks, on `d995b8f17`
+
+* `cargo fmt --all --check`: exit 0.
+* `memcap 8G cargo clippy -j 4 -p rexx-exec -p rexx-classes --all-targets -- -D warnings`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-exec --lib`: exit 0, 1155 passed.
+* `memcap 16G cargo test -j 4 --release -p rexx-exec --test dispatch_seam --test environment_seam
+  --test security_replacements --test refusal_sites --test owners --test closed_phases --test
+  phase_ten_reasons --test representation_refusals --test refusal_dispositions --test coverage
+  --test rexxc --test licensed_divergences --test package_requires`: exit 0. On `3f3dea5f8` it was
+  exit 101: `dispatch_seam`'s one-caller rule for `method_is_protected`, which `d995b8f17` restores.
+* `memcap 16G cargo test -j 4 --release -p rexx-parse -p rexx-classes`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-core --test unsafe_sites`: exit 0.
+* `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus`: exit 0,
+  1132 of 1132 matching.
+* The whole suite with the table at `t6.12/r1/suite/table.tsv`: exit 101 as expected, 402 groups,
+  4 red, 279 s. Against `t6.12/suite/tests.tsv`, the only changed row is SysFileTree
+  `TEST_TREE_DIRECTORY`, the known flake, which passes this time (`t6.12/r1/suite/changed-rows.txt`).
+
+### Perf
+
+`t6.12/r1/callgrind.txt`: pin, round 0 (`7fba9068c`) and `d995b8f17` in one run, exit 0. The
+round's own delta, head -libc d% minus parent -libc d%:
+
+| program | parent -libc | head -libc | own | own raw |
+|---|---|---|---|---|
+| startup | -0.1188 | -0.1201 | -0.0013 | +0.0003 |
+| interpret | -4.6297 | -4.6297 | 0.0000 | +0.0065 |
+| parse | -0.1416 | -0.1416 | 0.0000 | -0.0001 |
+| churn | +0.1069 | +0.1068 | -0.0001 | -0.0001 |
+| sayloop | -0.0630 | -0.0637 | -0.0007 | -0.0007 |
+| rexxcps | +0.5192 | +0.5192 | 0.0000 | -0.0001 |
+| sendloop | -0.2176 | -0.2176 | 0.0000 | 0.0000 |
+| dispatch | -0.1454 | -0.1454 | 0.0000 | 0.0000 |
+
+The first shape (`174c357be`) cost 3 Ir per send, all of it counted in `begin_invoke`: sendloop
++0.1086 and dispatch +0.0725 own. Moving the armed manager lookup out of line removed it.
+`t6.12/r1/perf-shapes.txt` lists the shapes tried.
+
+### Concerns
+
+1. `invoke_armed_executable` clears the protection row while `begin_invoke` runs, and a native
+   body runs inside `begin_invoke`. A send of the same method made from inside that native body
+   would not ask the manager. Not measured.
+2. A manager-raised condition carries no `RESULT`, as the oracle's does not. An ordinary command's
+   condition carries one (`result_is_rc`). rexxref names `RC` for both and does not mention
+   `RESULT`, so I followed the oracle.

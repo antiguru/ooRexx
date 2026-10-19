@@ -1,0 +1,4 @@
+
+thread 'rexx-interp' (1891275) has overflowed its stack
+fatal runtime error: stack overflow, aborting
+/home/moritz/.local/bin/memcap: line 67: 1891273 Aborted                    ( echo "$BASHPID" > "$cg/cgroup.procs"; exec "$@" )

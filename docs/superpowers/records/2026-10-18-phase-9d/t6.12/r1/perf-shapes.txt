@@ -1,0 +1,13 @@
+# Single-round callgrind.sh -r 1 -p "sendloop dispatch churn" runs of the shapes tried during
+# fix round 1, against parent 7fba9068c in the same run. Figures copied from each run's printed
+# table: head -libc d% against the pin (parent: sendloop -0.2176, dispatch -0.1454, churn +0.1069).
+# Raw outputs were in the session scratchpad (cg-r1b .. cg-r1j) and are not kept.
+shape                                                     sendloop  dispatch  churn
+runs_unchecked flag taken inside the inline seam          -0.1090   -0.0729   +0.0219   (full run, 174c357be)
+armed branch of the seam out of line                      +0.2890   +0.1932   +0.3137
+begin_invoke generic over a const ASKS, inline(always)    +2.2068   +1.5476   +0.3934
+begin_invoke itself generic over ASKS                     +2.2068   +1.5476   +0.3933
+protection lifted around begin_invoke (seam unchanged)    -0.1090   -0.0729   +0.0059
+plus check_protected_method cold and inline(never)        -0.0728   -0.0487   +0.1333
+armed manager lookup inline(never) (kept)                 -0.2176   -0.1454   +0.1068
+the seam keeps the protected predicate (kept, d995b8f17)  -0.2176   -0.1454   +0.1067

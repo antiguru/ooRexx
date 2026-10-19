@@ -1,0 +1,9 @@
+# oracle:
+syntax 3.1 Failure during initialization: File "noperm.cls" is unreadable.
+rc 0
+# red (7fba9068c):
+syntax 43.901 Could not find file "noperm.cls" for ::REQUIRES.
+rc 0
+# round 1:
+syntax 3.1 Failure during initialization: File "noperm.cls" is unreadable.
+rc 0

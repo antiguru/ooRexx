@@ -1,0 +1,10 @@
+program	red vs oracle	green vs oracle
+security_manager_started_message	differs: stdout stderr rc	identical
+security_manager_protected_put	differs: stdout stderr rc	identical
+security_manager_donated_flags	differs: stdout stderr rc	identical
+security_manager_directory_entry	differs: stdout	identical
+security_manager_requires_replacement	differs: stdout	identical
+security_manager_command_rc_condition	differs: stdout	identical
+security_manager_protected_primitive	identical	identical
+security_manager_set_protected	identical	identical
+security_manager_nil_entry	identical	identical

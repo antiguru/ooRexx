@@ -1,0 +1,20 @@
+before 0
+copy 1 original 0
+defined 1
+copy append result: 1
+copy append events: METHOD ARGUMENTS=[1:x] NAME=APPEND OBJECT=MYARR
+copy append handled result: 0
+copy append handled events: METHOD ARGUMENTS=[1:x] NAME=APPEND OBJECT=MYARR
+array append result: 1
+array append events: 
+rexx 1 0
+rexx foo result: foo ran
+rexx foo events: METHOD ARGUMENTS=[0:] NAME=FOO OBJECT=K
+rexx foo handled result: intercepted
+rexx foo handled events: METHOD ARGUMENTS=[0:] NAME=FOO OBJECT=K
+rexx foo no result result: 0
+rexx foo no result events: METHOD ARGUMENTS=[0:] NAME=FOO OBJECT=K
+rexx bar result: bar ran
+rexx bar events: 
+directive result: intercepted
+directive events: METHOD ARGUMENTS=[0:] NAME=BAZ OBJECT=K

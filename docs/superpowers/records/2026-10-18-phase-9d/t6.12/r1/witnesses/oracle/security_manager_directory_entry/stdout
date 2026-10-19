@@ -1,0 +1,8 @@
+send m ran events: LOCAL D
+at m ran events: LOCAL D
+brackets m ran events: LOCAL D
+entry m ran events: LOCAL D
+unknown m ran events: LOCAL D
+unknown brackets m ran events: LOCAL D
+run m ran events: LOCAL M
+object setMethod intercepted events: LOCAL M | METHOD FOO

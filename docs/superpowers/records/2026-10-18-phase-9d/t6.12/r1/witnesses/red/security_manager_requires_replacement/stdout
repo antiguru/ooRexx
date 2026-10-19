@@ -1,0 +1,9 @@
+nil 43.901 Could not find file "smreq.cls" for ::REQUIRES.
+nil events: 1
+missing 43.901 Could not find file "smreq.cls" for ::REQUIRES.
+missing events: 2
+removed 43.901 Could not find file "smreq.cls" for ::REQUIRES.
+removed events: 1
+smreq loaded
+unchanged smreq.cls
+unchanged events: 2

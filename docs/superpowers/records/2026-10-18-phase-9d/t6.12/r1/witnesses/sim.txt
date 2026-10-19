@@ -1,0 +1,9 @@
+# crate (3f3dea5f8) under REXX_SWITCH_MODE: stdout and rc against the oracle's; stderr holds only the rexx-sim banner
+sim:1 rc 0 stdout identical, other stderr lines 0
+sim:2 rc 0 stdout identical, other stderr lines 0
+sim:7,fifo rc 0 stdout identical, other stderr lines 0
+sim:3,uniform:0.2 rc 0 stdout identical, other stderr lines 0
+sim:5,pct:3,k=40 rc 0 stdout identical, other stderr lines 0
+sim:11,uniform:0.2 rc 0 stdout identical, other stderr lines 0
+sim:13,pct:3,k=40 rc 0 stdout identical, other stderr lines 0
+# oracle, 8 runs: each stdout identical to oracle/security_manager_started_message/stdout, rc 0

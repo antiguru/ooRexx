@@ -1,0 +1,18 @@
+FAILURE FAILURE 1 The NIL object The NIL object 0 The NIL object
+  call FAILURE 1 The NIL object The NIL object 0 The NIL object
+FAILURE after The NIL object
+ERROR ERROR 1 The NIL object The NIL object 0 The NIL object
+  call ERROR 1 The NIL object The NIL object 0 The NIL object
+ERROR after The NIL object
+FAILURE FAILURE 0 abc abc 0 The NIL object
+  call FAILURE 0 abc abc 0 The NIL object
+FAILURE after abc
+ERROR ERROR 0 abc abc 0 The NIL object
+  call ERROR 0 abc abc 0 The NIL object
+ERROR after abc
+FAILURE FAILURE 0 7 7 0 The NIL object
+  call FAILURE 0 7 7 0 The NIL object
+FAILURE after 7
+ERROR ERROR 0 7 7 0 The NIL object
+  call ERROR 0 7 7 0 The NIL object
+ERROR after 7

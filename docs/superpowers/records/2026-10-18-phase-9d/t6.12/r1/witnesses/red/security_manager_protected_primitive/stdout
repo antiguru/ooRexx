@@ -1,0 +1,26 @@
+setMethod no result
+setMethod events: METHOD ARGUMENTS=[1:unknown] NAME=SETMETHOD OBJECT=Directory
+unsetMethod no result
+unsetMethod events: METHOD ARGUMENTS=[1:unknown] NAME=UNSETMETHOD OBJECT=Directory
+superclasses result: 0
+superclasses events: METHOD ARGUMENTS=[0:] NAME=SUPERCLASSES OBJECT=Class
+setSecurityManager result: intercepted
+setSecurityManager events: LOCAL NAME=CONTEXT | ENVIRONMENT NAME=CONTEXT | METHOD ARGUMENTS=[0:] NAME=SETSECURITYMANAGER OBJECT=Routine
+define result: 1
+define events: METHOD ARGUMENTS=[2:FOO,return 1] NAME=DEFINE OBJECT=Class
+define handled result: 0
+define handled events: METHOD ARGUMENTS=[2:FOO,return 1] NAME=DEFINE OBJECT=Class
+superclass result: intercepted
+superclass events: METHOD ARGUMENTS=[0:] NAME=SUPERCLASS OBJECT=Class
+metaClass result: Class
+metaClass events: METHOD ARGUMENTS=[0:] NAME=METACLASS OBJECT=Class
+plain result: 0
+plain events: 
+plain class result: Array
+plain class events: 
+package result: prolog
+package events: METHOD ARGUMENTS=[1:unknown] NAME=SETMETHOD OBJECT=Directory
+method result: intercepted
+method events: METHOD ARGUMENTS=[1:unknown] NAME=SETMETHOD OBJECT=Directory
+isProtected 1 1 1 1 1 1 1 1 1
+unprotected 0 0 0 0

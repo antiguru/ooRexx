@@ -1,0 +1,20 @@
+# red (7fba9068c):
+wrote
+exists: 1
+wrote
+exists: 1
+rc 0
+/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t612st.Ejyg/secret.txt
+# oracle:
+syntax 97.1 Object "The NIL object" does not understand message "LINEOUT".
+exists: 0
+syntax 97.1 Object "The NIL object" does not understand message "LINEOUT".
+exists: 0
+/bin/bash: line 1: 1804463 Segmentation fault         ( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib timeout -k 5 20 /home/moritz/dev/repos/ooRexx/build/bin/rexx $D/s.rex $D/secret.txt ) 2> /dev/null
+rc 139
+# round 1:
+syntax 97.1 Object "The NIL object" does not understand message "LINEOUT".
+exists: 0
+syntax 97.1 Object "The NIL object" does not understand message "LINEOUT".
+exists: 0
+rc 0

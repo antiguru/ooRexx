@@ -1,0 +1,8 @@
+send intercepted events: LOCAL D | METHOD DIRM
+at intercepted events: LOCAL D | METHOD DIRM
+brackets intercepted events: LOCAL D | METHOD DIRM
+entry intercepted events: LOCAL D | METHOD DIRM
+unknown intercepted events: LOCAL D | METHOD UNKNOWN
+unknown brackets intercepted events: LOCAL D | METHOD UNKNOWN
+run m ran events: LOCAL M
+object setMethod intercepted events: LOCAL M | METHOD FOO

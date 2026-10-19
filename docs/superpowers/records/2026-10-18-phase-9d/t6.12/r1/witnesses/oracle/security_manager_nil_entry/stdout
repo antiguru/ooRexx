@@ -1,0 +1,24 @@
+environment nil result: The NIL object
+environment nil events: LOCAL ENVIRONMENT
+environment value result: replaced
+environment value events: LOCAL ENVIRONMENT
+environment unset result: RexxInfo
+environment unset events: LOCAL ENVIRONMENT
+local nil result: The NIL object
+local nil events: LOCAL
+local unset result: Stream
+local unset events: LOCAL
+method nil result: The NIL object
+method nil events: METHOD
+method unset result: 0
+method unset events: METHOD
+call nil result: The NIL object
+call nil events: CALL
+command rc nil result: The NIL object
+command rc nil events: COMMAND
+command rc unset result: 0
+command rc unset events: COMMAND
+command failure nil result: failure 0
+command failure nil events: COMMAND
+command error nil result: error 0
+command error nil events: COMMAND
