@@ -1,12 +1,15 @@
 /* An unset (name) selector in DROP, PROCEDURE EXPOSE and EXPOSE is subject to
    NOVALUE: 98.986 under ::OPTIONS NOVALUE SYNTAX, and a raised NOVALUE when
-   SIGNAL ON NOVALUE is in force. A set selector raises nothing. */
+   SIGNAL ON NOVALUE is in force. A set selector raises nothing. A compound
+   PROCEDURE EXPOSE selector is read in the procedure's own frame. */
 o = .k~new
 call try o, 'dropUnset'
 call try o, 'procedureUnset'
 call try o, 'exposeUnset'
 call try o, 'dropSet'
 call try o, 'procedureSet'
+call try o, 'procedureCompound'
+call try o, 'procedureConstant'
 call try o, 'setNames'
 call try o, 'exposeSet'
 call try o, 'dropTrapped'
@@ -43,6 +46,19 @@ pe: procedure expose (nolist2)
   return v
 ps: procedure expose (names)
   v = 'set in ps'
+  return
+::method procedureCompound
+  i = 2; a.2 = 'v'
+  call pk
+  return 'nothing'
+pk: procedure expose (a.i)
+  return
+::method procedureConstant
+  a.2 = 'v'; v = 1
+  call pn
+  return v
+pn: procedure expose (a.2)
+  v = 'set in pn'
   return
 ::method setNames
   expose names

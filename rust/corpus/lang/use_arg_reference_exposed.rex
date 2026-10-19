@@ -3,7 +3,8 @@
    not, one already assigned, an empty stem of another name, and one an
    earlier reference bound to the object's pool. An unset local target, a
    USE LOCAL name, a dropped stem, and a second reference to an unset local
-   variable bind. */
+   variable bind. A second >stem. compares the stem with the name of the
+   caller's variable the first one bound. */
 o = .k~new
 a = 1; a. = 'stem default'; a.1 = 'one'; b. = 'b default'
 call try o, 'refExposed', >a
@@ -23,6 +24,17 @@ call try o, 'kindFirst', >a.
 call try o, 'unsetPool', >unset
 call try o, 'setPool', >unset
 o~twiceExposed
+say c.
+call try o, 'twiceStem', >c.
+say 'c.1' c.1
+drop d.
+call try o, 'twiceStem', >d.
+say 'd.1' d.1
+e.1 = 'x'; drop e.1
+call try o, 'twiceStem', >e.
+say 'e.1' e.1
+f. = g.
+call try o, 'twiceStem', >f.
 say 'a' a 'a.1' a.1
 exit
 
@@ -91,6 +103,11 @@ caught:
   expose pooled
   pooled = 'object value'
   use arg >pooled
+::method twiceStem
+  use arg >abc.
+  use arg >abc.
+  abc.1 = 'set'
+  return 'bound twice'
 ::method twiceExposed
   expose v
   signal on syntax name caught

@@ -592,6 +592,10 @@ pub(crate) struct ActivationCold {
     /// `Directory` entry or `Routine~call` ran, or the first
     /// `.context~executable` answered.
     pub(crate) executable: Option<ObjRef>,
+    /// The name of the caller's variable each `USE ARG >name` aliased a slot
+    /// of `frame` to, which is the name `RexxVariable::isAliasable` compares
+    /// that slot's stem with.
+    pub(crate) reference_names: Vec<(SlotFrame, usize, Box<[u8]>)>,
 }
 
 /// A `USE LOCAL` method's object pool and the names it keeps local
@@ -1014,6 +1018,8 @@ impl Activation {
             locals: _,
             auto_expose,
             executable,
+            // Slot positions and name bytes.
+            reference_names: _,
         }) = cold.as_deref()
         {
             if let Some(TrappedCondition {

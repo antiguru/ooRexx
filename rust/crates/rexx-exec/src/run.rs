@@ -19,7 +19,7 @@ use crate::builtin;
 use crate::clause::{ClauseEntry, ClauseOutcome, ClauseValue, HandlerExit};
 use crate::error::{FailureSite, Raised, Search};
 use crate::ir::{BodyEngine, NodePath};
-use crate::plan::{BodyKey, Package};
+use crate::plan::{BodyKey, CompoundName, Package, TailPiece};
 use crate::scheduler::ExecOutcome;
 use crate::trace::{
     Announced, is_whole_number, raised_invalid_trace_letter, raised_numeric_trace_interactive_only,
@@ -1335,8 +1335,8 @@ impl Interp {
         // this activation has not swapped in a frame of its own yet.
         let outer = self.activation().frame;
         let mut bindings: Vec<(Box<[u8]>, usize, VarHome)> = Vec::with_capacity(names.len());
-        let mut tails: Vec<(Box<[u8]>, Box<[u8]>, Vec<u8>, ObjRef)> = Vec::new();
-        for name in names {
+        let mut tails: Vec<(Box<[u8]>, Box<[u8]>, Vec<u8>, ObjRef, bool)> = Vec::new();
+        for (name, traced) in names {
             // Whole stems alias fine -- the stem object lives in one slot,
             // so aliasing that slot shares the object and every measured
             // stem transcript falls out of it. A single tail is exposed once
@@ -1346,7 +1346,7 @@ impl Interp {
             if shape_of(&name) == NameShape::Compound {
                 let (stem_name, key) = self.split_compound(&name)?;
                 let home = self.read_stem(&stem_name);
-                tails.push((name, stem_name, key, home));
+                tails.push((name, stem_name, key, home, traced));
                 continue;
             }
             let slot = self.slot_of(&name);
@@ -1413,9 +1413,11 @@ impl Interp {
         if let Some(cold) = activation.cold.as_deref_mut() {
             cold.auto_expose = None;
         }
-        for (name, stem_name, key, home) in tails {
+        for (name, stem_name, key, home, traced) in tails {
             self.expose_tail(home, &stem_name, &key);
-            self.trace_exposed_tail(&name, &stem_name, &key);
+            if !traced {
+                self.trace_exposed_tail(&name, &stem_name, &key);
+            }
         }
         Ok(())
     }
@@ -1582,29 +1584,99 @@ impl Interp {
         Ok(owner)
     }
 
-    /// Every name one `PROCEDURE EXPOSE` list names, in source order.
+    /// Every name one `PROCEDURE EXPOSE` list names, in source order, each
+    /// with whether its `>C>` line has already been traced.
     fn expose_names(
         &mut self,
         code: &Code<'_>,
         variables: &[VariableRef],
-    ) -> Result<Vec<Box<[u8]>>, Failure> {
-        let mut names: Vec<Box<[u8]>> = Vec::new();
+    ) -> Result<Vec<(Box<[u8]>, bool)>, Failure> {
+        let mut names: Vec<(Box<[u8]>, bool)> = Vec::new();
         for variable in variables {
             match variable {
-                VariableRef::Direct(id) => names.push(code.symbols.name(*id).as_bytes().into()),
+                VariableRef::Direct(id) => {
+                    names.push((code.symbols.name(*id).as_bytes().into(), false));
+                }
                 VariableRef::Indirect(id) => {
                     // The selector itself, then the names its value spells.
-                    names.push(code.symbols.name(*id).as_bytes().into());
-                    let value = self.read_list_selector(code, *id)?;
+                    let name: Box<[u8]> = code.symbols.name(*id).as_bytes().into();
+                    let value = if shape_of(&name) == NameShape::Compound {
+                        let (stem_name, key) = self.split_compound(&name)?;
+                        self.trace_exposed_tail(&name, &stem_name, &key);
+                        names.push((name, true));
+                        self.procedure_selector_value(code, *id, &names)?
+                    } else {
+                        names.push((name, false));
+                        self.read_list_selector(code, *id)?
+                    };
                     let value = self.required_string_value(value)?;
                     let text = self.to_text(value).into_owned();
                     for word in split_indirect_words(&text) {
-                        names.push(validate_indirect_word(word)?.into());
+                        names.push((validate_indirect_word(word)?.into(), false));
                     }
                 }
             }
         }
         Ok(names)
+    }
+
+    /// A compound `PROCEDURE EXPOSE` selector's value as the procedure's own
+    /// frame reads it (`RexxVariableReference::procedureExpose` reads after
+    /// exposing): a tail variable and the compound itself have a value only
+    /// through a name `exposed` already holds, and are unset otherwise, with
+    /// the `NOVALUE` check and `TRACE I` lines of an ordinary read.
+    fn procedure_selector_value(
+        &mut self,
+        code: &Code<'_>,
+        id: SymbolId,
+        exposed: &[(Box<[u8]>, bool)],
+    ) -> Result<ObjRef, Failure> {
+        let spelling = code.symbols.name(id).as_bytes().to_vec();
+        let compound = CompoundName::split(&String::from_utf8_lossy(&spelling));
+        let visible = |name: &[u8]| exposed.iter().any(|(held, _)| **held == *name);
+        let mut key = Vec::new();
+        for (index, piece) in compound.tails.iter().enumerate() {
+            if index > 0 {
+                key.push(b'.');
+            }
+            match piece {
+                TailPiece::Constant(text) => key.extend_from_slice(text),
+                TailPiece::Variable { name, .. } if visible(name) => {
+                    let value = self.read_by_name(name);
+                    let value = self.required_string_or_nil(value)?;
+                    self.write_text(value, &mut key);
+                }
+                TailPiece::Variable { name, .. } => key.extend_from_slice(name),
+            }
+        }
+        let mut resolved = compound.stem.to_vec();
+        resolved.extend_from_slice(&key);
+        if self.tracing_intermediates() {
+            let indent = self.activity.clause_state.current_value_indent;
+            self.trace_compound_name(indent, &spelling, &resolved);
+        }
+        let mut reachable = visible(&compound.stem);
+        for (held, _) in exposed {
+            if reachable {
+                break;
+            }
+            if shape_of(held) == NameShape::Compound {
+                let (stem_name, held_key) = self.split_compound(held)?;
+                reachable = stem_name == compound.stem && held_key == key;
+            }
+        }
+        let (value, novalue) = if reachable {
+            self.stem_get(&compound.stem, &key)
+        } else {
+            (self.text(&resolved), Novalue::Unset)
+        };
+        self.novalue_check(novalue, value)?;
+        if self.tracing_intermediates() {
+            let indent = self.activity.clause_state.current_value_indent;
+            let text = self.string_value_text(value);
+            self.trace_variable(indent, &spelling, &text);
+        }
+        Ok(value)
     }
 
     /// `USE ARG`, `USE STRICT ARG` and `USE LOCAL`.
@@ -1816,7 +1888,17 @@ impl Interp {
                 return Err(Raised::variable_reference_not_uninitialised(&name).into());
             }
             match slot {
-                VarRefHome::Cell(cell) => self.roots.activity_mut().alias_slot(frame, index, cell),
+                VarRefHome::Cell(cell) => {
+                    self.roots.activity_mut().alias_slot(frame, index, cell);
+                    let names = &mut self.activation_mut().cold_mut().reference_names;
+                    match names
+                        .iter_mut()
+                        .find(|(at, slot, _)| (*at, *slot) == (frame, index))
+                    {
+                        Some(bound) => bound.2 = reference.clone(),
+                        None => names.push((frame, index, reference.clone())),
+                    }
+                }
                 // The same binding `EXPOSE` makes, on this activation's own
                 // slot: the target names the caller's object variable rather
                 // than any frame storage, so there is nothing to alias to.
@@ -1949,7 +2031,14 @@ impl Interp {
         match self.variable(frame, index) {
             None => true,
             Some(value) => {
-                shape_of(name) == NameShape::Stem && self.is_uninitialised_stem(value, name)
+                let own = (self.activation().cold.as_deref())
+                    .and_then(|cold| {
+                        cold.reference_names
+                            .iter()
+                            .find(|(at, slot, _)| (*at, *slot) == (frame, index))
+                    })
+                    .map_or(name, |(_, _, aliased)| aliased);
+                shape_of(name) == NameShape::Stem && self.is_uninitialised_stem(value, own)
             }
         }
     }
