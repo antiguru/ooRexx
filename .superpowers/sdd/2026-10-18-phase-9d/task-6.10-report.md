@@ -532,3 +532,54 @@ Checks at `9a3431a0b`:
 
   Every own delta is under +0.05%, and every figure against the pin is under +0.5% (rexxcps
   +0.4707%).
+
+## Fix round 2
+
+Status: done. Code at `24da8a29b`, records under `t6.10/r2/`. The re-review's finding 2 (`gw1`) is queued
+by the controller, and finding 3 is the controller's Deviation 50 text. Neither is touched here, and the witness
+marker lines are intact.
+
+**Finding 1: a waiting destination that calls anything never yielded.**
+* Cause: `9a3431a0b` kept one streak and restarted it whenever another activation ran.
+* Fix: `Activity::delivery_counts` keeps a clause count for each activation of the stack. The running
+  activation's count goes up at each of its own clauses, and the entries above it, which belong to callees that
+  have returned, are dropped. A caller's count therefore survives its calls, as the oracle's `instructionCount`
+  does (a `RexxActivation` member, `RexxActivation.cpp:616`).
+* The counts restart when the slice falls due. A yield is allowed once the running activation's own count passes
+  `DELIVERY_YIELD_CLAUSES`.
+* Inside a delivery the waiting slice is then taken at the first clause that may yield, without waiting for
+  another fresh slice. A slice that fell due while a callee ran would otherwise need a second one, and a `pre`
+  or `pct` schedule may have none left.
+
+Witnesses, each with a `phase-9.txt` line, a `sourceline_oracle` file, a seeded-gate row (k from a seed-0 fifo
+run) and an oracle set written under `REXX_SIM_ORACLE_REFRESH=1`:
+* `trace_destination_waits_calling_a_method` (the review's `sp1`): an unguarded LINEOUT waits on `\self~ready`,
+  an unguarded method.
+* `trace_destination_waits_calling_a_label` (`sp3`): the loop calls an internal label on each pass.
+
+At `9a3431a0b` both are killed at 10 s under wall, `sim:1` and `sim:3,uniform:0.2`.
+
+`t6.10/r2/modes.txt`: `sp1`, `sp3`, `st1`, `two1`, `trace_reply_continuation` and `test_forwarded3` each give the
+oracle's one outcome over 8 oracle runs, and the same outcome under every one of the re-review's 13 modes.
+
+Checks at `24da8a29b`:
+* fmt, clippy, `--lib` (1155 passed), the refusal tables, `rexx-parse`, `unsafe_sites`, `licensed_divergences`,
+  `sim_processes` and `trace_delivery_schedule`: exit 0 each.
+* Corpus gate: 1114 of 1114.
+* Whole suite: 402 groups, 12 red. `t6.10/r2/suite/changed-rows.txt` against round 0 is empty.
+* Seeded gate (`t6.10/r2/sim/summary.txt`): every row exits 0.
+  * Every corpus row, the two new ones included, agrees with its oracle set on every seed.
+  * `TRACE` whole fails only `TEST_TRACE_EXIT` and `TEST_TRACE_OTHER_ENTRYPOINT`.
+  * `REPLY` passes on every seed.
+* Perf: `t6.10/r2/callgrind.txt` (pin, r0 = `7936f3ca1`, head = `24da8a29b`; 3 rounds; exit 0; every spread
+  0.0000%). Own deltas against r0:
+
+  | startup | interpret | parse | churn | sayloop | nop | assign | emptyloop |
+  |---|---|---|---|---|---|---|---|
+  | -0.0015 | -0.0270 | -0.0364 | -0.0003 | -0.0018 | 0.0000 | 0.0000 | 0.0000 |
+
+  | rexxcps | sendloop | dispatch | dispatchclass | fibcall | intcall | extcall |
+  |---|---|---|---|---|---|---|
+  | +0.0136 | 0.0000 | 0.0000 | -0.0236 | -0.0011 | -0.0360 | 0.0000 |
+
+  Every own delta is under +0.05%, and every figure against the pin is under +0.5% (rexxcps +0.4707%).

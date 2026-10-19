@@ -1,0 +1,1 @@
+# diff <(sort docs/superpowers/records/2026-10-18-phase-9d/t6.10/suite/tests.tsv) <(sort docs/superpowers/records/2026-10-18-phase-9d/t6.10/r2/suite/tests.tsv)

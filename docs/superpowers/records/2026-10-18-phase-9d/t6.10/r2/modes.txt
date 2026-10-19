@@ -1,0 +1,92 @@
+# Each program from a fresh directory: the oracle 8 times, then the task (24da8a29b) under each of the re-review's 13 modes under memcap 2G timeout -s KILL 10.
+# A line is the md5 of stdout plus the rc line; the rexx-sim stderr line is not compared.
+## trace_destination_waits_calling_a_method.rex
+oracle       8 162a42e83fe5d8c37cb051428292633b  -
+wall 162a42e83fe5d8c37cb051428292633b  -
+sim:1 162a42e83fe5d8c37cb051428292633b  -
+sim:7 162a42e83fe5d8c37cb051428292633b  -
+sim:42 162a42e83fe5d8c37cb051428292633b  -
+sim:3,uniform:0.2 162a42e83fe5d8c37cb051428292633b  -
+sim:9,uniform:0.2 162a42e83fe5d8c37cb051428292633b  -
+sim:5,uniform:1 162a42e83fe5d8c37cb051428292633b  -
+sim:8,uniform:0.01 162a42e83fe5d8c37cb051428292633b  -
+sim:7,pct:3,k=40 162a42e83fe5d8c37cb051428292633b  -
+sim:11,pct:3,k=200 162a42e83fe5d8c37cb051428292633b  -
+sim:4,pct:2,k=1000 162a42e83fe5d8c37cb051428292633b  -
+sim:2,pre:2,k=40 162a42e83fe5d8c37cb051428292633b  -
+sim:6,pre:1,k=200 162a42e83fe5d8c37cb051428292633b  -
+## trace_destination_waits_calling_a_label.rex
+oracle       8 162a42e83fe5d8c37cb051428292633b  -
+wall 162a42e83fe5d8c37cb051428292633b  -
+sim:1 162a42e83fe5d8c37cb051428292633b  -
+sim:7 162a42e83fe5d8c37cb051428292633b  -
+sim:42 162a42e83fe5d8c37cb051428292633b  -
+sim:3,uniform:0.2 162a42e83fe5d8c37cb051428292633b  -
+sim:9,uniform:0.2 162a42e83fe5d8c37cb051428292633b  -
+sim:5,uniform:1 162a42e83fe5d8c37cb051428292633b  -
+sim:8,uniform:0.01 162a42e83fe5d8c37cb051428292633b  -
+sim:7,pct:3,k=40 162a42e83fe5d8c37cb051428292633b  -
+sim:11,pct:3,k=200 162a42e83fe5d8c37cb051428292633b  -
+sim:4,pct:2,k=1000 162a42e83fe5d8c37cb051428292633b  -
+sim:2,pre:2,k=40 162a42e83fe5d8c37cb051428292633b  -
+sim:6,pre:1,k=200 162a42e83fe5d8c37cb051428292633b  -
+## st1.rex
+oracle       8 162a42e83fe5d8c37cb051428292633b  -
+wall 162a42e83fe5d8c37cb051428292633b  -
+sim:1 162a42e83fe5d8c37cb051428292633b  -
+sim:7 162a42e83fe5d8c37cb051428292633b  -
+sim:42 162a42e83fe5d8c37cb051428292633b  -
+sim:3,uniform:0.2 162a42e83fe5d8c37cb051428292633b  -
+sim:9,uniform:0.2 162a42e83fe5d8c37cb051428292633b  -
+sim:5,uniform:1 162a42e83fe5d8c37cb051428292633b  -
+sim:8,uniform:0.01 162a42e83fe5d8c37cb051428292633b  -
+sim:7,pct:3,k=40 162a42e83fe5d8c37cb051428292633b  -
+sim:11,pct:3,k=200 162a42e83fe5d8c37cb051428292633b  -
+sim:4,pct:2,k=1000 162a42e83fe5d8c37cb051428292633b  -
+sim:2,pre:2,k=40 162a42e83fe5d8c37cb051428292633b  -
+sim:6,pre:1,k=200 162a42e83fe5d8c37cb051428292633b  -
+## two1.rex
+oracle       8 05ff6a68b3842a043d3d1d325ccb2eb4  -
+wall 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:1 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:7 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:42 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:3,uniform:0.2 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:9,uniform:0.2 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:5,uniform:1 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:8,uniform:0.01 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:7,pct:3,k=40 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:11,pct:3,k=200 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:4,pct:2,k=1000 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:2,pre:2,k=40 05ff6a68b3842a043d3d1d325ccb2eb4  -
+sim:6,pre:1,k=200 05ff6a68b3842a043d3d1d325ccb2eb4  -
+## trace_reply_continuation.rex
+oracle       8 569e21ceec8870494d21bd1bd834e726  -
+wall 569e21ceec8870494d21bd1bd834e726  -
+sim:1 569e21ceec8870494d21bd1bd834e726  -
+sim:7 569e21ceec8870494d21bd1bd834e726  -
+sim:42 569e21ceec8870494d21bd1bd834e726  -
+sim:3,uniform:0.2 569e21ceec8870494d21bd1bd834e726  -
+sim:9,uniform:0.2 569e21ceec8870494d21bd1bd834e726  -
+sim:5,uniform:1 569e21ceec8870494d21bd1bd834e726  -
+sim:8,uniform:0.01 569e21ceec8870494d21bd1bd834e726  -
+sim:7,pct:3,k=40 569e21ceec8870494d21bd1bd834e726  -
+sim:11,pct:3,k=200 569e21ceec8870494d21bd1bd834e726  -
+sim:4,pct:2,k=1000 569e21ceec8870494d21bd1bd834e726  -
+sim:2,pre:2,k=40 569e21ceec8870494d21bd1bd834e726  -
+sim:6,pre:1,k=200 569e21ceec8870494d21bd1bd834e726  -
+## fw3.rex
+oracle       8 76b63424ed3a805f2d78390f33cdffca  -
+wall 76b63424ed3a805f2d78390f33cdffca  -
+sim:1 76b63424ed3a805f2d78390f33cdffca  -
+sim:7 76b63424ed3a805f2d78390f33cdffca  -
+sim:42 76b63424ed3a805f2d78390f33cdffca  -
+sim:3,uniform:0.2 76b63424ed3a805f2d78390f33cdffca  -
+sim:9,uniform:0.2 76b63424ed3a805f2d78390f33cdffca  -
+sim:5,uniform:1 76b63424ed3a805f2d78390f33cdffca  -
+sim:8,uniform:0.01 76b63424ed3a805f2d78390f33cdffca  -
+sim:7,pct:3,k=40 76b63424ed3a805f2d78390f33cdffca  -
+sim:11,pct:3,k=200 76b63424ed3a805f2d78390f33cdffca  -
+sim:4,pct:2,k=1000 76b63424ed3a805f2d78390f33cdffca  -
+sim:2,pre:2,k=40 76b63424ed3a805f2d78390f33cdffca  -
+sim:6,pre:1,k=200 76b63424ed3a805f2d78390f33cdffca  -
