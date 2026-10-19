@@ -2450,13 +2450,14 @@ DEVIATIONS -- permanent, chosen
      LICENSED DIVERGENCE WITNESS: write-position-after-buffered-read
      LICENSED DIVERGENCE WITNESS: relative-seek-from-named-position
 
- 50. A CLAUSE WHOSE TRACE LINE CANNOT BE DELIVERED MAY RUN BEFORE ITS
-     97.1 (Phase 9d). OWNER: none.
+ 50. A CLAUSE WHOSE TRACE LINE CANNOT BE DELIVERED MAY RUN BEFORE THE
+     DELIVERY'S CONDITION (Phase 9d). OWNER: none.
 
      Ruled by Moritz 2026-10-19. When the trace destination cannot take a
      line, for example after `.traceOutput~destination("")`, the oracle
-     raises 97.1 before the clause does any of its own work. This crate
-     raises the same 97.1, but a clause in a chunk compiled under another
+     raises the condition the delivery raised, such as 97.1 or a 40.1 from
+     the destination's own code, before the clause does any of its own work.
+     This crate raises the same condition, but a clause in a chunk compiled under another
      trace setting, or a `>>>` result line inside a traced body, may run
      its own work first: probe `s1` sets a counter in the failing clause and
      prints `syntax 97.1 c=1` here and `c=0` on the oracle. Every measured
