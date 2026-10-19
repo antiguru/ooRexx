@@ -2275,7 +2275,14 @@ impl Interp {
             self.slice_deferred = false;
             return Err(Failure::Slice);
         }
-        if fresh && self.slice_deferred && self.activity.pin_depth > 0 {
+        // Not while a trace line is delivered: its `TraceObject` is made under
+        // the class's guard, which another activity's delivery would wait
+        // for under a pin of its own.
+        if fresh
+            && self.slice_deferred
+            && self.activity.pin_depth > 0
+            && !self.activity.routing_trace
+        {
             self.slice_deferred = false;
             return self.pinned_yield();
         }
