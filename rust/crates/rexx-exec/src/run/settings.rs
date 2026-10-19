@@ -141,8 +141,31 @@ impl Interp {
         // route every 4c-reachable `>I>` takes. `Trace::Skip` never gets here
         // -- it returned above -- and the C++ agrees: its own arm sets no
         // flags and calls nothing.
+        self.allow_entry_after_exposes(code);
         self.trace_invocation_entry();
         Ok(())
+    }
+
+    /// `RexxActivation::run` keeps `traceEntryAllowed` past an `EXPOSE`, so a
+    /// `TRACE` that only `EXPOSE`s precede in the body may still announce
+    /// `>I>`. Nothing but those `EXPOSE`s can have run before it: any other
+    /// way to reach it passes a label, a `DO` or another instruction first.
+    fn allow_entry_after_exposes(&mut self, code: &Code<'_>) {
+        if self.activation().trace_entry != TraceEntry::Spent
+            || self.activity.clause_line_override.is_some()
+        {
+            return;
+        }
+        let index = self.activity.clause_state.clause_index();
+        let exposes_only = code.body.instructions.get(..index).is_some_and(|before| {
+            !before.is_empty()
+                && before
+                    .iter()
+                    .all(|clause| matches!(clause.kind, rexx_parse::InstructionKind::Expose { .. }))
+        });
+        if exposes_only {
+            self.activation_mut().trace_entry = TraceEntry::Allowed;
+        }
     }
 
     /// `>I>`, if this activation is a `::ROUTINE` still on its first

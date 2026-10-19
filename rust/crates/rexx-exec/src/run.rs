@@ -1429,11 +1429,6 @@ impl Interp {
         code: &Code<'_>,
         variables: &[VariableRef],
     ) -> Result<(), Failure> {
-        // An `EXPOSE` leaves the next clause the one a `TRACE` may announce
-        // `>I>` from (`RexxActivation::run` keeps `traceEntryAllowed` past it).
-        if self.activation().trace_entry == TraceEntry::Allowed {
-            self.activation_mut().trace_entry = TraceEntry::Pending;
-        }
         let Some(identity) = self.activation().method_identity.as_ref() else {
             return Err(Raised::expose_outside_method().into());
         };
