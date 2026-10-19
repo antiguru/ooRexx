@@ -367,4 +367,4 @@ The heading names the measured shape, an untrapped `loadPackage` with `NAME` rep
 
 `t6.12/r2/callgrind.txt`: pin, round 1 (`d995b8f17`) and `45bd0c3ba` in one run, exit 0. With
 libc and ld-linux subtracted, head minus parent is 0.0000% on all eight programs, sendloop and
-dispatch included (at most 1 Ir per program). Raw, it is at most +0.0002% (interpret).
+dispatch included (at most 216 Ir, rexxcps, of 17.9 G). Raw, it is at most +0.0002% (interpret).
