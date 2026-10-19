@@ -1701,3 +1701,42 @@ wrapper from a fresh empty directory, after its review measured the same crash. 
 killed at a 2G memory cap after about 7 s (rc 137), where the task's parent printed `after`,
 rc 0: queued as
 `.superpowers/sdd/queued/2026-10-19-trace-destination-recursion-oom.md`. No upstream ticket.
+
+## 53. HALT sent to a started message whose activity is inside a trace delivery
+
+    .traceOutput~destination(.d~new)
+    m = .w~new~start('run')
+    call syssleep 0.3
+    say 'halt' m~halt
+    call syssleep 0.3
+    r = 'none'
+    signal on syntax
+    r = m~result
+    after:
+    say 'result' r
+    trace r
+    z = 1
+    trace off
+    x = .traceOutput~destination
+    say 'main lines' .local~mainlines
+    exit
+    syntax:
+    say 'result error' condition('o')~code
+    signal after
+    ::class w
+    ::method run
+      trace r
+      a = 1
+      trace off
+      return 'ran'
+    ::class d
+    ::method lineout unguarded
+      use arg t
+      if pos('z = 1', t~traceLine) > 0 then .local~mainlines = 1
+      if pos('a = 1', t~traceLine) > 0 then do k = 1 to 40000000; nop; end
+      return 0
+
+Effect: SIGSEGV, rc 139, on 8 of 8 runs. Before it, stdout holds `halt 1` and
+`    24 *-* a = 1`; stderr is empty. Measured 2026-10-19 by the Phase 9d Task 6.10 round-3
+re-review, under the standard wrapper from a fresh empty directory. This crate raises HALT in
+the halted activity, prints `result error 4.1` and `main lines 1`, rc 0. No upstream ticket.
