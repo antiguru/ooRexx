@@ -1,0 +1,36 @@
+count 35
+/* A sortWith or stableSortWith frame names the method that was dispatched:
+   Array's, reached through a subclass override forwarding to super, and
+   another class's own entry where it defined Array's method as its own. */
+c = .recorder~new
+m = .myarr~of(2, 1)
+m~sortWith(c)
+call show 'forwarded', c~frames[2], m
+m~stableSortWith(c)
+call show 'forwarded', c~frames[2], m
+o = .other~of(2, 1)
+o~sortWith(c)
+call show 'defined', c~frames[2], o
+exit
+
+show: procedure
+  use arg tag, f, target
+  say tag f~type f~name (f~target == target) f~traceLine
+  say tag (f~executable == .Array~method(f~name)) f~executable~scope~id
+  return
+
+::class recorder
+::attribute frames
+::method compare
+  self~frames = .context~stackFrames
+  return 0
+
+::class myarr subclass array
+::method sortWith
+  forward class (super)
+::method stableSortWith
+  forward class (super)
+
+::class other subclass array
+::method activate class
+  self~define('SORTWITH', .array~method('SORTWITH'))

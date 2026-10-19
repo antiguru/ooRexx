@@ -278,3 +278,7 @@ lang/setmethod_instance_method.rex
 lang/uninit_defined_on_superclass_later.rex
 lang/package_prolog_of_compiled_executable.rex
 lang/stackframes_sortwith_comparator.rex
+# 9d Task 6.11 fix round 1: the frame of a sortWith reached through an
+# override or a define, and a class object's own instanceMethods.
+lang/stackframes_sortwith_dispatched_scope.rex
+lang/class_setmethod_instance_methods.rex

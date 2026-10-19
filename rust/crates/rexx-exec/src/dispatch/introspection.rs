@@ -247,10 +247,19 @@ fn behaviour_entries(
 /// The methods `setMethod` gave the receiver itself, filtered to `scope` when
 /// one is given, each with the object `setMethod` installed.
 fn object_level_entries(interp: &Interp, receiver: ObjRef, scope: Option<ObjRef>) -> Vec<Listed> {
+    // A class object's own methods sit on the object holding its variable
+    // pools, where `Interp::own_method_entry` reads them.
+    let holder = match interp.heap.get(receiver) {
+        Some(rexx_core::Object {
+            body: rexx_core::Body::Class { .. },
+            ..
+        }) => interp.class_variables.get(&receiver).copied(),
+        _ => Some(receiver),
+    };
     let Some(rexx_core::Object {
         body: rexx_core::Body::Instance { own: Some(own), .. },
         ..
-    }) = interp.heap.get(receiver)
+    }) = holder.and_then(|holder| interp.heap.get(holder))
     else {
         return Vec::new();
     };

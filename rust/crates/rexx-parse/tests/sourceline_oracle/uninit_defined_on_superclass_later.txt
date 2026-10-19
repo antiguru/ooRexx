@@ -1,19 +1,28 @@
-count 18
+count 27
 /* An UNINIT that ~define gives a superclass after its subclass exists makes
-   the subclass's new instances finalizable; deleting it again stops that. */
+   the subclass's new instances finalizable; deleting it again stops that.
+   Collection timing is not specified, so each case drives collections until
+   the finalizer has run or a bound is reached, and prints only whether it
+   ran. */
 first = .Object~subclass('First')
 second = first~subclass('Second')
-first~define('UNINIT', "say 'uninit ran for' self~class~id")
+first~define('UNINIT', ".local~ran = .local~ran self~identityHash")
+.local~ran = ''
 o = second~new
-say 'built' o~class~id
-pad = 'keep the new object out of the last ten allocations'
+id = o~identityHash
 drop o
-call gc 'force'
-say 'after first collection'
+say 'defined:' collected(id)
 first~delete('UNINIT')
 o = second~new
-say 'built' o~class~id
-pad = 'keep the new object out of the last ten allocations'
+id = o~identityHash
 drop o
-call gc 'force'
-say 'after second collection'
+say 'deleted:' collected(id)
+exit
+
+collected: procedure
+  use arg id
+  do 50 while wordpos(id, .local~ran) = 0
+    pad = copies('x', 1000)
+    call gc 'force'
+  end
+  return wordpos(id, .local~ran) > 0

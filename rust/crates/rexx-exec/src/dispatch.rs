@@ -345,7 +345,9 @@ impl NativeTail {
 impl Interp {
     /// Runs `body`, the primitive method `name` sent to `receiver` with
     /// `arguments`, as a level of its own that `.context~stackFrames` lists
-    /// while the Rexx code it calls runs.
+    /// while the Rexx code it calls runs. The level's scope is that of the
+    /// highest-priority primitive entry under `name`, which is the one a
+    /// send or a `forward class (super)` from an override reached.
     pub(crate) fn in_method_level<T>(
         &mut self,
         name: &'static [u8],
@@ -354,9 +356,7 @@ impl Interp {
         body: impl FnOnce(&mut Self) -> T,
     ) -> T {
         let caller = self.running_activation().map(|activation| activation.id);
-        let scope = self
-            .lookup(receiver, name, None)
-            .map_or(ObjRef::NIL, |resolution| resolution.scope);
+        let scope = self.primitive_scope(receiver, name);
         self.activity
             .method_levels
             .push(crate::activity::MethodLevel {
@@ -369,6 +369,32 @@ impl Interp {
         let answer = body(self);
         self.activity.method_levels.pop();
         answer
+    }
+
+    /// The scope of the highest-priority entry under `name` that `receiver`
+    /// answers with a primitive method, its own methods first; `.nil` where
+    /// there is none.
+    #[cold]
+    fn primitive_scope(&mut self, receiver: ObjRef, name: &[u8]) -> ObjRef {
+        let mut entries = Vec::new();
+        if let Some(Some(own)) = self.own_method_entry(receiver, name) {
+            entries.push((own.scope, own.method));
+        }
+        let text = String::from_utf8_lossy(name);
+        match self.receiver_behaviour(receiver) {
+            Ok(Behaviour::Instance { methods, .. }) => {
+                entries.extend(self.classes().defined_named_at(methods, &text));
+            }
+            Ok(Behaviour::ClassSide(class)) => {
+                entries.extend(self.classes().class_defined_named(class, &text));
+            }
+            Err(_) => {}
+        }
+        let natives = &self.object_model().natives;
+        entries
+            .into_iter()
+            .find(|(_, method)| natives.get(*method).is_some())
+            .map_or(ObjRef::NIL, |(scope, _)| scope)
     }
 
     /// The `StackFrame` of the primitive method that entered the running
