@@ -36,3 +36,4 @@ Write the review file your dispatch names, in this directory: spec compliance, s
 by severity (Critical, Important, Minor) with the deciding probe lines quoted (the scratchpad is
 not durable), and a verdict of APPROVED or CHANGES REQUESTED. Return only the verdict and a
 one-line count of findings.
+* A new macro that is not small and mechanical is a finding (rust/CLAUDE.md, Moritz 2026-10-19).
