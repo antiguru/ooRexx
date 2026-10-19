@@ -2275,6 +2275,18 @@ impl Raised {
     /// ```
     pub(crate) fn report(&self, site: &ClauseSite<'_>) -> Vec<u8> {
         let mut out = Vec::new();
+        for line in self.report_lines(site) {
+            out.extend_from_slice(&line);
+            out.push(b'\n');
+        }
+        out
+    }
+
+    /// [`Raised::report`] as the lines `Activity::display` writes one at a
+    /// time, each without its line end. A line keeps a line end its echo or
+    /// substitution holds.
+    pub(crate) fn report_lines(&self, site: &ClauseSite<'_>) -> Vec<Vec<u8>> {
+        let mut lines = Vec::new();
         // `trace::push_clause` rather than a second copy of the same four
         // lines: the two used to be written out separately and documented as
         // byte-identical, and 4b's Task 2 needed the 40-column clamp on both.
@@ -2288,14 +2300,14 @@ impl Raised {
                 | FailureSite::Named {
                     line, text, indent, ..
                 } => {
+                    let mut out = Vec::new();
                     crate::trace::push_clause(&mut out, *line, *indent, text);
+                    out.pop();
+                    lines.push(out);
                 }
                 // Already a whole line, `*-*` marker and blank line-number
                 // field included, straight from the catalogue.
-                FailureSite::Rendered { text, .. } => {
-                    out.extend_from_slice(text);
-                    out.push(b'\n');
-                }
+                FailureSite::Rendered { text, .. } => lines.push(text.clone()),
                 FailureSite::Reraised { .. } => {}
             }
         }
@@ -2347,31 +2359,28 @@ impl Raised {
                 position.extend_from_slice(format!(" line {line}").as_bytes());
             }
         }
-        out.extend_from_slice(format!("Error {}", self.number).as_bytes());
+        let mut out = format!("Error {}", self.number).into_bytes();
         out.extend_from_slice(&position);
         out.extend_from_slice(b":  ");
         out.extend_from_slice(&self.message(self.number, 0));
-        out.push(b'\n');
+        lines.push(out);
         // **Sub `0` prints no second line at all**, measured: `raise syntax
         // 40` gives the major line and stops, where `raise syntax 40.4`
         // gives both. Reachable only through `RAISE` -- every raiser in the
         // crate names a real sub -- which is why 4a never had to know.
         if self.sub != 0 {
-            out.extend_from_slice(format!("Error {}.{}:  ", self.number, self.sub).as_bytes());
+            let mut out = format!("Error {}.{}:  ", self.number, self.sub).into_bytes();
             out.extend_from_slice(&self.message(self.number, self.sub));
-            out.push(b'\n');
+            lines.push(out);
         }
-        // **Applied once, to the whole report, and that is the oracle's own
-        // shape rather than a shortcut.** `Activity::display` sends each
-        // traceback echo and each `Error ...` line through
-        // `displayUsingTraceOutput`, which sanitises the line it is handed;
-        // the rule is per byte and leaves `\n` alone, so sanitising the
-        // concatenation is the same bytes as sanitising each line. It
-        // therefore covers the clause echoes too, which carry the program's
-        // own source and can hold any byte -- measured, a raw `0x01` inside a
-        // source literal echoes as `?`.
-        displayable(&mut out);
-        out
+        // `Activity::display` sends each line through
+        // `displayUsingTraceOutput`, which sanitises it. That covers the
+        // clause echoes too, which carry the program's own source -- measured,
+        // a raw `0x01` inside a source literal echoes as `?`.
+        for line in &mut lines {
+            displayable(line);
+        }
+        lines
     }
 
     /// One catalogue entry with this error's substitutions applied.

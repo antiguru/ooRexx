@@ -2107,13 +2107,13 @@ impl Interp {
         // With no level that has a line, the report names no program or line
         // (`Activity::display` with no `POSITION`).
         let report = if sites.iter().any(|site| site.line().is_some()) {
-            raised.report(&site)
+            raised.report_lines(&site)
         } else {
             let mut positionless = raised.clone();
             positionless.delivery.positionless = true;
-            positionless.report(&site)
+            positionless.report_lines(&site)
         };
-        self.write_trace_report(&report);
+        self.write_trace_report_lines(&report);
     }
 
     /// The running activity's main-program root, a park or slice in which

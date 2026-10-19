@@ -181,8 +181,10 @@ impl Interp {
         let Some(class) = self.rexx_package_class(b"TRACEOBJECT") else {
             return;
         };
+        // Only the line end the formatter appended: measured, a traced clause
+        // ending in `'0a'x` is delivered with it.
         let mut line = self.trace.split_off(start);
-        while line.last() == Some(&b'\n') {
+        if line.last() == Some(&b'\n') {
             line.pop();
         }
         self.activity.routing_trace = true;
@@ -212,11 +214,23 @@ impl Interp {
     pub(crate) fn write_trace_report(&mut self, report: &[u8]) {
         let body = report.strip_suffix(b"\n").unwrap_or(report);
         for line in body.split(|&byte| byte == b'\n') {
-            let start = self.trace.len();
-            self.trace.extend_from_slice(line);
-            self.trace.push(b'\n');
-            self.route_trace_line(start);
+            self.write_trace_report_line(line);
         }
+    }
+
+    /// [`Interp::write_trace_report`] over the report's own lines, each
+    /// delivered whole, with any line end it holds.
+    pub(crate) fn write_trace_report_lines(&mut self, lines: &[Vec<u8>]) {
+        for line in lines {
+            self.write_trace_report_line(line);
+        }
+    }
+
+    fn write_trace_report_line(&mut self, line: &[u8]) {
+        let start = self.trace.len();
+        self.trace.extend_from_slice(line);
+        self.trace.push(b'\n');
+        self.route_trace_line(start);
     }
 
     /// The send itself: a `TraceObject` carrying `line` and where it was

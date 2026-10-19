@@ -3727,7 +3727,7 @@ fn report_late_failures(
                     path,
                     sites: &sites,
                 };
-                interp.write_trace_report(&raised.report(&site));
+                interp.write_trace_report_lines(&raised.report_lines(&site));
             }
         }
     }
@@ -4006,7 +4006,7 @@ fn execute_as(
                 path,
                 sites: &failure_sites,
             };
-            interp.write_trace_report(&raised.report(&site));
+            interp.write_trace_report_lines(&raised.report_lines(&site));
             raised.exit_code()
         }
         // No report and no status here: the run may still have activities
