@@ -296,8 +296,8 @@ forwarding to super one and two deep, `define` in `ACTIVATE`, a run-time `define
 `define` (`Array`, Array's executable), a mixin that defines Array's method (`WITHMIX`),
 `setMethod` with `OBJECT` (`MYARR2`) and with `FLOAT` (`.NIL`, its executable the own entry's
 Method), `run` (`METHOD *UNNAMED*`, `scope ".NIL"`), and `sendWith` on Array and on the defining
-class. On round 1's binary it differs from the forward-to-`.array` case on and aborts at the
-`FLOAT` executable, rc 120 (`t6.11/r2/witnesses/summary.tsv`, red is round 1).
+class. On round 1's binary it differs from the forward-to-`.array` case on, and aborts with rc 120
+at the `OBJECT` case's executable (`t6.11/r2/witnesses/summary.tsv`, red is round 1).
 
 ### Perf
 
@@ -320,7 +320,7 @@ shuffle of `begin_invoke`'s inlined callees, not the level, which runs only for 
 comparator. Two other shapes were measured and dropped: the leveled arm inside `begin_invoke`'s
 native match (`28645a0d8`: sendloop +0.036, dispatch +0.024, churn +0.037), and a separate
 leveled table read last in `invocable` (sendloop +0.0725, dispatch +0.0484, churn 0.0000, with
-the lookup inline or out of line). Neither was committed past measurement but `28645a0d8`.
+the lookup inline or out of line). The second was never committed; `7efdf2dc5` replaces the first.
 
 ### Checks, on `7efdf2dc5`
 
