@@ -20,3 +20,6 @@ The round-2 re-review (`task-6.6-rereview-r2.md`, finding 2) adds an executable'
 error. With `.routine~new("x", ...)` holding `::constant k ('a' + 1)`, the oracle says
 `Error 41 running x line 4` and the crate `Error 41 running DIR/main.rex line 4`. With
 `.routine~newfile("r.rex")` the oracle names `r.rex` and the crate `DIR/main.rex`.
+
+The Task 6.11 review (`task-6.11-review.md`, Minor 4) adds a class cycle inside `.Package~new`:
+the error names the main file instead of the package.

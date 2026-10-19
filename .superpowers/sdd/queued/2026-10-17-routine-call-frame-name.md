@@ -63,3 +63,6 @@ identity with the oracle.
 
 Owner: none yet. Phase 9c records it as a known gap in
 `docs/superpowers/plans/phase-4-exclusions.txt`, beside Deviation 41.
+
+The Task 6.11 review (`task-6.11-review.md`, Minor 4): a sort inside `Routine~call` shows a single
+`ROUTINE CALL` frame where the oracle shows two frames.
