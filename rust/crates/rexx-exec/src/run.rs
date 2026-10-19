@@ -3088,7 +3088,7 @@ impl Interp {
             InstructionKind::Do(_) | InstructionKind::Loop(_) => {
                 self.leave_clause_without_boundary(entry.entry, ran)
             }
-            _ => self.leave_clause(entry.entry, code, ran),
+            _ => self.leave_clause(entry.entry, ran),
         };
         // The clause's *own* failure came back as `Ran(Err(_))` and was
         // recorded just above; this `Err` is the boundary's, and it is the
@@ -3627,13 +3627,9 @@ impl Interp {
     /// end
     /// say 'after'
     /// ```
-    pub(crate) fn end_promoted_branch(
-        &mut self,
-        code: &Code<'_>,
-        flow: Flow,
-    ) -> Result<Flow, Failure> {
+    pub(crate) fn end_promoted_branch(&mut self, flow: Flow) -> Result<Flow, Failure> {
         let line = self.activity.clause_state.line();
-        match self.in_clause(code, line, move |_| Ok(flow))? {
+        match self.in_clause(line, move |_| Ok(flow))? {
             ClauseOutcome::Ran(ran) => ran,
             ClauseOutcome::Ended(exit) => Ok(Flow::Exit(exit.value())),
         }

@@ -1124,7 +1124,7 @@ impl Interp {
                 let do_line = self
                     .clause_line_at(code, index, instruction, source)
                     .unwrap_or_else(|| self.activity.clause_state.line());
-                match self.in_clause(code, do_line, |it| {
+                match self.in_clause(do_line, |it| {
                     // A block that opened, so the boundary's own handler runs
                     // one level in -- the `select case raiser()` row of
                     // `settle_block_indent`'s table, and the same call.
@@ -1174,7 +1174,7 @@ impl Interp {
                         // but cheap to keep uniform rather than silently
                         // exempt).
                         let end_indent = self.printed_indent(code, index);
-                        match self.in_clause(code, end_line, |it| {
+                        match self.in_clause(end_line, |it| {
                             if it.trace_mode().all
                                 && let Some((line, text)) = it.clause_site(source, end_instruction)
                             {
@@ -1404,7 +1404,7 @@ impl Interp {
                 HeaderClause::End => end_line,
                 HeaderClause::Iterate { line } => line,
             };
-            let header = self.in_clause(code, header_line, |it| {
+            let header = self.in_clause(header_line, |it| {
                 // **A header that fails is blamed on the clause that
                 // transferred control back here, at the loop body's indent**
                 // -- not on the `DO` clause, which is where the enclosing
@@ -1566,7 +1566,7 @@ impl Interp {
                 // dropping both is what `a_while_retest_belongs_to_the_do_
                 // clause_then_to_the_end_clause` and `a_loop_retest_after_
                 // an_iterate_belongs_to_the_iterate_clause` fail on.
-                let tested = self.in_clause(code, until_line, |it| {
+                let tested = self.in_clause(until_line, |it| {
                     let held = it.eval_condition(
                         code,
                         &cond.condition,
@@ -1836,7 +1836,7 @@ impl Interp {
         let do_line = self
             .clause_line_at(code, index, instruction, source)
             .unwrap_or_else(|| self.activity.clause_state.line());
-        match self.in_clause(code, do_line, |it| {
+        match self.in_clause(do_line, |it| {
             it.settle_block_indent(true, do_indent);
             Ok(())
         })? {
@@ -2021,7 +2021,7 @@ impl Interp {
         // untouched -- `trace_clause` does not set it -- so without this the
         // `UNTIL`'s intermediates would read the `DO`'s own indent.
         self.activity.clause_state.current_value_indent = loop_indent;
-        let tested = self.in_counted_clause(code, until_line, counted, |it| {
+        let tested = self.in_counted_clause(until_line, counted, |it| {
             let held = pinned!(
                 it,
                 crate::pinning::PinKind::LoopHeader,
@@ -2135,7 +2135,7 @@ impl Interp {
                 Err(failure)
             }
         };
-        let header = self.leave_clause(entry, code, ran);
+        let header = self.leave_clause(entry, ran);
         let header = match header {
             Ok(header) => header,
             // The boundary's own failure, a requested `HALT`, is blamed as the
@@ -2175,7 +2175,7 @@ impl Interp {
         if !matches!(blame, HeaderClause::Do) {
             self.activation_mut().clock_stale = true;
         }
-        let header = self.in_counted_clause(code, header_line, counted, |it| {
+        let header = self.in_counted_clause(header_line, counted, |it| {
             let advanced = match it.loop_advance(code, state, do_indent, loop_indent) {
                 Ok(advanced) => advanced,
                 Err(failure) => {

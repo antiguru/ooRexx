@@ -14,7 +14,7 @@
 use std::time::{Duration, Instant};
 
 use crate::run::Flow;
-use crate::{Code, Ended, Failure, Interp, ObjRef};
+use crate::{Ended, Failure, Interp, ObjRef};
 
 /// A wall-clock bound on a whole run, honoured at the clause boundary and
 /// unset by default.
@@ -222,26 +222,24 @@ impl Interp {
     #[inline(always)]
     pub(crate) fn in_clause<T: ClauseValue>(
         &mut self,
-        code: &Code<'_>,
         line: usize,
         body: impl FnOnce(&mut Self) -> Result<T, Failure>,
     ) -> Result<ClauseOutcome<T>, Failure> {
         let counted = self.count_clause_against_deadline(false)?;
-        self.in_counted_clause(code, line, counted, body)
+        self.in_counted_clause(line, counted, body)
     }
 
     /// [`Interp::in_clause`] for a clause already `counted`.
     #[inline(always)]
     pub(crate) fn in_counted_clause<T: ClauseValue>(
         &mut self,
-        code: &Code<'_>,
         line: usize,
         counted: DeadlineCounted,
         body: impl FnOnce(&mut Self) -> Result<T, Failure>,
     ) -> Result<ClauseOutcome<T>, Failure> {
         let entry = self.enter_clause(line, counted);
         let ran = body(self);
-        self.leave_clause(entry, code, ran)
+        self.leave_clause(entry, ran)
     }
 
     /// Opens the clause at `line`: everything [`Interp::in_clause`] does before
@@ -393,7 +391,6 @@ impl Interp {
     pub(crate) fn leave_clause<T: ClauseValue>(
         &mut self,
         entry: ClauseEntry,
-        code: &Code<'_>,
         ran: Result<T, Failure>,
     ) -> Result<ClauseOutcome<T>, Failure> {
         let ClauseEntry(()) = entry;
@@ -408,7 +405,7 @@ impl Interp {
         if let Some(value) = value.rooted() {
             self.roots.activity_mut().push_temp(value);
         }
-        match self.deliver_pending_traps(code)? {
+        match self.deliver_pending_traps()? {
             Some(exit) => Ok(ClauseOutcome::Ended(exit)),
             None => Ok(ClauseOutcome::Ran(ran)),
         }

@@ -2446,7 +2446,7 @@ impl Interp {
                     InstructionKind::Do(_) | InstructionKind::Loop(_)
                 ) && !self.activity.pending_traps.is_empty() =>
             {
-                match self.deliver_pending_traps(code)? {
+                match self.deliver_pending_traps()? {
                     Some(exit) => Ok(RegionEnd::Flowed(Flow::Exit(exit.value()))),
                     None => ran,
                 }
@@ -2511,7 +2511,7 @@ impl Interp {
                     crate::run::FlatStep::Done(_) => do_indent,
                 };
             }
-            self.deliver_pending_traps(code)?
+            self.deliver_pending_traps()?
         };
         self.restore_clause_state(stepped);
         match exit {
@@ -3704,7 +3704,7 @@ impl Interp {
                         // wrapper to run. `Interp::end_promoted_branch`'s doc comment
                         // has the program that says it is not a spare one.
                         Op::EndBranch => {
-                            break 'step (self.end_promoted_branch(code, Flow::Next)?, pc + 1);
+                            break 'step (self.end_promoted_branch(Flow::Next)?, pc + 1);
                         }
                         Op::EndWhen => {
                             match self.leave_ended_select_branch(
@@ -3960,7 +3960,7 @@ impl Interp {
         let flow = self.leave_select(code, frame.select, frame.label, frame.resume, flow)?;
         // A matched `WHEN`'s branch is one the oracle closes with a synthetic
         // instruction, so it owes that instruction's boundary.
-        self.end_promoted_branch(code, flow)
+        self.end_promoted_branch(flow)
     }
 
     /// The frame [`Op::EnterWhen`] opens: the matched branch of the listed

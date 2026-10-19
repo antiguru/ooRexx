@@ -398,6 +398,15 @@ impl Interp {
         let target = match self.resolve_signal_target(&trap.label) {
             Ok(target) => target,
             Err(missing) => {
+                // The 16.1 is raised here, at the raising clause of the Rexx
+                // level holding the trap: nothing of the condition that found
+                // the trap, nor of the levels it left, belongs to it.
+                let site = self.activity.failure_site.take();
+                self.clear_failure_levels();
+                self.activity.failure_site = site;
+                self.activity.pending_additional = None;
+                self.activity.pending_result = None;
+                self.activity.pending_rc = None;
                 let traps = &mut self.activation_mut().traps;
                 match traps.get(raised.condition.as_bytes()) {
                     Some(_) => traps.remove(raised.condition.as_bytes()),
@@ -489,7 +498,7 @@ impl Interp {
         // activation. This is the point where that is decided in favour of
         // "trapped here, execution continues", so it is the point where a
         // `CALL ON` handler queued by the same clause is owed its run.
-        if let Some(exit) = self.deliver_pending_traps(code)? {
+        if let Some(exit) = self.deliver_pending_traps()? {
             return Ok(Flow::Exit(exit.value()));
         }
         Ok(Flow::Signal(target))
@@ -498,12 +507,7 @@ impl Interp {
     /// Runs every handler this clause boundary owes, in the order the
     /// conditions were queued, and stops early only if one of them ends the
     /// program.
-    /// `_code` is the body the boundary is in; a handler resolves against the
-    /// running activation instead.
-    pub(crate) fn deliver_pending_traps(
-        &mut self,
-        _code: &Code<'_>,
-    ) -> Result<Option<HandlerExit>, Failure> {
+    pub(crate) fn deliver_pending_traps(&mut self) -> Result<Option<HandlerExit>, Failure> {
         // Snapshotted rather than re-read, so that anything a handler queues
         // lands beyond the prefix this boundary is answering for.
         let mut owed = self.activity.pending_traps.len();
@@ -951,7 +955,7 @@ impl Interp {
         // This routine returns `result`, and the condition is offered to the
         // caller -- the input reader's dispatcher, where the caller is the one
         // that sent the reader's `LINEIN`.
-        let (caller, replied) = (sender.activation, sender.replied);
+        let caller = sender.activation;
         if self.input_dispatcher_takes(caller) {
             return Ok(finish(result));
         }
@@ -965,6 +969,9 @@ impl Interp {
         };
         let trap = caller.and_then(|_| self.trap_at_depth(sender.depth, &name));
         match trap {
+            Some(trap) if trap.call && sender.reply_issued && result.is_some() => {
+                Err(Raised::return_after_reply().into())
+            }
             // A `CALL ON` trap resumes, so the condition waits for the
             // caller's current clause to finish -- `deliver_pending_traps`
             // has the two transcripts that pin the wait.
@@ -1053,7 +1060,9 @@ impl Interp {
                 Err(raised.into())
             }
             // `returnFrom`'s check (`RexxActivation::raise`).
-            None if replied && result.is_some() => Err(Raised::return_after_reply().into()),
+            None if sender.reply_issued && result.is_some() => {
+                Err(Raised::return_after_reply().into())
+            }
             None => Ok(finish(result)),
         }
     }
@@ -1150,7 +1159,7 @@ impl Interp {
             true => Flow::Return(result),
             false => Flow::Exit(result),
         };
-        let (caller, replied) = (sender.activation, sender.replied);
+        let caller = sender.activation;
         if caller.is_some() && self.input_dispatcher_takes(caller) {
             return Ok(finish(result));
         }
@@ -1158,6 +1167,9 @@ impl Interp {
         let trap =
             caller.and_then(|caller| Some((caller, self.trap_at_depth(sender.depth, name)?)));
         match trap {
+            Some((_, trap)) if trap.call && sender.reply_issued && result.is_some() => {
+                Err(Raised::return_after_reply().into())
+            }
             Some((caller, trap)) if trap.call => {
                 if let Some(object) = object {
                     self.propagate_to_call_trap(object)?;
@@ -1198,7 +1210,9 @@ impl Interp {
                 raised.delivery.search = if returns { Search::Here } else { Search::Top };
                 Err(raised.into())
             }
-            None if replied && result.is_some() => Err(Raised::return_after_reply().into()),
+            None if sender.reply_issued && result.is_some() => {
+                Err(Raised::return_after_reply().into())
+            }
             None => Ok(finish(result)),
         }
     }
@@ -1220,10 +1234,10 @@ impl Interp {
             self.first_non_internal_depth()
         };
         let depth = if in_fragment { 0 } else { top + 1 };
-        let replied = !in_fragment
-            && self
-                .frame_at(top)
-                .is_some_and(|activation| activation.reply != ReplyState::None);
+        let reply_issued = self
+            .frame_at(top)
+            .is_some_and(|activation| activation.reply != ReplyState::None);
+        let replied = !in_fragment && reply_issued;
         let activation = self
             .frame_at(depth)
             .map(|activation| activation.id)
@@ -1233,7 +1247,7 @@ impl Interp {
             depth,
             in_fragment,
             returns,
-            replied,
+            reply_issued,
             activation,
         }
     }
@@ -1322,9 +1336,12 @@ struct Sender {
     /// with a `RETURN` tail offers it to.
     in_fragment: bool,
     returns: bool,
-    /// Whether `top` has replied, so nothing is offered the condition.
-    replied: bool,
-    /// The identity of the level at `depth`, unless `replied`.
+    /// Whether `top` has replied, which an `INTERPRET` fragment's sender
+    /// inherits: a value it returns is then 98.936 (`returnFrom`) unless a
+    /// `SIGNAL ON` trap takes the condition first.
+    reply_issued: bool,
+    /// The identity of the level at `depth`, unless that level is beyond a
+    /// `top` that has replied.
     activation: Option<crate::activation::ActivationId>,
 }
 
