@@ -1,0 +1,18 @@
+refExposed 98.995 Unable to reference variable "ABC"; it must be an uninitialized local variable.
+refAutoExposed 98.995 Unable to reference variable "ABC"; it must be an uninitialized local variable.
+refLocal answers 1
+refExposedStem 98.995 Unable to reference variable "ABC."; it must be an uninitialized local variable.
+refAutoExposedStem 98.995 Unable to reference variable "ABC."; it must be an uninitialized local variable.
+refLocalStem answers one
+doubleArgStem 98.995 Unable to reference variable "ABC."; it must be an uninitialized local variable.
+doubleArgStem 98.995 Unable to reference variable "ABC."; it must be an uninitialized local variable.
+doubleArgStem 98.995 Unable to reference variable "ABC."; it must be an uninitialized local variable.
+refAfterDrop answers one
+doubleArg 98.995 Unable to reference variable "ABC"; it must be an uninitialized local variable.
+refTwice 98.995 Unable to reference variable "ABC"; it must be an uninitialized local variable.
+refTwiceUnset answers bound twice
+kindFirst 88.930 The 1 argument must be a VariableReference for a simple variable; found "A.".
+unsetPool 98.995 Unable to reference variable "POOLED"; it must be an uninitialized local variable.
+setPool 98.995 Unable to reference variable "POOLED"; it must be an uninitialized local variable.
+twiceExposed 98.995 Unable to reference variable "Q"; it must be an uninitialized local variable.
+a 1 a.1 one

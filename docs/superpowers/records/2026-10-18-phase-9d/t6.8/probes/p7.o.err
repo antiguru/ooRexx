@@ -1,0 +1,8 @@
+     3 *-* call pe
+    13 *-*   pe:
+    13 *-*   procedure expose a.i (list) a.1
+       >V>     LIST => "c"
+       >C>     A.I => "A.2"
+       >C>     A.1 => "A.1"
+    14 *-*   return
+     4 *-* trace off

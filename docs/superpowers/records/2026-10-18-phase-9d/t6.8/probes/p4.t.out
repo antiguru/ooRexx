@@ -1,0 +1,14 @@
+refExposed: 98.995 [Unable to reference variable "ABC"; it must be an uninitialized local variable.]
+refExposedSet: 98.995 [Unable to reference variable "ABC"; it must be an uninitialized local variable.]
+refAutoExposed: 98.995 [Unable to reference variable "ABC"; it must be an uninitialized local variable.]
+refLocal: ok 1
+refExposedStem: 98.995 [Unable to reference variable "ABC."; it must be an uninitialized local variable.]
+refAutoExposedStem: 98.995 [Unable to reference variable "ABC."; it must be an uninitialized local variable.]
+refLocalStem: ok one
+doubleArgStem: 98.995 [Unable to reference variable "ABC."; it must be an uninitialized local variable.]
+doubleArg: 98.995 [Unable to reference variable "ABC"; it must be an uninitialized local variable.]
+refTwice: 98.995 [Unable to reference variable "ABC"; it must be an uninitialized local variable.]
+refTwiceUnset: ok twice
+refAutoTwice: 98.995 [Unable to reference variable "ABC"; it must be an uninitialized local variable.]
+kindFirst: 88.930 [The 1 argument must be a VariableReference for a simple variable; found "A.".]
+a = 1 a.1 = one

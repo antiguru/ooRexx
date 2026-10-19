@@ -1,0 +1,15 @@
+       >I> Routine "" in package "".
+     1 *-* nop
+       <I< Routine "" in package "".
+       >I> Routine "rr" in package "rr".
+     1 *-* nop
+       <I< Routine "rr" in package "rr".
+       >I> Routine "rr" in package "rr".
+     1 *-* nop;
+       <I< Routine "rr" in package "rr".
+       >I> Method "A" with scope "K" in package "".
+     1 *-* nop
+       <I< Method "A" with scope "K" in package "".
+       >I> Method "B" with scope ".NIL" in package "bb".
+     1 *-* nop;
+       <I< Method "B" with scope ".NIL" in package "bb".

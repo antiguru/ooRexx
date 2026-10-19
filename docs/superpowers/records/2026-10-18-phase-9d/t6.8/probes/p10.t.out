@@ -1,0 +1,4 @@
+n1 NOLIST2 c=3 VAR
+after pf h VAR VAR
+n1 NOLIST3 c=h VAR
+after pg h LIT

@@ -1,0 +1,111 @@
+     5 *-* list = 'a b'
+       >L>   "a b"
+       >>>   "a b"
+       >=>   LIST <= "a b"
+     6 *-* a = 1;
+       >L>   "1"
+       >>>   "1"
+       >=>   A <= "1"
+     6 *-* b = 2
+       >L>   "2"
+       >>>   "2"
+       >=>   B <= "2"
+     7 *-* drop (list)
+       >V>   LIST => "a b"
+     8 *-* say symbol('a') symbol('b')
+       >L>   "a"
+       >A>   "a"
+       >F>   SYMBOL => "LIT"
+       >L>   "b"
+       >A>   "b"
+       >F>   SYMBOL => "LIT"
+       >O>   " " => "LIT LIT"
+       >>>   "LIT LIT"
+     9 *-* list = 'c';
+       >L>   "c"
+       >>>   "c"
+       >=>   LIST <= "c"
+     9 *-* c = 3
+       >L>   "3"
+       >>>   "3"
+       >=>   C <= "3"
+    10 *-* call pe
+    20 *-*   pe:
+    20 *-*   procedure expose (list)
+       >V>     LIST => "c"
+    21 *-*   say c
+       >V>     C => "3"
+       >>>     "3"
+    22 *-*   return
+    11 *-* lst. = 'x y';
+       >L>   "x y"
+       >>>   "x y"
+       >=>   LST. <= "x y"
+    11 *-* x = 1;
+       >L>   "1"
+       >>>   "1"
+       >=>   X <= "1"
+    11 *-* y = 2
+       >L>   "2"
+       >>>   "2"
+       >=>   Y <= "2"
+    12 *-* drop (lst.)
+       >V>   LST. => "x y"
+    13 *-* say symbol('x') symbol('y') symbol('lst.')
+       >L>   "x"
+       >A>   "x"
+       >F>   SYMBOL => "LIT"
+       >L>   "y"
+       >A>   "y"
+       >F>   SYMBOL => "LIT"
+       >O>   " " => "LIT LIT"
+       >L>   "lst."
+       >A>   "lst."
+       >F>   SYMBOL => "VAR"
+       >O>   " " => "LIT LIT VAR"
+       >>>   "LIT LIT VAR"
+    14 *-* q.1 = 'z';
+       >L>   "z"
+       >>>   "z"
+       >C>   Q.1 => "Q.1"
+       >=>   Q.1 <= "z"
+    14 *-* z = 5
+       >L>   "5"
+       >>>   "5"
+       >=>   Z <= "5"
+    15 *-* drop (q.1)
+       >C>   Q.1 => "Q.1"
+       >V>   Q.1 => "z"
+    16 *-* say symbol('z') symbol('q.1')
+       >L>   "z"
+       >A>   "z"
+       >F>   SYMBOL => "LIT"
+       >L>   "q.1"
+       >A>   "q.1"
+       >F>   SYMBOL => "VAR"
+       >O>   " " => "LIT VAR"
+       >>>   "LIT VAR"
+    17 *-* .k~new~m
+       >E>   .K => "The K class"
+       >M>   "NEW" => "a K"
+       >I> Method "M" with scope "K" in package "DIR/variable_list_selector_trace.rex".
+    26 *-* expose zz
+    27 *-* zz = 'w'
+       >L>   "w"
+       >>>   "w"
+       >=>   ZZ <= "w"
+    28 *-* self~m2
+       >V>   SELF => "a K"
+       >I> Method "M2" with scope "K" in package "DIR/variable_list_selector_trace.rex".
+    31 *-* expose zz (zz)
+       >V>   ZZ => "w"
+    32 *-* w = 'object w'
+       >L>   "object w"
+       >>>   "object w"
+       >=>   W <= "object w"
+       <I< Method "M2" with scope "K" in package "DIR/variable_list_selector_trace.rex".
+    29 *-* say zz
+       >V>   ZZ => "w"
+       >>>   "w"
+       <I< Method "M" with scope "K" in package "DIR/variable_list_selector_trace.rex".
+    18 *-* exit

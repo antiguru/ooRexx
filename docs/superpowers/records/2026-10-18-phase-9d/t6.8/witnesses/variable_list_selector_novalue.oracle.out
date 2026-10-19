@@ -1,0 +1,8 @@
+dropUnset 98.986 Reference to unassigned variable "NOLIST".
+procedureUnset 98.986 Reference to unassigned variable "NOLIST2".
+exposeUnset 98.986 Reference to unassigned variable "NOLIST3".
+dropSet answers LIT
+procedureSet answers set in ps
+setNames answers v
+exposeSet answers object v
+dropTrapped answers NOVALUE NOLIST4 57

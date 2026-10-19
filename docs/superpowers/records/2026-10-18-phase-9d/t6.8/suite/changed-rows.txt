@@ -1,0 +1,35 @@
+# diff <(grep -v '^#' t6.7/r1/suite/tests.tsv | sort) <(grep -v '^#' t6.8/suite/tests.tsv | sort)
+1971,1972c1971,1972
+< base/bif/CONDITION	TEST_NOVALUE_DROP	-	passed	failed
+< base/bif/CONDITION	TEST_NOVALUE_METHOD_EXPOSE	-	passed	failed
+---
+> base/bif/CONDITION	TEST_NOVALUE_DROP	-	passed	passed
+> base/bif/CONDITION	TEST_NOVALUE_METHOD_EXPOSE	-	passed	passed
+1975c1975
+< base/bif/CONDITION	TEST_NOVALUE_PROEDURE_EXPOSE	-	passed	failed
+---
+> base/bif/CONDITION	TEST_NOVALUE_PROEDURE_EXPOSE	-	passed	passed
+22817c22817
+< base/keyword/TRACE	TEST_TRACE_DROP	-	passed	failed
+---
+> base/keyword/TRACE	TEST_TRACE_DROP	-	passed	passed
+22820c22820
+< base/keyword/TRACE	TEST_TRACE_EXPOSE	-	passed	failed
+---
+> base/keyword/TRACE	TEST_TRACE_EXPOSE	-	passed	passed
+22937c22937
+< base/keyword/VarRef	TESTDOUBLEARGSTEM	-	passed	failed
+---
+> base/keyword/VarRef	TESTDOUBLEARGSTEM	-	passed	passed
+22943,22944c22943,22944
+< base/keyword/VarRef	TESTREFAUTOEXPOSED	-	passed	failed
+< base/keyword/VarRef	TESTREFAUTOEXPOSEDSTEM	-	passed	failed
+---
+> base/keyword/VarRef	TESTREFAUTOEXPOSED	-	passed	passed
+> base/keyword/VarRef	TESTREFAUTOEXPOSEDSTEM	-	passed	passed
+22946,22947c22946,22947
+< base/keyword/VarRef	TESTREFEXPOSED	-	passed	failed
+< base/keyword/VarRef	TESTREFEXPOSEDSTEM	-	passed	failed
+---
+> base/keyword/VarRef	TESTREFEXPOSED	-	passed	passed
+> base/keyword/VarRef	TESTREFEXPOSEDSTEM	-	passed	passed

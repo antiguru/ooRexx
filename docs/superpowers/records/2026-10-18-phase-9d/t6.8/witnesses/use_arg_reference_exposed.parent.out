@@ -1,0 +1,18 @@
+refExposed answers ABC
+refAutoExposed answers ABC
+refLocal answers 1
+refExposedStem answers ABC.1
+refAutoExposedStem answers ABC.1
+refLocalStem answers one
+doubleArgStem 98.995 Unable to reference variable "ABC."; it must be an uninitialized local variable.
+doubleArgStem answers one
+doubleArgStem answers one
+refAfterDrop answers one
+doubleArg 98.995 Unable to reference variable "ABC"; it must be an uninitialized local variable.
+refTwice 98.995 Unable to reference variable "ABC"; it must be an uninitialized local variable.
+refTwiceUnset answers bound twice
+kindFirst 88.930 The 1 argument must be a VariableReference for a simple variable; found "A.".
+unsetPool 91.999 Message "SEND" did not return a result.
+setPool 98.995 Unable to reference variable "POOLED"; it must be an uninitialized local variable.
+twiceExposed answers bound twice
+a 1 a.1 one

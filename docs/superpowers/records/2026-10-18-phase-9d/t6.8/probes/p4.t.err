@@ -1,0 +1,4 @@
+    30 *-*   use arg >a
+    17 *-* call r1 >a
+Error 98 running DIR/p4.rex line 30:  Execution error.
+Error 98.995:  Unable to reference variable "A"; it must be an uninitialized local variable.

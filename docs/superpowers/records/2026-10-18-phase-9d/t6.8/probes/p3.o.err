@@ -1,0 +1,25 @@
+     4 *-* drop (list)
+       >V>   LIST => "a b"
+     5 *-* trace off
+    25 *-*   nop
+    26 *-*   trace off
+    30 *-*     call pe3
+    32 *-*       pe3:
+    32 *-*       procedure expose (list)
+       >V>         LIST => "c"
+    33 *-*       say c
+       >V>         C => "3"
+       >>>         "3"
+    34 *-*       return
+    31 *-*     return
+       >I> Method "M2" with scope "K" in package "".
+     1 *-* expose zz (zz) v;
+       >V>   ZZ => "w"
+       <I< Method "M2" with scope "K" in package "".
+    13 *-* drop (lst.)
+       >V>   LST. => "x y"
+    14 *-* trace off
+    19 *-* drop (q.1)
+       >C>   Q.1 => "Q.1"
+       >V>   Q.1 => "y"
+    20 *-* trace off

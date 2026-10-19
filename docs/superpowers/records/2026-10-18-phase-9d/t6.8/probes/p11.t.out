@@ -1,0 +1,4 @@
+s1 31.2 c=3 d=4 sel=9bad
+after pg h2 h3
+s1 41.1 c=h2 d=h3 sel=SEL
+after ph h2 h3

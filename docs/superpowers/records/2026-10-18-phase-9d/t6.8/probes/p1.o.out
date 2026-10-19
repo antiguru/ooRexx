@@ -1,0 +1,5 @@
+DROP: SYNTAX 98.986 [Reference to unassigned variable "NOLIST".]
+PE: SYNTAX 98.986 [Reference to unassigned variable "WHICH".]
+EXPOSE: SYNTAX 98.986 [Reference to unassigned variable "NOLIST3".]
+dropset ok LIT
+DROPSET: not raised
