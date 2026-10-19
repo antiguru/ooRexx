@@ -3856,7 +3856,7 @@ impl Interp {
                 self.activity.clause_state.current_value_indent,
                 name,
                 &rendered,
-            );
+            )?;
         }
         Ok(value)
     }
@@ -3878,7 +3878,7 @@ impl Interp {
                 // An omitted position traces an empty value line, not no
                 // line -- the same rule a call's own argument list follows.
                 None => {
-                    self.trace_argument(self.activity.clause_state.current_value_indent, b"");
+                    self.trace_argument(self.activity.clause_state.current_value_indent, b"")?;
                     values.push(None);
                 }
                 Some(expr) => values.push(Some(self.eval_traced_argument(code, expr)?)),

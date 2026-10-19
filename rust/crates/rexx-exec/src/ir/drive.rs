@@ -409,11 +409,7 @@ macro_rules! region_ops {
                         // for one clause.
                         let indent =
                             $self.activity.clause_state.current_value_indent;
-                        $self.echo_compiled_clause($source, $clause, indent);
-                        // A failed delivery abandons the clause it echoes.
-                        if !$self.activity.pending_traps.is_empty()
-                            && let Some(failure) = $self.take_trace_failure()
-                        {
+                        if let Err(failure) = $self.echo_compiled_clause($source, $clause, indent) {
                             break $cold Err(failure);
                         }
                     }
@@ -475,7 +471,9 @@ macro_rules! region_ops {
                     if !$self.tracing_intermediates() {
                         continue 'region_loop;
                     }
-                    $self.trace_call_arg($registers, *src);
+                    if let Err(failure) = $self.trace_call_arg($registers, *src) {
+                        break $cold Err(failure);
+                    }
                 }
                 Op::CallArgs {
                     slot,
@@ -552,7 +550,9 @@ macro_rules! region_ops {
                         break $cold Err(Loud::call_op_off_its_node().into());
                     };
                     let value = $registers.get(*src);
-                    $self.trace_intermediate($code, expr, value);
+                    if let Err(failure) = $self.trace_intermediate($code, expr, value) {
+                        break $cold Err(failure);
+                    }
                 }
                 // A send whose receiver and arguments ops of this region
                 // computed. Its body is behind a call for the reason
@@ -719,7 +719,9 @@ macro_rules! region_ops {
                         continue 'region_loop;
                     }
                     let value = $registers.get(*src);
-                    $self.echo_literal(value);
+                    if let Err(failure) = $self.echo_literal(value) {
+                        break $cold Err(failure);
+                    }
                 }
                 // **The second native expression op**: one bare
                 // symbol's own value, through the same
@@ -811,7 +813,9 @@ macro_rules! region_ops {
                         continue 'region_loop;
                     }
                     let value = $registers.get(*src);
-                    $self.echo_symbol_read($code, *symbol, value);
+                    if let Err(failure) = $self.echo_symbol_read($code, *symbol, value) {
+                        break $cold Err(failure);
+                    }
                 }
                 // **A native expression op**: one arithmetic
                 // operator applied to two registers, through
@@ -940,7 +944,9 @@ macro_rules! region_ops {
                         continue 'region_loop;
                     }
                     let value = $registers.get(*src);
-                    $self.echo_operator(*op, value);
+                    if let Err(failure) = $self.echo_operator(*op, value) {
+                        break $cold Err(failure);
+                    }
                 }
                 // **A prefix operator**: `+`, `-` or `\`
                 // applied to one register, through the same
@@ -998,7 +1004,9 @@ macro_rules! region_ops {
                         continue 'region_loop;
                     }
                     let value = $registers.get(*src);
-                    $self.echo_prefix_op(*op, value);
+                    if let Err(failure) = $self.echo_prefix_op(*op, value) {
+                        break $cold Err(failure);
+                    }
                 }
                 // The write, through `Interp::assign_evaluated`
                 // -- the whole of what `step`'s own
@@ -1558,7 +1566,9 @@ macro_rules! region_ops {
                      reserved"
                     );
                     let value = $registers.get(*src);
-                    $self.echo_header_value(*role, value);
+                    if let Err(failure) = $self.echo_header_value(*role, value) {
+                        break $cold Err(failure);
+                    }
                 }
                 // One header value's own validation, in front of
                 // the next value's evaluation because that order
@@ -1794,7 +1804,7 @@ macro_rules! open_clause {
         // `crate::ir::Op::Clause` is itself defined in
         // terms of -- so a promoted clause and an unpromoted one
         // discharge the same list from the same code.
-        $entry = $self.enter_stepped_clause(
+        $entry = match $self.enter_stepped_clause(
             echo,
             $code,
             $index,
@@ -1802,7 +1812,10 @@ macro_rules! open_clause {
             $source,
             $chunk.position_at($index),
             counted,
-        );
+        ) {
+            Ok(entry) => entry,
+            Err(failure) => return Err(failure),
+        };
         // Taken on entry exactly as `step` takes it, because a
         // promoted clause is a clause and the permission is spent
         // by whichever clause the activation granted it to.
@@ -1944,16 +1957,17 @@ impl Interp {
     /// One [`crate::ir::Op::TraceArgument`]'s `>A>` line, its gate already
     /// answered by the caller.
     #[inline(never)]
-    fn trace_call_arg(&mut self, registers: RegFrame<'_>, src: u16) {
+    fn trace_call_arg(&mut self, registers: RegFrame<'_>, src: u16) -> Result<(), Failure> {
         let indent = self.activity.clause_state.current_value_indent;
         if src == Op::ARG_OMITTED {
-            self.trace_argument(indent, b"");
-            return;
+            self.trace_argument(indent, b"")?;
+            return Ok(());
         }
         let value = registers.get(src);
         if let Some(rendered) = self.intermediate_text(value) {
-            self.trace_argument(indent, &rendered);
+            self.trace_argument(indent, &rendered)?;
         }
+        Ok(())
     }
 
     /// One [`crate::ir::Op::CallArgs`]: resolve the callee, then run it over
@@ -2367,7 +2381,7 @@ impl Interp {
         if let Some(value) = sent
             && self.tracing_intermediates()
         {
-            self.trace_sent(chunk.send_name(site).unwrap_or_default(), value);
+            self.trace_sent(chunk.send_name(site).unwrap_or_default(), value)?;
         }
         if form == SendForm::Value {
             return Ok(sent.unwrap_or(ObjRef::NIL));
@@ -2389,13 +2403,14 @@ impl Interp {
     /// The `>M>` line a send of `name` that answered `value` owes.
     #[cold]
     #[inline(never)]
-    fn trace_sent(&mut self, name: &[u8], value: ObjRef) {
+    fn trace_sent(&mut self, name: &[u8], value: ObjRef) -> Result<(), Failure> {
         // Rooted across the rendering, which can run a `STRING` method.
         self.roots.activity_mut().push_temp(value);
         if let Some(rendered) = self.intermediate_text(value) {
             let indent = self.activity.clause_state.current_value_indent;
-            self.trace_message(indent, name, &rendered);
+            self.trace_message(indent, name, &rendered)?;
         }
+        Ok(())
     }
 
     /// One [`Op::List`]: the array of the `argc` values on top of the argument
@@ -2416,7 +2431,7 @@ impl Interp {
         registers.set(dst, array);
         if let Some(rendered) = self.result_text(array) {
             let indent = self.activity.clause_state.current_value_indent;
-            self.trace_result(indent, &rendered);
+            self.trace_result(indent, &rendered)?;
         }
         Ok(())
     }

@@ -2382,7 +2382,6 @@ impl Interp {
                     queued_during_delivery: owner == running,
                     request: false,
                     fragment_depth: self.activity.fragment_depth,
-                    trace_failure: None,
                 });
                 Ok(())
             }
@@ -2591,7 +2590,6 @@ fn request_halt(target: &mut Activity, description: Option<Vec<u8>>) -> Option<b
         queued_during_delivery: true,
         request: true,
         fragment_depth: target.fragment_depth,
-        trace_failure: None,
     });
     Some(true)
 }

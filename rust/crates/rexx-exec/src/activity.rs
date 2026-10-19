@@ -709,7 +709,6 @@ impl Activity {
             queued_during_delivery: _,
             request: _,
             fragment_depth: _,
-            trace_failure: _,
         } in pending_traps
         {
             out.extend(*object);

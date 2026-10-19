@@ -16,7 +16,7 @@
 //! `TRACE`/`TRACE VALUE` setting goes through to become one.
 
 use crate::Interp;
-use crate::error::Raised;
+use crate::error::{Failure, Raised};
 use rexx_core::ObjRef;
 use rexx_num::Number;
 use rexx_parse::{Operator, PrefixOp, Trace};
@@ -149,8 +149,13 @@ impl Interp {
     /// call sites for why a `DO`/`LOOP` needs a second echo and nothing else
     /// built so far does). A label cannot appear at any of them -- one
     /// inside a `DO` block is error 47.2 at parse time, measured.
-    pub(crate) fn trace_clause(&mut self, line: usize, indent: usize, text: &[u8]) {
-        self.trace_stepped_clause(false, false, line, indent, text);
+    pub(crate) fn trace_clause(
+        &mut self,
+        line: usize,
+        indent: usize,
+        text: &[u8],
+    ) -> Result<(), Failure> {
+        self.trace_stepped_clause(false, false, line, indent, text)
     }
 
     /// The same line for a *stepped* instruction, which is the one place a
@@ -163,14 +168,14 @@ impl Interp {
         line: usize,
         indent: usize,
         text: &[u8],
-    ) {
+    ) -> Result<(), Failure> {
         if !self.tracing_clause(is_label, is_command) {
-            return;
+            return Ok(());
         }
-        self.trace_debug_source();
+        self.trace_debug_source()?;
         let start = self.trace.len();
         push_clause(&mut self.trace, line, indent, text);
-        self.route_trace_line(start);
+        self.route_trace_line(start)
     }
 
     /// `traceSourceString` (`RexxActivation.cpp:4007`-`4029`): the banner
@@ -180,12 +185,12 @@ impl Interp {
     ///
     /// Seven blanks, `+++`, a blank and the `PARSE SOURCE` string in double
     /// quotes -- measured, `       +++ "LINUX COMMAND /abs/t.rex"`.
-    pub(crate) fn trace_debug_source(&mut self) {
+    pub(crate) fn trace_debug_source(&mut self) -> Result<(), Failure> {
         if !self.traced_mode().debug
             || self.activation().debug.source_traced
             || self.untraceable_code()
         {
-            return;
+            return Ok(());
         }
         self.activation_mut().debug.source_traced = true;
         let source = self.debug_source_string();
@@ -195,7 +200,7 @@ impl Interp {
         self.trace.extend_from_slice(&source);
         self.trace.extend_from_slice(b"\"\n");
         make_displayable(&mut self.trace, start);
-        self.route_trace_line(start);
+        self.route_trace_line(start)
     }
 
     /// The `PARSE SOURCE` string this activation would answer, which is what
@@ -218,20 +223,20 @@ impl Interp {
     /// transcript in the report: a `say`'s own `>L>`/`>>>` sit at the same
     /// indent as the `say` clause itself, never one level further in).
     #[inline(always)]
-    pub(crate) fn trace_result(&mut self, indent: usize, value: &[u8]) {
+    pub(crate) fn trace_result(&mut self, indent: usize, value: &[u8]) -> Result<(), Failure> {
         if !self.traced_mode().results {
-            return;
+            return Ok(());
         }
-        self.trace_result_line(indent, value);
+        self.trace_result_line(indent, value)
     }
 
     /// The line itself, out of line: the gate above is what every call site
     /// pays when tracing is off, and it is one load and a branch.
     #[inline(never)]
-    fn trace_result_line(&mut self, indent: usize, value: &[u8]) {
+    fn trace_result_line(&mut self, indent: usize, value: &[u8]) -> Result<(), Failure> {
         let start = self.trace.len();
         push_value(&mut self.trace, ">>>", indent, value);
-        self.route_trace_line(start);
+        self.route_trace_line(start)
     }
 
     /// A command's own `>>>`, gated on [`TraceMode::commands`] rather than on
@@ -240,11 +245,15 @@ impl Interp {
     /// (`RexxInstructionCommand::execute`). Emitted **before** the command
     /// runs, which is observable: under `TRACE C` a command writing to its
     /// own standard error shows this line first.
-    pub(crate) fn trace_command_value(&mut self, indent: usize, value: &[u8]) {
+    pub(crate) fn trace_command_value(
+        &mut self,
+        indent: usize,
+        value: &[u8],
+    ) -> Result<(), Failure> {
         if !self.traced_mode().commands {
-            return;
+            return Ok(());
         }
-        self.trace_result_line(indent, value);
+        self.trace_result_line(indent, value)
     }
 
     /// The `*-*` and `>>>` a failing command echoes **after** it has run,
@@ -257,24 +266,24 @@ impl Interp {
         indent: usize,
         text: &[u8],
         value: &[u8],
-    ) {
-        self.trace_debug_source();
+    ) -> Result<(), Failure> {
+        self.trace_debug_source()?;
         let start = self.trace.len();
         push_clause(&mut self.trace, line, indent, text);
-        self.route_trace_line(start);
-        self.trace_result_line(indent, value);
+        self.route_trace_line(start)?;
+        self.trace_result_line(indent, value)
     }
 
     /// `+++ "RC(n)"`, the return code of a command that was traced by either
     /// route. Ungated for [`Interp::trace_command_retrace`]'s reason.
-    pub(crate) fn trace_command_rc(&mut self, indent: usize, rc: &[u8]) {
+    pub(crate) fn trace_command_rc(&mut self, indent: usize, rc: &[u8]) -> Result<(), Failure> {
         let start = self.trace.len();
         let mut rendered = Vec::with_capacity(rc.len() + 4);
         rendered.extend_from_slice(b"RC(");
         rendered.extend_from_slice(rc);
         rendered.push(b')');
         push_value(&mut self.trace, "+++", indent, &rendered);
-        self.route_trace_line(start);
+        self.route_trace_line(start)
     }
 
     /// `>K>`, a keyword sub-clause's own value (`DO`'s `TO`/`BY`/`FOR`/
@@ -282,9 +291,14 @@ impl Interp {
     /// `trace_mode.results` like `>>>`, **not** `intermediates`: measured,
     /// `trace r` alone already shows `>K>   "TO" => "2"` with no other
     /// intermediate line anywhere in the same transcript.
-    pub(crate) fn trace_keyword(&mut self, indent: usize, keyword: &str, value: &[u8]) {
+    pub(crate) fn trace_keyword(
+        &mut self,
+        indent: usize,
+        keyword: &str,
+        value: &[u8],
+    ) -> Result<(), Failure> {
         if !self.traced_mode().results {
-            return;
+            return Ok(());
         }
         let start = self.trace.len();
         push_tagged(
@@ -297,9 +311,9 @@ impl Interp {
             value,
         );
         if keyword == "WHEN" {
-            self.route_when_line(start, value);
+            self.route_when_line(start, value)
         } else {
-            self.route_trace_line(start);
+            self.route_trace_line(start)
         }
     }
 
@@ -307,10 +321,11 @@ impl Interp {
     /// where `value` starts with `0`.
     #[cold]
     #[inline(never)]
-    fn route_when_line(&mut self, start: usize, value: &[u8]) {
+    fn route_when_line(&mut self, start: usize, value: &[u8]) -> Result<(), Failure> {
         self.activity.waiting_traced = Some(value.first() == Some(&b'0'));
-        self.route_trace_line(start);
+        let routed = self.route_trace_line(start);
         self.activity.waiting_traced = None;
+        routed
     }
 
     /// `>L>`/`>V>`/`>O>`/`>P>` -- `eval.rs`'s own single post-order insertion
@@ -327,37 +342,37 @@ impl Interp {
     /// `Constant`** (this task's report says so), reasoned from `Literal`'s
     /// own measured shape rather than a second transcript.
     #[inline(always)]
-    pub(crate) fn trace_literal(&mut self, indent: usize, value: &[u8]) {
+    pub(crate) fn trace_literal(&mut self, indent: usize, value: &[u8]) -> Result<(), Failure> {
         if !self.traced_mode().intermediates {
-            return;
+            return Ok(());
         }
-        self.trace_literal_line(indent, value);
+        self.trace_literal_line(indent, value)
     }
 
     /// The line itself, out of line: the gate above is what every call site
     /// pays when tracing is off, and it is one load and a branch.
     #[inline(never)]
-    fn trace_literal_line(&mut self, indent: usize, value: &[u8]) {
+    fn trace_literal_line(&mut self, indent: usize, value: &[u8]) -> Result<(), Failure> {
         let start = self.trace.len();
         push_value(&mut self.trace, ">L>", indent, value);
-        self.route_trace_line(start);
+        self.route_trace_line(start)
     }
 
     /// One literal's own `>L>` line, from the value rather than from its text.
     #[inline(always)]
-    pub(crate) fn echo_literal(&mut self, value: ObjRef) {
+    pub(crate) fn echo_literal(&mut self, value: ObjRef) -> Result<(), Failure> {
         if !self.tracing_intermediates() {
-            return;
+            return Ok(());
         }
-        self.echo_literal_line(value);
+        self.echo_literal_line(value)
     }
 
     /// The rendering and the line, out of line behind [`echo_literal`]'s gate.
     #[inline(never)]
-    fn echo_literal_line(&mut self, value: ObjRef) {
+    fn echo_literal_line(&mut self, value: ObjRef) -> Result<(), Failure> {
         let indent = self.activity.clause_state.current_value_indent;
         let text = self.to_text(value).to_vec();
-        self.trace_literal(indent, &text);
+        self.trace_literal(indent, &text)
     }
 
     /// `>V>` (`TRACE_PREFIX_VARIABLE`): a simple variable or bare stem's own
@@ -371,22 +386,29 @@ impl Interp {
         tag: &[u8],
         value: &[u8],
         object: ObjRef,
-    ) {
+    ) -> Result<(), Failure> {
         if !self.traced_mode().intermediates {
-            return;
+            return Ok(());
         }
-        self.trace_variable_line(indent, tag, value, object);
+        self.trace_variable_line(indent, tag, value, object)
     }
 
     /// The line itself, out of line: the gate above is what every call site
     /// pays when tracing is off, and it is one load and a branch.
     #[inline(never)]
-    fn trace_variable_line(&mut self, indent: usize, tag: &[u8], value: &[u8], object: ObjRef) {
+    fn trace_variable_line(
+        &mut self,
+        indent: usize,
+        tag: &[u8],
+        value: &[u8],
+        object: ObjRef,
+    ) -> Result<(), Failure> {
         let start = self.trace.len();
         push_tagged(&mut self.trace, ">V>", indent, false, tag, " => ", value);
         self.activity.traced_variable = Some(TracedVariable::of(tag, object, false));
-        self.route_trace_line(start);
+        let routed = self.route_trace_line(start);
         self.activity.traced_variable = None;
+        routed
     }
 
     /// `>E>` (`TRACE_PREFIX_DOTVARIABLE`): `.NIL`/`.TRUE`/`.FALSE`, tagged
@@ -396,60 +418,75 @@ impl Interp {
     /// `say .nil` shows `>E>   .NIL => "The NIL object"` *and* `>>>`, both
     /// on pure 4a code (`ExprKind::DotVariable`'s three admissible names are
     /// 4a's own, D15).
-    pub(crate) fn trace_dotvar(&mut self, indent: usize, tag: &[u8], value: &[u8]) {
+    pub(crate) fn trace_dotvar(
+        &mut self,
+        indent: usize,
+        tag: &[u8],
+        value: &[u8],
+    ) -> Result<(), Failure> {
         if !self.traced_mode().intermediates {
-            return;
+            return Ok(());
         }
         let start = self.trace.len();
         push_tagged(&mut self.trace, ">E>", indent, false, tag, " => ", value);
-        self.route_trace_line(start);
+        self.route_trace_line(start)
     }
 
     /// `>N>` (`TRACE_PREFIX_NAMESPACE`): a namespace-qualified class lookup's
     /// result, tagged with `namespace:class` and unquoted --
     /// `traceClassResolution` builds the tag as `n->concatWith(c, ':')` and
     /// passes `quoteTag` false (`RexxActivation.hpp:358`).
-    pub(crate) fn trace_namespace(&mut self, indent: usize, tag: &[u8], value: &[u8]) {
+    pub(crate) fn trace_namespace(
+        &mut self,
+        indent: usize,
+        tag: &[u8],
+        value: &[u8],
+    ) -> Result<(), Failure> {
         if !self.traced_mode().intermediates {
-            return;
+            return Ok(());
         }
         let start = self.trace.len();
         push_tagged(&mut self.trace, ">N>", indent, false, tag, " => ", value);
-        self.route_trace_line(start);
+        self.route_trace_line(start)
     }
 
     /// The `>O>` line one binary operator's result owes, from the value
     /// itself, at the indent the clause in force is tracing values at.
-    pub(crate) fn echo_operator(&mut self, op: Operator, value: ObjRef) {
+    pub(crate) fn echo_operator(&mut self, op: Operator, value: ObjRef) -> Result<(), Failure> {
         if !self.tracing_intermediates() {
-            return;
+            return Ok(());
         }
         let indent = self.activity.clause_state.current_value_indent;
         let text = self.to_text(value).to_vec();
-        self.trace_operator(indent, op.spelling().as_bytes(), &text);
+        self.trace_operator(indent, op.spelling().as_bytes(), &text)
     }
 
     /// `>O>` (`TRACE_PREFIX_OPERATOR`): a binary operator's own result,
     /// tagged with the operator's own spelling, quoted
     /// (`traceOperatorValue` always quotes its tag, unlike `>V>`/`>=>`).
-    pub(crate) fn trace_operator(&mut self, indent: usize, op: &[u8], value: &[u8]) {
+    pub(crate) fn trace_operator(
+        &mut self,
+        indent: usize,
+        op: &[u8],
+        value: &[u8],
+    ) -> Result<(), Failure> {
         if !self.traced_mode().intermediates {
-            return;
+            return Ok(());
         }
         let start = self.trace.len();
         push_operator(&mut self.trace, ">O>", indent, op, value);
-        self.route_trace_line(start);
+        self.route_trace_line(start)
     }
 
     /// The `>P>` line one prefix operator's result owes, from the value
     /// itself, at the indent the clause in force is tracing values at.
-    pub(crate) fn echo_prefix_op(&mut self, op: PrefixOp, value: ObjRef) {
+    pub(crate) fn echo_prefix_op(&mut self, op: PrefixOp, value: ObjRef) -> Result<(), Failure> {
         if !self.tracing_intermediates() {
-            return;
+            return Ok(());
         }
         let indent = self.activity.clause_state.current_value_indent;
         let text = self.to_text(value).to_vec();
-        self.trace_prefix_op(indent, op.spelling().as_bytes(), &text);
+        self.trace_prefix_op(indent, op.spelling().as_bytes(), &text)
     }
 
     /// `>P>` (`TRACE_PREFIX_PREFIX`): a prefix operator's own result, the
@@ -457,13 +494,18 @@ impl Interp {
     /// (`tracePrefix`/`RexxActivation.hpp:353`-`354` calls the same
     /// `traceOperatorValue` `traceOperator` does, differing only in which
     /// `TracePrefix` it passes).
-    pub(crate) fn trace_prefix_op(&mut self, indent: usize, op: &[u8], value: &[u8]) {
+    pub(crate) fn trace_prefix_op(
+        &mut self,
+        indent: usize,
+        op: &[u8],
+        value: &[u8],
+    ) -> Result<(), Failure> {
         if !self.traced_mode().intermediates {
-            return;
+            return Ok(());
         }
         let start = self.trace.len();
         push_operator(&mut self.trace, ">P>", indent, op, value);
-        self.route_trace_line(start);
+        self.route_trace_line(start)
     }
 
     /// `>=>` (`TRACE_PREFIX_ASSIGNMENT`): a variable was just written.
@@ -482,15 +524,16 @@ impl Interp {
         tag: &[u8],
         value: &[u8],
         object: ObjRef,
-    ) {
+    ) -> Result<(), Failure> {
         if !self.traced_mode().intermediates {
-            return;
+            return Ok(());
         }
         let start = self.trace.len();
         push_tagged(&mut self.trace, ">=>", indent, false, tag, " <= ", value);
         self.activity.traced_variable = Some(TracedVariable::of(tag, object, true));
-        self.route_trace_line(start);
+        let routed = self.route_trace_line(start);
         self.activity.traced_variable = None;
+        routed
     }
 
     /// `>A>` (`TRACE_PREFIX_ARGUMENT`): one call argument's own evaluated
@@ -499,38 +542,48 @@ impl Interp {
     /// `RexxInstruction.cpp:144`-`162`, read directly: `traceArgument` right
     /// after each `evaluate`, and `traceArgument(NULLSTRING)` -- an empty
     /// value line, not a skipped one -- for an omitted position).
-    pub(crate) fn trace_argument(&mut self, indent: usize, value: &[u8]) {
+    pub(crate) fn trace_argument(&mut self, indent: usize, value: &[u8]) -> Result<(), Failure> {
         if !self.traced_mode().intermediates {
-            return;
+            return Ok(());
         }
         let start = self.trace.len();
         push_value(&mut self.trace, ">A>", indent, value);
-        self.route_trace_line(start);
+        self.route_trace_line(start)
     }
 
     /// `>F>` (`TRACE_PREFIX_FUNCTION`): a **function-form** call's own
     /// returned value, tagged with the routine's name, unquoted
     /// (`traceFunction`/`RexxActivation.hpp:347`-`348`, `quoteTag = false`,
     /// like `>V>` and unlike `>K>`).
-    pub(crate) fn trace_function(&mut self, indent: usize, name: &[u8], value: &[u8]) {
+    pub(crate) fn trace_function(
+        &mut self,
+        indent: usize,
+        name: &[u8],
+        value: &[u8],
+    ) -> Result<(), Failure> {
         if !self.traced_mode().intermediates {
-            return;
+            return Ok(());
         }
         let start = self.trace.len();
         push_tagged(&mut self.trace, ">F>", indent, false, name, " => ", value);
-        self.route_trace_line(start);
+        self.route_trace_line(start)
     }
 
     /// `>M>` (`TRACE_PREFIX_MESSAGE`): a message send's own result, tagged
     /// with the message name, **quoted** (`traceMessage`,
     /// `RexxActivation.hpp:349`, `quoteTag = true`, unlike `>F>`).
-    pub(crate) fn trace_message(&mut self, indent: usize, name: &[u8], value: &[u8]) {
+    pub(crate) fn trace_message(
+        &mut self,
+        indent: usize,
+        name: &[u8],
+        value: &[u8],
+    ) -> Result<(), Failure> {
         if !self.traced_mode().intermediates {
-            return;
+            return Ok(());
         }
         let start = self.trace.len();
         push_tagged(&mut self.trace, ">M>", indent, true, name, " => ", value);
-        self.route_trace_line(start);
+        self.route_trace_line(start)
     }
 
     /// `>R>` (`TRACE_PREFIX_ALIAS`): a `USE ARG >name` target has just been
@@ -540,9 +593,14 @@ impl Interp {
     /// useRef->getName())`, that order), so `orig = 'PP'; call sub >orig`
     /// into `use arg >q` traces `>R>     "ORIG" => "Q"` -- names on both
     /// sides, no value anywhere on the line.
-    pub(crate) fn trace_alias(&mut self, indent: usize, reference: &[u8], target: &[u8]) {
+    pub(crate) fn trace_alias(
+        &mut self,
+        indent: usize,
+        reference: &[u8],
+        target: &[u8],
+    ) -> Result<(), Failure> {
         if !self.traced_mode().results {
-            return;
+            return Ok(());
         }
         let start = self.trace.len();
         push_tagged(
@@ -554,18 +612,18 @@ impl Interp {
             " => ",
             target,
         );
-        self.route_trace_line(start);
+        self.route_trace_line(start)
     }
 
     /// `>.>` (`TRACE_PREFIX_DUMMY`): what a `PARSE` template's `.`
     /// placeholder just consumed, untagged, with no assignment behind it.
-    pub(crate) fn trace_dummy(&mut self, indent: usize, value: &[u8]) {
+    pub(crate) fn trace_dummy(&mut self, indent: usize, value: &[u8]) -> Result<(), Failure> {
         if !self.traced_mode().intermediates {
-            return;
+            return Ok(());
         }
         let start = self.trace.len();
         push_value(&mut self.trace, ">.>", indent, value);
-        self.route_trace_line(start);
+        self.route_trace_line(start)
     }
 
     /// `>C>` (`TRACE_PREFIX_COMPOUND`): announces which fully-resolved
@@ -578,13 +636,18 @@ impl Interp {
     /// `traceCompound`/`traceAssignment`, always both, whether or not the
     /// tail actually resolves to a stored value). Gated on `intermediates`
     /// like every other value-prefix line.
-    pub(crate) fn trace_compound_name(&mut self, indent: usize, tag: &[u8], resolved: &[u8]) {
+    pub(crate) fn trace_compound_name(
+        &mut self,
+        indent: usize,
+        tag: &[u8],
+        resolved: &[u8],
+    ) -> Result<(), Failure> {
         if !self.traced_mode().intermediates {
-            return;
+            return Ok(());
         }
         let start = self.trace.len();
         push_tagged(&mut self.trace, ">C>", indent, false, tag, " => ", resolved);
-        self.route_trace_line(start);
+        self.route_trace_line(start)
     }
 
     /// `value`'s rendered bytes, **or `None` when no intermediate-value
@@ -634,7 +697,16 @@ impl Interp {
         self.trace.extend_from_slice(package);
         self.trace.extend_from_slice(b"\".\n");
         make_displayable(&mut self.trace, line_start);
-        self.route_trace_line_as(line_start, prefix == ">I>");
+        // Not raised: an entry or exit line stands outside any clause, so a
+        // destination that cannot take it leaves it to standard error.
+        let line = self.trace[line_start..].to_vec();
+        if self
+            .route_trace_line_as(line_start, prefix == ">I>")
+            .is_err()
+        {
+            self.trace.extend_from_slice(&line);
+            self.hand_over_stderr();
+        }
     }
 }
 
@@ -888,9 +960,13 @@ mod tests {
         let mut interp = Interp::new();
         activate_empty(&mut interp);
         interp.set_trace_mode(TraceMode::RESULTS);
-        interp.trace_argument(0, b"1");
-        interp.trace_function(0, b"SUB", b"3");
-        interp.trace_alias(0, b"ORIG", b"Q");
+        interp.trace_argument(0, b"1").expect("the line is routed");
+        interp
+            .trace_function(0, b"SUB", b"3")
+            .expect("the line is routed");
+        interp
+            .trace_alias(0, b"ORIG", b"Q")
+            .expect("the line is routed");
         assert_eq!(
             interp.trace, b"       >R>   \"ORIG\" => \"Q\"\n",
             "under RESULTS only the alias line is shown"
@@ -899,9 +975,13 @@ mod tests {
         let mut interp = Interp::new();
         activate_empty(&mut interp);
         interp.set_trace_mode(TraceMode::INTERMEDIATES);
-        interp.trace_argument(0, b"1");
-        interp.trace_function(0, b"SUB", b"3");
-        interp.trace_alias(0, b"ORIG", b"Q");
+        interp.trace_argument(0, b"1").expect("the line is routed");
+        interp
+            .trace_function(0, b"SUB", b"3")
+            .expect("the line is routed");
+        interp
+            .trace_alias(0, b"ORIG", b"Q")
+            .expect("the line is routed");
         assert_eq!(
             interp.trace,
             b"       >A>   \"1\"\n       >F>   SUB => \"3\"\n       >R>   \"ORIG\" => \"Q\"\n",
@@ -910,9 +990,13 @@ mod tests {
 
         let mut interp = Interp::new();
         activate_empty(&mut interp);
-        interp.trace_argument(0, b"1");
-        interp.trace_function(0, b"SUB", b"3");
-        interp.trace_alias(0, b"ORIG", b"Q");
+        interp.trace_argument(0, b"1").expect("the line is routed");
+        interp
+            .trace_function(0, b"SUB", b"3")
+            .expect("the line is routed");
+        interp
+            .trace_alias(0, b"ORIG", b"Q")
+            .expect("the line is routed");
         assert!(interp.trace.is_empty(), "TraceMode::OFF is silent");
     }
 
@@ -945,17 +1029,25 @@ mod tests {
     fn the_three_gates_fire_under_exactly_the_modes_that_should_show_them() {
         let mut interp = Interp::new();
         activate_empty(&mut interp);
-        interp.trace_clause(1, 0, b"say 1");
-        interp.trace_result(0, b"1");
-        interp.trace_keyword(0, "TO", b"2");
+        interp
+            .trace_clause(1, 0, b"say 1")
+            .expect("the line is routed");
+        interp.trace_result(0, b"1").expect("the line is routed");
+        interp
+            .trace_keyword(0, "TO", b"2")
+            .expect("the line is routed");
         assert!(interp.trace.is_empty(), "TraceMode::OFF is silent");
 
         let mut interp = Interp::new();
         activate_empty(&mut interp);
         interp.set_trace_mode(TraceMode::RESULTS);
-        interp.trace_clause(1, 0, b"say 1");
-        interp.trace_result(0, b"1");
-        interp.trace_keyword(0, "TO", b"2");
+        interp
+            .trace_clause(1, 0, b"say 1")
+            .expect("the line is routed");
+        interp.trace_result(0, b"1").expect("the line is routed");
+        interp
+            .trace_keyword(0, "TO", b"2")
+            .expect("the line is routed");
         assert_eq!(
             interp.trace,
             b"     1 *-* say 1\n       >>>   \"1\"\n       >K>   \"TO\" => \"2\"\n"

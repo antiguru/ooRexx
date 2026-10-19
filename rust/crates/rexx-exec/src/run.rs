@@ -766,7 +766,7 @@ impl Interp {
                 //        >>>   "nop"
                 //      3 *-* nop
                 // ```
-                self.trace_result(self.activity.clause_state.current_value_indent, &text);
+                self.trace_result(self.activity.clause_state.current_value_indent, &text)?;
                 if self.debug_pause_instruction()? {
                     return Ok(Flow::Goto(index));
                 }
@@ -1038,7 +1038,7 @@ impl Interp {
                     // `Call::Named` has no equivalent of -- measured, `call
                     // sub 1+1, 'q'` under `trace r` traces no value line at
                     // all while `call (nm)` traces one for the target.
-                    self.trace_result(self.activity.clause_state.current_value_indent, &name);
+                    self.trace_result(self.activity.clause_state.current_value_indent, &name)?;
                     self.exec_call(code, &name, true, args)
                 }
                 // `CALL ON cond NAME label` / `CALL OFF cond`. Shares every
@@ -1204,7 +1204,7 @@ impl Interp {
                 self.roots.activity_mut().push_temp(value);
                 let value = self.required_string_value(value)?;
                 let text = self.to_text(value).to_vec();
-                self.trace_result(self.activity.clause_state.current_value_indent, &text);
+                self.trace_result(self.activity.clause_state.current_value_indent, &text)?;
                 Ok(Flow::Next)
             }
 
@@ -1416,7 +1416,7 @@ impl Interp {
         for (name, stem_name, key, home, traced) in tails {
             self.expose_tail(home, &stem_name, &key);
             if !traced {
-                self.trace_exposed_tail(&name, &stem_name, &key);
+                self.trace_exposed_tail(&name, &stem_name, &key)?;
             }
         }
         Ok(())
@@ -1532,18 +1532,24 @@ impl Interp {
             }
         };
         self.expose_tail(home, &stem_name, &key);
-        self.trace_exposed_tail(name, &stem_name, &key);
+        self.trace_exposed_tail(name, &stem_name, &key)?;
         Ok(())
     }
 
     /// The `>C>` line `traceCompoundName` gives an exposed tail.
-    fn trace_exposed_tail(&mut self, name: &[u8], stem_name: &[u8], key: &[u8]) {
+    fn trace_exposed_tail(
+        &mut self,
+        name: &[u8],
+        stem_name: &[u8],
+        key: &[u8],
+    ) -> Result<(), Failure> {
         if self.tracing_intermediates() {
             let mut resolved = stem_name.to_vec();
             resolved.extend_from_slice(key);
             let indent = self.activity.clause_state.current_value_indent;
-            self.trace_compound_name(indent, name, &resolved);
+            self.trace_compound_name(indent, name, &resolved)?;
         }
+        Ok(())
     }
 
     /// The object whose [`rexx_core::ScopePools`] a send to `receiver` binds
@@ -1602,7 +1608,7 @@ impl Interp {
                     let name: Box<[u8]> = code.symbols.name(*id).as_bytes().into();
                     let value = if shape_of(&name) == NameShape::Compound {
                         let (stem_name, key) = self.split_compound(&name)?;
-                        self.trace_exposed_tail(&name, &stem_name, &key);
+                        self.trace_exposed_tail(&name, &stem_name, &key)?;
                         names.push((name, true));
                         self.procedure_selector_value(code, *id, &names)?
                     } else {
@@ -1653,7 +1659,7 @@ impl Interp {
         resolved.extend_from_slice(&key);
         if self.tracing_intermediates() {
             let indent = self.activity.clause_state.current_value_indent;
-            self.trace_compound_name(indent, &spelling, &resolved);
+            self.trace_compound_name(indent, &spelling, &resolved)?;
         }
         let mut reachable = visible(&compound.stem);
         for (held, _) in exposed {
@@ -1674,7 +1680,7 @@ impl Interp {
         if self.tracing_intermediates() {
             let indent = self.activity.clause_state.current_value_indent;
             let text = self.string_value_text(value);
-            self.trace_variable(indent, &spelling, &text, value);
+            self.trace_variable(indent, &spelling, &text, value)?;
         }
         Ok(value)
     }
@@ -1916,7 +1922,7 @@ impl Interp {
                 self.activity.clause_state.current_value_indent,
                 &reference,
                 &name,
-            );
+            )?;
             return Ok(());
         }
 
@@ -1943,7 +1949,7 @@ impl Interp {
                     let indent = self.activity.clause_state.current_value_indent;
                     let rendered = self.result_text(value);
                     if let Some(rendered) = &rendered {
-                        self.trace_result(indent, rendered);
+                        self.trace_result(indent, rendered)?;
                     }
                     self.assign_expr_target(
                         code,
@@ -1985,11 +1991,11 @@ impl Interp {
                 // drops neither.
                 let rendered = self.result_text(value);
                 if let Some(rendered) = &rendered {
-                    self.trace_result(indent, rendered);
+                    self.trace_result(indent, rendered)?;
                 }
                 self.assign_by_name(&name, value);
                 if let Some(rendered) = &rendered {
-                    self.trace_assignment(indent, &name, rendered, value);
+                    self.trace_assignment(indent, &name, rendered, value)?;
                 }
                 Ok(())
             }
@@ -2050,7 +2056,7 @@ impl Interp {
             }
             None => Vec::new(),
         };
-        self.trace_result(self.activity.clause_state.current_value_indent, &line);
+        self.trace_result(self.activity.clause_state.current_value_indent, &line)?;
         // `Activity::sayOutput` (`concurrency/Activity.cpp:3214`): `.OUTPUT`
         // gets the line as a `SAY` message and its reply is dropped; an entry
         // that is missing **or holds `.nil`** takes the buffer instead.
@@ -2246,7 +2252,7 @@ impl Interp {
         if let Some(value) = value {
             self.roots.activity_mut().push_temp(value);
             if let Some(rendered) = self.result_text(value) {
-                self.trace_result(self.activity.clause_state.current_value_indent, &rendered);
+                self.trace_result(self.activity.clause_state.current_value_indent, &rendered)?;
             }
         }
         if self.activation().reply != ReplyState::None {
@@ -2305,7 +2311,7 @@ impl Interp {
                 if !self.heap.is_class(value) {
                     return Err(Raised::scope_override_not_a_class().into());
                 }
-                self.trace_forward_keyword("CLASS", value);
+                self.trace_forward_keyword("CLASS", value)?;
                 Some(value)
             }
         };
@@ -2346,7 +2352,7 @@ impl Interp {
             Some(value) => {
                 self.roots.activity_mut().push_temp(value);
                 if let Some(rendered) = self.result_text(value) {
-                    self.trace_result(indent, &rendered);
+                    self.trace_result(indent, &rendered)?;
                 }
                 self.set_variable(frame, slot, value);
             }
@@ -2375,19 +2381,20 @@ impl Interp {
     ) -> Result<ObjRef, Failure> {
         let value = self.eval(code, expr)?;
         self.roots.activity_mut().push_temp(value);
-        self.trace_forward_keyword(keyword, value);
+        self.trace_forward_keyword(keyword, value)?;
         Ok(value)
     }
 
     /// One `FORWARD` option's `>K>` line, for a caller that has to evaluate
     /// and trace at separate points.
-    fn trace_forward_keyword(&mut self, keyword: &str, value: ObjRef) {
+    fn trace_forward_keyword(&mut self, keyword: &str, value: ObjRef) -> Result<(), Failure> {
         let traced = self.string_value_text(value);
         self.trace_keyword(
             self.activity.clause_state.current_value_indent,
             keyword,
             &traced,
-        );
+        )?;
+        Ok(())
     }
 
     /// The argument list a `FORWARD` sends, into a borrowed buffer so that
@@ -2410,7 +2417,7 @@ impl Interp {
             for item in items {
                 match item {
                     None => {
-                        self.trace_argument(self.activity.clause_state.current_value_indent, b"");
+                        self.trace_argument(self.activity.clause_state.current_value_indent, b"")?;
                         values.push(None);
                     }
                     Some(expr) => {
@@ -2426,7 +2433,7 @@ impl Interp {
                 self.activity.clause_state.current_value_indent,
                 "ARRAY",
                 crate::dispatch::ARRAY_DEFAULT_NAME,
-            );
+            )?;
             return Ok(());
         }
         values.extend(self.activity.call_context.arguments.iter().copied());
@@ -2572,7 +2579,7 @@ impl Interp {
         if let Some(value) = value {
             self.roots.activity_mut().push_temp(value);
             if let Some(rendered) = self.result_text(value) {
-                self.trace_result(self.activity.clause_state.current_value_indent, &rendered);
+                self.trace_result(self.activity.clause_state.current_value_indent, &rendered)?;
             }
         }
         // **LEGALITY.** A `REPLY` has already answered
@@ -2644,7 +2651,7 @@ impl Interp {
             }
             None => Vec::new(),
         };
-        self.trace_result(self.activity.clause_state.current_value_indent, &line);
+        self.trace_result(self.activity.clause_state.current_value_indent, &line)?;
         match keyword {
             QueueKeyword::Push => self.queue.push(line),
             QueueKeyword::Queue => self.queue.queue(line),
@@ -2689,7 +2696,7 @@ impl Interp {
             // `ClauseState::instructions_traced_at_entry`, which carries the
             // measurement.
             if self.activity.clause_state.instructions_traced_at_entry {
-                self.trace_result(indent, rendered);
+                self.trace_result(indent, rendered)?;
             }
         }
         self.assign_expr_target(code, target, value, rendered.as_deref(), indent, at)
@@ -2711,7 +2718,7 @@ impl Interp {
         value: ObjRef,
         rendered: Option<&[u8]>,
         indent: usize,
-    ) {
+    ) -> Result<(), Failure> {
         debug_assert!(
             matches!(
                 shape_of(code.symbols.name(id).as_bytes()),
@@ -2725,8 +2732,9 @@ impl Interp {
         // The name is reached only where a line will print it, which is what
         // the general path below pays on every call.
         if let Some(rendered) = rendered {
-            self.trace_assignment(indent, code.symbols.name(id).as_bytes(), rendered, value);
+            self.trace_assignment(indent, code.symbols.name(id).as_bytes(), rendered, value)?;
         }
+        Ok(())
     }
 
     /// Writes `value` through one assignment *target expression*, and traces
@@ -2750,7 +2758,7 @@ impl Interp {
                 let frame = self.activation().frame;
                 self.set_variable(frame, slot, value);
                 if let Some(rendered) = rendered {
-                    self.trace_assignment(indent, name, rendered, value);
+                    self.trace_assignment(indent, name, rendered, value)?;
                 }
             }
             // `stem. = expr`: replace-and-rebind (D15a), through the
@@ -2771,7 +2779,7 @@ impl Interp {
                 let at = code.compound(*id).and_then(|entry| entry.stem_at);
                 self.stem_assign_at(name, at, value);
                 if let Some(rendered) = rendered {
-                    self.trace_assignment(indent, name, rendered, value);
+                    self.trace_assignment(indent, name, rendered, value)?;
                 }
             }
             // `a.b = expr`: resolve the tail key the same way reading
@@ -2815,12 +2823,15 @@ impl Interp {
                 if self.tracing_intermediates() {
                     let mut resolved = stem_name.to_vec();
                     resolved.extend_from_slice(&key);
-                    self.trace_compound_name(indent, tag, &resolved);
-                }
-                if let Some(rendered) = rendered {
-                    self.trace_assignment(indent, tag, rendered, value);
+                    if let Err(failure) = self.trace_compound_name(indent, tag, &resolved) {
+                        self.give_key_buffer(key);
+                        return Err(failure);
+                    }
                 }
                 self.give_key_buffer(key);
+                if let Some(rendered) = rendered {
+                    self.trace_assignment(indent, tag, rendered, value)?;
+                }
             }
             // `RexxExpressionMessage::assign` (`expression/ExpressionMessage.cpp:232`):
             // the term's `NAME=` sent with the value ahead of its own
@@ -2853,9 +2864,9 @@ impl Interp {
                         None => None,
                     };
                     if let Some(shown) = evaluated.and_then(|value| self.result_text(value)) {
-                        self.trace_result(indent, &shown);
+                        self.trace_result(indent, &shown)?;
                     } else if evaluated.is_none() {
-                        self.trace_result(indent, b"");
+                        self.trace_result(indent, b"")?;
                     }
                     values.push(evaluated);
                 }
@@ -2871,7 +2882,7 @@ impl Interp {
                 if let Some(answer) = answer
                     && let Some(shown) = self.intermediate_text(answer)
                 {
-                    self.trace_assignment(indent, &setter, &shown, answer);
+                    self.trace_assignment(indent, &setter, &shown, answer)?;
                 }
             }
             other => return Err(Loud::expression(other).into()),
@@ -2943,7 +2954,7 @@ impl Interp {
         source: Option<&ProgramSource>,
         position: (bool, crate::ir::ClausePosition),
         counted: crate::clause::DeadlineCounted,
-    ) -> SteppedClause {
+    ) -> Result<SteppedClause, Failure> {
         // `DATE`/`TIME`'s per-clause clock cache (`activation.rs`'s own doc
         // on `Activation::clock_stale`) is invalidated **unconditionally,
         // once per call, on whichever activation is executing right now**,
@@ -3042,8 +3053,11 @@ impl Interp {
         // the second arm is that a chunk compiled under a setting that does
         // not echo pays nothing at all for the decision -- no gate, no
         // `clause_site`, no op.
-        if matches!(echo, Echo::Gated) {
-            self.echo_stepped_clause(source, instruction, indent);
+        // A failed delivery of the echo leaves the clause before its work.
+        if matches!(echo, Echo::Gated)
+            && let Err(failure) = self.echo_stepped_clause(source, instruction, indent)
+        {
+            return Err(self.abandoned_clause(failure, code, index, source, instruction));
         }
         // The debug tripwire I22 asks for, alongside `ActivityRoots::temps_len`, its
         // one prerequisite. `SteppedClause` carries the watermark and the
@@ -3052,11 +3066,27 @@ impl Interp {
         // there rather than in `pop_frame`.
         let temps_at_entry = self.roots.activity().temps_len();
         let frame = self.roots.activity_mut().push_frame();
-        SteppedClause {
+        Ok(SteppedClause {
             entry,
             frame,
             temps_at_entry,
-        }
+        })
+    }
+
+    /// The failure a clause's echo raised, with the clause recorded as the
+    /// failure's site, as [`Interp::leave_stepped_clause`] records it.
+    #[cold]
+    #[inline(never)]
+    fn abandoned_clause(
+        &mut self,
+        failure: Failure,
+        code: &Code<'_>,
+        index: usize,
+        source: Option<&ProgramSource>,
+        instruction: &Instruction,
+    ) -> Failure {
+        self.record_failure_site(code, index, source, instruction);
+        failure
     }
 
     /// Closes the stepped clause `entry` opened, around `ran` -- everything
@@ -3127,14 +3157,15 @@ impl Interp {
         source: Option<&ProgramSource>,
         instruction: &Instruction,
         indent: usize,
-    ) {
+    ) -> Result<(), Failure> {
         let is_label = matches!(instruction.kind, InstructionKind::Label { .. });
         let is_command = matches!(instruction.kind, InstructionKind::Command { .. });
         if self.tracing_clause(is_label, is_command)
             && let Some((line, text)) = self.clause_site(source, instruction)
         {
-            self.trace_stepped_clause(is_label, is_command, line, indent, &text);
+            self.trace_stepped_clause(is_label, is_command, line, indent, &text)?;
         }
+        Ok(())
     }
 
     /// The same echo with **no gate at all**, for a caller that has already
@@ -3145,18 +3176,19 @@ impl Interp {
         source: Option<&ProgramSource>,
         instruction: &Instruction,
         indent: usize,
-    ) {
+    ) -> Result<(), Failure> {
         // The banner the stepped path owes too, and this path owes it for the
         // same reason: it is the first traced clause of the activation that
         // carries it. Reached when the setting was already `?R` at compile
         // time -- `RXTRACE=ON` is the case, where a `TRACE ?R` instruction
         // leaves the chunk stale and takes the stepped path instead.
-        self.trace_debug_source();
+        self.trace_debug_source()?;
         if let Some((line, text)) = self.clause_site(source, instruction) {
             let start = self.trace.len();
             crate::trace::push_clause(&mut self.trace, line, indent, &text);
-            self.route_trace_line(start);
+            self.route_trace_line(start)?;
         }
+        Ok(())
     }
 
     /// Resolves `instruction`'s own clause (and its statically-derived
@@ -3897,14 +3929,14 @@ impl Interp {
                 // `eval_condition` decides on its own. `SELECT CASE`'s own
                 // `WHEN`/`WhenCase` comparison never reaches this function at
                 // all -- see `test_case_when`'s own trace calls instead.
-                ConditionTrace::Result(indent) => self.trace_result(indent, &text),
+                ConditionTrace::Result(indent) => self.trace_result(indent, &text)?,
                 // `WHILE`/`UNTIL`'s own `>K>` (`DoBlockComponents.cpp`'s
                 // `traceKeywordResult(WHILE, ...)`/`(UNTIL, ...)`) -- re-fires
                 // every pass because the oracle re-evaluates the condition every
                 // pass too, which `run_repeating`'s own call site already does
                 // without any change from this task.
                 ConditionTrace::Keyword(indent, keyword) => {
-                    self.trace_keyword(indent, keyword, &text);
+                    self.trace_keyword(indent, keyword, &text)?
                 }
             }
         }
@@ -3933,10 +3965,10 @@ impl Interp {
         for value in values {
             let value = self.eval(code, value)?;
             self.roots.activity_mut().push_temp(value);
-            self.trace_value_result(indent, value);
+            self.trace_value_result(indent, value)?;
             let answer = self.apply_binary(rexx_parse::Operator::StrictEqual, case, value)?;
             self.roots.activity_mut().push_temp(answer);
-            self.trace_value_result(indent, answer);
+            self.trace_value_result(indent, answer)?;
             if self.truth(answer, raised_when_case_not_logical)? {
                 return Ok(true);
             }
@@ -3946,11 +3978,12 @@ impl Interp {
 
     /// [`Interp::trace_result`] for `value`'s rendering, copied only when the
     /// line prints.
-    fn trace_value_result(&mut self, indent: usize, value: ObjRef) {
+    fn trace_value_result(&mut self, indent: usize, value: ObjRef) -> Result<(), Failure> {
         if self.traced_mode().results {
             let text = self.to_text(value).to_vec();
-            self.trace_result(indent, &text);
+            self.trace_result(indent, &text)?;
         }
+        Ok(())
     }
 
     /// `instruction`'s own clause text and the 1-based line to print it against,

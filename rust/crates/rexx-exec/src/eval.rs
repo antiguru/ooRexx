@@ -108,7 +108,7 @@ impl Interp {
         // sub-expression either (the *clause* echo already happened, and
         // the raise's own report is what follows).
         if let Ok(v) = &value {
-            self.trace_intermediate(code, expr, *v);
+            self.trace_intermediate(code, expr, *v)?;
         }
         value
     }
@@ -122,16 +122,27 @@ impl Interp {
     /// (`TRACE I` only; `TRACE R` never reaches any of these, measured),
     /// so the match below only ever runs its own `to_text` cost under `I`.
     #[inline]
-    pub(crate) fn trace_intermediate(&mut self, code: &Code<'_>, expr: &Expr, value: ObjRef) {
+    pub(crate) fn trace_intermediate(
+        &mut self,
+        code: &Code<'_>,
+        expr: &Expr,
+        value: ObjRef,
+    ) -> Result<(), Failure> {
         if !self.tracing_intermediates() {
-            return;
+            return Ok(());
         }
-        self.trace_intermediate_event(code, expr, value);
+        self.trace_intermediate_event(code, expr, value)?;
+        Ok(())
     }
 
     /// [`Interp::trace_intermediate`]'s body, entered only under `TRACE I`.
     #[inline(never)]
-    fn trace_intermediate_event(&mut self, code: &Code<'_>, expr: &Expr, value: ObjRef) {
+    fn trace_intermediate_event(
+        &mut self,
+        code: &Code<'_>,
+        expr: &Expr,
+        value: ObjRef,
+    ) -> Result<(), Failure> {
         let indent = self.activity.clause_state.current_value_indent;
         match &expr.kind {
             // `Constant`'s own shape is reasoned from `Literal`'s measured
@@ -141,7 +152,7 @@ impl Interp {
             // `trace_literal`, because the compiled stream's own
             // `Op::TraceLiteral` emits the identical line from a register and
             // the two must not be able to disagree about it.
-            ExprKind::Literal(_) | ExprKind::Constant(_) => self.echo_literal(value),
+            ExprKind::Literal(_) | ExprKind::Constant(_) => self.echo_literal(value)?,
             // The three bare-symbol reads, all through the one function
             // `crate::ir::Op::TraceRead` enters from a register -- for the
             // reason `echo_literal` above is one function: a compiled read
@@ -150,7 +161,7 @@ impl Interp {
             // `echo_symbol_read`'s own doc comment has what a compound owes
             // that this does not emit.
             ExprKind::Variable(id) | ExprKind::Stem(id) | ExprKind::Compound(id) => {
-                self.echo_symbol_read(code, *id, value);
+                self.echo_symbol_read(code, *id, value)?
             }
             // `.NIL`/`.TRUE`/`.FALSE` -- `>E>`, measured (this task's
             // report): **not** in the design spec's own "measured reachable
@@ -158,7 +169,7 @@ impl Interp {
             // than assumed. The other `DotVariable` names all fail loudly
             // before reaching here (`eval_node`'s own arm), so this is
             // exhaustive over what can arrive.
-            ExprKind::DotVariable(id) => self.echo_environment_symbol(code, *id, value),
+            ExprKind::DotVariable(id) => self.echo_environment_symbol(code, *id, value)?,
             // `>P>`, not `>O>` -- a prefix operator's line is its own, which
             // is why this is not the arm below with a different operator type.
             // `echo_prefix_op` rather than an open-coded render plus
@@ -166,7 +177,7 @@ impl Interp {
             // `crate::ir::Op::TracePrefix` emits the identical line from a
             // register and the two must not be able to disagree -- the reason
             // `echo_literal` above is one function.
-            ExprKind::Prefix { op, .. } => self.echo_prefix_op(*op, value),
+            ExprKind::Prefix { op, .. } => self.echo_prefix_op(*op, value)?,
             // Every binary operator, arithmetic, comparison, logical and
             // concatenation alike, traces as `>O>` -- not independently
             // probed for every family, reasoned from the arithmetic
@@ -179,7 +190,7 @@ impl Interp {
             // `crate::ir::Op::TraceOperator` emits the identical line from a
             // register and the two must not be able to disagree -- the reason
             // `echo_literal` above is one function.
-            ExprKind::Binary { op, .. } => self.echo_operator(*op, value),
+            ExprKind::Binary { op, .. } => self.echo_operator(*op, value)?,
             // `>name`/`<name` traces as an **operator**, not as the read of
             // the variable it names: `>O>   ">" => "PQ"`, the referenced
             // variable's own *name* as the operator's value
@@ -197,10 +208,10 @@ impl Interp {
                     // (20.930 at parse time), and `eval_node`'s own arm
                     // fails loudly on anything that arrives regardless, so
                     // there is no value here to have traced.
-                    return;
+                    return Ok(());
                 };
                 let name = code.symbols.name(*id).as_bytes().to_vec();
-                self.trace_operator(indent, b">", &name);
+                self.trace_operator(indent, b">", &name)?;
             }
             // `>F>`, the **function form only** -- `trace_function`'s own
             // doc comment has the measured pair that separates it from
@@ -214,7 +225,7 @@ impl Interp {
                     CallTarget::Literal(bytes) => bytes.to_vec(),
                 };
                 let text = self.string_value_text(value);
-                self.trace_function(indent, &name, &text);
+                self.trace_function(indent, &name, &text)?;
             }
             // `>F>` too, tagged with the routine name **alone** -- measured,
             // `trace i` over `say w:wroutine()` traces
@@ -224,7 +235,7 @@ impl Interp {
             ExprKind::QualifiedCall { name, .. } => {
                 let name = code.symbols.name(*name).as_bytes().to_vec();
                 let text = self.string_value_text(value);
-                self.trace_function(indent, &name, &text);
+                self.trace_function(indent, &name, &text)?;
             }
             // `>N>`, tagged `namespace:class` -- `traceClassResolution`
             // (`RexxActivation.hpp:358`), whose tag is the two symbols joined
@@ -234,7 +245,7 @@ impl Interp {
                 tag.push(b':');
                 tag.extend_from_slice(code.symbols.name(*name).as_bytes());
                 let text = self.string_value_text(value);
-                self.trace_namespace(indent, &tag, &text);
+                self.trace_namespace(indent, &tag, &text)?;
             }
             // **`>M>` is not here**, and that is the one value prefix this
             // hook does not own: the message-assignment form is an
@@ -250,6 +261,7 @@ impl Interp {
             // never reaches here at all (`eval_node`'s own loud fallback).
             _ => {}
         }
+        Ok(())
     }
 
     /// One bare symbol's read: the whole of what `eval_node`'s own
@@ -296,7 +308,10 @@ impl Interp {
                     let mut printed = stem_name.to_vec();
                     printed.extend_from_slice(&key);
                     let indent = self.activity.clause_state.current_value_indent;
-                    self.trace_compound_name(indent, &tag, &printed);
+                    if let Err(failure) = self.trace_compound_name(indent, &tag, &printed) {
+                        self.give_key_buffer(key);
+                        return Err(failure);
+                    }
                 }
                 let (value, novalue) = self.stem_get_at(stem_name, stem_at, &key);
                 self.give_key_buffer(key);
@@ -333,36 +348,54 @@ impl Interp {
     }
 
     /// The `>E>` line one environment symbol's read owes.
-    pub(crate) fn echo_environment_symbol(&mut self, code: &Code<'_>, id: SymbolId, value: ObjRef) {
+    pub(crate) fn echo_environment_symbol(
+        &mut self,
+        code: &Code<'_>,
+        id: SymbolId,
+        value: ObjRef,
+    ) -> Result<(), Failure> {
         let indent = self.activity.clause_state.current_value_indent;
         let tag = code.symbols.name(id).as_bytes().to_vec();
         let text = self.string_value_text(value);
-        self.trace_dotvar(indent, &tag, &text);
+        self.trace_dotvar(indent, &tag, &text)?;
+        Ok(())
     }
 
     /// The `>V>` line one bare-symbol read owes, or `>E>` for an environment
     /// symbol.
     #[inline(always)]
-    pub(crate) fn echo_symbol_read(&mut self, code: &Code<'_>, id: SymbolId, value: ObjRef) {
+    pub(crate) fn echo_symbol_read(
+        &mut self,
+        code: &Code<'_>,
+        id: SymbolId,
+        value: ObjRef,
+    ) -> Result<(), Failure> {
         if !self.tracing_intermediates() {
-            return;
+            return Ok(());
         }
-        self.echo_symbol_read_line(code, id, value);
+        self.echo_symbol_read_line(code, id, value)?;
+        Ok(())
     }
 
     /// The name-building and the lines, out of line behind
     /// [`Interp::echo_symbol_read`]'s gate. An environment symbol, whose
     /// spelling starts with its period, echoes `>E>` instead.
     #[inline(never)]
-    fn echo_symbol_read_line(&mut self, code: &Code<'_>, id: SymbolId, value: ObjRef) {
+    fn echo_symbol_read_line(
+        &mut self,
+        code: &Code<'_>,
+        id: SymbolId,
+        value: ObjRef,
+    ) -> Result<(), Failure> {
         if code.symbols.name(id).starts_with('.') {
-            self.echo_environment_symbol(code, id, value);
-            return;
+            self.echo_environment_symbol(code, id, value)?;
+            return Ok(());
         }
         let indent = self.activity.clause_state.current_value_indent;
         let tag = code.symbols.name(id).as_bytes().to_vec();
         let text = self.string_value_text(value);
-        self.trace_variable(indent, &tag, &text, value);
+        self.trace_variable(indent, &tag, &text, value)?;
+        Ok(())
     }
 
     pub(crate) fn eval_node(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Failure> {
@@ -526,13 +559,13 @@ impl Interp {
             let value = self.eval(code, expr)?;
             self.roots.activity_mut().push_temp(value);
             if let Some(rendered) = self.intermediate_text(value) {
-                self.trace_argument(indent, &rendered);
+                self.trace_argument(indent, &rendered)?;
             }
             slots.push(Some(value));
         }
         let array = self.alloc_charged(rexx_core::BehaviourId::ARRAY, Body::array(slots));
         if let Some(rendered) = self.result_text(array) {
-            self.trace_result(indent, &rendered);
+            self.trace_result(indent, &rendered)?;
         }
         self.roots.activity_mut().pop_frame(frame);
         Ok(array)
@@ -1350,7 +1383,7 @@ impl Interp {
             let value = self.eval(code, item)?;
             self.roots.activity_mut().push_temp(value);
             let text = self.to_text(value).to_vec();
-            self.trace_result(indent, &text);
+            self.trace_result(indent, &text)?;
             let item_holds = self.truth(value, Raised::logical_list_element)?;
             if !item_holds {
                 holds = false;

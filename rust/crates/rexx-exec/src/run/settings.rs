@@ -300,7 +300,7 @@ impl Interp {
                 // VALUE` clause.
                 let mut text = self.take_result_buffer();
                 text.extend_from_slice(&self.to_text(value));
-                self.trace_result(self.activity.clause_state.current_value_indent, &text);
+                self.trace_result(self.activity.clause_state.current_value_indent, &text)?;
                 if text.len() > MAX_ADDRESS_NAME_LENGTH {
                     let raised = Raised::environment_name_too_long(MAX_ADDRESS_NAME_LENGTH, &text);
                     self.give_result_buffer(text);
@@ -411,7 +411,7 @@ impl Interp {
                     self.activity.clause_state.current_value_indent,
                     "FORM",
                     &text,
-                );
+                )?;
                 // The required-string protocol between the `>K>` and the
                 // validation, which is where `requestString` sits
                 // (`instructions/NumericInstruction.cpp:175`).
@@ -444,7 +444,7 @@ impl Interp {
             self.activity.clause_state.current_value_indent,
             keyword,
             &text,
-        );
+        )?;
         // **The required-string protocol runs after the `>K>` and its answer
         // replaces the bytes**, which is `requestUnsignedNumber`'s own
         // `requestString()` (`classes/ObjectClass.cpp:1077`). The trace above

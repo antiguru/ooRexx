@@ -518,7 +518,7 @@ impl Interp {
         let cursor = Cursor::new(source.len());
         if self.traced_mode().results {
             let whole = self.copied_piece(&source, 0..cursor.length);
-            self.trace_result(indent, &whole);
+            self.trace_result(indent, &whole)?;
             self.give_parse_buffer(whole);
         }
         Ok((source, cursor))
@@ -544,7 +544,7 @@ impl Interp {
             // `PARSE VALUE WITH template`, with no expression at all, is
             // legal and parses the null string.
             ParseSource::Value(None) => {
-                self.trace_literal(indent, b"");
+                self.trace_literal(indent, b"")?;
                 ("VALUE", Subject::Bytes(Vec::new()))
             }
             // **Rooted by whichever side produced it.** A value handed in is
@@ -610,7 +610,7 @@ impl Interp {
         };
         let value = match value {
             Subject::Bytes(bytes) => {
-                self.trace_keyword(indent, keyword, &bytes);
+                self.trace_keyword(indent, keyword, &bytes)?;
                 SourceText::Owned(bytes)
             }
             // **`>K>` names the object and the template walks the
@@ -625,7 +625,7 @@ impl Interp {
                 // it is taken under the line's own gate.
                 if self.traced_mode().results {
                     let traced = self.rendered_into_parse_buffer(value);
-                    self.trace_keyword(indent, keyword, &traced);
+                    self.trace_keyword(indent, keyword, &traced)?;
                     self.give_parse_buffer(traced);
                 }
                 let converted = self.required_string_value(value)?;
@@ -656,7 +656,7 @@ impl Interp {
                 self.novalue_check(novalue, value)?;
                 if self.tracing_intermediates() {
                     let text = self.to_text(value).to_vec();
-                    self.trace_variable(indent, name, &text, value);
+                    self.trace_variable(indent, name, &text, value)?;
                 }
                 Ok(value)
             }
@@ -666,7 +666,7 @@ impl Interp {
                 let value = self.read_stem(name);
                 if self.tracing_intermediates() {
                     let text = self.to_text(value).to_vec();
-                    self.trace_variable(indent, name, &text, value);
+                    self.trace_variable(indent, name, &text, value)?;
                 }
                 Ok(value)
             }
@@ -680,14 +680,17 @@ impl Interp {
                 if self.tracing_intermediates() {
                     let mut resolved = stem_name.to_vec();
                     resolved.extend_from_slice(&key);
-                    self.trace_compound_name(indent, name, &resolved);
+                    if let Err(failure) = self.trace_compound_name(indent, name, &resolved) {
+                        self.give_key_buffer(key);
+                        return Err(failure);
+                    }
                 }
                 let (value, novalue) = self.stem_get_at(stem_name, stem_at, &key);
                 self.give_key_buffer(key);
                 self.novalue_check(novalue, value)?;
                 if self.tracing_intermediates() {
                     let text = self.to_text(value).to_vec();
-                    self.trace_variable(indent, name, &text, value);
+                    self.trace_variable(indent, name, &text, value)?;
                 }
                 Ok(value)
             }
@@ -736,7 +739,7 @@ impl Interp {
         // numeric triggers that never look at the bytes at all.
         if self.trace_mode().results {
             let rendered = self.to_text(value).to_vec();
-            self.trace_result(indent, &rendered);
+            self.trace_result(indent, &rendered)?;
         }
         match trigger.kind {
             // **The needle is rendered before the source slice is taken**, not
@@ -847,7 +850,7 @@ impl Interp {
                         None
                     };
                     if let Some((id, slot)) = bound {
-                        self.assign_bound_variable(code, id, slot, value, rendered, indent);
+                        self.assign_bound_variable(code, id, slot, value, rendered, indent)?;
                     } else {
                         self.assign_expr_target(code, target, value, rendered, indent, None)?;
                     }
@@ -858,7 +861,7 @@ impl Interp {
                         let shown = shown
                             .as_deref()
                             .expect("a results line is one of the two the copy above is for");
-                        self.trace_result(indent, shown);
+                        self.trace_result(indent, shown)?;
                     }
                     if let Some(buffer) = shown {
                         self.give_parse_buffer(buffer);
@@ -876,7 +879,7 @@ impl Interp {
                     };
                     if traced.intermediates {
                         let shown = self.copied_piece(source, piece);
-                        self.trace_dummy(indent, &shown);
+                        self.trace_dummy(indent, &shown)?;
                         self.give_parse_buffer(shown);
                     }
                 }

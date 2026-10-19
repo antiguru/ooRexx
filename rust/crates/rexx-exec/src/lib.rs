@@ -1298,10 +1298,6 @@ struct PendingTrap {
     /// [`Activity::fragment_depth`] as it stood when this was queued: which
     /// `INTERPRET` fragment, if any, was running.
     fragment_depth: usize,
-    /// What a trace line's delivery raised (`Activity::traceOutput` lets a
-    /// failed `LINEOUT` propagate): delivered by raising it in the traced
-    /// activation.
-    trace_failure: Option<Failure>,
 }
 
 /// The interpreter. Owns the heap, the root set, the activity, the

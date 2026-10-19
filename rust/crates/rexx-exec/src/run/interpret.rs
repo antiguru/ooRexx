@@ -342,7 +342,7 @@ impl Interp {
             let start = self.trace.len();
             self.trace.extend_from_slice(&line);
             self.trace.push(b'\n');
-            self.route_trace_line(start);
+            self.route_trace_line(start)?;
         }
         loop {
             let line = self.debug_input_line()?;
@@ -423,7 +423,7 @@ impl Interp {
         match outcome {
             Ok(_) => Ok(()),
             Err(Failure::Raised(raised)) => {
-                self.report_debug_error(&raised);
+                self.report_debug_error(&raised)?;
                 self.clear_failure_levels();
                 Ok(())
             }
@@ -433,13 +433,14 @@ impl Interp {
 
     /// The two lines a failing pause line prints: the major and the sub, each
     /// behind `+++ Interactive trace.  Error`.
-    fn report_debug_error(&mut self, raised: &crate::error::Raised) {
+    fn report_debug_error(&mut self, raised: &crate::error::Raised) -> Result<(), Failure> {
         for line in raised.debug_error_lines() {
             let start = self.trace.len();
             self.trace.extend_from_slice(&line);
             self.trace.push(b'\n');
-            self.route_trace_line(start);
+            self.route_trace_line(start)?;
         }
+        Ok(())
     }
 
     /// Records a fragment entered from the running activation's clause at

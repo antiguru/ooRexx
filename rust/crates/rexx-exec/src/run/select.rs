@@ -35,7 +35,7 @@ impl Interp {
         // at the `SELECT`'s own level -- measured, `>K>   "CASE" => "2"` sits
         // at the same indent as `select case ...` itself, not the `WHEN`-scan
         // level a `WhenCase`'s own comparison lines are indented to.
-        self.trace_keyword(indent, "CASE", &text);
+        self.trace_keyword(indent, "CASE", &text)?;
         // **The block opens after this**, so the header clause's own boundary
         // runs one level in -- `newBlockInstruction` is the next thing
         // `RexxInstructionSelectCase::execute` does once the scrutinee has

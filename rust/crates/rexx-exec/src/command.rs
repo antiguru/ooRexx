@@ -992,7 +992,7 @@ impl Interp {
         let command = self.to_text(value).into_owned();
         // Before the command runs, and observably so: under `TRACE C` a
         // command writing to its own standard error shows this line first.
-        self.trace_command_value(indent, &command);
+        self.trace_command_value(indent, &command)?;
 
         let name = match environment {
             Some(name) => name.to_vec(),
@@ -1170,17 +1170,17 @@ impl Interp {
             && !echoed
             && let Some((line, text)) = self.clause_site(source, instruction)
         {
-            self.trace_command_retrace(line, indent, &text, command);
+            self.trace_command_retrace(line, indent, &text, command)?;
         }
         if (echoed || retrace) && outcome.rc != 0 {
             match &outcome.supplied {
                 Some(supplied) => {
                     let text = supplied.text.clone();
-                    self.trace_command_rc(indent, &text);
+                    self.trace_command_rc(indent, &text)?;
                 }
                 None => {
                     let text = outcome.rc.to_string().into_bytes();
-                    self.trace_command_rc(indent, &text);
+                    self.trace_command_rc(indent, &text)?;
                 }
             }
         }
@@ -1266,7 +1266,6 @@ impl Interp {
                     queued_during_delivery: false,
                     request: false,
                     fragment_depth: self.activity.fragment_depth,
-                    trace_failure: None,
                 });
                 Ok(())
             }
@@ -1331,7 +1330,6 @@ impl Interp {
                     queued_during_delivery: false,
                     request: false,
                     fragment_depth: self.activity.fragment_depth,
-                    trace_failure: None,
                 });
                 Ok(())
             }

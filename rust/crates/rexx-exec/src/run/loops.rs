@@ -588,9 +588,13 @@ pub(crate) struct LoopHeaderValues {
 impl Interp {
     /// One header value's own `>K>` line, at the `DO`/`LOOP` clause's own
     /// indent, for the roles the oracle echoes one for.
-    pub(crate) fn echo_header_value(&mut self, role: HeaderRole, value: ObjRef) {
+    pub(crate) fn echo_header_value(
+        &mut self,
+        role: HeaderRole,
+        value: ObjRef,
+    ) -> Result<(), Failure> {
         let Some(keyword) = role.keyword() else {
-            return;
+            return Ok(());
         };
         // `trace_keyword` carries its own `results` gate, so this is not a second
         // decision about whether to *print*: it decides whether to render the
@@ -598,14 +602,15 @@ impl Interp {
         // same shape and the same reason as `bind_control`'s own check, one level
         // down from where that one sits.
         if !self.trace_mode().results {
-            return;
+            return Ok(());
         }
         let text = self.string_value_text(value);
         self.trace_keyword(
             self.activity.clause_state.current_value_indent,
             keyword,
             &text,
-        );
+        )?;
+        Ok(())
     }
 
     /// One `Op::LoopHeaderValue`: a `COUNTER`'s reset, or `value` validated
@@ -750,7 +755,7 @@ impl Interp {
         };
         let indent = self.activity.clause_state.current_value_indent;
         self.bind_control(code, counter.name, indent, value, counter.at, counter.shape)?;
-        self.echo_header_value(HeaderRole::Counter, value);
+        self.echo_header_value(HeaderRole::Counter, value)?;
         Ok(())
     }
 
@@ -778,7 +783,7 @@ impl Interp {
         )?;
         if self.trace_mode().results {
             let text = self.string_value_text(value);
-            self.trace_keyword(loop_indent, "COUNTER", &text);
+            self.trace_keyword(loop_indent, "COUNTER", &text)?;
         }
         self.roots.activity_mut().pop_frame(pass);
         Ok(())
@@ -1178,7 +1183,7 @@ impl Interp {
                             if it.trace_mode().all
                                 && let Some((line, text)) = it.clause_site(source, end_instruction)
                             {
-                                it.trace_clause(line, end_indent, &text);
+                                it.trace_clause(line, end_indent, &text)?;
                             }
                             // The block is closed by the time this clause's
                             // boundary runs, so its handler sits back out at
@@ -1386,7 +1391,7 @@ impl Interp {
                 && self.trace_mode().all
                 && let Some((line, text)) = self.clause_site(source, do_instruction)
             {
-                self.trace_clause(line, do_indent, &text);
+                self.trace_clause(line, do_indent, &text)?;
             }
             first_pass = false;
 
@@ -1504,7 +1509,7 @@ impl Interp {
                     if self.trace_mode().all
                         && let Some((line, text)) = self.clause_site(source, end_instruction)
                     {
-                        self.trace_clause(line, do_indent, &text);
+                        self.trace_clause(line, do_indent, &text)?;
                     }
                 }
             }
@@ -1531,7 +1536,7 @@ impl Interp {
                 if self.trace_mode().all
                     && let Some((line, text)) = self.clause_site(source, do_instruction)
                 {
-                    self.trace_clause(line, do_indent, &text);
+                    self.trace_clause(line, do_indent, &text)?;
                 }
                 // Same override as `WHILE`'s own, above -- the re-echoed
                 // `END` clause just before this point left
@@ -1954,7 +1959,7 @@ impl Interp {
                     && let Some((line, text)) =
                         self.clause_site(source, &code.body.instructions[flat.end_index])
                 {
-                    self.trace_clause(line, flat.do_indent, &text);
+                    self.trace_clause(line, flat.do_indent, &text)?;
                 }
             }
         }
@@ -1969,7 +1974,7 @@ impl Interp {
                 && let Some((line, text)) =
                     self.clause_site(source, &code.body.instructions[flat.do_index])
             {
-                self.trace_clause(line, flat.do_indent, &text);
+                self.trace_clause(line, flat.do_indent, &text)?;
             }
             // The clock is stale after the pass boundary, as `run_repeating`'s
             // own store says. Only an `UNTIL` or a `WHILE` re-evaluates an
@@ -1994,7 +1999,7 @@ impl Interp {
             && let Some((line, text)) =
                 self.clause_site(source, &code.body.instructions[flat.do_index])
         {
-            self.trace_clause(line, flat.do_indent, &text);
+            self.trace_clause(line, flat.do_indent, &text)?;
         }
         let counted = counted(self)?;
         match self.flat_loop_header(code, source, flat, counted)? {
@@ -2564,7 +2569,7 @@ impl Interp {
                 self.roots.activity_mut().push_temp(value);
                 let bind_indent = if re_tested { loop_indent } else { do_indent };
                 if re_tested && let Some(rendered) = self.result_text(value) {
-                    self.trace_result(loop_indent, &rendered);
+                    self.trace_result(loop_indent, &rendered)?;
                 }
                 self.bind_control(code, *control, bind_indent, value, *at, shape)?;
                 // The control variable's own storage now roots `value`, and
@@ -2671,7 +2676,7 @@ impl Interp {
         // its own tracing counterpart use for an ordinary read.
         if let Some(resolved) = &resolved {
             let name = code.symbols.name(control).as_bytes();
-            self.trace_compound_name(loop_indent, name, resolved);
+            self.trace_compound_name(loop_indent, name, resolved)?;
         }
         // `result_text` for the pair, not `intermediate_text`:
         // `>V>` is `intermediates` and `>>>` is `results`, and
@@ -2679,8 +2684,8 @@ impl Interp {
         // either and drops neither.
         if let Some(rendered) = self.result_text(previous) {
             let name = code.symbols.name(control).as_bytes();
-            self.trace_variable(loop_indent, name, &rendered, previous);
-            self.trace_result(loop_indent, &rendered);
+            self.trace_variable(loop_indent, name, &rendered, previous)?;
+            self.trace_result(loop_indent, &rendered)?;
         }
         Ok(previous)
     }
@@ -2777,7 +2782,7 @@ impl Interp {
                 let sum = self.arith_general(rexx_parse::Operator::Plus, previous, ctl.by)?;
                 self.roots.activity_mut().push_temp(sum);
                 if let Some(rendered) = self.result_text(sum) {
-                    self.trace_result(loop_indent, &rendered);
+                    self.trace_result(loop_indent, &rendered)?;
                 }
                 (sum, loop_indent)
             }
@@ -2947,7 +2952,7 @@ impl Interp {
                 if self.tracing_intermediates() {
                     let name = code.symbols.name(control).as_bytes().to_vec();
                     let rendered = self.string_value_text(value);
-                    self.trace_assignment(indent, &name, &rendered, value);
+                    self.trace_assignment(indent, &name, &rendered, value)?;
                 }
                 Ok(())
             }
