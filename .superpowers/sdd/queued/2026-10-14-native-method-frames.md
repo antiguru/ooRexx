@@ -10,3 +10,5 @@ send path is hot: any fix measures sendloop, dispatch, dispatchclass, pingmsg ag
 Task 6.11 closed this for `SORTWITH` and `STABLESORTWITH`. Still open: the `Routine~call` CALL
 frame (Task 6.11 report), and a `METHOD SENDWITH` frame the oracle shows for `sendWith` and the
 crate does not (`task-6.11-review.md`, Minor 4).
+The Task 6.11 round-2 re-review (`task-6.11-rereview-r2.md`, Minor 2) adds `Message~send`: the
+oracle lists `METHOD SEND ... Compiled method "SEND" with scope "Message".` and the crate does not.
