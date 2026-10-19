@@ -2297,10 +2297,10 @@ impl Interp {
             return self.pinned_yield();
         }
         if fresh && !self.slice_deferred {
-            if self.activity.routing_trace {
-                if let Some(delivery) = self.deliveries.last_mut() {
-                    delivery.counts.clear();
-                }
+            if self.activity.routing_trace
+                && let Some(delivery) = self.deliveries.last_mut()
+            {
+                delivery.counts.clear();
             }
             self.slice_deferred = true;
             deferred_slice!(self);
