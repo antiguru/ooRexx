@@ -195,6 +195,13 @@ impl Interp {
         // enclosing call has already pushed: measured, `zz = length('abcd')`
         // under `trace i` refuses with `call_op_off_its_node`, where a call
         // with no arguments is untouched.
+        // The permission a traced clause holds for `PROCEDURE` is the
+        // activity's, and the clauses the delivery runs spend it: measured,
+        // `p: procedure` under `trace i` with a Rexx destination was 17.1.
+        let permitted = (
+            self.activity.procedure_permitted,
+            self.activity.region_procedure_permitted,
+        );
         let (values, mark) = self.take_value_buffer();
         let delivered = pinned!(
             self,
@@ -202,6 +209,10 @@ impl Interp {
             self.deliver_trace_line(class, route, &line, entry)
         );
         self.give_value_buffer(values, mark);
+        (
+            self.activity.procedure_permitted,
+            self.activity.region_procedure_permitted,
+        ) = permitted;
         self.activity.routing_trace = false;
         if delivered.is_err() {
             self.write_out_line(&line);

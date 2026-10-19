@@ -51,22 +51,26 @@ impl Interp {
     }
 
     /// One parsed `TRACE` setting, merged with the setting in force.
+    fn apply_trace_request(&mut self, request: &crate::trace::TraceRequest) {
+        let merged = crate::trace::applied(self.trace_mode(), request);
+        self.set_trace_mode(merged);
+    }
+
+    /// Whether a `TRACE` instruction leaves the setting alone, and calls
+    /// neither `setTrace` nor the `>I>` it makes.
     ///
     /// **A `TRACE` instruction is ignored while interactive debug is on**,
     /// and traced like any other clause: measured, a program that reaches
     /// `trace ?` and then `trace off` under `?R` still answers `?R` from
     /// `TRACE()` and keeps tracing. The builtin has no such guard, which is
     /// why it lives here rather than in `set_trace_mode`.
-    fn apply_trace_request(&mut self, request: &crate::trace::TraceRequest) {
-        // **`inDebug()` is `isDebug() && !debugPause`**, so the same
-        // instruction the program cannot use is what a line typed at the
-        // pause uses to end debug -- measured, `trace off` at a prompt ends
-        // the session and the pause with it.
-        if self.trace_mode().debug && !self.debug_pause() {
-            return;
-        }
-        let merged = crate::trace::applied(self.trace_mode(), request);
-        self.set_trace_mode(merged);
+    ///
+    /// **`inDebug()` is `isDebug() && !debugPause`**, so the same
+    /// instruction the program cannot use is what a line typed at the
+    /// pause uses to end debug -- measured, `trace off` at a prompt ends
+    /// the session and the pause with it.
+    fn ignores_trace_instruction(&self) -> bool {
+        self.trace_mode().debug && !self.debug_pause()
     }
 
     /// `NUMERIC DIGITS`/`FUZZ`/`FORM`, in every spelling the parser produces
@@ -77,9 +81,15 @@ impl Interp {
                 // `setTraceNormal`, which is silent here and is *not*
                 // `TRACE OFF` -- measured, `trace r` then bare `trace` then
                 // `trace()` gives `N`, where `trace off` gives `O`.
+                if self.ignores_trace_instruction() {
+                    return Ok(());
+                }
                 self.set_trace_mode(crate::trace::TraceMode::NORMAL);
             }
             Trace::Setting(bytes) => {
+                if self.ignores_trace_instruction() {
+                    return Ok(());
+                }
                 let request = crate::trace::parse_trace_request(bytes)
                     .expect("rexx-parse's check_trace_setting already validated this byte");
                 self.apply_trace_request(&request);
@@ -114,6 +124,11 @@ impl Interp {
                         .parse::<i64>()
                         .unwrap_or(0);
                     self.set_debug_skip(count)?;
+                    return Ok(());
+                }
+                // Ignored before it is read as a setting, so an invalid one
+                // raises nothing there.
+                if self.ignores_trace_instruction() {
                     return Ok(());
                 }
                 let request = crate::trace::parse_trace_request(&text)
@@ -191,11 +206,14 @@ impl Interp {
                 scope: self.class_id_text(identity.scope).as_bytes().to_vec(),
             });
         }
-        // A program called as a routine is announced under its own path.
+        // A program called as a routine is announced under its own path, and
+        // so is a prologue, which `runProlog` calls as an `EXTERNALCALL`.
         if self.activation().entry == crate::activation::Entry::TopLevel
             && matches!(
                 self.activation().call_type,
-                crate::activation::CallType::Subroutine | crate::activation::CallType::Function
+                crate::activation::CallType::Subroutine
+                    | crate::activation::CallType::Function
+                    | crate::activation::CallType::Requires
             )
         {
             let path = self.package_path(self.activation().program_id);

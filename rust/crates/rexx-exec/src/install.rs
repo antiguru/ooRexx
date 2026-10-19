@@ -2067,12 +2067,24 @@ impl Interp {
         let running = self
             .running_activation()
             .map(|activation| activation.settings.clone());
-        let outer = self.install_caller.replace(running);
+        let outer = self.install_caller.replace(running.clone());
         let installed = self.install_directives(id, &program);
         self.install_caller = outer;
         if let Err(failure) = installed {
             self.seal_package_level(&failure, id);
             return Err(failure);
+        }
+        // `PackageClass::install` installs a package with classes or
+        // requires by calling an empty routine of the package, which traces
+        // its `>I>` and `<I<` under the package's `::OPTIONS TRACE`. The main
+        // body built here is that empty routine.
+        if program.directives.iter().any(|directive| {
+            matches!(
+                directive.kind,
+                DirectiveKind::Class(_) | DirectiveKind::Requires(_)
+            )
+        }) {
+            self.run_install_stub(Rc::clone(&program), id, running)?;
         }
         let class = if routine {
             self.routine_class()

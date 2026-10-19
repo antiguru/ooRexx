@@ -219,8 +219,8 @@ fn form(
 }
 
 /// `PackageClass::traceRexx`: `TraceSetting::toString`, which is the one
-/// letter the setting is known by and the null string for a setting that was
-/// never made.
+/// letter the setting is known by, after a `?` for an interactive setting,
+/// and the null string for a setting that was never made.
 fn trace(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -228,7 +228,16 @@ fn trace(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let (_, trace) = settings_of(interp, receiver)?;
-    let text = trace.map(|mode| vec![mode.letter]).unwrap_or_default();
+    let text = trace
+        .map(|mode| {
+            let mut text = Vec::with_capacity(2);
+            if mode.debug {
+                text.push(b'?');
+            }
+            text.push(mode.letter);
+            text
+        })
+        .unwrap_or_default();
     Ok(Some(interp.text_built(text)))
 }
 

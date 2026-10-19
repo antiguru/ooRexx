@@ -2662,6 +2662,25 @@ impl Interp {
         outcome
     }
 
+    /// The empty routine `PackageClass::install` calls to install a package
+    /// whose `program` has an empty main body: one activation over that body.
+    pub(crate) fn run_install_stub(
+        &mut self,
+        program: Rc<Program>,
+        program_id: ProgramId,
+        caller_settings: Option<Settings>,
+    ) -> Result<(), Failure> {
+        debug_assert!(program.main.instructions.is_empty());
+        self.run_main(
+            program,
+            program_id,
+            CallType::Requires,
+            None,
+            caller_settings,
+        )?;
+        Ok(())
+    }
+
     /// [`Interp::run_loaded`] past the install: one activation over the main
     /// body, run to its end.
     fn run_main(
@@ -2726,6 +2745,12 @@ impl Interp {
             )
         });
         self.push_activation(main);
+        // `traceEntry()` before the first clause, which a body this
+        // announces makes under its package's `::OPTIONS TRACE`, even an
+        // empty one.
+        if own_level {
+            self.trace_package_invocation_entry();
+        }
         // Through the same route a `TRACE` instruction takes, because
         // `enableExternalTrace` is `setTrace` and that calls `traceEntry()`:
         // a called program announces itself with `>I>` where the top-level
@@ -2757,7 +2782,7 @@ impl Interp {
         if own_level && let Err(failure) = &exit {
             self.capture_activation_frame(failure);
         }
-        if called {
+        if own_level {
             self.trace_invocation_exit();
         }
         // Main's untrapped failure gives its failed sends their object while
