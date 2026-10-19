@@ -137,6 +137,9 @@ pub(crate) struct Activity {
     /// destructure can root it, and this field is covered by the exhaustive
     /// match in `object_roots`.
     pub(crate) pending_additional: Option<ObjRef>,
+    /// Condition objects a `CALL ON` trap queued inside a `LIBRARY REXX`
+    /// method, owed that method's frame once it returns.
+    pub(crate) native_frames_owed: Vec<ObjRef>,
     /// The `RESULT` a condition an extension raised names, held from the
     /// raise until the condition object is built, as
     /// [`Activity::pending_additional`] is.
@@ -421,6 +424,7 @@ impl Activity {
             native_tails: Vec::new(),
             pending_traps: VecDeque::new(),
             pending_additional: None,
+            native_frames_owed: Vec::new(),
             reraised_object: None,
             reraise_leaving: 0,
             pending_result: None,
@@ -564,6 +568,7 @@ impl Activity {
             flat_spares: _,
             pending_traps,
             pending_additional,
+            native_frames_owed,
             reraised_object,
             reraise_leaving: _,
             pending_result,
@@ -643,6 +648,7 @@ impl Activity {
         // The raise's own `ADDITIONAL`, alive between the raise and the
         // condition object that will hold it.
         out.extend(*pending_additional);
+        out.extend(native_frames_owed.iter().copied());
         out.extend(*pending_result);
         out.extend(*pending_rc);
         out.extend(*reraised_object);

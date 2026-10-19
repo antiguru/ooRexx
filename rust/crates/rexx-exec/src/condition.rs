@@ -164,6 +164,7 @@ impl Interp {
                 Some(self.activity.clause_state.line()),
             ),
         };
+        let package = self.reported_package(package);
         if let Some(line) = line {
             let position = self.counted(line);
             self.condition_put(object, key::POSITION, position)?;
@@ -179,6 +180,17 @@ impl Interp {
         let propagated = self.text(b"1");
         self.condition_put(object, key::PROPAGATED, propagated)?;
         Ok(object)
+    }
+
+    /// The package a condition object names for code in `package`: the
+    /// interpreter's own library programs are the `REXX` package. Measured,
+    /// a trapped 88.902 from `.Validate~number` names `REXX` as its `PACKAGE`
+    /// and `PROGRAM`.
+    fn reported_package(&self, package: Package) -> Package {
+        match package {
+            Package::Program(id) if self.library_programs.contains(&id) => Package::Rexx,
+            package => package,
+        }
     }
 
     /// Gives every message whose send the unwinding failure ended the
@@ -328,6 +340,54 @@ impl Interp {
         Ok(object)
     }
 
+    /// Puts the native method frame `frame`, whose traceback line is `text`,
+    /// first in `object`'s `STACKFRAMES` and `TRACEBACK`, and names the
+    /// `REXX` package that method is in, which has no `POSITION`.
+    pub(crate) fn lead_with_native_frame(
+        &mut self,
+        object: ObjRef,
+        frame: ObjRef,
+        text: &[u8],
+    ) -> Result<(), Failure> {
+        let held = self.roots.activity_mut().push_frame();
+        self.roots.activity_mut().push_temp(frame);
+        let line = self.text(text);
+        self.roots.activity_mut().push_temp(line);
+        for (name, item) in [(key::STACKFRAMES, frame), (key::TRACEBACK, line)] {
+            if let Some(list) = self.condition_entry(object, name) {
+                let caller = self.caller();
+                self.send_message(
+                    list,
+                    b"INSERT",
+                    None,
+                    &[Some(item), Some(ObjRef::NIL)],
+                    caller,
+                )?;
+            }
+        }
+        crate::dispatch::hash::directory_remove(self, object, key::POSITION)?;
+        let program = self.text(crate::LIBRARY_PACKAGE_NAME);
+        self.condition_put(object, key::PROGRAM, program)?;
+        let package = self.package_object(Package::Rexx)?;
+        self.condition_put(object, key::PACKAGE, package)?;
+        self.roots.activity_mut().pop_frame(held);
+        Ok(())
+    }
+
+    /// Marks a condition object `PROPAGATED` and taken by a `SIGNAL ON` trap,
+    /// as `RAISE PROPAGATE` passes a condition other than SYNTAX on.
+    pub(crate) fn trap_propagated_condition_object(
+        &mut self,
+        object: ObjRef,
+    ) -> Result<ObjRef, Failure> {
+        self.roots.activity_mut().push_temp(object);
+        let propagated = self.text(b"1");
+        self.condition_put(object, key::PROPAGATED, propagated)?;
+        let instruction = self.text(b"SIGNAL");
+        self.condition_put(object, key::INSTRUCTION, instruction)?;
+        Ok(object)
+    }
+
     /// Marks a condition object `PROPAGATED` and taken by a `CALL ON` trap,
     /// as `RAISE PROPAGATE` passes it to the caller's trap.
     pub(crate) fn propagate_to_call_trap(&mut self, object: ObjRef) -> Result<(), Failure> {
@@ -398,7 +458,7 @@ impl Interp {
         let origin = unwound_origin
             .map(|(package, _)| package)
             .or_else(|| self.running_program().map(Package::Program))
-            .unwrap_or(Package::Rexx);
+            .map_or(Package::Rexx, |package| self.reported_package(package));
         // A failure that never had a Rexx level (no level left a line or a
         // package, and none is running): `generateProgramInformation` finds no
         // Rexx frame, so the object has no `PACKAGE` or `POSITION` and an
@@ -441,10 +501,7 @@ impl Interp {
         }
         let program = match origin {
             _ if frameless => Vec::new(),
-            Package::Program(id) if !self.library_programs.contains(&id) => {
-                self.program_display_name(id).to_vec()
-            }
-            Package::Program(_) => self.program_path.clone(),
+            Package::Program(id) => self.program_display_name(id).to_vec(),
             Package::Rexx => crate::LIBRARY_PACKAGE_NAME.to_vec(),
         };
         let program = self.text_built(program);

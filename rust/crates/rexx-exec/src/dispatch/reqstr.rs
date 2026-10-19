@@ -228,6 +228,8 @@ impl Interp {
         // error and `CALL ON ANY` is measured not to catch a condition with
         // no resumption point.
         if self.trap_for(b"NOSTRING").is_some_and(|trap| !trap.call) {
+            // The object is the condition's `ADDITIONAL` (`ObjectClass.cpp:1247`).
+            self.activity.pending_additional = Some(value);
             return Err(Raised::nostring(&readable).into());
         }
         // `::OPTIONS NOSTRING SYNTAX`, and only where nothing trapped: the

@@ -133,6 +133,7 @@ impl Interp {
                 self.activity.pending_additional = Some(stream);
                 self.activity.pending_result = Some(result);
                 let object = self.build_condition_object(&raised, Some(true))?;
+                self.activity.native_frames_owed.push(object);
                 self.activity.pending_traps.push_back(PendingTrap {
                     condition: b"NOTREADY".as_slice().into(),
                     rc: None,
@@ -452,6 +453,12 @@ impl Interp {
             reraised,
         };
         let object = match self.activity.reraised_object.take() {
+            // `RexxActivation::raise` re-raises any other condition with the
+            // object it was built with, where `Activity::reraiseException`
+            // moves a SYNTAX condition's position to this level.
+            Some(object) if raised.condition != "SYNTAX" => {
+                self.trap_propagated_condition_object(object)?
+            }
             Some(object) => self.trap_reraised_condition_object(object, unwound.origin)?,
             None => self.build_trapped_condition_object(&raised, &unwound)?,
         };

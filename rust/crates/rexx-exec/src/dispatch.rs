@@ -2771,13 +2771,18 @@ impl Interp {
                     Err(native::deferred_send(entry, *owner).into())
                 }
                 native::ExternalBody::Implemented { arity, run } => {
-                    self.run_external(*arity, resolution, receiver, name, args, |interp| {
-                        pinned!(
-                            interp,
-                            crate::pinning::PinKind::native(name),
-                            run(interp, cleared, receiver, args)
-                        )
-                    })
+                    let ran =
+                        self.run_external(*arity, resolution, receiver, name, args, |interp| {
+                            pinned!(
+                                interp,
+                                crate::pinning::PinKind::native(name),
+                                run(interp, cleared, receiver, args)
+                            )
+                        });
+                    if !self.activity.native_frames_owed.is_empty() {
+                        self.settle_native_frames_owed(resolution, receiver, name, args)?;
+                    }
+                    ran
                 }
                 native::ExternalBody::Scoped { arity, begin } => {
                     let started =
@@ -2838,6 +2843,36 @@ impl Interp {
             self.run_uninits_at_return(value)?;
         }
         outcome.map(Started::Ran)
+    }
+
+    /// Leads each condition object a `CALL ON` trap queued inside this
+    /// `LIBRARY REXX` method with the method's own frame, as
+    /// `generateProgramInformation` builds it with the method's
+    /// `NativeActivation` on top.
+    #[cold]
+    #[inline(never)]
+    fn settle_native_frames_owed(
+        &mut self,
+        resolution: Resolution,
+        receiver: ObjRef,
+        name: &[u8],
+        args: &[Option<ObjRef>],
+    ) -> Result<(), Failure> {
+        let frame = self.roots.activity_mut().push_frame();
+        let owed = std::mem::take(&mut self.activity.native_frames_owed);
+        for &object in &owed {
+            self.roots.activity_mut().push_temp(object);
+        }
+        let scope = self.scope_id(resolution.scope);
+        let text = Raised::compiled_method_line(name, &scope);
+        let executable = context::native_method_executable(self, receiver, name);
+        let level =
+            context::build_native_level_frame(self, None, name, receiver, args, &text, executable);
+        let settled = owed
+            .iter()
+            .try_for_each(|&object| self.lead_with_native_frame(object, level, &text));
+        self.roots.activity_mut().pop_frame(frame);
+        settled
     }
 
     /// A `LIBRARY REXX` entry's `run` after the arity check `CPPCode`-style
@@ -3735,6 +3770,8 @@ impl Interp {
             Miss::PackageScope => Raised::package_scope_method(&target, name),
         };
         if self.trap_for(b"NOMETHOD").is_some_and(|trap| !trap.call) {
+            // The receiver is the condition's `ADDITIONAL` (`reportNomethod`).
+            self.activity.pending_additional = Some(receiver);
             Raised::nomethod(report, name).into()
         } else {
             report.into()
@@ -3887,8 +3924,12 @@ impl Interp {
             target,
             arguments,
             executable: None,
+            // A `LIBRARY REXX` entry's package is `REXX`.
             activation: Some(NativeActivationLevel {
-                package: self.external_package_program(method).map(Package::Program),
+                package: Some(
+                    self.external_package_program(method)
+                        .map_or(Package::Rexx, Package::Program),
+                ),
                 reraised,
             }),
         };

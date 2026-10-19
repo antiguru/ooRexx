@@ -1039,7 +1039,12 @@ fn trace_line_text(interp: &mut Interp, depth: usize, snapshot: &Snapshot) -> Ve
         .programs
         .get(snapshot.program)
         .is_none_or(|program| program.source.is_traceable());
-    let text = if !traceable {
+    // The interpreter's own library has no source to show, as
+    // `Interp::sourceless_site` reports it.
+    let library = interp.library_programs.contains(&snapshot.program);
+    let text = if library {
+        interp.sourceless_line(depth, crate::LIBRARY_PACKAGE_NAME)
+    } else if !traceable {
         let package = interp.program_display_name(snapshot.program).to_vec();
         interp.sourceless_line(depth, &package)
     } else {
