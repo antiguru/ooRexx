@@ -70,3 +70,4 @@ Task 6.7 r1 (359435fdf, 86d2e2d3b, bacf18d5a, 3a68eb48c): re-review (opus) APPRO
 Task 6.8: dispatched (implementer opus, BASE bbe6c5af2 + rules file).
 Task 6.8: implementer DONE_WITH_CONCERNS (8a0269f0b, 33298eb3b, 8b344309d). Concerns 1-2 queued as Deviation candidates for Moritz's batch (not copied, no test depends); 3-4 queued as gaps.
 Task 6.8 review (opus): CHANGES REQUESTED, 2 Important regressions (PROCEDURE EXPOSE compound selector tail read in caller frame; stem-name check compares target name not the slot's variable name), 2 Minor queued (list ordering added to Deviation candidates; local-novalue-hook).
+Task 6.8 r1 (a88871bb3, 0b405bf1e): re-review (opus) CHANGES REQUESTED, 2 Important: reference_names lost when a frame-sharing internal call returns; stores the alias's name not the owning variable's (fails two levels deep). Fix round 2 dispatched.
