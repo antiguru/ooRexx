@@ -69,3 +69,4 @@ Ruling: fix round 1 takes Important 1, Minor 2 (section count reads an Array as 
 Task 6.7 r1 (359435fdf, 86d2e2d3b, bacf18d5a, 3a68eb48c): re-review (opus) APPROVED, none open. Whole-number-argument Array reading appended to queued index-argument item. Task 6.7: complete (599f663ae, b55626842, 9435c51c3, 35ad9d68d, a40a7262e, 3920266a0, 359435fdf, 86d2e2d3b, bacf18d5a, 3a68eb48c).
 Task 6.8: dispatched (implementer opus, BASE bbe6c5af2 + rules file).
 Task 6.8: implementer DONE_WITH_CONCERNS (8a0269f0b, 33298eb3b, 8b344309d). Concerns 1-2 queued as Deviation candidates for Moritz's batch (not copied, no test depends); 3-4 queued as gaps.
+Task 6.8 review (opus): CHANGES REQUESTED, 2 Important regressions (PROCEDURE EXPOSE compound selector tail read in caller frame; stem-name check compares target name not the slot's variable name), 2 Minor queued (list ordering added to Deviation candidates; local-novalue-hook).

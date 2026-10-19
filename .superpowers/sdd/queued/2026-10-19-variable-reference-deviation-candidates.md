@@ -17,3 +17,10 @@ Found 2026-10-19 by Task 6.8 (`task-6.8-report.md`, Concerns).
   raises 98.995. The crate compares the names' bytes and binds both (`t6.8/probes/p16`). Copying
   the identity check would make string representation observable, which Deviation 4 leaves
   unspecified.
+
+The Task 6.8 review (`task-6.8-review.md`, Minor 3) traces the first item to a parser ordering.
+The oracle adds plain names to the front of a DROP, EXPOSE or PROCEDURE EXPOSE list and `(name)`
+selectors to the back (`InstructionParser.cpp:4495` and `:4523`), so every selector runs first, in
+reverse order. `drop list (list)` drops `X` on the oracle and `LIST` here. The crate runs the list
+in source order, as the documentation describes. The `PROCEDURE EXPOSE` handler split above
+follows from this ordering, so both can take one ruling.
