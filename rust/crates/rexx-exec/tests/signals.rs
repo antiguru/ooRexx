@@ -749,6 +749,30 @@ fn sigint_keeps_what_a_redirected_command_wrote() {
     );
 }
 
+/// A halt ending a wait whose target raised answers as Deviation 12
+/// licenses: 4.1 at the clause, so the `SIGNAL ON HALT` handler runs and the
+/// target's 42.3 is dropped. These bytes are this crate's; the oracle raises
+/// 98.923.
+#[test]
+fn sigint_drops_a_condition_a_redirected_target_raised() {
+    halts_after(
+        "redirectedraise",
+        "signal on halt\n\
+         address system 'echo a; sleep 5; echo b' with output using (.Bad~new)\n\
+         say 'after' rc\nexit\nhalt: say 'HALT handler rc' rc 'line' sigl; exit 0\n\
+         ::class Bad subclass OutputStream\n::method lineout\n  use arg l\n\
+           say 'O:'l\n  if l == 'a' then return 1 / 0\n  return 0\n",
+        "O:a\n",
+        &[Step::Pause(Duration::from_millis(300)), Step::Signal("INT")],
+        Launch::Plain,
+        &Ended {
+            code: Some(0),
+            stdout: "O:a\nHALT handler rc -4 line 2\n".to_string(),
+            stderr: String::new(),
+        },
+    );
+}
+
 /// The withdrawn wait answers `0` to a `CALL ON HALT` program, which runs
 /// on; the started activity's own halt ends it.
 #[test]

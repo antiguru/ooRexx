@@ -282,7 +282,7 @@ pub(crate) struct Activity {
     pub(crate) native_call: Option<Box<crate::dispatch::library::NativeInFlight>>,
     /// A command clause whose child waits off the baton, until the clause
     /// settles it.
-    pub(crate) blocked: Option<Box<crate::command::Blocked>>,
+    pub(crate) blocked: crate::command::Blocks,
     /// Whether a park's continuation is running, outside every driver, so a
     /// native call it makes does not leave one.
     pub(crate) resuming: bool,
@@ -493,7 +493,7 @@ impl Activity {
             driver_pins: 0,
             native_park: None,
             native_call: None,
-            blocked: None,
+            blocked: crate::command::Blocks::default(),
             resuming: false,
             first: None,
             root_then: None,
@@ -679,9 +679,7 @@ impl Activity {
         // The raise's own `ADDITIONAL`, alive between the raise and the
         // condition object that will hold it.
         out.extend(*pending_additional);
-        if let Some(blocked) = blocked {
-            blocked.object_roots(out);
-        }
+        blocked.object_roots(out);
         out.extend(native_frames_owed.iter().copied());
         out.extend(*pending_result);
         out.extend(*pending_rc);

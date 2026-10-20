@@ -597,7 +597,7 @@ impl Interp {
             InstructionKind::Guard(guard) => self.exec_guard(code, index, guard),
             InstructionKind::Reply { expression } => self.exec_reply(code, expression.as_ref()),
             InstructionKind::Command { .. } | InstructionKind::Address(_)
-                if self.blocked_command_woken() =>
+                if self.blocked_command_woken(index) =>
             {
                 self.end_blocked_command(index, instruction, source)
             }

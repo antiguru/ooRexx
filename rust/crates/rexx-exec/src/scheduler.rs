@@ -1180,7 +1180,7 @@ impl Interp {
                         || record.when_parked
                         || table.semaphores.queues(activity)
                         || record.native_call.is_some()
-                        || record.blocked.is_some();
+                        || !record.blocked.is_empty();
                     if !ready[index] && !finished && !wakes {
                         return fail("a parked activity with no wake source");
                     }
@@ -1534,8 +1534,7 @@ impl Interp {
                 } => {
                     let captured = self
                         .record_of(activity)
-                        .and_then(|record| record.blocked.as_mut())
-                        .is_some_and(|blocked| blocked.capture(token, bytes));
+                        .is_some_and(|record| record.blocked.capture(token, bytes));
                     if captured {
                         self.unpark(activity);
                     }
@@ -1560,8 +1559,7 @@ impl Interp {
                     self.activities.in_flight -= 1;
                     let ended = self
                         .record_of(activity)
-                        .and_then(|record| record.blocked.as_mut())
-                        .is_some_and(|blocked| blocked.end(token, ended));
+                        .is_some_and(|record| record.blocked.end(token, ended));
                     if ended {
                         self.unpark(activity);
                     }
@@ -2611,13 +2609,11 @@ impl Interp {
         } else if std::mem::take(&mut record.when_parked) {
             record.woken_by_halt = true;
             self.unpark(activity);
-        } else if let Some(token) = record
-            .blocked
-            .as_mut()
-            .and_then(|blocked| blocked.abandon())
+        } else if let tokens = record.blocked.abandon()
+            && !tokens.is_empty()
         {
-            table.in_flight -= 1;
-            table.abandoned_blocks.push(token);
+            table.in_flight -= tokens.len();
+            table.abandoned_blocks.extend(tokens);
             self.unpark(activity);
         } else if let Some(order) = record.semaphore_wait.take() {
             let before = table.sleepers.len();

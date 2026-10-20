@@ -314,3 +314,7 @@ lang/command_redirected_target_raises.rex
 # 9d Task 6.13 fix round 2: a raising target holds its condition until the
 # child ends.
 lang/command_redirected_target_raises_held.rex
+# 9d Task 6.13 fix round 3: a target whose method parks, and a raising
+# line dropping its part line.
+lang/command_redirected_target_parks.rex
+lang/command_redirected_target_raises_part_line.rex

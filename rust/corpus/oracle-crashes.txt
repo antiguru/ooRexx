@@ -1789,7 +1789,10 @@ crate reads the object's string value too, which is 3.1 naming `an Object`
     say 'error only' w.0 '['w.1']'
 
 Effect: SIGSEGV, rc 139, on 3 of 3 runs, with nothing written to either stream. With an output
-target as well (`output stem v.`) it runs and answers `[U.]` for the error stem's line. Measured
+target as well (`output stem v.`) it runs and answers `[U.]` for the error stem's line. Cause
+(found by the Task 6.13 re-review r2): `CommandIOContext::resolveConflicts`
+(`CommandIOContext.cpp:131`) wraps `output`, where `error` was meant, in a `BufferingOutputTarget`
+when the error target is also the input; with no output target it wraps NULL. Measured
 2026-10-20 by Phase 9d Task 6.13 fix round 2, under the standard wrapper from a fresh empty
 directory (found by the Task 6.13 re-review). This crate answers `error only 1 [in]`, rc 0. No
 upstream ticket.
@@ -1808,8 +1811,35 @@ upstream ticket.
       address system 'sleep 0.5; cat; echo err'k' >&2' with input stem i. output stem o. error stem e.
       return k rc o.0 o.1 o.2 o.3 e.0 e.1 .context~rs
 
-Effect: an INDEFINITE BLOCK in 3 of 6 runs, killed at the 20 s deadline (rc 124, the program
+Effect: an INDEFINITE BLOCK in 2 or 3 of 6 runs (3 here, 2 in the Task 6.13 re-review r2), killed at the 20 s deadline (rc 124, the program
 then reporting 4.1 at the command's line), having printed none or the first of the results;
 the other 3 runs print the four results and `parallel 1`. Measured 2026-10-20 by Phase 9d Task 6.13 fix round 2, under the standard wrapper
 with `timeout -k 5 20`, from a fresh empty directory (found by the Task 6.13 re-review, also 3 of
 6). This crate gives the four results and `parallel 1` in every run. No upstream ticket.
+
+## 58. A redirect target's method raising ERROR under `CALL ON ERROR`, the command ending non-zero
+
+    address system 'exit 7'
+    o = .Bad~new
+    call on error name h
+    address system 'echo a; sleep 0.3; echo b; exit 5' with output using (o)
+    say 'after' rc .rs
+    exit
+    h: say 'handler' condition('c') condition('d') 'rc' rc 'rs' .rs 'sigl' sigl
+    return
+    ::class Bad subclass OutputStream
+    ::method lineout
+      use arg l
+      say 'O:'l
+      if l == 'a' then raise error 9
+      return 0
+
+Effect: SIGSEGV, rc 139, on 3 of 3 runs, after `O:a`, `O:b` and one handler line, the command's
+(`handler ERROR echo a; ... exit 5 rc 5 rs 1 sigl 4`). The same shape with no redirection, a
+command whose expression's method does `raise error 3 return 'exit 5'`, dies the same way: it is
+entry 5's family, the same `CALL ON` condition queued twice in one clause. Measured 2026-10-20 by
+Phase 9d Task 6.13 fix round 3 under the standard wrapper from a fresh empty directory (found by
+the Task 6.13 re-review r2 as `rcun2`). rexxref (Condition traps, CALL ON) puts the trap in the
+delayed state from the first raise and ignores an ERROR raised again while it is delayed, so this
+crate runs the handler once, for the target's ERROR (`rc 9`), and ignores the command's
+(`src/scheduler/tests.rs`). No upstream ticket.

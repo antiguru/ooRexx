@@ -557,15 +557,67 @@ fn read_all(
 pub(crate) struct Blocked {
     command: Vec<u8>,
     indent: usize,
+    /// The activation and instruction index of the clause, which is the one
+    /// that takes the wait up when it runs again.
+    at: (crate::activation::ActivationId, usize),
     token: u64,
-    io: Option<IoContext>,
+    io: Option<Rc<IoContext>>,
     /// Output pieces that arrived for the output target and are not yet
     /// written.
     captured: Vec<u8>,
-    /// The first condition a target raised, which the clause raises once
-    /// the child has ended.
+    /// The last condition a target raised, which the clause raises once the
+    /// child has ended.
     raised: Option<Failure>,
+    /// Whether a halt ended the wait.
+    halted: bool,
     ended: Option<Waited>,
+}
+
+/// The command clauses of one activity whose children run off the baton:
+/// one, or more where a target's own method issues a command while the
+/// clause writes to it. The innermost is last, and is the clause the
+/// activity runs again.
+#[derive(Default)]
+pub(crate) struct Blocks(Vec<Blocked>);
+
+impl Blocks {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Records an output piece for the wait `token` names, wherever it is;
+    /// answers whether one took it.
+    pub(crate) fn capture(&mut self, token: u64, bytes: Vec<u8>) -> bool {
+        match self.0.iter_mut().find(|blocked| blocked.token == token) {
+            Some(blocked) => blocked.capture(token, bytes),
+            None => false,
+        }
+    }
+
+    /// Records the end of the wait `token` names, wherever it is; answers
+    /// whether one took it.
+    pub(crate) fn end(&mut self, token: u64, ended: Waited) -> bool {
+        match self.0.iter_mut().find(|blocked| blocked.token == token) {
+            Some(blocked) => blocked.end(token, ended),
+            None => false,
+        }
+    }
+
+    /// Abandons every wait still running, as a halt does, answering their
+    /// tokens.
+    pub(crate) fn abandon(&mut self) -> Vec<u64> {
+        self.0
+            .iter_mut()
+            .filter_map(|blocked| blocked.abandon())
+            .collect()
+    }
+
+    /// Every object the redirections' targets hold.
+    pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
+        for blocked in &self.0 {
+            blocked.object_roots(out);
+        }
+    }
 }
 
 impl Blocked {
@@ -587,9 +639,7 @@ impl Blocked {
     }
 
     /// Records what the child left, under the token the wait was left with;
-    /// answers whether it was this wait's. A clause whose target write
-    /// raised has left its wait, and the next command's wait has a token of
-    /// its own.
+    /// answers whether it was this wait's.
     pub(crate) fn end(&mut self, token: u64, ended: Waited) -> bool {
         if token != self.token {
             return false;
@@ -610,8 +660,14 @@ impl Blocked {
             out: Vec::new(),
             err: Vec::new(),
         });
+        self.halted = true;
         Some(self.token)
     }
+}
+
+/// Whether `failure` is a HALT condition.
+fn is_halt(failure: &Failure) -> bool {
+    matches!(failure, Failure::Raised(raised) if raised.condition.eq_ignore_ascii_case("HALT"))
 }
 
 /// The return code of a command whose wait a halt abandoned: `EINTR`, negated
@@ -1123,15 +1179,18 @@ impl Interp {
         self.roots.activity_mut().pop_frame(frame);
         let outcome = match outcome {
             Ok(Commanded::Left(token)) => {
-                self.activity.blocked = Some(Box::new(Blocked {
+                let at = (self.activation().id, index);
+                self.activity.blocked.0.push(Blocked {
                     command,
                     indent,
+                    at,
                     token,
-                    io: context,
+                    io: context.map(Rc::new),
                     captured: Vec::new(),
                     raised: None,
+                    halted: false,
                     ended: None,
-                }));
+                });
                 return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Block));
             }
             Ok(Commanded::Done(outcome)) => Ok(outcome),
@@ -1171,10 +1230,35 @@ impl Interp {
         }
     }
 
-    /// Whether the running activity's command clause has a child off the
-    /// baton, which [`Interp::end_blocked_command`] takes up.
-    pub(crate) fn blocked_command_woken(&self) -> bool {
-        self.activity.blocked.is_some()
+    /// Whether a `CALL ON` delivery of `condition` is already queued for the
+    /// running activation, which puts its trap in the delayed state.
+    fn call_trap_delayed(&self, condition: &[u8]) -> bool {
+        let here = self.activation().id;
+        self.activity.pending_traps.iter().any(|pending| {
+            !pending.request
+                && pending.activation == here
+                && pending.condition.eq_ignore_ascii_case(condition)
+        })
+    }
+
+    /// The running activity's innermost waiting command clause, where it is
+    /// the one `token` names.
+    fn innermost_block(&mut self, token: u64) -> Option<&mut Blocked> {
+        self.activity
+            .blocked
+            .0
+            .last_mut()
+            .filter(|blocked| blocked.token == token)
+    }
+
+    /// Whether the command clause at `index` of the running activation has a
+    /// child off the baton, which [`Interp::end_blocked_command`] takes up.
+    pub(crate) fn blocked_command_woken(&self, index: usize) -> bool {
+        self.activity
+            .blocked
+            .0
+            .last()
+            .is_some_and(|blocked| blocked.at == (self.activation().id, index))
     }
 
     /// The command clause whose child waits off the baton, run again: the
@@ -1188,7 +1272,46 @@ impl Interp {
         instruction: &Instruction,
         source: Option<&ProgramSource>,
     ) -> Result<ExecOutcome, Failure> {
-        let Some(mut blocked) = self.activity.blocked.take() else {
+        let Some(token) = self.activity.blocked.0.last().map(|blocked| blocked.token) else {
+            return Err(
+                crate::Loud::scheduler_inconsistency("a command resumed with no child").into(),
+            );
+        };
+        // The clause's wait stays on the record while the target is written,
+        // so a piece or the end that arrives while a target's method parks
+        // still finds it; each piece that did is written in turn.
+        loop {
+            let Some(blocked) = self.innermost_block(token) else {
+                return Err(crate::Loud::scheduler_inconsistency(
+                    "a command's wait left its place",
+                )
+                .into());
+            };
+            let captured = std::mem::take(&mut blocked.captured);
+            let (Some(io), false) = (blocked.io.clone(), captured.is_empty()) else {
+                break;
+            };
+            // A condition waits for the child, as the oracle's handler
+            // catches it and raises it once it returns; anything else (an
+            // EXIT, a refusal) ends the clause now.
+            let mut raised = blocked.raised.take();
+            let written =
+                self.write_holding_last(&mut raised, |interp| io.write_output(interp, &captured));
+            if let Err(failure) = written {
+                self.activity.blocked.0.pop();
+                return Err(failure);
+            }
+            if let Some(blocked) = self.innermost_block(token) {
+                blocked.raised = raised;
+            }
+        }
+        if self
+            .innermost_block(token)
+            .is_some_and(|blocked| blocked.ended.is_none())
+        {
+            return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Block));
+        }
+        let Some(blocked) = self.activity.blocked.0.pop() else {
             return Err(
                 crate::Loud::scheduler_inconsistency("a command resumed with no child").into(),
             );
@@ -1199,36 +1322,27 @@ impl Interp {
         for object in held {
             self.roots.activity_mut().push_temp(object);
         }
-        let captured = std::mem::take(&mut blocked.captured);
-        if let Some(context) = &blocked.io {
-            // A condition waits for the child, as the oracle's handler
-            // catches it and raises it once it returns; anything else (an
-            // EXIT, a refusal) ends the clause now.
-            let mut raised = blocked.raised.take();
-            let written = self.write_holding_last(&mut raised, |interp| {
-                context.write_output(interp, &captured)
-            });
-            if let Err(failure) = written {
-                self.roots.activity_mut().pop_frame(frame);
-                return Err(failure);
-            }
-            blocked.raised = raised;
-        }
-        if blocked.ended.is_none() {
-            self.roots.activity_mut().pop_frame(frame);
-            self.activity.blocked = Some(blocked);
-            return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Block));
-        }
         let Blocked {
             command,
             indent,
             io,
             raised,
+            halted,
             ended,
             ..
-        } = *blocked;
+        } = blocked;
+        // A halt ends the wait as Deviation 12 licenses: the clause answers
+        // its 4.1, so a condition a target raised is dropped, a HALT a
+        // target's method took aside.
+        let raised = match raised {
+            Some(failure) if halted && !is_halt(&failure) => {
+                self.clear_failure_levels();
+                None
+            }
+            raised => raised,
+        };
         let outcome = match ended {
-            Some(ended) => self.command_ended(io.as_ref(), &ended, raised),
+            Some(ended) => self.command_ended(io.as_deref(), &ended, raised),
             None => Err(crate::Loud::scheduler_inconsistency(
                 "a command resumed before its child ended",
             )
@@ -1484,6 +1598,11 @@ impl Interp {
             ..Raised::condition(std::borrow::Cow::Borrowed(condition))
         };
         match self.trap_for(condition.as_bytes()) {
+            // rexxref (Condition traps, CALL ON): a trap is in the delayed
+            // state from the raise on, and an ERROR or FAILURE raised again
+            // while it is delayed is ignored -- as here, after a redirect
+            // target's method raised the same condition in this clause.
+            Some(trap) if trap.call && self.call_trap_delayed(condition.as_bytes()) => Ok(()),
             Some(trap) if trap.call => {
                 self.activity.pending_rc = supplied;
                 // Built now, not at delivery: by then this clause has

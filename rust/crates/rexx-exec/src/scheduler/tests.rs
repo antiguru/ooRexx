@@ -31,6 +31,34 @@ fn stderr(outcome: &Outcome) -> String {
     String::from_utf8_lossy(&outcome.stderr).into_owned()
 }
 
+/// rexxref, CALL ON: a trap is delayed from the raise on, and an ERROR raised
+/// again while it is delayed is ignored. The command's own ERROR comes after
+/// the one its expression's method raised, so the handler runs once, for
+/// that one; the oracle runs it for the command's and then dies
+/// (`corpus/oracle-crashes.txt` entry 58).
+#[test]
+fn a_command_error_while_its_call_on_trap_is_delayed_is_ignored() {
+    let outcome = run(
+        "call on error name h\no = .g~new\naddress system o~cmd\nsay 'after' rc\nexit\n\
+              h: say 'handler' '['condition('d')']' rc\nreturn\n\
+              ::class g\n::method cmd\n  raise error 3 return 'exit 5'\n",
+    );
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(stdout(&outcome), "handler [] 3\nafter 3\n");
+}
+
+/// The adjacent case: with nothing delayed, the command's ERROR runs the
+/// handler.
+#[test]
+fn a_command_error_with_its_call_on_trap_enabled_runs_the_handler() {
+    let outcome = run(
+        "call on error name h\naddress system 'exit 5'\nsay 'after' rc\nexit\n\
+              h: say 'handler' '['condition('d')']' rc\nreturn\n",
+    );
+    assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
+    assert_eq!(stdout(&outcome), "handler [exit 5] 5\nafter 5\n");
+}
+
 /// A started method nothing waits on runs once main has ended, so its line
 /// comes after main's last one.
 #[test]
