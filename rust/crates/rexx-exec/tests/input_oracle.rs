@@ -148,7 +148,25 @@ end
 say 'chars end' n chars()
 ";
 
+/// The program the piped-position row runs: CHARIN after LINEIN reads on
+/// from where the line ended, and a start on a transient stream is 93.958.
+const PIPE_POSITION_PROGRAM: &str = "\
+say '[' || linein() || ']'
+say '[' || charin(, , 3) || ']'
+say '[' || charin(, 3) || ']'
+say 'not reached'
+";
+
 const CASES: &[Case] = &[
+    Case {
+        name: "console-charin-after-linein",
+        program: PIPE_POSITION_PROGRAM,
+        args: &[],
+        stdin: Some(b"hello\nworld\nthird\n"),
+        why: "LINEIN and CHARIN share one read position on a piped console, \
+              so CHARIN answers `wor`; a start positions, and a pipe cannot \
+              be positioned (rexxref funct.xml:1314-1316)",
+    },
     Case {
         name: "console-lines-loop",
         program: COUNT_PROGRAM,
@@ -600,31 +618,55 @@ end
 say 'end' n chars() lines() .stdin~lines
 ";
 
-/// A console redirected from a regular file is a persistent stream: CHARS
-/// answers the bytes left and LINES Count the lines left (rexxref
-/// iostrms.xml:155-170), a last line with no line end counted.
-#[test]
-fn a_file_console_counts_what_is_left() {
-    if !gate_mode() {
-        eprintln!(
-            "*** SKIPPED -- the file-console comparison needs the oracle and runs \
-             only with {GATE_ENV} set. ***"
-        );
-        return;
-    }
+/// The program the file-position test runs: the read position CHARIN's start
+/// and LINEIN's line move, shared by both, with the counts around each move.
+/// No LINES Count follows a LINEIN line: the oracle's cached line count
+/// answers wrongly there (Deviation candidate 5), and CHARS and LINES still
+/// witness the position.
+const FILE_POSITION_PROGRAM: &str = "\
+say 'A' chars() lines() .stdin~lines
+say '[' || linein() || ']'
+say 'B' chars() lines() .stdin~lines
+say '[' || charin(, 3) || ']'
+say 'C' chars() lines() .stdin~lines
+say '[' || charin(, 1, 3) || ']'
+say '[' || linein() || ']'
+say 'D' chars() lines() .stdin~lines
+say '[' || charin(, , 3) || ']'
+say '[' || linein() || ']'
+say 'E' chars() lines() .stdin~lines
+say '[' || linein(, 1) || ']'
+say 'F' chars() lines()
+say '[' || linein(, 3) || ']'
+say 'G' chars() lines()
+say '[' || .stdin~charin(2, 2) || ']'
+say 'H' chars() lines() .stdin~lines
+say '[' || .stdin~linein(4) || ']'
+say 'I' chars() lines() .stdin~lines
+say '[' || charin(, 23) || ']' .stdin~description
+say 'J' chars() lines() .stdin~lines
+say '[' || charin(, 22) || ']' .stdin~description
+say 'K' chars() lines() .stdin~lines
+say '[' || linein() || ']' .stdin~description
+say 'L' chars() lines() .stdin~lines
+";
+
+/// Runs `program` on both interpreters with `input` as a regular file on
+/// standard input, and answers both standard outputs once the exit codes
+/// agree.
+fn file_console_outputs(name: &str, program: &str, input: &[u8]) -> (String, String) {
     let dir = fresh_run_dir();
-    let file = dir.join("file-console.rex");
-    fs::write(&file, FILE_COUNT_PROGRAM)
-        .unwrap_or_else(|e| panic!("cannot write {}: {e}", file.display()));
-    let input = dir.join("console.txt");
-    fs::write(&input, b"hello\nworld\nthird\nlast")
-        .unwrap_or_else(|e| panic!("cannot write {}: {e}", input.display()));
+    let file = dir.join(format!("{name}.rex"));
+    fs::write(&file, program).unwrap_or_else(|e| panic!("cannot write {}: {e}", file.display()));
+    let console = dir.join("console.txt");
+    fs::write(&console, input)
+        .unwrap_or_else(|e| panic!("cannot write {}: {e}", console.display()));
     let abs = fs::canonicalize(&file)
         .unwrap_or_else(|e| panic!("cannot resolve {}: {e}", file.display()));
     let as_stdin = || {
         Stdio::from(
-            fs::File::open(&input)
-                .unwrap_or_else(|e| panic!("cannot open {}: {e}", input.display())),
+            fs::File::open(&console)
+                .unwrap_or_else(|e| panic!("cannot open {}: {e}", console.display())),
         )
     };
     let oracle = support::oracle::locate();
@@ -637,17 +679,67 @@ fn a_file_console_counts_what_is_left() {
     let cpp = oracle.run_with_stdin(&abs, &[], as_stdin());
     assert!(
         !did_not_finish(&cpp),
-        "a file console: the oracle did not finish: {:?}",
+        "{name}: the oracle did not finish: {:?}",
         cpp.termination
     );
     assert_eq!(
-        String::from_utf8_lossy(&rust.stdout),
-        String::from_utf8_lossy(&cpp.stdout),
-        "a file console's counts"
+        rust.status.code(),
+        Some(cpp.expect_exit_code()),
+        "{name}: exit codes, with stderr {:?} here and {:?} on the oracle",
+        String::from_utf8_lossy(&rust.stderr),
+        String::from_utf8_lossy(&cpp.stderr)
     );
+    (
+        String::from_utf8_lossy(&rust.stdout).into_owned(),
+        String::from_utf8_lossy(&cpp.stdout).into_owned(),
+    )
+}
+
+/// A console redirected from a regular file is a persistent stream: CHARS
+/// answers the bytes left and LINES Count the lines left (rexxref
+/// iostrms.xml:155-170), a last line with no line end counted.
+#[test]
+fn a_file_console_counts_what_is_left() {
+    if !gate_mode() {
+        eprintln!(
+            "*** SKIPPED -- the file-console comparison needs the oracle and runs \
+             only with {GATE_ENV} set. ***"
+        );
+        return;
+    }
+    let (rust, cpp) = file_console_outputs(
+        "file-console",
+        FILE_COUNT_PROGRAM,
+        b"hello\nworld\nthird\nlast",
+    );
+    assert_eq!(rust, cpp, "a file console's counts");
     assert!(
-        String::from_utf8_lossy(&cpp.stdout).starts_with("C 22 22 1 4\n"),
-        "the oracle did not count the file: {}",
-        String::from_utf8_lossy(&cpp.stdout)
+        cpp.starts_with("C 22 22 1 4\n"),
+        "the oracle did not count the file: {cpp}"
+    );
+}
+
+/// A console redirected from a regular file has one read position, which
+/// CHARIN's start and LINEIN's line move and both reads advance (rexxref
+/// funct.xml:1310-1322 and :3080-3087). A start past the end moves nothing
+/// and leaves `NOTREADY:EOF`.
+#[test]
+fn a_file_console_has_one_read_position() {
+    if !gate_mode() {
+        eprintln!(
+            "*** SKIPPED -- the file-position comparison needs the oracle and runs \
+             only with {GATE_ENV} set. ***"
+        );
+        return;
+    }
+    let (rust, cpp) = file_console_outputs(
+        "file-position",
+        FILE_POSITION_PROGRAM,
+        b"hello\nworld\nthird\nlast",
+    );
+    assert_eq!(rust, cpp, "a file console's read position");
+    assert!(
+        cpp.contains("\n[l]\nC 19 1 4\n[hel]\n[lo]\n"),
+        "the oracle did not position the file: {cpp}"
     );
 }

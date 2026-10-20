@@ -1160,10 +1160,19 @@ pub(super) fn charin(
     };
     if let Some(which) = standard_of(interp, receiver)? {
         refuse_transient_position(interp, which, start.is_some())?;
-        start.map(positive).transpose()?;
+        let start = start.map(positive).transpose()?;
         let StandardStream::In = which else {
             return Ok(Some(interp.text(b"")));
         };
+        if let Some(start) = start {
+            match interp.input_seek_char(start) {
+                None => return Err(Raised::transient_positioning().into()),
+                Some(false) => {
+                    return notready(interp, receiver, StreamStatus::NotReady, Vec::new());
+                }
+                Some(true) => {}
+            }
+        }
         let wanted = usize::try_from(length).unwrap_or(usize::MAX);
         // A zero-length ask reads nothing and leaves the state alone, as it
         // does on the file path: measured, `.stdin~charin( , 0)` answers the
@@ -1266,10 +1275,15 @@ pub(super) fn linein(
     }
     if let Some(which) = standard_of(interp, receiver)? {
         refuse_transient_position(interp, which, line.is_some())?;
-        line.map(positive).transpose()?;
+        let line = line.map(positive).transpose()?;
         let StandardStream::In = which else {
             return Ok(Some(interp.text(b"")));
         };
+        if let Some(line) = line
+            && !interp.input_seek_line(line)
+        {
+            return Err(Raised::transient_positioning().into());
+        }
     } else {
         if !read_setup(interp, receiver, b"")? {
             return Ok(Some(interp.text(b"")));
@@ -1786,7 +1800,7 @@ pub(super) fn lines(
         let StandardStream::In = which else {
             return Ok(Some(interp.text(b"0")));
         };
-        let left = interp.input_remaining_lines().unwrap_or(1);
+        let left = interp.input_remaining_lines(!quick).unwrap_or(1);
         let answer = if quick { u64::from(left > 0) } else { left };
         return Ok(Some(interp.text_built(answer.to_string().into_bytes())));
     }

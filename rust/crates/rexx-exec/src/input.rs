@@ -56,6 +56,8 @@ enum Source {
     /// The process's standard input, read a chunk at a time off the baton,
     /// where a halt can abandon the wait ([`Interp::fill_stdin`]).
     Stdin(Stdin),
+    /// The process's standard input when it is a regular file.
+    File(FileConsole),
     Bytes(Cursor<Vec<u8>>),
 }
 
@@ -86,11 +88,250 @@ pub(crate) fn read_stdin_chunk() -> Vec<u8> {
     chunk
 }
 
+/// A standard input that is a regular file: a persistent stream with one read
+/// position, which CHARIN's start and LINEIN's line move (rexxref
+/// funct.xml:1314-1322 and :3080-3087), and whose counts are taken from that
+/// position (iostrms.xml:155-165). The file is read in place, so the
+/// descriptor's own offset never moves.
+struct FileConsole {
+    file: std::fs::File,
+    /// The offset of the next byte to read.
+    position: u64,
+    /// The line `position` lies in, once something has counted it.
+    line: Option<u64>,
+    /// The file's lines, with the size they were counted at.
+    total: Option<(u64, u64)>,
+    /// Bytes read ahead, from `buffered_at`.
+    buffered: Vec<u8>,
+    buffered_at: u64,
+}
+
+impl FileConsole {
+    /// Standard input, when it is a regular file.
+    fn open() -> Option<FileConsole> {
+        use std::os::fd::AsFd;
+        let stdin = std::io::stdin();
+        FileConsole::over(std::fs::File::from(
+            stdin.as_fd().try_clone_to_owned().ok()?,
+        ))
+    }
+
+    /// `file` as a console, positioned at its descriptor's offset; `None`
+    /// unless it is a regular file.
+    fn over(mut file: std::fs::File) -> Option<FileConsole> {
+        use std::io::Seek;
+        if !file.metadata().ok()?.file_type().is_file() {
+            return None;
+        }
+        let position = file.stream_position().unwrap_or(0);
+        Some(FileConsole {
+            file,
+            position,
+            line: (position == 0).then_some(1),
+            total: None,
+            buffered: Vec::new(),
+            buffered_at: 0,
+        })
+    }
+
+    fn size(&self) -> u64 {
+        self.file.metadata().map(|meta| meta.len()).unwrap_or(0)
+    }
+
+    /// Up to `len` bytes at `offset`: empty at the end of the file or on an
+    /// error.
+    fn read_at(&self, offset: u64, len: usize) -> Vec<u8> {
+        use std::os::unix::fs::FileExt;
+        let mut out = vec![0u8; len];
+        let read = loop {
+            match self.file.read_at(&mut out, offset) {
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                read => break read.unwrap_or(0),
+            }
+        };
+        out.truncate(read);
+        out
+    }
+
+    /// Makes `buffered` hold the byte at the read position, answering
+    /// whether the file has one.
+    fn fill(&mut self) -> bool {
+        let end = self.buffered_at + self.buffered.len() as u64;
+        if self.position >= self.buffered_at && self.position < end {
+            return true;
+        }
+        self.buffered = self.read_at(self.position, STDIN_CHUNK);
+        self.buffered_at = self.position;
+        !self.buffered.is_empty()
+    }
+
+    /// The buffered bytes from the read position on, after [`FileConsole::fill`].
+    fn ahead(&self) -> &[u8] {
+        let from = usize::try_from(self.position.saturating_sub(self.buffered_at)).unwrap_or(0);
+        self.buffered.get(from..).unwrap_or_default()
+    }
+
+    /// One line with its terminator, or nothing at the end of the file.
+    fn read_line(&mut self) -> Vec<u8> {
+        let mut line = Vec::new();
+        while self.fill() {
+            let ahead = self.ahead();
+            let found = ahead.iter().position(|byte| *byte == b'\n');
+            let take = found.map_or(ahead.len(), |at| at + 1);
+            line.extend_from_slice(&ahead[..take]);
+            self.position += take as u64;
+            if found.is_some() {
+                if let Some(current) = &mut self.line {
+                    *current += 1;
+                }
+                break;
+            }
+        }
+        line
+    }
+
+    /// Up to `wanted` bytes from the read position, short only at the end of
+    /// the file.
+    fn read_bytes(&mut self, wanted: usize) -> Vec<u8> {
+        let mut out = Vec::new();
+        while out.len() < wanted && self.fill() {
+            let ahead = self.ahead();
+            let take = ahead.len().min(wanted - out.len());
+            out.extend_from_slice(&ahead[..take]);
+            self.position += take as u64;
+        }
+        if let Some(current) = &mut self.line {
+            *current += out.iter().filter(|byte| **byte == b'\n').count() as u64;
+        }
+        out
+    }
+
+    /// CHARS: the bytes from the read position to the end of the file.
+    fn chars_left(&self) -> u64 {
+        self.size().saturating_sub(self.position)
+    }
+
+    /// LINES Normal: whether any byte remains.
+    fn has_data(&mut self) -> bool {
+        self.fill()
+    }
+
+    /// LINES Count: the lines from the read position on, a last line with no
+    /// line end included. The file's line count is kept while its size stays,
+    /// so a loop of counts and reads costs one count.
+    fn lines_left(&mut self) -> u64 {
+        let size = self.size();
+        if self.position >= size {
+            return 0;
+        }
+        let line = self.line();
+        let total = match self.total {
+            Some((total, counted_at)) if counted_at == size => total,
+            _ => {
+                let total = line - 1 + self.lines_from(self.position, size);
+                self.total = Some((total, size));
+                total
+            }
+        };
+        (total + 1).saturating_sub(line)
+    }
+
+    /// The line the read position lies in: one more than the line ends before
+    /// it (rexxref iostrms.xml:476-483).
+    fn line(&mut self) -> u64 {
+        if let Some(line) = self.line {
+            return line;
+        }
+        let line = 1 + self.line_ends_between(0, self.position);
+        self.line = Some(line);
+        line
+    }
+
+    /// The line ends at offsets `from` up to, not including, `to`.
+    fn line_ends_between(&self, from: u64, to: u64) -> u64 {
+        let mut count = 0;
+        let mut at = from;
+        while at < to {
+            let want = usize::try_from((to - at).min(STDIN_CHUNK as u64)).unwrap_or(STDIN_CHUNK);
+            let chunk = self.read_at(at, want);
+            if chunk.is_empty() {
+                break;
+            }
+            count += chunk.iter().filter(|byte| **byte == b'\n').count() as u64;
+            at += chunk.len() as u64;
+        }
+        count
+    }
+
+    /// The lines from `from` to `size`, which lies past it: the line ends
+    /// there, and one more for a last line without one.
+    fn lines_from(&self, from: u64, size: u64) -> u64 {
+        let ends = self.line_ends_between(from, size);
+        let last = self.read_at(size - 1, 1);
+        ends + u64::from(last.first().is_some_and(|byte| *byte != b'\n'))
+    }
+
+    /// Whether the read position is the start of its line.
+    fn at_line_start(&self) -> bool {
+        self.position == 0 || self.read_at(self.position - 1, 1) == b"\n"
+    }
+
+    /// CHARIN's start: moves the read position to character `position`,
+    /// counted from 1, answering `false` past the end of the file, where
+    /// nothing moves (`StreamInfo::setCharReadPosition`).
+    fn seek_char(&mut self, position: u64) -> bool {
+        let Some(offset) = position.checked_sub(1) else {
+            return false;
+        };
+        if offset >= self.size() {
+            return false;
+        }
+        self.line = match self.line {
+            Some(line) if offset >= self.position => {
+                Some(line + self.line_ends_between(self.position, offset))
+            }
+            _ => None,
+        };
+        self.position = offset;
+        true
+    }
+
+    /// LINEIN's line: moves the read position to the start of line `line`,
+    /// or to the end of the file when it has fewer lines
+    /// (`SysFile::seekForwardLines`). Line ends are walked from the read
+    /// position when it lies on an earlier line, else from the start.
+    fn seek_line(&mut self, line: u64) {
+        let (mut at, mut reached) = match self.line {
+            Some(current) if current == line && self.at_line_start() => return,
+            Some(current) if current < line => (self.position, current),
+            _ => (0, 1),
+        };
+        'walk: while reached < line {
+            let chunk = self.read_at(at, STDIN_CHUNK);
+            if chunk.is_empty() {
+                break;
+            }
+            for (index, byte) in chunk.iter().enumerate() {
+                if *byte == b'\n' {
+                    reached += 1;
+                    if reached == line {
+                        at += index as u64 + 1;
+                        break 'walk;
+                    }
+                }
+            }
+            at += chunk.len() as u64;
+        }
+        self.position = at;
+        self.line = Some(reached);
+    }
+}
+
 impl Input {
-    /// Whether a read here can wait on something outside this process, which
-    /// is what makes handing the buffered output over first worth doing.
+    /// Whether this is the process's own standard input, whose reads hand
+    /// the buffered output over first.
     fn is_live(&self) -> bool {
-        matches!(self.source, Source::Stdin(_))
+        matches!(self.source, Source::Stdin(_) | Source::File(_))
     }
 
     /// Whether standard input needs a chunk more before the next read can
@@ -146,7 +387,10 @@ impl Input {
         Input {
             source: match input {
                 ProgramInput::Nothing => Source::Nothing,
-                ProgramInput::Stdin => Source::Stdin(Stdin::default()),
+                ProgramInput::Stdin => match FileConsole::open() {
+                    Some(file) => Source::File(file),
+                    None => Source::Stdin(Stdin::default()),
+                },
                 ProgramInput::Bytes(bytes) => Source::Bytes(Cursor::new(bytes)),
             },
             exhausted: false,
@@ -169,6 +413,10 @@ impl Input {
                 };
                 line.extend(stdin.buffered.drain(..end));
                 Ok(end)
+            }
+            Source::File(file) => {
+                line = file.read_line();
+                Ok(line.len())
             }
             Source::Bytes(cursor) => cursor.read_until(b'\n', &mut line),
         };
@@ -212,6 +460,7 @@ impl Input {
                 stdin.buffered.drain(..count);
                 Ok(count)
             }
+            Source::File(file) => return file.read_bytes(wanted),
             Source::Bytes(cursor) => cursor.read(&mut buffer),
         };
         let filled = match read {
@@ -227,15 +476,20 @@ impl Input {
 
     /// The lines left to read, counted the way [`Input::read_line`] would
     /// split them, when the source can be measured without consuming it.
-    /// `None` when it cannot, matching [`Input::remaining`].
-    fn remaining_lines(&mut self) -> Option<u64> {
+    /// `None` when it cannot, matching [`Input::remaining`]. Without `count`
+    /// a file console answers 1 or 0 for whether anything is left, with no
+    /// scan (rexxref funct.xml:3296-3306).
+    fn remaining_lines(&mut self, count: bool) -> Option<u64> {
+        if let Source::File(file) = &mut self.source {
+            return Some(match count {
+                true => file.lines_left(),
+                false => u64::from(file.has_data()),
+            });
+        }
         if self.exhausted {
             return Some(0);
         }
         if let Source::Stdin(_) = &self.source {
-            if let Some((_, lines)) = self.stdin_file_remaining() {
-                return Some(lines);
-            }
             return self.stdin_waiting().map(u64::from);
         }
         let asked = std::mem::replace(&mut self.lines_asked, true);
@@ -243,7 +497,7 @@ impl Input {
             // No input answers `1` once and `0` after, which is where this
             // parts from [`Input::remaining`].
             Source::Nothing if asked => Some(0),
-            Source::Nothing | Source::Stdin(_) => None,
+            Source::Nothing | Source::Stdin(_) | Source::File(_) => None,
             Source::Bytes(cursor) => {
                 let at = usize::try_from(cursor.position()).unwrap_or(usize::MAX);
                 let left = cursor.get_ref().get(at..).unwrap_or_default();
@@ -259,43 +513,6 @@ impl Input {
                 })
             }
         }
-    }
-
-    /// The bytes and lines left on a standard input that is a regular file, a
-    /// persistent stream (rexxref iostrms.xml:155-165): what is buffered and
-    /// what the file holds after the descriptor's offset, read in place
-    /// without moving it. A last line with no line end counts. `None` for any
-    /// other standard input, and while a read is in flight.
-    fn stdin_file_remaining(&self) -> Option<(u64, u64)> {
-        let Source::Stdin(stdin) = &self.source else {
-            return None;
-        };
-        if stdin.reading {
-            return None;
-        }
-        let descriptor = std::io::stdin();
-        let status = rustix::fs::fstat(&descriptor).ok()?;
-        if rustix::fs::FileType::from_raw_mode(status.st_mode) != rustix::fs::FileType::RegularFile
-        {
-            return None;
-        }
-        let mut at = rustix::fs::seek(&descriptor, rustix::fs::SeekFrom::Current(0)).ok()?;
-        let mut bytes = stdin.buffered.len() as u64;
-        let mut ends = stdin.buffered.iter().filter(|byte| **byte == b'\n').count() as u64;
-        let mut last = stdin.buffered.last().copied();
-        let mut chunk = vec![0u8; STDIN_CHUNK];
-        loop {
-            let read = rustix::io::pread(&descriptor, &mut chunk, at).ok()?;
-            if read == 0 {
-                break;
-            }
-            bytes += read as u64;
-            ends += chunk[..read].iter().filter(|byte| **byte == b'\n').count() as u64;
-            last = Some(chunk[read - 1]);
-            at += read as u64;
-        }
-        let lines = ends + u64::from(last.is_some_and(|byte| byte != b'\n'));
-        Some((bytes, lines))
     }
 
     /// Whether data waits on a live standard input, found without blocking:
@@ -343,13 +560,13 @@ impl Input {
     /// has drained, and `0` for either once a read has found the end, which is
     /// what `exhausted` carries.
     fn remaining(&mut self) -> Option<u64> {
+        if let Source::File(file) = &self.source {
+            return Some(file.chars_left());
+        }
         if self.exhausted {
             return Some(0);
         }
         if let Source::Stdin(_) = &self.source {
-            if let Some((bytes, _)) = self.stdin_file_remaining() {
-                return Some(bytes);
-            }
             return self.stdin_waiting().map(u64::from);
         }
         match &self.source {
@@ -357,7 +574,7 @@ impl Input {
             // the oracle answers `1` there until a read drains it and `0`
             // after -- so an unread `Nothing` is not yet a measured zero.
             Source::Nothing => None,
-            Source::Stdin(_) => None,
+            Source::Stdin(_) | Source::File(_) => None,
             Source::Bytes(cursor) => {
                 Some((cursor.get_ref().len() as u64).saturating_sub(cursor.position()))
             }
@@ -534,9 +751,33 @@ impl Interp {
         self.input.remaining()
     }
 
-    /// What `.STDIN~LINES` answers, as [`Interp::input_remaining`] for lines.
-    pub(crate) fn input_remaining_lines(&mut self) -> Option<u64> {
-        self.input.remaining_lines()
+    /// What `.STDIN~LINES` answers, as [`Interp::input_remaining`] for lines:
+    /// their count where `count`, else 1 or 0 for whether any is left.
+    pub(crate) fn input_remaining_lines(&mut self, count: bool) -> Option<u64> {
+        self.input.remaining_lines(count)
+    }
+
+    /// Moves `.STDIN`'s read position to character `position` for a CHARIN
+    /// start: `Some(false)` past the end, where nothing moves, and `None`
+    /// when standard input is not a regular file.
+    pub(crate) fn input_seek_char(&mut self, position: u64) -> Option<bool> {
+        match &mut self.input.source {
+            Source::File(file) => Some(file.seek_char(position)),
+            _ => None,
+        }
+    }
+
+    /// Moves `.STDIN`'s read position to the start of `line` for a LINEIN
+    /// line, or to the end of the file when it has fewer lines: `false` when
+    /// standard input is not a regular file.
+    pub(crate) fn input_seek_line(&mut self, line: u64) -> bool {
+        match &mut self.input.source {
+            Source::File(file) => {
+                file.seek_line(line);
+                true
+            }
+            _ => false,
+        }
     }
 }
 
@@ -611,9 +852,9 @@ mod tests {
     fn a_count_parts_a_live_source_from_a_drained_one() {
         let mut nothing = Input::new(ProgramInput::Nothing);
         assert_eq!(nothing.remaining(), None, "unread Nothing is unmeasurable");
-        assert_eq!(nothing.remaining_lines(), None, "the first ask");
+        assert_eq!(nothing.remaining_lines(true), None, "the first ask");
         assert_eq!(
-            nothing.remaining_lines(),
+            nothing.remaining_lines(true),
             Some(0),
             "and `0` every ask after, with no read in between"
         );
@@ -624,17 +865,17 @@ mod tests {
         );
         assert_eq!(nothing.read_line(), None);
         assert_eq!(nothing.remaining(), Some(0), "a read drained it");
-        assert_eq!(nothing.remaining_lines(), Some(0));
+        assert_eq!(nothing.remaining_lines(true), Some(0));
 
         let mut bytes = Input::new(ProgramInput::Bytes(b"one\ntwo\n".to_vec()));
         assert_eq!(bytes.remaining(), Some(8));
-        assert_eq!(bytes.remaining_lines(), Some(2));
+        assert_eq!(bytes.remaining_lines(true), Some(2));
         assert_eq!(bytes.read_line().as_deref(), Some(&b"one"[..]));
         assert_eq!(bytes.remaining(), Some(4));
-        assert_eq!(bytes.remaining_lines(), Some(1));
+        assert_eq!(bytes.remaining_lines(true), Some(1));
         assert_eq!(bytes.read_line().as_deref(), Some(&b"two"[..]));
         assert_eq!(bytes.remaining(), Some(0));
-        assert_eq!(bytes.remaining_lines(), Some(0));
+        assert_eq!(bytes.remaining_lines(true), Some(0));
     }
 
     /// A final line with no terminator is still a line, which is why the count
@@ -642,9 +883,9 @@ mod tests {
     #[test]
     fn an_unterminated_last_line_counts() {
         let mut input = Input::new(ProgramInput::Bytes(b"a\nb".to_vec()));
-        assert_eq!(input.remaining_lines(), Some(2));
+        assert_eq!(input.remaining_lines(true), Some(2));
         let mut terminated = Input::new(ProgramInput::Bytes(b"a\nb\n".to_vec()));
-        assert_eq!(terminated.remaining_lines(), Some(2));
+        assert_eq!(terminated.remaining_lines(true), Some(2));
     }
 
     /// `read_bytes` answers what is already there rather than waiting for the
@@ -684,5 +925,200 @@ mod tests {
         let mut buffer = vec![0u8; 8];
         let count = Dribble(b'z').read(&mut buffer).expect("the source answers");
         assert_eq!(count, 1, "one read answers one byte, not eight");
+    }
+
+    /// A file console over a fresh file holding `bytes`, and the file's path.
+    fn console(name: &str, bytes: &[u8]) -> (FileConsole, std::path::PathBuf) {
+        let path =
+            std::env::temp_dir().join(format!("rexx-file-console-{}-{name}", std::process::id()));
+        std::fs::write(&path, bytes).expect("the console file is written");
+        let file = std::fs::File::open(&path).expect("the console file opens");
+        let console = FileConsole::over(file).expect("a regular file is a file console");
+        (console, path)
+    }
+
+    /// CHARS, LINES Count and LINES Normal.
+    fn counts(console: &mut FileConsole) -> (u64, u64, bool) {
+        (
+            console.chars_left(),
+            console.lines_left(),
+            console.has_data(),
+        )
+    }
+
+    /// The oracle's answers on the same sequence, measured on a file stdin,
+    /// except the two LINES Counts after a line seek: the oracle answers 1
+    /// and -1 there from a stale line cache, and 3 and 1 lines remain.
+    #[test]
+    fn a_file_console_has_one_read_position() {
+        let (mut c, path) = console("position", b"hello\nworld\nthird\nlast");
+        assert_eq!(counts(&mut c), (22, 4, true));
+        assert_eq!(c.read_line(), b"hello\n");
+        assert_eq!(counts(&mut c), (16, 3, true));
+        assert!(c.seek_char(3));
+        assert_eq!(c.read_bytes(1), b"l");
+        assert_eq!(counts(&mut c), (19, 4, true));
+        assert!(c.seek_char(1));
+        assert_eq!(c.read_bytes(3), b"hel");
+        assert_eq!(counts(&mut c), (19, 4, true));
+        assert_eq!(c.read_line(), b"lo\n", "the rest of the line CHARIN was in");
+        assert_eq!(counts(&mut c), (16, 3, true));
+        assert_eq!(c.read_bytes(3), b"wor");
+        assert_eq!(c.read_line(), b"ld\n");
+        assert_eq!(counts(&mut c), (10, 2, true));
+        c.seek_line(1);
+        assert_eq!(c.read_line(), b"hello\n");
+        assert_eq!(counts(&mut c), (16, 3, true));
+        c.seek_line(3);
+        assert_eq!(c.read_line(), b"third\n");
+        assert_eq!(counts(&mut c), (4, 1, true));
+        assert!(c.seek_char(2));
+        assert_eq!(c.read_bytes(2), b"el");
+        assert_eq!(counts(&mut c), (19, 4, true));
+        c.seek_line(4);
+        assert_eq!(c.read_line(), b"last", "a last line with no line end");
+        assert_eq!(counts(&mut c), (0, 0, false));
+        assert!(c.seek_char(22));
+        assert_eq!(c.read_bytes(1), b"t");
+        assert_eq!(c.read_line(), b"", "the end of the file");
+        assert_eq!(counts(&mut c), (0, 0, false));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// A start past the end moves nothing; a line past the last one is the end
+    /// of the file (measured on the oracle: `charin(,23)` answers the null
+    /// string with CHARS still 22, `linein(,9)` leaves CHARS 0).
+    #[test]
+    fn a_seek_past_the_end_of_a_file_console() {
+        let (mut c, path) = console("past", b"hello\nworld\nthird\nlast");
+        assert!(!c.seek_char(23));
+        assert!(!c.seek_char(100));
+        assert_eq!(counts(&mut c), (22, 4, true), "nothing moved");
+        assert!(c.seek_char(22));
+        assert_eq!(c.read_bytes(5), b"t", "short at the end");
+        c.seek_line(9);
+        assert_eq!(counts(&mut c), (0, 0, false));
+        assert_eq!(c.read_line(), b"");
+        c.seek_line(4);
+        assert_eq!(c.read_line(), b"last");
+        c.seek_line(5);
+        assert_eq!(
+            counts(&mut c),
+            (0, 0, false),
+            "the line after the last line end"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// A line seek to the line the position lies in goes to its start, and a
+    /// seek to each line in turn reads each line.
+    #[test]
+    fn a_line_seek_lands_on_the_start_of_the_line() {
+        let (mut c, path) = console("midline", b"hello\nworld\nthird\n");
+        assert_eq!(c.read_bytes(2), b"he");
+        c.seek_line(1);
+        assert_eq!(c.read_line(), b"hello\n");
+        assert_eq!(c.read_bytes(2), b"wo");
+        c.seek_line(2);
+        assert_eq!(c.read_line(), b"world\n");
+        for (line, expected) in [
+            (1, "hello\n"),
+            (2, "world\n"),
+            (3, "third\n"),
+            (2, "world\n"),
+        ] {
+            c.seek_line(line);
+            assert_eq!(c.read_line(), expected.as_bytes(), "line {line}");
+        }
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// The lines left from `position` in `bytes`, counted afresh.
+    fn lines_in(bytes: &[u8], position: u64) -> u64 {
+        let left = bytes
+            .get(usize::try_from(position).unwrap_or(usize::MAX)..)
+            .unwrap_or_default();
+        let ends = left.iter().filter(|byte| **byte == b'\n').count() as u64;
+        ends + u64::from(left.last().is_some_and(|byte| *byte != b'\n'))
+    }
+
+    /// The cached line count answers what a fresh count answers after every
+    /// read and after a seek either way, and the file is counted once while
+    /// its size stays.
+    #[test]
+    fn a_file_console_counts_lines_once() {
+        let mut bytes = (1..=300).map(|n| format!("line {n}\n")).collect::<String>();
+        bytes.push_str("tail");
+        let (mut c, path) = console("count", bytes.as_bytes());
+        let mut step = 0;
+        while c.position < bytes.len() as u64 {
+            assert_eq!(
+                c.lines_left(),
+                lines_in(bytes.as_bytes(), c.position),
+                "at {}",
+                c.position
+            );
+            assert_eq!(c.total, Some((301, bytes.len() as u64)), "counted once");
+            if step % 3 == 1 {
+                c.read_bytes(5);
+            } else {
+                c.read_line();
+            }
+            step += 1;
+        }
+        assert_eq!(c.lines_left(), 0);
+        assert!(c.seek_char(10));
+        assert_eq!(
+            c.lines_left(),
+            lines_in(bytes.as_bytes(), 9),
+            "a seek backwards"
+        );
+        assert!(c.seek_char(100));
+        assert_eq!(
+            c.lines_left(),
+            lines_in(bytes.as_bytes(), 99),
+            "a seek forwards"
+        );
+        assert_eq!(c.total, Some((301, bytes.len() as u64)));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// A file that grows after its end was read is read on: the counts see
+    /// the new bytes and the next line is the appended one.
+    #[test]
+    fn a_file_console_reads_what_is_appended() {
+        use std::io::Write;
+        let (mut c, path) = console("grow", b"a\nb\n");
+        assert_eq!(c.read_line(), b"a\n");
+        assert_eq!(c.read_line(), b"b\n");
+        assert_eq!(counts(&mut c), (0, 0, false));
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .and_then(|mut file| file.write_all(b"more\nlines"))
+            .expect("the console file grows");
+        assert_eq!(counts(&mut c), (10, 2, true));
+        assert_eq!(c.read_line(), b"more\n");
+        assert_eq!(counts(&mut c), (5, 1, true));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// The console starts at the descriptor's offset, and anything but a
+    /// regular file is not one.
+    #[test]
+    fn a_file_console_starts_where_the_descriptor_is() {
+        use std::io::Seek;
+        let path =
+            std::env::temp_dir().join(format!("rexx-file-console-{}-offset", std::process::id()));
+        std::fs::write(&path, b"hello\nworld\n").expect("the console file is written");
+        let mut file = std::fs::File::open(&path).expect("the console file opens");
+        file.seek(std::io::SeekFrom::Start(6))
+            .expect("the offset moves");
+        let mut c = FileConsole::over(file).expect("a regular file is a file console");
+        assert_eq!(counts(&mut c), (6, 1, true));
+        assert_eq!(c.read_line(), b"world\n");
+        let _ = std::fs::remove_file(&path);
+        let null = std::fs::File::open("/dev/null").expect("/dev/null opens");
+        assert!(FileConsole::over(null).is_none());
     }
 }
