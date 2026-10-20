@@ -153,48 +153,31 @@ fn the_target_and_the_later_arguments_raise_different_numbers() {
     );
 }
 
-/// An omitted `MAX` argument answers differently depending on which
-/// representation argument 1 has, and both halves are pinned.
+/// An omitted `MAX` or `MIN` argument is 40.5 naming its position in the
+/// call, whatever the other arguments are.
 #[test]
-fn an_omitted_argument_answers_differently_on_the_two_paths() {
+fn an_omitted_argument_is_40_5_at_its_position() {
     assert_eq!(
         raised(b"MAX", &[Some(b"1"), None, Some(b"3")]),
-        (93, 903, subs(&[b"0"]))
+        (40, 5, subs(&[b"MAX", b"2"]))
     );
     assert_eq!(
-        raised(b"MAX", &[Some(b"1"), Some(b"2"), None, Some(b"4")]),
-        (93, 903, subs(&[b"1"]))
+        raised(b"MAX", &[Some(b"1.0"), None, Some(b"3")]),
+        (40, 5, subs(&[b"MAX", b"2"]))
     );
     assert_eq!(
         raised(
             b"MIN",
             &[Some(b"1"), Some(b"2"), Some(b"3"), None, Some(b"5")]
         ),
-        (93, 903, subs(&[b"2"]))
-    );
-
-    // A target that is not an integer object takes the general path.
-    assert_eq!(
-        raised(b"MAX", &[Some(b"1.0"), None, Some(b"3")]),
-        (40, 5, subs(&[b"MAX", b"1"]))
+        (40, 5, subs(&[b"MIN", b"4"]))
     );
     assert_eq!(
-        raised(b"MAX", &[Some(b"1"), Some(b"2.5"), None, Some(b"4")]),
+        raised_at("3", b"MAX", &[Some(b"123"), None, Some(b"3")]),
         (40, 5, subs(&[b"MAX", b"2"]))
     );
-    // ...and so does one too wide for the precision in force, which is
-    // the same call at two settings.
-    assert_eq!(
-        raised_at("9", b"MAX", &[Some(b"12345"), None, Some(b"3")]),
-        (93, 903, subs(&[b"0"]))
-    );
-    assert_eq!(
-        raised_at("3", b"MAX", &[Some(b"12345"), None, Some(b"3")]),
-        (40, 5, subs(&[b"MAX", b"1"]))
-    );
-
-    // One non-integer sends the whole list back to the general path, so
-    // an omission *after* it is never reached.
+    // The arguments are read in order, so a non-number before the omission
+    // is what is reported.
     assert_eq!(
         raised(b"MAX", &[Some(b"1"), Some(b"a"), None, Some(b"4")]),
         (93, 904, subs(&[b"1", b"a"]))

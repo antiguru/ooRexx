@@ -22,6 +22,9 @@
    where they decide a point. Where the documentation leaves a point open,
    the model takes this crate's answer, and says so at the rule.
 
+   The power of `**` is a digit string like any operand: its bits are taken
+   by halving the string, and the overflow test multiplies digit strings.
+
    numeric_eval answers one operation as "V[value]", "S code" for a SYNTAX
    condition, or "L[description]" for a LOSTDIGITS condition taken by a
    SIGNAL ON trap, which `trapped` says is set. */
@@ -341,12 +344,15 @@ unrounded: procedure expose m.
 /* ---- the operators (rexxref "Arithmetic Operators") ---- */
 
 /* a + b, or a - b with `neg`, at precision `k`. Each operand is truncated to
-   k + 1 digits. Aligned, the two must span no more than k + 1 places, so the
-   less significant one loses digits from its low end; then the sum is
-   rounded to `k` places counted from the leftmost place the aligned
-   operands occupy. That is how rexxref's own FUZZ example comes out:
-   4.9999 = 5 at DIGITS 5, FUZZ 1 subtracts at 4 digits and the difference
-   rounds to zero. */
+   k + 1 digits (rexxref "Arithmetic Operators"), and the sum is rounded to
+   `k` places counted from the leftmost place the aligned operands occupy,
+   which is how rexxref's own FUZZ example comes out: 4.9999 = 5 at DIGITS 5,
+   FUZZ 1 subtracts at 4 digits and the difference rounds to zero.
+   rexxref is silent on two aligned operands spanning more than k + 1
+   places; here the model takes the interpreters' answer, rexxref silent:
+   an operand entirely below the other's window is dropped, and otherwise
+   the less significant one loses digits from its low end until the pair
+   fits. */
 add: procedure expose m.
   parse arg a, b, neg, k
   if neg then b = negate(b)
@@ -562,14 +568,15 @@ pow: procedure expose m.
     if p == '0' then return '+ 1 0'
     return '+ 0 0'
   end
-  if abs(ea + length(da) - 1) * p > 999999999 then return fail('42.1')
+  if cmpmag(mulmag(abs(ea + length(da) - 1), p), 999999999) > 0 then
+    return fail('42.1')
   if p == '0' then return '+ 1 0'
   work = k + length(p) + 1
   bits = ''
   v = p
-  do while v > 0
-    bits = (v // 2) || bits
-    v = v % 2
+  do while v \== '0'
+    parse value halve(v) with v bit
+    bits = bit || bits
   end
   acc = a
   do i = 2 to length(bits)
@@ -593,6 +600,20 @@ pow: procedure expose m.
     e = e + 1
   end
   return s d e
+
+/* The digit string `d` halved, and the bit it drops: "half bit". */
+halve: procedure
+  parse arg d
+  out = ''
+  carry = 0
+  do i = 1 to length(d)
+    v = carry * 10 + substr(d, i, 1)
+    out = out || (v % 2)
+    carry = v // 2
+  end
+  out = strip(out, 'L', '0')
+  if out == '' then out = '0'
+  return out carry
 
 /* -1, 0 or 1: a against b as a numeric comparison, which is the sign of
    a - b subtracted at DIGITS minus FUZZ (rexxref "Numeric Comparisons"). */
@@ -729,14 +750,19 @@ count_arg: procedure expose m.
   if w == '' then return fail('40.12')
   return w
 
+/* The numeric builtins round every argument named as a number as though it
+   were added to 0, so one wider than DIGITS raises LOSTDIGITS (rexxref,
+   "Built-in Functions"), named as written. */
 bif: procedure expose m.
   parse arg name, function
   k = m.0digits
   select
-    when name == 'MAX' | name == 'MIN' then return maxmin(name)
+    when name == 'MAX' | name == 'MIN' then return maxmin(name, function)
     when name == 'ABS' | name == 'SIGN' then do
       n = num(m.0arg.1)
       if n == '' then return fail('93.943')
+      call lost n, k, m.0arg.1
+      if m.0event \== '' then return ''
       parse var n s d e
       if name == 'SIGN' then do
         if d == '0' then return 0
@@ -750,6 +776,8 @@ bif: procedure expose m.
       if m.0event \== '' then return ''
       n = num(m.0arg.1)
       if n == '' then return fail('93.943')
+      call lost n, k, m.0arg.1
+      if m.0event \== '' then return ''
       if left(places, 1) == '-' then return fail('93.906')
       if places == '' then places = 0
       return trunc(round(n, k), places)
@@ -761,6 +789,8 @@ bif: procedure expose m.
       end
       n = num(m.0arg.1)
       if n == '' then return fail('93.943')
+      call lost n, k, m.0arg.1
+      if m.0event \== '' then return ''
       do i = 2 to 5
         if left(w.i, 1) == '-' then return fail('93.906')
       end
@@ -874,37 +904,33 @@ datatype_w: procedure expose m.
   if e > 0 then return 1
   return verify(substr(d, a + 1), '0') == 0
 
-/* MAX and MIN, as functions and as messages alike (Deviation 44): the
-   target and every argument rounded to DIGITS, compared as numbers, FUZZ
-   included, an earlier value kept on a tie. The target raises no
-   LOSTDIGITS (Phase 9d plan, Ruled 10). An
-   argument does when it has more digits than DIGITS, unless every value
-   is written as a whole number and the target is valid under DIGITS
-   (Deviation 44: decided by the written value). Under FUZZ each
-   comparison raises it as any comparison does. */
+/* MAX and MIN, as functions and as messages alike: every number, the
+   target included, rounded to DIGITS as though added to 0, so one wider
+   raises LOSTDIGITS; compared as numbers, FUZZ included, an earlier value
+   kept on a tie. Under FUZZ each comparison raises LOSTDIGITS as any
+   comparison does. An omitted argument is 40.5 for the function and 93.903
+   for the message (rexxref, "Error Numbers"). The description renders the
+   number unrounded, which the documentation leaves open; the model takes
+   this crate's. */
 maxmin: procedure expose m.
-  parse arg name
+  parse arg name, function
   k = m.0digits
-  if \m.0given.1 then return fail('40.5')
+  missing = '93.903'
+  if function then missing = '40.5'
+  if \m.0given.1 then return fail(missing)
   t = num(m.0arg.1)
   if t == '' then return fail('93.943')
-  quiet = integer_written(m.0arg.1)
-  if quiet then quiet = valid_under(m.0arg.1, k)
-  do i = 2 to m.0count while quiet
-    if \m.0given.i then quiet = 0
-    else quiet = integer_written(m.0arg.i)
-  end
+  call lost t, k, unrounded(t, k)
+  if m.0event \== '' then return ''
   best = round(t, k)
   do i = 2 to m.0count
-    if \m.0given.i then return fail('40.5')
+    if \m.0given.i then return fail(missing)
     c = num(m.0arg.i)
     if c == '' then return fail('93.904')
-    if \quiet then do
-      call lost c, k, unrounded(c, k)
-      if m.0event \== '' then return ''
-    end
+    call lost c, k, unrounded(c, k)
+    if m.0event \== '' then return ''
     c = round(c, k)
-    if \quiet & m.0fuzz > 0 then do
+    if m.0fuzz > 0 then do
       call lost c, k - m.0fuzz, unrounded(c, k)
       call lost best, k - m.0fuzz, unrounded(best, k)
       if m.0event \== '' then return ''
@@ -915,27 +941,14 @@ maxmin: procedure expose m.
   end
   return render(best, k)
 
-/* Written as a whole number: an optional minus, then at most 18 digits
-   with no leading zero. */
-integer_written: procedure
-  parse arg t
-  if left(t, 1) == '-' then t = substr(t, 2)
-  if t == '' | length(t) > 18 then return 0
-  if verify(t, '0123456789') > 0 then return 0
-  return \(left(t, 1) == '0' & length(t) > 1)
-
-valid_under: procedure
-  parse arg t, k
-  if left(t, 1) == '-' then t = substr(t, 2)
-  return length(t) <= min(k, 18)
-
 /* ---- DO (rexxref "DO", ANSI X3.274 section 8.3.6) ---- */
 
 /* A repetitor or FOR count is a whole number at the digits in force, zero
    or more, else 26.2 or 26.3 (Deviation 47). It is tested as DATATYPE(n,
-   'W') tests, by rounding, so a count with more digits than DIGITS raises
-   LOSTDIGITS first (ANSI X3.274 section 8.3.6), named by its number
-   unrounded. Answers whether a loop of that count runs a first pass. */
+   'W') tests, by rounding as though added to 0, so a count with more
+   digits than DIGITS raises LOSTDIGITS first (ANSI X3.274 section 8.3.6),
+   named by its number unrounded, as MAX names an argument. Answers whether
+   a loop of that count runs a first pass. */
 do_count: procedure expose m.
   parse arg which, t
   code = '26.2'

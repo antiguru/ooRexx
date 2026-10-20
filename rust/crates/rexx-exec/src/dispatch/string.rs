@@ -1624,6 +1624,7 @@ fn native_string_abs(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let value = numeric_receiver(interp, receiver, b"ABS")?;
+    interp.lostdigits_check(&value, receiver)?;
     Ok(Some(crate::builtin::numeric::abs_of(interp, &value)))
 }
 
@@ -1635,6 +1636,7 @@ fn native_string_trunc(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let value = numeric_receiver(interp, receiver, b"TRUNC")?;
+    interp.lostdigits_check(&value, receiver)?;
     let places = count_method_argument(interp, args, 0)?;
     let answer = crate::builtin::numeric::trunc_of(interp, &value, places)?;
     Ok(Some(answer))
@@ -1745,6 +1747,7 @@ fn native_string_format(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let value = numeric_receiver(interp, receiver, b"FORMAT")?;
+    interp.lostdigits_check(&value, receiver)?;
     let before = count_method_argument(interp, args, 0)?;
     let after = count_method_argument(interp, args, 1)?;
     let expp = count_method_argument(interp, args, 2)?;
@@ -1783,12 +1786,7 @@ fn string_max_min(
 ) -> Result<Option<ObjRef>, Failure> {
     let value = numeric_receiver(interp, receiver, method)?;
     let text = interp.to_text(receiver).to_vec();
-    // Measured, `1~max(1111111111)` at DIGITS 9 raises no LOSTDIGITS: the
-    // oracle's `RexxInteger::Max` answers it without `NumberString::maxMin`.
-    let digits = numeric::digits_setting(interp);
-    let lostdigits =
-        interp.lostdigits_armed && !numeric::integer_path_applies(interp, receiver, args, digits);
-    let answer = numeric::max_min_over(interp, method, &value, text, args, args, want, lostdigits)?;
+    let answer = numeric::max_min_over(interp, method, &value, text, args, args, want, true)?;
     Ok(Some(answer))
 }
 
@@ -1920,6 +1918,7 @@ pub(super) fn native_string_sign(
         let found = interp.string_value_text(receiver);
         return Err(Raised::method_target_not_a_number(b"SIGN", &found).into());
     };
+    interp.lostdigits_check(&value, receiver)?;
     Ok(Some(crate::builtin::numeric::sign_of(interp, &value)))
 }
 

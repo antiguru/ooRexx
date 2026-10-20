@@ -267,9 +267,8 @@ impl Interp {
     }
 
     /// The comparison form. A numeric comparison is a subtraction carried out
-    /// at DIGITS minus FUZZ, so under FUZZ each operand is checked again at
-    /// that precision, unless the signs differ or both are zero, where the
-    /// subtraction is never reached (`NumberString::comp`).
+    /// at DIGITS minus FUZZ (rexxref, "Numeric Comparisons"), so under FUZZ
+    /// each operand is checked again at that precision, whatever the signs.
     #[inline(always)]
     pub(crate) fn lostdigits_check_compare(
         &mut self,
@@ -323,9 +322,6 @@ impl Interp {
         right_text: impl FnOnce(&mut Self) -> Vec<u8>,
         fuzz: u64,
     ) -> Result<(), Failure> {
-        if left.signum() != right.signum() || left.is_zero() {
-            return Ok(());
-        }
         let digits = self.activation().settings.digits().saturating_sub(fuzz);
         self.lostdigits_raise_at(left, digits, left_text)?;
         self.lostdigits_raise_at(right, digits, right_text)

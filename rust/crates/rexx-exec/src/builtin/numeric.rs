@@ -25,8 +25,6 @@
 //!   -> 1.2300, which is text and could not have moved
 //! ```
 
-use std::cmp::Ordering;
-
 use rexx_core::ObjRef;
 use rexx_num::{CompareOp, DivOp, Form, Number, compare_decoded};
 
@@ -51,7 +49,7 @@ fn current(interp: &Interp) -> Numeric {
 }
 
 /// Argument 1 as a number, or the 93.943 that names this builtin.
-fn target_number(
+fn target_parse(
     interp: &mut Interp,
     name: &'static [u8],
     args: Args<'_>,
@@ -64,6 +62,19 @@ fn target_number(
             Err(Raised::method_target_not_a_number(name, &found).into())
         }
     }
+}
+
+/// [`target_parse`], then the LOSTDIGITS of rounding it as though added to 0
+/// (rexxref, "Built-in Functions"), named by the argument as written.
+fn target_number(
+    interp: &mut Interp,
+    name: &'static [u8],
+    args: Args<'_>,
+) -> Result<Number, Failure> {
+    let number = target_parse(interp, name, args)?;
+    let value = arg(args, 1).expect("check_arity admitted the required first argument");
+    interp.lostdigits_check(&number, value)?;
+    Ok(number)
 }
 
 /// The range half of an optional non-negative argument, after
@@ -280,52 +291,14 @@ pub(crate) enum Extreme {
 }
 
 impl Extreme {
-    /// The comparison outcome that makes a candidate the new answer.
-    fn wins(self, ordering: Ordering) -> bool {
-        match self {
-            Extreme::Max => ordering == Ordering::Greater,
-            Extreme::Min => ordering == Ordering::Less,
-        }
-    }
-
-    /// [`wins`] as a `rexx-num` predicate, for the general path, where the
-    /// comparison honours `FUZZ` and so cannot be a bare `Ord`.
+    /// The comparison that makes a candidate the new answer, which honours
+    /// `FUZZ`.
     fn op(self) -> CompareOp {
         match self {
             Extreme::Max => CompareOp::Greater,
             Extreme::Min => CompareOp::Less,
         }
     }
-}
-
-/// `Numerics::REXXINTEGER_DIGITS` (`runtime/Numerics.cpp:112`, which defines
-/// it as `ARGUMENT_DIGITS`): the widest a value can be and still be held as
-/// an integer object rather than a general number.
-const REXX_INTEGER_DIGITS: usize = 18;
-
-/// The value's own integer form, when the oracle would be holding it as a
-/// `RexxInteger` rather than a `NumberString` or a `RexxString`.
-fn integer_object(text: &[u8]) -> Option<i64> {
-    let digits = text.strip_prefix(b"-").unwrap_or(text);
-    if digits.is_empty() || digits.len() > REXX_INTEGER_DIGITS {
-        return None;
-    }
-    if !digits.iter().all(u8::is_ascii_digit) {
-        return None;
-    }
-    if digits[0] == b'0' && digits.len() > 1 {
-        return None;
-    }
-    std::str::from_utf8(text).ok()?.parse().ok()
-}
-
-/// `Numerics::isValid(value, digits)` (`runtime/Numerics.hpp:191`): whether
-/// an integer object still fits the precision in force, capped at
-/// [`REXX_INTEGER_DIGITS`].
-fn valid_under(value: i64, digits: u64) -> bool {
-    let width = digits.min(REXX_INTEGER_DIGITS as u64) as u32;
-    // `10i64.pow(18)` is the largest this can compute and fits comfortably.
-    value.unsigned_abs() < 10u64.pow(width)
 }
 
 /// `MAX(number, ...)`.
@@ -346,41 +319,26 @@ pub(crate) fn min(
     max_min(interp, name, args, Extreme::Min)
 }
 
-/// The body both of them share, and the one place in this file where the
-/// answer depends on which *representation* the target has rather than only
-/// on its value.
-/// ```text
-/// max(1,,3)     93.903  Missing argument in method; argument 0 is required.   rc 163
-/// max(1.0,,3)   40.5    Missing argument in invocation of MAX; argument 1 ...  rc 216
-/// ```
+/// The body both of them share.
 fn max_min(
     interp: &mut Interp,
     name: &'static [u8],
     args: Args<'_>,
     want: Extreme,
 ) -> Result<ObjRef, Failure> {
-    // Only `digits` is read out here: the fast path below is the whole of
-    // what this wrapper decides, and `fuzz` and `form` belong to the general
-    // path, which now reads them for itself.
-    let Numeric { digits, .. } = current(interp);
-    let target = arg(args, 1).expect("check_arity admitted the required first argument");
     let rest = args.values_from(2);
-
-    if let Some(answer) = integer_path(interp, target, rest, digits, want)? {
-        return Ok(answer);
-    }
-
-    let best = target_number(interp, name, args)?;
+    let best = target_parse(interp, name, args)?;
     let best_text = required_string(interp, args, 1);
     let objects: Vec<Option<ObjRef>> = (0..rest.len()).map(|i| args.object(i + 2)).collect();
-    max_min_over(interp, name, &best, best_text, rest, &objects, want, true)
+    max_min_over(interp, name, &best, best_text, rest, &objects, want, false)
 }
 
-/// `MAX`'s and `MIN`'s general path, shared with `String~max` and `String~min`.
-/// With `lostdigits`, each argument after the target is an operand to
-/// LOSTDIGITS, as `NumberString::maxMin`'s `prepareOperatorNumber` makes it
-/// (`classes/NumberStringMath.cpp:277`), and under FUZZ each comparison's
-/// two rounded operands are, as any comparison's are.
+/// `MAX`'s and `MIN`'s answer, shared with `String~max` and `String~min`.
+/// Every number, the target included, is rounded as though added to 0, so
+/// one wider than DIGITS raises LOSTDIGITS (rexxref, "Built-in Functions"),
+/// and the comparisons honour FUZZ, raising it as any comparison does. An
+/// omitted argument is 40.5 for the function and 93.903 for the message,
+/// numbered by its position in the call.
 #[allow(
     clippy::too_many_arguments,
     reason = "the two callers differ in each of them"
@@ -393,14 +351,25 @@ pub(crate) fn max_min_over(
     rest: &[Option<ObjRef>],
     objects: &[Option<ObjRef>],
     want: Extreme,
-    lostdigits: bool,
+    message: bool,
 ) -> Result<ObjRef, Failure> {
     let Numeric { digits, fuzz, form } = current(interp);
+    // The description is the number unrounded, rendered at DIGITS: measured
+    // against the oracle, `' 4444444444 '` names `4444444444` and
+    // `44444444440E-1` names `4.4444444440E+9`.
+    interp.lostdigits_check_with(target, |_| {
+        target.render_unrounded(digits, form).into_bytes()
+    })?;
     let mut best = target.clone().into_round(digits);
     let mut best_text = target_text;
     for (index, slot) in rest.iter().enumerate() {
         let Some(candidate) = slot else {
-            return Err(Raised::missing_argument(name, index + 1).into());
+            return Err(if message {
+                Raised::missing_method_argument(index + 1)
+            } else {
+                Raised::missing_argument(name, index + 2)
+            }
+            .into());
         };
         let found = interp.to_text(*candidate).into_owned();
         let Ok(number) = interp.to_number(*candidate) else {
@@ -413,28 +382,17 @@ pub(crate) fn max_min_over(
             };
             return Err(Raised::method_argument_not_a_number(index + 1, &named).into());
         };
-        // The description is the argument's number as `prepareOperatorNumber`'s
-        // clone renders it, unrounded: measured, `' 4444444444 '` names
-        // `4444444444` and `44444444440E-1` names `4.4444444440E+9`.
-        if lostdigits {
-            interp.lostdigits_check_with(&number, |_| {
-                number.render_unrounded(digits, form).into_bytes()
-            })?;
-        }
+        interp.lostdigits_check_with(&number, |_| {
+            number.render_unrounded(digits, form).into_bytes()
+        })?;
         let number = number.into_round(digits);
-        if lostdigits {
-            interp.lostdigits_check_fuzz(
-                &number,
-                |_| number.render_unrounded(digits, form).into_bytes(),
-                &best,
-                |_| best.render_unrounded(digits, form).into_bytes(),
-                fuzz,
-            )?;
-        }
-        // Both sides are already parsed, so the byte slices are never read
-        // for these two non-strict operators; they are the real renderings
-        // anyway rather than a placeholder that would become wrong if a
-        // later `CompareOp` needed them.
+        interp.lostdigits_check_fuzz(
+            &number,
+            |_| number.render_unrounded(digits, form).into_bytes(),
+            &best,
+            |_| best.render_unrounded(digits, form).into_bytes(),
+            fuzz,
+        )?;
         let takes_over = compare_decoded(
             &found,
             Some(&number),
@@ -451,85 +409,6 @@ pub(crate) fn max_min_over(
         }
     }
     Ok(interp.number(best, saturate(digits), form))
-}
-
-/// Whether `RexxInteger::Max`/`::Min` answer `target` and `rest` without
-/// `NumberString::maxMin`: an integer target valid under `digits` and an
-/// integer in every argument.
-pub(crate) fn integer_path_applies(
-    interp: &mut Interp,
-    target: ObjRef,
-    rest: &[Option<ObjRef>],
-    digits: u64,
-) -> bool {
-    integer_object(&interp.to_text(target)).is_some_and(|value| valid_under(value, digits))
-        && rest
-            .iter()
-            .all(|slot| slot.is_some_and(|arg| integer_object(&interp.to_text(arg)).is_some()))
-}
-
-/// `RexxInteger::Max`/`::Min`'s fast path, or `None` when the oracle would
-/// have fallen through to `NumberString::maxMin` with the whole argument list.
-fn integer_path(
-    interp: &mut Interp,
-    target: ObjRef,
-    rest: &[Option<ObjRef>],
-    digits: u64,
-    want: Extreme,
-) -> Result<Option<ObjRef>, Failure> {
-    let text = interp.to_text(target).into_owned();
-    let Some(value) = integer_object(&text) else {
-        return Ok(None);
-    };
-    if want == Extreme::Min && rest.is_empty() {
-        return Ok(Some(rounded_integer(interp, target, value, digits)));
-    }
-    if !valid_under(value, digits) {
-        return Ok(None);
-    }
-    if rest.is_empty() {
-        return Ok(Some(target));
-    }
-
-    let mut best = value;
-    let mut best_object = target;
-    for (index, slot) in rest.iter().enumerate() {
-        // The omission check runs before this argument's own type is looked
-        // at, which is `requiredArgument(argument, arg)`'s position in the
-        // C++ loop, and `index` is passed to it unincremented -- so the
-        // message really does say "argument 0" for the call's argument 2.
-        let Some(candidate) = slot else {
-            return Err(Raised::missing_method_argument(index).into());
-        };
-        let candidate_text = interp.to_text(*candidate).into_owned();
-        let Some(other) = integer_object(&candidate_text) else {
-            // One non-integer sends the *whole* list back to the general
-            // path, which rescans from the first argument -- so an omission
-            // later in the list is never reached. Measured:
-            // `max(1,'a',,4)` is 93.904 naming method argument 1, not the
-            // 40.5 the omission at position 3 would have given.
-            return Ok(None);
-        };
-        if want.wins(other.cmp(&best)) {
-            best = other;
-            best_object = *candidate;
-        }
-    }
-    Ok(Some(rounded_integer(interp, best_object, best, digits)))
-}
-
-/// The integer path's answer, rounded to `digits` when it is wider, as every
-/// other number `MAX` and `MIN` answer is (Deviation 44).
-fn rounded_integer(interp: &mut Interp, object: ObjRef, value: i64, digits: u64) -> ObjRef {
-    if valid_under(value, digits) {
-        return object;
-    }
-    let form = current(interp).form;
-    interp.number(
-        Number::from_i64(value).into_round(digits),
-        saturate(digits),
-        form,
-    )
 }
 
 // ---- RANDOM ----

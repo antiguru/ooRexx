@@ -1,6 +1,6 @@
 # Task 6.14's own cases: rexxref's examples ("Numbers and Arithmetic" and the
 # numeric built-in functions), the errors, LOSTDIGITS under NUMERIC FUZZ,
-# and the rows where the derived rule and an interpreter part. The case
+# and the rows of the rules Moritz ruled 2026-10-20. The case
 # grammar is the one `spike` describes.
 
 case name=rexxref-operator-1 digits=5
@@ -396,7 +396,7 @@ model: V[1.2345    ] | V[1.2345    ]
 case name=format-engineering-wide form=engineering
 bif FORMAT | 123456789012 | 
 ----
-model: V[123.456789E+9] | V[123.456789E+9]
+model: V[123.456789E+9] | L[123456789012]
 
 case name=format-engineering-small form=engineering
 bif FORMAT | 0.00012 | | | | 1
@@ -491,32 +491,32 @@ model: V[1.0] | V[1.0]
 case name=min-lone-wide digits=3
 bif MIN | 12345
 ----
-model: V[1.23E+4] | V[1.23E+4]
+model: V[1.23E+4] | L[12345]
 
 case name=max-lone-wide digits=3
 bif MAX | 12345
 ----
-model: V[1.23E+4] | V[1.23E+4]
+model: V[1.23E+4] | L[12345]
 
 case name=msg-min-lone-wide digits=3
 msg MIN | 12345
 ----
-model: V[1.23E+4] | V[1.23E+4]
+model: V[1.23E+4] | L[12345]
 
 case name=max-negative-wide
 bif MAX | '-1111111111' | '-2222222222'
 ----
-model: V[-1.11111111E+9] | L[-2222222222]
+model: V[-1.11111111E+9] | L[-1111111111]
 
 case name=max-wide-rounds-up
 bif MAX | 1 | 2 | 1111111115
 ----
-model: V[1.11111112E+9] | V[1.11111112E+9]
+model: V[1.11111112E+9] | L[1111111115]
 
 case name=max-engineering-wide form=engineering
 bif MAX | 2 | 11111111111
 ----
-model: V[11.1111111E+9] | V[11.1111111E+9]
+model: V[11.1111111E+9] | L[11111111111]
 
 case name=err-left-not-number
 infix + | 'a' | 1
@@ -851,7 +851,7 @@ model: V[1] | L[1.00000002]
 case name=fuzz-15 fuzz=1
 bif MAX | 1.000000012 | 1
 ----
-model: V[1.00000001] | L[1.00000001]
+model: V[1.00000001] | L[1.000000012]
 
 case name=fuzz-16 fuzz=1
 bif MAX | 2 | 1.000000012
@@ -867,7 +867,6 @@ case name=fuzz-18 fuzz=1
 bif MAX | '-1.00000001' | 1
 ----
 model: V[1] | L[-1.00000001]
-crate: V[1] | V[1]
 
 case name=fuzz-19 fuzz=1
 bif MAX | 1.00000001
@@ -903,35 +902,31 @@ case name=fuzz-sign-differs fuzz=1
 infix = | 1.00000001 | '-2'
 ----
 model: V[0] | L[1.00000001]
-crate: V[0] | V[0]
 
 case name=fuzz-sign-zero fuzz=1
 infix > | 1.00000001 | 0
 ----
 model: V[1] | L[1.00000001]
-crate: V[1] | V[1]
 
 case name=max-fuzz-integers fuzz=1
 bif MAX | 100000001 | 100000002
 ----
-model: V[100000001] | V[100000001]
-crate: V[100000002] | V[100000002]
+model: V[100000001] | L[100000002]
 
 case name=max-message-fuzz-integers fuzz=1
 msg MAX | 100000001 | 100000002
 ----
-model: V[100000001] | V[100000001]
+model: V[100000001] | L[100000002]
 
 case name=max-missing-argument
 bif MAX | 1 | | 3
 ----
 model: S 40.5 | S 40.5
-crate: S 93.903 | S 93.903
 
 case name=max-message-missing-argument
 msg MAX | 1 | | 2
 ----
-model: S 40.5 | S 40.5
+model: S 93.903 | S 93.903
 
 case name=max-missing-argument-fraction
 bif MAX | 1.5 | | 3
@@ -942,4 +937,173 @@ case name=format-decimal-trigger
 bif FORMAT | 12.3456789 | | | | 3
 ----
 model: V[1.23456789E+1] | V[1.23456789E+1]
-crate: V[12.3456789] | V[12.3456789]
+
+case name=max-fuzz-strings fuzz=1
+bif MAX | '100000001' | '100000002'
+----
+model: V[100000001] | L[100000002]
+
+case name=min-fuzz-strings fuzz=1
+bif MIN | '100000002' | '100000001'
+----
+model: V[100000002] | L[100000001]
+
+case name=max-fuzz-strings-short digits=8 fuzz=7
+bif MAX | '11' | '12'
+----
+model: V[11] | L[12]
+
+case name=max-message-fuzz-strings fuzz=1
+msg MAX | '100000001' | '100000002'
+----
+model: V[100000001] | L[100000002]
+
+case name=min-missing-argument
+bif MIN | 1 | | 3
+----
+model: S 40.5 | S 40.5
+
+case name=min-message-missing-argument
+msg MIN | 1 | | 3
+----
+model: S 93.903 | S 93.903
+
+case name=div-zero-dividend
+infix / | 0 | 1234567890.5
+----
+model: V[0] | L[1234567890.5]
+
+case name=div-zero-dividend-string
+infix / | '0' | 1234567890.5
+----
+model: V[0] | L[1234567890.5]
+
+case name=intdiv-zero-dividend
+infix % | 0 | 1234567890.5
+----
+model: V[0] | L[1234567890.5]
+
+case name=rem-zero-dividend
+infix // | 0 | 1234567890.5
+----
+model: V[0] | L[1234567890.5]
+
+case name=describe-prefix-literal
+prefix - | 1234567890.5
+----
+model: V[-1.23456789E+9] | L[1234567890.5]
+
+case name=describe-mul-literal
+infix * | 1234567890.5 | 1
+----
+model: V[1.23456789E+9] | L[1234567890.5]
+
+case name=describe-pow-literal
+infix ** | 1234567890.5 | 1
+----
+model: V[1.23456789E+9] | L[1234567890.5]
+
+case name=describe-intdiv-literal
+infix % | 1234567890.5 | 1
+----
+model: S 26.11 | L[1234567890.5]
+
+case name=describe-add-string
+infix + | '1234567890.5' | 0
+----
+model: V[1.23456789E+9] | L[1234567890.5]
+
+case name=describe-max-literal digits=3
+bif MAX | 1 | 12345.5
+----
+model: V[1.23E+4] | L[1.23455E+4]
+
+case name=describe-max-string
+bif MAX | 5 | '12345678905E-1'
+----
+model: V[1.23456789E+9] | L[1.2345678905E+9]
+
+case name=describe-do-literal digits=3
+do count | 12345.5
+----
+model: S 26.2 | L[1.23455E+4]
+
+case name=describe-max-trailing digits=1
+bif MAX | 15 | 16.0
+----
+model: V[2E+1] | L[15]
+
+case name=abs-wide-literal digits=3
+bif ABS | 1234.567
+----
+model: V[1.23E+3] | L[1234.567]
+
+case name=abs-message-wide digits=3
+msg ABS | '1234.567'
+----
+model: V[1.23E+3] | L[1234.567]
+
+case name=sign-message-wide digits=3
+msg SIGN | '1234.567'
+----
+model: V[1] | L[1234.567]
+
+case name=format-wide-string digits=3
+bif FORMAT | '1234.567' | 6
+----
+model: V[     1.23E+3] | L[1234.567]
+
+case name=trunc-wide-string digits=3
+bif TRUNC | '1234.567' | 1
+----
+model: V[1230.0] | L[1234.567]
+
+case name=max-target-wide-fraction
+bif MAX | 1111111111.5 | 2
+----
+model: V[1.11111111E+9] | L[1.1111111115E+9]
+
+case name=min-negative-wide-string
+bif MIN | '-5' | '-1111111111'
+----
+model: V[-1.11111111E+9] | L[-1111111111]
+
+case name=max-message-missing-first
+msg MAX | '55' | | 77
+----
+model: S 93.903 | S 93.903
+
+case name=max-message-missing-middle
+msg MAX | '55' | 77 | | 88
+----
+model: S 93.903 | S 93.903
+
+case name=min-message-missing-first
+msg MIN | '55' | | 77
+----
+model: S 93.903 | S 93.903
+
+case name=fuzz-sign-negative fuzz=1
+infix < | '-1.00000001' | 2
+----
+model: V[1] | L[-1.00000001]
+
+case name=fuzz-zero-left fuzz=1
+infix < | 0 | 1.00000001
+----
+model: V[1] | L[1.00000001]
+
+case name=fuzz-engineering-integer digits=3 fuzz=1 form=engineering
+bif MAX | 123 | 1240
+----
+model: V[1.24E+3] | L[1240]
+
+case name=format-wide-fraction
+bif FORMAT | 1.1111111111 | 2 | 3
+----
+model: V[ 1.111] | L[1.1111111111]
+
+case name=trunc-wide-fraction
+bif TRUNC | 1.1111111111 | 2
+----
+model: V[1.11] | L[1.1111111111]

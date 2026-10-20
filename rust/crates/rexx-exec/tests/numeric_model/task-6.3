@@ -61,12 +61,12 @@ model: V[1.5] | L[1.00000000000000000000000001E-7]
 case name=maxstr-string
 bif MAX | 1 | '1111111111'
 ----
-model: V[1.11111111E+9] | V[1.11111111E+9]
+model: V[1.11111111E+9] | L[1111111111]
 
 case name=maxstr-literal
 bif MAX | 1 | 1111111111
 ----
-model: V[1.11111111E+9] | V[1.11111111E+9]
+model: V[1.11111111E+9] | L[1111111111]
 
 case name=trap-op-1
 infix + | 1111111111 | 1
@@ -186,7 +186,7 @@ model: V[1.5] | L[1111111111]
 case name=maxmin-3
 msg MAX | 1111111111 | 2222222222
 ----
-model: V[2.22222222E+9] | L[2222222222]
+model: V[2.22222222E+9] | L[1111111111]
 
 case name=maxmin-4
 msg MIN | 1.5 | 2222222222
@@ -196,7 +196,7 @@ model: V[1.5] | L[2222222222]
 case name=maxmin-5
 bif MAX | 1111111111 | 2222222222
 ----
-model: V[2.22222222E+9] | L[2222222222]
+model: V[2.22222222E+9] | L[1111111111]
 
 case name=maxmin-6
 bif MAX | 1.5 | 1 | 3333333333
@@ -221,42 +221,42 @@ model: V[111111111] | V[111111111]
 case name=maxmin-10
 bif MIN | 1 | 1111111111
 ----
-model: V[1] | V[1]
+model: V[1] | L[1111111111]
 
 case name=maxmin-11
 msg MAX | 1 | 1111111111
 ----
-model: V[1.11111111E+9] | V[1.11111111E+9]
+model: V[1.11111111E+9] | L[1111111111]
 
 case name=maxmin-12
 msg MIN | 1 | 1111111111
 ----
-model: V[1] | V[1]
+model: V[1] | L[1111111111]
 
 case name=maxmin-13
 bif MIN | 1.1111111111 | 2
 ----
-model: V[1.11111111] | V[1.11111111]
+model: V[1.11111111] | L[1.1111111111]
 
 case name=maxmin-14
 msg MAX | 1.1111111111 | 2
 ----
-model: V[2] | V[2]
+model: V[2] | L[1.1111111111]
 
 case name=maxmin-15
 bif ABS | 1111111111
 ----
-model: V[1.11111111E+9] | V[1.11111111E+9]
+model: V[1.11111111E+9] | L[1111111111]
 
 case name=maxmin-16
 msg ABS | 1111111111
 ----
-model: V[1.11111111E+9] | V[1.11111111E+9]
+model: V[1.11111111E+9] | L[1111111111]
 
 case name=maxmin-17
 msg SIGN | 1111111111
 ----
-model: V[1] | V[1]
+model: V[1] | L[1111111111]
 
 case name=maxmin-18 form=engineering
 bif MAX | 1.5 | '44444444440E-1'

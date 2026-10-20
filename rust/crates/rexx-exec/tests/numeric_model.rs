@@ -12,10 +12,9 @@
 //! The numeric model, `corpus/model/numeric.rex`, against the native
 //! operation on the same inputs: each case in `tests/numeric_model/` runs
 //! once untrapped and once under `SIGNAL ON LOSTDIGITS`, both ways. On this
-//! crate every answer agrees except the [`REPORTED`] rows the crate takes
-//! part in; on the oracle the model answers as it does here, and the native
-//! answer differs exactly on [`ORACLE_DEPARTURES`] and the [`REPORTED`] rows
-//! the oracle takes part in.
+//! crate every answer agrees; on the oracle the model answers as it does
+//! here, and the native answer differs exactly on [`ORACLE_DEPARTURES`], as
+//! each row records it.
 
 #![expect(
     clippy::disallowed_methods,
@@ -34,54 +33,241 @@ use support::oracle::{did_not_finish, locate};
 
 const CASES: &str = "tests/numeric_model";
 
-/// The cases whose native oracle answer differs from the model, each with the
-/// numeric Deviation (`docs/superpowers/plans/phase-4-exclusions.txt`) that
-/// licenses it.
-const ORACLE_DEPARTURES: &[(&str, u32)] = &[
-    ("max-wide-argument", 44),
-    ("max-message-wide-argument", 44),
-    ("max-trailing-zeros", 44),
-    ("maxstr-string", 44),
-    ("maxstr-literal", 44),
-    ("maxmin-11", 44),
-    ("min-lone-wide", 44),
-    ("msg-min-lone-wide", 44),
-    ("max-wide-rounds-up", 44),
-    ("max-engineering-wide", 44),
-    ("do-count-wide", 47),
-    ("do-for-wide", 47),
-    ("do-count-trailing-zeros", 47),
+/// The cases whose native oracle answer differs from the model: the case,
+/// the numeric Deviation that licenses it, the rule it rests on, and the
+/// oracle's answer, untrapped and then trapped. The rules are Moritz's
+/// 2026-10-20 rulings ("follow rexxref") reported by Task 6.14:
+/// * `R1`: under FUZZ a comparison checks LOSTDIGITS at DIGITS minus FUZZ
+///   whatever the signs;
+/// * `R2`: MAX and MIN apply FUZZ to whole numbers;
+/// * `R3`: an omitted MAX or MIN argument is 40.5 for the function and
+///   93.903 for the message, whatever the other arguments are;
+/// * `R4`: FORMAT's decimal-part `expt` trigger holds for a number with an
+///   integer part;
+/// * `R6`: a zero dividend still checks its divisor for LOSTDIGITS;
+/// * `R7`: the numeric builtins round every argument named as a number as
+///   though added to 0, and so raise LOSTDIGITS for a wide one;
+/// * `wide-integer`: MAX and MIN round a whole number wider than DIGITS;
+/// * `description`: the oracle names an unquoted literal's LOSTDIGITS by its
+///   spelling at parse time, and this crate by its value;
+/// * `do-count`: a DO count wider than DIGITS raises 26.2 or 26.3.
+const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
+    (
+        "max-wide-argument",
+        44,
+        "wide-integer",
+        "V[1111111111] | V[1111111111]",
+    ),
+    (
+        "max-message-wide-argument",
+        44,
+        "wide-integer",
+        "V[1111111111] | V[1111111111]",
+    ),
+    (
+        "max-wide-target",
+        44,
+        "R7",
+        "V[1.11111111E+9] | V[1.11111111E+9]",
+    ),
+    (
+        "max-message-wide-target",
+        44,
+        "R7",
+        "V[1.11111111E+9] | V[1.11111111E+9]",
+    ),
+    (
+        "max-trailing-zeros",
+        44,
+        "wide-integer",
+        "V[1000000000] | V[1000000000]",
+    ),
+    ("min-wide-argument", 44, "R7", "V[2] | V[2]"),
+    ("min-message-wide-argument", 44, "R7", "V[2] | V[2]"),
+    (
+        "min-wide-both",
+        44,
+        "R7",
+        "V[1.11111111E+9] | L[2222222222]",
+    ),
+    (
+        "min-message-wide-both",
+        44,
+        "R7",
+        "V[1.11111111E+9] | L[2222222222]",
+    ),
+    ("abs-wide", 44, "R7", "V[1.11111111E+9] | V[1.11111111E+9]"),
+    ("sign-wide", 44, "R7", "V[1] | V[1]"),
+    ("trunc-wide", 44, "R7", "V[1111111110] | V[1111111110]"),
+    (
+        "trunc-rounds-first",
+        44,
+        "R7",
+        "V[12345679.0] | V[12345679.0]",
+    ),
+    (
+        "format-wide",
+        44,
+        "R7",
+        "V[1.11111111E+9] | V[1.11111111E+9]",
+    ),
+    ("format-wide-after", 44, "R7", "V[1.11E+9] | V[1.11E+9]"),
+    ("do-count-wide", 47, "do-count", "V[ran] | V[ran]"),
+    ("do-for-wide", 47, "do-count", "V[ran] | V[ran]"),
+    ("do-count-trailing-zeros", 47, "do-count", "V[ran] | V[ran]"),
+    (
+        "maxstr-literal",
+        44,
+        "wide-integer",
+        "V[1111111111] | V[1111111111]",
+    ),
+    ("maxmin-3", 44, "R7", "V[2.22222222E+9] | L[2222222222]"),
+    ("maxmin-5", 44, "R7", "V[2.22222222E+9] | L[2222222222]"),
+    ("maxmin-10", 44, "R7", "V[1] | V[1]"),
+    (
+        "maxmin-11",
+        44,
+        "wide-integer",
+        "V[1111111111] | V[1111111111]",
+    ),
+    ("maxmin-12", 44, "R7", "V[1] | V[1]"),
+    ("maxmin-13", 44, "R7", "V[1.11111111] | V[1.11111111]"),
+    ("maxmin-14", 44, "R7", "V[2] | V[2]"),
+    ("maxmin-15", 44, "R7", "V[1.11111111E+9] | V[1.11111111E+9]"),
+    ("maxmin-16", 44, "R7", "V[1.11111111E+9] | V[1.11111111E+9]"),
+    ("maxmin-17", 44, "R7", "V[1] | V[1]"),
+    (
+        "format-engineering-wide",
+        44,
+        "R7",
+        "V[123.456789E+9] | V[123.456789E+9]",
+    ),
+    ("min-lone-wide", 44, "wide-integer", "V[12345] | V[12345]"),
+    ("max-lone-wide", 44, "R7", "V[1.23E+4] | V[1.23E+4]"),
+    (
+        "msg-min-lone-wide",
+        44,
+        "wide-integer",
+        "V[12345] | V[12345]",
+    ),
+    (
+        "max-negative-wide",
+        44,
+        "R7",
+        "V[-1.11111111E+9] | L[-2222222222]",
+    ),
+    (
+        "max-wide-rounds-up",
+        44,
+        "wide-integer",
+        "V[1111111115] | V[1111111115]",
+    ),
+    (
+        "max-engineering-wide",
+        44,
+        "wide-integer",
+        "V[11111111111] | V[11111111111]",
+    ),
+    ("fuzz-15", 44, "R7", "V[1.00000001] | L[1.00000001]"),
+    ("fuzz-18", 53, "R1", "V[1] | V[1]"),
+    ("fuzz-sign-differs", 53, "R1", "V[0] | V[0]"),
+    ("fuzz-sign-zero", 53, "R1", "V[1] | V[1]"),
+    ("max-fuzz-integers", 53, "R2", "V[100000002] | V[100000002]"),
+    (
+        "max-message-fuzz-integers",
+        53,
+        "R2",
+        "V[100000002] | V[100000002]",
+    ),
+    ("max-missing-argument", 53, "R3", "S 93.903 | S 93.903"),
+    (
+        "format-decimal-trigger",
+        53,
+        "R4",
+        "V[12.3456789] | V[12.3456789]",
+    ),
+    ("min-missing-argument", 53, "R3", "S 93.903 | S 93.903"),
+    ("div-zero-dividend", 53, "R6", "V[0] | V[0]"),
+    ("div-zero-dividend-string", 53, "R6", "V[0] | V[0]"),
+    ("intdiv-zero-dividend", 53, "R6", "V[0] | V[0]"),
+    ("rem-zero-dividend", 53, "R6", "V[0] | V[0]"),
+    (
+        "describe-prefix-literal",
+        53,
+        "description",
+        "V[-1.23456789E+9] | L[1.2345678905E+9]",
+    ),
+    (
+        "describe-mul-literal",
+        53,
+        "description",
+        "V[1.23456789E+9] | L[1.2345678905E+9]",
+    ),
+    (
+        "describe-pow-literal",
+        53,
+        "description",
+        "V[1.23456789E+9] | L[1.2345678905E+9]",
+    ),
+    (
+        "describe-intdiv-literal",
+        53,
+        "description",
+        "S 26.11 | L[1.2345678905E+9]",
+    ),
+    (
+        "describe-max-literal",
+        53,
+        "description",
+        "V[1.23E+4] | L[12345.5]",
+    ),
+    (
+        "describe-do-literal",
+        53,
+        "description",
+        "S 26.2 | L[12345.5]",
+    ),
+    ("describe-max-trailing", 44, "R7", "V[2E+1] | L[16.0]"),
+    ("abs-wide-literal", 44, "R7", "V[1.23E+3] | V[1.23E+3]"),
+    ("abs-message-wide", 44, "R7", "V[1.23E+3] | V[1.23E+3]"),
+    ("sign-message-wide", 44, "R7", "V[1] | V[1]"),
+    (
+        "format-wide-string",
+        44,
+        "R7",
+        "V[     1.23E+3] | V[     1.23E+3]",
+    ),
+    ("trunc-wide-string", 44, "R7", "V[1230.0] | V[1230.0]"),
+    (
+        "max-target-wide-fraction",
+        44,
+        "R7",
+        "V[1.11111111E+9] | V[1.11111111E+9]",
+    ),
+    ("max-message-missing-first", 53, "R3", "S 40.5 | S 40.5"),
+    ("max-message-missing-middle", 53, "R3", "S 40.5 | S 40.5"),
+    ("min-message-missing-first", 53, "R3", "S 40.5 | S 40.5"),
+    ("fuzz-sign-negative", 53, "R1", "V[1] | V[1]"),
+    ("fuzz-zero-left", 53, "R1", "V[1] | V[1]"),
+    (
+        "fuzz-engineering-integer",
+        44,
+        "wide-integer",
+        "V[1240] | V[1240]",
+    ),
+    ("format-wide-fraction", 44, "R7", "V[ 1.111] | V[ 1.111]"),
+    ("trunc-wide-fraction", 44, "R7", "V[1.11] | V[1.11]"),
 ];
 
-/// Which interpreter answers a [`REPORTED`] case differently from the model.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Sides {
-    Both,
-    Oracle,
+/// The Deviation each rule's departures are licensed under.
+fn deviation_of(rule: &str) -> u32 {
+    match rule {
+        "R1" | "R2" | "R3" | "R4" | "R6" | "description" => 53,
+        "R7" | "wide-integer" => 44,
+        "do-count" => 47,
+        other => panic!("unknown rule {other}"),
+    }
 }
-
-/// The cases where the model follows the rule derived from the documentation
-/// and an interpreter departs from it with no Deviation yet ruled: reported to
-/// Moritz by Task 6.14 (`.superpowers/sdd/2026-10-18-phase-9d/task-6.14-report.md`).
-const REPORTED: &[(&str, Sides)] = &[
-    // Under FUZZ a comparison subtracts at DIGITS minus FUZZ, but both
-    // interpreters check LOSTDIGITS at that precision only for same-signed
-    // operands.
-    ("fuzz-18", Sides::Both),
-    ("fuzz-sign-differs", Sides::Both),
-    ("fuzz-sign-zero", Sides::Both),
-    // MAX's whole-number path compares without FUZZ: the function form here
-    // and the oracle, and the oracle's message form.
-    ("max-fuzz-integers", Sides::Both),
-    ("max-message-fuzz-integers", Sides::Oracle),
-    // An omitted MAX argument is 93.903 naming argument 0 on the
-    // whole-number path, 40.5 otherwise.
-    ("max-missing-argument", Sides::Both),
-    ("max-message-missing-argument", Sides::Oracle),
-    // FORMAT's `expt` trigger for the decimal part of a number with an
-    // integer part.
-    ("format-decimal-trigger", Sides::Both),
-];
 
 /// One case's operation, from its input line.
 struct Operation<'a> {
@@ -208,6 +394,7 @@ fn answers(name: &str, side: &str, stdout: &[u8], stderr: &[u8]) -> (String, Str
 /// One case run here: its name, the program's path, and its two answers.
 struct CrateRun {
     name: String,
+    kind: String,
     path: PathBuf,
     native: String,
     model: String,
@@ -226,11 +413,13 @@ fn run_case(case: &datadriven::TestCase) -> CrateRun {
     };
     let name = arg("name", "");
     assert!(!name.is_empty(), "a case without a name: {}", case.input);
+    let op = operation(&case.input);
+    let kind = op.kind.to_string();
     let text = program(
         &arg("digits", "9"),
         &arg("fuzz", "0"),
         &arg("form", "scientific"),
-        &operation(&case.input),
+        &op,
     );
     let path = materialise(&name, &text);
     let path_str = path.to_str().expect("the case path is UTF-8");
@@ -243,6 +432,7 @@ fn run_case(case: &datadriven::TestCase) -> CrateRun {
     let (native, model) = answers(&name, "this crate", &outcome.stdout, &outcome.stderr);
     CrateRun {
         name,
+        kind,
         path,
         native,
         model,
@@ -259,13 +449,6 @@ fn recorded(run: &CrateRun) -> String {
     out
 }
 
-fn reported(name: &str) -> Option<Sides> {
-    REPORTED
-        .iter()
-        .find(|(case, _)| *case == name)
-        .map(|(_, sides)| *sides)
-}
-
 #[test]
 fn the_model_answers_every_case_as_this_crate_does() {
     let mut names = BTreeSet::new();
@@ -277,27 +460,15 @@ fn the_model_answers_every_case_as_this_crate_does() {
                 "two cases named {}",
                 run.name
             );
-            let expected_to_differ = reported(&run.name) == Some(Sides::Both);
             assert_eq!(
-                run.native != run.model,
-                expected_to_differ,
-                "[{}] this crate {} the model: native {}, model {}",
-                run.name,
-                if expected_to_differ {
-                    "was listed as departing from"
-                } else {
-                    "departs from"
-                },
-                run.native,
-                run.model
+                run.native, run.model,
+                "[{}] this crate departs from the model",
+                run.name
             );
             recorded(&run)
         });
     });
-    for (name, _) in REPORTED {
-        assert!(names.contains(*name), "REPORTED names no case {name}");
-    }
-    for (name, _) in ORACLE_DEPARTURES {
+    for (name, ..) in ORACLE_DEPARTURES {
         assert!(
             names.contains(*name),
             "ORACLE_DEPARTURES names no case {name}"
@@ -329,6 +500,32 @@ fn on_the_oracle_the_model_parts_only_where_the_numeric_deviations_say() {
                 "[{}] the model answers differently on the oracle",
                 run.name
             );
+            let listed = ORACLE_DEPARTURES
+                .iter()
+                .find(|(name, ..)| *name == run.name);
+            match listed {
+                None => assert_eq!(
+                    native, model,
+                    "[{}] the oracle departs from the model unlisted",
+                    run.name
+                ),
+                Some((_, deviation, rule, answer)) => {
+                    assert_ne!(native, model, "[{}] listed, but agrees", run.name);
+                    assert_eq!(&native, answer, "[{}] the oracle's answer moved", run.name);
+                    assert_eq!(*deviation, deviation_of(rule), "[{}] mislabelled", run.name);
+                    let kinds: &[&str] = match deviation {
+                        47 => &["do"],
+                        44 => &["bif", "msg"],
+                        _ => &["infix", "prefix", "bif", "msg", "do"],
+                    };
+                    assert!(
+                        kinds.contains(&run.kind.as_str()),
+                        "[{}] Deviation {deviation} cannot license a `{}` case",
+                        run.name,
+                        run.kind
+                    );
+                }
+            }
             if native != model {
                 departures.insert(run.name.clone());
             }
@@ -337,13 +534,12 @@ fn on_the_oracle_the_model_parts_only_where_the_numeric_deviations_say() {
     });
     let expected: BTreeSet<String> = ORACLE_DEPARTURES
         .iter()
-        .map(|(name, _)| (*name).to_string())
-        .chain(REPORTED.iter().map(|(name, _)| (*name).to_string()))
+        .map(|(name, ..)| (*name).to_string())
         .collect();
     assert_eq!(
         departures, expected,
         "the oracle's departures from the model are not the listed set"
     );
-    let deviations: BTreeSet<u32> = ORACLE_DEPARTURES.iter().map(|(_, d)| *d).collect();
-    assert_eq!(deviations, BTreeSet::from([44, 47]));
+    let deviations: BTreeSet<u32> = ORACLE_DEPARTURES.iter().map(|(_, d, ..)| *d).collect();
+    assert_eq!(deviations, BTreeSet::from([44, 47, 53]));
 }

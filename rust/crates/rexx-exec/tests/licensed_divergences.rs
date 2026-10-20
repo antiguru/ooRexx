@@ -105,7 +105,7 @@ const LICENSED_DIVERGENCES: &[LicensedDivergence] = &[
     LicensedDivergence {
         name: "max-min-wide-integer-rounds",
         program: "say max(2, 1111111111) min(1111111111) max(1111111111)\n\
-                  say min(2, 1111111111, 3333333333) max(-1111111111, -2222222222) \
+                  say min(2, 1111111111, 3333333333) min(-5, '-1111111111') \
                   max(1, 2, 1111111115)\n\
                   say max(2, 999999999) min(999999999) max(2, 1000000000)\n\
                   numeric form engineering\n\

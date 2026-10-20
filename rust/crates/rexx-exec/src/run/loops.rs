@@ -2994,7 +2994,9 @@ impl Interp {
 
     /// LOSTDIGITS for a repetitor or `FOR` count with more digits than
     /// DIGITS, which is checked as a whole number at that precision and so is
-    /// rounded first; the description is the count's number, unrounded.
+    /// rounded as though added to 0; the description is the count's number,
+    /// unrounded, rendered at DIGITS, whether it was written as a literal or a
+    /// string.
     #[inline(always)]
     fn count_lostdigits(&mut self, value: ObjRef) -> Result<(), Failure> {
         if !self.lostdigits_armed {

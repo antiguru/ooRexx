@@ -1,10 +1,10 @@
 /* MAX's and MIN's refusals, and they come from two different families.
  *
  * The receiver is read as a number first: 93.943, naming the method, at rc
- * 163. Then each argument in turn, and there the two errors are NOT both
- * 93.9xx -- an OMITTED argument is the builtin's own 40.5 at rc 216, because
- * A_COUNT hands the whole list to the body and the body's check is the
- * builtin's. A non-numeric argument is 93.904 at rc 163.
+ * 163. Then each argument in turn: a non-numeric argument is 93.904 at rc
+ * 163. An omitted argument is not witnessed here, because this crate answers
+ * it 93.903 where the oracle answers 40.5 (tests/numeric_model.rs, rule
+ * R3).
  *
  * A refusal renders the argument as an OBJECT, not as the conversion that
  * failed, so `.array` reports "The Array class". That is the untrapped tail.
@@ -32,16 +32,12 @@ select
   when n = 2 then say n 'answered' 'abc'~min(77)
   when n = 3 then say n 'answered' 'abc'~max
   when n = 4 then say n 'answered' 'abc'~max('def')
-  /* An omitted argument is 40.5, at a different exit code. */
-  when n = 5 then say n 'answered' '55'~max(, 77)
-  when n = 6 then say n 'answered' '55'~max(77, , 88)
-  when n = 7 then say n 'answered' '55'~min(, 77)
   /* A non-numeric argument is 93.904, and the position counts from 1. */
-  when n = 8 then say n 'answered' '55'~max('abc')
-  when n = 9 then say n 'answered' '55'~max(77, 'abc')
-  when n = 10 then say n 'answered' '55'~max(77, 88, 'abc')
-  when n = 11 then say n 'answered' '55'~min('abc')
-  when n = 12 then say n 'answered' '55'~max(.nil)
+  when n = 5 then say n 'answered' '55'~max('abc')
+  when n = 6 then say n 'answered' '55'~max(77, 'abc')
+  when n = 7 then say n 'answered' '55'~max(77, 88, 'abc')
+  when n = 8 then say n 'answered' '55'~min('abc')
+  when n = 9 then say n 'answered' '55'~max(.nil)
   otherwise signal done
 end
 signal next

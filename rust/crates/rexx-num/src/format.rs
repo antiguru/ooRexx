@@ -337,8 +337,7 @@ fn initial_exponent(shape: Shape, form: Form, expt: Option<i64>) -> Option<i32> 
     // `saturating_mul`: `expt` may itself be the saturated-i64 form of a huge
     // bare `digits` (see `trigger`), and doubling that must stay huge rather
     // than wrap.
-    let triggered =
-        a as i64 >= expt || (a < 0 && (shape.exponent as i64).abs() > expt.saturating_mul(2));
+    let triggered = a as i64 >= expt || (shape.exponent as i64).abs() > expt.saturating_mul(2);
     triggered.then(|| group(form, a))
 }
 
@@ -474,7 +473,7 @@ fn post_carry_exponent_error(
             // `saturating_mul` for the same reason as the other two
             // triggers: `expt` may be a saturated huge `digits` default.
             Some(expt) if adjusted2 as i64 >= expt
-                || (adjusted2 < 0 && (true_scale.exponent as i64).abs() > expt.saturating_mul(2))
+                || (true_scale.exponent as i64).abs() > expt.saturating_mul(2)
         );
     if !triggered {
         return None;
