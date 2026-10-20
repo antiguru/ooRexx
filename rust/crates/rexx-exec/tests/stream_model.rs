@@ -68,6 +68,12 @@ const CRATE_RUN_LIMIT: std::time::Duration = std::time::Duration::from_secs(120)
 /// differs. [`oracle_rule`] must name the same rule from the answers.
 const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
     ("charin-bounds", 0, "charin-eof-notready", "CI= ERROR 19 19"),
+    (
+        "line-mark-after-write",
+        0,
+        "line-query",
+        "Q_read_line=1 READY 19 8",
+    ),
     ("devnull-empty", 0, "charin-eof-notready", "CI= ERROR 1 1"),
     (
         "ctrlz-append-kept",

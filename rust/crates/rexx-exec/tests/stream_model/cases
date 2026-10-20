@@ -398,3 +398,17 @@ LC
 LC
 ----
 model: O_both_nobuffer=READY: READY 19 1;CI_2_1=li READY 19 3;LC=3 READY 19 3;LC=3 READY 19 3; [line1|line2|line3|]
+
+# A write that adds a line end before the position a line operation last
+# counted to moves that position's line.
+case name=line-mark-after-write initial=text3
+O both nobuffer
+CI 0 8
+Q read line
+LO x 1
+Q read line
+LC
+S =3 read line
+LI
+----
+model: O_both_nobuffer=READY: READY 19 1;CI_0_8= READY 19 8;Q_read_line=2 READY 19 8;LO_x_1=0 READY 3 8;Q_read_line=3 READY 3 8;LC=2 READY 3 8;S_=3_read_line=3 READY 3 7;LI=line2 READY 3 13; [x|ne1|line2|line3|]
