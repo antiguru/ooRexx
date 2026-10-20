@@ -222,3 +222,4 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointe
 2026-10-18-sysfiletree-tree-directory-flaky.md	process	-	9d	flaky test	9d
 2026-10-20-halt-after-signal-on-syntax.md	divergence	-	9d	broken report for a HALT taken at a SIGNAL ON SYNTAX label	9d
 2026-10-20-lineout-buffered-until-close.md	divergence	-		oracle buffers lineout to a named stream until close	
+2026-10-20-call-on-delayed-reraise.md	divergence	-	9d	a CALL ON condition raised again while delayed runs the handler twice	9d
