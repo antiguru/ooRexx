@@ -1,0 +1,8 @@
+Round 2's debug build (`cargo build -p rexx-exec --bin rexx` at 7a7441c6c) on
+probes/second-writer.rex, run at the start of this round:
+
+thread 'rexx-interp' (3115612) panicked at crates/rexx-exec/src/dispatch/stream.rs:2163:9:
+assertion `left == right` failed: the cached line count
+  left: Some(2)
+ right: Some(4)
+rc 101

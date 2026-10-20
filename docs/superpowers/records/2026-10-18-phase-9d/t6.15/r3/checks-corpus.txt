@@ -1,0 +1,63 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `release` profile [optimized + debuginfo] target(s) in 51.62s
+     Running tests/corpus.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t615-target/release/deps/corpus-6953cc47785bd785)
+
+running 30 tests
+test probe_emit_uncaptured_marker ... ignored, run only by demonstrate_the_report_reaches_a_plain_cargo_test, as a child process
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test every_opted_in_comparison_names_a_program_the_subset_runs ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test the_differential_reads_every_phase_subset_file ... ok
+test the_multiset_stdout_mode_is_selected_for_exactly_the_listed_programs ... ok
+test every_sidecar_names_a_program_the_subset_runs ... ok
+test every_lang_program_is_run_or_named_unfiled ... ok
+test demonstrate_the_report_reaches_a_plain_cargo_test ... ok
+test the_multiset_stdout_licence_covers_order_and_nothing_else ... ok
+test a_sidecar_changes_what_one_of_the_interpreters_answers ... ok
+test corpus_differential has been running for over 60 seconds
+==============================================================================
+rexx-exec differential corpus report -- rust/corpus/phase-4a.txt + phase-4b.txt + phase-4c.txt + phase-5a.txt + phase-5b.txt + phase-5c.txt + phase-5d.txt + phase-5j.txt + phase-6-1.txt + phase-6.txt + phase-7.txt + phase-8.txt + phase-9.txt
+mode: STRICT (the gate) -- REXX_CORPUS_GATE is set
+1148 of 1149 matching
+mismatches (1):
+  [UNCLASSIFIED] lang/command_redirected_target_waits_elsewhere.rex: stdout differ
+      rust:   stdout="O:a slept 1\nO:b slept 0\nO:c slept 0\nsleep 0 3\nO:a waited 1\nO:b waited 0\nO:c waited 0\nsemaphore 0 3\nreleased\nO:a\nO:b\nO:c\nguard 0 3 waited 1\n" stderr="" exit=0
+      oracle: stdout="O:a slept 1\nO:b slept 0\nO:c slept 0\nsleep 0 3\nO:a waited 1\nO:b waited 0\nO:c waited 0\nsemaphore 0 3\nreleased\nO:a\nO:b\nO:c\nguard 0 3 waited 0\n" stderr="" exit=0
+by owner:
+  UNCLASSIFIED: 1
+==============================================================================
+test corpus_differential ... FAILED
+
+failures:
+
+---- corpus_differential stdout ----
+
+thread 'corpus_differential' (3129889) panicked at crates/rexx-exec/tests/corpus.rs:887:5:
+STRICT (REXX_CORPUS_GATE) mode: 1 of 1149 corpus programs disagree with the oracle; see the report above for which and why.
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    corpus_differential
+
+test result: FAILED. 28 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 118.40s
+
+error: test failed, to rerun pass `-p rexx-exec --test corpus`

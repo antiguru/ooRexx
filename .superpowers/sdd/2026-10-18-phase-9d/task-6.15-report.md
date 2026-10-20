@@ -733,3 +733,88 @@ From `rust/`, `CARGO_TARGET_DIR=<scratchpad>/t615-target`, `CARGO_INCREMENTAL=0`
 4. `collect_stress` still fails at `raise_additional_array.rex`, as at the task base (round 1,
    Concern 1).
 5. The new rule labels still need numbers (`new` in `departures-oracle.tsv`).
+
+## Fix round 3
+
+Brief: `task-6.15-fix-r3.md`. Re-review: `task-6.15-rereview-r2.md`. Status: DONE_WITH_CONCERNS.
+
+### Commits
+
+* `01a7ca716`: the debug-only digests on the line cache (`rexx-core` `OpenFile`,
+  `dispatch/stream.rs`), the persistent counts for a file console (`input.rs`), the test
+  `a_second_writer_leaves_the_line_cache_checks_quiet` (`stream_model.rs`) and
+  `a_file_console_counts_what_is_left` (`input_oracle.rs`).
+* The records commit that follows holds `t6.15/r3/` and this section.
+
+### Important 1: the line cache under a second writer
+
+* The checks no longer fire on a legal program. `OpenFile` keeps `line_mark_digest` and
+  `line_total_digest`, digests of the bytes the mark and the count were counted over. They are
+  taken only under `cfg!(debug_assertions)`, so a release build adds no read and no syscall.
+* Each check of the cache runs only while its digest still matches the file. A mark counted from
+  a mark whose bytes changed gets no digest, so an answer built on stale data is never checked.
+  The stream's own writes keep the rest of the scheme: they drop the count, and drop the mark
+  when they land at or before it.
+* The release answers are unchanged, and may go stale when another writer changes the file, by
+  the controller's ruling (iostrms.xml:495-500).
+* Test `a_second_writer_leaves_the_line_cache_checks_quiet` runs the re-review's three programs
+  in one: two stream objects with a later line count, a second object's CHAROUT ahead of the
+  read position, and an `address system` `dd conv=notrunc` overwrite. It asserts rc 0, no
+  stderr, and the recorded answers. Run unoptimised it is the test that sees the checks
+  (`r3/checks-stream-model-debug.txt`, exit 0, 26 passed). Round 2's debug build panicked on the
+  same program (`r3/witnesses/second-writer.round2-debug.txt`).
+* Mutation: making `total_intact` answer true turns that test red in a debug build with `the
+  cached line count` (`r3/mutation/total-check-ungated.txt`).
+* Inverting `line_of`'s check turns the debug named, generated and second-writer tests red with
+  `a line counted from the mark` (`r3/mutation/line-mark-assert-inverted.txt`), so the check is
+  still live. Each mutation was reversed by a literal `sed`, and `grep` confirmed the line was
+  restored.
+* Answers on the program (`r3/witnesses/probes.*`):
+  * the release and debug crate give `before 2 / after 2 fresh 4 / A aaaa bbbb 3 11 / B 3 3 / C
+    aaaa 2 / D 2 4 bbbb 3`;
+  * the oracle gives the same except `B 3 1` and `D 2 2`. Both are LINES Counts after the other
+    writer, where the crate's cached count and stale mark answer differently. The ruling permits
+    this, and the line positions themselves (`B 3`, `D 2`) agree with the oracle.
+
+### Minor 1: a standard input that is a regular file
+
+* `Input::stdin_file_remaining`: when `fstat` of standard input says it is a regular file, CHARS
+  answers the buffered bytes plus what the file holds after the descriptor's offset. LINES Count
+  answers the lines in that, a last line with no line end included. The file is read with
+  `pread`, so the offset does not move.
+* Any other standard input keeps round 2's rule.
+* Witness `input_oracle.rs`'s `a_file_console_counts_what_is_left`, gated, oracle-identical.
+* Probe `r3/probes/stdin-file.rex` on `hello\nworld\nthird\nlast` (`r3/witnesses/stdin-file.*`):
+  round 2 answers `C 1 1 1 1`, and head and the oracle answer `C 22 22 1 4`.
+
+### Checks
+
+From `rust/`, `CARGO_TARGET_DIR=<scratchpad>/t615-target`, `CARGO_INCREMENTAL=0`; outputs in
+`t6.15/r3/`.
+
+| command | exit |
+| --- | --- |
+| `cargo fmt --all --check` | 0 |
+| `memcap 8G cargo clippy -j 4 -p rexx-exec -p rexx-core --all-targets -- -D warnings` | 0 |
+| `cargo test -p rexx-exec --test stream_model --no-fail-fast`, debug (`checks-stream-model-debug.txt`) | 0, 26 passed |
+| the same, release (`checks-stream-model.txt`) | 0 |
+| `REXX_CORPUS_GATE=1 ... --test input_oracle` (`checks-input-oracle.txt`) | 0, 23 passed |
+| `cargo test --release -p rexx-exec --lib` (`checks-lib.txt`) | 0 |
+| refusal tables + `licensed_divergences` + `numeric_model` (`checks-tables.txt`) | 0 |
+| `REXX_CORPUS_GATE=1 ... --test corpus` | 101 then 0. The first run's one mismatch was `lang/command_redirected_target_waits_elsewhere.rex`'s timed `guard ... waited` line, as in 6.14's first run (`checks-corpus.txt`). The second run is 1149 of 1149 (`checks-corpus-2.txt`) |
+| `REXX_SUITE_GATE=1 ... l3_core_suite` (`suite/`) | 0, no row changed against `r2/suite/tests.tsv` |
+
+### Perf
+
+`t6.15/r3/callgrind.txt`: parent `cg-9d/t6.15-r2/rexx-head`, head `cg-9d/t6.15-r3/rexx-head`
+(`01a7ca716`), exit 0. With libc subtracted, the head and the parent are equal on every program
+(own delta 0.0000).
+
+### Concerns (round 3)
+
+1. **Mixing LINEIN and CHARIN on a standard input differs, before this task too.** After
+   `linein()`, `charin(, 3)` answers one character here (`w`), on every binary back to the pin.
+   The oracle answers `l`, apparently from a separate buffer. The probe shows it, but nothing
+   here changes it. It is a queue candidate.
+2. **`command_redirected_target_waits_elsewhere.rex` can mismatch on a timed line**, as in 6.14.
+3. `collect_stress` still fails at `raise_additional_array.rex`, as at the task base.
