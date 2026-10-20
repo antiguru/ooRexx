@@ -25,3 +25,8 @@ error. With `.routine~new("x", ...)` holding `::constant k ('a' + 1)`, the oracl
 
 The Task 6.11 review (`task-6.11-review.md`, Minor 4) adds a class cycle inside `.Package~new`:
 the error names the main file instead of the package.
+
+The Task 6.13 round-4 re-review (`task-6.13-rereview-r4.md`, Minor 1) adds a related report-line
+shape: a HALT re-raised through a started message's `~result` (`hs9`) reports `running ... line 15`
+then `line 9` here, where the oracle reports `line 9` then `line 1`; `qpull`'s deadlock report has
+the same pattern and predates Task 6.13.
