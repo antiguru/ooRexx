@@ -1,0 +1,4 @@
+    21 *-*     return 1 / 0
+     4 *-* address system 'echo a; sleep 0.6; echo b; exit 0' with output using (b)
+Error 42 running DIR/raise1u.rex line 21:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

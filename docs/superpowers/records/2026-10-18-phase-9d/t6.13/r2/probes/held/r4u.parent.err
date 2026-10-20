@@ -1,0 +1,4 @@
+    17 *-*     return 1 / 0
+     5 *-* address system 'echo a; echo e1 >&2; sleep 0.4; echo b; echo c; printf part' with output using (b) error stem e.
+Error 42 running DIR/r4u.rex line 17:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

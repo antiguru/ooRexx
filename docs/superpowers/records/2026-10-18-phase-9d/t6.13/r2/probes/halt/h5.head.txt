@@ -1,0 +1,6 @@
+--- stdout
+--- stderr
+     0 *-* <no failing clause recorded>
+Error 4 running DIR/h5.rex line 0:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.
+--- rc 252

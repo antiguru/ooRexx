@@ -1,0 +1,5 @@
+--- stdout
+trapped SYNTAX 42.3
+HALT rc -4 stem 1 x line 8
+--- stderr
+--- rc 0

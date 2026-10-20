@@ -1,0 +1,4 @@
+lineout b
+trapped 42.3 after child 1 calls 2 rc 42
+later calls 2
+next 0 2 c d

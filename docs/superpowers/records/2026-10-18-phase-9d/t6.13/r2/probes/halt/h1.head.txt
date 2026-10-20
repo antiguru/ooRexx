@@ -1,0 +1,7 @@
+--- stdout
+--- stderr
+     6 *-* return 1 / 0
+     1 *-* address system 'echo a; sleep 1.13; echo b' with output using (.Bad~new)
+Error 42 running DIR/h1.rex line 1:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+--- rc 214

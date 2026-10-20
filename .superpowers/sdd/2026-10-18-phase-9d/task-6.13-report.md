@@ -361,3 +361,94 @@ pin is +0.4781 raw and +0.5302 with libc subtracted (Ruled 14).
 3. `ctrl_c_halts_a_redirected_command`'s doc said the wait ran on the baton; corrected.
 4. `phase-6-gate.md:472` and P64 still describe the off-baton path as unredirected only, for the
    9d gate's pointer (controller ruling).
+
+## Fix round 2
+
+Re-review `task-6.13-rereview.md`. Code commit `54958edd3`; the records commit that follows holds
+`t6.13/r2/` and this section.
+
+### Important 1: a raising target waits for the child
+
+rexxref is silent on when a target's condition is raised, so this follows the oracle, measured on
+the re-review's `raise1.rex`, `raise2.rex` and two shapes of my own (`r2/probes/held/`, each on
+the oracle, round 1 and head; head is identical to the oracle on every one, round 1 on none):
+* the clause stays parked until the child ends; later pieces are still offered to the target
+  (`lineout b` after the first `lineout` raised);
+* a line the target raises on ends its piece: that piece's later lines and its part line are
+  dropped (`r3`: `calls 3`, `part` never offered);
+* the error target is still written (`err 1 e1`);
+* the condition raised is the **last** one: with a 42.3 and then a 41.1 the oracle raises 41.1
+  (`r4`, `r4u`);
+* it is raised again at the command's clause, which the report names (`running ... line 5`,
+  traceback the last raise's method line then the command), with RC and `.RS` unset and the
+  cleanup skipped: no part line flushed, no named stream closed.
+
+`Interp::write_holding_last` (`run.rs`) runs a target write where a condition may already be held:
+a condition it raises replaces the held one, with the failure levels the earlier one left taken
+out first (its objects pushed as temps) so the report and `TRACEBACK` are the last raise's alone;
+a write that succeeds puts them back. Any other failure (an EXIT, a refusal) ends the clause at
+once. `end_blocked_command` holds the condition in `Blocked::raised` across parks.
+`IoContext::finish` takes the held condition, writes in the oracle's order (last output piece,
+standard error, then the cleanup's part line and closes), and on a condition calls
+`reraise_failure_levels` and answers it. `IoContext::write_output` clears the part line on a raise.
+
+Witness `lang/command_redirected_target_raises_held.rex`: `trapped 41.1 calls 3 lines  b` /
+`rc 41 .rs .RS error 1 e1`; oracle and head one output each in 8 runs, round 1 `trapped 42.3
+calls 1`. `lang/command_redirected_target_raises.rex`'s opening comment said the condition ends
+the clause while the child runs; it now says the clause raises it once the child has ended (its
+`sourceline_oracle/` file regenerated). Its output is unchanged. With the clause now waiting for
+its own child, that program no longer reaches `Blocked::end`'s token check, and no witness of
+this round does; whether any program still reaches it was not measured.
+
+The halt shapes (`r2/probes/halt/`, SIGINT by PID):
+* `h1`: a raising target under a halt: the oracle raises 98.923 (Deviation 12), head the held 42.3.
+* `h3`, `h5`, `h6`, `sigint2`: **a pre-existing defect, outside this cluster.** After a SYNTAX is
+  trapped by `SIGNAL ON SYNTAX`, the pending HALT taken at the label reports `0 *-* <no failing
+  clause recorded>` (untrapped) or `Error 0 ... <no message 0.0 in the catalogue>` (with
+  `SIGNAL ON HALT`), where the oracle names the label clause (`3 *-* raised:`) or runs the HALT
+  trap (`HALT 41 4`). `h5` and `h6` reach it with no command at all (`x = SysSleep(1.13) + 'a'`),
+  and the round-1 binary gives the same (`h6.parent.txt`). Not widened; proposed as a queued
+  item.
+
+### Deviation 52's witness
+
+`LICENSED DIVERGENCE WITNESS: target-error-whatever-the-rc` in its entry, and the
+`tests/licensed_divergences.rs` row: `exit 3` with a target whose `lineout` raises, oracle
+`ran on 3`, crate `trapped 42.3 42` (oracle measured 3 of 3).
+
+### oracle-crashes.txt
+
+Entry 56, the error stem that is also the input stem with no output target: SIGSEGV, rc 139, 3 of
+3, nothing written (the re-review's `errin.rex` line). Entry 57, `two.rex` from the re-review:
+an indefinite block in 3 of 6 runs at a 20 s deadline; the crate gives the four results and
+`parallel 1` in 6 of 6. Both programs are in `r2/probes/oracle-crashes/`.
+
+### Checks, on `54958edd3`
+
+From `rust/`, `CARGO_TARGET_DIR=<scratchpad>/t613-target`, `CARGO_INCREMENTAL=0`, each status read
+unpiped:
+* `cargo fmt --all --check`: exit 0.
+* `memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-exec --lib`: exit 0, 1155 passed.
+* `REXX_REFUSAL_SITES_REFRESH=1 ... --test refusal_sites`: exit 0, no change.
+* The round-1 test-binary set (refusal tables, `licensed_divergences`, `concurrency_tests`,
+  `sim_processes`, `rexx_command`, `signals`, `frame_block`, `stdin_contention`, `program_end`),
+  `--no-fail-fast`: exit 0, no failures.
+* `memcap 16G cargo test -j 4 --release -p rexx-parse`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-core --test unsafe_sites`: exit 0.
+* `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus`: exit 0,
+  1141 of 1141 matching.
+* The whole suite with the table at `t6.13/r2/suite/table.tsv`: exit 0, 402 groups green, 277 s.
+  Against `t6.13/r1/suite/tests.tsv` no row changed (`t6.13/r2/suite/changed-rows.txt`).
+
+### Perf
+
+`t6.13/r2/callgrind.txt`: pin, round 1 (`7e42bba78`) and `54958edd3` in one run, exit 0. Head minus
+parent with libc and ld-linux subtracted: at most +0.0011% (interpret); raw at most +0.0009%
+(sayloop). rexxcps against the pin: +0.4767 raw, +0.5287 with libc subtracted (Ruled 14).
+
+### Concerns
+
+1. The pending-HALT-after-a-SIGNAL report defect above (`h5`, `h6`), pre-existing and not a
+   command's; proposed as a queued item.
+2. `Blocked::end`'s token check is reached by no witness of this round (see Important 1).
