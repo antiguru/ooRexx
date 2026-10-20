@@ -605,6 +605,7 @@ impl Scheduler for Interp {
         let table = &mut self.activities;
         self.activity.woken_by_halt = false;
         self.activity.semaphore_wait = None;
+        self.activity.parked_block = None;
         match reason {
             ParkReason::Guard(_) => {}
             ParkReason::GuardWhen => self.activity.when_parked = true,
@@ -637,7 +638,10 @@ impl Scheduler for Interp {
                     });
                 }
             }
-            ParkReason::Native | ParkReason::Block => {}
+            ParkReason::Native => {}
+            ParkReason::Block => {
+                self.activity.parked_block = self.activity.blocked.innermost_token()
+            }
             ParkReason::Semaphore(wait) => {
                 let order = wait.deadline.map(|deadline| {
                     table.next_sleeper += 1;
@@ -1532,10 +1536,13 @@ impl Interp {
                     token,
                     bytes,
                 } => {
-                    let captured = self
-                        .record_of(activity)
-                        .is_some_and(|record| record.blocked.capture(token, bytes));
-                    if captured {
+                    // Recorded for the wait wherever it is; the activity is
+                    // woken only where it is parked on that wait, since any
+                    // other park it is in keeps its own wake.
+                    let woken = self.record_of(activity).is_some_and(|record| {
+                        record.blocked.capture(token, bytes) && record.parked_block == Some(token)
+                    });
+                    if woken {
                         self.unpark(activity);
                     }
                 }
@@ -1557,10 +1564,10 @@ impl Interp {
                         continue;
                     }
                     self.activities.in_flight -= 1;
-                    let ended = self
-                        .record_of(activity)
-                        .is_some_and(|record| record.blocked.end(token, ended));
-                    if ended {
+                    let woken = self.record_of(activity).is_some_and(|record| {
+                        record.blocked.end(token, ended) && record.parked_block == Some(token)
+                    });
+                    if woken {
                         self.unpark(activity);
                     }
                 }
@@ -2609,11 +2616,11 @@ impl Interp {
         } else if std::mem::take(&mut record.when_parked) {
             record.woken_by_halt = true;
             self.unpark(activity);
-        } else if let tokens = record.blocked.abandon()
-            && !tokens.is_empty()
+        } else if let Some(token) = record.parked_block
+            && record.blocked.abandon(token)
         {
-            table.in_flight -= tokens.len();
-            table.abandoned_blocks.extend(tokens);
+            table.in_flight -= 1;
+            table.abandoned_blocks.push(token);
             self.unpark(activity);
         } else if let Some(order) = record.semaphore_wait.take() {
             let before = table.sleepers.len();

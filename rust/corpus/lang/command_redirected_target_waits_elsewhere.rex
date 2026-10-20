@@ -1,0 +1,64 @@
+/* A redirect target whose method waits on something other than the command
+   while the child keeps writing: a sleep runs to its end, a semaphore wait
+   ends at its post, and a guard another activity holds keeps the target's
+   method out until it is released. The output that arrived meanwhile reaches
+   the target afterwards. */
+o = .Sleeper~new
+address system 'echo a; sleep 0.2; echo b; sleep 0.2; echo c' with output using (o)
+say 'sleep' rc o~calls
+.local~sem = .EventSemaphore~new
+o = .Waiter~new
+p = .Poster~new~start('post')
+address system 'echo a; sleep 0.2; echo b; sleep 0.2; echo c' with output using (o)
+say 'semaphore' rc o~calls
+p~result
+o = .Guarded~new
+h = o~start('hold')
+call SysSleep 0.1
+call time 'r'
+address system 'echo a; sleep 0.2; echo b; sleep 0.2; echo c' with output using (o)
+say 'guard' rc o~calls 'waited' (time('e') > 0.9)
+h~result
+exit
+
+::class Sleeper subclass OutputStream
+::attribute calls
+::method init
+  self~calls = 0
+::method lineout
+  use arg line
+  self~calls += 1
+  call time 'r'
+  if line == 'a' then call SysSleep 1
+  say 'O:'line 'slept' (time('e') > 0.9)
+  return 0
+
+::class Waiter subclass OutputStream
+::attribute calls
+::method init
+  self~calls = 0
+::method lineout
+  use arg line
+  self~calls += 1
+  call time 'r'
+  if line == 'a' then .sem~wait
+  say 'O:'line 'waited' (time('e') > 0.9)
+  return 0
+
+::class Poster
+::method post
+  call SysSleep 1
+  .sem~post
+
+::class Guarded subclass OutputStream
+::attribute calls
+::method init
+  self~calls = 0
+::method hold
+  call SysSleep 1
+  say 'released'
+::method lineout
+  use arg line
+  self~calls += 1
+  say 'O:'line
+  return 0

@@ -1,0 +1,68 @@
+/* A condition other than SYNTAX that a redirect target raises, taken by a
+   SIGNAL ON trap of the clause's activation, ends the clause at once: the
+   child runs on unread, RC is the raise's and .RS is unset. A redirected
+   command the handler issues while that child still runs keeps its own
+   output and its own end. Under CALL ON the handler runs once the command
+   has ended, and a SYNTAX condition waits for the child. */
+signal on error name error_trap
+o = .Raiser~new('error')
+address system 'echo a; sleep 0.6; echo b; exit 5' with output using (o)
+say 'not here'
+error_trap:
+  say 'ERROR rc' rc '.rs' .rs 'calls' o~calls 'sigl' sigl
+  address system 'sleep 1; echo x; echo y' with output stem t.
+  say 'next' rc t.0 t.1 t.2
+  call SysSleep 0.3
+  say 'calls' o~calls
+drop rc
+signal on user boom name user_trap
+o = .Raiser~new('user')
+address system 'echo a; sleep 0.3; echo b' with output using (o)
+say 'not here'
+user_trap:
+  say 'USER' condition('c') 'calls' o~calls 'rc' rc
+signal on halt name halt_trap
+o = .Raiser~new('halt')
+address system 'echo a; sleep 0.3; echo b' with output using (o)
+say 'not here'
+halt_trap:
+  say 'HALT calls' o~calls 'rc' rc
+signal on any name any_trap
+o = .Raiser~new('failure')
+address system 'echo a; sleep 0.3; echo b' with output using (o)
+say 'not here'
+any_trap:
+  say condition('c') 'calls' o~calls 'rc' rc
+call on error name call_trap
+o = .Raiser~new('error')
+address system 'echo a; sleep 0.3; echo b' with output using (o)
+say 'after' rc .rs 'calls' o~calls
+signal on syntax name syntax_trap
+o = .Raiser~new('syntax')
+address system 'echo a; sleep 0.3; echo b' with output using (o)
+say 'not here'
+syntax_trap:
+  say 'SYNTAX' condition('o')~code 'calls' o~calls
+exit
+call_trap:
+  say 'CALL ON ERROR rc' rc 'calls' o~calls
+  return
+
+::class Raiser subclass OutputStream
+::attribute calls
+::attribute kind
+::method init
+  use arg self~kind
+  self~calls = 0
+::method lineout
+  use arg line
+  self~calls += 1
+  say 'O:'line
+  if line \== 'a' then return 0
+  select
+    when self~kind == 'error' then raise error 9
+    when self~kind == 'user' then raise user boom
+    when self~kind == 'halt' then raise halt
+    when self~kind == 'failure' then raise failure 8
+    otherwise return 1 / 0
+  end

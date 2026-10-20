@@ -3619,10 +3619,13 @@ impl Interp {
     }
 
     /// Runs `write`, a redirect target's write, where `held` may already
-    /// hold a condition an earlier write raised: a condition `write` raises
-    /// replaces it, with its own levels in place of the earlier one's, as the
-    /// oracle's handler keeps the last condition its callbacks raised. Any
-    /// other failure is answered.
+    /// hold a SYNTAX condition an earlier write raised: a SYNTAX condition
+    /// `write` raises replaces it, with its own levels in place of the
+    /// earlier one's, as the oracle's handler keeps the last one its
+    /// callbacks raised. Any other condition, which only a `SIGNAL ON` trap
+    /// of the clause's activation lets through, and any other failure is
+    /// answered: measured, the oracle unwinds through its handler at once
+    /// for those, and holds SYNTAX alone.
     pub(crate) fn write_holding_last(
         &mut self,
         held: &mut Option<Failure>,
@@ -3636,8 +3639,8 @@ impl Interp {
                 }
                 Ok(())
             }
-            Err(failure @ Failure::Raised(_)) => {
-                *held = Some(failure);
+            Err(Failure::Raised(raised)) if raised.condition == "SYNTAX" => {
+                *held = Some(Failure::Raised(raised));
                 Ok(())
             }
             Err(failure) => Err(failure),

@@ -565,8 +565,8 @@ pub(crate) struct Blocked {
     /// Output pieces that arrived for the output target and are not yet
     /// written.
     captured: Vec<u8>,
-    /// The last condition a target raised, which the clause raises once the
-    /// child has ended.
+    /// The last SYNTAX condition a target raised, which the clause raises
+    /// once the child has ended.
     raised: Option<Failure>,
     /// Whether a halt ended the wait.
     halted: bool,
@@ -585,31 +585,63 @@ impl Blocks {
         self.0.is_empty()
     }
 
-    /// Records an output piece for the wait `token` names, wherever it is;
-    /// answers whether one took it.
+    /// The wait `token` names, wherever it is. A clause that left while its
+    /// child ran has no wait, so the child's later posts find none.
+    fn find(&mut self, token: u64) -> Option<&mut Blocked> {
+        self.0.iter_mut().find(|blocked| blocked.token == token)
+    }
+
+    /// The innermost wait's token.
+    pub(crate) fn innermost_token(&self) -> Option<u64> {
+        self.0.last().map(|blocked| blocked.token)
+    }
+
+    /// Takes the wait `token` names off the stack.
+    fn take(&mut self, token: u64) -> Option<Blocked> {
+        let at = self.0.iter().position(|blocked| blocked.token == token)?;
+        Some(self.0.remove(at))
+    }
+
+    /// Records an output piece for the wait `token` names; answers whether
+    /// there is one.
     pub(crate) fn capture(&mut self, token: u64, bytes: Vec<u8>) -> bool {
-        match self.0.iter_mut().find(|blocked| blocked.token == token) {
-            Some(blocked) => blocked.capture(token, bytes),
+        match self.find(token) {
+            Some(blocked) => {
+                blocked.captured.extend_from_slice(&bytes);
+                true
+            }
             None => false,
         }
     }
 
-    /// Records the end of the wait `token` names, wherever it is; answers
-    /// whether one took it.
+    /// Records the end of the wait `token` names; answers whether there is
+    /// one.
     pub(crate) fn end(&mut self, token: u64, ended: Waited) -> bool {
-        match self.0.iter_mut().find(|blocked| blocked.token == token) {
-            Some(blocked) => blocked.end(token, ended),
+        match self.find(token) {
+            Some(blocked) => {
+                blocked.ended = Some(ended);
+                true
+            }
             None => false,
         }
     }
 
-    /// Abandons every wait still running, as a halt does, answering their
-    /// tokens.
-    pub(crate) fn abandon(&mut self) -> Vec<u64> {
-        self.0
-            .iter_mut()
-            .filter_map(|blocked| blocked.abandon())
-            .collect()
+    /// Ends the wait `token` names for a child still running, as a halt
+    /// does; answers whether it did. `waitpid` interrupted leaves the
+    /// oracle's status unset, and this answers [`INTERRUPTED`].
+    pub(crate) fn abandon(&mut self, token: u64) -> bool {
+        match self.find(token) {
+            Some(blocked) if blocked.ended.is_none() => {
+                blocked.ended = Some(Waited {
+                    rc: INTERRUPTED,
+                    out: Vec::new(),
+                    err: Vec::new(),
+                });
+                blocked.halted = true;
+                true
+            }
+            _ => false,
+        }
     }
 
     /// Every object the redirections' targets hold.
@@ -621,53 +653,12 @@ impl Blocks {
 }
 
 impl Blocked {
-    /// Records an output piece for the target, under the token the wait was
-    /// left with; answers whether it was this wait's.
-    pub(crate) fn capture(&mut self, token: u64, bytes: Vec<u8>) -> bool {
-        if token != self.token || self.ended.is_some() {
-            return false;
-        }
-        self.captured.extend_from_slice(&bytes);
-        true
-    }
-
     /// Every object the redirection's targets hold.
     pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
         if let Some(io) = &self.io {
             io.object_roots(out);
         }
     }
-
-    /// Records what the child left, under the token the wait was left with;
-    /// answers whether it was this wait's.
-    pub(crate) fn end(&mut self, token: u64, ended: Waited) -> bool {
-        if token != self.token {
-            return false;
-        }
-        self.ended = Some(ended);
-        true
-    }
-
-    /// Ends the wait for a child still running, which a halt abandons there,
-    /// answering its token: `waitpid` interrupted leaves the oracle's status
-    /// unset, and this answers [`INTERRUPTED`].
-    pub(crate) fn abandon(&mut self) -> Option<u64> {
-        if self.ended.is_some() {
-            return None;
-        }
-        self.ended = Some(Waited {
-            rc: INTERRUPTED,
-            out: Vec::new(),
-            err: Vec::new(),
-        });
-        self.halted = true;
-        Some(self.token)
-    }
-}
-
-/// Whether `failure` is a HALT condition.
-fn is_halt(failure: &Failure) -> bool {
-    matches!(failure, Failure::Raised(raised) if raised.condition.eq_ignore_ascii_case("HALT"))
 }
 
 /// The return code of a command whose wait a halt abandoned: `EINTR`, negated
@@ -1266,17 +1257,25 @@ impl Interp {
     /// again until its child has ended, when it is settled as
     /// [`Interp::exec_command`] settles one whose child it waited for. A run
     /// with neither, after a wake that was not the command's, parks again.
+    ///
+    /// A SYNTAX condition a target raises is held for the child
+    /// ([`Interp::write_holding_last`]); any other failure a write answers
+    /// ends the clause at once, its child left running.
     pub(crate) fn end_blocked_command(
         &mut self,
         index: usize,
         instruction: &Instruction,
         source: Option<&ProgramSource>,
     ) -> Result<ExecOutcome, Failure> {
-        let Some(token) = self.activity.blocked.0.last().map(|blocked| blocked.token) else {
+        let Some(token) = self.activity.blocked.innermost_token() else {
             return Err(
                 crate::Loud::scheduler_inconsistency("a command resumed with no child").into(),
             );
         };
+        // The clause has taken up its wake: a post for the wait now waits
+        // for a write below to return, and a halt ends whatever park the
+        // target's method makes rather than this wait.
+        self.activity.parked_block = None;
         // The clause's wait stays on the record while the target is written,
         // so a piece or the end that arrives while a target's method parks
         // still finds it; each piece that did is written in turn.
@@ -1291,14 +1290,11 @@ impl Interp {
             let (Some(io), false) = (blocked.io.clone(), captured.is_empty()) else {
                 break;
             };
-            // A condition waits for the child, as the oracle's handler
-            // catches it and raises it once it returns; anything else (an
-            // EXIT, a refusal) ends the clause now.
             let mut raised = blocked.raised.take();
             let written =
                 self.write_holding_last(&mut raised, |interp| io.write_output(interp, &captured));
             if let Err(failure) = written {
-                self.activity.blocked.0.pop();
+                self.activity.blocked.take(token);
                 return Err(failure);
             }
             if let Some(blocked) = self.innermost_block(token) {
@@ -1311,7 +1307,7 @@ impl Interp {
         {
             return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Block));
         }
-        let Some(blocked) = self.activity.blocked.0.pop() else {
+        let Some(blocked) = self.activity.blocked.take(token) else {
             return Err(
                 crate::Loud::scheduler_inconsistency("a command resumed with no child").into(),
             );
@@ -1332,10 +1328,9 @@ impl Interp {
             ..
         } = blocked;
         // A halt ends the wait as Deviation 12 licenses: the clause answers
-        // its 4.1, so a condition a target raised is dropped, a HALT a
-        // target's method took aside.
+        // its 4.1, so a condition a target raised is dropped.
         let raised = match raised {
-            Some(failure) if halted && !is_halt(&failure) => {
+            Some(_) if halted => {
                 self.clear_failure_levels();
                 None
             }

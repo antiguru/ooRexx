@@ -318,3 +318,7 @@ lang/command_redirected_target_raises_held.rex
 # line dropping its part line.
 lang/command_redirected_target_parks.rex
 lang/command_redirected_target_raises_part_line.rex
+# 9d Task 6.13 fix round 4: a target's own wait keeps its own wake, and a
+# condition other than SYNTAX taken by SIGNAL ON ends the clause at once.
+lang/command_redirected_target_waits_elsewhere.rex
+lang/command_redirected_target_signals.rex

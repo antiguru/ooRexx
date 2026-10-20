@@ -773,6 +773,35 @@ fn sigint_drops_a_condition_a_redirected_target_raised() {
     );
 }
 
+/// A halt arriving while a target's method waits on a redirected command of
+/// its own ends that wait alone: its 4.1 leaves the method as SYNTAX, the
+/// outer command runs on and still offers its later line, and the condition
+/// is raised at the outer clause once its child has ended. The oracle's own
+/// shape, with 4.1 where it raises 98.923 (DEVIATIONS entry 12).
+#[test]
+fn sigint_at_a_nested_redirected_command_is_raised_at_the_outer_clause() {
+    halts_after(
+        "nestedredirect",
+        "address system 'echo a; sleep 1.5; echo b' with output using (.Sl~new)\n\
+         say 'after' rc\nexit\n\
+         ::class Sl subclass OutputStream\n::method lineout\n  use arg l\n\
+           if l == 'a' then address system 'sleep 3; echo n' with output stem q.\n\
+           say 'O:'l 'inner rc' rc\n  return 0\n",
+        "",
+        &[Step::Pause(Duration::from_millis(600)), Step::Signal("INT")],
+        Launch::Plain,
+        &Ended {
+            code: Some(252),
+            stdout: "O:b inner rc RC\n".to_string(),
+            stderr: "     7 *-*     address system 'sleep 3; echo n' with output stem q.\n\
+                     \x20    1 *-* address system 'echo a; sleep 1.5; echo b' with output using (.Sl~new)\n\
+                     Error 4 running PROGRAM line 1:  Program interrupted.\n\
+                     Error 4.1:  Program interrupted with HALT condition.\n"
+                .to_string(),
+        },
+    );
+}
+
 /// The withdrawn wait answers `0` to a `CALL ON HALT` program, which runs
 /// on; the started activity's own halt ends it.
 #[test]
