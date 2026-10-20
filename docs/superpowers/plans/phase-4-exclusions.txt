@@ -2528,12 +2528,14 @@ DEVIATIONS -- permanent, chosen
        `'55'~max(,77)`.
      * The divisor of `/`, `%` and `//` is checked for LOSTDIGITS when the
        dividend is zero; the oracle skips it.
-     * The LOSTDIGITS description (CONDITION('D')) does not depend on
-       whether the operand was written as a literal or as a string. The
-       oracle renders an unquoted literal from its internal form
-       (`-1234567890.5` at DIGITS 9 describes `1.2345678905E+9`) and gives
-       the written digits for the same value as a string. rexxref fixes no
-       rendering.
+     * The LOSTDIGITS description (CONDITION('D')) names the operand the
+       same way whether it came from a literal, a string or a computation.
+       This crate gives an operator's operand as written and a MAX, MIN or
+       DO count argument rendered at the digits in force. The oracle renders
+       the operand of prefix `+` and `-`, `*`, `/`, `%`, `//` and `**`
+       (`-1234567890.5` at DIGITS 9 describes `1.2345678905E+9`), and for
+       MAX, MIN and a DO count it gives source text as written and a computed
+       value rendered. rexxref fixes no rendering.
      Two documented readings were taken to Moritz and reverted on the
      ooTest suite's evidence (2026-10-20): the numeric builtins round their
      arguments without LOSTDIGITS (`base/keyword/LOSTDIGITS TESTBIFS`), and

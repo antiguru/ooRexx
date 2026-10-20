@@ -128,3 +128,4 @@ Moritz 2026-10-20: 'Follow rexxref, all' for R1 (FUZZ LOSTDIGITS for differing s
 Task 6.14 r1 (9b07a4e33, f8950e861): BLOCKED on the suite: R4 fails ~120 FORMAT tests, R7 ~435 String/format tests and LOSTDIGITS TESTBIFS ('the arithmetic builtin functions do not honor lostdigits...').
 Moritz 2026-10-20: revert R4 and R7 (ooTest is the authors' own reading of rexxref); keep R1, R2, R3, R6 under Deviation 53; Deviation 44's MAX/MIN rounding as it was.
 Moritz 2026-10-20: (a) the LOSTDIGITS description rows join Deviation 53; (b) Deviation 47 extended (LOSTDIGITS on a wide DO count under a trap). Controller wrote Deviation 53 and the 47 extension from t6.14/r2/oracle-departures.tsv.
+Task 6.14 rereview (opus): CHANGES REQUESTED, Important = Deviation 53 description bullet's explanation false (corrected by controller); Minors: numeric_model.rs doc line, target_number no-op wrapper, no test ties row 53 to its witness -> round 3.
