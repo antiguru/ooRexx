@@ -1,0 +1,13 @@
+charout at 1 : C1=0 w3 C=0 w4
+   [XYZe1|line2|]
+lineout at line 1 : L1=0 w5 L=0 w10
+   [new|tail|e2|]
+seek then charout : S=2 w2 C=0 w3
+   [lQne1|line2|]
+write append : C1=0 w3 L2=0 w10
+   [abne1|cd|e2|]
+charout past the end : C30=0 w33 L=0 w37
+   [line1|line2|@@@@@@@@@@@@@@@@@farend|]
+record append : L1=0 w5 C3=0 w4
+   [abZ BBBB]
+lines count after a read past the end : NOTREADY 2 NOTREADY

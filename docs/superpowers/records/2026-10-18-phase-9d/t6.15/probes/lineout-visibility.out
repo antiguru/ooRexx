@@ -1,0 +1,18 @@
+== oracle
+implicit : other object 0 | other process 0 | size 12
+implicit : after close size 12
+open both : other object 0 | other process 0 | size 12
+open both : after close size 12
+open nobuffer : other object 12 | other process 12 | size 12
+open nobuffer : after close size 12
+flush : other object 12 | other process 12 | size 12
+flush : after close size 12
+== crate
+implicit : other object 12 | other process 12 | size 12
+implicit : after close size 12
+open both : other object 12 | other process 12 | size 12
+open both : after close size 12
+open nobuffer : other object 12 | other process 12 | size 12
+open nobuffer : after close size 12
+flush : other object 12 | other process 12 | size 12
+flush : after close size 12

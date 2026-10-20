@@ -1,0 +1,7 @@
+# generated departures labelled 49 seek-from-end, by which positions their character SEEK <n names
+32 neither
+4 neither read
+2 neither write
+21 read
+1 read write
+15 write

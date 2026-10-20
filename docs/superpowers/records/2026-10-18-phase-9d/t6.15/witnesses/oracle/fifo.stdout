@@ -1,0 +1,9 @@
+READY:
+type TRANSIENT
+co 0 READY
+lo 0 READY
+chars 1 lines 1 1
+qp 1 1
+ci de READY
+li  READY
+S 93.958
