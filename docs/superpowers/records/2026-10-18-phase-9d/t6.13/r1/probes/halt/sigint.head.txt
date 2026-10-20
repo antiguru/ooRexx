@@ -1,0 +1,5 @@
+--- stdout
+HALT rc -4 stem 1 first line 5
+--- stderr
+memcap: left /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/claude-jail-1758197/memcap-2193258 behind, processes are still in it
+--- rc 0

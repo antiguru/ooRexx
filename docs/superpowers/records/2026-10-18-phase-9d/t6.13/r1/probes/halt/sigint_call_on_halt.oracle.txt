@@ -1,0 +1,7 @@
+--- stdout
+a
+--- stderr
+     4 *-* address system 'echo first; sleep 3; echo late' with output stem s.
+Error 98 running DIR/sigint_call_on_halt.rex line 4:  Execution error.
+Error 98.923:  Address command redirection failed (Interrupted system call).
+--- rc 158

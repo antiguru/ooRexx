@@ -1,0 +1,12 @@
+     5 *-* address rxsock 'hello'
+       >>>   "hello"
+       +++   "RC(30)"
+     7 *-* address RXSOCK 'hello'
+       >>>   "hello"
+       +++   "RC(30)"
+     9 *-* address rxunixsys 'hello'
+       >>>   "hello"
+       +++   "RC(30)"
+    11 *-* address HostEmu 'hello'
+       >>>   "hello"
+       +++   "RC(30)"

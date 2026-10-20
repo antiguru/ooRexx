@@ -1,0 +1,6 @@
+program	oracle	parent	head	distinct outputs (oracle/parent/head)
+command_library_environments_unregistered	rc 0	differs (rc 120)	identical	1/1/1
+command_redirected_targets_mid_command	rc 0	differs (rc 0)	identical	1/1/1
+command_redirected_targets_collected	rc 0	identical	identical	1/1/1
+trace_commands_address_clause	rc 0	differs (rc 0)	identical	1/1/1
+command_redirected_target_raises	rc 0	identical	identical	1/1/1

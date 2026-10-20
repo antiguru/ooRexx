@@ -1,0 +1,6 @@
+     1 *-* address rxsock "hello"
+       >>>   "hello"
+       +++   "RC(30)"
+     3 *-* address RXSOCK "hello"
+       >>>   "hello"
+       +++   "RC(30)"

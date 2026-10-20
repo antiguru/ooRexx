@@ -1,0 +1,4 @@
+       >>>   "echo a"
+       >>>   "echo b"
+     6 *-* 'echo c'
+       >>>   "echo c"

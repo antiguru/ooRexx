@@ -1,0 +1,6 @@
+     1 *-* address rxunixsys "hello"
+       >>>   "hello"
+       +++   "RC(30)"
+     3 *-* address HostEmu "x"
+       >>>   "x"
+       +++   "RC(30)"

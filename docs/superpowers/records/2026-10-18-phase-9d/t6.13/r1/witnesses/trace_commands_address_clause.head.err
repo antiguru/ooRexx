@@ -1,0 +1,6 @@
+     4 *-* address system 'echo a' with output stem o.
+       >>>   "echo a"
+     5 *-* address system 'echo b'
+       >>>   "echo b"
+     6 *-* 'echo c'
+       >>>   "echo c"
