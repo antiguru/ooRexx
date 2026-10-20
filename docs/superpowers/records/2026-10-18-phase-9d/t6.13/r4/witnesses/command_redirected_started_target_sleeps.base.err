@@ -1,0 +1,4 @@
+
+thread 'rexx-interp' (2439225) panicked at crates/rexx-exec/src/scheduler.rs:2001:13:
+internal error: entered unreachable code: a started activity records its outcome
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

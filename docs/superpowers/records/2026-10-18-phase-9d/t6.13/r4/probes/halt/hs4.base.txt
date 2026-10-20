@@ -1,0 +1,6 @@
+--- stdout
+O3:a rc RC
+O1:a rc -4
+after -4
+--- stderr
+--- rc 0

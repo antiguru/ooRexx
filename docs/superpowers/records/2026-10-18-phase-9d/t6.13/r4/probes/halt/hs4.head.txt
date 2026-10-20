@@ -1,0 +1,11 @@
+--- stdout
+O3:a rc RC
+O2:n rc RC
+O1:b rc RC
+--- stderr
+    13 *-*     address system 'echo a; sleep 2; echo n' with output using (.Sl~new(self~d + 1))
+    13 *-*     address system 'echo a; sleep 2; echo n' with output using (.Sl~new(self~d + 1))
+     3 *-* address system 'echo a; sleep 1.5; echo b' with output using (.Sl~new(1))
+Error 4 running DIR/hs4.rex line 3:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.
+--- rc 252

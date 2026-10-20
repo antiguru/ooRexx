@@ -1,0 +1,4 @@
+--- stdout
+after -4 fast 1
+--- stderr
+--- rc 0

@@ -1,0 +1,4 @@
+program	oracle	oracle stable	head identical	base
+command_redirected_target_waits_elsewhere	rc 0	8 of 8	8 of 8	differs
+command_redirected_target_signals	rc 0	8 of 8	8 of 8	differs
+command_redirected_started_target_sleeps	rc 0	8 of 8	8 of 8	differs (rc 101)

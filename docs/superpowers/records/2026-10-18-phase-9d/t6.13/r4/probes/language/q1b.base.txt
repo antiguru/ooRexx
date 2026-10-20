@@ -1,0 +1,4 @@
+--- stdout
+HALT handler line 7 fast 1
+--- stderr
+--- rc 0

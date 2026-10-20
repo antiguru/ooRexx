@@ -1,0 +1,13 @@
+O:a slept 1
+O:b slept 0
+O:c slept 0
+sleep 0 3
+O:a waited 1
+O:b waited 0
+O:c waited 0
+semaphore 0 3
+released
+O:a
+O:b
+O:c
+guard 0 3 waited 1

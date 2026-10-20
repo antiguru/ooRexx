@@ -1,0 +1,8 @@
+--- stdout
+O:b
+--- stderr
+     9 *-*     call SysSleep 2
+     2 *-* address system 'echo a; sleep 1.5; echo b' with output using (.Sl~new)
+Error 4 running DIR/hs1.rex line 2:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.
+--- rc 252

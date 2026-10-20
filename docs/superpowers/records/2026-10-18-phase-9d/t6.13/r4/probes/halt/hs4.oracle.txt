@@ -1,0 +1,11 @@
+--- stdout
+O3:a rc RC
+O2:n rc RC
+O1:b rc RC
+--- stderr
+    13 *-*     address system 'echo a; sleep 2; echo n' with output using (.Sl~new(self~d + 1))
+    13 *-*     address system 'echo a; sleep 2; echo n' with output using (.Sl~new(self~d + 1))
+     3 *-* address system 'echo a; sleep 1.5; echo b' with output using (.Sl~new(1))
+Error 98 running DIR/hs4.rex line 3:  Execution error.
+Error 98.923:  Address command redirection failed (Interrupted system call).
+--- rc 158

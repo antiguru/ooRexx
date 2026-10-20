@@ -1,0 +1,6 @@
+O:a
+O:b
+handler  rc 9 sigl 3
+after 9 0
+handler exit 4 rc 4 sigl 5
+end 4

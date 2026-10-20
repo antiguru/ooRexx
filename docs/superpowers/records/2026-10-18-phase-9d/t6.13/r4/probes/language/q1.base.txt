@@ -1,0 +1,7 @@
+--- stdout
+--- stderr
+     9 *-* call SysSleep 3
+     3 *-* x = .M~new~go
+Error 4 running DIR/q1.rex line 9:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.
+--- rc 252

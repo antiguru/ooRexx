@@ -1,0 +1,6 @@
+--- stdout
+target HALT rc -4 fast 1
+O:b inner rc RC
+after 0
+--- stderr
+--- rc 0

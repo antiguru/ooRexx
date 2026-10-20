@@ -1,0 +1,21 @@
+O:a
+O:b
+ERROR rc 9 .rs .RS calls 2 sigl 9
+next 0 2 x y
+calls 2
+O:a
+O:b
+USER USER BOOM calls 2 rc RC
+O:a
+O:b
+HALT calls 2 rc RC
+O:a
+O:b
+FAILURE calls 2 rc 8
+O:a
+O:b
+CALL ON ERROR rc 9 calls 2
+after 9 0 calls 2
+O:a
+O:b
+SYNTAX 42.3 calls 2

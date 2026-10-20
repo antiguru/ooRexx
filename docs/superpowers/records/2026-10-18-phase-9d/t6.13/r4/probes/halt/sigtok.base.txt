@@ -1,0 +1,5 @@
+--- stdout
+HALT rc -4 stem 1 a
+second rc 0 t 1 x T.2
+--- stderr
+--- rc 0

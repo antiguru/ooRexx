@@ -1,0 +1,6 @@
+--- stdout
+--- stderr
+     1 *-* address system 'echo a; sleep 1.13; echo b' with output using (.Bad~new)
+Error 4 running DIR/h1.rex line 1:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.
+--- rc 252

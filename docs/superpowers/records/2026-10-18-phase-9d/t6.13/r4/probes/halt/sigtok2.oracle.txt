@@ -1,0 +1,6 @@
+--- stdout
+--- stderr
+     2 *-* address system 'echo a; sleep 1.5; echo LATE; exit 3' with output stem s.
+Error 98 running DIR/sigtok2.rex line 2:  Execution error.
+Error 98.923:  Address command redirection failed (Interrupted system call).
+--- rc 158

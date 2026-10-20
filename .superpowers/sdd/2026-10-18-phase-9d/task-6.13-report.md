@@ -558,3 +558,225 @@ subtracted figures show. rexxcps against the pin: +0.4883 raw, +0.5287 with libc
    not widened.
 2. `rcun2`'s RC after the handler is 9, the target's condition's, since the command's ERROR that
    would have set it again is ignored; the oracle crashes before showing one.
+
+## Fix round 4
+
+Re-review `task-6.13-rereview-r3.md`; the ruling at the end of `progress.md`. Code commit and
+records commit are named under Checks. In `t6.13/r4/`, `base` is the round-3 binary, built from
+`2434a77af` (whose code is `518613a71`'s), `head` the round's.
+
+### Fix round 4: design
+
+The subject is one activity's stack of redirected waits (`Activity::blocked`, a `Blocked` per
+command clause whose child runs off the baton). The innermost wait is the last; more than one
+exists only while a target's method, run by the clause writing to it, has issued a redirected
+command of its own.
+
+**States of a wait.**
+* *Parked*: the clause is parked on it. `Activity::parked_block` names its token, from the park
+  until the clause runs again.
+* *Writing*: the clause is running, handing captured pieces to the target. The target's method
+  may park the activity on anything else (a sleep, a guard, a semaphore, a message wait, a nested
+  wait) and `parked_block` is `None` or names the nested wait.
+* *Ended*: the child's end is recorded in `ended`, not yet taken up.
+* *Halted*: a halt ended it: `ended` is `INTERRUPTED`, `halted` is set.
+* *Gone*: popped by the clause settling, or by the clause leaving at once.
+
+**Events.**
+* A piece (`Posted::Captured`) is recorded in the wait's `captured`. The child's end
+  (`Posted::Unblocked`) is recorded in `ended`. Either wakes the activity only when
+  `parked_block` names the wait; a wait in *Writing* finds them when the write returns, since the
+  clause re-reads `captured` and `ended` after each write before it parks again.
+* A halt ends the wait `parked_block` names, and only that one: the activity was parked on it.
+  A sleep, a `GUARD WHEN` or a semaphore wait inside a target's method is ended by that park's
+  own halt rule; a guard lock or a message wait is not ended (rulings P59, P60). Every outer
+  wait continues: its child runs on and its later pieces are still offered, as the oracle's
+  outer read is not the system call the signal interrupts.
+* A target's method parking and waking is that park's own business. No post for an outer wait
+  touches it.
+* A target's condition, by kind. SYNTAX, whatever trap is armed, is held in the wait's `raised`
+  (the last one wins), the clause keeps waiting and later pieces are still offered; once the
+  child has ended it is raised at the clause after the error target is written and before the
+  cleanup. Every other condition reaches the clause as a failure only under a `SIGNAL ON` trap
+  of the clause's activation (a `CALL ON` trap queues it and the write returns; untrapped, the
+  raise returns): the clause leaves at once, its wait popped, the child left running, and the
+  child's later posts find no wait. An `EXIT`, a refusal or a deadline leaves the same way.
+  A HALT raised in the target's method (a halted sleep or nested wait, untrapped there) leaves
+  the method as SYNTAX 4.1 and is held like any SYNTAX; a trap in the method takes it there.
+* Settling, once the clause takes up `ended`: halted, a held condition is dropped with its
+  levels, `RC` is -4 and the pending HALT is raised at the clause (Deviation 12); otherwise
+  `finish` runs with the held condition.
+
+**Who owns each wake.** A block post wakes the activity only through `parked_block`. A halt
+wakes the park the activity is in (sleep, `GUARD WHEN`, block, semaphore), each by its own rule.
+A guard lock's release and a message's completion wake their own waiters and nothing else does.
+
+### The code
+
+* `Activity::parked_block` (`activity.rs`): the token of the command wait the activity is parked
+  on. `Scheduler::park` sets it for `ParkReason::Block` from the innermost wait and clears it for
+  every other park; `end_blocked_command` clears it as the clause takes up its wake.
+* `Posted::Captured` and `Posted::Unblocked` (`scheduler.rs`) record their piece or end for the
+  wait the token names wherever it is in the stack, and `unpark` the activity only where
+  `parked_block` names that wait.
+* `wake_for_halt` abandons the wait `parked_block` names, and only that one; the sleep, `GUARD
+  WHEN` and semaphore branches are as they were.
+* `Blocks` (`command.rs`) is keyed by token: `capture`, `end` and `abandon(token)` find their
+  wait by token, `take(token)` pops it, and the duplicate compares in `Blocked` are gone.
+  `end_blocked_command` leaves at once, its wait taken off the stack, on any failure a write
+  answers other than a SYNTAX condition.
+* `Interp::write_holding_last` (`run.rs`) holds a SYNTAX condition and answers every other
+  failure, so a condition a `SIGNAL ON` trap of the clause's activation lets through ends the
+  clause at once. `is_halt` is gone with it: a HALT a target raises under `SIGNAL ON HALT` is
+  such a condition.
+
+### Important 1: a post for an outer wait
+
+Probes from the re-review's sources (`r4/probes/parks/`): `spur` `O:a slept>0.9 1|...`, `sem`
+`O:a waited>0.9 1|...` and `guard` `released|O:a|O:b|O:c|done 0 elapsed>0.9 1` are identical to
+the oracle on head; the round-3 binary cuts each wait short as the re-review found.
+
+The round-3 binary also dies on the re-review's `tokloud` (`r4/probes/started/`): a started
+activity's target sleeps while a post for its wait arrives, and the stale wake runs its root
+twice, `internal error: entered unreachable code: a started activity records its outcome`, rc
+101, 3 of 3. Head gives the oracle's `O:a|O:LATE|main rc 0 t 1 x|worker no`, 5 of 5. Witness
+`lang/command_redirected_started_target_sleeps.rex`, that program: oracle one output in 8 of 8,
+head identical in 8 of 8, the round-3 binary rc 101.
+
+Witness `lang/command_redirected_target_waits_elsewhere.rex`: a sleeping target (`O:a slept 1`),
+a semaphore wait posted by a started activity (`O:a waited 1`) and a guard held by a started
+activity (`released` before `O:a`, `waited 1`), each with the child's later lines arriving
+meanwhile and reaching the target afterwards. Oracle one output in 8 of 8, head identical in 8 of
+8 (`r4/witnesses/`); the round-3 binary gives `slept 0`, `waited 0` and `released` last.
+
+### Important 2: a halt during a target's nested wait
+
+The halt ends the wait the activity is parked on. For a nested redirected command that is the
+inner one: the inner clause answers rc -4 and raises HALT, untrapped in the target's method it
+is 4.1 leaving the method as SYNTAX, the outer wait holds it as it holds any SYNTAX, the outer
+child runs on and its later line is still offered, and the condition is raised at the outer
+clause once the child has ended. That is the oracle's own shape with 4.1 in place of its 98.923
+(Deviation 12), at every depth. `r4/probes/halt/`, SIGINT by PID at 0.6 s, head against the
+oracle:
+* `hs6` (no trap): `O:b inner rc RC`, traceback `8 *-*` then `2 *-*`, `Error 4 ... line 2`, 4.1,
+  rc 252; the oracle the same with 98.923 and rc 158. Round 3: `after -4`, rc 0.
+* `hs2` (`signal on halt` in main) and `hs3` (`call on halt`): as `hs6` with lines 10 and 3.
+  Main's HALT trap does not run on either side.
+* `hs4` (three deep): `O3:a rc RC|O2:n rc RC|O1:b rc RC`, traceback 13, 13, 3; the oracle the
+  same with 98.923.
+* `hs5` (the target traps HALT itself): `target HALT rc -4 fast 1|O:b inner rc RC|after 0`, rc
+  0, where the oracle's 98.923 is untrapped (rc 158): the depth-1 shape of `hB`, which
+  Deviation 12 licenses.
+* `hs1` (a sleeping target): identical to the oracle, as in round 3.
+* `hA` to `hE`, `sigint`, `sigtok`, `sigtok2` (`r3`'s and `r2`'s depth-1 shapes): unchanged from
+  the round-3 binary.
+
+**The re-review's "a trapped HALT handler must run, at every depth" is not the language's rule,
+and the oracle does not do it.** `r4/probes/language/q1.rex`: `signal on halt` in main, a method
+that sleeps, SIGINT at 0.6 s; both sides print `9 *-* call SysSleep 3`, `3 *-* x = .M~new~go`,
+`Error 4 ... line 9`, rc 252, and main's handler never runs. A halt is served in the running
+activation; an untrapped HALT leaves a method as SYNTAX 4.1 (`RexxActivation::raise`,
+`Raised::halt`), which a caller's `SIGNAL ON HALT` does not take. An internal routine inherits
+the trap and the handler runs (`q1b`, both sides `HALT handler line 7 fast 1`). So at depth 2
+and deeper the handler runs where the target's own method traps HALT (`hs5`), as the clause
+whose wait was ended is that method's.
+
+Witness `tests/signals.rs` `sigint_at_a_nested_redirected_command_is_raised_at_the_outer_clause`:
+the `hs6` shape, `O:b inner rc RC`, traceback `7 *-*` then `1 *-*`, 4.1 at line 1, rc 252.
+
+### Important 3: a condition other than SYNTAX under SIGNAL ON
+
+`r4/probes/conditions/`, head identical to the oracle on each: `ce3`, `ce3b` (`O:a|signalled rc
+9 sigl 3 calls 1`), `su`, `snr`, `sfa`, `sany`, `sanyu` (`calls 1`), `sanyz` (SYNTAX, `calls 2`),
+`cue`, `cnr`, `ce2` (CALL ON, unchanged). `q2` measures the timing: `signalled rc 9 rs .RS sigl 4
+calls 1 fast 1`, and `calls later 1` two seconds on, so the child's later line is never offered;
+the round-3 binary gives `calls 2 fast 0`. `q3`: an untrapped `raise error` and `raise user` in
+the target return normally and the command runs on, `after 5 1 calls 2`, both sides and the
+round-3 binary alike. `q4`: `raise halt` in the target under `signal on halt` ends the clause at
+once on the oracle, `HALT handler rc RC line 3 calls 1`; the round-3 binary held it (`calls 2`).
+
+Witness `lang/command_redirected_target_signals.rex`: ERROR under `SIGNAL ON ERROR` (`ERROR rc 9
+.rs .RS calls 1`), the handler's own redirected command while the first child still runs (`next
+0 2 x y`, then `calls 1`), USER, HALT and FAILURE under `SIGNAL ON` (`calls 1`), ERROR under
+`CALL ON` (`calls 2`, the handler after the clause) and SYNTAX (`calls 2`). Oracle one output in
+8 of 8, head identical in 8 of 8; the round-3 binary gives `calls 2` on every `SIGNAL ON` line.
+
+The token check is `Blocks::find`, which every post goes through, and the witness reaches it:
+with `find` answering the innermost wait whatever the token (mutant built, run, the file
+restored from an exact copy, `cmp` clean), the first child's end settles the handler's command,
+`next 5 3 b x`, 3 of 3.
+
+### The reviews' other probes
+
+Every probe of the review and the re-reviews with a recorded oracle output ran on head from
+its own source (`r4/sweeps.txt`): the round-3 set is identical on each but `conc` (identical as a
+multiset), `qpull` and `rcun2` (unchanged from the round-3 binary; the oracle crashes on
+`rcun2`, entry 58); the round-2 set is identical on each but the known shapes (the oracle's
+`lineout` buffering, Deviation 52, entries 56 and 58, the `CommandIOContext.cpp:131` family,
+`conc` as a multiset) and `tick2`, where the re-review's own two oracle runs disagree
+(`O:a|O:b|O:c` and `O:a|O:c`: `a` and `b` in one piece are dropped together when the target
+raises on `a`) and head gives the second; the round-0 set is identical on each but `errin`
+(entry 56), `rsi` (Deviation 51), `begin` and `two` (unchanged from the round-0 binary, the
+oracle's own defects the round-1 re-review names). `tokloud2` under SIGINT is the queued
+HALT-at-a-label defect on head and the round-3 binary alike.
+
+### Checks, on `8e365dcbe`
+
+From `rust/`, `CARGO_TARGET_DIR=<scratchpad>/t613r4-target`, `CARGO_INCREMENTAL=0`, each status read
+unpiped. Each ran on the working tree before the commit, whose every file they read is the
+committed one (`git status` showed this report alone modified beside them).
+* `cargo fmt --all --check`: exit 0.
+* `memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings`: exit 0, the log
+  showing `Checking rexx-exec`.
+* `memcap 16G cargo test -j 4 --release -p rexx-exec --lib`: exit 0, 1157 passed.
+* `REXX_REFUSAL_SITES_REFRESH=1 ... --test refusal_sites`: exit 0, `refusal-sites.tsv` unchanged.
+* The round-1 test-binary set, `--no-fail-fast`: exit 0, no failures (`signals` 40 passed,
+  `concurrency_tests` 54, `licensed_divergences` 22).
+* `memcap 16G cargo test -j 4 --release -p rexx-parse`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-core --test unsafe_sites`: exit 0.
+* `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus`: exit 0,
+  1145 of 1145 matching.
+
+### Concerns
+
+1. **"A trapped HALT handler must run, at every depth" is not what the oracle or the language
+   does, and this round does not do it** (Important 2 above, `q1`, `q1b`, `hs2`, `hs3`). A HALT
+   is served in the activation running when it arrives; untrapped there it leaves a method as
+   SYNTAX 4.1, which a caller's `SIGNAL ON HALT` does not take, on both sides. The crate's shape
+   at depth 2 and deeper is the oracle's with 4.1 for 98.923, which Deviation 12's text covers
+   ("raises 4.1 at the same clause"). If the controller wants main's HALT trap to run for a halt
+   served in a target's method, that is a new departure from the oracle and needs Moritz.
+2. **`hs5`**: at depth 2 the target's own `SIGNAL ON HALT` takes the 4.1 as HALT and the program
+   runs on (`after 0`), where the oracle's 98.923 is untrapped. It is `hB`'s depth-1 shape one
+   level down, under the same Deviation 12 sentence; no new candidate.
+3. The oracle's `tick2` answer depends on how its pipe read splits `echo a; echo b`
+   (`O:a|O:b|O:c` or `O:a|O:c`, both seen in the round-2 re-review's own two oracle runs); the
+   crate gives the second. Not a defect on either side.
+4. The round-3 binary's `tokloud` death (rc 101, a started activity's root run twice) was found
+   by this round's sweep, not by a review; it is closed by the same change, and
+   `lang/command_redirected_started_target_sleeps.rex` (its shape) witnesses it.
+5. `.superpowers/sdd/queued/2026-10-18-command-waits-for-background-child.md` is still not
+   closed: its probe is an unredirected command, which this round does not touch.
+* The whole suite on the committed tree, with the table at `t6.13/r4/suite/table.tsv` and the
+  commit's sha as the first line of its status file: exit 0, 402 groups green, 246 s. Against
+  `t6.13/r3/suite/tests.tsv` no row changed (`t6.13/r4/suite/changed-rows.txt`); the
+  `SysFileTree TEST_TREE_DIRECTORY` flake did not show.
+* On `lang/command_redirected_started_target_sleeps.rex`'s commit, the one after it: the corpus
+  gate again, exit 0, 1146 of 1146 matching; `memcap 16G cargo test -j 4 --release -p
+  rexx-parse`: exit 0.
+
+### Perf
+
+`t6.13/r4/callgrind.txt`: pin, round 3 (`518613a71`'s binary) and `8e365dcbe` in one run. Head minus
+parent with libc and ld-linux subtracted is +0.0000% on every program but interpret (-0.0012) and
+rexxcps (-0.0063); raw it is at most +0.0009% (interpret), rexxcps -0.0196. The script exits 1 on
+its budget for the **parent**: the round-3 binary's raw rexxcps measures +0.5038% over the pin in
+this run where round 3's own run measured it at +0.4883, its libc-subtracted figure +0.5287 the
+same in both; head's raw rexxcps is +0.4842 and +0.5224 with libc subtracted (Ruled 14).
+
+### Commits
+
+* `8e365dcbe`: the code, the `signals.rs` witness, `lang/command_redirected_target_waits_elsewhere.rex`
+  and `lang/command_redirected_target_signals.rex` with their `sourceline_oracle/` files.
+* `41dd12f9c`: `lang/command_redirected_started_target_sleeps.rex`.
+* The records commit that follows holds `t6.13/r4/` and this section.

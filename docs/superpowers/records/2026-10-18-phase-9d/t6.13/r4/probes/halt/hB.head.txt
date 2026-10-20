@@ -1,0 +1,5 @@
+--- stdout
+O:a
+HALT handler rc -4 line 2
+--- stderr
+--- rc 0
