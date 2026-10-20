@@ -130,3 +130,5 @@ Moritz 2026-10-20: revert R4 and R7 (ooTest is the authors' own reading of rexxr
 Moritz 2026-10-20: (a) the LOSTDIGITS description rows join Deviation 53; (b) Deviation 47 extended (LOSTDIGITS on a wide DO count under a trap). Controller wrote Deviation 53 and the 47 extension from t6.14/r2/oracle-departures.tsv.
 Task 6.14 rereview (opus): CHANGES REQUESTED, Important = Deviation 53 description bullet's explanation false (corrected by controller); Minors: numeric_model.rs doc line, target_number no-op wrapper, no test ties row 53 to its witness -> round 3.
 Task 6.14 r3 (1e386dec7): numeric_model's new row-check red until Deviations 44 and 47 name the test; controller added the two sentences; numeric_model 23 passed, licensed_divergences 22 passed (controller run).
+Task 6.14 r3 re-review (sonnet) APPROVED (Minor: row splitter can false-red, never false-green; accepted). Task 6.14: complete (009fd1978, 7a6eb8778, 525ca9989, 9b07a4e33, f8950e861, bc176f5e8, 1017846f2, 1e386dec7). Deviation 53; 44/47 witness sentences; 47 extended.
+Task 6.15: dispatched (implementer opus).
