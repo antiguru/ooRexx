@@ -27,13 +27,14 @@ model: O_both_nobuffer=READY: READY 19 1;LO_new_2=0 READY 11 1;Q_write=11 READY 
 case name=separate-positions initial=text3
 O both nobuffer
 CI 3
+CH
 CO xyz
 Q read
 Q write
 CI 2
 LI
 ----
-model: O_both_nobuffer=READY: READY 19 1;CI_3=lin READY 19 4;CO_xyz=0 READY 22 4;Q_read=4 READY 22 4;Q_write=22 READY 22 4;CI_2=e1 READY 22 6;LI= READY 22 7; [line1|line2|line3|xyz]
+model: O_both_nobuffer=READY: READY 19 1;CI_3=lin READY 19 4;CH=15 READY 19 4;CO_xyz=0 READY 22 4;Q_read=4 READY 22 4;Q_write=22 READY 22 4;CI_2=e1 READY 22 6;LI= READY 22 7; [line1|line2|line3|xyz]
 
 # CHARIN: one past the end is NOTREADY, a length of 0 only positions, a
 # short read answers what it got.
