@@ -2533,9 +2533,11 @@ DEVIATIONS -- permanent, chosen
        This crate gives an operator's operand as written and a MAX, MIN or
        DO count argument rendered at the digits in force. The oracle renders
        the operand of prefix `+` and `-`, `*`, `/`, `%`, `//` and `**`
-       (`-1234567890.5` at DIGITS 9 describes `1.2345678905E+9`), and for
-       MAX, MIN and a DO count it gives source text as written and a computed
-       value rendered. rexxref fixes no rendering.
+       (`-1234567890.5` at DIGITS 9 describes `1.2345678905E+9`). For MAX,
+       MIN and a DO count it gives source text as written in a clause it
+       translated ahead (`max(1, 12345.5)` at DIGITS 3 describes `12345.5`)
+       and rendered under INTERPRET (`1.23455E+4`). rexxref fixes no
+       rendering.
      Two documented readings were taken to Moritz and reverted on the
      ooTest suite's evidence (2026-10-20): the numeric builtins round their
      arguments without LOSTDIGITS (`base/keyword/LOSTDIGITS TESTBIFS`), and
