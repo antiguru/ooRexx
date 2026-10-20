@@ -1728,10 +1728,8 @@ pub(super) fn chars(
     Ok(Some(interp.text_built(left.to_string().into_bytes())))
 }
 
-/// `stream_lines`: `Count` -- the method's default -- answers the lines left,
-/// `Normal` answers 1 or 0. **The count carries the oracle's cache and its
-/// off-by-one**: after a `CHARIN` has zeroed the line position, the cache is
-/// stored one short and the next `Count` answers one less than this one.
+/// `stream_lines`: `Count` -- the method's default -- answers the lines left
+/// after the read position, `Normal` answers 1 or 0.
 pub(super) fn lines(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1976,8 +1974,8 @@ fn matches(token: &[u8], word: &[u8]) -> bool {
 }
 
 /// `stream_position`, which both `~seek` and `~position` bind: moves a
-/// position and answers where it landed. Nothing is range-checked -- `<99` on
-/// a 29-byte file answers `-69` and the stream stays `READY`.
+/// position and answers where it landed. A position past the end is
+/// accepted; one below 1 is not ([`invalid_seek`]).
 pub(super) fn position(
     interp: &mut Interp,
     _cleared: Cleared,

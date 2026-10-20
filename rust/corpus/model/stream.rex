@@ -30,7 +30,7 @@
    function in rust/crates/rexx-exec/src/dispatch/stream.rs and its line.
 
    stream_model runs one scenario. `initial` is the file's content before
-   it, `transient` says the stream is a FIFO, and `ops` is an array of
+   it, `transient` says the stream is transient, and `ops` is an array of
    operations in the grammar the driver test (tests/stream_model.rs)
    describes. It answers one item per operation and then the final content,
    as the driver's native run answers them. */
@@ -176,7 +176,7 @@ unwritable: procedure expose m.
    was opened (funct.xml:4309-4312). The model reads that as the interpreters
    do: SEEK and QUERY still report the write position as set, and a write
    from beyond the end lands at the end too, so what the stream's own writes
-   added is kept (this crate's `landing`, :LANDING). */
+   added is kept (this crate's `landing`, :1669). */
 landing: procedure expose m.
   if m.0append then return length(m.0data) + 1
   return arg(1)
@@ -294,7 +294,7 @@ pad_record: procedure expose m.
    characters and moves the read position by what it read. A read that gets
    some but fewer than asked is in the NOTREADY state. One that gets none is
    in the ERROR state, as both interpreters answer (this crate's `charin`,
-   :CHARIN), where the state method's own example of NOTREADY is a read
+   :1138), where the state method's own example of NOTREADY is a read
    beyond the end (streamclasses.xml:1638-1652); Phase 9d Task 6.15 reports
    it. A stream opened WRITE reads nothing, in the ERROR state
    (funct.xml:4302). */
@@ -332,8 +332,8 @@ charin: procedure expose m.
    end is still a line; at the end of the stream the answer is the null
    string and the state NOTREADY. On a record stream a line is what is left
    of the current record, short at the end as CHARIN is (this crate's
-   `read_record`, :1302). A line end's preceding carriage return is dropped too
-   (this crate's `read_line_from`, :840). */
+   `read_record`, :1332). A line end's preceding carriage return is dropped too
+   (this crate's `read_line_from`, :860). */
 linein: procedure expose m.
   parse arg line, count
   call implicit
@@ -425,7 +425,7 @@ line_ends: procedure expose m.
    (n - 1) * reclength + 1, past the end too (iostrms.xml:465-472,
    funct.xml:3203-3205). A text line past the last line end is the end of
    the stream: LINEOUT may name the line after the last one
-   (funct.xml:3203-3209), and nothing further (this crate's `seek_line`, :2167). */
+   (funct.xml:3203-3209), and nothing further (this crate's `seek_line`, :2141). */
 line_start: procedure expose m.
   parse arg n
   if n <= 1 then return 1
@@ -438,7 +438,7 @@ line_start: procedure expose m.
   return p + 1
 
 /* The line a SEEK ... LINE to `n` reaches: `n`, or past the last line end
-   the line after it (this crate's `seek_line`, :2167; the documentation is
+   the line after it (this crate's `seek_line`, :2141; the documentation is
    silent). */
 line_reached: procedure expose m.
   parse arg n
@@ -469,7 +469,7 @@ line_count: procedure expose m.
    (Deviation 49). READ or WRITE names the position; with neither, a stream
    opened for both sets both, from the read position (funct.xml:4395-4396;
    which position a relative move counts from is this crate's answer,
-   `position`, :POSITION),
+   `position`, :1979),
    and a READ or WRITE stream the one it has. CHAR is the default. The
    answer is the new position. A transient
    stream has no positions, 93.958 (iostrms.xml:194-197). */
@@ -520,7 +520,7 @@ seek: procedure expose m.
   end
   /* Line positioning in a stream open only for writing answers 0 and moves
      nothing (funct.xml:4454-4455 asks for an error; this crate's answer,
-     `position`, :POSITION). */
+     `position`, :1979). */
   if \readable() then return 0
   select
     when style == '=' then target = off
@@ -545,7 +545,7 @@ invalid_seek: procedure expose m.
    write position, by character or by line. With neither READ nor WRITE it
    is the read position on a stream that can read and the write position on
    one that cannot (funct.xml:4542-4544). A closed stream answers the null
-   string, and a transient one 1 (this crate's `query_position`, :2289). A READ
+   string, and a transient one 1 (this crate's `query_position`, :2210). A READ
    stream's write position is 0, in lines too. */
 query_position: procedure expose m.
   parse upper arg spec
