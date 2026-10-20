@@ -13,15 +13,15 @@
 //! streams on real files: the named cases in `tests/stream_model/` and
 //! generated operation sequences. Each scenario runs natively and through the
 //! model in one program, and the two answers are compared item by item and
-//! by the final file bytes. On this crate they agree except where a
-//! [`REPORTED`] rule says the crate and the documentation part; ANSI X3.274
-//! section 9.7's two properties hold of every native run; and on the oracle,
-//! with every stream opened `NOBUFFER`, the native answer differs from the
-//! model exactly where [`ORACLE_DEPARTURES`] and
-//! `tests/stream_model/departures-oracle.tsv` say. Both recorded sets,
-//! `departures-crate.tsv` and `departures-oracle.tsv`, are rewritten by
-//! `REXX_STREAM_MODEL_REFRESH=1`; `REXX_STREAM_MODEL_DUMP=<dir>` appends
-//! every answer to `<dir>/crate.tsv` and `<dir>/oracle.tsv`.
+//! by the final file bytes. On this crate they agree everywhere, and ANSI
+//! X3.274 section 9.7's two properties hold of every native run. On the
+//! oracle, with every stream opened `NOBUFFER`, each departure from the model
+//! is judged by [`oracle_rule`] from the answers themselves, and the judged
+//! set must be [`ORACLE_DEPARTURES`] and
+//! `tests/stream_model/departures-oracle.tsv`.
+//! `REXX_STREAM_MODEL_REFRESH=1` rewrites that file, and
+//! `REXX_STREAM_MODEL_DUMP=<dir>` appends every answer to `<dir>/crate.tsv`
+//! and `<dir>/oracle.tsv`.
 //!
 //! An operation is one of these, `f` the scenario's stream:
 //! * `O opts` `stream(f,'c','open' opts)`, `X` `stream(f,'c','close')`,
@@ -33,8 +33,11 @@
 //! * `CI [k [n]]` `charin(f,[n],[k])`, `LI [n [k]]` `linein(f,[n],[k])`,
 //!   `LZ` `linein(f,,0)`;
 //! * `CH` `chars(f)`, `LN` `lines(f)`, `LC` `lines(f,'C')`;
-//! * `S spec` `stream(f,'c','seek' spec)`, `Q spec`
-//!   `stream(f,'c','query position' spec)`.
+//! * `S spec` `stream(f,'c','seek' spec)`, `P spec`
+//!   `stream(f,'c','position' spec)`, `Q spec`
+//!   `stream(f,'c','query position' spec)`;
+//! * `CB`, in the model only: the blanks from the write position to the end
+//!   of its record, the oracle's padding Deviation 46 licenses.
 
 #![expect(
     clippy::disallowed_methods,
@@ -54,38 +57,53 @@ use support::oracle::{did_not_finish, locate};
 
 const CASES: &str = "tests/stream_model/cases";
 
-/// The rules by which this crate and the oracle both depart from the
-/// model, which follows the documentation. Phase 9d Task 6.15 reports each
-/// to Moritz; none is ruled:
-/// * `write-only`: a stream opened WRITE reads (funct.xml:4302 opens it
-///   "for writing only");
-/// * `line-position`: a line SEEK, LINEIN or LINEOUT counts lines from a
-///   tracked line number that character operations zero or leave behind,
-///   not from the line the position is in (iostrms.xml:463-490);
-/// * `line-query`: QUERY POSITION ... LINE answers from the same tracker,
-///   and for a write position inside the stream one line too many
-///   (funct.xml:4550-4555);
-/// * `lines-count`: LINES Count answers from a cached count that is one
-///   short once a character operation has run (funct.xml:3306-3307).
-const REPORTED: &[&str] = &["write-only", "line-position", "line-query", "lines-count"];
+/// How long a crate run may take before the test fails rather than hangs:
+/// a read of a transient stream that waits is not interrupted by the run's
+/// own deadline.
+const CRATE_RUN_LIMIT: std::time::Duration = std::time::Duration::from_secs(120);
 
-/// The named cases that show a [`REPORTED`] rule: this crate and the oracle
-/// answer alike there, and differ from the model.
-const REPORTED_CASES: &[(&str, &str)] = &[
-    ("write-only-reads", "write-only"),
-    ("line-seek-relative-after-charin", "line-position"),
-    ("linein-line-from-mid-line", "line-position"),
-    ("write-line-query", "line-query"),
-    ("read-line-at-end", "line-query"),
-    ("read-line-after-positioning", "line-query"),
-    ("lines-count-repeated", "lines-count"),
-];
-
-/// The named cases whose native oracle answer differs from the model where
-/// this crate's does not: the case, the Deviation that licenses it (0 for a
-/// departure no Deviation covers, which Phase 9d Task 6.15 reports), the
-/// rule, and the oracle's first item that differs.
+/// The named cases whose native oracle answer differs from the model: the
+/// case, the Deviation that licenses it (0 for a rule Phase 9d Task 6.15
+/// proposes as a new Deviation), the rule, and the oracle's first item that
+/// differs. [`oracle_rule`] must name the same rule from the answers.
 const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
+    (
+        "ctrlz-append-kept",
+        0,
+        "ctrlz-is-data",
+        "O_both_append_nobuffer=READY: READY 6 1",
+    ),
+    (
+        "ctrlz-is-data",
+        0,
+        "ctrlz-is-data",
+        "O_both_nobuffer=READY: READY 6 1",
+    ),
+    (
+        "line-seek-relative-after-charin",
+        0,
+        "line-position",
+        "S_+1_read_line=1 READY 19 1",
+    ),
+    (
+        "linein-line-from-mid-line",
+        0,
+        "line-position",
+        "LI_2=ne2 READY 19 13",
+    ),
+    ("lines-count-repeated", 0, "lines-count", "LC=2 READY 19 3"),
+    (
+        "read-line-after-positioning",
+        0,
+        "line-query",
+        "Q_read_line=1 READY 19 7",
+    ),
+    (
+        "read-line-at-end",
+        0,
+        "line-query",
+        "Q_read_line=3 READY 19 19",
+    ),
     (
         "record-close-pads-nothing",
         46,
@@ -98,6 +116,7 @@ const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
         "seek-from-end",
         "S_<3_read=22 READY 19 22",
     ),
+    ("seek-invalid", 0, "invalid-seek", "S_-9_read=0 ERROR 19 -1"),
     (
         "seek-relative",
         49,
@@ -116,6 +135,13 @@ const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
         "transient-counts-read",
         "CI_2=de READY 1 1",
     ),
+    (
+        "write-line-query",
+        0,
+        "line-query",
+        "Q_write_line=3 READY 8 1",
+    ),
+    ("write-only-reads", 0, "write-only", "CI_1_3=n READY 19 4"),
 ];
 
 /// A file's content before a scenario, by name.
@@ -125,18 +151,29 @@ fn initial(name: &str) -> &'static [u8] {
         "tail" => b"ab\ncd\nef",
         "rec16" => b"AAAABBBBCCCCDDDD",
         "empty" => b"",
+        "ctrlz" => b"ab\ncd\x1a",
         other => panic!("unknown initial content {other}"),
     }
 }
 
 /// One scenario: its name, its initial content's name, whether the stream is
-/// a FIFO, and its operations.
+/// a transient stream, which device stands behind it, and its operations.
+/// A named case may say the oracle cannot run it, and why.
 #[derive(Clone)]
 struct Scenario {
     name: String,
     initial: String,
     transient: bool,
+    device: Device,
+    oracle_skip: Option<String>,
     ops: Vec<String>,
+}
+
+/// What a transient scenario's stream name stands for.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Device {
+    Fifo,
+    DevNull,
 }
 
 /// A deterministic generator: xorshift64*.
@@ -166,10 +203,10 @@ impl Rng {
 /// The open options a generated scenario starts with, each with the initial
 /// contents it may take.
 const OPENS: &[(&str, &[&str])] = &[
-    ("both", &["text3", "tail", "empty"]),
+    ("both", &["text3", "tail", "empty", "ctrlz"]),
     ("read", &["text3", "tail"]),
     ("write", &["text3", "tail"]),
-    ("both append", &["text3", "tail"]),
+    ("both append", &["text3", "tail", "ctrlz"]),
     ("write append", &["text3"]),
     ("both replace", &["text3"]),
     ("write replace", &["tail"]),
@@ -178,13 +215,13 @@ const OPENS: &[(&str, &[&str])] = &[
     ("read binary reclength 4", &["rec16"]),
     ("both binary", &["rec16", "tail"]),
     ("both binary reclength 3 replace", &["rec16"]),
+    ("both binary reclength 4 append", &["rec16"]),
 ];
 
 const STRINGS: &[&str] = &["x", "yz", "abc", "QQQQQ"];
 
-/// One generated operation. A SEEK on a READ stream never names the write
-/// position, which such a stream does not have (funct.xml:4299).
-fn operation(rng: &mut Rng, read_only: bool) -> String {
+/// One generated operation.
+fn operation(rng: &mut Rng) -> String {
     let s = rng.pick(STRINGS);
     match rng.below(22) {
         0 | 1 => format!("CO {s}"),
@@ -206,13 +243,10 @@ fn operation(rng: &mut Rng, read_only: bool) -> String {
                 "=" => rng.within(1, 6),
                 _ => rng.within(0, 3),
             };
-            let which = if read_only {
-                rng.pick(&["", " read"])
-            } else {
-                rng.pick(&["", " read", " write"])
-            };
+            let which = rng.pick(&["", " read", " write"]);
             let unit = rng.pick(&["", " char", " line"]);
-            format!("S {style}{offset}{which}{unit}")
+            let command = rng.pick(&["S", "S", "P"]);
+            format!("{command} {style}{offset}{which}{unit}")
         }
         19 | 20 => {
             let which = rng.pick(&["", "read", "write"]);
@@ -234,7 +268,7 @@ fn generate(seed: u64, count: usize) -> Vec<Scenario> {
             let reopen = opts.replace(" replace", "");
             let mut ops = vec![format!("O {opts} nobuffer")];
             for _ in 0..rng.within(1, 9) {
-                let op = operation(&mut rng, opts.starts_with("read"));
+                let op = operation(&mut rng);
                 let closes = matches!(op.as_str(), "X" | "CX" | "LX");
                 ops.push(op);
                 if closes {
@@ -245,6 +279,8 @@ fn generate(seed: u64, count: usize) -> Vec<Scenario> {
                 name: format!("g{seed}s{index}"),
                 initial,
                 transient: false,
+                device: Device::Fifo,
+                oracle_skip: None,
                 ops,
             }
         })
@@ -307,6 +343,7 @@ native_op: procedure
     when code == 'LN' then return lines(f)
     when code == 'LC' then return lines(f, 'C')
     when code == 'S' then return stream(f, 'c', 'seek' subword(arg(2), 2))
+    when code == 'P' then return stream(f, 'c', 'position' subword(arg(2), 2))
     when code == 'Q' then return stream(f, 'c', 'query position' subword(arg(2), 2))
   end
 native_syntax:
@@ -322,34 +359,44 @@ fn literal(bytes: &[u8]) -> String {
     format!("x2c('{hex}')")
 }
 
+/// A Rexx array of operations.
+fn array(ops: &[String]) -> String {
+    let quoted: Vec<String> = ops.iter().map(|op| format!("'{op}'")).collect();
+    format!(".array~of({})", quoted.join(", "))
+}
+
 /// The program that runs `scenarios` in `dir`, printing `NAME native: ...`
-/// and `NAME model: ...` for each.
+/// and `NAME model: ...` for each, and `NAME variant: ...`, the model with
+/// the oracle's Deviation 46 padding, where [`padding_variant`] makes one.
 fn program(dir: &Path, scenarios: &[Scenario]) -> String {
     let dir = dir.to_str().expect("the run directory is UTF-8");
     let mut text = String::new();
     for scenario in scenarios {
-        let ops: Vec<String> = scenario.ops.iter().map(|op| format!("'{op}'")).collect();
+        let variant = padding_variant(scenario).map_or(".nil".to_string(), |ops| array(&ops));
         text.push_str(&format!(
-            "call run '{}', {}, {}, .array~of({})\n",
+            "call run '{}', {}, {}, {}, {variant}\n",
             scenario.name,
             literal(initial(&scenario.initial)),
             u8::from(scenario.transient),
-            ops.join(", ")
+            array(&scenario.ops)
         ));
     }
     text.push_str("exit\n");
     text.push_str(&format!(
-        "run: procedure\n  use arg name, initial, transient, ops\n  f = '{dir}/' || name || '.dat'\n  \
+        "run: procedure\n  use arg name, initial, transient, ops, variant\n  \
+         f = '{dir}/' || name || '.dat'\n  \
          say name 'native:' native(f, initial, transient, ops)\n  \
-         say name 'model:' stream_model(initial, transient, ops)\n  return\n"
+         say name 'model:' stream_model(initial, transient, ops)\n  \
+         if variant \\== .nil then say name 'variant:' stream_model(initial, transient, variant)\n  \
+         return\n"
     ));
     text.push_str(NATIVE);
     text.push_str("::requires 'stream.rex'\n");
     text
 }
 
-/// A fresh directory holding a copy of the model, with a FIFO for each
-/// transient scenario.
+/// A fresh directory holding a copy of the model, with a FIFO, or a link to
+/// `/dev/null`, for each transient scenario.
 fn fresh_dir(label: &str, scenarios: &[Scenario]) -> PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -364,62 +411,81 @@ fn fresh_dir(label: &str, scenarios: &[Scenario]) -> PathBuf {
     fs::copy(&model, dir.join("stream.rex"))
         .unwrap_or_else(|e| panic!("cannot copy {}: {e}", model.display()));
     for scenario in scenarios.iter().filter(|scenario| scenario.transient) {
-        let fifo = dir.join(format!("{}.dat", scenario.name));
+        let name = dir.join(format!("{}.dat", scenario.name));
+        if scenario.device == Device::DevNull {
+            std::os::unix::fs::symlink("/dev/null", &name)
+                .unwrap_or_else(|e| panic!("cannot link {}: {e}", name.display()));
+            continue;
+        }
         let status = Command::new("mkfifo")
-            .arg(&fifo)
+            .arg(&name)
             .status()
             .expect("mkfifo runs");
-        assert!(status.success(), "mkfifo {} failed", fifo.display());
+        assert!(status.success(), "mkfifo {} failed", name.display());
     }
     fs::canonicalize(&dir).unwrap_or_else(|e| panic!("cannot resolve {}: {e}", dir.display()))
 }
 
-/// The `native` and `model` answers of each scenario in one run's stdout.
+/// One scenario's answers: native, through the model, and through the
+/// padding variant where there is one.
+#[derive(Clone)]
+struct Answers {
+    native: String,
+    model: String,
+    variant: Option<String>,
+}
+
+/// The answers of each scenario in one run's stdout.
 fn answers(
     side: &str,
     scenarios: &[Scenario],
     stdout: &[u8],
     stderr: &[u8],
-) -> BTreeMap<String, (String, String)> {
+) -> BTreeMap<String, Answers> {
     assert!(
         stderr.is_empty(),
         "{side} wrote stderr: {}",
         String::from_utf8_lossy(stderr)
     );
     let text = String::from_utf8_lossy(stdout);
-    let mut native = BTreeMap::new();
-    let mut model = BTreeMap::new();
+    let mut lines: BTreeMap<(String, &str), String> = BTreeMap::new();
     for line in text.lines() {
-        if let Some((name, rest)) = line.split_once(" native: ") {
-            native.insert(name.to_string(), rest.to_string());
-        } else if let Some((name, rest)) = line.split_once(" model: ") {
-            model.insert(name.to_string(), rest.to_string());
+        for which in ["native", "model", "variant"] {
+            if let Some((name, rest)) = line.split_once(&format!(" {which}: ")) {
+                lines.insert((name.to_string(), which), rest.to_string());
+            }
         }
     }
     scenarios
         .iter()
         .map(|scenario| {
             let name = &scenario.name;
-            let get = |map: &BTreeMap<String, String>, which: &str| {
-                map.get(name)
+            let get = |which: &str| {
+                lines
+                    .get(&(name.clone(), which))
                     .unwrap_or_else(|| panic!("[{name}] {side} printed no {which} line: {text}"))
                     .clone()
             };
-            (name.clone(), (get(&native, "native"), get(&model, "model")))
+            let answer = Answers {
+                native: get("native"),
+                model: get("model"),
+                variant: lines.get(&(name.clone(), "variant")).cloned(),
+            };
+            (name.clone(), answer)
         })
         .collect()
 }
 
 /// Appends each scenario's answers to `<side>.tsv` under the directory
 /// `REXX_STREAM_MODEL_DUMP` names, when it names one.
-fn dump(side: &str, scenarios: &[Scenario], answers: &BTreeMap<String, (String, String)>) {
+fn dump(side: &str, scenarios: &[Scenario], answers: &BTreeMap<String, Answers>) {
     use std::io::Write;
     let Ok(dir) = std::env::var("REXX_STREAM_MODEL_DUMP") else {
         return;
     };
     let mut text = String::new();
     for scenario in scenarios {
-        let (native, model) = &answers[&scenario.name];
+        let Answers { native, model, .. } = &answers[&scenario.name];
         text.push_str(&format!(
             "{}\t{}\t{}\t{}\t{native}\t{model}\n",
             scenario.name,
@@ -439,16 +505,24 @@ fn dump(side: &str, scenarios: &[Scenario], answers: &BTreeMap<String, (String, 
 }
 
 /// Runs `scenarios` on this crate.
-fn run_crate(label: &str, scenarios: &[Scenario]) -> BTreeMap<String, (String, String)> {
+fn run_crate(label: &str, scenarios: &[Scenario]) -> BTreeMap<String, Answers> {
     let dir = fresh_dir(&format!("{label}-crate"), scenarios);
     let text = program(&dir, scenarios);
     let file = dir.join("case.rex");
     fs::write(&file, &text).unwrap_or_else(|e| panic!("cannot write {}: {e}", file.display()));
-    let outcome = run_program(
-        file.to_str().expect("the case path is UTF-8"),
-        text.into_bytes(),
-        Invocation::none().with_deadline(support::oracle::RUN_DEADLINE),
-    );
+    let path = file.to_str().expect("the case path is UTF-8").to_string();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let outcome = run_program(
+            &path,
+            text.into_bytes(),
+            Invocation::none().with_deadline(support::oracle::RUN_DEADLINE),
+        );
+        let _ = sender.send(outcome);
+    });
+    let outcome = receiver.recv_timeout(CRATE_RUN_LIMIT).unwrap_or_else(|_| {
+        panic!("[{label}] this crate did not finish within {CRATE_RUN_LIMIT:?}")
+    });
     assert_eq!(
         outcome.exit_code,
         0,
@@ -461,7 +535,7 @@ fn run_crate(label: &str, scenarios: &[Scenario]) -> BTreeMap<String, (String, S
 }
 
 /// Runs `scenarios` on the oracle.
-fn run_oracle(label: &str, scenarios: &[Scenario]) -> BTreeMap<String, (String, String)> {
+fn run_oracle(label: &str, scenarios: &[Scenario]) -> BTreeMap<String, Answers> {
     let oracle = locate();
     let dir = fresh_dir(&format!("{label}-oracle"), scenarios);
     let file = dir.join("case.rex");
@@ -493,7 +567,13 @@ fn named_case(case: &datadriven::TestCase) -> Scenario {
     let scenario = Scenario {
         name: arg("name", ""),
         initial: arg("initial", "empty"),
-        transient: arg("transient", "0") == "1",
+        transient: arg("transient", "0") != "0",
+        device: if arg("transient", "0") == "devnull" {
+            Device::DevNull
+        } else {
+            Device::Fifo
+        },
+        oracle_skip: case.args.get("oracle").map(|values| values.join(" ")),
         ops: case.input.lines().map(str::to_string).collect(),
     };
     assert!(!scenario.name.is_empty(), "a case without a name");
@@ -518,6 +598,7 @@ fn unshow(text: &str) -> Vec<u8> {
             b'|' => b'\n',
             b'@' => 0,
             b'_' => b' ',
+            b'^' => 0x1a,
             other => other,
         })
         .collect()
@@ -536,6 +617,7 @@ fn check_reflective(scenario: &Scenario, answer: &str) -> Result<(), String> {
     let mut overlay = before.clone();
     let mut covered = vec![false; before.len()];
     let mut record = 0usize;
+    let mut append = false;
     let mut previous_write: Option<i64> = None;
     for (op, item) in scenario.ops.iter().zip(&results) {
         let (_, after) = item.split_once('=').expect("an item names its operation");
@@ -555,6 +637,7 @@ fn check_reflective(scenario: &Scenario, answer: &str) -> Result<(), String> {
                 overlay.clear();
                 covered.clear();
             }
+            append = lower.contains("append");
             record = lower.split_once("reclength ").map_or(0, |(_, rest)| {
                 rest.split(' ').next().unwrap_or("0").parse().unwrap_or(0)
             });
@@ -565,6 +648,7 @@ fn check_reflective(scenario: &Scenario, answer: &str) -> Result<(), String> {
             if words[0] != "CO" {
                 if record > 0 {
                     let start = match (words.get(2), previous_write) {
+                        _ if append => overlay.len() as i64 + 1,
                         (Some(line), _) => {
                             (line.parse::<i64>().expect("a line") - 1) * record as i64 + 1
                         }
@@ -616,75 +700,6 @@ fn check_reflective(scenario: &Scenario, answer: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// The index of the first item at which two answers part.
-fn first_difference_at(native: &str, model: &str) -> Option<usize> {
-    let (left, left_content) = items(native);
-    let (right, right_content) = items(model);
-    if let Some(at) = left.iter().zip(&right).position(|(a, b)| a != b) {
-        return Some(at);
-    }
-    if left.len() != right.len() {
-        return Some(left.len().min(right.len()));
-    }
-    (left_content != right_content).then_some(left.len())
-}
-
-/// The item at `at`, the final content standing after the operations.
-fn item_at(answer: &str, at: usize) -> String {
-    let (ops, content) = items(answer);
-    ops.get(at)
-        .map_or_else(|| format!("[{content}]"), |item| (*item).to_string())
-}
-
-/// The [`REPORTED`] rule a departure first seen at item `at` of `scenario`
-/// falls under: any item of a stream opened WRITE, and otherwise the line
-/// operation at `at`.
-fn reported_rule(scenario: &Scenario, at: usize) -> Option<&'static str> {
-    if scenario.ops[0].starts_with("O write") {
-        return Some("write-only");
-    }
-    let op = scenario.ops.get(at)?;
-    let words: Vec<&str> = op.split(' ').collect();
-    let by_line = op.contains("line");
-    match words[0] {
-        "Q" if by_line => Some("line-query"),
-        "LC" => Some("lines-count"),
-        "S" if by_line => Some("line-position"),
-        "LI" | "LP" if words.len() > 1 => Some("line-position"),
-        "LO" if words.len() > 2 => Some("line-position"),
-        _ => None,
-    }
-}
-
-/// The Deviation and rule an oracle departure first seen at item `at` of
-/// `scenario` falls under, by the operations up to it: a LINEOUT that
-/// closes or only positions a binary stream (Deviation 46), a buffered
-/// transient stream (Deviation 48), a relative SEEK, or a SEEK by
-/// characters from the end (Deviation 49).
-fn deviation_rule(scenario: &Scenario, at: usize) -> Option<(u32, &'static str)> {
-    let before = &scenario.ops[..=at.min(scenario.ops.len() - 1)];
-    if scenario.transient && !scenario.ops[0].contains("nobuffer") {
-        return Some((48, "transient-no-seek"));
-    }
-    let binary = scenario.ops[0].contains("binary");
-    if binary && before.iter().any(|op| op == "LX" || op.starts_with("LP ")) {
-        return Some((46, "pads-on-close"));
-    }
-    if before
-        .iter()
-        .any(|op| op.starts_with("S +") || op.starts_with("S -"))
-    {
-        return Some((49, "relative-seek"));
-    }
-    if before
-        .iter()
-        .any(|op| op.starts_with("S <") && !op.contains("line"))
-    {
-        return Some((49, "seek-from-end"));
-    }
-    None
-}
-
 /// The recorded departures of one side, `scenario\tlabel` per line, and
 /// whether `REXX_STREAM_MODEL_REFRESH=1` asks for them to be rewritten.
 fn recorded_departures(side: &str) -> (PathBuf, BTreeMap<String, String>, bool) {
@@ -733,234 +748,6 @@ fn compare_recorded(side: &str, header: &str, actual: &BTreeMap<String, String>)
     );
 }
 
-/// Every named case on this crate: native and model answers.
-fn named_runs() -> BTreeMap<String, (Scenario, String, String)> {
-    let mut runs = BTreeMap::new();
-    datadriven::walk(CASES, |file| {
-        file.run(|case| {
-            let scenario = named_case(case);
-            let answers = run_crate(&scenario.name, std::slice::from_ref(&scenario));
-            let (native, model) = answers[&scenario.name].clone();
-            let mut out = format!("model: {model}\n");
-            if native != model {
-                out.push_str(&format!("crate: {native}\n"));
-            }
-            assert!(
-                runs.insert(scenario.name.clone(), (scenario, native, model))
-                    .is_none(),
-                "two cases with one name"
-            );
-            out
-        });
-    });
-    runs
-}
-
-#[test]
-fn the_model_answers_the_named_cases_as_this_crate_does() {
-    let runs = named_runs();
-    let mut wrong = Vec::new();
-    for (name, (scenario, native, model)) in &runs {
-        let reported = REPORTED_CASES.iter().find(|(case, _)| case == name);
-        match (native == model, reported) {
-            (true, None) => {}
-            (true, Some(_)) => wrong.push(format!("{name}: listed in REPORTED_CASES, but agrees")),
-            (false, None) => wrong.push(format!(
-                "{name}: this crate departs from the model at {}",
-                item_at(
-                    native,
-                    first_difference_at(native, model).expect("they part")
-                )
-            )),
-            (false, Some((_, rule))) => {
-                let at = first_difference_at(native, model).expect("they part");
-                if reported_rule(scenario, at) != Some(*rule) {
-                    wrong.push(format!("{name}: departs at item {at}, not by {rule}"));
-                }
-            }
-        }
-        if !scenario.transient
-            && let Err(e) = check_reflective(scenario, native)
-        {
-            wrong.push(format!("{name}: 9.7: {e}"));
-        }
-    }
-    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-    for (name, ..) in ORACLE_DEPARTURES {
-        assert!(
-            runs.contains_key(*name),
-            "ORACLE_DEPARTURES names no case {name}"
-        );
-    }
-    for rule in REPORTED {
-        assert!(
-            REPORTED_CASES.iter().any(|(_, listed)| listed == rule),
-            "no named case shows {rule}"
-        );
-    }
-}
-
-#[test]
-fn on_the_oracle_the_named_cases_part_only_where_listed() {
-    let runs = named_runs();
-    let mut wrong = Vec::new();
-    for (name, (scenario, native, model)) in &runs {
-        let answers = run_oracle(name, std::slice::from_ref(scenario));
-        let (oracle, oracle_model) = &answers[name];
-        if oracle_model != model {
-            wrong.push(format!(
-                "{name}: the model answers differently on the oracle"
-            ));
-            continue;
-        }
-        let reported = REPORTED_CASES.iter().any(|(case, _)| case == name);
-        let listed = ORACLE_DEPARTURES.iter().find(|(case, ..)| case == name);
-        match (reported, listed) {
-            (true, _) if oracle != native => wrong.push(format!(
-                "{name}: a REPORTED case, but the oracle and this crate part at {}",
-                item_at(
-                    oracle,
-                    first_difference_at(oracle, native).expect("they part")
-                )
-            )),
-            (true, _) => {}
-            (false, None) if oracle != model => wrong.push(format!(
-                "{name}: the oracle departs unlisted at {}",
-                item_at(
-                    oracle,
-                    first_difference_at(oracle, model).expect("they part")
-                )
-            )),
-            (false, None) => {}
-            (false, Some((_, deviation, rule, answer))) => match first_difference_at(oracle, model)
-            {
-                None => wrong.push(format!("{name}: listed, but agrees")),
-                Some(at) => {
-                    if item_at(oracle, at) != *answer {
-                        wrong.push(format!(
-                            "{name}: the oracle's answer moved to {}",
-                            item_at(oracle, at)
-                        ));
-                    }
-                    if *deviation != 0
-                        && deviation_rule(scenario, at).map(|(d, _)| d) != Some(*deviation)
-                    {
-                        wrong.push(format!("{name}: {rule} is not Deviation {deviation}'s"));
-                    }
-                }
-            },
-        }
-    }
-    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-}
-
-/// The generated scenarios, all seeds.
-fn generated() -> Vec<Vec<Scenario>> {
-    SEEDS.map(|seed| generate(seed, PER_SEED)).collect()
-}
-
-/// This crate's answers to every generated scenario, by name, with the
-/// scenarios themselves.
-fn crate_runs() -> BTreeMap<String, (Scenario, String, String)> {
-    let mut runs = BTreeMap::new();
-    for (index, scenarios) in generated().iter().enumerate() {
-        let answers = run_crate(&format!("batch{index}"), scenarios);
-        for scenario in scenarios {
-            let (native, model) = answers[&scenario.name].clone();
-            runs.insert(scenario.name.clone(), (scenario.clone(), native, model));
-        }
-    }
-    runs
-}
-
-#[test]
-fn the_model_answers_generated_scenarios_as_this_crate_does() {
-    let mut wrong = Vec::new();
-    let mut departures = BTreeMap::new();
-    for (name, (scenario, native, model)) in crate_runs() {
-        if let Err(e) = check_reflective(&scenario, &native) {
-            wrong.push(format!("{name} {:?}: 9.7: {e}", scenario.ops));
-        }
-        let Some(at) = first_difference_at(&native, &model) else {
-            continue;
-        };
-        match reported_rule(&scenario, at) {
-            Some(rule) => {
-                departures.insert(name, format!("reported {rule}"));
-            }
-            None => wrong.push(format!(
-                "{name} {:?}: this crate departs from the model at {} (model {})",
-                scenario.ops,
-                item_at(&native, at),
-                item_at(&model, at)
-            )),
-        }
-    }
-    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-    compare_recorded(
-        "crate",
-        "# Generated scenarios where this crate departs from the model, with the\n\
-         # REPORTED rule of the first item that differs. Rewritten by\n\
-         # REXX_STREAM_MODEL_REFRESH=1.\n",
-        &departures,
-    );
-}
-
-#[test]
-fn on_the_oracle_the_generated_scenarios_part_only_where_the_deviations_say() {
-    let crate_side = crate_runs();
-    let mut wrong = Vec::new();
-    let mut departures = BTreeMap::new();
-    let mut padding_seen = 0;
-    for (index, scenarios) in generated().iter().enumerate() {
-        let answers = run_oracle(&format!("batch{index}"), scenarios);
-        for scenario in scenarios {
-            let name = &scenario.name;
-            let (oracle, oracle_model) = &answers[name];
-            let (_, native, model) = &crate_side[name];
-            if oracle_model != model {
-                wrong.push(format!(
-                    "{name}: the model answers differently on the oracle"
-                ));
-                continue;
-            }
-            let Some(at) = first_difference_at(oracle, model) else {
-                continue;
-            };
-            let crate_departs = first_difference_at(native, model).is_some();
-            let label = match (deviation_rule(scenario, at), reported_rule(scenario, at)) {
-                (Some((deviation, rule)), _) => format!("{deviation} {rule}"),
-                (None, Some(rule)) if crate_departs => format!("reported {rule}"),
-                _ => {
-                    wrong.push(format!(
-                        "{name} {:?}: the oracle departs from the model at {} (model {})",
-                        scenario.ops,
-                        item_at(oracle, at),
-                        item_at(model, at)
-                    ));
-                    continue;
-                }
-            };
-            if label.starts_with("46") && check_reflective(scenario, oracle).is_err() {
-                padding_seen += 1;
-            }
-            departures.insert(name.clone(), label);
-        }
-    }
-    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-    assert!(
-        padding_seen > 0,
-        "the 9.7 check sees none of the oracle's Deviation 46 padding"
-    );
-    compare_recorded(
-        "oracle",
-        "# Generated scenarios where the oracle departs from the model, with the\n\
-         # Deviation and rule, or the REPORTED rule this crate shares, of the\n\
-         # first item that differs. Rewritten by REXX_STREAM_MODEL_REFRESH=1.\n",
-        &departures,
-    );
-}
-
 /// Each numbered Deviation row of `phase-4-exclusions.txt`, by number: the
 /// row's text from its ` NN. ` heading to the next one.
 fn deviation_rows(text: &str) -> BTreeMap<u32, String> {
@@ -988,6 +775,379 @@ fn deviation_rows(text: &str) -> BTreeMap<u32, String> {
     rows
 }
 
+/// The index of the first item at which two answers part.
+fn first_difference_at(native: &str, model: &str) -> Option<usize> {
+    let (left, left_content) = items(native);
+    let (right, right_content) = items(model);
+    if let Some(at) = left.iter().zip(&right).position(|(a, b)| a != b) {
+        return Some(at);
+    }
+    if left.len() != right.len() {
+        return Some(left.len().min(right.len()));
+    }
+    (left_content != right_content).then_some(left.len())
+}
+
+/// The item at `at`, the final content standing after the operations.
+fn item_at(answer: &str, at: usize) -> String {
+    let (ops, content) = items(answer);
+    ops.get(at)
+        .map_or_else(|| format!("[{content}]"), |item| (*item).to_string())
+}
+
+/// One item's fields: the result, the state word, and the write and read
+/// positions.
+struct Fields<'a> {
+    result: &'a str,
+    state: &'a str,
+    write: &'a str,
+    read: &'a str,
+}
+
+fn fields(item: &str) -> Fields<'_> {
+    // The operation's name may hold `=` (`S_=3`), and a rendered result
+    // holds no blank, so the result starts after the last `=` before the
+    // first blank.
+    let head = item.split(' ').next().unwrap_or("");
+    let start = head.rfind('=').map_or(0, |at| at + 1);
+    let mut parts = item[start..].split(' ');
+    let mut next = || parts.next().unwrap_or("");
+    Fields {
+        result: next(),
+        state: next(),
+        write: next(),
+        read: next(),
+    }
+}
+
+/// The variant answer's items with the `CB` padding items taken out, so they
+/// line up with the scenario's own operations.
+fn without_padding(answer: &str) -> String {
+    let (ops, content) = items(answer);
+    let kept: Vec<&str> = ops
+        .into_iter()
+        .filter(|item| !item.starts_with("CB="))
+        .collect();
+    format!("{}; [{content}]", kept.join(";"))
+}
+
+/// The rule an oracle departure at item `at` falls under, judged from the
+/// observed fields of the oracle's item and the model's there: the
+/// Deviation, or 0 for a rule proposed as a new one, and the rule's name.
+/// Each rule checks that the operation at `at` is the one it describes and
+/// that the field it describes is what differs.
+fn oracle_rule(
+    scenario: &Scenario,
+    at: usize,
+    oracle: &str,
+    model: &str,
+) -> Option<(u32, &'static str)> {
+    let op = scenario.ops.get(at)?;
+    let words: Vec<&str> = op.split(' ').collect();
+    let opened = scenario.ops[..=at]
+        .iter()
+        .rev()
+        .find(|op| op.starts_with("O "))
+        .map_or("", String::as_str);
+    let write_only = opened.starts_with("O write");
+    let (oracle, model) = (fields(oracle), fields(model));
+    let same_positions = oracle.write == model.write && oracle.read == model.read;
+    let by_line = op.contains("line");
+    if scenario.transient {
+        let counted = scenario.ops[..at]
+            .iter()
+            .any(|op| matches!(op.as_str(), "CH" | "LN" | "LC"));
+        return match words[0] {
+            _ if !opened.contains("nobuffer") => Some((48, "transient-no-seek")),
+            "CI" | "LI" if counted => Some((0, "transient-counts-read")),
+            _ => None,
+        };
+    }
+    let appending = opened.contains("append");
+    let ctrlz = scenario.initial == "ctrlz";
+    match words[0] {
+        "O" if ctrlz
+            && oracle.write.parse::<i64>().ok()
+                == model.write.parse::<i64>().ok().map(|w| w - 1) =>
+        {
+            Some((0, "ctrlz-is-data"))
+        }
+        "LO" | "LE" if appending && opened.contains("binary") => Some((0, "append-record")),
+        "S" | "P" if model.result == "0" && model.state == "NOTREADY" => Some((0, "invalid-seek")),
+        "S" | "P" if write_only && by_line && model.result == "0" && oracle.result != "0" => {
+            Some((0, "write-only"))
+        }
+        "S" | "P" if !by_line && (op.contains('+') || op.contains(" -")) => {
+            Some((49, "relative-seek"))
+        }
+        "S" | "P" if op.contains('<') && !by_line => Some((49, "seek-from-end")),
+        "S" | "P" if by_line => Some((0, "line-position")),
+        "CI" | "LI" if write_only && (!oracle.result.is_empty() || oracle.state != model.state) => {
+            Some((0, "write-only"))
+        }
+        "CH" | "LN" | "LC" if write_only && oracle.result != "0" => Some((0, "write-only")),
+        "Q" if write_only
+            && words.len() < 2
+            && oracle.result == oracle.read
+            && model.result == model.write =>
+        {
+            Some((0, "write-only"))
+        }
+        "LI" | "LP" if words.len() > 1 => Some((0, "line-position")),
+        "LO" if words.len() > 2 => Some((0, "line-position")),
+        "Q" if by_line && same_positions && oracle.state == model.state => Some((0, "line-query")),
+        "LC" if same_positions
+            && (oracle.result != model.result || oracle.state != model.state) =>
+        {
+            Some((0, "lines-count"))
+        }
+        _ => None,
+    }
+}
+
+/// The label of an oracle answer that differs from the model's, or why it
+/// is unlicensed. With a variant, the model run with the oracle's padding by
+/// a LINEOUT that closes or only positions a binary stream (Deviation 46),
+/// the oracle must match the variant up to a difference another rule
+/// licenses.
+fn oracle_label(
+    scenario: &Scenario,
+    oracle: &str,
+    model: &str,
+    variant: Option<&str>,
+) -> Result<String, String> {
+    let at = first_difference_at(oracle, model).expect("the answers part");
+    if let Some(rule) = oracle_rule(scenario, at, &item_at(oracle, at), &item_at(model, at)) {
+        return Ok(format!("{} {}", label_of(rule.0), rule.1));
+    }
+    if let Some(variant) = variant.map(without_padding) {
+        let Some(at) = first_difference_at(oracle, &variant) else {
+            return Ok("46 pads-on-close".to_string());
+        };
+        if let Some(rule) = oracle_rule(scenario, at, &item_at(oracle, at), &item_at(&variant, at))
+        {
+            return Ok(format!(
+                "46 pads-on-close + {} {}",
+                label_of(rule.0),
+                rule.1
+            ));
+        }
+    }
+    Err(format!(
+        "the oracle departs from the model at {} (model {})",
+        item_at(oracle, at),
+        item_at(model, at)
+    ))
+}
+
+fn label_of(deviation: u32) -> String {
+    if deviation == 0 {
+        "new".to_string()
+    } else {
+        deviation.to_string()
+    }
+}
+
+/// Whether a scenario's oracle answer can carry Deviation 46: a LINEOUT
+/// that closes or only positions a binary stream. The variant puts the
+/// oracle's padding, `CB`, before each.
+fn padding_variant(scenario: &Scenario) -> Option<Vec<String>> {
+    if !scenario.ops[0].contains("binary") {
+        return None;
+    }
+    if !scenario
+        .ops
+        .iter()
+        .any(|op| op == "LX" || op.starts_with("LP "))
+    {
+        return None;
+    }
+    let mut ops = Vec::new();
+    for op in &scenario.ops {
+        if op == "LX" || op.starts_with("LP ") {
+            ops.push("CB".to_string());
+        }
+        ops.push(op.clone());
+    }
+    Some(ops)
+}
+
+/// Every named case on this crate.
+fn named_runs() -> BTreeMap<String, (Scenario, Answers)> {
+    let mut runs = BTreeMap::new();
+    datadriven::walk(CASES, |file| {
+        file.run(|case| {
+            let scenario = named_case(case);
+            let answers = run_crate(&scenario.name, std::slice::from_ref(&scenario));
+            let answer = answers[&scenario.name].clone();
+            let mut out = format!("model: {}\n", answer.model);
+            if answer.native != answer.model {
+                out.push_str(&format!("crate: {}\n", answer.native));
+            }
+            assert!(
+                runs.insert(scenario.name.clone(), (scenario, answer))
+                    .is_none(),
+                "two cases with one name"
+            );
+            out
+        });
+    });
+    runs
+}
+
+#[test]
+fn the_model_answers_the_named_cases_as_this_crate_does() {
+    let runs = named_runs();
+    let mut wrong = Vec::new();
+    for (name, (scenario, answer)) in &runs {
+        if let Some(at) = first_difference_at(&answer.native, &answer.model) {
+            wrong.push(format!(
+                "{name}: this crate departs from the model at {} (model {})",
+                item_at(&answer.native, at),
+                item_at(&answer.model, at)
+            ));
+        }
+        if !scenario.transient
+            && let Err(e) = check_reflective(scenario, &answer.native)
+        {
+            wrong.push(format!("{name}: 9.7: {e}"));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    for (name, ..) in ORACLE_DEPARTURES {
+        assert!(
+            runs.contains_key(*name),
+            "ORACLE_DEPARTURES names no case {name}"
+        );
+    }
+}
+
+#[test]
+fn on_the_oracle_the_named_cases_part_only_where_listed() {
+    let runs = named_runs();
+    let mut wrong = Vec::new();
+    for (name, (scenario, answer)) in &runs {
+        if scenario.oracle_skip.is_some() {
+            continue;
+        }
+        let answers = run_oracle(name, std::slice::from_ref(scenario));
+        let oracle = &answers[name];
+        if oracle.model != answer.model {
+            wrong.push(format!(
+                "{name}: the model answers differently on the oracle"
+            ));
+            continue;
+        }
+        let listed = ORACLE_DEPARTURES.iter().find(|(case, ..)| case == name);
+        let at = first_difference_at(&oracle.native, &oracle.model);
+        match (listed, at) {
+            (None, None) => {}
+            (None, Some(at)) => wrong.push(format!(
+                "{name}: the oracle departs unlisted at {}",
+                item_at(&oracle.native, at)
+            )),
+            (Some(_), None) => wrong.push(format!("{name}: listed, but agrees")),
+            (Some((_, deviation, rule, item)), Some(at)) => {
+                if item_at(&oracle.native, at) != *item {
+                    wrong.push(format!(
+                        "{name}: the oracle's answer moved to {}",
+                        item_at(&oracle.native, at)
+                    ));
+                }
+                let label = oracle_label(
+                    scenario,
+                    &oracle.native,
+                    &oracle.model,
+                    oracle.variant.as_deref(),
+                );
+                let expected = if *rule == "pads-on-close" {
+                    "46 pads-on-close".to_string()
+                } else {
+                    format!("{} {rule}", label_of(*deviation))
+                };
+                if label.as_deref() != Ok(expected.as_str()) {
+                    wrong.push(format!("{name}: listed as {expected}, judged {label:?}"));
+                }
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+/// The generated scenarios, all seeds.
+fn generated() -> Vec<Vec<Scenario>> {
+    SEEDS.map(|seed| generate(seed, PER_SEED)).collect()
+}
+
+#[test]
+fn the_model_answers_generated_scenarios_as_this_crate_does() {
+    let mut wrong = Vec::new();
+    for (index, scenarios) in generated().iter().enumerate() {
+        let answers = run_crate(&format!("batch{index}"), scenarios);
+        for scenario in scenarios {
+            let answer = &answers[&scenario.name];
+            if let Err(e) = check_reflective(scenario, &answer.native) {
+                wrong.push(format!("{} {:?}: 9.7: {e}", scenario.name, scenario.ops));
+            }
+            if let Some(at) = first_difference_at(&answer.native, &answer.model) {
+                wrong.push(format!(
+                    "{} {:?}: this crate departs from the model at {} (model {})",
+                    scenario.name,
+                    scenario.ops,
+                    item_at(&answer.native, at),
+                    item_at(&answer.model, at)
+                ));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn on_the_oracle_the_generated_scenarios_part_only_where_the_deviations_say() {
+    let mut wrong = Vec::new();
+    let mut departures = BTreeMap::new();
+    let mut padding_seen = 0;
+    for (index, scenarios) in generated().iter().enumerate() {
+        let answers = run_oracle(&format!("batch{index}"), scenarios);
+        for scenario in scenarios {
+            let name = &scenario.name;
+            let oracle = &answers[name];
+            if first_difference_at(&oracle.native, &oracle.model).is_none() {
+                continue;
+            }
+            match oracle_label(
+                scenario,
+                &oracle.native,
+                &oracle.model,
+                oracle.variant.as_deref(),
+            ) {
+                Ok(label) => {
+                    if label.starts_with("46")
+                        && check_reflective(scenario, &oracle.native).is_err()
+                    {
+                        padding_seen += 1;
+                    }
+                    departures.insert(name.clone(), label);
+                }
+                Err(e) => wrong.push(format!("{name} {:?}: {e}", scenario.ops)),
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    assert!(
+        padding_seen > 0,
+        "the 9.7 check sees none of the oracle's Deviation 46 padding"
+    );
+    compare_recorded(
+        "oracle",
+        "# Generated scenarios where the oracle departs from the model, with the\n\
+         # Deviation (\"new\" for one proposed) and rule oracle_label judges from\n\
+         # the answers. Rewritten by REXX_STREAM_MODEL_REFRESH=1.\n",
+        &departures,
+    );
+}
+
 /// Every Deviation that licenses a departure here names this test in its
 /// row, so the licence and its witness cannot drift apart.
 #[test]
@@ -1006,7 +1166,8 @@ fn every_licensing_deviation_names_this_test() {
     licensing.extend(
         recorded
             .values()
-            .filter_map(|label| label.split(' ').next()?.parse::<u32>().ok()),
+            .flat_map(|label| label.split(' '))
+            .filter_map(|word| word.parse::<u32>().ok()),
     );
     let unnamed: Vec<u32> = licensing
         .into_iter()

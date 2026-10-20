@@ -62,6 +62,7 @@ operation: procedure expose m.
     when code == 'CX' | code == 'LX' then return close_by_write()
     when code == 'CO' then return charout(1, a, b)
     when code == 'CE' then return charout(1, '', '')
+    when code == 'CB' then return pad_record()
     when code == 'CP' then return charout(0, '', a)
     when code == 'LO' then return lineout(1, a, b)
     when code == 'LE' then return lineout(1, '', '')
@@ -78,7 +79,7 @@ operation: procedure expose m.
     when code == 'CH' then return chars()
     when code == 'LN' then return lines('N')
     when code == 'LC' then return lines('C')
-    when code == 'S' then return seek(subword(arg(1), 2))
+    when code == 'S' | code == 'P' then return seek(subword(arg(1), 2))
     when code == 'Q' then return query_position(subword(arg(1), 2))
     otherwise return 'model-op' code
   end
@@ -172,35 +173,31 @@ unwritable: procedure expose m.
 
 /* Where a write from position `p` lands. On an APPEND stream every write
    lands at the end: the write position cannot move into the stream as it
-   was opened (funct.xml:4309-4312), and what the stream's own writes added
-   is kept as well (the documentation is silent; the oracle's answer, and
-   this crate's `landing`, :1670). */
+   was opened (funct.xml:4309-4312). The model reads that as the interpreters
+   do: SEEK and QUERY still report the write position as set, and a write
+   from beyond the end lands at the end too, so what the stream's own writes
+   added is kept (this crate's `landing`, :LANDING). */
 landing: procedure expose m.
   if m.0append then return length(m.0data) + 1
   return arg(1)
 
-/* What is left of the record holding position `p`. A position below 1,
-   which only a SEEK reaches, counts as Rust's `rem_euclid` does (the
-   documentation is silent; this crate's `record_remainder`, :1285). */
+/* What is left of the record holding position `p`. */
 room: procedure expose m.
-  parse arg p
-  r = (p - 1) // m.0record
-  if r < 0 then r = r + m.0record
-  return m.0record - r
+  return m.0record - (arg(1) - 1) // m.0record
 
 /* Writes `bytes` at character `p` of the stream: a write beyond the end
    leaves the gap as NUL characters (the documentation is silent; this
-   crate's file system answer). A position below 1 transfers from
-   character 1 (the documentation is silent; this crate's `offset_of`, :800). */
+   crate's file system answer). A null string writes nothing, wherever
+   (funct.xml:1396-1398). */
 put: procedure expose m.
   parse arg bytes, p
+  if bytes == '' then return
   if m.0transient then do
     m.0data = m.0data || bytes
     return
   end
-  q = max(p, 1)
-  if q - 1 > length(m.0data) then m.0data = m.0data || copies('00'x, q - 1 - length(m.0data))
-  m.0data = overlay(bytes, m.0data, q)
+  if p - 1 > length(m.0data) then m.0data = m.0data || copies('00'x, p - 1 - length(m.0data))
+  m.0data = overlay(bytes, m.0data, p)
   return
 
 /* The bytes from character `p`, at most `k` of them. A transient stream
@@ -212,9 +209,8 @@ take: procedure expose m.
     m.0data = substr(m.0data, length(got) + 1)
     return got
   end
-  q = max(p, 1)
-  if q > length(m.0data) then return ''
-  return substr(m.0data, q, min(k, length(m.0data) - q + 1))
+  if p > length(m.0data) then return ''
+  return substr(m.0data, p, min(k, length(m.0data) - p + 1))
 
 /* CHAROUT (funct.xml:1388-1418): writes at the write position, or at
    `start` once the write position is set to it, and moves the write
@@ -233,7 +229,7 @@ charout: procedure expose m.
     if bad \== '' then return bad
     m.0write = start
   end
-  if \given then return 0
+  if \given | s == '' then return 0
   if m.0transient then do
     call put s
     return 0
@@ -250,9 +246,9 @@ charout: procedure expose m.
    string completes its record: it is padded with blanks to the record's
    end (rexxpg rexio.xml:562-565), and a string longer than what is left of
    the record is the bare 93 (this crate's `write_record`, :1637; the documentation
-   is silent). Only this pads (Deviation 46 as extended). A text stream
-   ending in a ctrl-Z has it overwritten by a line written at the end
-   (this crate's `CTRL_Z`, :787). */
+   is silent). Only this pads (Deviation 46 as extended). A ctrl-Z is data
+   like any other character: Unix-like systems use no end-of-file character
+   in text files (intro.xml:3322-3330). */
 lineout: procedure expose m.
   parse arg given, s, line
   call implicit
@@ -276,20 +272,32 @@ lineout: procedure expose m.
     m.0write = at + k
     return 0
   end
-  if at = length(m.0data) + 1 & right(m.0data, 1) == '1a'x then at = at - 1
   call put s || '0a'x, at
   m.0write = at + length(s) + 1
+  return 0
+
+/* `CB`, which no Rexx operation is: blanks from the write position to the
+   end of its record, a whole record at a record boundary. It is the
+   oracle's padding by a LINEOUT that closes or only positions a binary
+   stream, which Deviation 46 licenses, and the driver puts it before such a
+   LINEOUT to build the answer the oracle is licensed to give. */
+pad_record: procedure expose m.
+  if \writable() then return 0
+  k = room(m.0write)
+  call put copies(' ', k), landing(m.0write)
+  m.0write = m.0write + k
   return 0
 
 /* CHARIN (funct.xml:1305-1335): `start` sets the read position, and one
    past the end of the stream is NOTREADY with the null string. A length of
    0 reads nothing (funct.xml:1325-1328). Otherwise it reads up to `length`
    characters and moves the read position by what it read. A read that gets
-   none is NOTREADY in the ERROR state, one that gets some but fewer than
-   asked in the NOTREADY state (the documentation names no state; this
-   crate's `charin`, :1133). A write-only stream reads nothing, in the ERROR
-   state (this crate's answer for a descriptor it could open only for
-   writing). */
+   some but fewer than asked is in the NOTREADY state. One that gets none is
+   in the ERROR state, as both interpreters answer (this crate's `charin`,
+   :CHARIN), where the state method's own example of NOTREADY is a read
+   beyond the end (streamclasses.xml:1638-1652); Phase 9d Task 6.15 reports
+   it. A stream opened WRITE reads nothing, in the ERROR state
+   (funct.xml:4302). */
 charin: procedure expose m.
   parse arg start, k
   call implicit
@@ -352,9 +360,13 @@ linein: procedure expose m.
     e = pos('0a'x, m.0data)
     if e = 0 then e = length(m.0data)
     got = take(1, e)
+    if got == '' then do
+      m.0state = 'NOTREADY'
+      return ''
+    end
   end
   else do
-    q = max(m.0read, 1)
+    q = m.0read
     if q > length(m.0data) then do
       m.0state = 'NOTREADY'
       return ''
@@ -362,9 +374,7 @@ linein: procedure expose m.
     e = pos('0a'x, m.0data, q)
     if e = 0 then e = length(m.0data)
     got = substr(m.0data, q, e - q + 1)
-    /* A position below 1 reads from character 1 and lands as if it had
-       been 0 (this crate's `read_line_from`, :840, reading from offset 0). */
-    m.0read = max(m.0read, 0) + length(got)
+    m.0read = m.0read + length(got)
   end
   if right(got, 1) == '0a'x then do
     got = left(got, length(got) - 1)
@@ -373,24 +383,25 @@ linein: procedure expose m.
   return got
 
 /* CHARS (funct.xml:1475-1487): the characters from the read position to
-   the end, line ends included. A transient stream cannot be measured
-   without reading it, so it answers 1 (iostrms.xml:189-193). A write-only
-   stream has none. */
+   the end, line ends included. A transient stream answers 1 when data waits
+   and 0 when none does (iostrms.xml:189-193), and reading nothing to learn
+   it. A write-only stream has none. */
 chars: procedure expose m.
   call implicit
-  if m.0transient then return 1
   if \readable() then return 0
+  if m.0transient then return m.0data \== ''
   return max(0, length(m.0data) - (m.0read - 1))
 
 /* LINES (funct.xml:3295-3307): Normal answers 1 when data remains after the
    read position and 0 when none does; Count answers the lines that remain,
    a last line with no line end included, or on a record stream the
    records that remain, the current partial one included
-   (iostrms.xml:465-472). A transient stream answers 1, as CHARS does. */
+   (iostrms.xml:465-472). A transient stream answers whether data waits, as
+   CHARS does. */
 lines: procedure expose m.
   call implicit
-  if m.0transient then return 1
   if \readable() then return 0
+  if m.0transient then return m.0data \== ''
   if m.0read > length(m.0data) then return 0
   if arg(1) == 'N' then return 1
   if m.0record > 0 then
@@ -398,7 +409,7 @@ lines: procedure expose m.
   /* Counting text lines reads the stream, so the stream is READY after it
      (the documentation is silent; the oracle's `readSetup`). */
   m.0state = 'READY'
-  rest = substr(m.0data, max(m.0read, 1))
+  rest = substr(m.0data, m.0read)
   n = countstr('0a'x, rest)
   if right(rest, 1) \== '0a'x then n = n + 1
   return n
@@ -439,8 +450,8 @@ line_reached: procedure expose m.
    (iostrms.xml:476-483), or on a record stream the record holding it. */
 line_of: procedure expose m.
   parse arg p
-  if m.0record > 0 then return (max(p, 1) - 1) % m.0record + 1
-  q = min(max(p, 1), length(m.0data) + 1)
+  if m.0record > 0 then return (p - 1) % m.0record + 1
+  q = min(p, length(m.0data) + 1)
   return countstr('0a'x, left(m.0data, q - 1)) + 1
 
 /* The stream's lines, for SEEK <n LINE: a last line with no line end
@@ -458,11 +469,9 @@ line_count: procedure expose m.
    (Deviation 49). READ or WRITE names the position; with neither, a stream
    opened for both sets both, from the read position (funct.xml:4395-4396;
    which position a relative move counts from is this crate's answer,
-   `position`, :1989),
+   `position`, :POSITION),
    and a READ or WRITE stream the one it has. CHAR is the default. The
-   answer is the new position. The target is not range-checked: the
-   documentation's "appropriate error message" has no form to model, and
-   this crate answers the position reached whatever it is. A transient
+   answer is the new position. A transient
    stream has no positions, 93.958 (iostrms.xml:194-197). */
 seek: procedure expose m.
   parse upper arg spec
@@ -491,40 +500,46 @@ seek: procedure expose m.
     else do
       rd = 1
       wr = 1
-      m.0write = m.0read
     end
   end
+  if wr & m.0mode == 'READ' then return invalid_seek()
   call implicit
   if style == '-' then off = -off
+  if rd then from = m.0read
+  else from = m.0write
   if \byline then do
-    if rd then current = m.0read
-    else current = m.0write
     select
       when style == '=' then landed = off
       when style == '<' then landed = length(m.0data) - off + 1
-      otherwise landed = current + off
+      otherwise landed = from + off
     end
+    if landed < 1 then return invalid_seek()
     if rd then m.0read = landed
     if wr then m.0write = landed
     return landed
   end
   /* Line positioning in a stream open only for writing answers 0 and moves
      nothing (funct.xml:4454-4455 asks for an error; this crate's answer,
-     `position`, :1989). */
+     `position`, :POSITION). */
   if \readable() then return 0
-  if rd then current = line_of(m.0read)
-  else current = line_of(m.0write)
   select
     when style == '=' then target = off
     when style == '<' then target = line_count() - off
-    otherwise target = current + off
+    otherwise target = line_of(from) + off
   end
-  target = max(target, 1)
+  if target < 1 then return invalid_seek()
   line = line_reached(target)
   at = line_start(target)
   if rd then m.0read = at
   if wr then m.0write = at
   return line
+
+/* A SEEK to a position the stream does not have, below 1 or the write
+   position of a READ stream (funct.xml:4299), is not "successfully located"
+   (funct.xml:4427-4429): it answers 0, is NOTREADY, and moves nothing. */
+invalid_seek: procedure expose m.
+  m.0state = 'NOTREADY'
+  return 0
 
 /* STREAM QUERY POSITION (funct.xml:4531-4569): the read position, or the
    write position, by character or by line. With neither READ nor WRITE it
@@ -558,6 +573,7 @@ query_position: procedure expose m.
 query: procedure expose m.
   return query_position(arg(1))
 
-/* The rendering both runs share: a line end as `|`, NUL as `@`, a blank as `_`. */
+/* The rendering both runs share: a line end as `|`, NUL as `@`, a blank as
+   `_`, a ctrl-Z as `^`. */
 ::routine show public
-  return arg(1)~changestr('0a'x, '|')~changestr('00'x, '@')~changestr(' ', '_')
+  return arg(1)~changestr('0a'x, '|')~changestr('00'x, '@')~changestr(' ', '_')~changestr('1a'x, '^')

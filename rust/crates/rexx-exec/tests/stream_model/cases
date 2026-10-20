@@ -254,6 +254,88 @@ X
 ----
 model: O_both=READY: READY 1 1;CO_abc=0 READY 1 1;CO_de=0 READY 1 1;X=READY: UNKNOWN  ; [-]
 
+# A SEEK below position 1, or of the write position of a READ stream, answers
+# 0, is NOTREADY, and moves nothing.
+case name=seek-invalid initial=text3
+O both nobuffer
+CI 4
+S -9 read
+Q read
+S <30 write
+Q write
+S =0 line
+S -5 read line
+CI
+X
+O read nobuffer
+S =2 write
+S +1 write line
+Q write
+----
+model: O_both_nobuffer=READY: READY 19 1;CI_4=line READY 19 5;S_-9_read=0 NOTREADY 19 5;Q_read=5 NOTREADY 19 5;S_<30_write=0 NOTREADY 19 5;Q_write=19 NOTREADY 19 5;S_=0_line=0 NOTREADY 19 5;S_-5_read_line=0 NOTREADY 19 5;CI=1 READY 19 6;X=READY: UNKNOWN  ;O_read_nobuffer=READY: READY 0 1;S_=2_write=0 NOTREADY 0 1;S_+1_write_line=0 NOTREADY 0 1;Q_write=0 NOTREADY 0 1; [line1|line2|line3|]
+
+# The POSITION command is SEEK by another name.
+case name=position-command initial=text3
+O both nobuffer
+P =7 read
+LI
+P <1 write line
+LO tail
+----
+model: O_both_nobuffer=READY: READY 19 1;P_=7_read=7 READY 19 7;LI=line2 READY 19 13;P_<1_write_line=2 READY 7 13;LO_tail=0 READY 12 13; [line1|tail||line3|]
+
+# An APPEND stream on a record stream: every write lands at the end.
+case name=append-record initial=rec16
+O both binary reclength 4 append nobuffer
+LO ab 1
+CO Z 3
+----
+model: O_both_binary_reclength_4_append_nobuffer=READY: READY 17 1;LO_ab_1=0 READY 21 1;CO_Z_3=0 READY 22 1; [AAAABBBBCCCCDDDDab__Z]
+
+# A ctrl-Z at the end is data like any other byte: Unix-like systems use no
+# end-of-file character in text files (intro.xml:3322-3330), so the write
+# position starts after it and a LINEOUT keeps it.
+case name=ctrlz-is-data initial=ctrlz
+O both nobuffer
+LO x
+----
+model: O_both_nobuffer=READY: READY 7 1;LO_x=0 READY 9 1; [ab|cd^x|]
+
+case name=ctrlz-append-kept initial=ctrlz
+O both append nobuffer
+LO x
+----
+model: O_both_append_nobuffer=READY: READY 7 1;LO_x=0 READY 9 1; [ab|cd^x|]
+
+# An empty transient stream answers 0 to CHARS and LINES, and data waiting
+# answers 1 without being taken. The oracle cannot run it: its CHARS reads
+# a byte to learn whether data waits, and on an empty FIFO this process
+# holds open for writing that read never returns.
+case name=transient-empty transient=1 oracle=blocks-reading-an-empty-fifo
+O both nobuffer
+CH
+LN
+LC
+CO ab
+CH
+LN
+CI 2
+CH
+----
+model: O_both_nobuffer=READY: READY 1 1;CH=0 READY 1 1;LN=0 READY 1 1;LC=0 READY 1 1;CO_ab=0 READY 1 1;CH=1 READY 1 1;LN=1 READY 1 1;CI_2=ab READY 1 1;CH=0 READY 1 1; [-]
+
+# /dev/null holds no data: CHARS and LINES answer 0, so a loop reading while
+# LINES answers 1 ends at once.
+case name=devnull-empty transient=devnull
+O both nobuffer
+CH
+LN
+LC
+LI
+CI
+----
+model: O_both_nobuffer=READY: READY 1 1;CH=0 READY 1 1;LN=0 READY 1 1;LC=0 READY 1 1;LI= NOTREADY 1 1;CI= ERROR 1 1; [-]
+
 # A stream opened WRITE is write-only (funct.xml:4302).
 case name=write-only-reads initial=text3
 O write nobuffer
@@ -264,7 +346,6 @@ LN
 S =2 read line
 ----
 model: O_write_nobuffer=READY: READY 19 1;CI_1_3= ERROR 19 3;LI_1= ERROR 19 3;CH=0 ERROR 19 3;LN=0 ERROR 19 3;S_=2_read_line=0 READY 19 3; [line1|line2|line3|]
-crate: O_write_nobuffer=READY: READY 19 1;CI_1_3=n READY 19 4;LI_1=line1 READY 19 7;CH=12 READY 19 7;LN=1 READY 19 7;S_=2_read_line=2 READY 19 7; [line1|line2|line3|]
 
 # A relative line SEEK counts from the line the position is in.
 case name=line-seek-relative-after-charin initial=text3
@@ -274,7 +355,6 @@ S +1 read line
 LI
 ----
 model: O_both_nobuffer=READY: READY 19 1;CI_6_1=line1| READY 19 7;S_+1_read_line=3 READY 19 13;LI=line3 READY 19 19; [line1|line2|line3|]
-crate: O_both_nobuffer=READY: READY 19 1;CI_6_1=line1| READY 19 7;S_+1_read_line=1 READY 19 1;LI=line1 READY 19 7; [line1|line2|line3|]
 
 # LINEIN names a line by its start, wherever the read position is.
 case name=linein-line-from-mid-line initial=text3
@@ -284,7 +364,6 @@ Q read line
 LI 2
 ----
 model: O_both_nobuffer=READY: READY 19 1;CI_8_1=line1|li READY 19 9;Q_read_line=2 READY 19 9;LI_2=line2 READY 19 13; [line1|line2|line3|]
-crate: O_both_nobuffer=READY: READY 19 1;CI_8_1=line1|li READY 19 9;Q_read_line=2 READY 19 9;LI_2=ne2 READY 19 13; [line1|line2|line3|]
 
 # The write line is the line the write position is in.
 case name=write-line-query initial=text3
@@ -293,7 +372,6 @@ CP 8
 Q write line
 ----
 model: O_both_nobuffer=READY: READY 19 1;CP_8=0 READY 8 1;Q_write_line=2 READY 8 1; [line1|line2|line3|]
-crate: O_both_nobuffer=READY: READY 19 1;CP_8=0 READY 8 1;Q_write_line=3 READY 8 1; [line1|line2|line3|]
 
 # The read position at the end of a stream ending in a line end is the
 # start of the line after the last.
@@ -303,7 +381,6 @@ CI 1 18
 Q read line
 ----
 model: O_both_nobuffer=READY: READY 19 1;CI_1_18=| READY 19 19;Q_read_line=4 READY 19 19; [line1|line2|line3|]
-crate: O_both_nobuffer=READY: READY 19 1;CI_1_18=| READY 19 19;Q_read_line=3 READY 19 19; [line1|line2|line3|]
 
 # A CHARIN of length 0 moves the read position, and its line with it.
 case name=read-line-after-positioning initial=text3
@@ -312,7 +389,6 @@ CI 0 7
 Q read line
 ----
 model: O_both_nobuffer=READY: READY 19 1;CI_0_7= READY 19 7;Q_read_line=2 READY 19 7; [line1|line2|line3|]
-crate: O_both_nobuffer=READY: READY 19 1;CI_0_7= READY 19 7;Q_read_line=1 READY 19 7; [line1|line2|line3|]
 
 # LINES Count answers the lines that remain, every time.
 case name=lines-count-repeated initial=text3
@@ -322,4 +398,3 @@ LC
 LC
 ----
 model: O_both_nobuffer=READY: READY 19 1;CI_2_1=li READY 19 3;LC=3 READY 19 3;LC=3 READY 19 3; [line1|line2|line3|]
-crate: O_both_nobuffer=READY: READY 19 1;CI_2_1=li READY 19 3;LC=3 READY 19 3;LC=2 READY 19 3; [line1|line2|line3|]
