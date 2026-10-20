@@ -1,0 +1,14 @@
+     63 46 pads-on-close
+      1 46 pads-on-close + 49 relative-seek
+      1 46 pads-on-close + 49 seek-from-end
+      1 46 pads-on-close + new invalid-seek
+      1 46 pads-on-close + new write-only
+     41 49 relative-seek
+     57 49 seek-from-end
+      6 new append-record
+     59 new ctrlz-is-data
+    100 new invalid-seek
+     21 new line-position
+     19 new line-query
+      2 new lines-count
+    299 new write-only

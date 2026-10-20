@@ -1,0 +1,3 @@
+thread 'rexx-interp' (2964357) panicked at crates/rexx-exec/src/dispatch.rs:1799:9:
+a live value
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 71 filtered out; finished in 5.10s

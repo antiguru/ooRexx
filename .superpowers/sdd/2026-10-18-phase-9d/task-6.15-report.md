@@ -234,3 +234,260 @@ With libc subtracted:
    departs from the documentation here, and the difference is one the documentation permits.
 7. Deviation 12 (a halt during a blocking read) is not reached by the model. No case reads a
    transient stream that waits.
+
+## Fix round 1
+
+Brief: `task-6.15-fix-r1.md`, with Moritz's rulings of 2026-10-20. Review: `task-6.15-review.md`.
+Status: DONE_WITH_CONCERNS. Every ruling is in the crate and the model. No ooTest row changed, so
+no ruled change is reverted. The driver no longer licenses any crate departure. The new Deviation
+candidates are below, for the controller to write.
+
+### Commits
+
+* `4064a8011`: the crate (`dispatch/stream.rs`, `rexx-core` `OpenFile`), the model, the driver,
+  the cases and `departures-oracle.tsv`. `departures-crate.tsv` is deleted.
+* `231fb2fde`: the stream corpus witnesses drop the lines the rulings overturn, and their
+  `sourceline_oracle` files are regenerated.
+* `09c39a341`: citations and doc comments follow the code.
+* The records commit that follows holds `t6.15/r1/` and this section.
+
+### What changed in the crate, per ruling
+
+* **Transient CHARS and LINES** (ruling 1, review I1): they answer 1 only when data waits or the
+  state cannot be learned, and 0 otherwise. `transient_has_data` polls with no wait. When the
+  descriptor is readable, it reads one byte and keeps it in `OpenFile::pending`, and the next read
+  returns that byte first. A read at the end of input answers 0. Nothing is consumed.
+  `do while lines('/dev/null') > 0` ends at once (`r1/witnesses/transient-counts.*`: round 0
+  looped, head and oracle do not).
+* **R1, OPEN WRITE is write-only.** The descriptor is still opened for reading where it can be, so
+  LINEOUT can find a line number, but CHARIN, LINEIN and ARRAYIN refuse with `ERROR:9`. CHARS and
+  LINES answer 0, and a line SEEK answers 0.
+* **R2-R4, lines from the position.** The line tracker and the line count cache are gone from
+  `OpenFile`. A line SEEK, `LINEIN n` and `LINEOUT s, n` walk line ends from the start of the file.
+  The current line is `line_of` the position: one more than the line ends before it, or the record
+  holding it. QUERY POSITION ... LINE answers `line_of`, and 0 for a READ stream's write position.
+  LINES Count counts from the read position every time.
+* **Invalid SEEK** (ruling 3): a SEEK that would land below 1 by characters or by lines, or that
+  names WRITE on a READ stream, answers 0, raises NOTREADY and moves nothing (`invalid_seek`).
+  WRITE seeks on READ streams are generated again.
+* **APPEND and ctrl-Z** (review I4, M4): derived from rexxref intro.xml:3322-3330. Unix-like
+  systems use no end-of-file character in text files, and Rexx honours `'1a'x` only in program
+  source. So a ctrl-Z is data. The crate's `CTRL_Z` overwrite is removed for every stream, not
+  only APPEND streams, since the passage covers every stream (see the candidate below). With
+  APPEND, the derived rule and the oracle agree on where the bytes land.
+* **A null CHAROUT moves nothing.** `charout(f, '')` on an APPEND stream moved the write position
+  to the end. It now leaves it, as the oracle does and funct.xml:1396-1398 says ("no characters are
+  written"). The generated record APPEND streams found this.
+
+Witness `r1/probes/rulings.rex`: one line per ruling. The base (`cg-9d/t6.14-r2/rexx-head`) and
+the oracle print the same answers on every ruled line, where head prints the ruled ones
+(`r1/witnesses/{red,green,oracle}/rulings.*`). The ruled lines are each a candidate below.
+
+### ooTest
+
+`REXX_SUITE_GATE=1 ... l3_core_suite` with the table at `t6.15/r1/suite/table.tsv`: exit 0, 402
+groups `equal`. `diff <(sort t6.15/suite/tests.tsv) <(sort t6.15/r1/suite/tests.tsv)` is empty:
+no test row changed, so no ruled change is reverted.
+
+### Corpus witnesses
+
+The gated corpus failed on five stream programs, each at lines the rulings overturn. Those lines
+are dropped, and each departure is pinned in `tests/stream_model.rs` instead. After the edit each
+program is identical to the oracle on all three descriptors (`bin/both`, `r1/checks-corpus.txt`
+1149 of 1149):
+* `lang/stream_chars_lines.rex`: the second LINES Count after a CHARIN (R4);
+* `lang/stream_seek.rex`: `seek <99` (invalid SEEK);
+* `lang/stream_seek_line.rex`: `seek 0 read line` (invalid SEEK) and a line SEEK on a WRITE
+  stream (R1). Its comments no longer state the tracker's rules;
+* `lang/stream_seek_errors.rex`: `seek -1` from position 1 (invalid SEEK, not a rejected option),
+  and QUERY POSITION WRITE LINE on a READ stream (R3);
+* `lang/stream_write_only_reads.rex`: LINEIN on a write-only descriptor (R1: ERROR here,
+  NOTREADY:EOF on the oracle).
+
+### The driver (review I2, I3, M2, M3, M5)
+
+* The crate tests allow no departure: this crate must equal the model on every item of every
+  named and generated scenario, and pass the 9.7 check.
+* An oracle departure is judged by `oracle_rule` at the first differing item. The rule must
+  describe the operation at that item and the field that differs:
+  * a relative or `<n` character SEEK's answer (Deviation 49);
+  * the model's invalid SEEK;
+  * a read on a WRITE stream answering data;
+  * a line operation's answer or position;
+  * a line query's answer;
+  * an LC item's count or state;
+  * the open's write position on a ctrl-Z file;
+  * a LINEOUT on a record APPEND stream;
+  * the transient rules.
+* Deviation 46 is judged by a variant: the model run with the oracle's padding (`CB`) put before
+  each binary `LX` or `LP`. The oracle must equal the variant, or equal it up to an item another
+  rule licenses.
+* Rows where the oracle answered as this crate does can no longer get a Deviation label, because
+  the crate equals the model.
+* Mutation, the review's LINEOUT one byte late on a WRITE stream: `stream_model` goes red in
+  `the_model_answers_generated_scenarios_as_this_crate_does` (`r1/mutation/lineout-late-on-write.txt`).
+* Mutation, `write_record` ignoring APPEND (review C2): red in the named and the generated crate
+  tests (`r1/mutation/record-append-ignored.txt`). M2: `OPENS` has `both binary reclength 4
+  append`, and the named case `append-record`.
+* Mutation, an empty transient stream answering 1: red at `transient-empty`
+  (`r1/mutation/transient-empty-answers-1.txt`). Each mutation was reversed by a literal `sed`
+  and `git diff --stat` was empty after it.
+* M3: the crate run is on its own thread with a 120 s limit, and a blocked read fails the test.
+* M5: operation `P` sends the POSITION command, generated and in the named case `position-command`.
+* M6: `r1/seek-from-end-split.py` (command in its header) counts the `49 seek-from-end` rows by the
+  position the SEEK at the first difference names: 18 READ, 17 WRITE, 22 neither.
+
+Recorded oracle labels (`grep -v '^#' departures-oracle.tsv | cut -f2 | sort | uniq -c`,
+`r1/departure-labels.txt`):
+
+| label | rows |
+| --- | --- |
+| 46 pads-on-close | 63 |
+| 46 pads-on-close + 49 relative-seek | 1 |
+| 46 pads-on-close + 49 seek-from-end | 1 |
+| 46 pads-on-close + new invalid-seek | 1 |
+| 46 pads-on-close + new write-only | 1 |
+| 49 relative-seek | 41 |
+| 49 seek-from-end | 57 |
+| new append-record | 6 |
+| new ctrlz-is-data | 59 |
+| new invalid-seek | 100 |
+| new line-position | 21 |
+| new line-query | 19 |
+| new lines-count | 2 |
+| new write-only | 299 |
+
+`every_licensing_deviation_names_this_test` passes: it checks numbered Deviations only, and the
+`new` labels name none yet.
+
+### Deviation candidates (for the controller to write)
+
+Measurements are from `r1/probes/rulings.rex` (crate head vs oracle, both NOBUFFER) and the
+named cases. "Witnessed by" is the sentence for each row, once its rule label gets a number.
+
+1. **CHARS AND LINES ON A TRANSIENT STREAM TAKE NO INPUT (Phase 9d).**
+   * Rule: they answer 1 when data waits or the state cannot be learned, and 0 otherwise, and the
+     next read returns what waited.
+   * Measured (`r1/probes/transient-counts.rex`): after `abcd` and `e` are written to a FIFO, the
+     oracle's `charin(f,,2)` answers `de` and its LINEIN the null string. This crate answers `ab`
+     and `cde`. On an empty FIFO this process holds open, the oracle's CHARS blocks
+     (`transient-empty`, skipped on the oracle). The oracle's `SysFile::hasData`
+     (common/platform/unix/SysFile.cpp:1322-1333) reads a byte and fails to put it back.
+   * rexxref iostrms.xml:189-193, funct.xml:1475-1487.
+   * `     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES, rule transient-counts-read).`
+2. **A STREAM OPENED WRITE READS NOTHING (Phase 9d).**
+   * Rule: CHARIN, LINEIN and ARRAYIN refuse with ERROR, CHARS and LINES answer 0, a line SEEK
+     answers 0, and QUERY POSITION defaults to the write position.
+   * Measured: `charin(f,3,1)` after `OPEN WRITE` on a three-line file. The oracle answers `n`
+     READY, CHARS 15 and LINES Count 3. This crate answers the null string in ERROR, and 0 and 0.
+   * rexxref funct.xml:4302, 4454-4455.
+   * `     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES and departures-oracle.tsv, rule write-only).`
+3. **LINE POSITIONS COUNT LINE ENDS FROM THE POSITION (Phase 9d).**
+   * Rule: a relative line SEEK counts from the line the position is in. LINEIN and LINEOUT with
+     a line number, and a line SEEK, land at that line's start, whatever an earlier operation
+     left.
+   * Measured: after `charin(f,6,1)`, `seek +1 read line` is 1 and reads `line1` on the oracle,
+     and 3 and `line3` here. `linein(f,2)` after a query at character 9 reads `ne2` on the oracle
+     and `line2` here.
+   * rexxref iostrms.xml:476-490, funct.xml:3088-3090, 3201-3203.
+   * `     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES and departures-oracle.tsv, rule line-position).`
+4. **QUERY POSITION ... LINE ANSWERS THE LINE THE POSITION IS IN (Phase 9d).**
+   * Rule: one more than the line ends before the position, and 0 for a READ stream's write
+     position.
+   * Measured on a three-line file:
+     * write position 8: 3 on the oracle, 2 here;
+     * read position at the end: 3 on the oracle, 4 here;
+     * read position 7 after `charin(f,7,0)`: 3 on the oracle, 2 here.
+   * rexxref funct.xml:4550-4555.
+   * `     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES and departures-oracle.tsv, rule line-query).`
+5. **LINES COUNT ANSWERS THE LINES THAT REMAIN (Phase 9d).**
+   * Rule: counted from the read position every time.
+   * Measured: after `charin(f,2,1)`, two LINES Counts answer `3 2` on the oracle and `3 3` here.
+     With no cache, a count always reads, so the stream is READY after it.
+   * rexxref funct.xml:3306-3307.
+   * `     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES and departures-oracle.tsv, rule lines-count).`
+6. **A SEEK BELOW POSITION 1, OR OF A READ STREAM'S WRITE POSITION, FAILS (Phase 9d).**
+   * Rule: it answers 0, raises NOTREADY, and moves nothing.
+   * Measured:
+     * `seek <99 read` on an 18-byte file: 118 READY on the NOBUFFER oracle, and the unchecked
+       position on the buffered one. Here it is `0 NOTREADY`, the read position still 1.
+     * `seek -9 read` from 4: `0 ERROR` with the read position at -1 on the oracle (case
+       `seek-invalid`).
+     * `seek =2 write` on a READ stream: 2 READY on the oracle, `0 NOTREADY` with write position 0
+       here.
+   * rexxref funct.xml:4427-4429 ("or an appropriate error message otherwise"), 4299.
+   * `     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES and departures-oracle.tsv, rule invalid-seek).`
+7. **A CTRL-Z IN A STREAM IS DATA (Phase 9d).** This one goes past the brief's APPEND question;
+   see Concern 2.
+   * Rule: no stream operation treats a trailing `'1a'x` specially.
+   * Measured on `'ab'||'1a'x`:
+     * the oracle opens with write position 3 and a LINEOUT overwrites the ctrl-Z
+       (`6162780A`), BOTH and APPEND alike (cases `ctrlz-is-data`, `ctrlz-append-kept`);
+     * this crate opens at 4 and keeps it (`61621A780A`);
+     * with APPEND the oracle's bytes also land after the ctrl-Z (O_APPEND), but it still
+       reports position 3.
+   * rexxref intro.xml:3322-3330.
+   * `     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES and departures-oracle.tsv, rule ctrlz-is-data).`
+8. **ON A RECORD STREAM OPENED APPEND, LINEOUT COMPLETES THE RECORD AT THE END (Phase 9d).**
+   * Rule: the bytes land at the end (funct.xml:4309-4312), so the record a LINEOUT completes is
+     the one there (funct.xml:4352-4354).
+   * Measured (generated `g4s3`, `r1/dump/oracle.tsv`): after `charout(f,,15)` on a 21-byte
+     `RECLENGTH 4` stream, the oracle's `lineout(f,'abc')` is the bare 93, because it sizes the
+     room from position 15. This crate writes `abc_` at 21.
+   * `     Witnessed by tests/stream_model.rs (departures-oracle.tsv, rule append-record).`
+
+### Reported for Moritz (no change)
+
+* **M1, a read of nothing is ERROR.** `charin(f)` at the end answers `ERROR:0` on both
+  interpreters, while LINEIN at the same place answers `NOTREADY:EOF`. The state method's
+  NOTREADY example is a read beyond the end (streamclasses.xml:1638-1652). The model takes the
+  interpreters' answer and says so at `charin`.
+* **M4, APPEND's reading.** The model states it at `landing`: SEEK and QUERY report the write
+  position as set, and every write, including one from beyond the end, lands at the end. Both
+  interpreters agree.
+
+### Checks
+
+From `rust/`, `CARGO_TARGET_DIR=<scratchpad>/t615-target`, `CARGO_INCREMENTAL=0`; outputs in
+`t6.15/r1/`.
+
+| command | exit |
+| --- | --- |
+| `cargo fmt --all --check` | 0 |
+| `memcap 8G cargo clippy -j 4 -p rexx-exec -p rexx-core --all-targets -- -D warnings` | 0 |
+| refusal tables + `licensed_divergences` + `numeric_model` (`checks-tables.txt`) | 0 |
+| `cargo test --release -p rexx-parse --test sourceline_oracle` (`checks-sourceline.txt`) | 0 |
+| `cargo test --release -p rexx-exec --lib` (`checks-lib.txt`) | 0, 1157 passed |
+| `cargo test --release -p rexx-core` (`checks-core.txt`) | 0 |
+| `REXX_CORPUS_GATE=1 ... --test corpus` (`checks-corpus.txt`) | 0, 1149 of 1149 |
+| `--test stream_model --no-fail-fast` (`checks-stream-model.txt`) | 0, 25 passed |
+| `--test ir_recorded --test collect_stress` (`checks-ir-collect.txt`) | 101: `collect_stress` fails at `lang/raise_additional_array.rex` (Concern 1) |
+| `REXX_SUITE_GATE=1 ... l3_core_suite` (`suite/`) | 0, 402 groups green |
+
+### Perf
+
+`t6.15/r1/callgrind.txt`: parent `cg-9d/t6.15/rexx-head` (round 0), head `cg-9d/t6.15-r1/rexx-head`
+(`4064a8011`'s code), exit 0. With libc subtracted, the own delta is:
+
+| program | parent vs pin | head vs pin | own delta |
+| --- | --- | --- | --- |
+| startup | -0.1207 | -0.1202 | +0.0005 |
+| interpret | -4.6331 | -4.6331 | 0.0000 |
+| parse | -0.1416 | -0.1416 | 0.0000 |
+| churn | +0.1068 | +0.1068 | 0.0000 |
+| sayloop | -0.0640 | -0.0637 | +0.0003 |
+
+### Concerns (round 1)
+
+1. **`collect_stress` fails before this task.** `the_l0_subset_passes_again_under_collect_on_every_allocation`
+   panics with `a live value` (`dispatch.rs:1799`, `not_in_arena`) on `lang/raise_additional_array.rex`,
+   a program with no streams. It fails identically at `5698947b0` and at `86175cf84`, each built
+   from a `git archive` (`r1/collect-stress-at-*.txt`). It is a rooting defect for the controller.
+   Those builds shared the target dir, which left stale build outputs. The dir was deleted and the
+   head rebuilt before the perf run and the green witnesses, and the witness output was compared
+   with that rebuilt binary.
+2. **The ctrl-Z candidate goes past the brief's APPEND question.** The passage the derivation rests
+   on covers every stream, so the crate keeps a trailing ctrl-Z on non-APPEND streams too. If
+   Moritz rules ctrl-Z for APPEND only, the overwrite comes back for the other streams, and the
+   `ctrlz-is-data` rows split by open mode.
+3. The new rule labels need numbers. Until then, `departures-oracle.tsv` carries them as `new`.

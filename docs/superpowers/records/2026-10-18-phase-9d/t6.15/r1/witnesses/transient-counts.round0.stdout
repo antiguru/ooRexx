@@ -1,0 +1,4 @@
+devnull: chars 1 lines 1 loop ran 5
+fifo with data: chars 1 lines 1 1
+then charin ab linein cde
+rc 0

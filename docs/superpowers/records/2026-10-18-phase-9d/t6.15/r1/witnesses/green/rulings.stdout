@@ -1,0 +1,11 @@
+R1 write-only:  ERROR 0 0 0
+R2 line seek: 3 line3
+R2 linein n: line2
+R3 line query: 2 4 2
+R4 lines count: 3 3
+invalid seek: 0 NOTREADY 1
+invalid seek on READ: 0 NOTREADY 0
+ctrl-Z: 4 0
+    61621A780A
+devnull: 0 0
+   loop ran 0

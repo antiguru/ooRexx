@@ -1,0 +1,130 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+warning: unused variable: `append`
+    --> crates/rexx-exec/src/dispatch/stream.rs:1644:9
+     |
+1644 |     let append = state.mode.append;
+     |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_append`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `rexx-exec` (lib) generated 1 warning (run `cargo fix --lib -p rexx-exec` to apply 1 suggestion)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1m 30s
+     Running tests/stream_model.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t615-target/release/deps/stream_model-bef85aabf673daa0)
+
+running 25 tests
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test every_licensing_deviation_names_this_test ... ok
+test on_the_oracle_the_named_cases_part_only_where_listed ... FAILED
+test the_model_answers_the_named_cases_as_this_crate_does ... FAILED
+test on_the_oracle_the_generated_scenarios_part_only_where_the_deviations_say ... ok
+test the_model_answers_generated_scenarios_as_this_crate_does ... FAILED
+
+failures:
+
+---- on_the_oracle_the_named_cases_part_only_where_listed stdout ----
+
+thread 'on_the_oracle_the_named_cases_part_only_where_listed' (2955041) panicked at /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/datadriven-0.9.0/src/lib.rs:276:9:
+failure:
+tests/stream_model/cases:288:
+O both binary reclength 4 append nobuffer
+LO ab 1
+CO Z 3
+
+expected:
+model: O_both_binary_reclength_4_append_nobuffer=READY: READY 17 1;LO_ab_1=0 READY 21 1;CO_Z_3=0 READY 22 1; [AAAABBBBCCCCDDDDab__Z]
+
+actual:
+model: O_both_binary_reclength_4_append_nobuffer=READY: READY 17 1;LO_ab_1=0 READY 21 1;CO_Z_3=0 READY 22 1; [AAAABBBBCCCCDDDDab__Z]
+crate: O_both_binary_reclength_4_append_nobuffer=READY: READY 17 1;LO_ab_1=0 READY 5 1;CO_Z_3=0 READY 18 1; [ab__BBBBCCCCDDDDZ]
+
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- the_model_answers_the_named_cases_as_this_crate_does stdout ----
+
+thread 'the_model_answers_the_named_cases_as_this_crate_does' (2955063) panicked at /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/datadriven-0.9.0/src/lib.rs:276:9:
+failure:
+tests/stream_model/cases:288:
+O both binary reclength 4 append nobuffer
+LO ab 1
+CO Z 3
+
+expected:
+model: O_both_binary_reclength_4_append_nobuffer=READY: READY 17 1;LO_ab_1=0 READY 21 1;CO_Z_3=0 READY 22 1; [AAAABBBBCCCCDDDDab__Z]
+
+actual:
+model: O_both_binary_reclength_4_append_nobuffer=READY: READY 17 1;LO_ab_1=0 READY 21 1;CO_Z_3=0 READY 22 1; [AAAABBBBCCCCDDDDab__Z]
+crate: O_both_binary_reclength_4_append_nobuffer=READY: READY 17 1;LO_ab_1=0 READY 5 1;CO_Z_3=0 READY 18 1; [ab__BBBBCCCCDDDDZ]
+
+
+
+---- the_model_answers_generated_scenarios_as_this_crate_does stdout ----
+
+thread 'the_model_answers_generated_scenarios_as_this_crate_does' (2955062) panicked at crates/rexx-exec/tests/stream_model.rs:1103:5:
+g1s20 ["O both binary reclength 4 append nobuffer", "S <2 write char", "LO yz"]: 9.7: LO yz landed in less room than it wrote
+g1s20 ["O both binary reclength 4 append nobuffer", "S <2 write char", "LO yz"]: this crate departs from the model at LO_yz=0 READY 17 1 (model LO_yz=0 READY 21 1)
+g1s54 ["O both binary reclength 4 append nobuffer", "CO yz", "CI", "Q read char", "Q read", "CP 11", "LO yz"]: 9.7: LO yz landed in less room than it wrote
+g1s54 ["O both binary reclength 4 append nobuffer", "CO yz", "CI", "Q read char", "Q read", "CP 11", "LO yz"]: this crate departs from the model at LO_yz=0 READY 13 2 (model LO_yz=0 READY 21 2)
+g3s69 ["O both binary reclength 4 append nobuffer", "LO yz 1", "CE", "LO abc", "LI"]: 9.7: LO yz 1 landed in less room than it wrote
+g3s69 ["O both binary reclength 4 append nobuffer", "LO yz 1", "CE", "LO abc", "LI"]: this crate departs from the model at LO_yz_1=0 READY 5 1 (model LO_yz_1=0 READY 21 1)
+g4s3 ["O both binary reclength 4 append nobuffer", "CO abc 17", "LE", "CP 15", "LI", "LO abc", "LO yz", "LO x", "LI"]: 9.7: LO yz landed in less room than it wrote
+g4s3 ["O both binary reclength 4 append nobuffer", "CO abc 17", "LE", "CP 15", "LI", "LO abc", "LO yz", "LO x", "LI"]: this crate departs from the model at LO_abc=S93.0 READY 15 5 (model LO_abc=0 READY 25 5)
+g4s38 ["O both binary reclength 4 append nobuffer", "CI", "LO yz 1", "CO QQQQQ", "LC"]: 9.7: LO yz 1 landed in less room than it wrote
+g4s38 ["O both binary reclength 4 append nobuffer", "CI", "LO yz 1", "CO QQQQQ", "LC"]: this crate departs from the model at LO_yz_1=0 READY 5 2 (model LO_yz_1=0 READY 21 2)
+g6s78 ["O both binary reclength 4 append nobuffer", "LO abc", "LO abc", "P =6", "LO x", "S -2 write line", "LO abc", "LI", "LP 2", "CI 1"]: 9.7: LO x landed in less room than it wrote
+g6s78 ["O both binary reclength 4 append nobuffer", "LO abc", "LO abc", "P =6", "LO x", "S -2 write line", "LO abc", "LI", "LP 2", "CI 1"]: this crate departs from the model at LO_x=0 READY 9 6 (model LO_x=0 READY 29 6)
+g8s42 ["O both binary reclength 4 append nobuffer", "LI 3", "LO abc 3"]: 9.7: LO abc 3 landed in less room than it wrote
+g8s42 ["O both binary reclength 4 append nobuffer", "LI 3", "LO abc 3"]: this crate departs from the model at LO_abc_3=0 READY 13 13 (model LO_abc_3=0 READY 21 13)
+g10s4 ["O both binary reclength 4 append nobuffer", "Q  char", "LI", "P =2 write", "LI 1", "LO abc", "CO QQQQQ 3"]: 9.7: LO abc landed in less room than it wrote
+g10s4 ["O both binary reclength 4 append nobuffer", "Q  char", "LI", "P =2 write", "LI 1", "LO abc", "CO QQQQQ 3"]: this crate departs from the model at LO_abc=0 READY 5 5 (model LO_abc=0 READY 21 5)
+g10s23 ["O both binary reclength 4 append nobuffer", "LO abc 1", "S -2 line", "LP 3", "Q  line", "CI 5 12", "Q read line"]: 9.7: LO abc 1 landed in less room than it wrote
+g10s23 ["O both binary reclength 4 append nobuffer", "LO abc 1", "S -2 line", "LP 3", "Q  line", "CI 5 12", "Q read line"]: this crate departs from the model at LO_abc_1=0 READY 5 1 (model LO_abc_1=0 READY 21 1)
+g11s55 ["O both binary reclength 4 append nobuffer", "Q write char", "Q  line", "LP 1", "LN", "LO x 2"]: 9.7: LO x 2 landed in less room than it wrote
+g11s55 ["O both binary reclength 4 append nobuffer", "Q write char", "Q  line", "LP 1", "LN", "LO x 2"]: this crate departs from the model at LO_x_2=0 READY 9 1 (model LO_x_2=0 READY 21 1)
+g11s62 ["O both binary reclength 4 append nobuffer", "S -1 read", "S +1 write line", "LI", "LE", "LI 2", "CP 10", "CI 0 18"]: 9.7: reading from position 1 does not return what was written at 17
+g11s62 ["O both binary reclength 4 append nobuffer", "S -1 read", "S +1 write line", "LI", "LE", "LI 2", "CP 10", "CI 0 18"]: this crate departs from the model at LE=0 READY 25 5 (model LE=0 READY 21 5)
+g11s68 ["O both binary reclength 4 append nobuffer", "LI", "CI 1 3", "Q", "LO abc 3", "CI 4", "LP 4", "CI", "CI 4", "S <1 char"]: 9.7: LO abc 3 landed in less room than it wrote
+g11s68 ["O both binary reclength 4 append nobuffer", "LI", "CI 1 3", "Q", "LO abc 3", "CI 4", "LP 4", "CI", "CI 4", "S <1 char"]: this crate departs from the model at LO_abc_3=0 READY 13 4 (model LO_abc_3=0 READY 21 4)
+g12s22 ["O both binary reclength 4 append nobuffer", "CI 3 1", "CH", "S =6 read char", "Q write", "LO x 3", "LI 1", "S <0 line"]: 9.7: LO x 3 landed in less room than it wrote
+g12s22 ["O both binary reclength 4 append nobuffer", "CI 3 1", "CH", "S =6 read char", "Q write", "LO x 3", "LI 1", "S <0 line"]: this crate departs from the model at LO_x_3=0 READY 13 6 (model LO_x_3=0 READY 21 6)
+g12s35 ["O both binary reclength 4 append nobuffer", "LO QQQQQ 1", "LO x 1", "LP 3", "CI 5", "Q", "CE", "LP 4", "CI 0", "P =2 char"]: 9.7: LO x 1 landed in less room than it wrote
+g12s35 ["O both binary reclength 4 append nobuffer", "LO QQQQQ 1", "LO x 1", "LP 3", "CI 5", "Q", "CE", "LP 4", "CI 0", "P =2 char"]: this crate departs from the model at LO_x_1=0 READY 5 1 (model LO_x_1=0 READY 21 1)
+g14s14 ["O both binary reclength 4 append nobuffer", "CI", "Q write char", "LP 3", "P =2 char", "LN", "LO x", "CP 15", "LP 2"]: 9.7: LO x landed in less room than it wrote
+g14s14 ["O both binary reclength 4 append nobuffer", "CI", "Q write char", "LP 3", "P =2 char", "LN", "LO x", "CP 15", "LP 2"]: this crate departs from the model at LO_x=0 READY 5 2 (model LO_x=0 READY 21 2)
+g15s26 ["O both binary reclength 4 append nobuffer", "CI", "LE", "CI", "P +2 read char", "CI 1 10", "S <0 line", "LO x 1", "LP 4", "CO abc"]: 9.7: LO x 1 landed in less room than it wrote
+g15s26 ["O both binary reclength 4 append nobuffer", "CI", "LE", "CI", "P +2 read char", "CI 1 10", "S <0 line", "LO x 1", "LP 4", "CO abc"]: this crate departs from the model at LO_x_1=0 READY 5 17 (model LO_x_1=0 READY 25 17)
+g15s54 ["O both binary reclength 4 append nobuffer", "LO QQQQQ", "LO abc 2", "S -1 read", "LO QQQQQ"]: 9.7: LO abc 2 landed in less room than it wrote
+g15s54 ["O both binary reclength 4 append nobuffer", "LO QQQQQ", "LO abc 2", "S -1 read", "LO QQQQQ"]: this crate departs from the model at LO_abc_2=0 READY 9 1 (model LO_abc_2=0 READY 21 1)
+g16s44 ["O both binary reclength 4 append nobuffer", "LO x", "CO yz 19", "CP 15", "CI 1", "LO x"]: 9.7: LO x landed in less room than it wrote
+g16s44 ["O both binary reclength 4 append nobuffer", "LO x", "CO yz 19", "CP 15", "CI 1", "LO x"]: this crate departs from the model at LO_x=0 READY 17 2 (model LO_x=0 READY 25 2)
+
+
+failures:
+    on_the_oracle_the_named_cases_part_only_where_listed
+    the_model_answers_generated_scenarios_as_this_crate_does
+    the_model_answers_the_named_cases_as_this_crate_does
+
+test result: FAILED. 22 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.71s
+
+error: test failed, to rerun pass `-p rexx-exec --test stream_model`
+error: 1 target failed:
+    `-p rexx-exec --test stream_model`

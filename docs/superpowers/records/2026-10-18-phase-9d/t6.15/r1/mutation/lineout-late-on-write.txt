@@ -1,0 +1,202 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1m 31s
+     Running tests/stream_model.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t615-target/release/deps/stream_model-bef85aabf673daa0)
+
+running 25 tests
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test every_licensing_deviation_names_this_test ... ok
+test on_the_oracle_the_generated_scenarios_part_only_where_the_deviations_say ... ok
+test the_model_answers_generated_scenarios_as_this_crate_does ... FAILED
+test the_model_answers_the_named_cases_as_this_crate_does ... ok
+test on_the_oracle_the_named_cases_part_only_where_listed ... ok
+
+failures:
+
+---- the_model_answers_generated_scenarios_as_this_crate_does stdout ----
+
+thread 'the_model_answers_generated_scenarios_as_this_crate_does' (2954359) panicked at crates/rexx-exec/tests/stream_model.rs:1103:5:
+g1s29 ["O write replace nobuffer", "CI", "LI", "LO x 2", "Q write char", "S <3 read char", "LO yz"]: this crate departs from the model at LO_x_2=0 READY 4 1 (model LO_x_2=0 READY 3 1)
+g1s51 ["O write nobuffer", "CI 3 18", "LO yz"]: this crate departs from the model at LO_yz=0 READY 13 1 (model LO_yz=0 READY 12 1)
+g1s59 ["O write nobuffer", "S +0", "LO x 5", "Q read char", "Q", "LI 3", "CI 4", "CO x 19", "CX", "O write nobuffer"]: this crate departs from the model at LO_x_5=0 READY 12 1 (model LO_x_5=0 READY 11 1)
+g1s60 ["O write replace nobuffer", "CO abc", "Q write char", "LI", "CI 2", "LX", "O write nobuffer", "LO QQQQQ 3", "LI", "CI 0 15", "LN"]: this crate departs from the model at LO_QQQQQ_3=0 READY 11 1 (model LO_QQQQQ_3=0 READY 10 1)
+g1s62 ["O write nobuffer", "LO x 4", "CI 4", "CO x", "LX", "O write nobuffer", "CO yz"]: this crate departs from the model at LO_x_4=0 READY 12 1 (model LO_x_4=0 READY 11 1)
+g1s69 ["O write nobuffer", "LI", "S =5 read char", "LP 3", "LO abc", "LZ", "CO abc", "LO yz 3", "CO abc", "LI 2"]: this crate departs from the model at LO_abc=0 READY 12 5 (model LO_abc=0 READY 11 5)
+g1s76 ["O write append nobuffer", "CO yz", "LI", "LO yz 2", "CI 2 19", "CP 3", "S =1 write line"]: this crate departs from the model at LO_yz_2=0 READY 25 1 (model LO_yz_2=0 READY 24 1)
+g1s78 ["O write append nobuffer", "CO abc", "LI", "LO yz", "LI", "LO x", "CO x", "P -1 line"]: this crate departs from the model at LO_yz=0 READY 26 1 (model LO_yz=0 READY 25 1)
+g2s1 ["O write nobuffer", "LO x 2"]: this crate departs from the model at LO_x_2=0 READY 7 1 (model LO_x_2=0 READY 6 1)
+g2s17 ["O write append nobuffer", "LI 5", "LO x", "LO x 1", "CO QQQQQ 18", "P +3 read", "CI", "LP 1", "CI", "Q  line"]: this crate departs from the model at LO_x=0 READY 22 1 (model LO_x=0 READY 21 1)
+g2s20 ["O write append nobuffer", "CI 4 2", "LO yz", "LI 5", "LI", "CI 2 9"]: this crate departs from the model at LO_yz=0 READY 23 2 (model LO_yz=0 READY 22 2)
+g2s30 ["O write replace nobuffer", "LO abc 3", "CI 5 11", "CI", "CI 2 13", "LI 5", "Q"]: this crate departs from the model at LO_abc_3=0 READY 6 1 (model LO_abc_3=0 READY 5 1)
+g2s36 ["O write nobuffer", "CI 1", "S -1 write line", "P -2 line", "CO yz", "Q read line", "CO abc", "LO x 4"]: this crate departs from the model at LO_x_4=0 READY 17 1 (model LO_x_4=0 READY 16 1)
+g2s38 ["O write nobuffer", "S +2 write", "LI", "CH", "LO x"]: this crate departs from the model at LO_x=0 READY 24 1 (model LO_x=0 READY 23 1)
+g2s48 ["O write replace nobuffer", "S -0 write", "CI", "Q write line", "LP 2", "LO x"]: this crate departs from the model at LO_x=0 READY 4 1 (model LO_x=0 READY 3 1)
+g2s49 ["O write append nobuffer", "LI", "CI 2 19", "CO x", "LO QQQQQ 1", "S +0 read"]: this crate departs from the model at LO_QQQQQ_1=0 READY 27 1 (model LO_QQQQQ_1=0 READY 26 1)
+g2s72 ["O write replace nobuffer", "LO abc 4", "CO x", "LI", "CH", "CO yz", "CH", "CI 3", "LI"]: this crate departs from the model at LO_abc_4=0 READY 6 1 (model LO_abc_4=0 READY 5 1)
+g2s77 ["O write replace nobuffer", "CO yz", "LO x"]: this crate departs from the model at LO_x=0 READY 6 1 (model LO_x=0 READY 5 1)
+g2s79 ["O write replace nobuffer", "S +0 read line", "LN", "CO x", "LI", "LO x", "CH", "CO abc", "LI"]: this crate departs from the model at LO_x=0 READY 5 1 (model LO_x=0 READY 4 1)
+g3s0 ["O write replace nobuffer", "LI 3", "CP 2", "Q read char", "LO abc", "LP 5", "CE"]: this crate departs from the model at LO_abc=0 READY 7 1 (model LO_abc=0 READY 6 1)
+g3s11 ["O write append nobuffer", "LO yz 3", "Q read line", "LO QQQQQ"]: this crate departs from the model at LO_yz_3=0 READY 23 1 (model LO_yz_3=0 READY 22 1)
+g3s13 ["O write append nobuffer", "CH", "P <1 char", "CO x", "LI 3", "CH", "LO x", "P -1 read", "P +2"]: this crate departs from the model at LO_x=0 READY 23 1 (model LO_x=0 READY 22 1)
+g3s34 ["O write nobuffer", "CI 2", "LO QQQQQ", "Q write line", "LP 2", "P <0 read line", "CE", "Q write line", "CP 2"]: this crate departs from the model at LO_QQQQQ=0 READY 16 1 (model LO_QQQQQ=0 READY 15 1)
+g3s44 ["O write replace nobuffer", "CI 3 17", "LO abc", "CH", "CP 18", "LN", "LN", "S -3 write"]: this crate departs from the model at LO_abc=0 READY 6 1 (model LO_abc=0 READY 5 1)
+g3s46 ["O write nobuffer", "Q write char", "LI 4", "CI 3", "P -3 read", "CP 2", "LO yz", "LN", "CI 2"]: this crate departs from the model at LO_yz=0 READY 6 1 (model LO_yz=0 READY 5 1)
+g3s49 ["O write append nobuffer", "CI 2", "CI", "CP 12", "CO yz", "CO x", "LO yz", "CI", "Q read char"]: this crate departs from the model at LO_yz=0 READY 26 1 (model LO_yz=0 READY 25 1)
+g3s51 ["O write nobuffer", "S <2 read line", "LO abc"]: this crate departs from the model at LO_abc=0 READY 14 1 (model LO_abc=0 READY 13 1)
+g3s59 ["O write append nobuffer", "LI 2", "LO yz 4", "LO yz", "CI"]: this crate departs from the model at LO_yz_4=0 READY 23 1 (model LO_yz_4=0 READY 22 1)
+g3s66 ["O write nobuffer", "LO abc 3", "LI"]: this crate departs from the model at LO_abc_3=0 READY 12 1 (model LO_abc_3=0 READY 11 1)
+g3s68 ["O write append nobuffer", "LO QQQQQ", "CO yz", "LO x 3", "S <1 write line", "CO x 14"]: this crate departs from the model at LO_QQQQQ=0 READY 26 1 (model LO_QQQQQ=0 READY 25 1)
+g4s6 ["O write nobuffer", "LI 3", "LI", "CI 2 11", "LO yz", "S +3 write", "P <2 read char", "CI 3 20"]: this crate departs from the model at LO_yz=0 READY 23 11 (model LO_yz=0 READY 22 11)
+g4s8 ["O write append nobuffer", "LO abc", "CI"]: this crate departs from the model at LO_abc=0 READY 24 1 (model LO_abc=0 READY 23 1)
+g4s14 ["O write append nobuffer", "CO x", "CH", "LO abc 3", "LO yz"]: this crate departs from the model at LO_abc_3=0 READY 25 1 (model LO_abc_3=0 READY 24 1)
+g4s20 ["O write nobuffer", "CI 5 12", "S -2", "P =6 read line", "CP 21", "LE", "LI", "LI 3", "CO QQQQQ", "CH"]: this crate departs from the model at LE=0 READY 23 1 (model LE=0 READY 22 1)
+g4s30 ["O write replace nobuffer", "CI 3 13", "CE", "LO abc", "LI", "X", "O write nobuffer", "LO abc", "CI 1 16", "CO abc 4", "LO QQQQQ 4"]: this crate departs from the model at LO_abc=0 READY 6 1 (model LO_abc=0 READY 5 1)
+g4s39 ["O write replace nobuffer", "LO x 5", "LN", "CP 8", "LI 4", "CP 17", "LO abc", "Q write line"]: this crate departs from the model at LO_x_5=0 READY 4 1 (model LO_x_5=0 READY 3 1)
+g4s55 ["O write append nobuffer", "CP 21", "CH", "S <2 read char", "LO abc", "CP 9", "LI 5", "LO QQQQQ 5"]: this crate departs from the model at LO_abc=0 READY 24 17 (model LO_abc=0 READY 23 17)
+g4s64 ["O write append nobuffer", "CO x 2", "Q read line", "CH", "CO QQQQQ 17", "LO abc 2"]: this crate departs from the model at LO_abc_2=0 READY 30 1 (model LO_abc_2=0 READY 29 1)
+g4s65 ["O write nobuffer", "Q read char", "LO QQQQQ 5", "LI", "CO x", "CI 1 14", "CI 3 17", "Q"]: this crate departs from the model at LO_QQQQQ_5=0 READY 26 1 (model LO_QQQQQ_5=0 READY 25 1)
+g4s70 ["O write replace nobuffer", "LO abc", "LO x", "LI 4", "CI 0", "CP 21"]: this crate departs from the model at LO_abc=0 READY 6 1 (model LO_abc=0 READY 5 1)
+g4s71 ["O write append nobuffer", "LC", "CP 18", "LI 4", "LO x", "CO x", "LO QQQQQ", "LO yz", "Q  line", "LO abc"]: this crate departs from the model at LO_x=0 READY 22 1 (model LO_x=0 READY 21 1)
+g4s72 ["O write append nobuffer", "S <2", "Q  char", "S -3 read char", "LI", "CP 15", "CO abc 7", "LO x"]: this crate departs from the model at LO_x=0 READY 25 1 (model LO_x=0 READY 24 1)
+g4s78 ["O write nobuffer", "CO QQQQQ 21", "LI", "LI", "LO x 5", "LO abc", "LO abc", "CI 3"]: this crate departs from the model at LO_x_5=0 READY 29 1 (model LO_x_5=0 READY 28 1)
+g4s79 ["O write replace nobuffer", "S -1 write", "CH", "Q", "S =3 read", "Q write line", "CO abc", "LO yz"]: this crate departs from the model at LO_yz=0 READY 8 3 (model LO_yz=0 READY 7 3)
+g5s0 ["O write replace nobuffer", "CE", "LO QQQQQ", "Q read line", "CI 2", "Q write line", "CI 5", "LI 4"]: this crate departs from the model at LO_QQQQQ=0 READY 8 1 (model LO_QQQQQ=0 READY 7 1)
+g5s1 ["O write nobuffer", "LO yz 3", "LC"]: this crate departs from the model at LO_yz_3=0 READY 17 1 (model LO_yz_3=0 READY 16 1)
+g5s2 ["O write append nobuffer", "LN", "CO x", "S =2 write line", "LO yz", "S -0 write line", "LI"]: this crate departs from the model at LO_yz=0 READY 24 1 (model LO_yz=0 READY 23 1)
+g5s4 ["O write replace nobuffer", "CI", "X", "O write nobuffer", "LO x", "LO yz 5", "CO QQQQQ", "LI", "LP 1", "S -2"]: this crate departs from the model at LO_x=0 READY 4 1 (model LO_x=0 READY 3 1)
+g5s28 ["O write nobuffer", "CI 3 21", "P <3 write char", "P =1 read char", "CH", "LN", "LO abc 2", "LO abc", "CO QQQQQ"]: this crate departs from the model at LO_abc_2=0 READY 9 1 (model LO_abc_2=0 READY 8 1)
+g5s42 ["O write append nobuffer", "LO abc 4", "CO yz", "CI"]: this crate departs from the model at LO_abc_4=0 READY 24 1 (model LO_abc_4=0 READY 23 1)
+g5s46 ["O write nobuffer", "Q read", "LO x", "CP 11", "S -1 write line", "LP 1", "CO yz", "LO QQQQQ"]: this crate departs from the model at LO_x=0 READY 22 1 (model LO_x=0 READY 21 1)
+g5s48 ["O write replace nobuffer", "CP 2", "LP 1", "CI 0", "CO x", "LI", "LE", "CO QQQQQ", "CO x 2", "LI 2"]: this crate departs from the model at LE=0 READY 4 1 (model LE=0 READY 3 1)
+g5s53 ["O write append nobuffer", "LI", "CI 0 21", "CO x", "Q read char", "LO QQQQQ 1", "CO x 12", "LO abc", "P -2 read", "CI 5 5"]: this crate departs from the model at LO_QQQQQ_1=0 READY 27 1 (model LO_QQQQQ_1=0 READY 26 1)
+g5s57 ["O write replace nobuffer", "LI", "Q  char", "CO x", "S +3 read line", "P =6 char", "LO yz 1", "LI", "CO abc"]: this crate departs from the model at LO_yz_1=0 READY 5 1 (model LO_yz_1=0 READY 4 1)
+g5s58 ["O write append nobuffer", "LO x", "LO x", "Q  char"]: this crate departs from the model at LO_x=0 READY 22 1 (model LO_x=0 READY 21 1)
+g5s68 ["O write nobuffer", "LO abc", "LI 2", "CO QQQQQ 18", "Q read", "LI", "S =6"]: this crate departs from the model at LO_abc=0 READY 14 1 (model LO_abc=0 READY 13 1)
+g5s75 ["O write replace nobuffer", "CI 0 1", "CI", "P -2 write", "LZ", "LO QQQQQ 2", "LN", "Q  char", "LI", "LO x"]: this crate departs from the model at LO_QQQQQ_2=0 READY 8 1 (model LO_QQQQQ_2=0 READY 7 1)
+g6s2 ["O write nobuffer", "CI", "LO abc", "CO yz 8", "S =1"]: this crate departs from the model at LO_abc=0 READY 14 1 (model LO_abc=0 READY 13 1)
+g6s6 ["O write replace nobuffer", "S <0 read", "S =2 char", "Q write", "LO x", "LI"]: this crate departs from the model at LO_x=0 READY 5 1 (model LO_x=0 READY 4 1)
+g6s11 ["O write nobuffer", "P -3 read", "X", "O write nobuffer", "CO QQQQQ 16", "Q", "CP 12", "LO QQQQQ", "CH"]: this crate departs from the model at LO_QQQQQ=0 READY 19 1 (model LO_QQQQQ=0 READY 18 1)
+g6s14 ["O write append nobuffer", "LE", "CP 15", "LO yz", "CH", "LP 5", "CO x", "CO x", "LI 2", "CO QQQQQ"]: this crate departs from the model at LE=0 READY 21 1 (model LE=0 READY 20 1)
+g6s22 ["O write append nobuffer", "LI 1", "LO QQQQQ 4", "CI 4 1"]: this crate departs from the model at LO_QQQQQ_4=0 READY 26 1 (model LO_QQQQQ_4=0 READY 25 1)
+g6s26 ["O write append nobuffer", "P -2 char", "LO yz", "CI 2", "CI 3 21", "LI", "LC", "CH", "Q  line", "S -1 line"]: this crate departs from the model at LO_yz=0 READY 23 1 (model LO_yz=0 READY 22 1)
+g6s27 ["O write append nobuffer", "LP 5", "LI", "LO yz 5", "S -1 read char", "LO yz", "LP 3"]: this crate departs from the model at LO_yz_5=0 READY 23 1 (model LO_yz_5=0 READY 22 1)
+g6s34 ["O write append nobuffer", "Q write line", "LO x"]: this crate departs from the model at LO_x=0 READY 22 1 (model LO_x=0 READY 21 1)
+g6s47 ["O write append nobuffer", "Q write", "LN", "S +3 char", "LC", "LE", "CH"]: this crate departs from the model at LE=0 READY 21 1 (model LE=0 READY 20 1)
+g6s51 ["O write append nobuffer", "CO QQQQQ 2", "LI 5", "CO abc", "CI 5 3", "Q write char", "LO x", "CI 1", "Q write", "S -1 write char"]: this crate departs from the model at LO_x=0 READY 30 3 (model LO_x=0 READY 29 3)
+g6s64 ["O write replace nobuffer", "CI 2", "CO x", "LI 2", "LO x"]: this crate departs from the model at LO_x=0 READY 5 1 (model LO_x=0 READY 4 1)
+g6s67 ["O write append nobuffer", "LO QQQQQ", "LO abc 4", "LC"]: this crate departs from the model at LO_QQQQQ=0 READY 26 1 (model LO_QQQQQ=0 READY 25 1)
+g7s6 ["O write append nobuffer", "LI", "LO yz", "LC", "CO abc", "P +1 write", "S <3 char", "S -3", "S +0 read"]: this crate departs from the model at LO_yz=0 READY 23 1 (model LO_yz=0 READY 22 1)
+g7s13 ["O write replace nobuffer", "LO yz 1", "CO abc 14"]: this crate departs from the model at LO_yz_1=0 READY 5 1 (model LO_yz_1=0 READY 4 1)
+g7s16 ["O write nobuffer", "CO QQQQQ", "S -2 write char", "LO x 1", "S +0 write", "CO x", "LO abc 1", "LO yz", "LO yz"]: this crate departs from the model at LO_x_1=0 READY 4 1 (model LO_x_1=0 READY 3 1)
+g7s26 ["O write replace nobuffer", "CI", "LO x 3"]: this crate departs from the model at LO_x_3=0 READY 4 1 (model LO_x_3=0 READY 3 1)
+g7s34 ["O write replace nobuffer", "LO yz", "CO QQQQQ", "LI"]: this crate departs from the model at LO_yz=0 READY 5 1 (model LO_yz=0 READY 4 1)
+g7s35 ["O write replace nobuffer", "LI", "LI", "CH", "LI", "LO x", "Q  line", "LO yz", "LZ", "LO abc 2"]: this crate departs from the model at LO_x=0 READY 4 1 (model LO_x=0 READY 3 1)
+g7s45 ["O write append nobuffer", "LO x", "CI", "S +2 read char", "CE", "CI 3", "CI 2", "LO yz", "LI 3"]: this crate departs from the model at LO_x=0 READY 22 1 (model LO_x=0 READY 21 1)
+g7s48 ["O write replace nobuffer", "CI 5 5", "LO x", "Q read char"]: this crate departs from the model at LO_x=0 READY 4 1 (model LO_x=0 READY 3 1)
+g7s57 ["O write replace nobuffer", "P <3 write", "LO QQQQQ", "LC", "CO x 11", "Q read", "CO yz", "S <3", "CH"]: this crate departs from the model at LO_QQQQQ=0 READY 8 1 (model LO_QQQQQ=0 READY 7 1)
+g7s75 ["O write append nobuffer", "CO yz", "LI", "Q  char", "Q read char", "CE", "LO abc 4", "LI 5", "CI 2", "CO QQQQQ 3"]: this crate departs from the model at LO_abc_4=0 READY 26 1 (model LO_abc_4=0 READY 25 1)
+g8s15 ["O write nobuffer", "S <2 read line", "LO yz"]: this crate departs from the model at LO_yz=0 READY 13 1 (model LO_yz=0 READY 12 1)
+g8s21 ["O write replace nobuffer", "CO x", "CI 0 16", "Q read", "CO abc", "LO x", "Q  line", "Q read"]: this crate departs from the model at LO_x=0 READY 8 1 (model LO_x=0 READY 7 1)
+g8s58 ["O write append nobuffer", "LO x"]: this crate departs from the model at LO_x=0 READY 22 1 (model LO_x=0 READY 21 1)
+g8s64 ["O write append nobuffer", "LI 4", "CI", "LO yz"]: this crate departs from the model at LO_yz=0 READY 23 1 (model LO_yz=0 READY 22 1)
+g8s69 ["O write nobuffer", "LP 4", "LO abc", "S -0 write char"]: this crate departs from the model at LO_abc=0 READY 24 1 (model LO_abc=0 READY 23 1)
+g8s78 ["O write nobuffer", "CP 3", "LO x", "LI 3", "CI", "Q read line"]: this crate departs from the model at LO_x=0 READY 6 1 (model LO_x=0 READY 5 1)
+g9s8 ["O write replace nobuffer", "P =5 read line", "LO x", "S =5 read line", "CO x 4", "LO abc"]: this crate departs from the model at LO_x=0 READY 4 1 (model LO_x=0 READY 3 1)
+g9s12 ["O write replace nobuffer", "S -3 read", "CO x 18", "LO abc", "Q read char"]: this crate departs from the model at LO_abc=0 READY 24 1 (model LO_abc=0 READY 23 1)
+g9s15 ["O write replace nobuffer", "CI", "LO x", "LI"]: this crate departs from the model at LO_x=0 READY 4 1 (model LO_x=0 READY 3 1)
+g9s18 ["O write replace nobuffer", "LI", "CI", "LO abc", "P =4", "X", "O write nobuffer", "CH"]: this crate departs from the model at LO_abc=0 READY 6 1 (model LO_abc=0 READY 5 1)
+g9s24 ["O write replace nobuffer", "CO x", "LI", "P <1 char", "Q write", "S <3 char", "CI", "LO QQQQQ 3", "LI 1", "LN"]: this crate departs from the model at LO_QQQQQ_3=0 READY 9 1 (model LO_QQQQQ_3=0 READY 8 1)
+g9s36 ["O write nobuffer", "Q  char", "LO x", "CO abc", "LO QQQQQ 5"]: this crate departs from the model at LO_x=0 READY 12 1 (model LO_x=0 READY 11 1)
+g9s38 ["O write append nobuffer", "LO QQQQQ", "LN", "Q write", "CO x 20", "S +1 write char", "LP 2", "LO yz"]: this crate departs from the model at LO_QQQQQ=0 READY 26 1 (model LO_QQQQQ=0 READY 25 1)
+g9s40 ["O write nobuffer", "LO x", "CH", "CI 1 13", "LI", "CP 12", "LC"]: this crate departs from the model at LO_x=0 READY 22 1 (model LO_x=0 READY 21 1)
+g9s54 ["O write replace nobuffer", "LI", "LP 3", "CI", "LI", "LO abc 2", "Q read char", "LI"]: this crate departs from the model at LO_abc_2=0 READY 6 1 (model LO_abc_2=0 READY 5 1)
+g9s77 ["O write append nobuffer", "LO x", "S <3 write char", "LI", "LO abc", "CI 3", "CI 5 21", "LO x 4"]: this crate departs from the model at LO_x=0 READY 22 1 (model LO_x=0 READY 21 1)
+g10s17 ["O write append nobuffer", "Q  line", "CP 18", "LO yz", "LN", "LP 3", "P -1 write", "LO QQQQQ 2", "LO x", "S <2 read char"]: this crate departs from the model at LO_yz=0 READY 23 1 (model LO_yz=0 READY 22 1)
+g10s35 ["O write nobuffer", "CI 0", "LO QQQQQ 5", "Q  char", "CI", "S -0 write line"]: this crate departs from the model at LO_QQQQQ_5=0 READY 26 1 (model LO_QQQQQ_5=0 READY 25 1)
+g10s42 ["O write replace nobuffer", "CO abc 4", "CI 3", "CP 15", "LO abc", "Q  char", "LP 2"]: this crate departs from the model at LO_abc=0 READY 20 1 (model LO_abc=0 READY 19 1)
+g10s44 ["O write append nobuffer", "LI 1", "LP 1", "S =2 write line", "LC", "LO yz", "LO QQQQQ"]: this crate departs from the model at LO_yz=0 READY 23 1 (model LO_yz=0 READY 22 1)
+g10s48 ["O write replace nobuffer", "LI", "CI", "LO yz 3", "LO x 4", "LI", "S <2 line", "LO QQQQQ 1", "CI 1 16"]: this crate departs from the model at LO_yz_3=0 READY 5 1 (model LO_yz_3=0 READY 4 1)
+g10s53 ["O write replace nobuffer", "LO abc 3", "CI", "CP 2", "CO abc 19", "CH", "CO yz 1", "LI 4", "LI 4"]: this crate departs from the model at LO_abc_3=0 READY 6 1 (model LO_abc_3=0 READY 5 1)
+g10s54 ["O write replace nobuffer", "LO abc", "CI 3 14", "LE", "CO yz"]: this crate departs from the model at LO_abc=0 READY 6 1 (model LO_abc=0 READY 5 1)
+g10s60 ["O write nobuffer", "LE", "LI", "CI", "LO QQQQQ"]: this crate departs from the model at LE=0 READY 11 1 (model LE=0 READY 10 1)
+g10s65 ["O write replace nobuffer", "CO x", "CO abc", "P +0 write line", "LZ", "Q read line", "LE", "CO x", "Q  line"]: this crate departs from the model at LE=0 READY 7 1 (model LE=0 READY 6 1)
+g10s68 ["O write append nobuffer", "S <1 read", "LO QQQQQ", "LI 4", "LO x 2", "S =2 char", "S =4 line", "LC", "S +2 read char", "CH"]: this crate departs from the model at LO_QQQQQ=0 READY 26 18 (model LO_QQQQQ=0 READY 25 18)
+g10s71 ["O write nobuffer", "LO QQQQQ 1", "LI", "CI"]: this crate departs from the model at LO_QQQQQ_1=0 READY 8 1 (model LO_QQQQQ_1=0 READY 7 1)
+g10s76 ["O write nobuffer", "LO x 2", "CO x", "CH"]: this crate departs from the model at LO_x_2=0 READY 7 1 (model LO_x_2=0 READY 6 1)
+g11s4 ["O write nobuffer", "CO x", "LO abc"]: this crate departs from the model at LO_abc=0 READY 15 1 (model LO_abc=0 READY 14 1)
+g11s21 ["O write nobuffer", "CI", "LI", "LO QQQQQ", "S =2"]: this crate departs from the model at LO_QQQQQ=0 READY 16 1 (model LO_QQQQQ=0 READY 15 1)
+g11s25 ["O write nobuffer", "CH", "CH", "CO abc", "S +1 write line", "S =1 read", "LO x 1", "LN", "S =1 read char", "LC"]: this crate departs from the model at LO_x_1=0 READY 4 1 (model LO_x_1=0 READY 3 1)
+g11s39 ["O write append nobuffer", "CI 3 4", "LO yz", "LI 5"]: this crate departs from the model at LO_yz=0 READY 23 4 (model LO_yz=0 READY 22 4)
+g11s47 ["O write nobuffer", "LO yz", "S -2 read", "CO QQQQQ", "LC"]: this crate departs from the model at LO_yz=0 READY 23 1 (model LO_yz=0 READY 22 1)
+g11s50 ["O write append nobuffer", "Q write", "LE", "LO x", "Q read char", "CI 1 8", "LP 2", "Q write", "Q write", "CO abc"]: this crate departs from the model at LE=0 READY 21 1 (model LE=0 READY 20 1)
+g11s67 ["O write append nobuffer", "P <1 line", "S -0 read", "LC", "CO QQQQQ", "CO yz", "LO x 4", "Q write char", "CH", "S -3 read"]: this crate departs from the model at LO_x_4=0 READY 29 1 (model LO_x_4=0 READY 28 1)
+g11s78 ["O write append nobuffer", "P =1 read", "LO abc", "Q read char", "LI", "LP 5", "CO abc"]: this crate departs from the model at LO_abc=0 READY 24 1 (model LO_abc=0 READY 23 1)
+g11s79 ["O write append nobuffer", "CO QQQQQ 12", "LO x", "CP 9"]: this crate departs from the model at LO_x=0 READY 27 1 (model LO_x=0 READY 26 1)
+g12s29 ["O write replace nobuffer", "CP 2", "LO yz 2"]: this crate departs from the model at LO_yz_2=0 READY 5 1 (model LO_yz_2=0 READY 4 1)
+g12s32 ["O write append nobuffer", "LO abc 1", "LI", "P +3 char"]: this crate departs from the model at LO_abc_1=0 READY 24 1 (model LO_abc_1=0 READY 23 1)
+g12s41 ["O write replace nobuffer", "LP 4", "LZ", "LI", "CH", "LO abc 5", "CO yz", "LI 2", "CI 4 3"]: this crate departs from the model at LO_abc_5=0 READY 6 1 (model LO_abc_5=0 READY 5 1)
+g12s62 ["O write append nobuffer", "CO x", "Q  line", "CH", "LO QQQQQ 2", "CI 4 16", "Q write", "LO QQQQQ", "Q  char"]: this crate departs from the model at LO_QQQQQ_2=0 READY 27 1 (model LO_QQQQQ_2=0 READY 26 1)
+g12s63 ["O write append nobuffer", "LX", "O write append nobuffer", "CI", "LO QQQQQ 1", "S +2 line", "LC", "Q read line", "LZ", "LP 3"]: this crate departs from the model at LO_QQQQQ_1=0 READY 26 1 (model LO_QQQQQ_1=0 READY 25 1)
+g12s70 ["O write append nobuffer", "CO yz", "CI 2 6", "CI", "S +1 read line", "LO abc 2"]: this crate departs from the model at LO_abc_2=0 READY 26 6 (model LO_abc_2=0 READY 25 6)
+g13s18 ["O write nobuffer", "CO yz", "LC", "Q read", "LO QQQQQ"]: this crate departs from the model at LO_QQQQQ=0 READY 18 1 (model LO_QQQQQ=0 READY 17 1)
+g13s25 ["O write append nobuffer", "LI 5", "S -2 write line", "LI", "LO abc", "LO x", "CI 3 10"]: this crate departs from the model at LO_abc=0 READY 24 1 (model LO_abc=0 READY 23 1)
+g13s33 ["O write nobuffer", "CI 1", "LI 5", "Q write", "LO abc", "LO yz 1"]: this crate departs from the model at LO_abc=0 READY 24 1 (model LO_abc=0 READY 23 1)
+g13s50 ["O write nobuffer", "LO abc", "Q read char", "CO yz", "Q  char", "LO yz 1", "CO x 2", "S <2 read", "CI"]: this crate departs from the model at LO_abc=0 READY 14 1 (model LO_abc=0 READY 13 1)
+g13s56 ["O write nobuffer", "S <2 write line", "LI", "CO yz 11", "CI 1", "Q read line", "LO yz 4", "LI", "Q read char"]: this crate departs from the model at LO_yz_4=0 READY 17 1 (model LO_yz_4=0 READY 16 1)
+g13s62 ["O write append nobuffer", "Q  line", "LO abc", "LI", "LZ", "S <1 write char", "CE", "CP 9", "Q", "LO yz"]: this crate departs from the model at LO_abc=0 READY 24 1 (model LO_abc=0 READY 23 1)
+g13s67 ["O write replace nobuffer", "LN", "LO x", "LI", "LO x", "Q write char", "CO x", "LO QQQQQ"]: this crate departs from the model at LO_x=0 READY 4 1 (model LO_x=0 READY 3 1)
+g14s7 ["O write replace nobuffer", "CI 0 7", "CE", "LO QQQQQ", "S =2 read char"]: this crate departs from the model at LO_QQQQQ=0 READY 8 1 (model LO_QQQQQ=0 READY 7 1)
+g14s25 ["O write replace nobuffer", "S <0 write", "LO x", "Q read line"]: this crate departs from the model at LO_x=0 READY 4 1 (model LO_x=0 READY 3 1)
+g14s38 ["O write nobuffer", "LI", "LZ", "CO QQQQQ", "LO QQQQQ 2", "LI 1", "CP 21", "LI"]: this crate departs from the model at LO_QQQQQ_2=0 READY 11 1 (model LO_QQQQQ_2=0 READY 10 1)
+g14s41 ["O write append nobuffer", "LO abc", "CI 3 16", "CP 17", "LP 2", "CO QQQQQ 14"]: this crate departs from the model at LO_abc=0 READY 24 1 (model LO_abc=0 READY 23 1)
+g14s51 ["O write replace nobuffer", "LI", "CI 3", "LO yz"]: this crate departs from the model at LO_yz=0 READY 5 1 (model LO_yz=0 READY 4 1)
+g14s61 ["O write replace nobuffer", "CO abc", "CI 4 16", "P =1 read", "LC", "LO abc 3", "Q read"]: this crate departs from the model at LO_abc_3=0 READY 9 1 (model LO_abc_3=0 READY 8 1)
+g14s76 ["O write replace nobuffer", "CP 2", "LC", "CP 8", "LZ", "P +3", "CI 5 5", "LZ", "LE", "S =3"]: this crate departs from the model at LE=0 READY 13 1 (model LE=0 READY 12 1)
+g15s0 ["O write replace nobuffer", "LO x", "P +1 write", "LO abc", "Q read char"]: this crate departs from the model at LO_x=0 READY 4 1 (model LO_x=0 READY 3 1)
+g15s41 ["O write nobuffer", "CI", "LX", "O write nobuffer", "LI", "LO QQQQQ", "CI 1 8", "S +3 read", "CI 4"]: this crate departs from the model at LO_QQQQQ=0 READY 26 1 (model LO_QQQQQ=0 READY 25 1)
+g15s46 ["O write replace nobuffer", "CO yz", "CI 2 11", "CO x 15", "LC", "CO x 18", "LN", "LO yz", "LO x"]: this crate departs from the model at LO_yz=0 READY 23 1 (model LO_yz=0 READY 22 1)
+g15s47 ["O write append nobuffer", "CP 5", "LE", "LI", "Q write line", "LO QQQQQ 3"]: this crate departs from the model at LE=0 READY 21 1 (model LE=0 READY 20 1)
+g15s49 ["O write nobuffer", "CP 17", "CO x", "CO abc 15", "CH", "Q read line", "LO x"]: this crate departs from the model at LO_x=0 READY 21 1 (model LO_x=0 READY 20 1)
+g15s62 ["O write replace nobuffer", "CO yz", "S =4 write line", "CO QQQQQ 20", "LO QQQQQ"]: this crate departs from the model at LO_QQQQQ=0 READY 32 1 (model LO_QQQQQ=0 READY 31 1)
+g16s6 ["O write replace nobuffer", "CO QQQQQ 5", "LP 3", "CH", "LO abc", "CO x", "CO x"]: this crate departs from the model at LO_abc=0 READY 15 1 (model LO_abc=0 READY 14 1)
+g16s9 ["O write nobuffer", "LO yz 3", "LO x 5", "P -2 read line", "CI 1 19", "LO abc", "CH"]: this crate departs from the model at LO_yz_3=0 READY 17 1 (model LO_yz_3=0 READY 16 1)
+g16s18 ["O write nobuffer", "LO QQQQQ 5", "Q write line", "LI", "S -1 line", "CO x 2", "CO x 7", "CI 1"]: this crate departs from the model at LO_QQQQQ_5=0 READY 26 1 (model LO_QQQQQ_5=0 READY 25 1)
+g16s21 ["O write append nobuffer", "S <0 write line", "LO x 1", "CO QQQQQ 8", "LI", "LP 2", "CP 6", "CO yz 17", "CO abc", "CO yz"]: this crate departs from the model at LO_x_1=0 READY 22 1 (model LO_x_1=0 READY 21 1)
+g16s24 ["O write nobuffer", "LI", "LI", "Q read", "LO QQQQQ", "LI"]: this crate departs from the model at LO_QQQQQ=0 READY 16 1 (model LO_QQQQQ=0 READY 15 1)
+g16s28 ["O write replace nobuffer", "LN", "Q", "LO abc 1", "LI 3", "CO x 9"]: this crate departs from the model at LO_abc_1=0 READY 6 1 (model LO_abc_1=0 READY 5 1)
+g16s40 ["O write nobuffer", "CO abc", "S +1", "CP 18", "CO abc", "LO QQQQQ", "CP 1"]: this crate departs from the model at LO_QQQQQ=0 READY 28 1 (model LO_QQQQQ=0 READY 27 1)
+g16s42 ["O write append nobuffer", "LI", "LP 4", "CI 1", "S -2 write", "LO yz", "LO x 1", "LI", "P -2 line", "LE"]: this crate departs from the model at LO_yz=0 READY 23 1 (model LO_yz=0 READY 22 1)
+g16s43 ["O write replace nobuffer", "CI 2", "LO QQQQQ 1", "LI", "LI", "P +0 read line", "Q write char", "LI", "CI", "S -0 line"]: this crate departs from the model at LO_QQQQQ_1=0 READY 8 1 (model LO_QQQQQ_1=0 READY 7 1)
+g16s45 ["O write append nobuffer", "S +3 write char", "LC", "S =6 read line", "LO abc", "CH", "CI 5", "CI 0 14"]: this crate departs from the model at LO_abc=0 READY 24 1 (model LO_abc=0 READY 23 1)
+g16s52 ["O write append nobuffer", "LI", "LO x 3", "CH", "LI 1", "S +1 read char", "CI", "CI 5", "LN"]: this crate departs from the model at LO_x_3=0 READY 22 1 (model LO_x_3=0 READY 21 1)
+g16s71 ["O write replace nobuffer", "LI", "CI 4 10", "LO abc 5"]: this crate departs from the model at LO_abc_5=0 READY 6 1 (model LO_abc_5=0 READY 5 1)
+g16s74 ["O write nobuffer", "LO yz", "CP 6", "LI", "CO x", "CE", "Q  line", "CX", "O write nobuffer"]: this crate departs from the model at LO_yz=0 READY 13 1 (model LO_yz=0 READY 12 1)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    the_model_answers_generated_scenarios_as_this_crate_does
+
+test result: FAILED. 24 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.03s
+
+error: test failed, to rerun pass `-p rexx-exec --test stream_model`
+error: 1 target failed:
+    `-p rexx-exec --test stream_model`

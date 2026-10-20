@@ -1,0 +1,11 @@
+R1 write-only: lin READY 15 3 2
+R2 line seek: 1 line1
+R2 linein n: ne2
+R3 line query: 3 3 3
+R4 lines count: 3 2
+invalid seek: -80 READY -80
+invalid seek on READ: 2 READY 2
+ctrl-Z: 4 0
+    6162780A
+devnull: 0 0
+   loop ran 0
