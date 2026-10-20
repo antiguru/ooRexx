@@ -1,0 +1,6 @@
+     1 *-* address "xyzzy" "HI"
+       >>>   "HI"
+       +++   "RC(30)"
+     3 *-* address "hostemu" "HI"
+       >>>   "HI"
+       +++   "RC(30)"

@@ -1,0 +1,6 @@
+     1 *-* address "xyzzy" "HI"
+       >>>   "HI"
+       +++   "RC(30)"
+     3 *-* address "hostemu" "HI"
+Error 4 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/p613.raD3/other_environment.rex line 3:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.

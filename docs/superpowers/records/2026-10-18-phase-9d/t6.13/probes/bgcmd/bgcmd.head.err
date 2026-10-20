@@ -1,0 +1,3 @@
+     2 *-* address system '(sleep 0.3; printf abc > ff1) &'
+Error 4 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/bg613.dP3c/bgcmd.rex line 2:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.

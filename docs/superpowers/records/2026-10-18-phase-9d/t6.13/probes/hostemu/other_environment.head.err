@@ -1,0 +1,4 @@
+     1 *-* address "xyzzy" "HI"
+       >>>   "HI"
+       +++   "RC(30)"
+rexx-exec: ADDRESS environment "hostemu" a native package loader registers is not implemented (Phase 10 Extension)

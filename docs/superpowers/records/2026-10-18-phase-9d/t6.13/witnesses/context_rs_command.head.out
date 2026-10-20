@@ -1,0 +1,12 @@
+start The NIL object
+normal 0 0
+error 1 1
+failure -1 -1
+redirected 0 1
+internal 0
+internal after 1
+after internal 0
+routine The NIL object caller 0
+routine after 0 caller 0
+after routine 0
+method The NIL object 1 0

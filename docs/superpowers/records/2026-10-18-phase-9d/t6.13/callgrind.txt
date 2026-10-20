@@ -1,0 +1,13 @@
+# parent = 45bd0c3ba at /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.12-r2/rexx-head 6613c4935731b042548baae8e72157cbc9596e8a19277de9a2954840dff15ecd; head = 0a934624f at /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.13/rexx-head 32ba4de62fc1263a2a65ab4ee79c1d3e7a5e8bf0e39b24f75ec21f4e85d62c72
+# rust/bench-programs/callgrind.sh -B 0.5 -p "startup interpret parse churn sayloop rexxcps sendloop dispatch" -o /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.13-run pin=/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run parent=/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.12-r2/rexx-head head=/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.13/rexx-head   (exit 0)
+program	pin	parent	head	parent d%	head d%	pin -libc	parent -libc	head -libc	parent -libc d%	head -libc d%	pin spread%	parent spread%	head spread%
+startup	119095931	119179664	119184162	+0.0703	+0.0741	57372808	57303888	57303968	-0.1201	-0.1200	0.0001	0.0000	0.0000
+interpret	4207372289	4132976030	4132913688	-1.7682	-1.7697	1785212077	1702562263	1702602112	-4.6297	-4.6275	0.0000	0.0000	0.0000
+parse	1654599637	1652599255	1652604171	-0.1209	-0.1206	1552803158	1550603910	1550603795	-0.1416	-0.1416	0.0000	0.0000	0.0000
+churn	631490012	632327524	632331157	+0.1326	+0.1332	378751556	379156056	379155992	+0.1068	+0.1068	0.0000	0.0000	0.0000
+sayloop	179667899	179747787	179752837	+0.0445	+0.0473	107724067	107655483	107655563	-0.0637	-0.0636	0.0004	0.0002	0.0001
+rexxcps	19278654767	19368270758	19370515817	+0.4648	+0.4765	17792036242	17884416495	17886657631	+0.5192	+0.5318	0.0000	0.0001	0.0001
+sendloop	14584921613	14555034775	14555038847	-0.2049	-0.2049	13818086050	13788023088	13788022704	-0.2176	-0.2176	0.0000	0.0000	0.0000
+dispatch	22105710870	22035823693	22035827802	-0.3161	-0.3161	20673777300	20643714129	20643713745	-0.1454	-0.1454	0.0000	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t6.13-run
+# rexxcps by function, r1, head minus parent (cgdiff.py): +2240207 Ir <rexx_exec::Interp>::exec_instruction self; every other function moves by at most a few thousand Ir

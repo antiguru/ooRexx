@@ -1,0 +1,45 @@
+# diff <(sort t6.12/r2/suite/tests.tsv) <(sort t6.13/suite/tests.tsv)
+10361c10361
+< base/class/RexxContext	TESTRS01	-	passed	failed
+---
+> base/class/RexxContext	TESTRS01	-	passed	passed
+22803c22803
+< base/keyword/SIGNAL	TEST_SIGNAL_ANY_CONDITION_HALT	-	passed	failed
+---
+> base/keyword/SIGNAL	TEST_SIGNAL_ANY_CONDITION_HALT	Phase10(Extension)	passed	blocked: rexx-exec: ADDRESS environment "hostemu" a native package loader registers is not implemented (Phase 10 Extension)
+23564c23564
+< extensions/hostemu/hostemu	TEST_EXECIO_DISKR_SKIP_THEN_STEM	Phase10(Extension)	passed	failed
+---
+> extensions/hostemu/hostemu	TEST_EXECIO_DISKR_SKIP_THEN_STEM	Phase10(Extension)	passed	blocked: rexx-exec: ADDRESS environment "hostemu" a native package loader registers is not implemented (Phase 10 Extension)
+23566c23566
+< extensions/hostemu/hostemu	TEST_EXECIO_DISKR_START_AT_THREE_READ_FOUR_STEM	Phase10(Extension)	passed	failed
+---
+> extensions/hostemu/hostemu	TEST_EXECIO_DISKR_START_AT_THREE_READ_FOUR_STEM	Phase10(Extension)	passed	blocked: rexx-exec: ADDRESS environment "hostemu" a native package loader registers is not implemented (Phase 10 Extension)
+23568,23570c23568,23570
+< extensions/hostemu/hostemu	TEST_EXECIO_DISKR_START_AT_TWO_STEM	Phase10(Extension)	passed	failed
+< extensions/hostemu/hostemu	TEST_EXECIO_DISKR_STEM	Phase10(Extension)	passed	failed
+< extensions/hostemu/hostemu	TEST_EXECIO_DISKR_STEM_SKIP	Phase10(Extension)	passed	failed
+---
+> extensions/hostemu/hostemu	TEST_EXECIO_DISKR_START_AT_TWO_STEM	Phase10(Extension)	passed	blocked: rexx-exec: ADDRESS environment "hostemu" a native package loader registers is not implemented (Phase 10 Extension)
+> extensions/hostemu/hostemu	TEST_EXECIO_DISKR_STEM	Phase10(Extension)	passed	blocked: rexx-exec: ADDRESS environment "hostemu" a native package loader registers is not implemented (Phase 10 Extension)
+> extensions/hostemu/hostemu	TEST_EXECIO_DISKR_STEM_SKIP	Phase10(Extension)	passed	blocked: rexx-exec: ADDRESS environment "hostemu" a native package loader registers is not implemented (Phase 10 Extension)
+23572c23572
+< extensions/hostemu/hostemu	TEST_EXECIO_DISKR_TWO_LINES_STEM	Phase10(Extension)	passed	failed
+---
+> extensions/hostemu/hostemu	TEST_EXECIO_DISKR_TWO_LINES_STEM	Phase10(Extension)	passed	blocked: rexx-exec: ADDRESS environment "hostemu" a native package loader registers is not implemented (Phase 10 Extension)
+23574,23576c23574,23576
+< extensions/hostemu/hostemu	TEST_EXECIO_DISKW_STEM	Phase10(Extension)	passed	failed
+< extensions/hostemu/hostemu	TEST_HI	Phase10(Extension)	passed	failed
+< extensions/hostemu/hostemu	TEST_TE	Phase10(Extension)	passed	failed
+---
+> extensions/hostemu/hostemu	TEST_EXECIO_DISKW_STEM	Phase10(Extension)	passed	blocked: rexx-exec: ADDRESS environment "hostemu" a native package loader registers is not implemented (Phase 10 Extension)
+> extensions/hostemu/hostemu	TEST_HI	Phase10(Extension)	passed	blocked: rexx-exec: ADDRESS environment "hostemu" a native package loader registers is not implemented (Phase 10 Extension)
+> extensions/hostemu/hostemu	TEST_TE	Phase10(Extension)	passed	blocked: rexx-exec: ADDRESS environment "hostemu" a native package loader registers is not implemented (Phase 10 Extension)
+24433c24433
+< samples/scclient	TEST_04_SCCLIENT.REX	-	passed	failed
+---
+> samples/scclient	TEST_04_SCCLIENT.REX	-	passed	passed
+24437c24437
+< samples/sfclient	TEST_04_SFCLIENT.REX	-	passed	failed
+---
+> samples/sfclient	TEST_04_SFCLIENT.REX	-	passed	passed
