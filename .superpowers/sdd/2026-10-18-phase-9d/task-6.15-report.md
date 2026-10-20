@@ -64,7 +64,7 @@ Witnesses:
   (`cg-9d/t6.14-r2/rexx-head`, whose stream code is that of `5698947b0`) differs on every line
   (`t6.15/witnesses/red/`). Green: stdout, stderr and rc are identical to the oracle's
   (`t6.15/witnesses/green/`, `t6.15/witnesses/oracle/`). I read the stdout: every scenario
-  lines print.
+  line prints.
 * Fix 2: named cases `transient-queue` and `transient-counts`, plus probe `t6.15/probes/fifo.rex`.
   Red: the base answers `ci '' ERROR`, `li '' NOTREADY` and `chars 0 lines 0 0`. Green: it answers
   `ci ab`, `li cde` and `chars 1 lines 1 1`. The oracle reads `de`, not `ab`, which is the
