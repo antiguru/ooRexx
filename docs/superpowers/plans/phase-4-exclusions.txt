@@ -2497,6 +2497,7 @@ DEVIATIONS -- permanent, chosen
      failure does not depend on the command's return code. Measured by
      Phase 9d Task 6.13 fix round 1
      (.superpowers/sdd/2026-10-18-phase-9d/task-6.13-report.md, Concerns).
+     LICENSED DIVERGENCE WITNESS: target-error-whatever-the-rc
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------

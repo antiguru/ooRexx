@@ -250,6 +250,10 @@ impl IoContext {
     /// output target as they arrive (`OutputRedirector::writeBuffer`), and
     /// keeps a trailing part line for the next piece. A deferred output keeps
     /// everything.
+    ///
+    /// A line the target raises on ends this piece: its later lines and its
+    /// part line are dropped, as the oracle's unwind out of `writeBuffer`
+    /// drops them, and the next piece is offered as usual.
     pub(crate) fn write_output(&self, interp: &mut Interp, bytes: &[u8]) -> Result<(), Failure> {
         let Some(target) = &self.output else {
             return Ok(());
@@ -262,12 +266,24 @@ impl IoContext {
             }
             whole_lines(&mut carry)
         };
-        self.write_lines(interp, target, 0, &lines)
+        let written = self.write_lines(interp, target, 0, &lines);
+        if written.is_err() {
+            self.carry.borrow_mut().clear();
+        }
+        written
     }
 
-    /// Hands what the child wrote to the targets once it has ended:
-    /// `out`, standard output's last piece, then standard error, then each
-    /// named stream closed (`CommandIOContext::cleanup`).
+    /// Hands what the child wrote to the targets once it has ended, in the
+    /// oracle's order: `out`, standard output's last piece, then standard
+    /// error, then the cleanup (`CommandIOContext::cleanup`), which writes the
+    /// output's last part line, or all of a deferred output, and closes each
+    /// named stream.
+    ///
+    /// `held` is the condition a target raised on an earlier piece. A
+    /// condition raised here replaces it ([`Interp::write_holding_last`]); one
+    /// standing once standard error has been offered is raised again at the
+    /// command's clause and answered, and the cleanup does not run, as the
+    /// oracle raises it before `cleanup`.
     ///
     /// Under [`IoContext::shares_one_target`] the caller has already merged
     /// both streams into `out` and `err` is empty.
@@ -276,10 +292,48 @@ impl IoContext {
         interp: &mut Interp,
         out: &[u8],
         err: &[u8],
+        held: Option<Failure>,
     ) -> Result<(), Failure> {
-        self.write_output(interp, out)?;
-        let rest = split_lines(&std::mem::take(&mut *self.carry.borrow_mut()));
-        self.finish_lines(interp, &rest, &split_lines(err))
+        let mut held = held;
+        interp.write_holding_last(&mut held, |interp| self.write_output(interp, out))?;
+        let error = self.error.as_ref().filter(|_| !self.shares_one_target());
+        if let Some(target) = error {
+            interp.write_holding_last(&mut held, |interp| {
+                if self.deferred == Some(Stream::Error) {
+                    self.begin_target(interp, target, 1)?;
+                }
+                self.write_lines(interp, target, 1, &split_lines(err))
+            })?;
+        }
+        if let Some(held) = held {
+            // Raised again at the command's clause, which the report names.
+            interp.reraise_failure_levels();
+            return Err(held);
+        }
+        if let Some(target) = &self.output {
+            if self.deferred == Some(Stream::Output) {
+                self.begin_target(interp, target, 0)?;
+            }
+            let rest = split_lines(&std::mem::take(&mut *self.carry.borrow_mut()));
+            self.write_lines(interp, target, 0, &rest)?;
+        }
+        self.close_named(interp)
+    }
+
+    /// Closes each named stream this redirection opened.
+    fn close_named(&self, interp: &mut Interp) -> Result<(), Failure> {
+        let error = self.error.as_ref().filter(|_| !self.shares_one_target());
+        for target in self.output.iter().chain(error) {
+            if let Target::Stream {
+                object,
+                qualified: Some(_),
+            } = *target
+            {
+                let caller = interp.caller();
+                interp.send_message(object, b"CLOSE", None, &[], caller)?;
+            }
+        }
+        Ok(())
     }
 
     /// Hands each redirected stream's remaining lines to its target, then
@@ -306,17 +360,7 @@ impl IoContext {
             }
             self.write_lines(interp, target, 1, err)?;
         }
-        for target in self.output.iter().chain(error) {
-            if let Target::Stream {
-                object,
-                qualified: Some(_),
-            } = *target
-            {
-                let caller = interp.caller();
-                interp.send_message(object, b"CLOSE", None, &[], caller)?;
-            }
-        }
-        Ok(())
+        self.close_named(interp)
     }
 
     fn write_lines(

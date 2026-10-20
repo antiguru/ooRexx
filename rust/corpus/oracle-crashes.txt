@@ -1781,3 +1781,35 @@ answer 3.1 naming `an Object` instead (Task 6.12 re-review r1, 3 of 3). This
 crate reads the object's string value too, which is 3.1 naming `an Object`
 (`tests/security_replacements.rs`). Measured 2026-10-19 by Phase 9d Task 6.12 round 1
 (`t6.12/r1/probes/requires_object_name.rex`). No upstream ticket.
+
+## 56. A redirected command whose error stem is also its input stem, with no output target
+
+    w.0 = 1; w.1 = 'in'
+    address system 'cat >&2' with input stem w. error stem w.
+    say 'error only' w.0 '['w.1']'
+
+Effect: SIGSEGV, rc 139, on 3 of 3 runs, with nothing written to either stream. With an output
+target as well (`output stem v.`) it runs and answers `[U.]` for the error stem's line. Measured
+2026-10-20 by Phase 9d Task 6.13 fix round 2, under the standard wrapper from a fresh empty
+directory (found by the Task 6.13 re-review). This crate answers `error only 1 [in]`, rc 0. No
+upstream ticket.
+
+## 57. Four started activities each running a redirected command with input, output and error stems
+
+    call time 'r'
+    ms = .array~new
+    do k = 1 to 4; ms~append(.T~new~start('go', k)); end
+    do m over ms; say m~result; end
+    say 'parallel' (time('e') < 1.5)
+    ::class T
+    ::method go
+      use arg k
+      i.0 = 3; i.1 = k; i.2 = k*2; i.3 = k*3
+      address system 'sleep 0.5; cat; echo err'k' >&2' with input stem i. output stem o. error stem e.
+      return k rc o.0 o.1 o.2 o.3 e.0 e.1 .context~rs
+
+Effect: an INDEFINITE BLOCK in 3 of 6 runs, killed at the 20 s deadline (rc 124, the program
+then reporting 4.1 at the command's line), having printed none or the first of the results;
+the other 3 runs print the four results and `parallel 1`. Measured 2026-10-20 by Phase 9d Task 6.13 fix round 2, under the standard wrapper
+with `timeout -k 5 20`, from a fresh empty directory (found by the Task 6.13 re-review, also 3 of
+6). This crate gives the four results and `parallel 1` in every run. No upstream ticket.

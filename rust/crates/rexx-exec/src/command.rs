@@ -562,6 +562,9 @@ pub(crate) struct Blocked {
     /// Output pieces that arrived for the output target and are not yet
     /// written.
     captured: Vec<u8>,
+    /// The first condition a target raised, which the clause raises once
+    /// the child has ended.
+    raised: Option<Failure>,
     ended: Option<Waited>,
 }
 
@@ -865,7 +868,7 @@ impl Interp {
                 merged,
             } => self.collect_on_baton(running, input, merged)?,
         };
-        self.command_ended(io, &spawned).map(Commanded::Done)
+        self.command_ended(io, &spawned, None).map(Commanded::Done)
     }
 
     /// [`collect`] on the baton. In the simulation mode no other activity
@@ -905,21 +908,26 @@ impl Interp {
     /// What a command whose child ended answers: its redirected streams
     /// handed to `io`'s targets, the others written to this interpreter's
     /// sinks, and its return code.
+    ///
+    /// `held` is the condition a target raised while the child ran, which
+    /// the clause raises in place of settling.
     fn command_ended(
         &mut self,
         io: Option<&IoContext>,
         ended: &Waited,
+        held: Option<Failure>,
     ) -> Result<CommandOutcome, Failure> {
-        if let Some(context) = io {
-            context.finish(self, &ended.out, &ended.err)?;
-        }
+        let finished = match io {
+            Some(context) => context.finish(self, &ended.out, &ended.err, held),
+            None => Ok(()),
+        };
         if io.is_none_or(|context| !context.redirects_output()) {
             self.write_out(&ended.out);
         }
         if io.is_none_or(|context| !context.redirects_error()) {
             self.write_err(&ended.err);
         }
-        Ok(CommandOutcome::of(ended.rc))
+        finished.map(|()| CommandOutcome::of(ended.rc))
     }
 
     /// `CommandHandler::call` (`concurrency/CommandHandler.cpp:98-151`) for a
@@ -1121,6 +1129,7 @@ impl Interp {
                     token,
                     io: context,
                     captured: Vec::new(),
+                    raised: None,
                     ended: None,
                 }));
                 return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Block));
@@ -1191,11 +1200,21 @@ impl Interp {
             self.roots.activity_mut().push_temp(object);
         }
         let captured = std::mem::take(&mut blocked.captured);
-        let written = match &blocked.io {
-            Some(context) => context.write_output(self, &captured),
-            None => Ok(()),
-        };
-        if written.is_ok() && blocked.ended.is_none() {
+        if let Some(context) = &blocked.io {
+            // A condition waits for the child, as the oracle's handler
+            // catches it and raises it once it returns; anything else (an
+            // EXIT, a refusal) ends the clause now.
+            let mut raised = blocked.raised.take();
+            let written = self.write_holding_last(&mut raised, |interp| {
+                context.write_output(interp, &captured)
+            });
+            if let Err(failure) = written {
+                self.roots.activity_mut().pop_frame(frame);
+                return Err(failure);
+            }
+            blocked.raised = raised;
+        }
+        if blocked.ended.is_none() {
             self.roots.activity_mut().pop_frame(frame);
             self.activity.blocked = Some(blocked);
             return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Block));
@@ -1204,16 +1223,17 @@ impl Interp {
             command,
             indent,
             io,
+            raised,
             ended,
             ..
         } = *blocked;
-        let outcome = written.and_then(|()| match ended {
-            Some(ended) => self.command_ended(io.as_ref(), &ended),
+        let outcome = match ended {
+            Some(ended) => self.command_ended(io.as_ref(), &ended, raised),
             None => Err(crate::Loud::scheduler_inconsistency(
                 "a command resumed before its child ended",
             )
             .into()),
-        });
+        };
         self.roots.activity_mut().pop_frame(frame);
         let kept = self.activity.input_dispatch_syntax.take();
         let outcome = outcome?;

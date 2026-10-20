@@ -229,6 +229,18 @@ const LICENSED_DIVERGENCES: &[LicensedDivergence] = &[
         oracle_stdout: "in 1 0\nout 1 1\n",
         crate_stdout: "in 1 1\nout 1 1\n",
     },
+    LicensedDivergence {
+        name: "target-error-whatever-the-rc",
+        program: "signal on syntax name s\n\
+                  address system 'echo a; echo b; exit 3' with output using (.Bad~new)\n\
+                  say 'ran on' rc\nexit\n\
+                  s: say 'trapped' condition('o')~code rc\nexit\n\
+                  ::class Bad subclass OutputStream\n::method lineout\n  return 1 / 0\n",
+        exit_code: 0,
+        stderr: "",
+        oracle_stdout: "ran on 3\n",
+        crate_stdout: "trapped 42.3 42\n",
+    },
 ];
 
 /// Where the prose half lives. `builtin_status.rs`'s own `exclusions_path`,

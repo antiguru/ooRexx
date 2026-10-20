@@ -1,6 +1,6 @@
-/* An output target that raises while its command still runs ends that
-   command's clause with the condition, and the next redirected command's
-   wait is its own: it gets its own child's output and return code. */
+/* An output target that raises while its command still runs: the clause
+   raises the condition once its child has ended, and the next redirected
+   command gets its own child's output and return code. */
 signal on syntax name raised
 address system 'echo a; sleep 0.3; echo b' with output using (.Bad~new)
 say 'not here'

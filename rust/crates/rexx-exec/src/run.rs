@@ -330,6 +330,21 @@ pub(crate) enum QueueKeyword {
     Queue,
 }
 
+/// The levels a failure has left on the activity, set aside by
+/// [`Interp::write_holding_last`].
+struct FailureLevels {
+    site: Option<FailureSite>,
+    sites: Vec<FailureSite>,
+    frame: Option<ObjRef>,
+    frames: Vec<ObjRef>,
+    origin: Option<(Package, Option<usize>)>,
+    propagated: bool,
+    reraised: bool,
+    reraised_object: Option<ObjRef>,
+    reraise_leaving: usize,
+    failed_sends: Vec<ObjRef>,
+}
+
 impl Interp {
     // ---- the instruction loop, which is what this spike is for ----
 
@@ -3601,6 +3616,77 @@ impl Interp {
         self.activity.reraised_object = Some(object);
         raised.position = 0;
         Err(raised.into())
+    }
+
+    /// Runs `write`, a redirect target's write, where `held` may already
+    /// hold a condition an earlier write raised: a condition `write` raises
+    /// replaces it, with its own levels in place of the earlier one's, as the
+    /// oracle's handler keeps the last condition its callbacks raised. Any
+    /// other failure is answered.
+    pub(crate) fn write_holding_last(
+        &mut self,
+        held: &mut Option<Failure>,
+        write: impl FnOnce(&mut Interp) -> Result<(), Failure>,
+    ) -> Result<(), Failure> {
+        let kept = held.is_some().then(|| self.take_failure_levels());
+        match write(self) {
+            Ok(()) => {
+                if let Some(kept) = kept {
+                    self.restore_failure_levels(kept);
+                }
+                Ok(())
+            }
+            Err(failure @ Failure::Raised(_)) => {
+                *held = Some(failure);
+                Ok(())
+            }
+            Err(failure) => Err(failure),
+        }
+    }
+
+    /// The levels a failure has left, taken out with their objects pushed as
+    /// temps of the frame in force, which must outlive the matching
+    /// [`Interp::restore_failure_levels`].
+    fn take_failure_levels(&mut self) -> FailureLevels {
+        let activity = &mut self.activity;
+        let kept = FailureLevels {
+            site: activity.failure_site.take(),
+            sites: std::mem::take(&mut activity.failure_sites),
+            frame: activity.failure_frame.take(),
+            frames: std::mem::take(&mut activity.failure_frames),
+            origin: activity.failure_origin.take(),
+            propagated: std::mem::take(&mut activity.failure_propagated),
+            reraised: std::mem::take(&mut activity.failure_reraised),
+            reraised_object: activity.reraised_object.take(),
+            reraise_leaving: std::mem::take(&mut activity.reraise_leaving),
+            failed_sends: std::mem::take(&mut activity.failed_sends),
+        };
+        let objects: Vec<ObjRef> = kept
+            .frame
+            .iter()
+            .chain(&kept.frames)
+            .chain(&kept.reraised_object)
+            .chain(&kept.failed_sends)
+            .copied()
+            .collect();
+        for object in objects {
+            self.roots.activity_mut().push_temp(object);
+        }
+        kept
+    }
+
+    fn restore_failure_levels(&mut self, kept: FailureLevels) {
+        let activity = &mut self.activity;
+        activity.failure_site = kept.site;
+        activity.failure_sites = kept.sites;
+        activity.failure_frame = kept.frame;
+        activity.failure_frames = kept.frames;
+        activity.failure_origin = kept.origin;
+        activity.failure_propagated = kept.propagated;
+        activity.failure_reraised = kept.reraised;
+        activity.reraised_object = kept.reraised_object;
+        activity.reraise_leaving = kept.reraise_leaving;
+        activity.failed_sends = kept.failed_sends;
     }
 
     /// Forgets every level a failure has left, which a trap or a report has
