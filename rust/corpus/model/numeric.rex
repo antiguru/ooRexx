@@ -750,9 +750,10 @@ count_arg: procedure expose m.
   if w == '' then return fail('40.12')
   return w
 
-/* The numeric builtins round every argument named as a number as though it
-   were added to 0, so one wider than DIGITS raises LOSTDIGITS (rexxref,
-   "Built-in Functions"), named as written. */
+/* The numeric builtins round every argument named as a number to DIGITS
+   (rexxref, "Built-in Functions": "as though the number had been added to
+   0") without raising LOSTDIGITS. The model takes the interpreters' answer:
+   ooTest's reading of rexxref (`base/keyword/LOSTDIGITS TESTBIFS`). */
 bif: procedure expose m.
   parse arg name, function
   k = m.0digits
@@ -761,8 +762,6 @@ bif: procedure expose m.
     when name == 'ABS' | name == 'SIGN' then do
       n = num(m.0arg.1)
       if n == '' then return fail('93.943')
-      call lost n, k, m.0arg.1
-      if m.0event \== '' then return ''
       parse var n s d e
       if name == 'SIGN' then do
         if d == '0' then return 0
@@ -776,8 +775,6 @@ bif: procedure expose m.
       if m.0event \== '' then return ''
       n = num(m.0arg.1)
       if n == '' then return fail('93.943')
-      call lost n, k, m.0arg.1
-      if m.0event \== '' then return ''
       if left(places, 1) == '-' then return fail('93.906')
       if places == '' then places = 0
       return trunc(round(n, k), places)
@@ -789,8 +786,6 @@ bif: procedure expose m.
       end
       n = num(m.0arg.1)
       if n == '' then return fail('93.943')
-      call lost n, k, m.0arg.1
-      if m.0event \== '' then return ''
       do i = 2 to 5
         if left(w.i, 1) == '-' then return fail('93.906')
       end
@@ -831,8 +826,10 @@ round_places: procedure
 
 /* FORMAT (rexxref "FORMAT"): the number rounded as by number + 0, then laid
    out in `before` and `after` places, exponential when the places its
-   integer part needs exceed `expt` or the places its decimal part needs
-   exceed twice `expt`. Rounding to `after` places can carry into a new
+   integer part needs exceed `expt` or, for a number below one, the places
+   its decimal part needs exceed twice `expt`. The second trigger is read
+   for a number below one only: the model takes the interpreters' answer,
+   ooTest's reading of rexxref (`base/bif/FORMAT`). Rounding to `after` places can carry into a new
    leading digit, which moves the exponent; the layout is decided again
    until it settles. */
 format: procedure expose m.
@@ -846,7 +843,7 @@ format: procedure expose m.
   x0 = ''
   if trig \== '' then do
     a = e + length(d) - 1
-    if a >= trig | -e > 2 * trig then x0 = group(a)
+    if a >= trig | (a < 0 & -e > 2 * trig) then x0 = group(a)
   end
   if expp \== '' & x0 \== '' then
     if length(abs(x0)) > expp then return fail('93.941')
@@ -904,14 +901,16 @@ datatype_w: procedure expose m.
   if e > 0 then return 1
   return verify(substr(d, a + 1), '0') == 0
 
-/* MAX and MIN, as functions and as messages alike: every number, the
-   target included, rounded to DIGITS as though added to 0, so one wider
-   raises LOSTDIGITS; compared as numbers, FUZZ included, an earlier value
-   kept on a tie. Under FUZZ each comparison raises LOSTDIGITS as any
-   comparison does. An omitted argument is 40.5 for the function and 93.903
-   for the message (rexxref, "Error Numbers"). The description renders the
-   number unrounded, which the documentation leaves open; the model takes
-   this crate's. */
+/* MAX and MIN, as functions and as messages alike: every number rounded
+   to DIGITS, compared as numbers, FUZZ included, an earlier value kept on a
+   tie. The target raises no LOSTDIGITS (ooTest's reading, as for the other
+   builtins). An argument wider than DIGITS raises it, and under FUZZ so
+   does each comparison, unless every value is written as a whole number
+   and the target fits DIGITS (Deviation 44: decided by the written value).
+   An omitted argument is 40.5 for the function and 93.903 for the message
+   (rexxref, "Error Numbers"). The description renders the number
+   unrounded, which the documentation leaves open; the model takes this
+   crate's. */
 maxmin: procedure expose m.
   parse arg name, function
   k = m.0digits
@@ -920,17 +919,23 @@ maxmin: procedure expose m.
   if \m.0given.1 then return fail(missing)
   t = num(m.0arg.1)
   if t == '' then return fail('93.943')
-  call lost t, k, unrounded(t, k)
-  if m.0event \== '' then return ''
+  quiet = integer_written(m.0arg.1)
+  if quiet then quiet = valid_under(m.0arg.1, k)
+  do i = 2 to m.0count while quiet
+    if \m.0given.i then quiet = 0
+    else quiet = integer_written(m.0arg.i)
+  end
   best = round(t, k)
   do i = 2 to m.0count
     if \m.0given.i then return fail(missing)
     c = num(m.0arg.i)
     if c == '' then return fail('93.904')
-    call lost c, k, unrounded(c, k)
-    if m.0event \== '' then return ''
+    if \quiet then do
+      call lost c, k, unrounded(c, k)
+      if m.0event \== '' then return ''
+    end
     c = round(c, k)
-    if m.0fuzz > 0 then do
+    if \quiet & m.0fuzz > 0 then do
       call lost c, k - m.0fuzz, unrounded(c, k)
       call lost best, k - m.0fuzz, unrounded(best, k)
       if m.0event \== '' then return ''
@@ -940,6 +945,20 @@ maxmin: procedure expose m.
     if name == 'MIN' & order < 0 then best = c
   end
   return render(best, k)
+
+/* Written as a whole number: an optional minus, then at most 18 digits
+   with no leading zero. */
+integer_written: procedure
+  parse arg t
+  if left(t, 1) == '-' then t = substr(t, 2)
+  if t == '' | length(t) > 18 then return 0
+  if verify(t, '0123456789') > 0 then return 0
+  return \(left(t, 1) == '0' & length(t) > 1)
+
+valid_under: procedure
+  parse arg t, k
+  if left(t, 1) == '-' then t = substr(t, 2)
+  return length(t) <= min(k, 18)
 
 /* ---- DO (rexxref "DO", ANSI X3.274 section 8.3.6) ---- */
 

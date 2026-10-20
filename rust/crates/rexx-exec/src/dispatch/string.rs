@@ -1624,7 +1624,6 @@ fn native_string_abs(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let value = numeric_receiver(interp, receiver, b"ABS")?;
-    interp.lostdigits_check(&value, receiver)?;
     Ok(Some(crate::builtin::numeric::abs_of(interp, &value)))
 }
 
@@ -1636,7 +1635,6 @@ fn native_string_trunc(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let value = numeric_receiver(interp, receiver, b"TRUNC")?;
-    interp.lostdigits_check(&value, receiver)?;
     let places = count_method_argument(interp, args, 0)?;
     let answer = crate::builtin::numeric::trunc_of(interp, &value, places)?;
     Ok(Some(answer))
@@ -1747,7 +1745,6 @@ fn native_string_format(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let value = numeric_receiver(interp, receiver, b"FORMAT")?;
-    interp.lostdigits_check(&value, receiver)?;
     let before = count_method_argument(interp, args, 0)?;
     let after = count_method_argument(interp, args, 1)?;
     let expp = count_method_argument(interp, args, 2)?;
@@ -1918,7 +1915,6 @@ pub(super) fn native_string_sign(
         let found = interp.string_value_text(receiver);
         return Err(Raised::method_target_not_a_number(b"SIGN", &found).into());
     };
-    interp.lostdigits_check(&value, receiver)?;
     Ok(Some(crate::builtin::numeric::sign_of(interp, &value)))
 }
 

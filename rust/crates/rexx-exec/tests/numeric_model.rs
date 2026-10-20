@@ -35,21 +35,19 @@ const CASES: &str = "tests/numeric_model";
 
 /// The cases whose native oracle answer differs from the model: the case,
 /// the numeric Deviation that licenses it, the rule it rests on, and the
-/// oracle's answer, untrapped and then trapped. The rules are Moritz's
-/// 2026-10-20 rulings ("follow rexxref") reported by Task 6.14:
+/// oracle's answer, untrapped and then trapped. The rules R1-R3 and R6 are
+/// Moritz's 2026-10-20 rulings ("follow rexxref") reported by Task 6.14:
 /// * `R1`: under FUZZ a comparison checks LOSTDIGITS at DIGITS minus FUZZ
 ///   whatever the signs;
 /// * `R2`: MAX and MIN apply FUZZ to whole numbers;
 /// * `R3`: an omitted MAX or MIN argument is 40.5 for the function and
 ///   93.903 for the message, whatever the other arguments are;
-/// * `R4`: FORMAT's decimal-part `expt` trigger holds for a number with an
-///   integer part;
 /// * `R6`: a zero dividend still checks its divisor for LOSTDIGITS;
-/// * `R7`: the numeric builtins round every argument named as a number as
-///   though added to 0, and so raise LOSTDIGITS for a wide one;
-/// * `wide-integer`: MAX and MIN round a whole number wider than DIGITS;
 /// * `description`: the oracle names an unquoted literal's LOSTDIGITS by its
 ///   spelling at parse time, and this crate by its value;
+/// * `wide-integer`: MAX and MIN round a whole number wider than DIGITS;
+/// * `written-value`: MAX and MIN decide LOSTDIGITS by how the values are
+///   written, not by whether the oracle holds them as integers;
 /// * `do-count`: a DO count wider than DIGITS raises 26.2 or 26.3.
 const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
     (
@@ -65,96 +63,38 @@ const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
         "V[1111111111] | V[1111111111]",
     ),
     (
-        "max-wide-target",
-        44,
-        "R7",
-        "V[1.11111111E+9] | V[1.11111111E+9]",
-    ),
-    (
-        "max-message-wide-target",
-        44,
-        "R7",
-        "V[1.11111111E+9] | V[1.11111111E+9]",
-    ),
-    (
         "max-trailing-zeros",
         44,
         "wide-integer",
         "V[1000000000] | V[1000000000]",
     ),
-    ("min-wide-argument", 44, "R7", "V[2] | V[2]"),
-    ("min-message-wide-argument", 44, "R7", "V[2] | V[2]"),
-    (
-        "min-wide-both",
-        44,
-        "R7",
-        "V[1.11111111E+9] | L[2222222222]",
-    ),
-    (
-        "min-message-wide-both",
-        44,
-        "R7",
-        "V[1.11111111E+9] | L[2222222222]",
-    ),
-    ("abs-wide", 44, "R7", "V[1.11111111E+9] | V[1.11111111E+9]"),
-    ("sign-wide", 44, "R7", "V[1] | V[1]"),
-    ("trunc-wide", 44, "R7", "V[1111111110] | V[1111111110]"),
-    (
-        "trunc-rounds-first",
-        44,
-        "R7",
-        "V[12345679.0] | V[12345679.0]",
-    ),
-    (
-        "format-wide",
-        44,
-        "R7",
-        "V[1.11111111E+9] | V[1.11111111E+9]",
-    ),
-    ("format-wide-after", 44, "R7", "V[1.11E+9] | V[1.11E+9]"),
     ("do-count-wide", 47, "do-count", "V[ran] | V[ran]"),
     ("do-for-wide", 47, "do-count", "V[ran] | V[ran]"),
     ("do-count-trailing-zeros", 47, "do-count", "V[ran] | V[ran]"),
+    (
+        "maxstr-string",
+        44,
+        "written-value",
+        "V[1.11111111E+9] | L[1111111111]",
+    ),
     (
         "maxstr-literal",
         44,
         "wide-integer",
         "V[1111111111] | V[1111111111]",
     ),
-    ("maxmin-3", 44, "R7", "V[2.22222222E+9] | L[2222222222]"),
-    ("maxmin-5", 44, "R7", "V[2.22222222E+9] | L[2222222222]"),
-    ("maxmin-10", 44, "R7", "V[1] | V[1]"),
     (
         "maxmin-11",
         44,
         "wide-integer",
         "V[1111111111] | V[1111111111]",
     ),
-    ("maxmin-12", 44, "R7", "V[1] | V[1]"),
-    ("maxmin-13", 44, "R7", "V[1.11111111] | V[1.11111111]"),
-    ("maxmin-14", 44, "R7", "V[2] | V[2]"),
-    ("maxmin-15", 44, "R7", "V[1.11111111E+9] | V[1.11111111E+9]"),
-    ("maxmin-16", 44, "R7", "V[1.11111111E+9] | V[1.11111111E+9]"),
-    ("maxmin-17", 44, "R7", "V[1] | V[1]"),
-    (
-        "format-engineering-wide",
-        44,
-        "R7",
-        "V[123.456789E+9] | V[123.456789E+9]",
-    ),
     ("min-lone-wide", 44, "wide-integer", "V[12345] | V[12345]"),
-    ("max-lone-wide", 44, "R7", "V[1.23E+4] | V[1.23E+4]"),
     (
         "msg-min-lone-wide",
         44,
         "wide-integer",
         "V[12345] | V[12345]",
-    ),
-    (
-        "max-negative-wide",
-        44,
-        "R7",
-        "V[-1.11111111E+9] | L[-2222222222]",
     ),
     (
         "max-wide-rounds-up",
@@ -168,7 +108,6 @@ const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
         "wide-integer",
         "V[11111111111] | V[11111111111]",
     ),
-    ("fuzz-15", 44, "R7", "V[1.00000001] | L[1.00000001]"),
     ("fuzz-18", 53, "R1", "V[1] | V[1]"),
     ("fuzz-sign-differs", 53, "R1", "V[0] | V[0]"),
     ("fuzz-sign-zero", 53, "R1", "V[1] | V[1]"),
@@ -181,10 +120,28 @@ const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
     ),
     ("max-missing-argument", 53, "R3", "S 93.903 | S 93.903"),
     (
-        "format-decimal-trigger",
-        53,
-        "R4",
-        "V[12.3456789] | V[12.3456789]",
+        "max-fuzz-strings",
+        44,
+        "written-value",
+        "V[100000001] | L[100000002]",
+    ),
+    (
+        "min-fuzz-strings",
+        44,
+        "written-value",
+        "V[100000002] | L[100000001]",
+    ),
+    (
+        "max-fuzz-strings-short",
+        44,
+        "written-value",
+        "V[11] | L[12]",
+    ),
+    (
+        "max-message-fuzz-strings",
+        44,
+        "written-value",
+        "V[100000001] | L[100000002]",
     ),
     ("min-missing-argument", 53, "R3", "S 93.903 | S 93.903"),
     ("div-zero-dividend", 53, "R6", "V[0] | V[0]"),
@@ -227,22 +184,17 @@ const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
         "description",
         "S 26.2 | L[12345.5]",
     ),
-    ("describe-max-trailing", 44, "R7", "V[2E+1] | L[16.0]"),
-    ("abs-wide-literal", 44, "R7", "V[1.23E+3] | V[1.23E+3]"),
-    ("abs-message-wide", 44, "R7", "V[1.23E+3] | V[1.23E+3]"),
-    ("sign-message-wide", 44, "R7", "V[1] | V[1]"),
     (
-        "format-wide-string",
-        44,
-        "R7",
-        "V[     1.23E+3] | V[     1.23E+3]",
+        "describe-max-trailing",
+        53,
+        "description",
+        "V[2E+1] | L[16.0]",
     ),
-    ("trunc-wide-string", 44, "R7", "V[1230.0] | V[1230.0]"),
     (
-        "max-target-wide-fraction",
+        "min-negative-wide-string",
         44,
-        "R7",
-        "V[1.11111111E+9] | V[1.11111111E+9]",
+        "written-value",
+        "V[-1.11111111E+9] | L[-1111111111]",
     ),
     ("max-message-missing-first", 53, "R3", "S 40.5 | S 40.5"),
     ("max-message-missing-middle", 53, "R3", "S 40.5 | S 40.5"),
@@ -255,15 +207,13 @@ const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
         "wide-integer",
         "V[1240] | V[1240]",
     ),
-    ("format-wide-fraction", 44, "R7", "V[ 1.111] | V[ 1.111]"),
-    ("trunc-wide-fraction", 44, "R7", "V[1.11] | V[1.11]"),
 ];
 
 /// The Deviation each rule's departures are licensed under.
 fn deviation_of(rule: &str) -> u32 {
     match rule {
-        "R1" | "R2" | "R3" | "R4" | "R6" | "description" => 53,
-        "R7" | "wide-integer" => 44,
+        "R1" | "R2" | "R3" | "R6" | "description" => 53,
+        "wide-integer" | "written-value" => 44,
         "do-count" => 47,
         other => panic!("unknown rule {other}"),
     }

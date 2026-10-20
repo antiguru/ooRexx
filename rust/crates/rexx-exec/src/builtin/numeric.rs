@@ -64,17 +64,14 @@ fn target_parse(
     }
 }
 
-/// [`target_parse`], then the LOSTDIGITS of rounding it as though added to 0
-/// (rexxref, "Built-in Functions"), named by the argument as written.
+/// Argument 1 as a number. The builtins round it without LOSTDIGITS, as
+/// ooTest's `base/keyword/LOSTDIGITS TESTBIFS` reads rexxref.
 fn target_number(
     interp: &mut Interp,
     name: &'static [u8],
     args: Args<'_>,
 ) -> Result<Number, Failure> {
-    let number = target_parse(interp, name, args)?;
-    let value = arg(args, 1).expect("check_arity admitted the required first argument");
-    interp.lostdigits_check(&number, value)?;
-    Ok(number)
+    target_parse(interp, name, args)
 }
 
 /// The range half of an optional non-negative argument, after
@@ -334,11 +331,12 @@ fn max_min(
 }
 
 /// `MAX`'s and `MIN`'s answer, shared with `String~max` and `String~min`.
-/// Every number, the target included, is rounded as though added to 0, so
-/// one wider than DIGITS raises LOSTDIGITS (rexxref, "Built-in Functions"),
-/// and the comparisons honour FUZZ, raising it as any comparison does. An
-/// omitted argument is 40.5 for the function and 93.903 for the message,
-/// numbered by its position in the call.
+/// Every number is rounded to DIGITS and the comparisons honour FUZZ. The
+/// target never raises LOSTDIGITS; an argument wider than DIGITS does, and
+/// so does each comparison under FUZZ, unless every value is written as a
+/// whole number and the target fits DIGITS (Deviation 44). An omitted
+/// argument is 40.5 for the function and 93.903 for the message, numbered by
+/// its position in the call.
 #[allow(
     clippy::too_many_arguments,
     reason = "the two callers differ in each of them"
@@ -354,12 +352,7 @@ pub(crate) fn max_min_over(
     message: bool,
 ) -> Result<ObjRef, Failure> {
     let Numeric { digits, fuzz, form } = current(interp);
-    // The description is the number unrounded, rendered at DIGITS: measured
-    // against the oracle, `' 4444444444 '` names `4444444444` and
-    // `44444444440E-1` names `4.4444444440E+9`.
-    interp.lostdigits_check_with(target, |_| {
-        target.render_unrounded(digits, form).into_bytes()
-    })?;
+    let quiet = written_whole(interp, &target_text, rest, digits);
     let mut best = target.clone().into_round(digits);
     let mut best_text = target_text;
     for (index, slot) in rest.iter().enumerate() {
@@ -382,17 +375,24 @@ pub(crate) fn max_min_over(
             };
             return Err(Raised::method_argument_not_a_number(index + 1, &named).into());
         };
-        interp.lostdigits_check_with(&number, |_| {
-            number.render_unrounded(digits, form).into_bytes()
-        })?;
+        // The description is the number unrounded, rendered at DIGITS:
+        // measured against the oracle, `' 4444444444 '` names `4444444444`
+        // and `44444444440E-1` names `4.4444444440E+9`.
+        if !quiet {
+            interp.lostdigits_check_with(&number, |_| {
+                number.render_unrounded(digits, form).into_bytes()
+            })?;
+        }
         let number = number.into_round(digits);
-        interp.lostdigits_check_fuzz(
-            &number,
-            |_| number.render_unrounded(digits, form).into_bytes(),
-            &best,
-            |_| best.render_unrounded(digits, form).into_bytes(),
-            fuzz,
-        )?;
+        if !quiet {
+            interp.lostdigits_check_fuzz(
+                &number,
+                |_| number.render_unrounded(digits, form).into_bytes(),
+                &best,
+                |_| best.render_unrounded(digits, form).into_bytes(),
+                fuzz,
+            )?;
+        }
         let takes_over = compare_decoded(
             &found,
             Some(&number),
@@ -409,6 +409,32 @@ pub(crate) fn max_min_over(
         }
     }
     Ok(interp.number(best, saturate(digits), form))
+}
+
+/// The widest a whole number can be written and still count as one here.
+const WRITTEN_WHOLE_DIGITS: usize = 18;
+
+/// The value written as a whole number: an optional minus, then at most
+/// [`WRITTEN_WHOLE_DIGITS`] digits with no leading zero.
+fn whole_written(text: &[u8]) -> Option<i64> {
+    let digits = text.strip_prefix(b"-").unwrap_or(text);
+    if digits.is_empty() || digits.len() > WRITTEN_WHOLE_DIGITS {
+        return None;
+    }
+    if !digits.iter().all(u8::is_ascii_digit) || (digits[0] == b'0' && digits.len() > 1) {
+        return None;
+    }
+    std::str::from_utf8(text).ok()?.parse().ok()
+}
+
+/// Whether `MAX`/`MIN` stay quiet on LOSTDIGITS (Deviation 44): the target is
+/// written as a whole number that fits `digits`, and so is every argument.
+fn written_whole(interp: &mut Interp, target: &[u8], rest: &[Option<ObjRef>], digits: u64) -> bool {
+    let width = digits.min(WRITTEN_WHOLE_DIGITS as u64) as u32;
+    whole_written(target).is_some_and(|value| value.unsigned_abs() < 10u64.pow(width))
+        && rest
+            .iter()
+            .all(|slot| slot.is_some_and(|arg| whole_written(&interp.to_text(arg)).is_some()))
 }
 
 // ---- RANDOM ----

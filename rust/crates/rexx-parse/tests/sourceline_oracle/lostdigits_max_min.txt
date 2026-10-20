@@ -1,9 +1,13 @@
-count 37
-/* MAX and MIN raise LOSTDIGITS for an argument wider than DIGITS, named
-   by its number unrounded, in either form. */
+count 57
+/* MAX and MIN raise LOSTDIGITS for an argument after the first, unless the
+   first is a whole number valid under DIGITS and every argument is whole.
+   The first argument, and the arguments of the rounding builtins, never
+   raise it. */
 call t 'max(1.5, 1111111111)'
 call t 'min(1.5, 1111111111)'
+call t '1111111111~max(2222222222)'
 call t '1.5~min(2222222222)'
+call t 'max(1111111111, 2222222222)'
 call t 'max(1.5, 1, 3333333333)'
 call t "max('1.5', ' 4444444444 ')"
 call t "max(1.5, '44444444440E-1')"
@@ -14,6 +18,21 @@ call t "max(1.5, '.00004444444444')"
 call t "max(1.5, '1.00000000000000000000000001E-7')"
 call t 'max(1.5, 1.111111111)'
 call t 'max(1.5, 111111111)'
+-- Their answers are not part of this witness, only that they raise nothing.
+call t 'max(1, 1111111111)', 'quiet'
+call t 'min(1, 1111111111)', 'quiet'
+call t '1~max(1111111111)', 'quiet'
+call t '1~min(1111111111)', 'quiet'
+call t 'max(1111111111, 2)'
+call t 'min(1.1111111111, 2)'
+call t '1.1111111111~max(2)'
+call t 'abs(1111111111)'
+call t '1111111111~abs'
+call t 'format(1111111111)'
+call t 'format(1.1111111111, 2, 3)'
+call t 'trunc(1.1111111111, 2)'
+call t 'sign(1111111111)'
+call t '1111111111~sign'
 numeric form engineering
 call t "max(1.5, '44444444440E-1')"
 call t "max(1.5, '4444444444E+20')"
@@ -27,11 +46,12 @@ r~call
 exit
 
 t: procedure
-  parse arg expr
+  parse arg expr, quiet
   signal on lostdigits
   numeric digits 9
   interpret 'x=' expr
-  say left(expr, 30) 'none' x
+  if quiet == '' then say left(expr, 30) 'none' x
+  else say left(expr, 30) 'none'
   return
 lostdigits:
   say left(expr, 30) condition('C') '['condition('D')']' sigl

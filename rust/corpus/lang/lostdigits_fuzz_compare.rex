@@ -22,6 +22,7 @@ call t 'max(1.00000001, 1.00000002)'
 call t 'max(1, 1.00000002)'
 call t 'max(1.00000001, 1)'
 call t "max(1, ' 1.00000002 ')"
+call t 'max(1.000000012, 1)'
 call t 'max(2, 1.000000012)'
 call t 'min(2, 1.00000002, 1.00000003)'
 call t 'max(1.00000001)'
@@ -37,6 +38,8 @@ numeric fuzz 1
 call t '1.23 = 1.24'
 call t '1.2 = 1.3'
 call t '123 = 124'
+numeric form engineering
+call t 'max(12345.6789, 12345.6788)'
 call syntax
 exit
 
