@@ -2401,6 +2401,7 @@ DEVIATIONS -- permanent, chosen
      close only closes (rexxpg rexio.xml:613-616, rexxref funct.xml:3193-3196).
      Ruled: `AAAABBBBCCCCDDDD` opened BOTH BINARY RECLENGTH 4, then
      `charout(f,'x',5)` and `lineout(f)`, leaves `AAAAxBBBCCCCDDDD`.
+     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES and departures-oracle.tsv, rule pads-on-close).
      LICENSED DIVERGENCE WITNESS: lineout-without-string-pads-nothing
 
  47. A `DO` REPETITOR OR `FOR` COUNT WIDER THAN NUMERIC DIGITS RAISES 26.2
@@ -2433,6 +2434,7 @@ DEVIATIONS -- permanent, chosen
      position. The documentation gives transient streams no positions
      (rexxref iostrms.xml:186-197). This crate writes to a transient stream
      without seeking (.superpowers/sdd/queued/2026-10-18-fifo-buffered-write-seek.md).
+     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES, rule transient-no-seek).
  49. READ AND WRITE POSITIONS ON A PERSISTENT STREAM FOLLOW THE
      DOCUMENTATION, BUFFERED OR NOT (Phase 9d). OWNER: none.
 
@@ -2459,6 +2461,12 @@ DEVIATIONS -- permanent, chosen
      scenarios against the NOBUFFER oracle). Measured by the Phase 9d Task
      6.5 review of rounds 2 and 3
      (.superpowers/sdd/2026-10-18-phase-9d/task-6.5-review-r23.md).
+     Extended by Moritz 2026-10-20 ("Extend 49"): on a NOBUFFER stream the
+     oracle lands past the end for every char SEEK `<n`, whether it names
+     READ, WRITE or neither position: `seek <3 read` on an 18-byte file
+     gives 22, where the documentation gives 16. Measured by Phase 9d Task
+     6.15 (docs/superpowers/records/2026-10-18-phase-9d/t6.15/seek-from-end-split.txt).
+     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES and departures-oracle.tsv, rules relative-seek and seek-from-end).
      LICENSED DIVERGENCE WITNESS: write-position-after-buffered-read
      LICENSED DIVERGENCE WITNESS: relative-seek-from-named-position
 
