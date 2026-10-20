@@ -2362,6 +2362,8 @@ DEVIATIONS -- permanent, chosen
      raises where `max(1, 1111111111)` does not. This crate rounds to the
      digits in force. Ruled: this crate rounds in both the function and the
      message form, as ANSI X3.274 section 9.4 does, and decides by the value.
+     Witnessed by tests/numeric_model.rs (ORACLE_DEPARTURES, rules
+     wide-integer and written-value).
      LICENSED DIVERGENCE WITNESS: max-min-wide-integer-rounds
 
  45. `Bag~hasItem` WITH AN INDEX UNEQUAL TO THE ITEM ANSWERS 0 (Phase 9d).
@@ -2419,6 +2421,7 @@ DEVIATIONS -- permanent, chosen
      raises 26.2 on the oracle too. Measured by Phase 9d Task 6.14
      (docs/superpowers/records/2026-10-18-phase-9d/t6.14/r2/oracle-departures.tsv,
      rule do-count).
+     Witnessed by tests/numeric_model.rs (ORACLE_DEPARTURES, rule do-count).
  48. A WRITE TO A TRANSIENT STREAM NEVER SEEKS (Phase 9d). OWNER: none.
 
      Ruled by Moritz 2026-10-18 ("Lgtm"), from the derivation in
