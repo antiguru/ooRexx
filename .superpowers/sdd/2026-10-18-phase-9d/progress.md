@@ -132,3 +132,10 @@ Task 6.14 rereview (opus): CHANGES REQUESTED, Important = Deviation 53 descripti
 Task 6.14 r3 (1e386dec7): numeric_model's new row-check red until Deviations 44 and 47 name the test; controller added the two sentences; numeric_model 23 passed, licensed_divergences 22 passed (controller run).
 Task 6.14 r3 re-review (sonnet) APPROVED (Minor: row splitter can false-red, never false-green; accepted). Task 6.14: complete (009fd1978, 7a6eb8778, 525ca9989, 9b07a4e33, f8950e861, bc176f5e8, 1017846f2, 1e386dec7). Deviation 53; 44/47 witness sentences; 47 extended.
 Task 6.15: dispatched (implementer opus).
+Task 6.15: implementer DONE_WITH_CONCERNS at 86175cf84 (5 commits from 5698947b0). Reviewer t615-review (opus) dispatched.
+Moritz rulings 2026-10-20 on 6.15 concerns:
+  - Dev 49 extend: every char `SEEK <n` (READ, WRITE or none named) lands past the end on the NOBUFFER oracle ("Extend 49").
+  - New Deviation: oracle CHARS/LINES on a FIFO consume a byte (SysFile::hasData); crate consumes nothing ("New Deviation").
+  - R1-R4 (OPEN WRITE reads; stale line tracker for line positions; QUERY POSITION LINE from tracker; LINES Count after CHARIN): change crate to rexxref, one Deviation each; revert any that breaks ooTest ("Docs, revert on ooTest").
+  - Invalid SEEK (below 1; WRITE on a READ stream): answer 0, NOTREADY, position unchanged; Deviation ("0 + NOTREADY").
+  - LINEOUT buffered until close: crate writes through, no Deviation, close queued item ("Write-through, no Dev").

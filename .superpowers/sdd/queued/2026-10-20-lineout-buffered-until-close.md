@@ -1,4 +1,4 @@
-**OPEN: found by the Phase 9d Task 6.13 round-2 re-review, not yet ruled.** The oracle buffers LINEOUT to a named stream until close; the crate writes through.
+**CLOSED, ruled by Moritz 2026-10-20 ("Write-through, no Dev"): no Deviation.** rexxref expects buffering and offers NOBUFFER and FLUSH to make writes visible (funct.xml:4331-4335, 4390-4391; iostrms.xml:495-500), but never requires written data to stay hidden, so both interpreters follow it. The crate keeps writing through. Measured by Phase 9d Task 6.15 (`docs/superpowers/records/2026-10-18-phase-9d/t6.15/probes/lineout-visibility.rex`).
 
 # LINEOUT to a named stream is buffered on the oracle
 
