@@ -1765,7 +1765,7 @@ fn push_read(
 fn echoes(trace: ChunkTrace, instruction: &Instruction) -> bool {
     trace.echoes(
         matches!(instruction.kind, InstructionKind::Label { .. }),
-        crate::command::issues_command(&instruction.kind),
+        matches!(instruction.kind, InstructionKind::Command { .. }),
     )
 }
 

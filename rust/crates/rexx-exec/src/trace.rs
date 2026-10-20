@@ -265,6 +265,14 @@ impl Interp {
         self.trace_result_line(indent, value);
     }
 
+    /// The `*-*` line of a clause issuing a command, ungated.
+    pub(crate) fn trace_issued_clause(&mut self, line: usize, indent: usize, text: &[u8]) {
+        self.trace_debug_source();
+        let start = self.trace.len();
+        push_clause(&mut self.trace, line, indent, text);
+        self.route_trace_line(start);
+    }
+
     /// `+++ "RC(n)"`, the return code of a command that was traced by either
     /// route. Ungated for [`Interp::trace_command_retrace`]'s reason.
     pub(crate) fn trace_command_rc(&mut self, indent: usize, rc: &[u8]) {

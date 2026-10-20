@@ -1558,11 +1558,11 @@ impl Interp {
                         continue;
                     }
                     self.activities.in_flight -= 1;
-                    if let Some(blocked) = self
+                    let ended = self
                         .record_of(activity)
                         .and_then(|record| record.blocked.as_mut())
-                    {
-                        blocked.end(ended);
+                        .is_some_and(|blocked| blocked.end(token, ended));
+                    if ended {
                         self.unpark(activity);
                     }
                 }

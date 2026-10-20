@@ -304,8 +304,10 @@ lang/security_manager_existing_instances.rex
 lang/context_rs_command.rex
 lang/command_redirected_off_baton.rex
 # 9d Task 6.13 fix round 1: unregistered environments named after loaded
-# packages, redirect targets seen mid-command, and parked targets rooted.
+# packages, redirect targets seen mid-command, parked targets rooted, the
+# TRACE C echo of an ADDRESS command, and a target raising mid-command.
 lang/command_library_environments_unregistered.rex
 lang/command_redirected_targets_mid_command.rex
 lang/command_redirected_targets_collected.rex
 lang/trace_commands_address_clause.rex
+lang/command_redirected_target_raises.rex

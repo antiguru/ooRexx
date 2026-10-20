@@ -477,16 +477,6 @@ pub(crate) enum Commanded {
     Left(u64),
 }
 
-/// Whether a clause of `kind` issues a command: a command clause, or an
-/// `ADDRESS` naming one, which `TRACE C` echoes alike.
-pub(crate) fn issues_command(kind: &rexx_parse::InstructionKind) -> bool {
-    match kind {
-        rexx_parse::InstructionKind::Command { .. } => true,
-        rexx_parse::InstructionKind::Address(address) => address.command.is_some(),
-        _ => false,
-    }
-}
-
 /// What one child left behind: its return code and each stream it wrote.
 pub(crate) struct Waited {
     rc: i32,
@@ -593,9 +583,16 @@ impl Blocked {
         }
     }
 
-    /// Records what the child left.
-    pub(crate) fn end(&mut self, ended: Waited) {
+    /// Records what the child left, under the token the wait was left with;
+    /// answers whether it was this wait's. A clause whose target write
+    /// raised has left its wait, and the next command's wait has a token of
+    /// its own.
+    pub(crate) fn end(&mut self, token: u64, ended: Waited) -> bool {
+        if token != self.token {
+            return false;
+        }
         self.ended = Some(ended);
+        true
     }
 
     /// Ends the wait for a child still running, which a halt abandons there,
@@ -1076,6 +1073,9 @@ impl Interp {
         io: Option<&AddressIo>,
     ) -> Result<ExecOutcome, Failure> {
         let indent = self.activity.clause_state.current_value_indent;
+        if matches!(instruction.kind, rexx_parse::InstructionKind::Address(_)) {
+            self.echo_address_command(source, instruction, indent);
+        }
         let value = self.eval(code, expression)?;
         self.roots.activity_mut().push_temp(value);
         let value = self.required_string_or_nil(value)?;
@@ -1143,20 +1143,36 @@ impl Interp {
             .map(ExecOutcome::Done)
     }
 
-    /// Whether the running activity's command clause has a child that ended
-    /// off the baton, or output for its target, which
-    /// [`Interp::end_blocked_command`] takes.
-    pub(crate) fn blocked_command_woken(&self) -> bool {
-        self.activity
-            .blocked
-            .as_ref()
-            .is_some_and(|blocked| blocked.ended.is_some() || !blocked.captured.is_empty())
+    /// The `*-*` line of an `ADDRESS` clause issuing a command where the
+    /// setting echoes commands but not every clause (`TRACE C`), which the
+    /// oracle echoes as it does a command clause. Every other setting that
+    /// echoes it has done so before the clause ran.
+    fn echo_address_command(
+        &mut self,
+        source: Option<&ProgramSource>,
+        instruction: &Instruction,
+        indent: usize,
+    ) {
+        let trace = self.chunk_trace();
+        if trace.echoes(false, true)
+            && !trace.echoes(false, false)
+            && let Some((line, text)) = self.clause_site(source, instruction)
+        {
+            self.trace_issued_clause(line, indent, &text);
+        }
     }
 
-    /// The command clause whose child waits off the baton, woken: the output
-    /// that arrived is written to the target, and the clause parks again
-    /// until its child has ended, when it is settled as [`Interp::exec_command`]
-    /// settles one whose child it waited for.
+    /// Whether the running activity's command clause has a child off the
+    /// baton, which [`Interp::end_blocked_command`] takes up.
+    pub(crate) fn blocked_command_woken(&self) -> bool {
+        self.activity.blocked.is_some()
+    }
+
+    /// The command clause whose child waits off the baton, run again: the
+    /// output that arrived is written to the target, and the clause parks
+    /// again until its child has ended, when it is settled as
+    /// [`Interp::exec_command`] settles one whose child it waited for. A run
+    /// with neither, after a wake that was not the command's, parks again.
     pub(crate) fn end_blocked_command(
         &mut self,
         index: usize,

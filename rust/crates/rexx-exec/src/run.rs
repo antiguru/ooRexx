@@ -3128,7 +3128,7 @@ impl Interp {
         indent: usize,
     ) {
         let is_label = matches!(instruction.kind, InstructionKind::Label { .. });
-        let is_command = crate::command::issues_command(&instruction.kind);
+        let is_command = matches!(instruction.kind, InstructionKind::Command { .. });
         if self.tracing_clause(is_label, is_command)
             && let Some((line, text)) = self.clause_site(source, instruction)
         {
