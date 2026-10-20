@@ -2485,6 +2485,18 @@ DEVIATIONS -- permanent, chosen
      (oracle `in 1 0 4`, this crate `in 1 1 4`). No ooTest test reaches it.
      LICENSED DIVERGENCE WITNESS: context-rs-in-interpret
 
+ 52. A REDIRECT TARGET'S ERROR IS RAISED WHATEVER THE COMMAND'S RETURN
+     CODE (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-19. With an output target whose `lineout`
+     raises SYNTAX, the oracle raises 42.3 when the command ends with rc 0,
+     but runs on past the clause with no condition when it ends non-zero:
+     `'echo a; echo b; exit 3'` continues, `'echo a; echo b; exit 0'`
+     raises 42.3. This crate raises 42.3 in both, since the target's
+     failure does not depend on the command's return code. Measured by
+     Phase 9d Task 6.13 fix round 1
+     (.superpowers/sdd/2026-10-18-phase-9d/task-6.13-report.md, Concerns).
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
