@@ -322,3 +322,4 @@ lang/command_redirected_target_raises_part_line.rex
 # condition other than SYNTAX taken by SIGNAL ON ends the clause at once.
 lang/command_redirected_target_waits_elsewhere.rex
 lang/command_redirected_target_signals.rex
+lang/command_redirected_started_target_sleeps.rex

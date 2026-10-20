@@ -1,0 +1,21 @@
+/* A started activity's redirect target sleeps while its child's next line
+   arrives, and main's own redirected command runs meanwhile: each wait wakes
+   its own clause, and the started activity's method ends once. */
+m = .W~new~start('go')
+call SysSleep 0.2
+address system 'sleep 1.2; echo x' with output stem t.
+say 'main rc' rc 't' t.0 t.1
+say 'worker' m~result
+exit
+::class W
+::method go
+  signal on any name t
+  address system 'echo a; sleep 0.6; echo LATE' with output using (.Slow~new)
+  return 'no'
+t: return 'trapped' condition('c')
+::class Slow subclass OutputStream
+::method lineout
+  use arg l
+  call SysSleep 0.1
+  say 'O:'l
+  return 0
