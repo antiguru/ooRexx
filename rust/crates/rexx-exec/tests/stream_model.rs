@@ -1241,3 +1241,62 @@ fn every_licensing_deviation_names_this_test() {
          stream_model: {unnamed:?}"
     );
 }
+
+/// Another stream object, and another process, writing a file a stream has
+/// counted lines in. The line answers may go stale (rexxref
+/// iostrms.xml:495-500), and a debug build's checks of the line cache must
+/// stand aside rather than abort a legal program. Run unoptimised, this is
+/// the test that sees them.
+const SECOND_WRITER: &str = r#"
+f = DIR || '/c.txt'
+call charout f, 'a' || '0a'x || 'b' || '0a'x; call charout f
+r = .stream~new(f); w = .stream~new(f)
+zz = r~open('read'); zz = w~open('write append')
+say 'before' r~lines('C')
+zz = w~lineout('c'); zz = w~lineout('d'); zz = w~close
+say 'after ' r~lines('C') 'fresh' .stream~new(f)~lines('C')
+zz = r~close
+g = DIR || '/d.txt'
+call charout g, 'aaaa' || '0a'x || 'bbbb' || '0a'x || 'cccc' || '0a'x; call charout g
+r = .stream~new(g)
+zz = r~open('read')
+say 'A' r~linein r~linein r~query('position read line') r~query('position read char')
+o = .stream~new(g)
+zz = o~charout('x' || '0a'x || 'y' || '0a'x, 1)
+zz = o~close
+say 'B' r~query('position read line') r~lines('C')
+zz = r~close
+h = DIR || '/e.txt'
+call charout h, 'aaaa' || '0a'x || 'bbbb' || '0a'x || 'cccc' || '0a'x; call charout h
+r = .stream~new(h)
+zz = r~open('read')
+say 'C' r~linein r~query('position read line')
+address system "printf 'x\ny\n' | dd of="h" conv=notrunc status=none"
+say 'D' r~query('position read line') r~lines('C') r~linein r~query('position read line')
+zz = r~close
+"#;
+
+#[test]
+fn a_second_writer_leaves_the_line_cache_checks_quiet() {
+    let dir = fresh_dir("second-writer", &[]);
+    let text = SECOND_WRITER.replace("DIR", &format!("'{}'", dir.display()));
+    let file = dir.join("second.rex");
+    fs::write(&file, &text).unwrap_or_else(|e| panic!("cannot write {}: {e}", file.display()));
+    let outcome = run_program(
+        file.to_str().expect("the path is UTF-8"),
+        text.into_bytes(),
+        Invocation::none().with_deadline(support::oracle::RUN_DEADLINE),
+    );
+    assert_eq!(
+        (
+            outcome.exit_code,
+            String::from_utf8_lossy(&outcome.stderr).into_owned()
+        ),
+        (0, String::new()),
+        "a legal program with a second writer must run to its end"
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "before 2\nafter  2 fresh 4\nA aaaa bbbb 3 11\nB 3 3\nC aaaa 2\nD 2 4 bbbb 3\n"
+    );
+}

@@ -537,6 +537,13 @@ pub struct OpenFile {
     pub line_mark: Option<(i64, i64)>,
     /// The stream's line count, dropped by any write.
     pub line_total: Option<u64>,
+    /// Debug builds only: digests of the bytes [`OpenFile::line_mark`] and
+    /// [`OpenFile::line_total`] were counted over, so a check of either runs
+    /// only while those bytes are unchanged. Another stream object or process
+    /// writing the file may leave the line answers stale (rexxref
+    /// iostrms.xml:495-500); the checks then stand aside.
+    pub line_mark_digest: Option<u64>,
+    pub line_total_digest: Option<u64>,
 }
 
 /// A `Stream`'s own state (`streamLibrary/StreamNative.hpp:158`). The name is

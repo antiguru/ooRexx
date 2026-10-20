@@ -753,6 +753,8 @@ pub(super) fn open(
         transient,
         line_mark: None,
         line_total: None,
+        line_mark_digest: None,
+        line_total_digest: None,
     });
     state.status = StreamStatus::Ready;
     Ok(Some(interp.text(b"READY:")))
@@ -1021,6 +1023,8 @@ fn ensure_open(
         transient,
         line_mark: None,
         line_total: None,
+        line_mark_digest: None,
+        line_total_digest: None,
     });
     Ok(true)
 }
@@ -1695,8 +1699,10 @@ fn landing(open: &rexx_core::OpenFile, append: bool, position: i64) -> i64 {
 /// writes the file meanwhile (iostrms.xml:495-500).
 fn write_open(open: &mut rexx_core::OpenFile, at: i64, bytes: &[u8]) -> std::io::Result<()> {
     open.line_total = None;
+    open.line_total_digest = None;
     if open.line_mark.is_some_and(|(mark, _)| at <= mark) {
         open.line_mark = None;
+        open.line_mark_digest = None;
     }
     write_at(&mut open.file, offset_of(at), bytes, open.transient)
 }
@@ -2160,16 +2166,58 @@ fn line_count(open: &mut rexx_core::OpenFile, record_length: u64) -> std::io::Re
         return Ok(whole + u64::from(!size.is_multiple_of(record_length)));
     }
     if let Some(total) = open.line_total {
-        debug_assert_eq!(
-            Some(total),
-            count_lines_from(&mut open.file, 1).ok(),
-            "the cached line count"
-        );
+        if cfg!(debug_assertions) && total_intact(open) {
+            assert_eq!(
+                Some(total),
+                count_lines_from(&mut open.file, 1).ok(),
+                "the cached line count"
+            );
+        }
         return Ok(total);
     }
     let total = count_lines_from(&mut open.file, 1)?;
     open.line_total = Some(total);
+    if cfg!(debug_assertions) {
+        open.line_total_digest = digest_before(&mut open.file, size as i64 + 1);
+    }
     Ok(total)
+}
+
+/// Debug builds: a digest of the bytes before character `upto`.
+fn digest_before(file: &mut std::fs::File, upto: i64) -> Option<u64> {
+    use std::hash::{Hash, Hasher};
+    let bytes = read_from(file, 1, usize::try_from(upto - 1).ok()?).ok()?;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    Some(hasher.finish())
+}
+
+/// Debug builds: whether the bytes the line mark was counted over are as
+/// they were.
+fn mark_intact(open: &mut rexx_core::OpenFile) -> bool {
+    match (open.line_mark, open.line_mark_digest) {
+        (Some((mark, _)), Some(digest)) => digest_before(&mut open.file, mark) == Some(digest),
+        _ => false,
+    }
+}
+
+/// Debug builds: whether the file the line count was counted over is as it
+/// was.
+fn total_intact(open: &mut rexx_core::OpenFile) -> bool {
+    let end = size_of(&open.file) as i64 + 1;
+    open.line_total_digest.is_some() && digest_before(&mut open.file, end) == open.line_total_digest
+}
+
+/// Sets the line mark. In a debug build its digest is kept only when the
+/// line was counted from bytes known unchanged, so a mark built on a stale
+/// one is never checked.
+fn set_mark(open: &mut rexx_core::OpenFile, position: i64, line: i64, trusted: bool) {
+    open.line_mark = Some((position, line));
+    open.line_mark_digest = if cfg!(debug_assertions) && trusted {
+        digest_before(&mut open.file, position)
+    } else {
+        None
+    };
 }
 
 /// The lines of a text stream from `position` on, which is not past its end:
@@ -2178,11 +2226,13 @@ fn lines_after(open: &mut rexx_core::OpenFile, position: i64) -> std::io::Result
     let total = line_count(open, 0)?;
     let before = u64::try_from(line_of(open, position, 0)? - 1).unwrap_or(0);
     let answer = total.saturating_sub(before);
-    debug_assert_eq!(
-        Some(answer),
-        count_lines_from(&mut open.file, offset_of(position)).ok(),
-        "the lines after a position, from the cached count"
-    );
+    if cfg!(debug_assertions) && total_intact(open) && mark_intact(open) {
+        assert_eq!(
+            Some(answer),
+            count_lines_from(&mut open.file, offset_of(position)).ok(),
+            "the lines after a position, from the cached count"
+        );
+    }
     Ok(answer)
 }
 
@@ -2206,15 +2256,18 @@ fn seek_line(open: &mut rexx_core::OpenFile, target: i64, record_length: u64) ->
         }
         _ => (1, 1),
     };
+    let trusted = cfg!(debug_assertions) && (from == 1 || mark_intact(open));
     let (moved, at) =
         seek_forward_lines(&mut open.file, from, line - from_line).unwrap_or((0, from));
     let reached = from_line + moved;
-    debug_assert_eq!(
-        Some((reached - 1, at)),
-        seek_forward_lines(&mut open.file, 1, line - 1).ok(),
-        "a line walk from the mark"
-    );
-    open.line_mark = Some((at, as_position(reached)));
+    if trusted {
+        assert_eq!(
+            Some((reached - 1, at)),
+            seek_forward_lines(&mut open.file, 1, line - 1).ok(),
+            "a line walk from the mark"
+        );
+    }
+    set_mark(open, at, as_position(reached), trusted);
     (reached, at)
 }
 
@@ -2262,13 +2315,16 @@ fn line_of(
         Some((mark, mark_line)) if mark <= position => (mark, mark_line),
         _ => (1, 1),
     };
+    let trusted = cfg!(debug_assertions) && (from == 1 || mark_intact(open));
     let line = from_line + line_ends_between(&mut open.file, from, position)?;
-    debug_assert_eq!(
-        line,
-        1 + line_ends_between(&mut open.file, 1, position)?,
-        "a line counted from the mark"
-    );
-    open.line_mark = Some((position, line));
+    if trusted {
+        assert_eq!(
+            line,
+            1 + line_ends_between(&mut open.file, 1, position)?,
+            "a line counted from the mark"
+        );
+    }
+    set_mark(open, position, line, trusted);
     Ok(line)
 }
 

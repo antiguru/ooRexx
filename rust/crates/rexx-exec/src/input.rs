@@ -233,6 +233,9 @@ impl Input {
             return Some(0);
         }
         if let Source::Stdin(_) = &self.source {
+            if let Some((_, lines)) = self.stdin_file_remaining() {
+                return Some(lines);
+            }
             return self.stdin_waiting().map(u64::from);
         }
         let asked = std::mem::replace(&mut self.lines_asked, true);
@@ -256,6 +259,43 @@ impl Input {
                 })
             }
         }
+    }
+
+    /// The bytes and lines left on a standard input that is a regular file, a
+    /// persistent stream (rexxref iostrms.xml:155-165): what is buffered and
+    /// what the file holds after the descriptor's offset, read in place
+    /// without moving it. A last line with no line end counts. `None` for any
+    /// other standard input, and while a read is in flight.
+    fn stdin_file_remaining(&self) -> Option<(u64, u64)> {
+        let Source::Stdin(stdin) = &self.source else {
+            return None;
+        };
+        if stdin.reading {
+            return None;
+        }
+        let descriptor = std::io::stdin();
+        let status = rustix::fs::fstat(&descriptor).ok()?;
+        if rustix::fs::FileType::from_raw_mode(status.st_mode) != rustix::fs::FileType::RegularFile
+        {
+            return None;
+        }
+        let mut at = rustix::fs::seek(&descriptor, rustix::fs::SeekFrom::Current(0)).ok()?;
+        let mut bytes = stdin.buffered.len() as u64;
+        let mut ends = stdin.buffered.iter().filter(|byte| **byte == b'\n').count() as u64;
+        let mut last = stdin.buffered.last().copied();
+        let mut chunk = vec![0u8; STDIN_CHUNK];
+        loop {
+            let read = rustix::io::pread(&descriptor, &mut chunk, at).ok()?;
+            if read == 0 {
+                break;
+            }
+            bytes += read as u64;
+            ends += chunk[..read].iter().filter(|byte| **byte == b'\n').count() as u64;
+            last = Some(chunk[read - 1]);
+            at += read as u64;
+        }
+        let lines = ends + u64::from(last.is_some_and(|byte| byte != b'\n'));
+        Some((bytes, lines))
     }
 
     /// Whether data waits on a live standard input, found without blocking:
@@ -307,6 +347,9 @@ impl Input {
             return Some(0);
         }
         if let Source::Stdin(_) = &self.source {
+            if let Some((bytes, _)) = self.stdin_file_remaining() {
+                return Some(bytes);
+            }
             return self.stdin_waiting().map(u64::from);
         }
         match &self.source {

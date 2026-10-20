@@ -585,3 +585,69 @@ fn an_unreadable_console_is_end_of_input() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// The program the file-console test runs: the counts before, between and
+/// after reads, and a loop on LINES.
+const FILE_COUNT_PROGRAM: &str = "\
+say 'C' chars() .stdin~chars lines() .stdin~lines
+say '[' || linein() || ']'
+say 'D' chars() .stdin~chars lines() .stdin~lines
+n = 0
+do while lines() > 0 & n < 9
+  n = n + 1
+  say n '[' || linein() || ']'
+end
+say 'end' n chars() lines() .stdin~lines
+";
+
+/// A console redirected from a regular file is a persistent stream: CHARS
+/// answers the bytes left and LINES Count the lines left (rexxref
+/// iostrms.xml:155-170), a last line with no line end counted.
+#[test]
+fn a_file_console_counts_what_is_left() {
+    if !gate_mode() {
+        eprintln!(
+            "*** SKIPPED -- the file-console comparison needs the oracle and runs \
+             only with {GATE_ENV} set. ***"
+        );
+        return;
+    }
+    let dir = fresh_run_dir();
+    let file = dir.join("file-console.rex");
+    fs::write(&file, FILE_COUNT_PROGRAM)
+        .unwrap_or_else(|e| panic!("cannot write {}: {e}", file.display()));
+    let input = dir.join("console.txt");
+    fs::write(&input, b"hello\nworld\nthird\nlast")
+        .unwrap_or_else(|e| panic!("cannot write {}: {e}", input.display()));
+    let abs = fs::canonicalize(&file)
+        .unwrap_or_else(|e| panic!("cannot resolve {}: {e}", file.display()));
+    let as_stdin = || {
+        Stdio::from(
+            fs::File::open(&input)
+                .unwrap_or_else(|e| panic!("cannot open {}: {e}", input.display())),
+        )
+    };
+    let oracle = support::oracle::locate();
+    let rust = Command::new(env!("CARGO_BIN_EXE_rexx"))
+        .arg(&abs)
+        .current_dir(&dir)
+        .stdin(as_stdin())
+        .output()
+        .expect("rexx starts");
+    let cpp = oracle.run_with_stdin(&abs, &[], as_stdin());
+    assert!(
+        !did_not_finish(&cpp),
+        "a file console: the oracle did not finish: {:?}",
+        cpp.termination
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&rust.stdout),
+        String::from_utf8_lossy(&cpp.stdout),
+        "a file console's counts"
+    );
+    assert!(
+        String::from_utf8_lossy(&cpp.stdout).starts_with("C 22 22 1 4\n"),
+        "the oracle did not count the file: {}",
+        String::from_utf8_lossy(&cpp.stdout)
+    );
+}
