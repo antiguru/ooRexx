@@ -639,11 +639,11 @@ fn a_long_command_does_not_stop_another_activitys_output() {
     assert_eq!(ran.stdout(), "tick 1\ntick 2\ntick 3\nafter 0\ndone\n");
 }
 
-/// A redirected command keeps the baton while its child runs, so another
-/// activity's output waits for it; the oracle prints `w 1` to `w 3` first
-/// (30 of 30 runs).
+/// A redirected command's child is waited for on a pool thread too, so
+/// another activity's output does not wait for it; the oracle prints `w 1`
+/// to `w 3` first (30 of 30 runs).
 #[test]
-fn a_redirected_command_stops_every_other_activity() {
+fn a_redirected_command_does_not_stop_another_activity() {
     let ran = run(
         "m = .t~new~start('ticks')\naddress system 'sleep 1' with output stem o.\n\
          say 'main' rc\n::class t\n::method ticks\n  do i = 1 to 3\n    say 'w' i\n    \
@@ -651,7 +651,7 @@ fn a_redirected_command_stops_every_other_activity() {
         None,
     );
     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
-    assert_eq!(ran.stdout(), "main 0\nw 1\nw 2\nw 3\n");
+    assert_eq!(ran.stdout(), "w 1\nw 2\nw 3\nmain 0\n");
 }
 
 /// A lone activity's native call keeps the baton for its whole length

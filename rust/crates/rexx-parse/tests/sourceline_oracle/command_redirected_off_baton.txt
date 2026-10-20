@@ -1,0 +1,30 @@
+count 29
+/* A redirected command's wait lets the other activities run: the child
+   waits for a file the starting activity writes once the child has
+   announced itself. */
+call SysFileDelete 'started'
+call SysFileDelete 'answer'
+job = .Job~new
+msg = job~start('run')
+do tries = 1 to 200 until SysFileExists('started')
+  call SysSleep 0.05
+end
+say 'started seen' SysFileExists('started')
+call lineout 'answer.tmp', 'hello'
+call lineout 'answer.tmp'
+call SysFileMove 'answer.tmp', 'answer'
+say msg~result
+say 'input' job~lines
+call SysFileDelete 'started'
+call SysFileDelete 'answer'
+exit
+
+::class Job
+::attribute lines
+::method run
+  script = 'touch started; n=0; while [ ! -f answer ] && [ $n -lt 100 ];' -
+           'do sleep 0.05; n=$((n+1)); done;' -
+           'if [ -f answer ]; then read line; echo "got $(cat answer) $line"; else echo gave up; fi'
+  address system script with input using ('from rexx') output stem out.
+  self~lines = out.0
+  return rc out.1

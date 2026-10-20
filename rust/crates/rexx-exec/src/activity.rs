@@ -643,8 +643,7 @@ impl Activity {
             driver_pins: _,
             native_park,
             native_call,
-            // Bytes and a return code only.
-            blocked: _,
+            blocked,
             resuming: _,
             first,
             root_then,
@@ -680,6 +679,9 @@ impl Activity {
         // The raise's own `ADDITIONAL`, alive between the raise and the
         // condition object that will hold it.
         out.extend(*pending_additional);
+        if let Some(blocked) = blocked {
+            blocked.object_roots(out);
+        }
         out.extend(native_frames_owed.iter().copied());
         out.extend(*pending_result);
         out.extend(*pending_rc);

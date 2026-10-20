@@ -1,0 +1,38 @@
+/* RexxContext~rs: .nil before any command in its context, then the
+   return status of the last command that context issued. */
+say 'start' .context~rs
+outer = .context
+address system 'true'
+say 'normal' .context~rs .rs
+address system 'exit 3'
+say 'error' .context~rs .rs
+address system 'exit 127'
+say 'failure' .context~rs .rs
+address "" "echo foo" with output using (.Array~new)
+say 'redirected' .context~rs (.context~rs == .rs)
+call internal
+say 'after internal' .context~rs
+call routine outer
+say 'after routine' .context~rs
+say 'method' .Probe~new~run(outer)
+exit
+
+internal:
+  say 'internal' .context~rs
+  address system 'exit 5'
+  say 'internal after' .context~rs
+  return
+
+::routine routine
+  use arg caller
+  say 'routine' .context~rs 'caller' caller~rs
+  address system 'true'
+  say 'routine after' .context~rs 'caller' caller~rs
+  return
+
+::class Probe
+::method run
+  use arg caller
+  first = .context~rs
+  address system 'exit 2'
+  return first .context~rs caller~rs

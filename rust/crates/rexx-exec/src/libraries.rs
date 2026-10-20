@@ -66,6 +66,17 @@ impl Libraries {
         }))
     }
 
+    /// Whether a held library whose package loader ran has `name` as its
+    /// package name, compared without case.
+    pub(crate) fn loader_named(&self, name: &[u8]) -> bool {
+        self.held.values().any(|library| {
+            library.has_hook(rexx_api::load::Hook::Loader)
+                && library
+                    .name()
+                    .is_some_and(|package| package.eq_ignore_ascii_case(name))
+        })
+    }
+
     /// Records an ask for `name` that loaded nothing, which the oracle's
     /// table sees as a put and then a remove.
     pub(crate) fn missed(&mut self, name: &[u8]) {

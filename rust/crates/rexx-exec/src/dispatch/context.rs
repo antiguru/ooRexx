@@ -314,7 +314,13 @@ fn context_rs(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    at_context(interp, receiver, |_, _| Ok(Some(ObjRef::NIL)))
+    at_context(interp, receiver, |interp, depth| {
+        let rs = frame(interp, depth)?.rs;
+        Ok(Some(match rs {
+            Some(rs) => interp.text(rs.to_string().as_bytes()),
+            None => ObjRef::NIL,
+        }))
+    })
 }
 
 /// `RexxContext::getCondition`: a **copy** of the condition object the

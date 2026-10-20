@@ -639,6 +639,21 @@ impl Loud {
         }
     }
 
+    /// An `ADDRESS` environment no handler answers, named as a native package
+    /// whose loader ran: `hostemu`'s loader registers its environment under
+    /// that name through the classic subcommand API (`RexxRegisterSubcomExe`),
+    /// which this crate does not implement.
+    #[cold]
+    fn loader_environment(environment: &[u8]) -> Loud {
+        let shown = String::from_utf8_lossy(environment);
+        Loud {
+            message: owned_message(
+                &format!("ADDRESS environment \"{shown}\" a native package loader registers"),
+                Some(Owner::Phase10(rexx_core::Deferral::Extension)),
+            ),
+        }
+    }
+
     /// An operator whose **left** operand is an object that answers no
     /// operator message. No program reaches it: scout A's `spec-op.txt`
     /// probes, every dyadic and prefix operator on `.array`, `.local`,

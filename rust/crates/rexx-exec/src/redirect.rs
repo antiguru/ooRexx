@@ -125,6 +125,11 @@ impl Target {
 }
 
 impl IoContext {
+    /// Every object a target holds.
+    pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
+        out.extend(self.output.iter().chain(&self.error).map(Target::object));
+    }
+
     /// What a child reads on standard input: every line with its terminator,
     /// the last one included -- measured, `'cat -A' with input using 'x'`
     /// prints `x$`.

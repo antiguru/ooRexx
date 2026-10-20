@@ -297,6 +297,7 @@ base/class/RexxQueue	TEST_STRING_ONE_ARG	Phase 10 Rxapi	reaching_rxapi
 base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADLIBRARYNAME	Phase 10 Rxapi	refusal: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)
 base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADNAME	Phase 10 Rxapi	refusal: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)
 base/keyword/ADDRESS	TEST_REXXQUEUE	Phase 10 Rxapi	reaching_rxapi
+base/keyword/SIGNAL	TEST_SIGNAL_ANY_CONDITION_HALT	Phase 10 Extension	refusal: rexx-exec: ADDRESS environment "hostemu" a native package loader registers is not implemented (Phase 10 Extension)
 base/rexxutil/Macrospace	TEST_ADD_ARG_OPTION_ILLEGAL	Phase 10 Rxapi	reaching_rxapi
 base/rexxutil/Macrospace	TEST_ADD_ARG_PATH_INVALID	Phase 10 Rxapi	reaching_rxapi
 base/rexxutil/Macrospace	TEST_ADD_ARG_PATH_NO_VALID_REXX	Phase 10 Rxapi	reaching_rxapi

@@ -7,7 +7,3 @@
 #   awk -F'\t' '$3=="-" && $4=="passed" && $5=="failed" {print $1"\t"$2}' tests.tsv
 #
 # ootest revision 13178
-base/class/RexxContext	TESTRS01
-base/keyword/SIGNAL	TEST_SIGNAL_ANY_CONDITION_HALT
-samples/scclient	TEST_04_SCCLIENT.REX
-samples/sfclient	TEST_04_SFCLIENT.REX
