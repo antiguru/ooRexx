@@ -1,0 +1,10 @@
+# ootest revision 13178
+group	verdict	crate	oracle denominator
+base/bif/CHARIN	green		equal
+base/bif/CHAROUT	green		equal
+base/bif/CHARS	green		equal
+base/bif/LINEIN	green		equal
+base/bif/LINEOUT	green		equal
+base/bif/LINES	green		equal
+base/bif/STREAM	green		equal
+base/class/Stream	green		equal

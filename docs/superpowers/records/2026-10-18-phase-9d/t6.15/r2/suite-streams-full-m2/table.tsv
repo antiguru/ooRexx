@@ -1,0 +1,18 @@
+# ootest revision 13178
+group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
+base/bif/CHARIN	oracle	13	13	13			-	-	1	yes	ulimit -v 1048576	13
+base/bif/CHARIN	crate	13	13	13			-	-	1	yes	memcap 2G	13
+base/bif/CHAROUT	oracle	38	39	39			-	-	1	yes	ulimit -v 1048576	39
+base/bif/CHAROUT	crate	38	39	39			-	-	1	yes	memcap 2G	39
+base/bif/CHARS	oracle	11	11	11			-	-	1	yes	ulimit -v 1048576	11
+base/bif/CHARS	crate	11	11	11			-	-	1	yes	memcap 2G	11
+base/bif/LINEIN	oracle	4	4	4			-	-	1	yes	ulimit -v 1048576	4
+base/bif/LINEIN	crate	4	4	4			-	-	1	yes	memcap 2G	4
+base/bif/LINEOUT	oracle	14	17	17			-	-	1	yes	ulimit -v 1048576	17
+base/bif/LINEOUT	crate	14	17	15	TEST_BINARY	TEST_QUEUE=rexx-exec: environment symbol ".STDQUE" is not implemented (Phase 10 Rxapi)	-	-	2	yes	memcap 2G	16
+base/bif/LINES	oracle	16	16	16			-	-	1	yes	ulimit -v 1048576	16
+base/bif/LINES	crate	16	16	16			-	-	1	yes	memcap 2G	16
+base/bif/STREAM	oracle	40	40	40			-	-	1	yes	ulimit -v 1048576	40
+base/bif/STREAM	crate	40	40	40			-	-	1	yes	memcap 2G	40
+base/class/Stream	oracle	107	107	107			-	-	1	yes	ulimit -v 1048576	107
+base/class/Stream	crate	107	107	107			-	-	1	yes	memcap 2G	107

@@ -1,0 +1,4 @@
+# ootest revision 13178
+group	test	oracle	crate
+base/bif/LINEOUT	TEST_BINARY	passed	failed
+base/bif/LINEOUT	TEST_QUEUE	passed	blocked: rexx-exec: environment symbol ".STDQUE" is not implemented (Phase 10 Rxapi)

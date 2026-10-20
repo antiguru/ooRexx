@@ -1,0 +1,81 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `release` profile [optimized + debuginfo] target(s) in 51.79s
+     Running tests/corpus.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t615-target/release/deps/corpus-6953cc47785bd785)
+
+running 30 tests
+test probe_emit_uncaptured_marker ... ignored, run only by demonstrate_the_report_reaches_a_plain_cargo_test, as a child process
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test the_differential_reads_every_phase_subset_file ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test every_opted_in_comparison_names_a_program_the_subset_runs ... ok
+test the_multiset_stdout_mode_is_selected_for_exactly_the_listed_programs ... ok
+test every_lang_program_is_run_or_named_unfiled ... ok
+test demonstrate_the_report_reaches_a_plain_cargo_test ... ok
+test every_sidecar_names_a_program_the_subset_runs ... ok
+test the_multiset_stdout_licence_covers_order_and_nothing_else ... ok
+test a_sidecar_changes_what_one_of_the_interpreters_answers ... ok
+test corpus_differential has been running for over 60 seconds
+==============================================================================
+rexx-exec differential corpus report -- rust/corpus/phase-4a.txt + phase-4b.txt + phase-4c.txt + phase-5a.txt + phase-5b.txt + phase-5c.txt + phase-5d.txt + phase-5j.txt + phase-6-1.txt + phase-6.txt + phase-7.txt + phase-8.txt + phase-9.txt
+mode: STRICT (the gate) -- REXX_CORPUS_GATE is set
+1142 of 1149 matching
+mismatches (7):
+  [UNCLASSIFIED] lang/stream_chars_lines.rex: stdout differ
+      rust:   stdout="chars and lines\nlineout 0 0 0\nstate [READY]\nclose [READY:]\ncount 3 3 3\nnormal 1\nchars 9\nlinein [a]\ncount after a line read 2 2\ncharin [b]\ncount after a char read 2\nrest of the line [b]\nleft 1 4\nlast l..." stderr="" exit=0
+      oracle: stdout="chars and lines\nlineout 0 0 0\nstate [READY]\nclose [READY:]\ncount 3 3 3\nnormal 1\nchars 9\nlinein [a]\ncount after a line read 2 2\ncharin [b]\ncount after a char read 2\nrest of the line [b]\nleft 1 4\nlast l..." stderr="" exit=0
+  [UNCLASSIFIED] lang/std_stream_writes.rex: stdout differ
+      rust:   stdout="standard streams\nout string  [STDOUT]\nin  string  [STDIN]\nerr string  [STDERR]\nout class   [Stream]\nout state   [READY]\nout descr   [READY:]\nout qualify [STDOUT]\nsame object [0]\nbuilt string[STDOUT]\nb..." stderr="12\n" exit=0
+      oracle: stdout="standard streams\nout string  [STDOUT]\nin  string  [STDIN]\nerr string  [STDERR]\nout class   [Stream]\nout state   [READY]\nout descr   [READY:]\nout qualify [STDOUT]\nsame object [0]\nbuilt string[STDOUT]\nb..." stderr="12\n" exit=0
+  [UNCLASSIFIED] lang/stream_notready_names.rex: stdout differ
+      rust:   stdout="2F chars [0] hits 1 state ERROR [ERROR:2 No such file or directory] D=2F A=Stream:2F R=[0] I=CALL P=0\n2F lines [0] hits 1 state ERROR [ERROR:2 No such file or directory] D=2F A=Stream:2F R=[0] I=CALL ..." stderr="" exit=0
+      oracle: stdout="2F chars [0] hits 1 state ERROR [ERROR:2 No such file or directory] D=2F A=Stream:2F R=[0] I=CALL P=0\n2F lines [0] hits 1 state ERROR [ERROR:2 No such file or directory] D=2F A=Stream:2F R=[0] I=CALL ..." stderr="" exit=0
+  [UNCLASSIFIED] lang/stream_charin_eof.rex: stdout differ
+      rust:   stdout="s~charin(9, 6) [90] NOTREADY:EOF raised f.txt [90]\ns~charin(, 2) [] NOTREADY:EOF raised f.txt []\ns~charin(30) [] NOTREADY:EOF raised f.txt []\ns~charin(11) [] NOTREADY:EOF raised f.txt []\ns~charin(5) [..." stderr="" exit=0
+      oracle: stdout="s~charin(9, 6) [90] NOTREADY:EOF raised f.txt [90]\ns~charin(, 2) [] ERROR:0 raised f.txt []\ns~charin(30) [] NOTREADY:EOF raised f.txt []\ns~charin(11) [] NOTREADY:EOF raised f.txt []\ns~charin(5) [5] RE..." stderr="" exit=0
+  [UNCLASSIFIED] lang/stream_binary_records.rex: stdout differ
+      rust:   stdout="READY:\nlineout 3 1\nlineout 2 1\nlineout 1 1\ntoo long 93.0\ncharout 0\ntoo long after charout 93.0\nlineout 0\ncharout 0\nclose READY:\n[xyabcz]\nREADY:\nlines 3 chars 10 lines N 3\nlinein [0123] READY: chars 6 ..." stderr="" exit=0
+      oracle: stdout="READY:\nlineout 3 0\nlineout 2 0\nlineout 1 0\ntoo long 93.0\ncharout 0\ntoo long after charout 93.0\nlineout 0\ncharout 0\nclose READY:\n[1    xyabcz33  ]\nREADY:\nlines 3 chars 10 lines N 3\nlinein [0123] READY:..." stderr="" exit=0
+  [UNCLASSIFIED] lang/stream_write_only_reads.rex: stdout differ
+      rust:   stdout="stream(f, 'c', 'open write') [READY:] READY: \nchars(f) [0] READY: \nlines(f) [0] READY: \nlines(f, 'N') [0] READY: \ncharin(f) [] ERROR:9 Bad file descriptor raised []\nstream(f, 'c', 'query position writ..." stderr="" exit=0
+      oracle: stdout="stream(f, 'c', 'open write') [READY:] READY: \nchars(f) [0] READY: \nlines(f) [0] READY: \nlines(f, 'N') [0] READY: \ncharin(f) [] ERROR:9 Bad file descriptor raised []\nstream(f, 'c', 'query position writ..." stderr="" exit=0
+  [UNCLASSIFIED] lang/stream_append_writes_at_end.rex: stdout differ
+      rust:   stdout="charout at 1 : C1=0 w15 C=0 w16\n   [line1|line2|XYZ]\nlineout at line 1 : L1=0 w17 L=0 w22\n   [line1|line2|new|tail|]\nseek then charout : S=2 w2 C=0 w14\n   [line1|line2|Q]\nwrite append : C1=0 w15 L2=1 ..." stderr="" exit=0
+      oracle: stdout="charout at 1 : C1=0 w15 C=0 w16\n   [line1|line2|XYZ]\nlineout at line 1 : L1=0 w17 L=0 w22\n   [line1|line2|new|tail|]\nseek then charout : S=2 w2 C=0 w14\n   [line1|line2|Q]\nwrite append : C1=0 w15 L2=0 ..." stderr="" exit=0
+by owner:
+  UNCLASSIFIED: 7
+==============================================================================
+test corpus_differential ... FAILED
+
+failures:
+
+---- corpus_differential stdout ----
+
+thread 'corpus_differential' (2992155) panicked at crates/rexx-exec/tests/corpus.rs:887:5:
+STRICT (REXX_CORPUS_GATE) mode: 7 of 1149 corpus programs disagree with the oracle; see the report above for which and why.
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    corpus_differential
+
+test result: FAILED. 28 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 118.36s
+
+error: test failed, to rerun pass `-p rexx-exec --test corpus`

@@ -1,0 +1,8 @@
+both w 5 charout 0
+    61620A1A51
+both w 5 lineout 0
+    61620A1A780A
+append w 5 lineout 0
+    61620A1A780A
+implicit charout 0
+    61620A1A51

@@ -493,3 +493,243 @@ From `rust/`, `CARGO_TARGET_DIR=<scratchpad>/t615-target`, `CARGO_INCREMENTAL=0`
    Moritz rules ctrl-Z for APPEND only, the overwrite comes back for the other streams, and the
    `ctrlz-is-data` rows split by open mode.
 3. The new rule labels need numbers. Until then, `departures-oracle.tsv` carries them as `new`.
+
+## Fix round 2
+
+Brief: `task-6.15-fix-r2.md`. Re-review: `task-6.15-rereview-r1.md`. Status: DONE_WITH_CONCERNS.
+I1-I3, M1, M2 and the CHARIN ruling are in. No ooTest row changed, so the CHARIN ruling stays.
+
+### Commits
+
+* `63c7cad28`: the crate (`dispatch/stream.rs`, `input.rs`, `rexx-core` `OpenFile`), the model,
+  the driver, `input_oracle.rs`'s console rows, and seven stream witnesses with their
+  `sourceline_oracle` files.
+* `9584ac2ba`: the named case `line-mark-after-write` and its `ORACLE_DEPARTURES` row.
+* The records commit that follows holds `t6.15/r2/` and this section.
+
+### I1: line operations are linear
+
+* `OpenFile` keeps `line_mark`, a (character position, line) pair from the last line operation,
+  and `line_total`, the stream's line count.
+* `line_of` counts forward from the mark when the mark is at or before the position. `seek_line`
+  walks forward from it when it lies on an earlier line. LINES Count is the line count less the
+  lines before the read position's line.
+* `write_open` drops the count on every write, and the mark on a write landing at or before it.
+  So each cached answer is what a recount answers. The cache rests on rexxref's condition for
+  its positioning optimizations, that nothing else writes the file meanwhile
+  (iostrms.xml:495-500).
+* Each accessor has a `debug_assert` that the cached answer equals a recount from the start.
+  `stream_model` and the gated corpus pass under a debug build
+  (`r2/checks-stream-model-debug.txt`, `r2/checks-corpus-debug.txt`, 1149 of 1149).
+* Inverting `line_of`'s assertion turns the debug `stream_model` red with `a line counted from
+  the mark` (`r2/mutation/line-mark-assert-inverted.txt`).
+* A write that never drops the mark turns the release named test red at `line-mark-after-write`
+  (`r2/mutation/mark-never-dropped.txt`). The generated scenarios alone did not catch it, so the
+  case was added.
+
+Callgrind, Ir for the whole process, from `r2/lineperf/run.sh` with the programs in
+`r2/lineperf/` (`table.tsv`):
+* `p1`: `do while s~lines > 0; s~linein`;
+* `p2`: `linein(f, i)`;
+* `p4`: LINEIN, then `query position read line`;
+* `p6`: `seek i read line`, then LINEIN.
+
+The parent is the round-0 binary, whose crates equal `2b5551df3`'s.
+
+| program | lines | parent | round 1 | head |
+| --- | --- | --- | --- | --- |
+| p1 | 2500 | 145,961,536 | 592,416,158 | 150,139,890 |
+| p1 | 5000 | 172,778,201 | 1,950,685,786 | 181,136,271 |
+| p2 | 2500 | 146,223,970 | 624,351,714 | 158,540,244 |
+| p2 | 5000 | 173,422,096 | 2,074,114,705 | 198,368,635 |
+| p4 | 2500 | 239,439,473 | 689,320,188 | 243,571,032 |
+| p4 | 5000 | 358,572,611 | 2,150,443,276 | 366,846,420 |
+| p6 | 2500 | 203,145,389 | 681,482,298 | 215,431,268 |
+| p6 | 5000 | 286,289,237 | 2,187,669,798 | 311,032,017 |
+
+Less the roughly 120M of startup, head doubles from 2500 to 5000 lines on every program, so it
+grows linearly, as the parent does. Round 1 grew quadratically. Head's `p2` costs about 5,000 Ir
+a line more than the parent's.
+
+### I2: nothing is consumed
+
+* `transient_has_data` asks `FIONREAD` first. That needs no read, and it covers pipes, FIFOs and
+  terminals.
+* Only a device that refuses `FIONREAD` falls back to a `poll`, then a one-byte read kept for the
+  next read. `/dev/null` is one such device, and its read finds the end and keeps nothing. Such a
+  device has no other way to tell whether data waits.
+* Probe `r2/probes/fifo-kept-byte.rex` (`r2/witnesses/fifo-kept-byte.*`):
+  * after CHARS and LINES on a FIFO holding `abcd\nef\n`, a second stream object reads `6162`
+    here and `6263` on round 1;
+  * after a close and reopen, head reads `6364` and round 1 `640A`;
+  * the oracle's second object reads `640A`, and its next CHARS blocks.
+
+### I3: the default input stream
+
+* `Input::stdin_waiting`: buffered data answers 1, and the end of input 0. Otherwise a `poll` with
+  no wait answers 0 when nothing is readable. When something is, a read that cannot block takes
+  what is there into the buffer.
+* LINES and CHARS on a live standard input answer from it. While a read is in flight they answer
+  1, since nothing can be learned then.
+* Witness: `input_oracle.rs` rows `console-lines-loop` and `console-chars-loop`, piped input,
+  oracle-identical (`r2/checks-input-oracle.txt`, gated, exit 0). Probe
+  `r2/probes/console-lines.rex` with `printf 'hello\nworld\nthird\n' |` reads one line on round 1
+  and three on head and on the oracle (`r2/witnesses/console-lines.*`).
+* With `/dev/null` as standard input, the oracle's first LINES and CHARS answer 1. Its
+  `SysFile::hasData` reads an unset count after `FIONREAD` fails. This crate answers 0, as
+  ruling 1 says for `/dev/null`. `lang/std_stream_writes.rex` drops those two lines.
+
+### M1: every rule compares its field
+
+* The line-position arms need the result, or the position the line operation set, to differ.
+* The relative and `<n` SEEK arms need the SEEK's answer to differ.
+* The append-record arm needs the LINEOUT's result or write position to differ.
+* A read on a WRITE stream that moves the read position is write-only.
+* After the first LINEOUT that would pad, the Deviation 46 variant is asked first.
+* `g3s35` is now `46 pads-on-close`, and `g4s32` is `new write-only`.
+
+### M2: line positioning on a WRITE stream
+
+On a text stream opened WRITE, a line SEEK answers 0 with NOTREADY and moves nothing, in the
+invalid SEEK's form. `lineout(f, s, n)` and `lineout(f, , n)` raise NOTREADY, answer 1 (LINEOUT's
+failure answer, funct.xml:3222-3226), and write and move nothing.
+
+On a record stream opened WRITE, lines are character positions (iostrms.xml:465-472), and LINEOUT
+may name a line past the end of a binary stream (funct.xml:3203-3205), so record positioning
+stays allowed there. ooTest's `LINEOUT TEST_BINARY` opens `write ... binary reclength 5` and
+asserts that each line-numbered LINEOUT answers 0. Refusing it would break the assertions that
+Deviation 46's licence relies on passing (global constraint 7). The full refusal did not change
+TEST_BINARY's row (`r2/suite-streams-full-m2/`), only because that test already fails at its
+licensed final assertion.
+
+### The CHARIN ruling (charin-eof-notready)
+
+A CHARIN that reads nothing at the end is NOTREADY:EOF. This applies to a file, a transient
+stream and the default input stream. A LINEIN on a record stream that reads nothing is
+NOTREADY:EOF too, as text LINEIN already was. A read that fails with an errno stays ERROR. The
+whole suite has no changed row (`r2/suite/`, against `t6.15/r1/suite/tests.tsv`), so nothing is
+reverted.
+
+### Witnesses edited
+
+Seven programs drop the lines the rulings overturn, and each is oracle-identical again (gated
+corpus 1149 of 1149):
+* `stream_chars_lines`, `stream_charin_eof` and `stream_notready_names`: CHARIN past the end;
+* `stream_binary_records`: the record LINEIN past the end;
+* `std_stream_writes`: the `/dev/null` counts and CHARIN past the end;
+* `stream_write_only_reads`: line positioning on a write-only text stream;
+* `stream_append_writes_at_end`: its WRITE scenario writes without a line number.
+
+### Recorded oracle labels
+
+From `cut -f2 departures-oracle.tsv | sort | uniq -c` (`r2/departure-labels.txt`):
+
+| label | rows |
+| --- | --- |
+| 46 pads-on-close | 53 |
+| 46 pads-on-close + 49 relative-seek | 4 |
+| 46 pads-on-close + 49 seek-from-end | 4 |
+| 46 pads-on-close + new append-record | 1 |
+| 46 pads-on-close + new charin-eof-notready | 7 |
+| 46 pads-on-close + new invalid-seek | 2 |
+| 46 pads-on-close + new line-position | 1 |
+| 46 pads-on-close + new write-only | 6 |
+| 49 relative-seek | 35 |
+| 49 seek-from-end | 51 |
+| new append-record | 3 |
+| new charin-eof-notready | 100 |
+| new ctrlz-is-data | 59 |
+| new invalid-seek | 91 |
+| new line-position | 19 |
+| new line-query | 19 |
+| new write-only | 300 |
+
+### Deviation candidates, updated
+
+* **CHARS AND LINES ON A TRANSIENT STREAM TAKE NO INPUT** (round 1, candidate 1) now covers the
+  default input stream.
+  * Rule: 1 while data waits and 0 at the end, so `do while lines() > 0` reads every waiting line.
+  * Measured: with `/dev/null` as standard input, the oracle answers 1 and this crate 0.
+  * Measured (I2): after CHARS and LINES, a second stream object on the FIFO reads `ab` here. The
+    oracle's reads have lost what its counts took.
+  * Witnessed by: unchanged.
+* **A STREAM OPENED WRITE READS NOTHING** (candidate 2) adds a rule: line positioning on a text
+  stream opened WRITE is NOTREADY. A line SEEK answers 0, and a LINEOUT with a line number
+  answers 1 and writes nothing.
+  * Measured: `lineout(f,'X',2)` after `open write` answers `0 READY` and writes line 2 on the
+    oracle, and `1 NOTREADY` here, writing nothing.
+  * rexxref funct.xml:4454-4455.
+* **A CTRL-Z IN A STREAM IS DATA** (candidate 7, ruled a Deviation by Moritz). Measured with
+  `r2/probes/ctrlz.rex` on `'ab'||'0a'x||'1a'x` (`r2/witnesses/ctrlz.*`):
+  * the oracle reports write position 4 on BOTH and APPEND opens, before the ctrl-Z, and this
+    crate reports 5;
+  * the oracle's CHAROUT `Q` at the end overwrites the ctrl-Z (`61620A51`), on BOTH and on an
+    implicit open, and its LINEOUT `x` does too (`61620A780A`);
+  * this crate keeps it in all three (`61620A1A51`, `61620A1A780A`);
+  * with APPEND the oracle's bytes land after the ctrl-Z (`61620A1A780A`, as here) while it
+    reports position 4;
+  * rexxref intro.xml:3322-3330;
+  * `     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES and departures-oracle.tsv, rule ctrlz-is-data).`
+* **On a record stream opened APPEND, LINEOUT completes the record at the end** (candidate 8,
+  ruled a Deviation by Moritz). Unchanged.
+* **New: A READ PAST THE END IS NOTREADY (Phase 9d).**
+  * Rule: a CHARIN that reads nothing at the end, on a file, a transient stream or the default
+    input, leaves the stream NOTREADY with description `NOTREADY:EOF`, as LINEIN does. So does a
+    record-stream LINEIN that reads nothing. A read that fails with an errno is still ERROR.
+  * Measured:
+    * named case `charin-bounds`: a bare `charin(f)` at the end of an 18-byte file answers the
+      null string, `ERROR` on the oracle and `NOTREADY` here;
+    * `lang/stream_charin_eof.rex` before its edit: `s~charin(, 2)` past the end left `ERROR:0`
+      on the oracle and `NOTREADY:EOF` here;
+    * `lang/stream_binary_records.rex` before its edit: a record LINEIN past the end left
+      `ERROR:0` and `NOTREADY:EOF`.
+  * rexxref streamclasses.xml:1638-1652 (the NOTREADY example is a read beyond the end).
+  * `     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES and departures-oracle.tsv, rule charin-eof-notready).`
+
+### Checks
+
+From `rust/`, `CARGO_TARGET_DIR=<scratchpad>/t615-target`, `CARGO_INCREMENTAL=0`; outputs in
+`t6.15/r2/`.
+
+| command | exit |
+| --- | --- |
+| `cargo fmt --all --check` | 0 |
+| `memcap 8G cargo clippy -j 4 -p rexx-exec -p rexx-core --all-targets -- -D warnings` (`checks-clippy.txt`) | 0 |
+| refusal tables + `licensed_divergences` + `numeric_model` (`checks-tables.txt`) | 0 |
+| `cargo test --release -p rexx-parse --test sourceline_oracle` (`checks-sourceline.txt`) | 0 |
+| `cargo test --release -p rexx-exec --lib` (`checks-lib.txt`) | 0, 1157 passed |
+| `cargo test --release -p rexx-core` (`checks-core.txt`) | 0 |
+| `REXX_CORPUS_GATE=1 ... --test corpus`, release (`checks-corpus.txt`) and debug (`checks-corpus-debug.txt`) | 0 and 0, 1149 of 1149 each |
+| `--test stream_model --no-fail-fast`, release (`checks-stream-model.txt`) and debug | 0 and 0 |
+| `REXX_CORPUS_GATE=1 ... --test input_oracle` (`checks-input-oracle.txt`) | 0 |
+| `--test ir_recorded --test collect_stress` (`checks-ir-collect.txt`) | 101: only `collect_stress`, at `raise_additional_array.rex`, as at `5698947b0` |
+| `REXX_SUITE_GATE=1 ... l3_core_suite` (`suite/`) | 0, 402 groups green, no row changed |
+
+### Perf
+
+`t6.15/r2/callgrind.txt`: parent `cg-9d/t6.15-r1/rexx-head`, head `cg-9d/t6.15-r2/rexx-head`
+(`63c7cad28`), exit 0. With libc subtracted:
+
+| program | parent vs pin | head vs pin | own delta |
+| --- | --- | --- | --- |
+| startup | -0.1202 | -0.1207 | -0.0005 |
+| interpret | -4.6331 | -4.6331 | 0.0000 |
+| parse | -0.1416 | -0.1417 | -0.0001 |
+| churn | +0.1068 | +0.1067 | -0.0001 |
+| sayloop | -0.0637 | -0.0639 | -0.0002 |
+
+### Concerns (round 2)
+
+1. **M2 is narrower than the cited sentence.** On a record stream opened WRITE, line positioning
+   stays allowed, for the binary-stream exception and the ooTest assertions above. If Moritz
+   wants the error there too, `LINEOUT TEST_BINARY`'s earlier assertions fail, and Deviation 46's
+   licence then needs a ruling.
+2. **The line cache assumes a single writer.** Another stream object writing line ends ahead of
+   the cached position leaves the mark stale, and in a debug build the assertion fires.
+   rexxref's positioning optimizations make the same assumption (iostrms.xml:495-500).
+3. **The console rows in `input_oracle.rs` race on startup.** The harness writes the piped input
+   after spawning, so a LINES asked before the bytes arrive answers 0 on both interpreters. It
+   was stable in every run here.
+4. `collect_stress` still fails at `raise_additional_array.rex`, as at the task base (round 1,
+   Concern 1).
+5. The new rule labels still need numbers (`new` in `departures-oracle.tsv`).

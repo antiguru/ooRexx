@@ -1,0 +1,80 @@
+   Compiling rexx-inventory v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory)
+   Compiling cfg-if v1.0.4
+   Compiling rustc-hash v2.1.2
+   Compiling libc v0.2.186
+   Compiling num-traits v0.2.19
+   Compiling rexx-lib v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-lib)
+   Compiling rexx-classes v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-classes)
+   Compiling rustix v1.1.4
+   Compiling crossbeam-utils v0.8.21
+   Compiling libloading v0.8.9
+   Compiling rexx-num v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num)
+   Compiling once_cell v1.21.4
+   Compiling iana-time-zone v0.1.65
+   Compiling linux-raw-sys v0.12.1
+   Compiling rexx-core v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core)
+   Compiling bitflags v2.13.1
+   Compiling crossbeam-epoch v0.9.20
+   Compiling rexx-api v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api)
+   Compiling rexx-parse v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse)
+   Compiling chrono v0.4.45
+   Compiling tracing-core v0.1.36
+   Compiling log v0.4.34
+   Compiling tz-rs v0.7.3
+   Compiling regex-syntax v0.8.11
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+   Compiling regex-automata v0.4.14
+   Compiling syn v2.0.119
+   Compiling pin-project-lite v0.2.17
+   Compiling lazy_static v1.5.1
+   Compiling sharded-slab v0.1.7
+   Compiling thiserror v1.0.69
+   Compiling rayon-core v1.13.0
+   Compiling tracing v0.1.44
+   Compiling thiserror-impl v1.0.69
+   Compiling crossbeam-deque v0.8.6
+   Compiling generator v0.8.10
+   Compiling matchers v0.2.0
+   Compiling tracing-log v0.2.0
+   Compiling thread_local v1.1.10
+   Compiling nu-ansi-term v0.50.3
+   Compiling smallvec v1.16.2
+   Compiling tracing-subscriber v0.3.23
+   Compiling scoped-tls v1.0.1
+   Compiling either v1.16.0
+   Compiling rayon v1.12.0
+   Compiling loom v0.7.2
+   Compiling datadriven v0.9.0
+   Compiling rexx-extract v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract)
+    Finished `test` profile [optimized + debuginfo] target(s) in 48.73s
+     Running tests/stream_model.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t615-target/debug/deps/stream_model-c69e914f1234168c)
+
+running 25 tests
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test every_licensing_deviation_names_this_test ... ok
+test on_the_oracle_the_generated_scenarios_part_only_where_the_deviations_say ... ok
+test the_model_answers_the_named_cases_as_this_crate_does ... ok
+test the_model_answers_generated_scenarios_as_this_crate_does ... ok
+test on_the_oracle_the_named_cases_part_only_where_listed ... ok
+
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.14s
+

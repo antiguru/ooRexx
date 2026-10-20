@@ -1,0 +1,9 @@
+open READY:
+counts 1 1 1
+open2 ERROR:2
+second object reads [640A]
+counts 0 0
+    11 *-* say 'counts' f~chars f~lines
+Error 4 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t6.15/r2/probes/fifo-kept-byte.rex line 11:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.
+rc 124

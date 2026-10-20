@@ -1,0 +1,9 @@
+open READY:
+counts 1 1 1
+open2 ERROR:2
+second object reads [6162]
+counts 1 1
+close READY: reopen READY:
+after reopen [6364]
+rest []
+rc 0

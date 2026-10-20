@@ -1,0 +1,40 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1m 30s
+     Running tests/stream_model.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t615-target/release/deps/stream_model-bef85aabf673daa0)
+
+running 1 test
+test the_model_answers_the_named_cases_as_this_crate_does ... FAILED
+
+failures:
+
+---- the_model_answers_the_named_cases_as_this_crate_does stdout ----
+
+thread 'the_model_answers_the_named_cases_as_this_crate_does' (3049808) panicked at /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/datadriven-0.9.0/src/lib.rs:276:9:
+failure:
+tests/stream_model/cases:404:
+O both nobuffer
+CI 0 8
+Q read line
+LO x 1
+Q read line
+LC
+S =3 read line
+LI
+
+expected:
+model: O_both_nobuffer=READY: READY 19 1;CI_0_8= READY 19 8;Q_read_line=2 READY 19 8;LO_x_1=0 READY 3 8;Q_read_line=3 READY 3 8;LC=2 READY 3 8;S_=3_read_line=3 READY 3 7;LI=line2 READY 3 13; [x|ne1|line2|line3|]
+
+actual:
+model: O_both_nobuffer=READY: READY 19 1;CI_0_8= READY 19 8;Q_read_line=2 READY 19 8;LO_x_1=0 READY 3 8;Q_read_line=3 READY 3 8;LC=2 READY 3 8;S_=3_read_line=3 READY 3 7;LI=line2 READY 3 13; [x|ne1|line2|line3|]
+crate: O_both_nobuffer=READY: READY 19 1;CI_0_8= READY 19 8;Q_read_line=2 READY 19 8;LO_x_1=0 READY 3 8;Q_read_line=2 READY 3 8;LC=3 READY 3 8;S_=3_read_line=3 READY 3 13;LI=line3 READY 3 19; [x|ne1|line2|line3|]
+
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    the_model_answers_the_named_cases_as_this_crate_does
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 24 filtered out; finished in 0.64s
+
+error: test failed, to rerun pass `-p rexx-exec --test stream_model`

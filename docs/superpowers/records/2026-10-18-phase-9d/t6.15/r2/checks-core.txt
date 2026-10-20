@@ -1,0 +1,191 @@
+   Compiling rexx-core v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core)
+    Finished `release` profile [optimized + debuginfo] target(s) in 19.73s
+     Running unittests src/lib.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t615-target/release/deps/rexx_core-715d5e7e9f235b2a)
+
+running 21 tests
+test body::aligned_tests::aligned_bytes_are_aligned_and_read_back ... ok
+test bytes::tests::a_buffer_grown_across_the_capacity_changes_arm_where_it_should ... ok
+test bytes::tests::both_arms_answer_the_bytes_they_were_given ... ok
+test bytes::tests::a_buffer_past_the_capacity_is_taken_rather_than_copied ... ok
+test frame::tests::a_block_size_outside_the_range_is_refused ... ok
+test bytes::tests::the_two_constructors_agree_whatever_is_behind_the_live_bytes ... ok
+test bytes::tests::the_capacity_is_where_the_constant_says_it_is ... ok
+test bytes::tests::debug_shows_the_live_bytes_and_not_the_padding ... ok
+test frame::tests::a_parked_frame_comes_back_with_its_registers_across_a_block_boundary ... ok
+test frame::tests::a_double_release_leaves_the_walk_inside_its_blocks ... ok
+test frame::tests::empty_frames_nest_across_a_block_boundary ... ok
+test frame::tests::frames_spill_into_new_blocks_and_come_back ... ok
+test handle::inline_byte_tests::a_single_byte_inlines_the_same_way_either_route ... ok
+test heap::body_bytes_tests::a_collection_sums_the_survivors_body_bytes ... ok
+test heap::body_text_tests::it_answers_what_get_and_a_body_match_answer ... ok
+test heap::retire_tests::a_slot_at_generation_max_is_retired_not_reused ... ok
+test frame::tests::unparking_under_a_shorter_top_is_refused - should panic ... ok
+test owner::tests::a_phase_10_label_is_the_phase_then_the_reason ... ok
+test frame::tests::a_frame_larger_than_the_block_holds_every_register ... ok
+test slots::tests::every_write_keeps_the_last_item ... ok
+test frame::tests::every_frame_starts_inside_its_blocks_admitted_range ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/behaviour.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t615-target/release/deps/behaviour-38261c75256e713c)
+
+running 6 tests
+test a_subclass_method_overrides_the_superclass ... ok
+test a_method_defined_on_a_behaviour_is_found ... ok
+test a_superclass_cycle_terminates_instead_of_looping_forever ... ok
+test an_unknown_message_is_a_miss_rather_than_a_panic ... ok
+test lookup_walks_to_the_superclass ... ok
+test lookup_is_case_insensitive_because_rexx_message_names_are_uppercased ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/buffer_bytes.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t615-target/release/deps/buffer_bytes-496309be7f2068ec)
+
+running 6 tests
+test a_copy_of_lent_bytes_is_not_lent ... ok
+test a_lent_buffer_set_smaller_keeps_its_storage ... ok
+test each_growth_path_moves_lent_bytes ... ok
+test unlent_or_fitting_growth_keeps_the_storage ... ok
+test growth_of_lent_bytes_keeps_the_old_storage_until_the_last_release ... ok
+test an_edit_growing_lent_bytes_panics - should panic ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/collect.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t615-target/release/deps/collect-bf6b9ad85d2a276f)
+
+running 16 tests
+test a_cells_value_lives_as_long_as_its_object ... ok
+test a_cleared_slot_is_unset_and_differs_from_one_holding_nil ... ok
+test a_cleared_slot_stops_being_a_root ... ok
+test a_collected_cell_is_refused - should panic ... ok
+test a_slot_frame_grows_for_a_name_the_plan_never_saw ... ok
+test a_stems_tails_and_default_are_traced ... ok
+test growing_a_frame_below_the_top_keeps_every_frames_values ... ok
+test growth_does_not_recycle_a_cleared_slot ... ok
+test a_handle_to_a_swept_object_does_not_alias_the_slots_next_occupant ... ok
+test objects_reachable_from_a_root_survive ... ok
+test reference_cycles_are_collected ... ok
+test popping_a_frame_that_is_not_the_top_one_panics - should panic ... ok
+test slot_frames_keep_locals_alive_and_release_them_on_pop ... ok
+test swept_slots_are_reused_by_the_next_allocation ... ok
+test transitively_reachable_objects_survive ... ok
+test unreachable_objects_are_swept ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/handle.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t615-target/release/deps/handle-40156724fb4ecb6a)
+
+running 9 tests
+test a_short_string_round_trips_through_the_handle_at_every_length ... ok
+test an_inline_string_is_not_a_slot_an_integer_or_nil ... ok
+test integers_outside_the_tagged_range_are_rejected_rather_than_truncated ... ok
+test heap_handles_round_trip ... ok
+test nil_is_distinct_from_every_heap_slot_and_every_integer ... ok
+test a_string_one_byte_too_long_is_refused_rather_than_truncated ... ok
+test small_integers_are_encoded_inline_without_allocating ... ok
+test strings_differing_only_in_length_are_different_handles ... ok
+test the_same_slot_at_different_generations_is_a_different_handle ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/heap.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t615-target/release/deps/heap-dca99b3388602ef0)
+
+running 5 tests
+test a_class_is_an_ordinary_arena_object_and_a_freed_one_misses ... ok
+test a_handle_from_a_stale_generation_does_not_read_the_slots_new_occupant ... ok
+test small_integer_handles_are_not_in_the_heap ... ok
+test arrays_hold_handles_to_other_objects ... ok
+test allocation_returns_a_heap_handle_that_reads_back ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/roots.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t615-target/release/deps/roots-5d972293fcafc40c)
+
+running 20 tests
+test a_cell_outlives_the_frame_it_was_promoted_out_of ... ok
+test a_moved_frame_keeps_its_values_and_cells ... ok
+test a_frame_beneath_another_grows_and_aliases_into_it_hold ... ok
+test a_frame_aliasing_a_slot_does_not_move - should panic ... ok
+test a_promoted_variable_still_reads_and_writes_by_name ... ok
+test a_nested_register_frame_leaves_the_enclosing_one_intact ... ok
+test a_closed_frames_handle_is_refused_by_its_successor - should panic ... ok
+test a_promoted_slot_resolves_to_its_cell ... ok
+test an_alias_taken_before_a_promotion_still_reaches_the_cell ... ok
+test globals_are_always_roots ... ok
+test popping_an_outer_frame_discards_the_inner_frames_it_contains ... ok
+test promoting_an_exposed_name_promotes_the_storage_behind_it ... ok
+test rebinding_a_global_replaces_it_rather_than_adding_a_second_root ... ok
+test promoting_a_cell_again_is_refused - should panic ... ok
+test registers_are_roots_until_their_frame_is_released ... ok
+test taken_parked_values_stop_being_roots ... ok
+test registers_leave_the_variable_frame_growable ... ok
+test temporaries_stop_being_roots_when_their_frame_is_popped ... ok
+test the_top_accessors_reach_a_lower_frame ... ok
+test the_frame_block_size_cannot_change_under_a_reserved_frame - should panic ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/scope_pools.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t615-target/release/deps/scope_pools-74c99cbe0ce5f4e2)
+
+running 5 tests
+test a_second_write_to_one_name_replaces_rather_than_shadows ... ok
+test a_name_the_pool_never_held_reads_as_unset ... ok
+test clearing_a_name_the_pool_never_held_is_a_no_op ... ok
+test clearing_one_scopes_binding_leaves_the_others ... ok
+test two_scopes_hold_one_name_at_two_values ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/trace.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t615-target/release/deps/trace-6423d389f9ece910)
+
+running 5 tests
+test a_string_reaches_nothing ... ok
+test an_array_reaches_every_element_including_duplicates ... ok
+test an_array_reaches_past_an_empty_slot_and_not_through_it ... ok
+test an_instance_stops_reaching_a_dropped_variable ... ok
+test an_instance_reaches_every_scope_and_every_value_but_no_name ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/uninit.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t615-target/release/deps/uninit-9ee331bae6fd4458)
+
+running 8 tests
+test a_still_unreachable_flagged_object_is_reported_once_and_resurrected_every_time ... ok
+test a_cleared_weak_reference_reads_as_nil ... ok
+test a_weak_reference_does_not_keep_its_target_alive ... ok
+test an_object_flagged_twice_across_a_clear_is_reported_once ... ok
+test a_weak_reference_to_a_handle_carried_value_is_not_cleared ... ok
+test a_weak_reference_to_an_uninit_pending_object_is_still_cleared ... ok
+test an_object_with_uninit_is_reported_rather_than_swept_immediately ... ok
+test taking_the_flagged_objects_clears_every_flag ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/unsafe_sites.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t615-target/release/deps/unsafe_sites-0d319af3dd2a83c2)
+
+running 2 tests
+test the_scan_reaches_the_whole_workspace ... ok
+test only_the_granted_module_may_say_unsafe ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+   Doc-tests rexx_core
+
+running 3 tests
+test crates/rexx-core/src/frame.rs - frame::FrameArena (line 179) ... ok
+test crates/rexx-core/src/handle.rs - handle::ObjRef (line 65) ... ok
+test crates/rexx-core/src/frame.rs - frame::RegFrame (line 108) ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 5 tests
+test crates/rexx-core/src/frame.rs - frame::FrameArena (line 168) - compile fail ... ok
+test crates/rexx-core/src/frame.rs - frame::RegFrame (line 90) - compile fail ... ok
+test crates/rexx-core/src/handle.rs - handle::ObjRef (line 57) - compile fail ... ok
+test crates/rexx-core/src/frame.rs - frame::RegFrame (line 99) - compile fail ... ok
+test crates/rexx-core/src/handle.rs - handle::ObjRef (line 52) - compile fail ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+all doctests ran in 2.23s; merged doctests compilation took 2.12s
