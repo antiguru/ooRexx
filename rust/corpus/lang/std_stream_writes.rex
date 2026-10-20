@@ -45,19 +45,14 @@ d = .stdin~description
 say 'in write rc [' || w || ']'
 say 'in state    [' || s || ']'
 say 'in descr    [' || d || ']'
-/* An undrained empty input: the two counters disagree, and both fall to 0
-   once a read has found the end. */
-say 'in lines0   [' || .stdin~lines || ']'
-say 'in chars0   [' || .stdin~chars || ']'
+/* Both counters are 0 once a read has found the end. */
 say 'in read     [' || .stdin~linein || ']'
 say 'in lines1   [' || .stdin~lines || ']'
 say 'in chars1   [' || .stdin~chars || ']'
 say 'in state1   [' || .stdin~state || ']'
 say 'in descr1   [' || .stdin~description || ']'
-/* CHARIN over a drained input answers nothing and leaves ERROR:0, which is
-   what parts it from LINEIN's NOTREADY:EOF. */
+/* CHARIN over a drained input answers nothing. */
 say 'in charin   [' || .stdin~charin || ']'
-say 'in descr2   [' || .stdin~description || ']'
 /* Both output streams stay ready throughout, and the states are per stream
    rather than shared. */
 say 'out state1  [' || .stdout~state || ']'

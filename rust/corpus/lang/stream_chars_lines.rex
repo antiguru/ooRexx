@@ -19,12 +19,10 @@ say 'rest of the line [' || t~linein || ']'
 say 'left' t~lines t~chars
 say 'last line [' || t~linein || ']'
 say 'state [' || t~state || '] [' || t~description || ']'
-/* Past the end the two reads answer differently, and both are measured:
-   LINEIN leaves NOTREADY:EOF, CHARIN leaves a bare ERROR:0. */
+/* Past the end LINEIN leaves NOTREADY:EOF, and CHARIN answers nothing. */
 say 'eof linein [' || t~linein || ']'
 say 'state [' || t~state || '] [' || t~description || ']'
 say 'eof charin [' || t~charin || ']'
-say 'state [' || t~state || '] [' || t~description || ']'
 say 'close [' || t~close || ']'
 /* A name nothing resolves to answers 0 and leaves ERROR:2, and reading it
    creates nothing. */

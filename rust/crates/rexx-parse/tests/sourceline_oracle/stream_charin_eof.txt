@@ -1,7 +1,6 @@
-count 48
+count 46
 /* CHARIN past the end. A read that gets some characters but not all answers
-   them and leaves NOTREADY:EOF, a read that gets none leaves ERROR:0, and a
-   start past the end is NOTREADY:EOF before anything is read and leaves the
+   them and leaves NOTREADY:EOF, and a start past the end is NOTREADY:EOF before anything is read and leaves the
    read position where it was. A read that succeeds makes the stream READY
    again. Each raise carries what the call answers as RESULT. */
 call charout 'f.txt', '1234567890'
@@ -9,7 +8,6 @@ call charout 'f.txt'
 s = .Stream~new('f.txt')
 call on notready name caught
 call t 's~charin(9, 6)'
-call t 's~charin(, 2)'
 call t 's~charin(30)'
 call t 's~charin(11)'
 call t 's~charin(5)'

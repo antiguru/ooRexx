@@ -47,7 +47,7 @@ CI 5 16
 CI
 CH
 ----
-model: O_both_nobuffer=READY: READY 19 1;CI_3_30= NOTREADY 19 1;CI_0_5= READY 19 5;CI_2=1| READY 19 7;CI_5_16=e3| NOTREADY 19 19;CI= ERROR 19 19;CH=0 ERROR 19 19; [line1|line2|line3|]
+model: O_both_nobuffer=READY: READY 19 1;CI_3_30= NOTREADY 19 1;CI_0_5= READY 19 5;CI_2=1| READY 19 7;CI_5_16=e3| NOTREADY 19 19;CI= NOTREADY 19 19;CH=0 NOTREADY 19 19; [line1|line2|line3|]
 
 # LINEIN reads to the line end and drops it; at the end it is NOTREADY.
 case name=linein-lines initial=text3
@@ -334,7 +334,7 @@ LC
 LI
 CI
 ----
-model: O_both_nobuffer=READY: READY 1 1;CH=0 READY 1 1;LN=0 READY 1 1;LC=0 READY 1 1;LI= NOTREADY 1 1;CI= ERROR 1 1; [-]
+model: O_both_nobuffer=READY: READY 1 1;CH=0 READY 1 1;LN=0 READY 1 1;LC=0 READY 1 1;LI= NOTREADY 1 1;CI= NOTREADY 1 1; [-]
 
 # A stream opened WRITE is write-only (funct.xml:4302).
 case name=write-only-reads initial=text3
@@ -345,7 +345,7 @@ CH
 LN
 S =2 read line
 ----
-model: O_write_nobuffer=READY: READY 19 1;CI_1_3= ERROR 19 3;LI_1= ERROR 19 3;CH=0 ERROR 19 3;LN=0 ERROR 19 3;S_=2_read_line=0 READY 19 3; [line1|line2|line3|]
+model: O_write_nobuffer=READY: READY 19 1;CI_1_3= ERROR 19 3;LI_1= ERROR 19 3;CH=0 ERROR 19 3;LN=0 ERROR 19 3;S_=2_read_line=0 NOTREADY 19 3; [line1|line2|line3|]
 
 # A relative line SEEK counts from the line the position is in.
 case name=line-seek-relative-after-charin initial=text3

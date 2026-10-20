@@ -67,6 +67,8 @@ const CRATE_RUN_LIMIT: std::time::Duration = std::time::Duration::from_secs(120)
 /// proposes as a new Deviation), the rule, and the oracle's first item that
 /// differs. [`oracle_rule`] must name the same rule from the answers.
 const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
+    ("charin-bounds", 0, "charin-eof-notready", "CI= ERROR 19 19"),
+    ("devnull-empty", 0, "charin-eof-notready", "CI= ERROR 1 1"),
     (
         "ctrlz-append-kept",
         0,
@@ -853,6 +855,21 @@ fn oracle_rule(
     let (oracle, model) = (fields(oracle), fields(model));
     let same_positions = oracle.write == model.write && oracle.read == model.read;
     let by_line = op.contains("line");
+    // A line number given to LINEIN, LINEOUT or LINEOUT with no string, or a
+    // SEEK by lines.
+    let line_numbered = match words[0] {
+        "LI" | "LP" => words.len() > 1,
+        "LO" => words.len() > 2,
+        _ => by_line,
+    };
+    let read_past_the_end = matches!(words[0], "CI" | "LI")
+        && oracle.state == "ERROR"
+        && model.state == "NOTREADY"
+        && oracle.result == model.result
+        && same_positions;
+    if read_past_the_end {
+        return Some((0, "charin-eof-notready"));
+    }
     if scenario.transient {
         let counted = scenario.ops[..at]
             .iter()
@@ -872,17 +889,41 @@ fn oracle_rule(
         {
             Some((0, "ctrlz-is-data"))
         }
-        "LO" | "LE" if appending && opened.contains("binary") => Some((0, "append-record")),
-        "S" | "P" if model.result == "0" && model.state == "NOTREADY" => Some((0, "invalid-seek")),
-        "S" | "P" if write_only && by_line && model.result == "0" && oracle.result != "0" => {
+        "LO" | "LE"
+            if appending
+                && opened.contains("binary")
+                && (oracle.result != model.result || oracle.write != model.write) =>
+        {
+            Some((0, "append-record"))
+        }
+        "S" | "P" | "LO" | "LP"
+            if write_only
+                && line_numbered
+                && model.state == "NOTREADY"
+                && oracle.state != "NOTREADY" =>
+        {
             Some((0, "write-only"))
         }
-        "S" | "P" if !by_line && (op.contains('+') || op.contains(" -")) => {
+        "S" | "P" if model.result == "0" && model.state == "NOTREADY" => Some((0, "invalid-seek")),
+        "S" | "P"
+            if !by_line
+                && (op.contains('+') || op.contains(" -"))
+                && oracle.result != model.result =>
+        {
             Some((49, "relative-seek"))
         }
-        "S" | "P" if op.contains('<') && !by_line => Some((49, "seek-from-end")),
-        "S" | "P" if by_line => Some((0, "line-position")),
-        "CI" | "LI" if write_only && (!oracle.result.is_empty() || oracle.state != model.state) => {
+        "S" | "P" if op.contains('<') && !by_line && oracle.result != model.result => {
+            Some((49, "seek-from-end"))
+        }
+        "S" | "P" if by_line && (oracle.result != model.result || !same_positions) => {
+            Some((0, "line-position"))
+        }
+        "CI" | "LI"
+            if write_only
+                && (!oracle.result.is_empty()
+                    || oracle.state != model.state
+                    || oracle.read != model.read) =>
+        {
             Some((0, "write-only"))
         }
         "CH" | "LN" | "LC" if write_only && oracle.result != "0" => Some((0, "write-only")),
@@ -893,8 +934,10 @@ fn oracle_rule(
         {
             Some((0, "write-only"))
         }
-        "LI" | "LP" if words.len() > 1 => Some((0, "line-position")),
-        "LO" if words.len() > 2 => Some((0, "line-position")),
+        "LI" if line_numbered && (oracle.result != model.result || oracle.read != model.read) => {
+            Some((0, "line-position"))
+        }
+        "LO" | "LP" if line_numbered && oracle.write != model.write => Some((0, "line-position")),
         "Q" if by_line && same_positions && oracle.state == model.state => Some((0, "line-query")),
         "LC" if same_positions
             && (oracle.result != model.result || oracle.state != model.state) =>
@@ -917,10 +960,16 @@ fn oracle_label(
     variant: Option<&str>,
 ) -> Result<String, String> {
     let at = first_difference_at(oracle, model).expect("the answers part");
-    if let Some(rule) = oracle_rule(scenario, at, &item_at(oracle, at), &item_at(model, at)) {
+    // The padding can only explain a difference after the first LINEOUT
+    // that would pad, and there the variant is asked first.
+    let padded_before = scenario.ops[..at.min(scenario.ops.len())]
+        .iter()
+        .any(|op| op == "LX" || op.starts_with("LP "));
+    let model_rule = || oracle_rule(scenario, at, &item_at(oracle, at), &item_at(model, at));
+    if !padded_before && let Some(rule) = model_rule() {
         return Ok(format!("{} {}", label_of(rule.0), rule.1));
     }
-    if let Some(variant) = variant.map(without_padding) {
+    if let Some(variant) = variant.map(without_padding).filter(|_| padded_before) {
         let Some(at) = first_difference_at(oracle, &variant) else {
             return Ok("46 pads-on-close".to_string());
         };
@@ -932,6 +981,9 @@ fn oracle_label(
                 rule.1
             ));
         }
+    }
+    if let Some(rule) = model_rule() {
+        return Ok(format!("{} {}", label_of(rule.0), rule.1));
     }
     Err(format!(
         "the oracle departs from the model at {} (model {})",

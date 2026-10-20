@@ -127,7 +127,45 @@ parse linein n5
 say \"[\" || n1 || \"][\" || n2 || \"][\" || n3 || \"][\" || n4 || \"][\" || n5 || \"]\"
 ";
 
+/// The program the console-count rows run: it reads while LINES, or while
+/// CHARS, says data waits (rexxref iostrms.xml:189-193), and stops after
+/// five reads so a count that never falls cannot loop.
+const COUNT_PROGRAM: &str = "\
+n = 0
+do while lines() > 0 & n < 5
+  n = n + 1
+  say n '[' || linein() || ']'
+end
+say 'lines end' n lines()
+";
+
+const CHARS_PROGRAM: &str = "\
+n = 0
+do while chars() > 0 & n < 40
+  n = n + 1
+  c = charin()
+end
+say 'chars end' n chars()
+";
+
 const CASES: &[Case] = &[
+    Case {
+        name: "console-lines-loop",
+        program: COUNT_PROGRAM,
+        args: &[],
+        stdin: Some(b"hello\nworld\nthird\n"),
+        why: "LINES on a piped console answers 1 while a line waits and 0 at \
+              the end, so the loop reads every waiting line; one that \
+              answers 0 after its first ask reads one",
+    },
+    Case {
+        name: "console-chars-loop",
+        program: CHARS_PROGRAM,
+        args: &[],
+        stdin: Some(b"abc\nde\n"),
+        why: "CHARS on a piped console answers 1 while a byte waits and 0 at \
+              the end, so the loop reads every waiting byte",
+    },
     Case {
         name: "arg-none",
         program: ARG_PROGRAM,

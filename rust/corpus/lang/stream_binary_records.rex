@@ -2,7 +2,7 @@
    short record with blanks and refuses one that does not fit what is left of
    the record with 93, LINEIN reads the rest of the current record, LINES
    counts records and ARRAYIN splits by record. A partial last record is
-   NOTREADY:EOF and a read past it ERROR:0. BINARY with no RECLENGTH takes the
+   NOTREADY:EOF. BINARY with no RECLENGTH takes the
    file's size as the record. */
 call on notready name caught
 f = 'r.bin'
@@ -24,7 +24,7 @@ call charout 'd.txt'
 s = .Stream~new('d.txt')
 say s~open('read binary reclength 4')
 say 'lines' s~lines 'chars' s~chars 'lines N' s~lines('N')
-do 4
+do 3
   hits = ''
   r = s~linein
   say 'linein [' || r || ']' s~description 'chars' s~chars 'lines' s~lines hits

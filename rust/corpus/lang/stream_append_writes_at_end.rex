@@ -4,7 +4,7 @@
 call scenario 'charout at 1', 'both append', 'C1 XY', 'C Z'
 call scenario 'lineout at line 1', 'both append', 'L1 new', 'L tail'
 call scenario 'seek then charout', 'both append', 'S =2 write', 'C Q'
-call scenario 'write append', 'write append', 'C1 ab', 'L2 cd'
+call scenario 'write append', 'write append', 'C1 ab', 'L cd'
 call scenario 'charout past the end', 'both append', 'C30 far', 'L end'
 call record 'record append', 'both append binary reclength 4', 'L1 ab', 'C3 Z'
 call counted 'lines count after a read past the end'

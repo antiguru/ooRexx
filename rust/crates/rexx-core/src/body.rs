@@ -527,9 +527,16 @@ pub struct OpenFile {
     pub read_position: i64,
     pub write_position: i64,
     /// A byte taken from a transient stream to learn whether data waits, which
-    /// the next read returns first.
+    /// the next read returns first. Only a device that cannot say how much
+    /// waits without being read leaves one.
     pub pending: Option<u8>,
     pub transient: bool,
+    /// A character position and the line it lies in, from the last line
+    /// operation. Any write landing before the position drops it, so it is
+    /// always what a count from the start would answer.
+    pub line_mark: Option<(i64, i64)>,
+    /// The stream's line count, dropped by any write.
+    pub line_total: Option<u64>,
 }
 
 /// A `Stream`'s own state (`streamLibrary/StreamNative.hpp:158`). The name is

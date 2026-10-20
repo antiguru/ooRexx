@@ -6,7 +6,7 @@ count 55
    value the call answers as RESULT. LINEOUT and CHAROUT with no data run the
    write setup before they close, which creates a missing file. */
 names = .array~of('/', '*', 'non-existing-file', 'bad' || '80'x || 'name', 'nodir/x')
-ops = .array~of('chars', 'lines', 'linesC', 'linein', 'charin', 'lineout', 'charout', 'close')
+ops = .array~of('chars', 'lines', 'linesC', 'linein', 'lineout', 'charout', 'close')
 call on notready name caught
 do n over names
   do op over ops

@@ -232,13 +232,14 @@ impl Input {
         if self.exhausted {
             return Some(0);
         }
+        if let Source::Stdin(_) = &self.source {
+            return self.stdin_waiting().map(u64::from);
+        }
         let asked = std::mem::replace(&mut self.lines_asked, true);
         match &self.source {
-            // An unmeasurable source answers `1` once and `0` after, which is
-            // where this parts from [`Input::remaining`]: measured, `chars`
-            // keeps answering `1` over the same input where the second
-            // `lines` answers `0`.
-            Source::Nothing | Source::Stdin(_) if asked => Some(0),
+            // No input answers `1` once and `0` after, which is where this
+            // parts from [`Input::remaining`].
+            Source::Nothing if asked => Some(0),
             Source::Nothing | Source::Stdin(_) => None,
             Source::Bytes(cursor) => {
                 let at = usize::try_from(cursor.position()).unwrap_or(usize::MAX);
@@ -257,15 +258,56 @@ impl Input {
         }
     }
 
+    /// Whether data waits on a live standard input, found without blocking:
+    /// what is buffered, else a `poll` with no wait, and when it reports the
+    /// descriptor readable, a read that cannot block takes what is there into
+    /// the buffer (rexxref iostrms.xml:189-193). `None` while a read is
+    /// already in flight, when the state cannot be learned.
+    fn stdin_waiting(&mut self) -> Option<bool> {
+        use rustix::event::{PollFd, PollFlags, Timespec, poll};
+        let Source::Stdin(stdin) = &self.source else {
+            return None;
+        };
+        if !stdin.buffered.is_empty() {
+            return Some(true);
+        }
+        if stdin.ended {
+            return Some(false);
+        }
+        if stdin.reading {
+            return None;
+        }
+        let zero = Timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
+        let descriptor = std::io::stdin();
+        let mut polled = [PollFd::new(&descriptor, PollFlags::IN)];
+        match poll(&mut polled, Some(&zero)) {
+            Ok(_) if polled[0].revents().is_empty() => return Some(false),
+            Ok(_) => {}
+            Err(_) => return None,
+        }
+        let chunk = read_stdin_chunk();
+        self.receive(chunk);
+        let Source::Stdin(stdin) = &self.source else {
+            return None;
+        };
+        Some(!stdin.buffered.is_empty())
+    }
+
     /// The bytes left to read, when that is knowable without consuming them,
     /// and `None` when it is not -- a live standard input is a stream, not a
     /// length. Measured on the oracle: `.stdin~chars` answers the true
     /// remaining count for a redirected regular file, `1` for a pipe nothing
     /// has drained, and `0` for either once a read has found the end, which is
     /// what `exhausted` carries.
-    fn remaining(&self) -> Option<u64> {
+    fn remaining(&mut self) -> Option<u64> {
         if self.exhausted {
             return Some(0);
+        }
+        if let Source::Stdin(_) = &self.source {
+            return self.stdin_waiting().map(u64::from);
         }
         match &self.source {
             // Live but empty, exactly like a `/dev/null` descriptor: measured,
@@ -443,15 +485,13 @@ impl Interp {
         }
     }
 
-    /// What `.STDIN~CHARS` answers: the bytes left, or `None` when the source
-    /// cannot be measured without consuming it.
-    pub(crate) fn input_remaining(&self) -> Option<u64> {
+    /// What `.STDIN~CHARS` answers: the bytes left, 1 or 0 for whether data
+    /// waits on a live standard input, or `None` when that cannot be learned.
+    pub(crate) fn input_remaining(&mut self) -> Option<u64> {
         self.input.remaining()
     }
 
     /// What `.STDIN~LINES` answers, as [`Interp::input_remaining`] for lines.
-    /// **Takes `&mut self`**: asking an unmeasurable source for its line count
-    /// is what makes the next ask answer `0`.
     pub(crate) fn input_remaining_lines(&mut self) -> Option<u64> {
         self.input.remaining_lines()
     }

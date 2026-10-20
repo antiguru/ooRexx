@@ -254,6 +254,14 @@ lineout: procedure expose m.
   call implicit
   if \writable() then return unwritable(1)
   m.0state = 'READY'
+  /* Line positioning in a text stream open only for writing is an error
+     (funct.xml:4454-4455): NOTREADY, and nothing written or moved. A
+     record stream's lines are character positions, which a binary stream
+     may name past its end (funct.xml:3203-3205). */
+  if line \== '' & \readable() & m.0record = 0 then do
+    m.0state = 'NOTREADY'
+    return 1
+  end
   if line \== '' then do
     bad = position_arg(line)
     if bad \== '' then return bad
@@ -292,12 +300,10 @@ pad_record: procedure expose m.
    past the end of the stream is NOTREADY with the null string. A length of
    0 reads nothing (funct.xml:1325-1328). Otherwise it reads up to `length`
    characters and moves the read position by what it read. A read that gets
-   some but fewer than asked is in the NOTREADY state. One that gets none is
-   in the ERROR state, as both interpreters answer (this crate's `charin`,
-   :1138), where the state method's own example of NOTREADY is a read
-   beyond the end (streamclasses.xml:1638-1652); Phase 9d Task 6.15 reports
-   it. A stream opened WRITE reads nothing, in the ERROR state
-   (funct.xml:4302). */
+   fewer than asked, none included, is in the NOTREADY state: the state
+   method's own example of NOTREADY is a read beyond the end
+   (streamclasses.xml:1638-1652). A stream opened WRITE reads nothing, in
+   the ERROR state (funct.xml:4302). */
 charin: procedure expose m.
   parse arg start, k
   call implicit
@@ -318,7 +324,7 @@ charin: procedure expose m.
   end
   got = take(m.0read, k)
   if got == '' then do
-    m.0state = 'ERROR'
+    m.0state = 'NOTREADY'
     return ''
   end
   if \m.0transient then m.0read = m.0read + length(got)
@@ -352,8 +358,7 @@ linein: procedure expose m.
     left = room(m.0read)
     got = take(m.0read, left)
     m.0read = m.0read + length(got)
-    if got == '' then m.0state = 'ERROR'
-    else if length(got) < left then m.0state = 'NOTREADY'
+    if length(got) < left then m.0state = 'NOTREADY'
     return got
   end
   if m.0transient then do
@@ -518,10 +523,10 @@ seek: procedure expose m.
     if wr then m.0write = landed
     return landed
   end
-  /* Line positioning in a stream open only for writing answers 0 and moves
-     nothing (funct.xml:4454-4455 asks for an error; this crate's answer,
-     `position`, :1979). */
-  if \readable() then return 0
+  /* Line positioning in a text stream open only for writing is an error
+     (funct.xml:4454-4455), in the invalid SEEK's form. A record stream's
+     lines are character positions (iostrms.xml:465-472). */
+  if \readable() & m.0record = 0 then return invalid_seek()
   select
     when style == '=' then target = off
     when style == '<' then target = line_count() - off
