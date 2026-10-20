@@ -477,6 +477,16 @@ pub(crate) enum Commanded {
     Left(u64),
 }
 
+/// Whether a clause of `kind` issues a command: a command clause, or an
+/// `ADDRESS` naming one, which `TRACE C` echoes alike.
+pub(crate) fn issues_command(kind: &rexx_parse::InstructionKind) -> bool {
+    match kind {
+        rexx_parse::InstructionKind::Command { .. } => true,
+        rexx_parse::InstructionKind::Address(address) => address.command.is_some(),
+        _ => false,
+    }
+}
+
 /// What one child left behind: its return code and each stream it wrote.
 pub(crate) struct Waited {
     rc: i32,
@@ -490,33 +500,54 @@ pub(crate) struct Block {
     running: std::process::Child,
     input: Option<Vec<u8>>,
     merged: Option<std::io::PipeReader>,
-    /// Whether the command carries an `ADDRESS ... WITH` context, whose
-    /// targets are written once the clause runs again.
-    redirected: bool,
+    /// Whether standard output (or both streams, merged) goes to a target.
+    captures_output: bool,
+    /// Whether standard error goes to a target of its own.
+    captures_error: bool,
+}
+
+/// Where a piece a child off the baton wrote goes.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum Piece {
+    /// This interpreter's standard output.
+    Out,
+    /// This interpreter's standard error.
+    Err,
+    /// The output target, written by the parked clause as it arrives.
+    Captured,
 }
 
 impl Block {
-    /// Waits for the child. A redirected one's streams are kept whole in the
-    /// answer; otherwise each piece is handed to `written`, with whether it
-    /// went to standard error, as it arrives, and the answer holds the return
-    /// code alone.
-    pub(crate) fn stream(self, written: &(dyn Fn(bool, Vec<u8>) + Sync)) -> Waited {
-        match self.redirected {
-            true => collect(self.running, self.input, self.merged, None),
-            false => collect(self.running, None, None, Some(written)),
-        }
+    /// Waits for the child, handing each piece it writes to `written` as it
+    /// arrives, except standard error going to a target, which the answer
+    /// holds whole (the oracle's error reader writes its target once the
+    /// output has ended).
+    pub(crate) fn stream(self, written: &(dyn Fn(Piece, Vec<u8>) + Sync)) -> Waited {
+        let out = match self.captures_output {
+            true => Piece::Captured,
+            false => Piece::Out,
+        };
+        let err = match self.captures_error {
+            true => None,
+            false => Some(Piece::Err),
+        };
+        let input = self.input;
+        collect(self.running, input, self.merged, Some((written, out, err)))
     }
 }
 
+/// A child's pieces' destination: the sink and where standard output and
+/// standard error go, `None` for standard error kept whole.
+type Routes<'a> = (&'a (dyn Fn(Piece, Vec<u8>) + Sync), Piece, Option<Piece>);
+
 /// Reads `reader` to its end, into `kept`, or piece by piece into `written`
-/// with `error` where there is one.
+/// as `piece` where there is one.
 fn read_all(
     mut reader: impl Read,
     kept: &mut Vec<u8>,
-    written: Option<&(dyn Fn(bool, Vec<u8>) + Sync)>,
-    error: bool,
+    written: Option<(&(dyn Fn(Piece, Vec<u8>) + Sync), Piece)>,
 ) {
-    let Some(written) = written else {
+    let Some((written, as_piece)) = written else {
         let _ = reader.read_to_end(kept);
         return;
     };
@@ -524,7 +555,7 @@ fn read_all(
     loop {
         match reader.read(&mut piece) {
             Ok(0) => return,
-            Ok(count) => written(error, piece[..count].to_vec()),
+            Ok(count) => written(as_piece, piece[..count].to_vec()),
             Err(failed) if failed.kind() == std::io::ErrorKind::Interrupted => {}
             Err(_) => return,
         }
@@ -538,10 +569,23 @@ pub(crate) struct Blocked {
     indent: usize,
     token: u64,
     io: Option<IoContext>,
+    /// Output pieces that arrived for the output target and are not yet
+    /// written.
+    captured: Vec<u8>,
     ended: Option<Waited>,
 }
 
 impl Blocked {
+    /// Records an output piece for the target, under the token the wait was
+    /// left with; answers whether it was this wait's.
+    pub(crate) fn capture(&mut self, token: u64, bytes: Vec<u8>) -> bool {
+        if token != self.token || self.ended.is_some() {
+            return false;
+        }
+        self.captured.extend_from_slice(&bytes);
+        true
+    }
+
     /// Every object the redirection's targets hold.
     pub(crate) fn object_roots(&self, out: &mut Vec<ObjRef>) {
         if let Some(io) = &self.io {
@@ -684,12 +728,14 @@ fn collect(
     mut running: std::process::Child,
     input: Option<Vec<u8>>,
     merged: Option<std::io::PipeReader>,
-    written: Option<&(dyn Fn(bool, Vec<u8>) + Sync)>,
+    routes: Option<Routes<'_>>,
 ) -> Waited {
     let stdin = running.stdin.take();
     let stdout = running.stdout.take();
     let stderr = running.stderr.take();
     let mut out = Vec::new();
+    let out_route = routes.map(|(written, out, _)| (written, out));
+    let err_route = routes.and_then(|(written, _, err)| Some((written, err?)));
     let err = std::thread::scope(|scope| {
         if let (Some(mut stdin), Some(bytes)) = (stdin, input.as_deref()) {
             // A write error is dropped: a child exiting before it reads its
@@ -702,15 +748,15 @@ fn collect(
         let collector = scope.spawn(|| {
             let mut bytes = Vec::new();
             if let Some(stderr) = stderr {
-                read_all(stderr, &mut bytes, written, true);
+                read_all(stderr, &mut bytes, err_route);
             }
             bytes
         });
         match merged {
-            Some(merged) => read_all(merged, &mut out, written, false),
+            Some(merged) => read_all(merged, &mut out, out_route),
             None => {
                 if let Some(stdout) = stdout {
-                    read_all(stdout, &mut out, written, false);
+                    read_all(stdout, &mut out, out_route);
                 }
             }
         }
@@ -736,8 +782,13 @@ impl Interp {
     /// included, as `InterpreterInstance::resolveCommandHandler` finds it. An
     /// environment no handler is registered for runs nothing and answers
     /// [`NOT_REGISTERED`] with a `FAILURE` -- measured, the command is
-    /// evaluated and never executed. An environment named as a native package
-    /// whose loader ran is refused instead ([`crate::Loud::loader_environment`]).
+    /// evaluated and never executed. An environment a held native package's
+    /// loader registers through the classic subcommand API is refused instead
+    /// ([`crate::Loud::loader_environment`]).
+    ///
+    /// `io`'s targets are begun before the handler runs
+    /// (`CommandHandler::call`), so a target that cannot be begun stops the
+    /// command before it starts.
     ///
     /// A child's wait leaves the baton, answering `Left`, outside a park's
     /// continuation (`NativeActivation::run`,
@@ -759,7 +810,7 @@ impl Interp {
                 .map(Commanded::Done);
         }
         let Some(handler) = handler_for(environment) else {
-            if self.libraries.loader_named(environment) {
+            if self.libraries.classic_environment(environment) {
                 return Err(crate::Loud::loader_environment(environment).into());
             }
             return Ok(Commanded::Done(CommandOutcome {
@@ -783,6 +834,9 @@ impl Interp {
         {
             return Ok(Commanded::Done(outcome));
         }
+        if let Some(context) = io {
+            context.begin(self)?;
+        }
         self.hand_over_output();
         let switch_mode = self.child_switch_mode();
         let spawned = match start(self, &handler, command, io, switch_mode)? {
@@ -796,7 +850,10 @@ impl Interp {
                     running,
                     input,
                     merged,
-                    redirected: io.is_some(),
+                    captures_output: io.is_some_and(IoContext::redirects_output),
+                    captures_error: io.is_some_and(|context| {
+                        context.redirects_error() && !context.shares_one_target()
+                    }),
                 };
                 match self.exit_for_block(block) {
                     Ok(token) => return Ok(Commanded::Left(token)),
@@ -885,6 +942,9 @@ impl Interp {
     ) -> Result<CommandOutcome, Failure> {
         if io.is_some() && !handler.redirects() {
             return Err(Raised::redirection_not_supported(environment).into());
+        }
+        if let Some(context) = io {
+            context.begin(self)?;
         }
         let redirector = io.map_or_else(Redirector::unrequested, IoContext::redirector);
         let handled = self.run_command_handler(handler, environment, command, &redirector)?;
@@ -1060,6 +1120,7 @@ impl Interp {
                     indent,
                     token,
                     io: context,
+                    captured: Vec::new(),
                     ended: None,
                 }));
                 return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Block));
@@ -1083,49 +1144,60 @@ impl Interp {
     }
 
     /// Whether the running activity's command clause has a child that ended
-    /// off the baton, which [`Interp::end_blocked_command`] settles.
-    pub(crate) fn blocked_command_ended(&self) -> bool {
+    /// off the baton, or output for its target, which
+    /// [`Interp::end_blocked_command`] takes.
+    pub(crate) fn blocked_command_woken(&self) -> bool {
         self.activity
             .blocked
             .as_ref()
-            .is_some_and(|blocked| blocked.ended.is_some())
+            .is_some_and(|blocked| blocked.ended.is_some() || !blocked.captured.is_empty())
     }
 
-    /// The command clause whose child ended off the baton, settled as
-    /// [`Interp::exec_command`] settles one whose child it waited for.
+    /// The command clause whose child waits off the baton, woken: the output
+    /// that arrived is written to the target, and the clause parks again
+    /// until its child has ended, when it is settled as [`Interp::exec_command`]
+    /// settles one whose child it waited for.
     pub(crate) fn end_blocked_command(
         &mut self,
         index: usize,
         instruction: &Instruction,
         source: Option<&ProgramSource>,
-    ) -> Result<Flow, Failure> {
-        let Some(blocked) = self.activity.blocked.take() else {
+    ) -> Result<ExecOutcome, Failure> {
+        let Some(mut blocked) = self.activity.blocked.take() else {
             return Err(
                 crate::Loud::scheduler_inconsistency("a command resumed with no child").into(),
             );
         };
-        let Blocked {
-            command,
-            indent,
-            token: _,
-            io,
-            ended: Some(ended),
-        } = *blocked
-        else {
-            return Err(crate::Loud::scheduler_inconsistency(
-                "a command resumed before its child ended",
-            )
-            .into());
-        };
         let frame = self.roots.activity_mut().push_frame();
         let mut held = Vec::new();
-        if let Some(context) = &io {
-            context.object_roots(&mut held);
-        }
+        blocked.object_roots(&mut held);
         for object in held {
             self.roots.activity_mut().push_temp(object);
         }
-        let outcome = self.command_ended(io.as_ref(), &ended);
+        let captured = std::mem::take(&mut blocked.captured);
+        let written = match &blocked.io {
+            Some(context) => context.write_output(self, &captured),
+            None => Ok(()),
+        };
+        if written.is_ok() && blocked.ended.is_none() {
+            self.roots.activity_mut().pop_frame(frame);
+            self.activity.blocked = Some(blocked);
+            return Ok(ExecOutcome::Park(crate::scheduler::ParkReason::Block));
+        }
+        let Blocked {
+            command,
+            indent,
+            io,
+            ended,
+            ..
+        } = *blocked;
+        let outcome = written.and_then(|()| match ended {
+            Some(ended) => self.command_ended(io.as_ref(), &ended),
+            None => Err(crate::Loud::scheduler_inconsistency(
+                "a command resumed before its child ended",
+            )
+            .into()),
+        });
         self.roots.activity_mut().pop_frame(frame);
         let kept = self.activity.input_dispatch_syntax.take();
         let outcome = outcome?;
@@ -1134,6 +1206,7 @@ impl Interp {
             return Err(kept);
         }
         self.settle_command(index, instruction, source, &command, indent, &outcome)
+            .map(ExecOutcome::Done)
     }
 
     /// `RC`, `.RS`, the trace lines, any condition and the debug pause of a

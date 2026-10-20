@@ -158,6 +158,13 @@ pub(crate) enum Posted {
         token: u64,
         ended: crate::command::Waited,
     },
+    /// What `activity`'s redirected command, posted under `token`, wrote to
+    /// its output target, which the parked clause writes.
+    Captured {
+        activity: ActivityId,
+        token: u64,
+        bytes: Vec<u8>,
+    },
     /// What a command's child off the baton wrote, to standard error where
     /// `error`, written to the interpreter's own as it arrives.
     Output {
@@ -736,8 +743,19 @@ impl Scheduler for Interp {
         worker.run(Box::new(move || {
             pool::posting_panics(&inbox, &baton, || {
                 let ended = crate::signal::unblocked(|| {
-                    block.stream(&|error, bytes| {
-                        inbox.post(Posted::Output { error, bytes });
+                    block.stream(&|piece, bytes| {
+                        inbox.post(match piece {
+                            crate::command::Piece::Out => Posted::Output {
+                                error: false,
+                                bytes,
+                            },
+                            crate::command::Piece::Err => Posted::Output { error: true, bytes },
+                            crate::command::Piece::Captured => Posted::Captured {
+                                activity,
+                                token,
+                                bytes,
+                            },
+                        });
                     })
                 });
                 inbox.post(Posted::Unblocked {
@@ -1509,6 +1527,19 @@ impl Interp {
                     bytes,
                 } => self.write_out(&bytes),
                 Posted::Output { error: true, bytes } => self.write_err(&bytes),
+                Posted::Captured {
+                    activity,
+                    token,
+                    bytes,
+                } => {
+                    let captured = self
+                        .record_of(activity)
+                        .and_then(|record| record.blocked.as_mut())
+                        .is_some_and(|blocked| blocked.capture(token, bytes));
+                    if captured {
+                        self.unpark(activity);
+                    }
+                }
                 Posted::Panicked(payload) => std::panic::resume_unwind(payload),
                 Posted::Halt => {
                     self.timer.requests().clear(crate::timer::HALT);

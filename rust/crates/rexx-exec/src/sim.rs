@@ -1235,7 +1235,7 @@ impl Interp {
             let what = match post {
                 Posted::Completed(_) | Posted::Halt => continue,
                 Posted::Recall(_) => "a recall of the baton",
-                Posted::Output { .. } => "a command's output",
+                Posted::Output { .. } | Posted::Captured { .. } => "a command's output",
                 Posted::Unblocked { .. } => "a command's end",
                 Posted::Input(_) => "a standard input chunk",
                 Posted::Panicked(_) => "a pool thread's panic",

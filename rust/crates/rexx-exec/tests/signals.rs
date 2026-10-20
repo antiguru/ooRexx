@@ -704,11 +704,9 @@ fn sigint_ends_a_semaphore_wait() {
     );
 }
 
-/// A redirected command's child is waited for on the baton, which hands
-/// `a` over only at the end, so the signal goes after a second; Ctrl-C kills
-/// the child and the halt is served once the wait returns. The oracle's pipe read
-/// returns `EINTR` and it raises 98.923 "Interrupted system call" instead.
-/// DEVIATIONS entry 12.
+/// Ctrl-C at a redirected command kills the child, and the halt ends the
+/// wait. The oracle's pipe read returns `EINTR` and it raises 98.923
+/// "Interrupted system call" instead. DEVIATIONS entry 12.
 #[test]
 fn ctrl_c_halts_a_redirected_command() {
     halts_at_once(
@@ -725,6 +723,28 @@ fn ctrl_c_halts_a_redirected_command() {
                      Error 4 running PROGRAM line 2:  Program interrupted.\n\
                      Error 4.1:  Program interrupted with HALT condition.\n"
                 .to_string(),
+        },
+    );
+}
+
+/// A halt abandons a redirected command's wait as it does an unredirected
+/// one's, `RC` -4, and the target keeps the lines the command had already
+/// written. These bytes are this crate's: the oracle's pipe read returns
+/// `EINTR` and it raises 98.923 (DEVIATIONS entries 10 and 12).
+#[test]
+fn sigint_keeps_what_a_redirected_command_wrote() {
+    halts_after(
+        "redirectedtrap",
+        "call on halt name h\ns.0 = 5; s.1 = 'old'\nsay 'a'\n\
+         address system 'echo first; sleep 5; echo late' with output stem s.\n\
+         say 'b' rc s.0 s.1\nexit\nh: say 'halted' sigl; return\n",
+        "a\n",
+        &[Step::Pause(Duration::from_millis(500)), Step::Signal("INT")],
+        Launch::Plain,
+        &Ended {
+            code: Some(0),
+            stdout: "a\nb -4 1 first\nhalted 5\n".to_string(),
+            stderr: String::new(),
         },
     );
 }

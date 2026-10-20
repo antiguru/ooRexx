@@ -202,3 +202,10 @@ lang/call_argument_concatenates_a_rexx_string_method.rex
 # The clause after a `TRACE` that interactive debug ignored keeps the value
 # lines of the setting still in force.
 lang/trace_debug_ignores_trace.rex
+# Phase 9d Task 6.10: the trace-destination programs the simulation gate
+# runs (corpus/sim-gate.tsv), also in phase-9.txt.
+lang/trace_reply_continuation.rex
+lang/trace_destination_waits_on_thread.rex
+lang/trace_destinations_two_threads.rex
+lang/trace_destination_waits_calling_a_method.rex
+lang/trace_destination_waits_calling_a_label.rex

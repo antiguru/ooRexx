@@ -19,6 +19,13 @@ use std::rc::Rc;
 
 use rexx_api::load::Library;
 
+/// The package name and command environment of each extension whose loader
+/// registers that environment through `RexxRegisterSubcomExe`, which this
+/// crate does not implement: hostemu's `HostEmu`
+/// (`extensions/hostemu/platform/unix/hostemu.cpp:836`). Derived by
+/// `grep -rln 'RexxRegisterSubcom' extensions/ | grep -v windows`.
+const CLASSIC_ENVIRONMENTS: &[(&[u8], &[u8])] = &[(b"hostemu", b"HostEmu")];
+
 /// Every library name that has loaded, with the library it loaded.
 ///
 /// Only a library is held, never a miss: `PackageManager::loadLibrary`
@@ -66,14 +73,18 @@ impl Libraries {
         }))
     }
 
-    /// Whether a held library whose package loader ran has `name` as its
-    /// package name, compared without case.
-    pub(crate) fn loader_named(&self, name: &[u8]) -> bool {
-        self.held.values().any(|library| {
-            library.has_hook(rexx_api::load::Hook::Loader)
-                && library
-                    .name()
-                    .is_some_and(|package| package.eq_ignore_ascii_case(name))
+    /// Whether `environment`, compared without case, is one a held package's
+    /// loader registers through the classic subcommand API
+    /// ([`CLASSIC_ENVIRONMENTS`]).
+    pub(crate) fn classic_environment(&self, environment: &[u8]) -> bool {
+        CLASSIC_ENVIRONMENTS.iter().any(|(package, registered)| {
+            registered.eq_ignore_ascii_case(environment)
+                && self.held.values().any(|library| {
+                    library.has_hook(rexx_api::load::Hook::Loader)
+                        && library
+                            .name()
+                            .is_some_and(|name| name.eq_ignore_ascii_case(package))
+                })
         })
     }
 

@@ -19,6 +19,7 @@
 //! evaluating that configuration's sources and targets in the variable
 //! context then in force.
 
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use rexx_core::{Body, Decoded, Deferral, ObjRef, Owner};
@@ -56,6 +57,26 @@ pub(crate) struct IoContext {
     input: Option<Vec<Vec<u8>>>,
     output: Option<Target>,
     error: Option<Target>,
+    /// The output target that is also the input source, which
+    /// `CommandIOContext::resolveConflicts` buffers: it is neither emptied
+    /// nor written until the command has ended. The output's, else the
+    /// error's.
+    deferred: Option<Stream>,
+    /// The output's and the error's next stem tail, from
+    /// [`IoContext::begin`] on.
+    next: [Cell<usize>; 2],
+    /// Output bytes not yet a whole line, or all of a deferred output.
+    carry: RefCell<Vec<u8>>,
+}
+
+/// Where an input source reads from, as `OutputRedirector::needsBuffering`
+/// compares it with an output target: a stem object, a stream object or a
+/// stream name. Any other source is never an output target.
+enum Origin {
+    Stem(ObjRef),
+    Stream(ObjRef),
+    Name(Vec<u8>),
+    Other,
 }
 
 /// Where one redirected output stream's lines end up. Every write happens at
@@ -81,6 +102,30 @@ enum Target {
 }
 
 impl Target {
+    /// Whether this target is the input source `origin`, which
+    /// `needsBuffering` decides by kind and then by object, or for a named
+    /// stream by name.
+    fn reads_from(&self, origin: &Origin) -> bool {
+        match (self, origin) {
+            (Target::Stem { object, .. }, Origin::Stem(source)) => object == source,
+            (
+                Target::Stream {
+                    qualified: Some(name),
+                    ..
+                },
+                Origin::Name(source),
+            ) => name == source,
+            (
+                Target::Stream {
+                    object,
+                    qualified: None,
+                },
+                Origin::Stream(source),
+            ) => object == source,
+            _ => false,
+        }
+    }
+
     fn object(&self) -> ObjRef {
         match self {
             Target::Stem { object, .. }
@@ -172,22 +217,74 @@ impl IoContext {
         }
     }
 
-    /// Splits what the child wrote and hands it to the targets.
+    /// `CommandIOContext::init`, before the command runs: a `REPLACE` stem is
+    /// emptied with `stem.0` set to 0, an `APPEND` one reads its `stem.0`,
+    /// and a `REPLACE` collection is sent `EMPTY`. A deferred target and an
+    /// error target shared with the output are left for later.
+    pub(crate) fn begin(&self, interp: &mut Interp) -> Result<(), Failure> {
+        if let Some(target) = &self.output
+            && self.deferred != Some(Stream::Output)
+        {
+            self.begin_target(interp, target, 0)?;
+        }
+        if let Some(target) = &self.error
+            && !self.shares_one_target()
+            && self.deferred != Some(Stream::Error)
+        {
+            self.begin_target(interp, target, 1)?;
+        }
+        Ok(())
+    }
+
+    fn begin_target(&self, interp: &mut Interp, target: &Target, at: usize) -> Result<(), Failure> {
+        let next = pinned!(
+            interp,
+            crate::pinning::PinKind::RedirectWrapper,
+            interp.begin_target(target)
+        )?;
+        self.next[at].set(next);
+        Ok(())
+    }
+
+    /// Hands the whole lines of `bytes`, standard output's next piece, to the
+    /// output target as they arrive (`OutputRedirector::writeBuffer`), and
+    /// keeps a trailing part line for the next piece. A deferred output keeps
+    /// everything.
+    pub(crate) fn write_output(&self, interp: &mut Interp, bytes: &[u8]) -> Result<(), Failure> {
+        let Some(target) = &self.output else {
+            return Ok(());
+        };
+        let lines = {
+            let mut carry = self.carry.borrow_mut();
+            carry.extend_from_slice(bytes);
+            if self.deferred == Some(Stream::Output) {
+                return Ok(());
+            }
+            whole_lines(&mut carry)
+        };
+        self.write_lines(interp, target, 0, &lines)
+    }
+
+    /// Hands what the child wrote to the targets once it has ended:
+    /// `out`, standard output's last piece, then standard error, then each
+    /// named stream closed (`CommandIOContext::cleanup`).
     ///
-    /// `out` is standard output and `err` standard error; under
-    /// [`IoContext::shares_one_target`] the caller has already merged them
-    /// into `out` and `err` is empty.
+    /// Under [`IoContext::shares_one_target`] the caller has already merged
+    /// both streams into `out` and `err` is empty.
     pub(crate) fn finish(
         &self,
         interp: &mut Interp,
         out: &[u8],
         err: &[u8],
     ) -> Result<(), Failure> {
-        self.finish_lines(interp, &split_lines(out), &split_lines(err))
+        self.write_output(interp, out)?;
+        let rest = split_lines(&std::mem::take(&mut *self.carry.borrow_mut()));
+        self.finish_lines(interp, &rest, &split_lines(err))
     }
 
-    /// Hands each redirected stream's lines to its target. Under
-    /// [`IoContext::shares_one_target`] every line is in `out`.
+    /// Hands each redirected stream's remaining lines to its target, then
+    /// closes each named stream. Under [`IoContext::shares_one_target`]
+    /// every line is in `out`.
     pub(crate) fn finish_lines(
         &self,
         interp: &mut Interp,
@@ -195,27 +292,64 @@ impl IoContext {
         err: &[Vec<u8>],
     ) -> Result<(), Failure> {
         if let Some(target) = &self.output {
-            pinned!(
-                interp,
-                crate::pinning::PinKind::RedirectWrapper,
-                interp.write_target(target, out)
-            )?;
+            if self.deferred == Some(Stream::Output) {
+                self.begin_target(interp, target, 0)?;
+            }
+            self.write_lines(interp, target, 0, out)?;
         }
         // **One object for both streams is written once.** Everything the
-        // command produced is in `out` and `err` is empty, so a second write
-        // here would replace what the first one just landed.
-        if self.shares_one_target() {
-            return Ok(());
+        // command produced is in `out` and `err` is empty.
+        let error = self.error.as_ref().filter(|_| !self.shares_one_target());
+        if let Some(target) = error {
+            if self.deferred == Some(Stream::Error) {
+                self.begin_target(interp, target, 1)?;
+            }
+            self.write_lines(interp, target, 1, err)?;
         }
-        if let Some(target) = &self.error {
-            pinned!(
-                interp,
-                crate::pinning::PinKind::RedirectWrapper,
-                interp.write_target(target, err)
-            )?;
+        for target in self.output.iter().chain(error) {
+            if let Target::Stream {
+                object,
+                qualified: Some(_),
+            } = *target
+            {
+                let caller = interp.caller();
+                interp.send_message(object, b"CLOSE", None, &[], caller)?;
+            }
         }
         Ok(())
     }
+
+    fn write_lines(
+        &self,
+        interp: &mut Interp,
+        target: &Target,
+        at: usize,
+        lines: &[Vec<u8>],
+    ) -> Result<(), Failure> {
+        if lines.is_empty() {
+            return Ok(());
+        }
+        let next = pinned!(
+            interp,
+            crate::pinning::PinKind::RedirectWrapper,
+            interp.write_target(target, self.next[at].get(), lines)
+        )?;
+        self.next[at].set(next);
+        Ok(())
+    }
+}
+
+/// The whole lines at the front of `carry`, taken out of it, each without its
+/// terminator as [`split_lines`] reads one; the part line after the last `\n`
+/// stays.
+fn whole_lines(carry: &mut Vec<u8>) -> Vec<Vec<u8>> {
+    let Some(last) = carry.iter().rposition(|byte| *byte == b'\n') else {
+        return Vec::new();
+    };
+    let rest = carry.split_off(last + 1);
+    let lines = split_lines(carry);
+    *carry = rest;
+    lines
 }
 
 /// One captured stream as lines.
@@ -339,9 +473,12 @@ impl Interp {
             local.map(|io| (&io.error, io.error_option)),
             global.map(|io| (&io.error, io.error_option)),
         );
-        let input = match input {
-            Some((source, _)) => Some(self.input_lines(code, source)?),
-            None => None,
+        let (input, origin) = match input {
+            Some((source, _)) => {
+                let (lines, origin) = self.input_lines(code, source)?;
+                (Some(lines), origin)
+            }
+            None => (None, Origin::Other),
         };
         let output = match output {
             Some((target, option)) => {
@@ -355,31 +492,54 @@ impl Interp {
             }
             None => None,
         };
+        let deferred = if output
+            .as_ref()
+            .is_some_and(|target| target.reads_from(&origin))
+        {
+            Some(Stream::Output)
+        } else if error
+            .as_ref()
+            .is_some_and(|target| target.reads_from(&origin))
+        {
+            Some(Stream::Error)
+        } else {
+            None
+        };
         Ok(Some(IoContext {
             input,
             output,
             error,
+            deferred,
+            next: [Cell::new(1), Cell::new(1)],
+            carry: RefCell::new(Vec::new()),
         }))
     }
 
-    /// Every line a redirected input reads.
+    /// Every line a redirected input reads, and where it read them.
     fn input_lines(
         &mut self,
         code: &Code<'_>,
         source: &Redirection,
-    ) -> Result<Vec<Vec<u8>>, Failure> {
-        let lines = match source {
+    ) -> Result<(Vec<Vec<u8>>, Origin), Failure> {
+        Ok(match source {
             // `merge` answers `None` for both, so neither reaches here.
-            Redirection::Default | Redirection::Normal => Vec::new(),
+            Redirection::Default | Redirection::Normal => (Vec::new(), Origin::Other),
             Redirection::Stem(id) => {
                 let object = self.redirect_stem(code, *id, Stream::Input);
-                self.stem_input_lines(object)?
+                (self.stem_input_lines(object)?, Origin::Stem(object))
             }
             Redirection::Using(expression) => {
                 let object = self.eval(code, expression)?;
                 self.roots.activity_mut().push_temp(object);
                 self.trace_redirect_target(Stream::Input, object);
-                self.using_input_lines(object)?
+                let origin = if self.is_stem_object(object) {
+                    Origin::Stem(object)
+                } else if self.is_stream_object(object) {
+                    Origin::Stream(object)
+                } else {
+                    Origin::Other
+                };
+                (self.using_input_lines(object)?, origin)
             }
             Redirection::Stream(expression) => {
                 let name = self.redirect_stream_name(code, expression, Stream::Input)?;
@@ -387,10 +547,9 @@ impl Interp {
                 let lines = self.read_stream_lines(stream)?;
                 let caller = self.caller();
                 self.send_message(stream, b"CLOSE", None, &[], caller)?;
-                lines
+                (lines, Origin::Name(name))
             }
-        };
-        Ok(lines)
+        })
     }
 
     /// A stem read as input: `stem.1` through `stem.<stem.0>`.
@@ -579,46 +738,67 @@ impl Interp {
         self.trace_keyword(indent, stream.keyword(), &text);
     }
 
-    /// Writes one target's lines.
-    fn write_target(&mut self, target: &Target, lines: &[Vec<u8>]) -> Result<(), Failure> {
+    /// `init` of one target, answering the stem tail its first line goes to.
+    ///
+    /// Emptying a stem drops every tail and **keeps the stem's own default**,
+    /// measured: a stem with `o. = 'dflt'` and `o.7` set answers `dflt` for
+    /// `o.7` again after one line of output. An `APPEND` stem with no `stem.0`
+    /// of its own is emptied too -- a default is not a size count, measured
+    /// with both `drop p.` and `q. = 'q'`.
+    fn begin_target(&mut self, target: &Target) -> Result<usize, Failure> {
         match *target {
-            Target::Stem { object, append } => self.write_stem_target(object, append, lines),
+            Target::Stem { object, append } => {
+                if append && let Some(count) = self.redirect_stem_count(object)? {
+                    return Ok(count + 1);
+                }
+                self.stem_object_clear(object);
+                let zero = self.counted(0);
+                self.stem_object_write(object, b"0", zero);
+                Ok(1)
+            }
             Target::Collection { object, append } => {
-                self.write_collection_target(object, append, lines)
+                if !append {
+                    let caller = self.caller();
+                    self.send_message(object, b"EMPTY", None, &[], caller)?;
+                }
+                Ok(1)
             }
-            Target::Stream { object, .. } => {
-                let close = matches!(
-                    target,
-                    Target::Stream {
-                        qualified: Some(_),
-                        ..
-                    }
-                );
-                self.write_stream_target(object, close, lines)
-            }
+            // Opened, and truncated for `REPLACE`, where it was resolved.
+            Target::Stream { .. } => Ok(1),
         }
     }
 
-    /// `StreamOutputTarget`: one `LINEOUT` per line, then a `CLOSE` for a
-    /// target this redirection opened. A `USING` stream object is left open,
-    /// because the program owns it.
-    fn write_stream_target(
+    /// Writes `lines` to one target, a stem's from tail `next` on with
+    /// `stem.0` after each (`StemOutputTarget::writeLine`), answering the
+    /// next tail.
+    fn write_target(
         &mut self,
-        object: ObjRef,
-        close: bool,
+        target: &Target,
+        mut next: usize,
         lines: &[Vec<u8>],
-    ) -> Result<(), Failure> {
+    ) -> Result<usize, Failure> {
         for line in lines {
             let value = self.text(line);
             self.roots.activity_mut().push_temp(value);
-            let caller = self.caller();
-            self.send_message(object, b"LINEOUT", None, &[Some(value)], caller)?;
+            match *target {
+                Target::Stem { object, .. } => {
+                    let key = next.to_string().into_bytes();
+                    self.stem_object_write(object, &key, value);
+                    let count = self.counted(next);
+                    self.stem_object_write(object, b"0", count);
+                }
+                Target::Collection { object, .. } => {
+                    let caller = self.caller();
+                    self.send_message(object, b"APPEND", None, &[Some(value)], caller)?;
+                }
+                Target::Stream { object, .. } => {
+                    let caller = self.caller();
+                    self.send_message(object, b"LINEOUT", None, &[Some(value)], caller)?;
+                }
+            }
+            next += 1;
         }
-        if close {
-            let caller = self.caller();
-            self.send_message(object, b"CLOSE", None, &[], caller)?;
-        }
-        Ok(())
+        Ok(next)
     }
 
     /// The qualified name a `STREAM expr` redirection resolves to, echoed as
@@ -728,67 +908,6 @@ impl Interp {
         }
         self.activity.input_dispatch_trapped = true;
         true
-    }
-
-    /// `StemOutputTarget`: `stem.1` upwards, with `stem.0` rewritten to the
-    /// last index used.
-    ///
-    /// `REPLACE` -- which is also what no option at all means -- drops every
-    /// tail and **keeps the stem's own default**, measured: a stem with
-    /// `o. = 'dflt'` and `o.7` set answers `dflt` for `o.7` again after one
-    /// line of output. `APPEND` starts at `stem.0 + 1`, and a stem with no
-    /// `stem.0` of its own is a `REPLACE` however it was asked for -- a
-    /// default is not a size count, measured with both `drop p.` and
-    /// `q. = 'q'`.
-    fn write_stem_target(
-        &mut self,
-        object: ObjRef,
-        append: bool,
-        lines: &[Vec<u8>],
-    ) -> Result<(), Failure> {
-        let start = match append {
-            true => self.redirect_stem_count(object)?,
-            false => None,
-        };
-        let mut next = match start {
-            Some(count) => count + 1,
-            None => {
-                self.stem_object_clear(object);
-                1
-            }
-        };
-        for line in lines {
-            let value = self.text(line);
-            let key = next.to_string().into_bytes();
-            self.stem_object_write(object, &key, value);
-            next += 1;
-        }
-        let count = self.text((next - 1).to_string().as_bytes());
-        self.stem_object_write(object, b"0", count);
-        Ok(())
-    }
-
-    /// `CollectionOutputTarget`: `EMPTY` unless appending, then one `APPEND`
-    /// per line. Both are sends, so the collection's own class decides what
-    /// they do -- measured, a `.list~of('keep1','keep2')` given two lines of
-    /// output holds those two lines and nothing else, and is still a `List`.
-    fn write_collection_target(
-        &mut self,
-        object: ObjRef,
-        append: bool,
-        lines: &[Vec<u8>],
-    ) -> Result<(), Failure> {
-        if !append {
-            let caller = self.caller();
-            self.send_message(object, b"EMPTY", None, &[], caller)?;
-        }
-        for line in lines {
-            let value = self.text(line);
-            self.roots.activity_mut().push_temp(value);
-            let caller = self.caller();
-            self.send_message(object, b"APPEND", None, &[Some(value)], caller)?;
-        }
-        Ok(())
     }
 
     /// `stem.0` as a count, or `None` where the stem carries none of its own.

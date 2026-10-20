@@ -303,3 +303,9 @@ lang/security_manager_existing_instances.rex
 # that leaves the baton to the other activities while its child runs.
 lang/context_rs_command.rex
 lang/command_redirected_off_baton.rex
+# 9d Task 6.13 fix round 1: unregistered environments named after loaded
+# packages, redirect targets seen mid-command, and parked targets rooted.
+lang/command_library_environments_unregistered.rex
+lang/command_redirected_targets_mid_command.rex
+lang/command_redirected_targets_collected.rex
+lang/trace_commands_address_clause.rex

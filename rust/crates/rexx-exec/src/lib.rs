@@ -639,10 +639,9 @@ impl Loud {
         }
     }
 
-    /// An `ADDRESS` environment no handler answers, named as a native package
-    /// whose loader ran: `hostemu`'s loader registers its environment under
-    /// that name through the classic subcommand API (`RexxRegisterSubcomExe`),
-    /// which this crate does not implement.
+    /// An `ADDRESS` environment no handler answers that a held native
+    /// package's loader registers through the classic subcommand API
+    /// (`RexxRegisterSubcomExe`), which this crate does not implement.
     #[cold]
     fn loader_environment(environment: &[u8]) -> Loud {
         let shown = String::from_utf8_lossy(environment);

@@ -2483,6 +2483,7 @@ DEVIATIONS -- permanent, chosen
      the INTERPRET and after it. Probe:
      docs/superpowers/records/2026-10-18-phase-9d/t6.13/probes/interpret/
      (oracle `in 1 0 4`, this crate `in 1 1 4`). No ooTest test reaches it.
+     LICENSED DIVERGENCE WITNESS: context-rs-in-interpret
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------

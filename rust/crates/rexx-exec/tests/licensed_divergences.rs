@@ -219,6 +219,16 @@ const LICENSED_DIVERGENCES: &[LicensedDivergence] = &[
         oracle_stdout: "syntax 97.1 c=0\n",
         crate_stdout: "syntax 97.1 c=1\n",
     },
+    LicensedDivergence {
+        name: "context-rs-in-interpret",
+        program: "address system 'true'\n\
+                  interpret \"address system 'exit 4'; say 'in' .rs .context~rs\"\n\
+                  say 'out' .rs .context~rs\n",
+        exit_code: 0,
+        stderr: "",
+        oracle_stdout: "in 1 0\nout 1 1\n",
+        crate_stdout: "in 1 1\nout 1 1\n",
+    },
 ];
 
 /// Where the prose half lives. `builtin_status.rs`'s own `exclusions_path`,

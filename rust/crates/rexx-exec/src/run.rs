@@ -582,10 +582,9 @@ impl Interp {
             InstructionKind::Guard(guard) => self.exec_guard(code, index, guard),
             InstructionKind::Reply { expression } => self.exec_reply(code, expression.as_ref()),
             InstructionKind::Command { .. } | InstructionKind::Address(_)
-                if self.blocked_command_ended() =>
+                if self.blocked_command_woken() =>
             {
                 self.end_blocked_command(index, instruction, source)
-                    .map(ExecOutcome::Done)
             }
             // A command clause: the string is evaluated, handed to the
             // `ADDRESS` environment in force, and its return code settles
@@ -3129,7 +3128,7 @@ impl Interp {
         indent: usize,
     ) {
         let is_label = matches!(instruction.kind, InstructionKind::Label { .. });
-        let is_command = matches!(instruction.kind, InstructionKind::Command { .. });
+        let is_command = crate::command::issues_command(&instruction.kind);
         if self.tracing_clause(is_label, is_command)
             && let Some((line, text)) = self.clause_site(source, instruction)
         {
