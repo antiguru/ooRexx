@@ -327,3 +327,5 @@ lang/command_redirected_started_target_sleeps.rex
 lang/lostdigits_fuzz_compare.rex
 # 9d Task 6.14: LOSTDIGITS from a DO repetitor or FOR count.
 lang/lostdigits_do_count.rex
+# 9d Task 6.15: APPEND writes at the end, and a LINES count leaves the stream READY.
+lang/stream_append_writes_at_end.rex

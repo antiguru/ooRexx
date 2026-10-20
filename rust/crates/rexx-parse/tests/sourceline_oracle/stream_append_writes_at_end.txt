@@ -1,0 +1,58 @@
+count 57
+/* On a stream opened APPEND every write lands at the end, wherever a start
+   argument, a line number or a SEEK put the write position. A LINES count
+   that reads the stream leaves it READY. */
+call scenario 'charout at 1', 'both append', 'C1 XY', 'C Z'
+call scenario 'lineout at line 1', 'both append', 'L1 new', 'L tail'
+call scenario 'seek then charout', 'both append', 'S =2 write', 'C Q'
+call scenario 'write append', 'write append', 'C1 ab', 'L2 cd'
+call scenario 'charout past the end', 'both append', 'C30 far', 'L end'
+call record 'record append', 'both append binary reclength 4', 'L1 ab', 'C3 Z'
+call counted 'lines count after a read past the end'
+exit
+
+scenario:
+  f = 'a' || arg(1)~changestr(' ', '_') || '.txt'
+  call charout f, 'line1' || '0a'x || 'line2' || '0a'x
+  call charout f
+  call stream f, 'c', 'open' arg(2) 'nobuffer'
+  call run arg(1), f, arg(3), arg(4)
+  return
+
+record:
+  f = 'r' || arg(1)~changestr(' ', '_') || '.bin'
+  call charout f, 'AAAABBBB'
+  call charout f
+  call stream f, 'c', 'open' arg(2) 'nobuffer'
+  call run arg(1), f, arg(3), arg(4)
+  return
+
+run:
+  parse arg name, f
+  out = name ':'
+  do i = 3 to arg()
+    parse value arg(i) with op text
+    select
+      when op = 'C' then r = charout(f, text)
+      when op~left(1) = 'C' then r = charout(f, text, op~substr(2))
+      when op = 'L' then r = lineout(f, text)
+      when op~left(1) = 'L' then r = lineout(f, text, op~substr(2))
+      when op = 'S' then r = stream(f, 'c', 'seek' text)
+    end
+    out = out op'='r 'w' || stream(f, 'c', 'query position write')
+  end
+  call stream f, 'c', 'close'
+  say out
+  say '   [' || charin(f, 1, chars(f))~changestr('0a'x, '|')~changestr('00'x, '@') || ']'
+  call stream f, 'c', 'close'
+  return
+
+counted:
+  f = 'counted.txt'
+  call charout f, 'a' || '0a'x || 'b' || '0a'x
+  call charout f
+  call stream f, 'c', 'open both nobuffer'
+  call charin f, 9, 1
+  say arg(1) ':' stream(f, 'S') lines(f, 'C') stream(f, 'S')
+  call stream f, 'c', 'close'
+  return

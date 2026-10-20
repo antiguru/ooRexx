@@ -1,0 +1,324 @@
+# Named stream cases: one operation per input line, in the grammar
+# tests/stream_model.rs describes. `initial` names the file's content
+# before the case, and `transient=1` makes the stream a FIFO. Every
+# persistent stream is opened NOBUFFER except where a case says otherwise.
+
+# A write starts at the write position, which starts at the end, and a
+# start argument moves it (funct.xml:1399-1410).
+case name=charout-append-at-end initial=text3
+O both nobuffer
+CO abc
+CO xy 1
+Q write
+----
+model: O_both_nobuffer=READY: READY 19 1;CO_abc=0 READY 22 1;CO_xy_1=0 READY 3 1;Q_write=3 READY 3 1; [xyne1|line2|line3|abc]
+
+# The documented write position after a line-numbered LINEOUT (Deviation 49).
+case name=lineout-positions initial=text3
+O both nobuffer
+LO new 2
+Q write
+LI
+LO tail
+----
+model: O_both_nobuffer=READY: READY 19 1;LO_new_2=0 READY 11 1;Q_write=11 READY 11 1;LI=line1 READY 11 7;LO_tail=0 READY 16 7; [line1|new|tail|e3|]
+
+# The read and write positions are separate (iostrms.xml:226-227).
+case name=separate-positions initial=text3
+O both nobuffer
+CI 3
+CO xyz
+Q read
+Q write
+CI 2
+LI
+----
+model: O_both_nobuffer=READY: READY 19 1;CI_3=lin READY 19 4;CO_xyz=0 READY 22 4;Q_read=4 READY 22 4;Q_write=22 READY 22 4;CI_2=e1 READY 22 6;LI= READY 22 7; [line1|line2|line3|xyz]
+
+# CHARIN: one past the end is NOTREADY, a length of 0 only positions, a
+# short read answers what it got.
+case name=charin-bounds initial=text3
+O both nobuffer
+CI 3 30
+CI 0 5
+CI 2
+CI 5 16
+CI
+CH
+----
+model: O_both_nobuffer=READY: READY 19 1;CI_3_30= NOTREADY 19 1;CI_0_5= READY 19 5;CI_2=1| READY 19 7;CI_5_16=e3| NOTREADY 19 19;CI= ERROR 19 19;CH=0 ERROR 19 19; [line1|line2|line3|]
+
+# LINEIN reads to the line end and drops it; at the end it is NOTREADY.
+case name=linein-lines initial=text3
+O both nobuffer
+LI
+LI
+LI
+LI
+LI 2
+LI 1 0
+LI
+LZ
+----
+model: O_both_nobuffer=READY: READY 19 1;LI=line1 READY 19 7;LI=line2 READY 19 13;LI=line3 READY 19 19;LI= NOTREADY 19 19;LI_2=line2 READY 19 13;LI_1_0= READY 19 1;LI=line1 READY 19 7;LZ= READY 19 7; [line1|line2|line3|]
+
+# A last line with no line end is still a line.
+case name=linein-unterminated initial=tail
+O both nobuffer
+LC
+LI
+LI
+LI
+LI
+LN
+CH
+----
+model: O_both_nobuffer=READY: READY 9 1;LC=3 READY 9 1;LI=ab READY 9 4;LI=cd READY 9 7;LI=ef READY 9 9;LI= NOTREADY 9 9;LN=0 NOTREADY 9 9;CH=0 NOTREADY 9 9; [ab|cd|ef]
+
+# Records are addressing: line n is character (n-1)*4+1, and LINEOUT with
+# a string completes its record (rexxpg rexio.xml:562-565).
+case name=record-lines initial=rec16
+O both binary reclength 4 nobuffer
+LI
+LI 3
+LO x
+LO x 1
+LP 2
+LO yz
+Q read line
+Q write line
+LC
+LN
+----
+model: O_both_binary_reclength_4_nobuffer=READY: READY 17 1;LI=AAAA READY 17 5;LI_3=CCCC READY 17 13;LO_x=0 READY 21 13;LO_x_1=0 READY 5 13;LP_2=0 READY 5 13;LO_yz=0 READY 9 13;Q_read_line=4 READY 9 13;Q_write_line=3 READY 9 13;LC=2 READY 9 13;LN=1 READY 9 13; [x___yz__CCCCDDDDx___]
+
+# A string longer than what is left of its record is the bare 93.
+case name=record-too-long initial=rec16
+O both binary reclength 4 nobuffer
+LO QQQQQ
+CO x 3
+LO abc
+LO ab
+----
+model: O_both_binary_reclength_4_nobuffer=READY: READY 17 1;LO_QQQQQ=S93.0 READY 17 1;CO_x_3=0 READY 4 1;LO_abc=S93.0 READY 4 1;LO_ab=S93.0 READY 4 1; [AAxABBBBCCCCDDDD]
+
+# BINARY without RECLENGTH makes the whole stream one record.
+case name=binary-whole-stream initial=tail
+O both binary nobuffer
+LI
+LO x
+LC
+----
+model: O_both_binary_nobuffer=READY: READY 9 1;LI=ab|cd|ef READY 9 9;LO_x=0 READY 17 9;LC=1 READY 17 9; [ab|cd|efx_______]
+
+# REPLACE empties the stream.
+case name=replace-empties initial=text3
+O both replace nobuffer
+CH
+LO a
+LO b
+LI 1
+LI
+Q write
+----
+model: O_both_replace_nobuffer=READY: READY 1 1;CH=0 READY 1 1;LO_a=0 READY 3 1;LO_b=0 READY 5 1;LI_1=a READY 5 3;LI=b READY 5 5;Q_write=5 READY 5 5; [a|b|]
+
+# A READ stream has no write position and writes nothing.
+case name=read-only-writes initial=text3
+O read nobuffer
+CO x
+LO x
+CP 3
+Q write
+LI
+LX
+----
+model: O_read_nobuffer=READY: READY 0 1;CO_x=1 ERROR 0 1;LO_x=1 ERROR 0 1;CP_3=0 ERROR 0 1;Q_write=0 ERROR 0 1;LI=line1 READY 0 7;LX=0 UNKNOWN  ; [line1|line2|line3|]
+
+# SEEK with =, by characters and lines, and with neither READ nor WRITE.
+case name=seek-absolute initial=text3
+O both nobuffer
+S =4 read
+CI 2
+S =2 write
+CO Z
+S =2 read line
+LI
+S =3 write line
+LO W
+S =3
+Q read
+Q write
+----
+model: O_both_nobuffer=READY: READY 19 1;S_=4_read=4 READY 19 4;CI_2=e1 READY 19 6;S_=2_write=2 READY 2 6;CO_Z=0 READY 3 6;S_=2_read_line=2 READY 3 7;LI=line2 READY 3 13;S_=3_write_line=3 READY 13 13;LO_W=0 READY 15 13;S_=3=3 READY 3 3;Q_read=3 READY 3 3;Q_write=3 READY 3 3; [lZne1|line2|W|ne3|]
+
+# SEEK <n by lines counts from the last line.
+case name=seek-line-from-end initial=text3
+O both nobuffer
+S <1 read line
+LI
+----
+model: O_both_nobuffer=READY: READY 19 1;S_<1_read_line=2 READY 19 7;LI=line2 READY 19 13; [line1|line2|line3|]
+
+# SEEK <n by characters is from the end (Deviation 49).
+case name=seek-char-from-end initial=text3
+O both nobuffer
+S <3 read
+CI 3
+S <1 write
+CO Z
+----
+model: O_both_nobuffer=READY: READY 19 1;S_<3_read=16 READY 19 16;CI_3=e3| READY 19 19;S_<1_write=18 READY 18 19;CO_Z=0 READY 19 19; [line1|line2|line3Z]
+
+# A relative SEEK moves from the position it names (Deviation 49).
+case name=seek-relative initial=text3
+O both nobuffer
+CI 2
+CO ab 10
+S +2 read
+CI
+S -2 write
+CO Z
+----
+model: O_both_nobuffer=READY: READY 19 1;CI_2=li READY 19 3;CO_ab_10=0 READY 12 3;S_+2_read=5 READY 12 5;CI=1 READY 12 6;S_-2_write=10 READY 10 6;CO_Z=0 READY 11 6; [line1|linZb|line3|]
+
+# On an APPEND stream every write lands at the end (funct.xml:4309-4312).
+case name=append-writes-at-end initial=text3
+O both append nobuffer
+CO x 1
+LO y 1
+S =2 write
+CO z
+Q write
+----
+model: O_both_append_nobuffer=READY: READY 19 1;CO_x_1=0 READY 20 1;LO_y_1=0 READY 22 1;S_=2_write=2 READY 2 1;CO_z=0 READY 23 1;Q_write=23 READY 23 1; [line1|line2|line3|xy|z]
+
+# Positioning and closing write nothing on a record stream (Deviation 46).
+case name=record-close-pads-nothing initial=rec16
+O both binary reclength 4 nobuffer
+CO x 5
+LX
+O both binary reclength 4 nobuffer
+LP 3
+----
+model: O_both_binary_reclength_4_nobuffer=READY: READY 17 1;CO_x_5=0 READY 6 1;LX=0 UNKNOWN  ;O_both_binary_reclength_4_nobuffer=READY: READY 17 1;LP_3=0 READY 9 1; [AAAAxBBBCCCCDDDD]
+
+# CHAROUT and STREAM CLOSE close a record stream with nothing written.
+case name=record-other-closes initial=rec16
+O both binary reclength 4 nobuffer
+CO x 5
+CX
+O both binary reclength 4 nobuffer
+CO y 9
+X
+----
+model: O_both_binary_reclength_4_nobuffer=READY: READY 17 1;CO_x_5=0 READY 6 1;CX=0 UNKNOWN  ;O_both_binary_reclength_4_nobuffer=READY: READY 17 1;CO_y_9=0 READY 10 1;X=READY: UNKNOWN  ; [AAAAxBBByCCCDDDD]
+
+# A transient stream is a queue with no positions (iostrms.xml:186-197).
+case name=transient-queue transient=1
+O both nobuffer
+CO abc
+LO de
+CI 2
+LI
+Q read
+S =1
+CO x 3
+CI 1 1
+LI 1
+LP 1
+----
+model: O_both_nobuffer=READY: READY 1 1;CO_abc=0 READY 1 1;LO_de=0 READY 1 1;CI_2=ab READY 1 1;LI=cde READY 1 1;Q_read=1 READY 1 1;S_=1=S93.958 READY 1 1;CO_x_3=S93.958 READY 1 1;CI_1_1=S93.958 READY 1 1;LI_1=S93.958 READY 1 1;LP_1=S93.958 READY 1 1; [-]
+
+# CHARS and LINES on a transient stream answer 1: what waits cannot be
+# counted without reading it (iostrms.xml:189-193).
+case name=transient-counts transient=1
+O both nobuffer
+CO abcd
+LO e
+CH
+LN
+LC
+CI 2
+LI
+----
+model: O_both_nobuffer=READY: READY 1 1;CO_abcd=0 READY 1 1;LO_e=0 READY 1 1;CH=1 READY 1 1;LN=1 READY 1 1;LC=1 READY 1 1;CI_2=ab READY 1 1;LI=cde READY 1 1; [-]
+
+# A buffered write to a transient stream after another (Deviation 48).
+case name=transient-buffered-writes transient=1
+O both
+CO abc
+CO de
+X
+----
+model: O_both=READY: READY 1 1;CO_abc=0 READY 1 1;CO_de=0 READY 1 1;X=READY: UNKNOWN  ; [-]
+
+# A stream opened WRITE is write-only (funct.xml:4302).
+case name=write-only-reads initial=text3
+O write nobuffer
+CI 1 3
+LI 1
+CH
+LN
+S =2 read line
+----
+model: O_write_nobuffer=READY: READY 19 1;CI_1_3= ERROR 19 3;LI_1= ERROR 19 3;CH=0 ERROR 19 3;LN=0 ERROR 19 3;S_=2_read_line=0 READY 19 3; [line1|line2|line3|]
+crate: O_write_nobuffer=READY: READY 19 1;CI_1_3=n READY 19 4;LI_1=line1 READY 19 7;CH=12 READY 19 7;LN=1 READY 19 7;S_=2_read_line=2 READY 19 7; [line1|line2|line3|]
+
+# A relative line SEEK counts from the line the position is in.
+case name=line-seek-relative-after-charin initial=text3
+O both nobuffer
+CI 6 1
+S +1 read line
+LI
+----
+model: O_both_nobuffer=READY: READY 19 1;CI_6_1=line1| READY 19 7;S_+1_read_line=3 READY 19 13;LI=line3 READY 19 19; [line1|line2|line3|]
+crate: O_both_nobuffer=READY: READY 19 1;CI_6_1=line1| READY 19 7;S_+1_read_line=1 READY 19 1;LI=line1 READY 19 7; [line1|line2|line3|]
+
+# LINEIN names a line by its start, wherever the read position is.
+case name=linein-line-from-mid-line initial=text3
+O both nobuffer
+CI 8 1
+Q read line
+LI 2
+----
+model: O_both_nobuffer=READY: READY 19 1;CI_8_1=line1|li READY 19 9;Q_read_line=2 READY 19 9;LI_2=line2 READY 19 13; [line1|line2|line3|]
+crate: O_both_nobuffer=READY: READY 19 1;CI_8_1=line1|li READY 19 9;Q_read_line=2 READY 19 9;LI_2=ne2 READY 19 13; [line1|line2|line3|]
+
+# The write line is the line the write position is in.
+case name=write-line-query initial=text3
+O both nobuffer
+CP 8
+Q write line
+----
+model: O_both_nobuffer=READY: READY 19 1;CP_8=0 READY 8 1;Q_write_line=2 READY 8 1; [line1|line2|line3|]
+crate: O_both_nobuffer=READY: READY 19 1;CP_8=0 READY 8 1;Q_write_line=3 READY 8 1; [line1|line2|line3|]
+
+# The read position at the end of a stream ending in a line end is the
+# start of the line after the last.
+case name=read-line-at-end initial=text3
+O both nobuffer
+CI 1 18
+Q read line
+----
+model: O_both_nobuffer=READY: READY 19 1;CI_1_18=| READY 19 19;Q_read_line=4 READY 19 19; [line1|line2|line3|]
+crate: O_both_nobuffer=READY: READY 19 1;CI_1_18=| READY 19 19;Q_read_line=3 READY 19 19; [line1|line2|line3|]
+
+# A CHARIN of length 0 moves the read position, and its line with it.
+case name=read-line-after-positioning initial=text3
+O both nobuffer
+CI 0 7
+Q read line
+----
+model: O_both_nobuffer=READY: READY 19 1;CI_0_7= READY 19 7;Q_read_line=2 READY 19 7; [line1|line2|line3|]
+crate: O_both_nobuffer=READY: READY 19 1;CI_0_7= READY 19 7;Q_read_line=1 READY 19 7; [line1|line2|line3|]
+
+# LINES Count answers the lines that remain, every time.
+case name=lines-count-repeated initial=text3
+O both nobuffer
+CI 2 1
+LC
+LC
+----
+model: O_both_nobuffer=READY: READY 19 1;CI_2_1=li READY 19 3;LC=3 READY 19 3;LC=3 READY 19 3; [line1|line2|line3|]
+crate: O_both_nobuffer=READY: READY 19 1;CI_2_1=li READY 19 3;LC=3 READY 19 3;LC=2 READY 19 3; [line1|line2|line3|]

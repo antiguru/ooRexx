@@ -813,18 +813,40 @@ fn read_from(file: &mut std::fs::File, position: u64, len: usize) -> std::io::Re
     Ok(out)
 }
 
+/// Up to `len` bytes: from `position` (1-based) of a persistent stream, or
+/// the next ones of a transient stream, which has no position and waits
+/// until `len` arrive or its input ends (rexxref funct.xml:1329-1335).
+fn read_at(
+    file: &mut std::fs::File,
+    position: u64,
+    len: usize,
+    transient: bool,
+) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    if !transient {
+        return read_from(file, position, len);
+    }
+    let mut out = Vec::new();
+    file.take(u64::try_from(len).unwrap_or(u64::MAX))
+        .read_to_end(&mut out)?;
+    Ok(out)
+}
+
 /// One line from `position`, and the position after it. The line drops its
 /// terminating `\n` and the `\r` immediately before that -- a bare `\r` is
 /// data (`SysFile::gets`) -- and a final unterminated line is still a line.
-/// `None` at the end of the file.
+/// `None` at the end of the file. A transient stream is read a byte at a
+/// time, so nothing after the line end is taken from it.
 fn read_line_from(
     file: &mut std::fs::File,
     position: u64,
+    transient: bool,
 ) -> std::io::Result<Option<(Vec<u8>, i64)>> {
     let mut line = Vec::new();
     let mut at = position;
+    let want = if transient { 1 } else { CHUNK };
     loop {
-        let chunk = read_from(file, at, CHUNK)?;
+        let chunk = read_at(file, at, want, transient)?;
         if chunk.is_empty() {
             return Ok(if line.is_empty() {
                 None
@@ -1174,7 +1196,7 @@ pub(super) fn charin(
     }
     // A read that fails reports its errno: measured, `EBADF` on a stream
     // opened write-only is `ERROR:9`.
-    let read = match read_from(&mut open.file, offset_of(at), wanted) {
+    let read = match read_at(&mut open.file, offset_of(at), wanted, open.transient) {
         Ok(read) => read,
         Err(error) => {
             let errno = error.raw_os_error().unwrap_or(0);
@@ -1292,7 +1314,7 @@ fn read_record(
     };
     let from = open.read_position;
     let wanted = record_remainder(from, record_length);
-    let (bytes, errno) = match read_from(&mut open.file, offset_of(from), wanted) {
+    let (bytes, errno) = match read_at(&mut open.file, offset_of(from), wanted, open.transient) {
         Ok(bytes) => (bytes, 0),
         Err(error) => (Vec::new(), error.raw_os_error().unwrap_or(0)),
     };
@@ -1336,7 +1358,7 @@ fn next_line(interp: &mut Interp, receiver: ObjRef) -> Result<Option<Vec<u8>>, F
         return Ok(None);
     };
     let at = open.read_position;
-    match read_line_from(&mut open.file, offset_of(at)).unwrap_or(None) {
+    match read_line_from(&mut open.file, offset_of(at), open.transient).unwrap_or(None) {
         Some((text, next)) => {
             open.read_position = next;
             if open.line_read != 0 {
@@ -1456,6 +1478,7 @@ pub(super) fn charout(
         return Ok(Some(interp.text_built(residual)));
     }
     let state = require_mut(interp, receiver)?;
+    let append = state.mode.append;
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"0")));
     };
@@ -1468,7 +1491,7 @@ pub(super) fn charout(
     let Some(data) = data else {
         return Ok(Some(interp.text(b"0")));
     };
-    let at = open.write_position;
+    let at = landing(open, append, open.write_position);
     let transient = open.transient;
     match write_at(&mut open.file, offset_of(at), &data, transient) {
         Ok(()) => {
@@ -1545,7 +1568,7 @@ pub(super) fn lineout(
     }
     // A file whose last byte is ctrl-Z has it overwritten rather than kept.
     let size = size_of(&open.file) as i64;
-    let mut at = open.write_position;
+    let mut at = landing(open, mode.append, open.write_position);
     if at == size + 1 && size > 0 {
         let tail = read_from(&mut open.file, offset_of(size), 1).unwrap_or_default();
         if tail.first() == Some(&CTRL_Z) {
@@ -1618,10 +1641,11 @@ fn write_record(
     mut data: Vec<u8>,
 ) -> Result<Option<ObjRef>, Failure> {
     let state = require_mut(interp, receiver)?;
+    let append = state.mode.append;
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"1")));
     };
-    let at = open.write_position;
+    let at = landing(open, append, open.write_position);
     let room = record_remainder(at, record_length);
     if data.len() > room {
         return Err(Raised::syntax(93, 0, Vec::new()).into());
@@ -1637,6 +1661,17 @@ fn write_record(
             let errno = error.raw_os_error().unwrap_or(0);
             notready(interp, receiver, StreamStatus::Error(errno), b"1".to_vec())
         }
+    }
+}
+
+/// Where a write from `position` lands: at the end of the file on an APPEND
+/// stream, whose write position cannot move into the file as it was opened
+/// (rexxref funct.xml:4309-4312), and at `position` otherwise.
+fn landing(open: &rexx_core::OpenFile, append: bool, position: i64) -> i64 {
+    if append && !open.transient {
+        size_of(&open.file) as i64 + 1
+    } else {
+        position
     }
 }
 
@@ -1657,7 +1692,8 @@ fn write_at(
 
 /// `stream_chars`: the characters left from the read position, which is the
 /// size less what has been read, floored at zero. A persistent stream that
-/// cannot read answers 0.
+/// cannot read answers 0. A transient stream answers 1: what waits in it
+/// cannot be counted without reading it (rexxref iostrms.xml:189-193).
 pub(super) fn chars(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1682,7 +1718,10 @@ pub(super) fn chars(
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"0")));
     };
-    if !open.transient && !readable {
+    if open.transient {
+        return Ok(Some(interp.text(b"1")));
+    }
+    if !readable {
         return Ok(Some(interp.text(b"0")));
     }
     let left = (size_of(&open.file) as i64 - (open.read_position - 1)).max(0);
@@ -1729,8 +1768,12 @@ pub(super) fn lines(
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"0")));
     };
-    // A persistent stream that cannot read has no lines (`StreamInfo::lines`).
-    if !open.transient && !readable {
+    // A transient stream answers 1, as `chars` does, and a persistent
+    // stream that cannot read has no lines (`StreamInfo::lines`).
+    if open.transient {
+        return Ok(Some(interp.text(b"1")));
+    }
+    if !readable {
         return Ok(Some(interp.text(b"0")));
     }
     let size = size_of(&open.file) as i64;
@@ -1755,8 +1798,11 @@ pub(super) fn lines(
         // short after a `CHARIN` stored the cache with a zero line position.
         open.line_size
     } else {
+        // The scan is a read, so it leaves the stream `READY`
+        // (`StreamInfo::lines` calls `readSetup` first).
         let count = count_lines_from(&mut open.file, offset_of(open.read_position)).unwrap_or(0);
         open.line_size = (count + open.line_read).saturating_sub(1);
+        state.status = StreamStatus::Ready;
         count
     };
     Ok(Some(interp.text_built(answer.to_string().into_bytes())))
