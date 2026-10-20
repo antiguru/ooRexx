@@ -1,4 +1,4 @@
-**RULED: 9d, under Moritz's 2026-10-19 ruling that gaps found during 9d are fixed in 9d (Task 8).** A pending HALT taken at a SIGNAL ON SYNTAX label gives a broken report.
+**RULED: 9d by the controller, as Moritz ruled the post-Task-2 gaps 2026-10-19 ("proposal ok"); Task 8.** A pending HALT taken at a SIGNAL ON SYNTAX label gives a broken report.
 
 # HALT at a SIGNAL ON SYNTAX label
 
