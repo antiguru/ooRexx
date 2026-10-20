@@ -1,0 +1,945 @@
+# Task 6.14's own cases: rexxref's examples ("Numbers and Arithmetic" and the
+# numeric built-in functions), the errors, LOSTDIGITS under NUMERIC FUZZ,
+# and the rows where the derived rule and an interpreter part. The case
+# grammar is the one `spike` describes.
+
+case name=rexxref-operator-1 digits=5
+infix + | 12 | 7.00
+----
+model: V[19.00] | V[19.00]
+
+case name=rexxref-operator-2 digits=5
+infix - | 1.3 | 1.07
+----
+model: V[0.23] | V[0.23]
+
+case name=rexxref-operator-3 digits=5
+infix - | 1.3 | 2.07
+----
+model: V[-0.77] | V[-0.77]
+
+case name=rexxref-operator-4 digits=5
+infix * | 1.20 | 3
+----
+model: V[3.60] | V[3.60]
+
+case name=rexxref-operator-5 digits=5
+infix * | 7 | 3
+----
+model: V[21] | V[21]
+
+case name=rexxref-operator-6 digits=5
+infix * | 0.9 | 0.8
+----
+model: V[0.72] | V[0.72]
+
+case name=rexxref-operator-7 digits=5
+infix / | 1 | 3
+----
+model: V[0.33333] | V[0.33333]
+
+case name=rexxref-operator-8 digits=5
+infix / | 2 | 3
+----
+model: V[0.66667] | V[0.66667]
+
+case name=rexxref-operator-9 digits=5
+infix / | 5 | 2
+----
+model: V[2.5] | V[2.5]
+
+case name=rexxref-operator-10 digits=5
+infix / | 1 | 10
+----
+model: V[0.1] | V[0.1]
+
+case name=rexxref-operator-11 digits=5
+infix / | 12 | 12
+----
+model: V[1] | V[1]
+
+case name=rexxref-operator-12 digits=5
+infix / | 8.0 | 2
+----
+model: V[4] | V[4]
+
+case name=rexxref-operator-13 digits=5
+infix ** | 2 | 3
+----
+model: V[8] | V[8]
+
+case name=rexxref-operator-14 digits=5
+infix ** | 2 | '-3'
+----
+model: V[0.125] | V[0.125]
+
+case name=rexxref-operator-15 digits=5
+infix ** | 1.7 | 8
+----
+model: V[69.758] | V[69.758]
+
+case name=rexxref-operator-16 digits=5
+infix % | 2 | 3
+----
+model: V[0] | V[0]
+
+case name=rexxref-operator-17 digits=5
+infix // | 2.1 | 3
+----
+model: V[2.1] | V[2.1]
+
+case name=rexxref-operator-18 digits=5
+infix % | 10 | 3
+----
+model: V[3] | V[3]
+
+case name=rexxref-operator-19 digits=5
+infix // | 10 | 3
+----
+model: V[1] | V[1]
+
+case name=rexxref-operator-20 digits=5
+infix // | '-10' | 3
+----
+model: V[-1] | V[-1]
+
+case name=rexxref-operator-21 digits=5
+infix // | 10.2 | 1
+----
+model: V[0.2] | V[0.2]
+
+case name=rexxref-operator-22 digits=5
+infix // | 10 | 0.3
+----
+model: V[0.1] | V[0.1]
+
+case name=rexxref-operator-23 digits=5
+infix // | 3.6 | 1.3
+----
+model: V[1.0] | V[1.0]
+
+case name=rexxref-arith-1
+infix + | 2.40 | 2
+----
+model: V[4.40] | V[4.40]
+
+case name=rexxref-arith-2
+infix - | 2.40 | 2
+----
+model: V[0.40] | V[0.40]
+
+case name=rexxref-arith-3
+infix * | 2.40 | 2
+----
+model: V[4.80] | V[4.80]
+
+case name=rexxref-arith-4
+infix / | 2.40 | 2
+----
+model: V[1.2] | V[1.2]
+
+case name=rexxref-exponential-1
+infix * | 1e6 | 1e6
+----
+model: V[1E+12] | V[1E+12]
+
+case name=rexxref-exponential-2
+infix / | 1 | 3E10
+----
+model: V[3.33333333E-11] | V[3.33333333E-11]
+
+case name=rexxref-exponential-3 digits=5
+infix * | 54321 | 54321
+----
+model: V[2.9508E+9] | V[2.9508E+9]
+
+case name=rexxref-form-1
+infix * | 123.45 | 1e11
+----
+model: V[1.2345E+13] | V[1.2345E+13]
+
+case name=rexxref-form-2 form=engineering
+infix * | 123.45 | 1e11
+----
+model: V[12.345E+12] | V[12.345E+12]
+
+case name=rexxref-intdiv-fails
+infix % | 10000000000 | 3
+----
+model: S 26.11 | L[10000000000]
+
+case name=rexxref-fuzz-0-eq digits=5
+infix = | 4.9999 | 5
+----
+model: V[0] | V[0]
+
+case name=rexxref-fuzz-0-lt digits=5
+infix < | 4.9999 | 5
+----
+model: V[1] | V[1]
+
+case name=rexxref-fuzz-1-eq digits=5 fuzz=1
+infix = | 4.9999 | 5
+----
+model: V[1] | L[4.9999]
+
+case name=rexxref-fuzz-1-lt digits=5 fuzz=1
+infix < | 4.9999 | 5
+----
+model: V[0] | L[4.9999]
+
+case name=rexxref-exp-compare-1
+infix = | 12E7 | 120000000
+----
+model: V[1] | V[1]
+
+case name=rexxref-exp-compare-2
+infix = | 12E-5 | 0.00012
+----
+model: V[1] | V[1]
+
+case name=rexxref-exp-compare-3
+infix = | 0e123 | 0e456
+----
+model: V[1] | V[1]
+
+case name=rexxref-exp-compare-4
+infix == | 0e123 | 0e456
+----
+model: V[0] | V[0]
+
+case name=rexxref-abs-1
+bif ABS | '12.3'
+----
+model: V[12.3] | V[12.3]
+
+case name=rexxref-abs-2
+bif ABS | ' -0.307'
+----
+model: V[0.307] | V[0.307]
+
+case name=rexxref-sign-1
+bif SIGN | '12.3'
+----
+model: V[1] | V[1]
+
+case name=rexxref-sign-2
+bif SIGN | ' -0.307'
+----
+model: V[-1] | V[-1]
+
+case name=rexxref-sign-3
+bif SIGN | 0.0
+----
+model: V[0] | V[0]
+
+case name=rexxref-trunc-1
+bif TRUNC | 12.3
+----
+model: V[12] | V[12]
+
+case name=rexxref-trunc-2
+bif TRUNC | 127.09782 | 3
+----
+model: V[127.097] | V[127.097]
+
+case name=rexxref-trunc-3
+bif TRUNC | 127.1 | 3
+----
+model: V[127.100] | V[127.100]
+
+case name=rexxref-max-1
+bif MAX | 12 | 6 | 7 | 9
+----
+model: V[12] | V[12]
+
+case name=rexxref-max-2
+bif MAX | 17.3 | 19 | 17.03
+----
+model: V[19] | V[19]
+
+case name=rexxref-max-3
+bif MAX | '-7' | '-3' | '-4.3'
+----
+model: V[-3] | V[-3]
+
+case name=rexxref-min-1
+bif MIN | 12 | 6 | 7 | 9
+----
+model: V[6] | V[6]
+
+case name=rexxref-min-2
+bif MIN | 17.3 | 19 | 17.03
+----
+model: V[17.03] | V[17.03]
+
+case name=rexxref-min-3
+bif MIN | '-7' | '-3' | '-4.3'
+----
+model: V[-7] | V[-7]
+
+case name=rexxref-format-1
+bif FORMAT | '3' | 4
+----
+model: V[   3] | V[   3]
+
+case name=rexxref-format-2
+bif FORMAT | '1.73' | 4 | 0
+----
+model: V[   2] | V[   2]
+
+case name=rexxref-format-3
+bif FORMAT | '1.73' | 4 | 3
+----
+model: V[   1.730] | V[   1.730]
+
+case name=rexxref-format-4
+bif FORMAT | '-.76' | 4 | 1
+----
+model: V[  -0.8] | V[  -0.8]
+
+case name=rexxref-format-5
+bif FORMAT | '3.03' | 4
+----
+model: V[   3.03] | V[   3.03]
+
+case name=rexxref-format-6
+bif FORMAT | ' - 12.73' |  | 4
+----
+model: V[-12.7300] | V[-12.7300]
+
+case name=rexxref-format-7
+bif FORMAT | ' - 12.73'
+----
+model: V[-12.73] | V[-12.73]
+
+case name=rexxref-format-8
+bif FORMAT | '0.000'
+----
+model: V[0] | V[0]
+
+case name=rexxref-format-9
+bif FORMAT | '12345.73' |  |  | 2 | 2
+----
+model: V[1.234573E+04] | V[1.234573E+04]
+
+case name=rexxref-format-10
+bif FORMAT | '12345.73' |  | 3 |  | 0
+----
+model: V[1.235E+4] | V[1.235E+4]
+
+case name=rexxref-format-11
+bif FORMAT | '1.234573' |  | 3 |  | 0
+----
+model: V[1.235] | V[1.235]
+
+case name=rexxref-format-12
+bif FORMAT | '12345.73' |  |  | 3 | 6
+----
+model: V[12345.73] | V[12345.73]
+
+case name=rexxref-format-13
+bif FORMAT | '1234567e5' |  | 3 | 0
+----
+model: V[123456700000.000] | V[123456700000.000]
+
+case name=format-fraction-trigger
+bif FORMAT | 0.0123 | | | | 1
+----
+model: V[1.23E-2] | V[1.23E-2]
+
+case name=format-zero-always
+bif FORMAT | 0 | | | | 0
+----
+model: V[0] | V[0]
+
+case name=format-zero-expp
+bif FORMAT | 0 | | | 2 | 0
+----
+model: V[0    ] | V[0    ]
+
+case name=format-small-expp
+bif FORMAT | 5 | | | 2 | 0
+----
+model: V[5    ] | V[5    ]
+
+case name=format-carry-exponential
+bif FORMAT | 99.99 | | 0 | | 2
+----
+model: V[1E+2] | V[1E+2]
+
+case name=format-carry-exponent
+bif FORMAT | 9.99 | | 1 | | 0
+----
+model: V[1.0E+1] | V[1.0E+1]
+
+case name=format-negative-zero
+bif FORMAT | '-0.04' | | 1
+----
+model: V[0.0] | V[0.0]
+
+case name=format-negative-round
+bif FORMAT | '-0.06' | | 1
+----
+model: V[-0.1] | V[-0.1]
+
+case name=format-engineering form=engineering
+bif FORMAT | 12345.73 | | | | 2
+----
+model: V[12.34573E+3] | V[12.34573E+3]
+
+case name=format-engineering-expp form=engineering
+bif FORMAT | 1.2345 | | | 2 | 0
+----
+model: V[1.2345    ] | V[1.2345    ]
+
+case name=format-engineering-wide form=engineering
+bif FORMAT | 123456789012 | 
+----
+model: V[123.456789E+9] | V[123.456789E+9]
+
+case name=format-engineering-small form=engineering
+bif FORMAT | 0.00012 | | | | 1
+----
+model: V[120E-6] | V[120E-6]
+
+case name=format-expp-too-small
+bif FORMAT | 1E+100 | | | 2
+----
+model: S 93.941 | S 93.941
+
+case name=format-not-number
+bif FORMAT | 'a'
+----
+model: S 93.943 | S 93.943
+
+case name=format-not-whole
+bif FORMAT | 1 | 'a'
+----
+model: S 40.12 | S 40.12
+
+case name=format-negative-width
+bif FORMAT | 1 | '-1'
+----
+model: S 93.906 | S 93.906
+
+case name=trunc-negative-zero
+bif TRUNC | '-0.04' | 1
+----
+model: V[0.0] | V[0.0]
+
+case name=trunc-negative
+bif TRUNC | '-1.99'
+----
+model: V[-1] | V[-1]
+
+case name=trunc-not-whole
+bif TRUNC | 1 | 'a'
+----
+model: S 40.12 | S 40.12
+
+case name=trunc-negative-places
+bif TRUNC | 1 | '-1'
+----
+model: S 93.906 | S 93.906
+
+case name=trunc-not-number
+bif TRUNC | 'a'
+----
+model: S 93.943 | S 93.943
+
+case name=abs-not-number
+bif ABS | 'a'
+----
+model: S 93.943 | S 93.943
+
+case name=sign-not-number
+bif SIGN | 'a'
+----
+model: S 93.943 | S 93.943
+
+case name=max-not-number
+bif MAX | 1 | 'a'
+----
+model: S 93.904 | S 93.904
+
+case name=max-target-not-number
+bif MAX | 'a' | 1
+----
+model: S 93.943 | S 93.943
+
+case name=max-message-not-number
+msg MAX | 1 | 'a'
+----
+model: S 93.904 | S 93.904
+
+case name=max-message-target-not-number
+msg MAX | 'a' | 1
+----
+model: S 93.943 | S 93.943
+
+case name=max-tie-keeps-first
+bif MAX | 1 | 1.0
+----
+model: V[1] | V[1]
+
+case name=min-tie-keeps-first
+bif MIN | 1.0 | 1
+----
+model: V[1.0] | V[1.0]
+
+case name=min-lone-wide digits=3
+bif MIN | 12345
+----
+model: V[1.23E+4] | V[1.23E+4]
+
+case name=max-lone-wide digits=3
+bif MAX | 12345
+----
+model: V[1.23E+4] | V[1.23E+4]
+
+case name=msg-min-lone-wide digits=3
+msg MIN | 12345
+----
+model: V[1.23E+4] | V[1.23E+4]
+
+case name=max-negative-wide
+bif MAX | '-1111111111' | '-2222222222'
+----
+model: V[-1.11111111E+9] | L[-2222222222]
+
+case name=max-wide-rounds-up
+bif MAX | 1 | 2 | 1111111115
+----
+model: V[1.11111112E+9] | V[1.11111112E+9]
+
+case name=max-engineering-wide form=engineering
+bif MAX | 2 | 11111111111
+----
+model: V[11.1111111E+9] | V[11.1111111E+9]
+
+case name=err-left-not-number
+infix + | 'a' | 1
+----
+model: S 41.1 | S 41.1
+
+case name=err-right-not-number
+infix + | 1 | 'a'
+----
+model: S 41.1 | S 41.1
+
+case name=err-power-not-number
+infix ** | 2 | 'a'
+----
+model: S 26.8 | S 26.8
+
+case name=err-power-not-whole
+infix ** | 2 | 1.5
+----
+model: S 26.8 | S 26.8
+
+case name=err-prefix-not-number
+prefix - | 'a'
+----
+model: S 41.1 | S 41.1
+
+case name=err-divide-zero
+infix / | 1 | 0
+----
+model: S 42.3 | S 42.3
+
+case name=err-intdiv-zero
+infix % | 1 | 0
+----
+model: S 42.3 | S 42.3
+
+case name=err-rem-zero
+infix // | 5 | 0
+----
+model: S 42.3 | S 42.3
+
+case name=err-zero-negative-power
+infix ** | 0 | '-1'
+----
+model: S 42.903 | S 42.903
+
+case name=err-overflow
+infix * | 1E+999999999 | 10
+----
+model: S 42.901 | S 42.901
+
+case name=err-underflow
+infix / | 1E-999999999 | 10
+----
+model: S 42.902 | S 42.902
+
+case name=err-power-overflow
+infix ** | 1E+999999999 | 2
+----
+model: S 42.1 | S 42.1
+
+case name=err-power-wide-exponent
+infix ** | 2 | 1E+10
+----
+model: S 26.8 | S 26.8
+
+case name=err-rem-not-whole
+infix // | 1E+10 | 3
+----
+model: S 26.12 | S 26.12
+
+case name=pow-largest
+infix ** | 10 | 999999999
+----
+model: V[1E+999999999] | V[1E+999999999]
+
+case name=pow-inverse
+infix ** | 3 | '-2'
+----
+model: V[0.111111111] | V[0.111111111]
+
+case name=pow-fraction
+infix ** | 1.1 | 20
+----
+model: V[6.72749995] | V[6.72749995]
+
+case name=pow-wide-base digits=3
+infix ** | 1.23456789 | 1
+----
+model: V[1.23] | L[1.23456789]
+
+case name=pow-exponent-rounds digits=3
+infix ** | 2 | 1234
+----
+model: S 26.8 | S 26.8
+
+case name=div-third
+infix / | 1 | 7
+----
+model: V[0.142857143] | V[0.142857143]
+
+case name=div-repeating-wide digits=20
+infix / | 22 | 7
+----
+model: V[3.1428571428571428571] | V[3.1428571428571428571]
+
+case name=div-exact-zeros
+infix / | 100 | 4
+----
+model: V[25] | V[25]
+
+case name=div-small
+infix / | 1 | 9999999999
+----
+model: V[0.0000000001] | L[9999999999]
+
+case name=rem-fraction
+infix // | 0.5 | 3
+----
+model: V[0.5] | V[0.5]
+
+case name=rem-negative
+infix // | '-7' | 2
+----
+model: V[-1] | V[-1]
+
+case name=intdiv-negative
+infix % | '-7' | 2
+----
+model: V[-3] | V[-3]
+
+case name=sub-cancel-fraction
+infix - | 123456789.4 | 123456789.3
+----
+model: V[0] | L[123456789.4]
+
+case name=sub-cancel-rounded
+infix - | 1111111115 | 1111111110
+----
+model: V[10] | L[1111111115]
+
+case name=sub-small-right
+infix - | 1111111115 | 1
+----
+model: V[1.11111111E+9] | L[1111111115]
+
+case name=add-align digits=3
+infix - | 12.3400 | 9.999999995
+----
+model: V[2.4] | L[12.3400]
+
+case name=add-zero-left
+infix + | 0 | 123456789
+----
+model: V[123456789] | V[123456789]
+
+case name=add-far-apart
+infix + | 1E+20 | 1
+----
+model: V[1E+20] | V[1E+20]
+
+case name=mul-wide-product
+infix * | 123456789 | 987654321
+----
+model: V[1.21932631E+17] | V[1.21932631E+17]
+
+case name=prefix-zero
+prefix - | 0
+----
+model: V[0] | V[0]
+
+case name=prefix-trailing
+prefix + | '1.10'
+----
+model: V[1.10] | V[1.10]
+
+case name=cmp-string-fallback
+infix = | 'abc' | ' abc'
+----
+model: V[1] | V[1]
+
+case name=cmp-strict-numbers
+infix >> | 2 | 10
+----
+model: V[1] | V[1]
+
+case name=cmp-mixed
+infix < | 1 | 'a'
+----
+model: V[1] | V[1]
+
+case name=cmp-wide-string digits=3
+infix = | 1.23456789 | 'abc'
+----
+model: V[0] | V[0]
+
+case name=do-count-plain
+do count | 3
+----
+model: V[ran] | V[ran]
+
+case name=do-count-zero
+do count | 0
+----
+model: V[none] | V[none]
+
+case name=do-count-negative
+do count | '-1'
+----
+model: S 26.2 | S 26.2
+
+case name=do-count-fraction
+do count | 1.5
+----
+model: S 26.2 | S 26.2
+
+case name=do-count-not-number
+do count | 'a'
+----
+model: S 26.2 | S 26.2
+
+case name=do-for-plain
+do for | 3
+----
+model: V[ran] | V[ran]
+
+case name=do-for-negative
+do for | '-1'
+----
+model: S 26.3 | S 26.3
+
+case name=do-count-rounds-whole
+do count | 2.9999999999
+----
+model: V[ran] | L[2.9999999999]
+
+case name=do-count-wide-string
+do count | '1111111111'
+----
+model: S 26.2 | L[1111111111]
+
+case name=do-for-wide-fraction
+do for | '1111111111.5'
+----
+model: S 26.3 | L[1.1111111115E+9]
+
+case name=do-count-blank-zeros
+do count | ' 3.0000000000 '
+----
+model: V[ran] | L[3.0000000000]
+
+case name=do-for-nine-digits
+do for | '3.00000000'
+----
+model: V[ran] | V[ran]
+
+case name=do-count-nines
+do count | 999999999
+----
+model: V[ran] | V[ran]
+
+case name=fuzz-1 fuzz=1
+infix = | 1.00000001 | 1.00000002
+----
+model: V[1] | L[1.00000001]
+
+case name=fuzz-2 fuzz=1
+infix = | 1.00000002 | 1.00000001
+----
+model: V[1] | L[1.00000002]
+
+case name=fuzz-3 fuzz=1
+infix = | '-1.00000001' | '-1.00000002'
+----
+model: V[1] | L[-1.00000001]
+
+case name=fuzz-4 fuzz=1
+infix = | 12345678 | 123456789
+----
+model: V[0] | L[123456789]
+
+case name=fuzz-5 fuzz=1
+infix = | ' 1.00000001 ' | 1.00000002
+----
+model: V[1] | L[ 1.00000001 ]
+
+case name=fuzz-6 fuzz=1
+infix = | 100000000 | 1E+8
+----
+model: V[1] | L[100000000]
+
+case name=fuzz-7 fuzz=1
+infix >= | 1.00000001 | 1.00000002
+----
+model: V[1] | L[1.00000001]
+
+case name=fuzz-8 fuzz=1
+infix <> | 1.00000001 | 1.00000002
+----
+model: V[0] | L[1.00000001]
+
+case name=fuzz-9 fuzz=1
+infix = | 1.0000001 | 1.0000002
+----
+model: V[0] | V[0]
+
+case name=fuzz-10 fuzz=1
+infix == | 1.00000001 | 1.00000002
+----
+model: V[0] | V[0]
+
+case name=fuzz-11 fuzz=1
+bif MAX | 1.00000001 | 1.00000002
+----
+model: V[1.00000001] | L[1.00000002]
+
+case name=fuzz-12 fuzz=1
+bif MAX | 1 | 1.00000002
+----
+model: V[1] | L[1.00000002]
+
+case name=fuzz-13 fuzz=1
+bif MAX | 1.00000001 | 1
+----
+model: V[1.00000001] | L[1.00000001]
+
+case name=fuzz-14 fuzz=1
+bif MAX | 1 | ' 1.00000002 '
+----
+model: V[1] | L[1.00000002]
+
+case name=fuzz-15 fuzz=1
+bif MAX | 1.000000012 | 1
+----
+model: V[1.00000001] | L[1.00000001]
+
+case name=fuzz-16 fuzz=1
+bif MAX | 2 | 1.000000012
+----
+model: V[2] | L[1.000000012]
+
+case name=fuzz-17 fuzz=1
+bif MIN | 2 | 1.00000002 | 1.00000003
+----
+model: V[1.00000002] | L[1.00000002]
+
+case name=fuzz-18 fuzz=1
+bif MAX | '-1.00000001' | 1
+----
+model: V[1] | L[-1.00000001]
+crate: V[1] | V[1]
+
+case name=fuzz-19 fuzz=1
+bif MAX | 1.00000001
+----
+model: V[1.00000001] | V[1.00000001]
+
+case name=fuzz-20 fuzz=1
+msg MAX | 1 | 1.00000001
+----
+model: V[1] | L[1.00000001]
+
+case name=fuzz-21 fuzz=1
+msg MAX | '1.00000001' | 1
+----
+model: V[1.00000001] | L[1.00000001]
+
+case name=fuzz-22 fuzz=1 digits=3
+infix = | 1.23 | 1.24
+----
+model: V[1] | L[1.23]
+
+case name=fuzz-23 fuzz=1 digits=3
+infix = | 1.2 | 1.3
+----
+model: V[0] | V[0]
+
+case name=fuzz-24 fuzz=1 form=engineering
+bif MAX | 12345.6789 | 12345.6788
+----
+model: V[12345.6789] | L[12345.6788]
+
+case name=fuzz-sign-differs fuzz=1
+infix = | 1.00000001 | '-2'
+----
+model: V[0] | L[1.00000001]
+crate: V[0] | V[0]
+
+case name=fuzz-sign-zero fuzz=1
+infix > | 1.00000001 | 0
+----
+model: V[1] | L[1.00000001]
+crate: V[1] | V[1]
+
+case name=max-fuzz-integers fuzz=1
+bif MAX | 100000001 | 100000002
+----
+model: V[100000001] | V[100000001]
+crate: V[100000002] | V[100000002]
+
+case name=max-message-fuzz-integers fuzz=1
+msg MAX | 100000001 | 100000002
+----
+model: V[100000001] | V[100000001]
+
+case name=max-missing-argument
+bif MAX | 1 | | 3
+----
+model: S 40.5 | S 40.5
+crate: S 93.903 | S 93.903
+
+case name=max-message-missing-argument
+msg MAX | 1 | | 2
+----
+model: S 40.5 | S 40.5
+
+case name=max-missing-argument-fraction
+bif MAX | 1.5 | | 3
+----
+model: S 40.5 | S 40.5
+
+case name=format-decimal-trigger
+bif FORMAT | 12.3456789 | | | | 3
+----
+model: V[1.23456789E+1] | V[1.23456789E+1]
+crate: V[12.3456789] | V[12.3456789]

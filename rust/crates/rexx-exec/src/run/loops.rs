@@ -683,6 +683,7 @@ impl Interp {
             // `object_operand_tests` is that half.
             HeaderRole::For | HeaderRole::OverFor => {
                 let converted = self.required_string_or_nil(value)?;
+                self.count_lostdigits(converted)?;
                 values.for_remaining = Some(match self.whole_nonneg(converted) {
                     Some(count) => count,
                     None => {
@@ -693,6 +694,7 @@ impl Interp {
             }
             HeaderRole::Count => {
                 let converted = self.required_string_or_nil(value)?;
+                self.count_lostdigits(converted)?;
                 values.count = Some(match self.whole_nonneg(converted) {
                     Some(count) => count,
                     None => {
@@ -2988,6 +2990,30 @@ impl Interp {
                 self.assign_expr_target(code, &target, value, rendered.as_deref(), indent, None)
             }
         }
+    }
+
+    /// LOSTDIGITS for a repetitor or `FOR` count with more digits than
+    /// DIGITS, which is checked as a whole number at that precision and so is
+    /// rounded first; the description is the count's number, unrounded.
+    #[inline(always)]
+    fn count_lostdigits(&mut self, value: ObjRef) -> Result<(), Failure> {
+        if !self.lostdigits_armed {
+            return Ok(());
+        }
+        self.count_lostdigits_raise(value)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn count_lostdigits_raise(&mut self, value: ObjRef) -> Result<(), Failure> {
+        let Ok(number) = self.to_number(value) else {
+            return Ok(());
+        };
+        let digits = self.activation().settings.digits();
+        let form = self.activation().settings.form();
+        self.lostdigits_check_with(&number, |_| {
+            number.render_unrounded(digits, form).into_bytes()
+        })
     }
 
     /// Validates `value` as "zero or a positive whole number" -- the rule a

@@ -1,0 +1,404 @@
+# Task 6.3's probes (docs/superpowers/records/2026-10-18-phase-9d/t6.3/probes,
+# maxdesc.rex and maxstr.rex) and the operations of its witnesses
+# (corpus/lang/lostdigits_signal_trap.rex, lostdigits_max_min.rex and
+# datatype_whole_wide.rex). The case grammar is the one `spike` describes.
+
+case name=maxdesc-1
+bif MAX | 1.5 | ' 4444444444 '
+----
+model: V[4.44444444E+9] | L[4444444444]
+
+case name=maxdesc-2
+bif MAX | 1.5 | '04444444444'
+----
+model: V[4.44444444E+9] | L[4444444444]
+
+case name=maxdesc-3
+bif MAX | 1.5 | '4.444444444E+3'
+----
+model: V[4444.44444] | L[4444.444444]
+
+case name=maxdesc-4
+bif MAX | 1.5 | '44444444440E-1'
+----
+model: V[4.44444444E+9] | L[4.4444444440E+9]
+
+case name=maxdesc-5
+bif MAX | 1.5 | '1.0000000000'
+----
+model: V[1.5] | L[1.0000000000]
+
+case name=maxdesc-6
+bif MAX | 1.5 | '-0004444444444.0'
+----
+model: V[1.5] | L[-4.4444444440E+9]
+
+case name=maxdesc-7
+bif MAX | 1.5 | '4444444444e0'
+----
+model: V[4.44444444E+9] | L[4444444444]
+
+case name=maxdesc-8
+bif MAX | 1.5 | '.00004444444444'
+----
+model: V[1.5] | L[0.00004444444444]
+
+case name=maxdesc-9
+bif MAX | 1.5 | '4444444444E+20'
+----
+model: V[4.44444444E+29] | L[4.444444444E+29]
+
+case name=maxdesc-10
+bif MAX | 1.5 | '12345678901234567890123'
+----
+model: V[1.23456789E+22] | L[12345678901234567890123]
+
+case name=maxdesc-11
+bif MAX | 1.5 | '1.00000000000000000000000001E-7'
+----
+model: V[1.5] | L[1.00000000000000000000000001E-7]
+
+case name=maxstr-string
+bif MAX | 1 | '1111111111'
+----
+model: V[1.11111111E+9] | V[1.11111111E+9]
+
+case name=maxstr-literal
+bif MAX | 1 | 1111111111
+----
+model: V[1.11111111E+9] | V[1.11111111E+9]
+
+case name=trap-op-1
+infix + | 1111111111 | 1
+----
+model: V[1.11111111E+9] | L[1111111111]
+
+case name=trap-op-2
+infix + | 1 | 1111111111
+----
+model: V[1.11111111E+9] | L[1111111111]
+
+case name=trap-op-3
+infix - | 1111111111 | 1
+----
+model: V[1.11111111E+9] | L[1111111111]
+
+case name=trap-op-4
+infix * | 1111111111 | 1
+----
+model: V[1.11111111E+9] | L[1111111111]
+
+case name=trap-op-5
+infix / | 1 | 1111111111
+----
+model: V[0.0000000009] | L[1111111111]
+
+case name=trap-op-6
+infix % | 1111111111 | 1
+----
+model: S 26.11 | L[1111111111]
+
+case name=trap-op-7
+infix // | 1111111111 | 1
+----
+model: S 26.12 | L[1111111111]
+
+case name=trap-op-8
+infix ** | 1111111111 | 2
+----
+model: V[1.2345679E+18] | L[1111111111]
+
+case name=trap-op-9
+infix = | 1111111111 | 1
+----
+model: V[0] | L[1111111111]
+
+case name=trap-op-10
+infix < | 1 | 1111111111
+----
+model: V[1] | L[1111111111]
+
+case name=trap-op-11
+infix + | 1.111111111 | 1
+----
+model: V[2.11111111] | L[1.111111111]
+
+case name=trap-op-12
+infix + | 111111111 | 1
+----
+model: V[111111112] | V[111111112]
+
+case name=trap-op-13
+infix + | 1e10 | 1
+----
+model: V[1E+10] | V[1E+10]
+
+case name=trap-op-14
+infix + | 0111111111 | 1
+----
+model: V[111111112] | V[111111112]
+
+case name=trap-op-15
+infix + | '-1111111111' | 1
+----
+model: V[-1.11111111E+9] | L[-1111111111]
+
+case name=trap-op-16
+infix + | ' 1111111111 ' | 1
+----
+model: V[1.11111111E+9] | L[ 1111111111 ]
+
+case name=trap-op-17
+infix == | 1111111111 | 1
+----
+model: V[0] | V[0]
+
+case name=trap-op-18
+infix = | 1111111111 | 'abc'
+----
+model: V[0] | V[0]
+
+case name=trap-digits-8 digits=8
+infix + | 111111111 | 1
+----
+model: V[1.1111111E+8] | L[111111111]
+
+case name=trap-digits-10 digits=10
+infix + | 1111111111 | 1
+----
+model: V[1111111112] | V[1111111112]
+
+case name=trap-divide-wide
+infix / | 1 | 9999999999
+----
+model: V[0.0000000001] | L[9999999999]
+
+case name=maxmin-1
+bif MAX | 1.5 | 1111111111
+----
+model: V[1.11111111E+9] | L[1111111111]
+
+case name=maxmin-2
+bif MIN | 1.5 | 1111111111
+----
+model: V[1.5] | L[1111111111]
+
+case name=maxmin-3
+msg MAX | 1111111111 | 2222222222
+----
+model: V[2.22222222E+9] | L[2222222222]
+
+case name=maxmin-4
+msg MIN | 1.5 | 2222222222
+----
+model: V[1.5] | L[2222222222]
+
+case name=maxmin-5
+bif MAX | 1111111111 | 2222222222
+----
+model: V[2.22222222E+9] | L[2222222222]
+
+case name=maxmin-6
+bif MAX | 1.5 | 1 | 3333333333
+----
+model: V[3.33333333E+9] | L[3333333333]
+
+case name=maxmin-7
+bif MAX | '1.5' | ' 4444444444 '
+----
+model: V[4.44444444E+9] | L[4444444444]
+
+case name=maxmin-8
+bif MAX | 1.5 | 1.111111111
+----
+model: V[1.5] | L[1.111111111]
+
+case name=maxmin-9
+bif MAX | 1.5 | 111111111
+----
+model: V[111111111] | V[111111111]
+
+case name=maxmin-10
+bif MIN | 1 | 1111111111
+----
+model: V[1] | V[1]
+
+case name=maxmin-11
+msg MAX | 1 | 1111111111
+----
+model: V[1.11111111E+9] | V[1.11111111E+9]
+
+case name=maxmin-12
+msg MIN | 1 | 1111111111
+----
+model: V[1] | V[1]
+
+case name=maxmin-13
+bif MIN | 1.1111111111 | 2
+----
+model: V[1.11111111] | V[1.11111111]
+
+case name=maxmin-14
+msg MAX | 1.1111111111 | 2
+----
+model: V[2] | V[2]
+
+case name=maxmin-15
+bif ABS | 1111111111
+----
+model: V[1.11111111E+9] | V[1.11111111E+9]
+
+case name=maxmin-16
+msg ABS | 1111111111
+----
+model: V[1.11111111E+9] | V[1.11111111E+9]
+
+case name=maxmin-17
+msg SIGN | 1111111111
+----
+model: V[1] | V[1]
+
+case name=maxmin-18 form=engineering
+bif MAX | 1.5 | '44444444440E-1'
+----
+model: V[4.44444444E+9] | L[4.4444444440E+9]
+
+case name=maxmin-19 form=engineering
+bif MAX | 1.5 | '4444444444E+20'
+----
+model: V[444.444444E+27] | L[444.4444444E+27]
+
+case name=maxmin-20 form=engineering
+bif MAX | 1.5 | '1.00000000000000000000000001E-7'
+----
+model: V[1.5] | L[100.000000000000000000000001E-9]
+
+case name=datatype-w-1 digits=19
+bif DATATYPE | 1111111111111111111 | 'W'
+----
+model: V[1] | V[1]
+
+case name=datatype-w-2 digits=19
+bif DATATYPE | 9999999999999999999 | 'W'
+----
+model: V[1] | V[1]
+
+case name=datatype-w-3 digits=19
+bif DATATYPE | 11111111111111111111 | 'W'
+----
+model: V[0] | L[11111111111111111111]
+
+case name=datatype-w-4 digits=20
+bif DATATYPE | 11111111111111111111 | 'W'
+----
+model: V[1] | V[1]
+
+case name=datatype-w-5 digits=20
+bif DATATYPE | '-99999999999999999999' | 'W'
+----
+model: V[1] | V[1]
+
+case name=datatype-w-6 digits=20
+bif DATATYPE | 111111111111111111111 | 'W'
+----
+model: V[0] | L[111111111111111111111]
+
+case name=datatype-w-7 digits=30
+bif DATATYPE | '1111111111111111111111111.0000' | 'W'
+----
+model: V[1] | V[1]
+
+case name=datatype-w-8 digits=30
+bif DATATYPE | '1111111111111111111111111.5' | 'W'
+----
+model: V[0] | V[0]
+
+case name=datatype-w-9 digits=30
+bif DATATYPE | '1E+25' | 'W'
+----
+model: V[1] | V[1]
+
+case name=datatype-w-10 digits=30
+bif DATATYPE | '1E+29' | 'W'
+----
+model: V[1] | V[1]
+
+case name=datatype-w-11 digits=30
+bif DATATYPE | '1E+30' | 'W'
+----
+model: V[0] | V[0]
+
+case name=datatype-w-12 digits=30
+bif DATATYPE | '11111111111111111111111111111.4' | 'W'
+----
+model: V[0] | V[0]
+
+case name=datatype-w-13
+bif DATATYPE | '1234567890' | 'W'
+----
+model: V[0] | L[1234567890]
+
+case name=datatype-w-14
+bif DATATYPE | '1234567891' | 'W'
+----
+model: V[0] | L[1234567891]
+
+case name=datatype-w-15
+bif DATATYPE | '12345678.9' | 'W'
+----
+model: V[0] | V[0]
+
+case name=datatype-w-16
+bif DATATYPE | '0.00000000001' | 'W'
+----
+model: V[0] | V[0]
+
+case name=datatype-w-17
+bif DATATYPE | '1.5E+8' | 'W'
+----
+model: V[1] | V[1]
+
+case name=datatype-w-18
+bif DATATYPE | '-0' | 'W'
+----
+model: V[1] | V[1]
+
+case name=datatype-w-19
+bif DATATYPE | '9999999999' | 'W'
+----
+model: V[0] | L[9999999999]
+
+case name=datatype-w-20
+bif DATATYPE | '123456789.4' | 'W'
+----
+model: V[1] | L[123456789.4]
+
+case name=datatype-w-21
+bif DATATYPE | '123456789.5' | 'W'
+----
+model: V[1] | L[123456789.5]
+
+case name=datatype-w-22
+bif DATATYPE | ' 12 ' | 'W'
+----
+model: V[1] | V[1]
+
+case name=datatype-w-23
+bif DATATYPE | 'abc' | 'W'
+----
+model: V[0] | V[0]
+
+case name=datatype-w-24
+bif DATATYPE | '' | 'W'
+----
+model: V[0] | V[0]
+
+case name=datatype-w-25
+bif DATATYPE | '  1111111111.000 ' | 'W'
+----
+model: V[0] | L[  1111111111.000 ]
+
+case name=datatype-w-26
+bif DATATYPE | '9.9999999999E+999999999' | 'W'
+----
+model: S 42.901 | L[9.9999999999E+999999999]
