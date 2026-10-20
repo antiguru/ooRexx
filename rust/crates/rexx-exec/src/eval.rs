@@ -1079,7 +1079,7 @@ impl Interp {
             // DIGITS 3 is rc 0 on the oracle, because a comparison that falls
             // through to the string rule converts no operand at all. A strict
             // operator never reaches here either.
-            self.lostdigits_check2(left, left_value, right, right_value)?;
+            self.lostdigits_check_compare(left, left_value, right, right_value, fuzz)?;
             let holds = rexx_num::compare_numbers(left, right, digits, fuzz, compare_op(op))
                 .map_err(Raised::from)?;
             return Ok(logical(holds));

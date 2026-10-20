@@ -266,6 +266,71 @@ impl Interp {
         self.lostdigits_raise(right, right_value)
     }
 
+    /// The comparison form. A numeric comparison is a subtraction carried out
+    /// at DIGITS minus FUZZ, so under FUZZ each operand is checked again at
+    /// that precision, unless the signs differ or both are zero, where the
+    /// subtraction is never reached (`NumberString::comp`).
+    #[inline(always)]
+    pub(crate) fn lostdigits_check_compare(
+        &mut self,
+        left: &Number,
+        left_value: ObjRef,
+        right: &Number,
+        right_value: ObjRef,
+        fuzz: u64,
+    ) -> Result<(), Failure> {
+        if !self.lostdigits_armed {
+            return Ok(());
+        }
+        self.lostdigits_raise(left, left_value)?;
+        self.lostdigits_raise(right, right_value)?;
+        if fuzz == 0 {
+            return Ok(());
+        }
+        self.lostdigits_fuzz_raise(
+            left,
+            |interp| interp.string_value_text(left_value),
+            right,
+            |interp| interp.string_value_text(right_value),
+            fuzz,
+        )
+    }
+
+    /// The FUZZ half of [`Interp::lostdigits_check_compare`], for a caller
+    /// whose operands carry no object: a `MAX` or `MIN` candidate and the
+    /// answer so far, or a controlled loop's variable and its `TO` bound.
+    pub(crate) fn lostdigits_check_fuzz(
+        &mut self,
+        left: &Number,
+        left_text: impl FnOnce(&mut Self) -> Vec<u8>,
+        right: &Number,
+        right_text: impl FnOnce(&mut Self) -> Vec<u8>,
+        fuzz: u64,
+    ) -> Result<(), Failure> {
+        if !self.lostdigits_armed || fuzz == 0 {
+            return Ok(());
+        }
+        self.lostdigits_fuzz_raise(left, left_text, right, right_text, fuzz)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn lostdigits_fuzz_raise(
+        &mut self,
+        left: &Number,
+        left_text: impl FnOnce(&mut Self) -> Vec<u8>,
+        right: &Number,
+        right_text: impl FnOnce(&mut Self) -> Vec<u8>,
+        fuzz: u64,
+    ) -> Result<(), Failure> {
+        if left.signum() != right.signum() || left.is_zero() {
+            return Ok(());
+        }
+        let digits = self.activation().settings.digits().saturating_sub(fuzz);
+        self.lostdigits_raise_at(left, digits, left_text)?;
+        self.lostdigits_raise_at(right, digits, right_text)
+    }
+
     /// [`Interp::lostdigits_check`] with the condition's description from
     /// `description`, which runs only for a raise.
     pub(crate) fn lostdigits_check_with(
@@ -296,7 +361,19 @@ impl Interp {
         operand: &Number,
         description: impl FnOnce(&mut Self) -> Vec<u8>,
     ) -> Result<(), Failure> {
-        let digits = usize::try_from(self.activation().settings.digits()).unwrap_or(usize::MAX);
+        let digits = self.activation().settings.digits();
+        self.lostdigits_raise_at(operand, digits, description)
+    }
+
+    /// [`Interp::lostdigits_raise_with`] against `digits` rather than the
+    /// setting in force.
+    fn lostdigits_raise_at(
+        &mut self,
+        operand: &Number,
+        digits: u64,
+        description: impl FnOnce(&mut Self) -> Vec<u8>,
+    ) -> Result<(), Failure> {
+        let digits = usize::try_from(digits).unwrap_or(usize::MAX);
         if operand.digit_count() <= digits {
             return Ok(());
         }

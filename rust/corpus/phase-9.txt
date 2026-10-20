@@ -323,3 +323,5 @@ lang/command_redirected_target_raises_part_line.rex
 lang/command_redirected_target_waits_elsewhere.rex
 lang/command_redirected_target_signals.rex
 lang/command_redirected_started_target_sleeps.rex
+# 9d Task 6.14: LOSTDIGITS from a comparison under NUMERIC FUZZ.
+lang/lostdigits_fuzz_compare.rex

@@ -2362,6 +2362,7 @@ DEVIATIONS -- permanent, chosen
      raises where `max(1, 1111111111)` does not. This crate rounds to the
      digits in force. Ruled: this crate rounds in both the function and the
      message form, as ANSI X3.274 section 9.4 does, and decides by the value.
+     LICENSED DIVERGENCE WITNESS: max-min-wide-integer-rounds
 
  45. `Bag~hasItem` WITH AN INDEX UNEQUAL TO THE ITEM ANSWERS 0 (Phase 9d).
      OWNER: none.

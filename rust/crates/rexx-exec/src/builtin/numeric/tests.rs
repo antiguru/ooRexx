@@ -214,14 +214,12 @@ fn a_tie_keeps_the_earlier_value_at_both_ends() {
     assert_eq!(answer(b"MIN", &[b"2.5", b"1"]), b"1");
 }
 
-/// `MIN` answers a lone target before testing it against `DIGITS` and
-/// `MAX` does not -- the one place the two differ for a reason other
-/// than direction.
+/// A lone target wider than `DIGITS` is rounded by both (Deviation 44).
 #[test]
-fn min_answers_a_lone_target_before_max_would() {
-    assert_eq!(answer_at("3", b"MIN", &[b"12345"]), b"12345");
+fn a_lone_wide_target_rounds_at_both_ends() {
+    assert_eq!(answer_at("3", b"MIN", &[b"12345"]), b"1.23E+4");
     assert_eq!(answer_at("3", b"MAX", &[b"12345"]), b"1.23E+4");
-    // At a precision the value fits, the two agree again.
+    // At a precision the value fits, the two answer it unchanged.
     assert_eq!(answer_at("9", b"MIN", &[b"12345"]), b"12345");
     assert_eq!(answer_at("9", b"MAX", &[b"12345"]), b"12345");
 }

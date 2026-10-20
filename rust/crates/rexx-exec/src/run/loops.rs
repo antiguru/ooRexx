@@ -2420,7 +2420,7 @@ impl Interp {
                             && let Some(sum) = self.controlled_step_wide(previous, by, digits)?
                         {
                             let stepped_value = ControlValue::Wide(sum);
-                            let within = Self::controlled_within_wide(
+                            let within = self.controlled_within_wide(
                                 &stepped_value,
                                 bound,
                                 by,
@@ -2591,7 +2591,7 @@ impl Interp {
                                 current <= to
                             }
                         }
-                        _ => Self::controlled_within_wide(current, to, by, digits, fuzz)?,
+                        _ => self.controlled_within_wide(current, to, by, digits, fuzz)?,
                     };
                     if !within {
                         return Ok(false);
@@ -2826,8 +2826,10 @@ impl Interp {
     /// A controlled loop's `TO` test where either side is wider than an
     /// `i64` comparison answers. Out of line for the reason
     /// [`Interp::controlled_step_wide`] gives.
+    /// Under FUZZ the test can raise LOSTDIGITS, the variable named first.
     #[inline(never)]
     fn controlled_within_wide(
+        &mut self,
         current: &ControlValue,
         to: &Number,
         by: &Number,
@@ -2835,6 +2837,16 @@ impl Interp {
         fuzz: u64,
     ) -> Result<bool, Failure> {
         let current = current.number();
+        if fuzz != 0 {
+            let form = self.activation().settings.form();
+            self.lostdigits_check_fuzz(
+                &current,
+                |_| current.render_unrounded(digits, form).into_bytes(),
+                to,
+                |_| to.render_unrounded(digits, form).into_bytes(),
+                fuzz,
+            )?;
+        }
         let within = if by.signum() < 0 {
             !numeric_less(&current, to, digits, fuzz).map_err(Raised::from)?
         } else {

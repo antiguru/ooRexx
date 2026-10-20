@@ -1,0 +1,86 @@
+/* Under NUMERIC FUZZ a numeric comparison subtracts at DIGITS minus FUZZ, so
+   an operand wider than that raises LOSTDIGITS, the left one named first.
+   Operands of different signs, or two zeros, raise it only past DIGITS. */
+numeric fuzz 1
+call t '1.00000001 = 1.00000002'
+call t '1.00000002 = 1.00000001'
+call t '1.00000001 = 1.00000001'
+call t '-1.00000001 = -1.00000002'
+call t '12345678 = 123456789'
+call t "' 1.00000001 ' = 1.00000002"
+call t '100000000 = 1E+8'
+call t '1.00000001 >= 1.00000002'
+call t '1.00000001 \= 1.00000002'
+call t '1.00000001 <> 1.00000002'
+call t '1.00000001 < 1.00000002'
+call t '1.00000001 = -2'
+call t '-1.00000001 < 2'
+call t '1.00000001 > 0'
+call t '0 < 1.00000001'
+call t '0 = 0'
+call t '1.0000001 = 1.0000002'
+call t '1.00000001 == 1.00000002'
+call t '1.00000001 = 1.0000000a'
+call t 'max(1.00000001, 1.00000002)'
+call t 'max(1, 1.00000002)'
+call t 'max(1.00000001, 1)'
+call t "max(1, ' 1.00000002 ')"
+call t 'max(1.000000012, 1)'
+call t 'max(2, 1.000000012)'
+call t 'min(2, 1.00000002, 1.00000003)'
+call t 'max(-1.00000001, 1)'
+call t 'max(1.00000001)'
+call t '1~max(1.00000001)'
+call t "'1.00000001'~max(1)"
+call t '1.00000001~min(1.00000002)'
+call loop
+numeric fuzz 2
+call t '1.00000001 = 1.0000001'
+call t '1.0000001 = 1.0000002'
+numeric digits 3
+numeric fuzz 1
+call t '1.23 = 1.24'
+call t '1.2 = 1.3'
+call t '123 = 124'
+numeric form engineering
+call t 'max(12345.6789, 12345.6788)'
+call syntax
+exit
+
+t:
+  signal on lostdigits name t_ld
+  interpret 'r =' arg(1)
+  say arg(1) '->' r
+  return
+t_ld:
+  say arg(1) '-> LOSTDIGITS' '['condition('D')']'
+  return
+
+loop:
+  call loop_to 1.00000001, 1.00000002, 1
+  call loop_to 2, 1.00000002, -1
+  call loop_to 1.5, 3, 1
+  return
+
+loop_to:
+  signal on lostdigits name loop_ld
+  n = 0
+  do i = arg(1) to arg(2) by arg(3)
+    n = n + 1
+    if n > 3 then leave
+  end
+  say 'do' arg(1) 'to' arg(2) 'by' arg(3) '->' n
+  return
+loop_ld:
+  say 'do' arg(1) 'to' arg(2) 'by' arg(3) '-> LOSTDIGITS' '['condition('D')']'
+  return
+
+/* Untrapped, the comparison answers as it always did; ::OPTIONS LOSTDIGITS
+   SYNTAX turns the raise into 98.972. */
+syntax:
+  numeric fuzz 1
+  say 'untrapped' (1.00000001 = 1.00000002)
+  r = .routine~new('fuzz', ('numeric fuzz 1', 'say 1.00000001 = -2', -
+    'say 1.00000001 = 1.00000002', '::options lostdigits syntax'))
+  r~call
+  return

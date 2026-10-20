@@ -103,6 +103,25 @@ const LICENSED_DIVERGENCES: &[LicensedDivergence] = &[
         crate_stdout: "34\n",
     },
     LicensedDivergence {
+        name: "max-min-wide-integer-rounds",
+        program: "say max(2, 1111111111) min(1111111111) max(1111111111)\n\
+                  say min(2, 1111111111, 3333333333) max(-1111111111, -2222222222) \
+                  max(1, 2, 1111111115)\n\
+                  say max(2, 999999999) min(999999999) max(2, 1000000000)\n\
+                  numeric form engineering\n\
+                  say max(2, 11111111111)\n",
+        exit_code: 0,
+        stderr: "",
+        oracle_stdout: "1111111111 1111111111 1.11111111E+9\n\
+                        2 -1.11111111E+9 1111111115\n\
+                        999999999 999999999 1000000000\n\
+                        11111111111\n",
+        crate_stdout: "1.11111111E+9 1.11111111E+9 1.11111111E+9\n\
+                       2 -1.11111111E+9 1.11111112E+9\n\
+                       999999999 999999999 1.00000000E+9\n\
+                       11.1111111E+9\n",
+    },
+    LicensedDivergence {
         name: "lineout-without-string-pads-nothing",
         // A CHAROUT leaves record 2 partly written, then a LINEOUT with no
         // string closes: on a RECLENGTH stream, after positioning at a record

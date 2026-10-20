@@ -379,7 +379,8 @@ fn max_min(
 /// `MAX`'s and `MIN`'s general path, shared with `String~max` and `String~min`.
 /// With `lostdigits`, each argument after the target is an operand to
 /// LOSTDIGITS, as `NumberString::maxMin`'s `prepareOperatorNumber` makes it
-/// (`classes/NumberStringMath.cpp:277`). The target never is.
+/// (`classes/NumberStringMath.cpp:277`), and under FUZZ each comparison's
+/// two rounded operands are, as any comparison's are.
 #[allow(
     clippy::too_many_arguments,
     reason = "the two callers differ in each of them"
@@ -421,6 +422,15 @@ pub(crate) fn max_min_over(
             })?;
         }
         let number = number.into_round(digits);
+        if lostdigits {
+            interp.lostdigits_check_fuzz(
+                &number,
+                |_| number.render_unrounded(digits, form).into_bytes(),
+                &best,
+                |_| best.render_unrounded(digits, form).into_bytes(),
+                fuzz,
+            )?;
+        }
         // Both sides are already parsed, so the byte slices are never read
         // for these two non-strict operators; they are the real renderings
         // anyway rather than a placeholder that would become wrong if a
@@ -472,7 +482,7 @@ fn integer_path(
         return Ok(None);
     };
     if want == Extreme::Min && rest.is_empty() {
-        return Ok(Some(target));
+        return Ok(Some(rounded_integer(interp, target, value, digits)));
     }
     if !valid_under(value, digits) {
         return Ok(None);
@@ -505,7 +515,21 @@ fn integer_path(
             best_object = *candidate;
         }
     }
-    Ok(Some(best_object))
+    Ok(Some(rounded_integer(interp, best_object, best, digits)))
+}
+
+/// The integer path's answer, rounded to `digits` when it is wider, as every
+/// other number `MAX` and `MIN` answer is (Deviation 44).
+fn rounded_integer(interp: &mut Interp, object: ObjRef, value: i64, digits: u64) -> ObjRef {
+    if valid_under(value, digits) {
+        return object;
+    }
+    let form = current(interp).form;
+    interp.number(
+        Number::from_i64(value).into_round(digits),
+        saturate(digits),
+        form,
+    )
 }
 
 // ---- RANDOM ----
