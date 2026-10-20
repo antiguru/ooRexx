@@ -106,3 +106,4 @@ Ruling: round 1 takes all findings plus the pre-existing halves in the same mech
 Task 6.12 r1 (174c357be, 3f3dea5f8, d995b8f17, a0a58dce3): re-review (opus) CHANGES REQUESTED, 2 Important (existing instances keep the donated identity: setProtected bypasses the manager, setPrivate regresses; protection lift mutates shared special_methods for a per-call decision), Minor (entry 55 heading wider than measured). defineMethods supplier queued. Round 2 dispatched.
 Task 6.12 r2 (45bd0c3ba, ed1e1fc68, 19692e83a): re-review r2 APPROVED, 0 open. Task 6.12: complete (a404ad404, f4d8daa7f, 7fba9068c, 174c357be, 3f3dea5f8, d995b8f17, a0a58dce3, 45bd0c3ba, ed1e1fc68, 19692e83a). 4 red groups.
 Task 6.13: dispatched (implementer opus).
+Ruling: Tasks 6.14 Step 2 and 6.15 Step 1 brought in line with Ruled 13 -- the models follow the derived rule; crate departures are defects, uncovered oracle departures go to Moritz -- the plan predates Ruled 13.
