@@ -2470,6 +2470,20 @@ DEVIATIONS -- permanent, chosen
      (.superpowers/sdd/queued/2026-10-19-trace-chunk-swap.md).
      LICENSED DIVERGENCE WITNESS: undelivered-trace-clause-runs-first
 
+ 51. `.CONTEXT~RS` INSIDE AN INTERPRET EQUALS `.RS` (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-19. rexxref (utilityclasses.xml:7821) gives
+     `rs` as "the context current return status value ... equivalent to
+     using the .RS environment symbol". On the oracle, inside an INTERPRET
+     whose command sets the return status, `.rs` answers the new value
+     while `.context~rs` still answers the caller's earlier one, and the
+     two agree again once the INTERPRET ends: the INTERPRET keeps its own
+     settings and copies them back at its end, while `.context` is the
+     caller's object. This crate answers the same value for both, inside
+     the INTERPRET and after it. Probe:
+     docs/superpowers/records/2026-10-18-phase-9d/t6.13/probes/interpret/
+     (oracle `in 1 0 4`, this crate `in 1 1 4`). No ooTest test reaches it.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
