@@ -534,3 +534,34 @@ before round 1) and head `bc176f5e8`, exit 0. The delta with libc subtracted is 
 on every program, and rexxcps is +0.0000% (61 instructions). So round 1's rexxcps +0.0565% went
 with R7, whose new LOSTDIGITS checks were the only change to the paths rexxcps runs. Nothing is
 over +0.05%, so there was nothing to trace.
+
+## Fix round 3
+
+Re-review: `task-6.14-rereview.md`. Status: DONE_WITH_CONCERNS. One new test,
+`every_licensing_deviation_names_this_test`, stays red until the controller adds two sentences
+to `phase-4-exclusions.txt`.
+
+* `numeric_model.rs`'s `description` bullet now matches Deviation 53's corrected text. This crate
+  names an operator's operand as written and a MAX, MIN or DO count argument rendered at the
+  digits in force, whatever it came from. The oracle's rendering depends on the operator, and for
+  MAX, MIN and a DO count on whether the clause was translated ahead or ran under INTERPRET.
+* Minor 2: `target_number` and `target_parse` are one function again, `target_number`. Its doc
+  says that the builtins round argument 1 without LOSTDIGITS, as ooTest's `TESTBIFS` reads
+  rexxref.
+* Minor 3: the new test reads `docs/superpowers/plans/phase-4-exclusions.txt` and splits it into
+  numbered rows at each ` NN. ` heading. It asserts that every Deviation number in
+  `ORACLE_DEPARTURES` has a row naming `numeric_model`. Today it fails with `[44, 47]`, and row 53
+  passes. The sentences that would close it:
+  * at the end of Deviation 44:
+    `     Witnessed by tests/numeric_model.rs (ORACLE_DEPARTURES, rules wide-integer and written-value).`
+  * at the end of Deviation 47:
+    `     Witnessed by tests/numeric_model.rs (ORACLE_DEPARTURES, rule do-count).`
+
+### Checks
+
+| command | exit |
+| --- | --- |
+| `cargo fmt --all --check` | 0 |
+| `cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` | 0 |
+| `cargo test --release -p rexx-exec --test numeric_model --test licensed_divergences` | 101: only `every_licensing_deviation_names_this_test` fails, on `[44, 47]` |
+| `cargo test --release -p rexx-exec --lib` | 0 (1157 passed) |

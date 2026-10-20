@@ -48,8 +48,10 @@ fn current(interp: &Interp) -> Numeric {
     }
 }
 
-/// Argument 1 as a number, or the 93.943 that names this builtin.
-fn target_parse(
+/// Argument 1 as a number, or the 93.943 that names this builtin. The
+/// builtins round it without LOSTDIGITS, as ooTest's `base/keyword/LOSTDIGITS
+/// TESTBIFS` reads rexxref.
+fn target_number(
     interp: &mut Interp,
     name: &'static [u8],
     args: Args<'_>,
@@ -62,16 +64,6 @@ fn target_parse(
             Err(Raised::method_target_not_a_number(name, &found).into())
         }
     }
-}
-
-/// Argument 1 as a number. The builtins round it without LOSTDIGITS, as
-/// ooTest's `base/keyword/LOSTDIGITS TESTBIFS` reads rexxref.
-fn target_number(
-    interp: &mut Interp,
-    name: &'static [u8],
-    args: Args<'_>,
-) -> Result<Number, Failure> {
-    target_parse(interp, name, args)
 }
 
 /// The range half of an optional non-negative argument, after
@@ -324,7 +316,7 @@ fn max_min(
     want: Extreme,
 ) -> Result<ObjRef, Failure> {
     let rest = args.values_from(2);
-    let best = target_parse(interp, name, args)?;
+    let best = target_number(interp, name, args)?;
     let best_text = required_string(interp, args, 1);
     let objects: Vec<Option<ObjRef>> = (0..rest.len()).map(|i| args.object(i + 2)).collect();
     max_min_over(interp, name, &best, best_text, rest, &objects, want, false)

@@ -43,8 +43,11 @@ const CASES: &str = "tests/numeric_model";
 /// * `R3`: an omitted MAX or MIN argument is 40.5 for the function and
 ///   93.903 for the message, whatever the other arguments are;
 /// * `R6`: a zero dividend still checks its divisor for LOSTDIGITS;
-/// * `description`: the oracle names an unquoted literal's LOSTDIGITS by its
-///   spelling at parse time, and this crate by its value;
+/// * `description`: this crate names an operator's operand as written and a
+///   MAX, MIN or DO count argument rendered at the digits in force, whatever
+///   it came from; the oracle's rendering depends on the operator, and for
+///   MAX, MIN and a DO count on whether the clause was translated ahead or
+///   run under INTERPRET;
 /// * `wide-integer`: MAX and MIN round a whole number wider than DIGITS;
 /// * `written-value`: MAX and MIN decide LOSTDIGITS by how the values are
 ///   written, not by whether the oracle holds them as integers;
@@ -492,4 +495,58 @@ fn on_the_oracle_the_model_parts_only_where_the_numeric_deviations_say() {
     );
     let deviations: BTreeSet<u32> = ORACLE_DEPARTURES.iter().map(|(_, d, ..)| *d).collect();
     assert_eq!(deviations, BTreeSet::from([44, 47, 53]));
+}
+
+/// Each numbered Deviation row of `phase-4-exclusions.txt`, by number: the
+/// row's text from its ` NN. ` heading to the next one.
+fn deviation_rows(text: &str) -> std::collections::BTreeMap<u32, String> {
+    let mut rows = std::collections::BTreeMap::new();
+    let mut current: Option<(u32, String)> = None;
+    for line in text.lines() {
+        let heading = line
+            .strip_prefix(' ')
+            .and_then(|rest| rest.split_once(". "))
+            .and_then(|(number, _)| number.parse::<u32>().ok());
+        if let Some(number) = heading {
+            if let Some((done, body)) = current.take() {
+                rows.insert(done, body);
+            }
+            current = Some((number, String::new()));
+        }
+        if let Some((_, body)) = current.as_mut() {
+            body.push_str(line);
+            body.push('\n');
+        }
+    }
+    if let Some((done, body)) = current {
+        rows.insert(done, body);
+    }
+    rows
+}
+
+/// Every Deviation that licenses a departure here names this test in its
+/// row, so the licence and its witness cannot drift apart.
+#[test]
+fn every_licensing_deviation_names_this_test() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../docs/superpowers/plans/phase-4-exclusions.txt");
+    let text =
+        fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+    let rows = deviation_rows(&text);
+    let unnamed: Vec<u32> = ORACLE_DEPARTURES
+        .iter()
+        .map(|(_, deviation, ..)| *deviation)
+        .collect::<BTreeSet<u32>>()
+        .into_iter()
+        .filter(|deviation| {
+            !rows
+                .get(deviation)
+                .is_some_and(|row| row.contains("numeric_model"))
+        })
+        .collect();
+    assert!(
+        unnamed.is_empty(),
+        "these Deviations license a numeric_model departure but their row does not name \
+         numeric_model: {unnamed:?}"
+    );
 }
