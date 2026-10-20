@@ -2412,6 +2412,13 @@ DEVIATIONS -- permanent, chosen
      Measured by the Phase 9d Task 6.3 review (probes rep.rex, rep2.rex) and
      the 2026-10-18 ANSI spike
      (.superpowers/sdd/2026-10-18-phase-9d/spike-ansi-model.md).
+     Extended by Moritz 2026-10-20: the count is an operand like any other,
+     so under a LOSTDIGITS trap this crate raises LOSTDIGITS for it before the
+     whole-number check, and 26.2 or 26.3 untrapped. The oracle holds the
+     literal as an integer and runs the loop either way; `do '1111111111'`
+     raises 26.2 on the oracle too. Measured by Phase 9d Task 6.14
+     (docs/superpowers/records/2026-10-18-phase-9d/t6.14/r2/oracle-departures.tsv,
+     rule do-count).
  48. A WRITE TO A TRANSIENT STREAM NEVER SEEKS (Phase 9d). OWNER: none.
 
      Ruled by Moritz 2026-10-18 ("Lgtm"), from the derivation in
@@ -2499,6 +2506,39 @@ DEVIATIONS -- permanent, chosen
      Phase 9d Task 6.13 fix round 1
      (.superpowers/sdd/2026-10-18-phase-9d/task-6.13-report.md, Concerns).
      LICENSED DIVERGENCE WITNESS: target-error-whatever-the-rc
+
+ 53. NUMERIC RULES FOLLOW REXXREF WHERE BOTH INTERPRETERS' ANSWERS DEPART
+     FROM IT (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-20 ("Follow rexxref"), from the numeric model
+     of Phase 9d Task 6.14 (rust/corpus/model/numeric.rex,
+     tests/numeric_model.rs). The oracle's answers below are measured; each
+     row is in docs/superpowers/records/2026-10-18-phase-9d/t6.14/r2/oracle-departures.tsv.
+     * A comparison under NUMERIC FUZZ checks LOSTDIGITS at DIGITS minus FUZZ
+       whatever the operands' signs (rexxref numarit.xml, Numeric
+       Comparisons; condtra.xml, LOSTDIGITS). At FUZZ 1, `1.00000001 = -2`
+       and `1.00000001 > 0` raise LOSTDIGITS here; the oracle skips the
+       check when the signs differ or an operand is zero.
+     * MAX and MIN apply FUZZ to whole-number arguments, in both forms: at
+       FUZZ 1, `max(100000001, 100000002)` is 100000001 here and 100000002
+       on the oracle, which compares whole numbers as machine integers.
+     * An omitted MAX or MIN argument is 40.5 for the function and 93.903
+       for the message, whatever the other arguments (rexxref errnums.xml).
+       The oracle gives 93.903 for `max(1,,3)` and 40.5 for
+       `'55'~max(,77)`.
+     * The divisor of `/`, `%` and `//` is checked for LOSTDIGITS when the
+       dividend is zero; the oracle skips it.
+     * The LOSTDIGITS description (CONDITION('D')) does not depend on
+       whether the operand was written as a literal or as a string. The
+       oracle renders an unquoted literal from its internal form
+       (`-1234567890.5` at DIGITS 9 describes `1.2345678905E+9`) and gives
+       the written digits for the same value as a string. rexxref fixes no
+       rendering.
+     Two documented readings were taken to Moritz and reverted on the
+     ooTest suite's evidence (2026-10-20): the numeric builtins round their
+     arguments without LOSTDIGITS (`base/keyword/LOSTDIGITS TESTBIFS`), and
+     FORMAT's decimal-part exponent trigger applies only below one
+     (`base/bif/FORMAT`). The model takes the interpreters' answer for both.
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
