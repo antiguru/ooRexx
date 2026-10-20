@@ -1427,15 +1427,16 @@ DEVIATIONS -- permanent, chosen
 
  12. A BLOCKING WAIT A SIGNAL DOES NOT END (ruling P60). OWNER: none.
 
-     A halt ends the wait for an unredirected command's child and for a read
-     of the default input stream. It does not end a read of any other
-     stream, or a redirected command's wait, which runs on the baton holder's
-     thread with its pipes read by threads of its own: the halt is served
-     when the wait returns. The oracle's own read gets EINTR in some of
-     these: measured, a redirected command under a process-group SIGINT is
-     98.923 "Address command redirection failed (Interrupted system call)",
-     rc 158, where this crate waits for the child the signal killed and
-     raises 4.1 at the same clause. Under ulimit -v, where a pool thread's
+     A halt ends the wait for a command's child, redirected or not, and for a
+     read of the default input stream. It does not end a read of any other
+     stream: the halt is served when the read returns. The oracle's own read
+     gets EINTR in some of these: measured, a redirected command under a
+     process-group SIGINT is 98.923 "Address command redirection failed
+     (Interrupted system call)", rc 158, where this crate ends the wait,
+     keeps what the command already wrote to its targets, and raises 4.1 at
+     the same clause (corrected 2026-10-19 by Phase 9d Task 6.13, which took
+     redirected commands off the baton; the licensed observable is
+     unchanged). Under ulimit -v, where a pool thread's
      stack cannot be reserved, an unredirected command and a read of the
      default input stream are waited for there too.
 
