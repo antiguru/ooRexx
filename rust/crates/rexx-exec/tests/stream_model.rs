@@ -413,28 +413,29 @@ fn answers(
 /// Appends each scenario's answers to `<side>.tsv` under the directory
 /// `REXX_STREAM_MODEL_DUMP` names, when it names one.
 fn dump(side: &str, scenarios: &[Scenario], answers: &BTreeMap<String, (String, String)>) {
+    use std::io::Write;
     let Ok(dir) = std::env::var("REXX_STREAM_MODEL_DUMP") else {
         return;
     };
-    use std::io::Write;
-    let path = Path::new(&dir).join(format!("{side}.tsv"));
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .unwrap_or_else(|e| panic!("cannot open {}: {e}", path.display()));
+    let mut text = String::new();
     for scenario in scenarios {
         let (native, model) = &answers[&scenario.name];
-        writeln!(
-            file,
-            "{}\t{}\t{}\t{}\t{native}\t{model}",
+        text.push_str(&format!(
+            "{}\t{}\t{}\t{}\t{native}\t{model}\n",
             scenario.name,
             scenario.initial,
             u8::from(scenario.transient),
             scenario.ops.join(" ; ")
-        )
-        .expect("the dump is writable");
+        ));
     }
+    let path = Path::new(&dir).join(format!("{side}.tsv"));
+    // One write per batch, so tests running at once do not interleave lines.
+    fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .and_then(|mut file| file.write_all(text.as_bytes()))
+        .unwrap_or_else(|e| panic!("cannot append to {}: {e}", path.display()));
 }
 
 /// Runs `scenarios` on this crate.
