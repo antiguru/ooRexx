@@ -1,0 +1,33 @@
+do '2.9999999999' -> ran 1
+do i = 1 for '2.9999999999' -> ran 1
+do x over .array~of(1, 2) for '2.9999999999' -> ran 1
+do i = 1 to 2 for '2.9999999999' -> ran 1
+do '1111111111.5' -> SYNTAX 26.2
+do i = 1 for '1111111111.5' -> SYNTAX 26.3
+do x over .array~of(1, 2) for '1111111111.5' -> SYNTAX 26.3
+do i = 1 to 2 for '1111111111.5' -> SYNTAX 26.3
+do ' 3.0000000000 ' -> ran 1
+do i = 1 for ' 3.0000000000 ' -> ran 1
+do x over .array~of(1, 2) for ' 3.0000000000 ' -> ran 1
+do i = 1 to 2 for ' 3.0000000000 ' -> ran 1
+do '-1.0000000001' -> SYNTAX 26.2
+do i = 1 for '-1.0000000001' -> SYNTAX 26.3
+do x over .array~of(1, 2) for '-1.0000000001' -> SYNTAX 26.3
+do i = 1 to 2 for '-1.0000000001' -> SYNTAX 26.3
+do '1111111111' -> SYNTAX 26.2
+do i = 1 for '1111111111' -> SYNTAX 26.3
+do x over .array~of(1, 2) for '1111111111' -> SYNTAX 26.3
+do i = 1 to 2 for '1111111111' -> SYNTAX 26.3
+do 'abc' -> SYNTAX 26.2
+do i = 1 for 'abc' -> SYNTAX 26.3
+do x over .array~of(1, 2) for 'abc' -> SYNTAX 26.3
+do i = 1 to 2 for 'abc' -> SYNTAX 26.3
+do 3 -> ran 1
+do i = 1 for 3 -> ran 1
+do x over .array~of(1, 2) for 3 -> ran 1
+do i = 1 to 2 for 3 -> ran 1
+do '3.00000000' -> ran 1
+do i = 1 for '3.00000000' -> ran 1
+do x over .array~of(1, 2) for '3.00000000' -> ran 1
+do i = 1 to 2 for '3.00000000' -> ran 1
+untrapped ran 3

@@ -1,3 +1,5 @@
+**CLOSED: fixed 2026-10-20 by Phase 9d Task 6.14 (`009fd1978`).** Witness `corpus/lang/lostdigits_fuzz_compare.rex`; the different-sign case is reported in `task-6.14-report.md`.
+
 **RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** Task 6.14 owns it.
 
 **OPEN: found by the Phase 9d ANSI spike, not yet ruled.** Under `NUMERIC FUZZ 1`, a comparison of operands wider than DIGITS minus FUZZ raises LOSTDIGITS on the oracle and not here.
