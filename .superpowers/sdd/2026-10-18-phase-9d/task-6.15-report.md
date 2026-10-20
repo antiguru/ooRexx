@@ -279,9 +279,11 @@ candidates are below, for the controller to write.
   to the end. It now leaves it, as the oracle does and funct.xml:1396-1398 says ("no characters are
   written"). The generated record APPEND streams found this.
 
-Witness `r1/probes/rulings.rex`: one line per ruling. The base (`cg-9d/t6.14-r2/rexx-head`) and
-the oracle print the same answers on every ruled line, where head prints the ruled ones
-(`r1/witnesses/{red,green,oracle}/rulings.*`). The ruled lines are each a candidate below.
+Witness `r1/probes/rulings.rex`: one line per ruling (`r1/witnesses/{red,green,oracle}/rulings.*`).
+The base (`cg-9d/t6.14-r2/rexx-head`) prints the oracle's answers on the R1-R4 lines and the READ
+stream's SEEK. On `seek <99` it answers -80, the unchecked position, where the NOBUFFER oracle
+answers 118, and it opens the ctrl-Z file at 4 where the oracle opens at 3. Head prints the ruled
+answer on every line, and each ruled line is a candidate below.
 
 ### ooTest
 
