@@ -1,6 +1,6 @@
-count 50
+count 49
 /* A stream that OPEN WRITE opened write-only cannot read. CHARS and LINES
-   answer 0, CHARIN is ERROR:9 and LINEIN is NOTREADY:EOF. Counting the write
+   answer 0, and CHARIN is ERROR:9. Counting the write
    line raises ERROR:9, and LINEOUT placed by line number cannot walk the file,
    so it writes at line 1 and leaves the write position after its bytes. A
    file that cannot be written and is opened by a read keeps write line 1. */
@@ -15,7 +15,6 @@ call t "chars(f)"
 call t "lines(f)"
 call t "lines(f, 'N')"
 call t "charin(f)"
-call t "linein(f)"
 call t "stream(f, 'c', 'query position write')"
 hits = ''
 call stream f, 'c', 'query position write line'

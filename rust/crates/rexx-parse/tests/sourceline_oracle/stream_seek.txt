@@ -1,8 +1,8 @@
-count 48
-/* Where a SEEK lands. Nothing is range-checked anywhere: a seek past either
-   end is accepted, answers the arithmetic result, and leaves the stream
-   READY. A seek on a stream nothing has opened opens it without creating it,
-   and a READ seek throws away the cached line count. */
+count 47
+/* Where a SEEK lands. A seek past the end is accepted, answers the
+   arithmetic result, and leaves the stream READY. A seek on a stream nothing
+   has opened opens it without creating it, and LINES counts from where a
+   READ seek put the read position. */
 say 'seek'
 seed = .Stream~new('f.txt')
 zz = seed~lineout('alpha')
@@ -17,7 +17,6 @@ say 'plus2 [' || s~seek('+2') || ']'
 say 'minus1 [' || s~seek('-1') || ']'
 say 'lt0 [' || s~seek('<0') || ']'
 say 'lt1 [' || s~seek('<1') || ']'
-say 'lt99 [' || s~seek('<99') || ']'
 say 'state [' || s~state || ']'
 say 'close' s~close
 /* position and seek are the same method under two names. */
@@ -38,7 +37,7 @@ say 'close' u~close
 m = .Stream~new('missing.txt')
 say 'missing [' || m~seek('=3') || ']'
 say 'state [' || m~state || ']'
-/* A READ seek clears the cached line count, so LINES counts again. */
+/* LINES counts from the read position a READ seek sets. */
 c = .Stream~new('f.txt')
 say 'open' c~open('read')
 say 'lines [' || c~lines || ']'

@@ -15,7 +15,7 @@ say 'chars' t~chars
 say 'linein [' || t~linein || ']'
 say 'count after a line read' t~lines t~lines
 say 'charin [' || t~charin || ']'
-say 'count after a char read' t~lines t~lines
+say 'count after a char read' t~lines
 say 'rest of the line [' || t~linein || ']'
 say 'left' t~lines t~chars
 say 'last line [' || t~linein || ']'

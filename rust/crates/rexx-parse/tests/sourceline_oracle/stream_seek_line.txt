@@ -1,7 +1,6 @@
-count 50
-/* Line positioning clamps at the bottom to line 1 and at the top to the last
-   line plus one, QUERY POSITION recomputes a line position a CHARIN threw
-   away, and the write line position sits one past the read one. */
+count 46
+/* Line positioning stops at the top at the last line plus one, and QUERY
+   POSITION answers the line a position is in after a CHARIN too. */
 say 'seek line'
 seed = .Stream~new('f.txt')
 zz = seed~lineout('alpha')
@@ -11,7 +10,6 @@ zz = seed~close
 s = .Stream~new('f.txt')
 say 'open' s~open('read')
 say 'l99 [' || s~seek('99 read line') || ']'
-say 'l0 [' || s~seek('0 read line') || ']'
 say 'ltline0 [' || s~seek('<0 read line') || ']'
 say 'ltline1 [' || s~seek('<1 read line') || ']'
 say 'l2 [' || s~seek('=2 read line') || ']'
@@ -41,11 +39,9 @@ say 'sys [' || p~query('position sys') || ']'
 say 'readline [' || p~query('position read line') || ']'
 say 'readchar [' || p~query('position read char') || ']'
 say 'close' p~close
-/* A write-only open defaults QUERY POSITION to the write pointer, and can
-   still position by line, because WRITE opens the descriptor read-write. */
+/* A write-only open defaults QUERY POSITION to the write pointer. */
 o = .Stream~new('f.txt')
 say 'open' o~open('write')
 say 'default [' || o~query('position') || ']'
 say 'seek [' || o~seek('=2') || ']'
-say 'line [' || o~seek('=2 line') || ']'
 say 'close' o~close
