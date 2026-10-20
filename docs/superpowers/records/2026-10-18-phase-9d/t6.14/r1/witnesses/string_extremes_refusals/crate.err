@@ -1,0 +1,4 @@
+       *-* Compiled method "MAX" with scope "String".
+    52 *-* say '55'~max(.array)
+Error 93 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t614/w4/string_extremes_refusals.rex line 52:  Incorrect call to method.
+Error 93.904:  Method argument 1 must be a number; found "The Array class".

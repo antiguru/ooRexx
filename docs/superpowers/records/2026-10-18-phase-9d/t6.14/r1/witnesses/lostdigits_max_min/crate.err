@@ -1,0 +1,5 @@
+     2 *-* say max(1.5, 1111111111)
+       *-* Compiled method "CALL" with scope "Routine".
+    25 *-* r~call
+Error 98 running lostdigits line 2:  Execution error.
+Error 98.972:  Number 1111111111 has more digits than the current precision.

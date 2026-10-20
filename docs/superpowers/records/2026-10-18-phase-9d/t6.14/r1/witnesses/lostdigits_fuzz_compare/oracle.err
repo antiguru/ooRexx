@@ -1,0 +1,6 @@
+     2 *-* say 1.00000001 = 1.00000002
+       *-* Compiled method "CALL" with scope "Routine".
+    78 *-*   r~call
+    40 *-* call syntax
+Error 98 running fuzz line 2:  Execution error.
+Error 98.972:  Number 1.00000001 has more digits than the current precision.

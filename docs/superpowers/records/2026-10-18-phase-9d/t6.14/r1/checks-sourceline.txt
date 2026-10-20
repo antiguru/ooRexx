@@ -1,0 +1,9 @@
+   Compiling rexx-parse v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse)
+    Finished `release` profile [optimized + debuginfo] target(s) in 6.13s
+     Running tests/sourceline_oracle.rs (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t614-target/release/deps/sourceline_oracle-ad800564eb52dc61)
+
+running 1 test
+test sourceline_matches_the_interpreter_for_every_corpus_program ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
