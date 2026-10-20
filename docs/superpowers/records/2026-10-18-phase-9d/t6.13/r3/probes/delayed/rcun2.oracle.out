@@ -1,0 +1,3 @@
+O:a
+O:b
+handler ERROR echo a; sleep 0.3; echo b; exit 5 rc 5 rs 1 sigl 4

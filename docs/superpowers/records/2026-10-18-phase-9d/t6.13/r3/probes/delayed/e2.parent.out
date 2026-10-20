@@ -1,0 +1,3 @@
+handler ERROR [] rc 3 sigl 3
+handler ERROR [exit 5] rc 5 sigl 3
+after 5

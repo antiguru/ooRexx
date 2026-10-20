@@ -452,3 +452,109 @@ parent with libc and ld-linux subtracted: at most +0.0011% (interpret); raw at m
 1. The pending-HALT-after-a-SIGNAL report defect above (`h5`, `h6`), pre-existing and not a
    command's; proposed as a queued item.
 2. `Blocked::end`'s token check is reached by no witness of this round (see Important 1).
+
+## Fix round 3
+
+Re-review `task-6.13-rereview-r2.md`; the ruling at the end of `progress.md`. Code commit
+`518613a71`; the records commit that follows holds `t6.13/r3/` and this section.
+
+### Important 1: a target whose method parks
+
+`end_blocked_command` no longer takes the clause's `Blocked` off the record while it writes to
+the target. `Activity::blocked` is now `Blocks`, a stack of waits (`command.rs`): a target's own
+method can issue a redirected command while the outer clause writes, and that wait goes on top.
+`Posted::Captured` and `Posted::Unblocked` find their wait by token anywhere in the stack, so a
+piece or the end that arrives while the target's method parks is kept, and the clause writes each
+such piece in turn before it parks again or settles. The IoContext is held in an `Rc`, so the
+clause writes through a clone while the wait stays reachable and rooted. A wait records its clause
+(`at`: activation and instruction index), and only that clause takes it up again, so a command
+clause run inside a target's method starts its own command. A halt abandons every wait in the
+stack.
+
+`r3/probes/parks/` against the oracle (round 2 differs on all of them but `carry`): `w1`
+`O:a|done 0 calls 1`, `lost` `O:a|O:b|O:c|done 0 calls 3`, `w4` (`address system 'true'` in the
+target) and `w6` (a nested redirected command) identical. Witness
+`lang/command_redirected_target_parks.rex` (a sleeping target, the `lost` shape, a nested
+redirected command): one output in 8 of 8 runs on the oracle and head, round 2 differs.
+
+### Important 2: a halt answers 4.1
+
+Following Deviation 12, per the ruling: when a halt ended the wait (`Blocked::halted`), a condition
+a target raised is dropped with the levels it left (`clear_failure_levels`), the clause settles at
+rc -4, and the pending HALT is raised at the clause; a HALT a target's own method took is kept.
+`r3/probes/halt/`: `hA` 4.1 at line 1; `hB` and `hD` `HALT handler rc -4 line 2`; `hC` (`call on
+halt`) `after -4|HALT handler rc -4 line 3`, the shape `call_on_halt_sees_an_abandoned_command`
+pins for an unredirected command; `hE` unchanged; `sigint.rex` (`sigint2`) `HALT rc -4 stem S.0
+S.1 line 4`. The oracle raises 98.923 on each (Deviation 12). Witness
+`tests/signals.rs` `sigint_drops_a_condition_a_redirected_target_raised`: `O:a`, `HALT handler rc
+-4 line 2`.
+
+### Minor 3: the part-line witness
+
+`lang/command_redirected_target_raises_part_line.rex` (the re-review's `carry` shape):
+`O:a|O:d|O:e|trapped 42.3 calls 3`, identical to the oracle in 8 of 8. With the part-line clear in
+`IoContext::write_output` disabled it is `O:a|O:cd|O:e`, 3 of 3 (mutant built, run, the file
+restored by an exact copy, `git diff --stat` empty).
+
+### Minor 4
+
+The token check in `Blocked::end` stays. `Blocked::end`'s doc no longer claims a raising write
+leaves the wait, and `Blocked::raised` says it holds the last condition.
+
+### rcun2 and rexxref's delayed state
+
+rexxref (Condition traps, CALL ON): "When the condition is raised, and before the CALL is made,
+the condition trap is put into a delayed state ... if the condition is raised again, it is either
+ignored (for ERROR and FAILURE) or ... delayed"; and under ERROR, a command's ERROR "is ignored
+if the ERROR condition trap is already in the delayed state". So in `rcun2` the target's `raise
+error 9` delays the trap and the command's own ERROR (rc 5) is ignored: one handler, the
+target's. `Interp::call_trap_delayed` (`command.rs`) makes `raise_command_condition` ignore a
+command's ERROR or FAILURE while a `CALL ON` delivery of it is queued for the clause's activation.
+Head: `O:a|O:b|handler ERROR  rc 9 rs 1 sigl 4|after 9 1`, where round 2 ran the handler twice.
+The same holds with no redirection (`e2`, a command whose expression's method does `raise error 3
+return 'exit 5'`). Witnesses in `src/scheduler/tests.rs`:
+`a_command_error_while_its_call_on_trap_is_delayed_is_ignored` and its adjacent case
+`a_command_error_with_its_call_on_trap_enabled_runs_the_handler`.
+
+The oracle departs from this: it runs the handler for the command's ERROR and then dies, SIGSEGV
+rc 139, 3 of 3 (both shapes), entry 5's family of the same `CALL ON` condition queued twice.
+`oracle-crashes.txt` entry 58. A crash leaves no oracle answer to match, so I see no Deviation
+candidate here; that is the controller's call.
+
+### oracle-crashes.txt
+
+Entry 56 names the cause, `CommandIOContext.cpp:131`'s `output` wrapped where `error` was meant,
+NULL with no output target. Entry 57 reads "2 or 3 of 6". Entry 58 is `rcun2`, measured here.
+
+### Checks, on `518613a71`
+
+From `rust/`, `CARGO_TARGET_DIR=<scratchpad>/t613-target`, `CARGO_INCREMENTAL=0`, each status read
+unpiped:
+* `cargo fmt --all --check`: exit 0.
+* `memcap 8G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-exec --lib`: exit 0, 1157 passed.
+* `REXX_REFUSAL_SITES_REFRESH=1 ... --test refusal_sites`: exit 0, no change.
+* The round-1 test-binary set, `--no-fail-fast`: exit 0, no failures (`signals` 39 passed).
+* `memcap 16G cargo test -j 4 --release -p rexx-parse`: exit 0.
+* `memcap 16G cargo test -j 4 --release -p rexx-core --test unsafe_sites`: exit 0.
+* `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus`: exit 0,
+  1143 of 1143 matching.
+* The whole suite with the table at `t6.13/r3/suite/table.tsv`: exit 0, 402 groups green, 278 s.
+  Against `t6.13/r2/suite/tests.tsv` no row changed (`t6.13/r3/suite/changed-rows.txt`).
+
+### Perf
+
+`t6.13/r3/callgrind.txt`: pin, round 2 (`54958edd3`) and `518613a71` in one run, exit 0. With
+libc and ld-linux subtracted, head minus parent is at most +0.0000% on every program (interpret
+-0.0033). Raw it is at most +0.0248% (churn) and +0.0116% (rexxcps), each inside glibc as the
+subtracted figures show. rexxcps against the pin: +0.4883 raw, +0.5287 with libc subtracted
+(Ruled 14).
+
+### Concerns
+
+1. The delayed-state rule is applied to a command's own ERROR and FAILURE only. Two RAISE ERRORs
+   in one clause (`ra() + ra()` with `raise error`) still run the handler twice here, which
+   rexxref's same sentence ignores; that is the general `CALL ON` drain (entry 5's family) and was
+   not widened.
+2. `rcun2`'s RC after the handler is 9, the target's condition's, since the command's ERROR that
+   would have set it again is ignored; the oracle crashes before showing one.
