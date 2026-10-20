@@ -371,3 +371,166 @@ over the +0.05% per-task line, and I did not attribute it. Against the task's st
 1. The suite block above, on R4 and R7.
 2. rexxcps +0.0565% for the round, unattributed.
 3. The `description` rows' Deviation label (53 or 44) is for the controller to choose.
+
+## Fix round 2
+
+Moritz ruled 2026-10-20: revert R4 and R7. ooTest is the ooRexx authors' own reading of rexxref.
+R1, R2, R3 and R6 stay (Deviation 53). Status: DONE. The whole suite is green.
+
+### Commits
+
+* `bc176f5e8`: the revert in the crate and the model, the restored witness lines and their
+  `sourceline_oracle` files, and the departure table.
+* The records commit that follows holds `t6.14/r2/` and this section.
+
+### What changed
+
+* R4: `rexx-num/src/format.rs` again applies FORMAT's decimal-part trigger only below one.
+* R7: `target_number` (ABS, SIGN, TRUNC, FORMAT) and the four message forms no longer check
+  LOSTDIGITS.
+* `max_min_over` again leaves the target quiet. Arguments, and each comparison under FUZZ, raise
+  LOSTDIGITS unless every value is written as a whole number and the target fits DIGITS
+  (`written_whole`, Deviation 44). It keeps R2 (FUZZ on whole numbers) and R3 (40.5 for the
+  function, 93.903 for the message).
+* Model: the builtin preamble and FORMAT say "the model takes the interpreters' answer: ooTest's
+  reading of rexxref (`base/keyword/LOSTDIGITS TESTBIFS`, `base/bif/FORMAT`)". MAX/MIN have their
+  quiet rule back.
+* Witnesses: `lang/lostdigits_max_min.rex` is back to its `7a6eb8778` text and
+  `sourceline_oracle` file. `lang/lostdigits_fuzz_compare.rex` has its wide-target and ENGINEERING
+  lines back, and only the R1 sign lines stay out (its `sourceline_oracle` file is regenerated).
+  `lang/string_extremes_refusals.rex` keeps round 1's edit, because R3 stays. All four numeric
+  witnesses are identical to the oracle on stdout, stderr and rc.
+* Test: the R4 and R7 rows are gone from `ORACLE_DEPARTURES`. The rows where MAX/MIN stay quiet on
+  a string written as a whole number and the oracle raises are labelled `written-value` (44).
+  These are `maxstr-string`, the `*-fuzz-strings*` rows and `min-negative-wide-string`, and their
+  answers equal the oracle's apart from that LOSTDIGITS.
+
+### Final departures table
+
+These are all the cases where the oracle's native answer differs from the model. On every case,
+this crate's answer equals the model's. Answers are untrapped `;` under SIGNAL ON LOSTDIGITS. The
+TSV is `t6.14/r2/oracle-departures.tsv`. The rexxref citation per rule:
+
+* **R1** (53): numarit.xml "Numeric Comparisons": "Numeric values are compared by subtracting
+  the two numbers ... the numbers are subtracted with a precision of DIGITS minus FUZZ digits
+  during the comparison ... just as though NUMERIC DIGITS 8 had been put in effect"; condtra.xml
+  LOSTDIGITS: "raised if a number used in an arithmetic operation has more digits than the current
+  setting of NUMERIC DIGITS".
+* **R2** (53): the same numarit.xml passages. MAX "Returns the largest number of the list" uses
+  the numeric comparison, FUZZ included.
+* **R3** (53): errnums.xml 40.5, "Missing argument in invocation of routine; argument
+  argument_number is required", for the function. 93.903, "Missing argument in method; argument
+  argument is required", for the message.
+* **R6** (53): condtra.xml LOSTDIGITS, as for R1. The division's divisor is an operand whatever
+  the dividend.
+* **description** (53, the controller's label): rexxref condtra.xml gives "The number with
+  excessive digits that caused the LOSTDIGITS condition" and fixes no rendering.
+* **wide-integer** and **written-value** (44): as Deviation 44 states.
+* **do-count** (47): as Deviation 47 states.
+
+**R1** (Deviation 53, 5 rows)
+
+| case | operation | settings | crate (= model) | oracle |
+| --- | --- | --- | --- | --- |
+| `fuzz-18` | `bif MAX / '-1.00000001' / 1` | fuzz=1 | `V[1] ; L[-1.00000001]` | `V[1] ; V[1]` |
+| `fuzz-sign-differs` | `infix = / 1.00000001 / '-2'` | fuzz=1 | `V[0] ; L[1.00000001]` | `V[0] ; V[0]` |
+| `fuzz-sign-zero` | `infix > / 1.00000001 / 0` | fuzz=1 | `V[1] ; L[1.00000001]` | `V[1] ; V[1]` |
+| `fuzz-sign-negative` | `infix < / '-1.00000001' / 2` | fuzz=1 | `V[1] ; L[-1.00000001]` | `V[1] ; V[1]` |
+| `fuzz-zero-left` | `infix < / 0 / 1.00000001` | fuzz=1 | `V[1] ; L[1.00000001]` | `V[1] ; V[1]` |
+
+**R2** (Deviation 53, 2 rows)
+
+| case | operation | settings | crate (= model) | oracle |
+| --- | --- | --- | --- | --- |
+| `max-fuzz-integers` | `bif MAX / 100000001 / 100000002` | fuzz=1 | `V[100000001] ; V[100000001]` | `V[100000002] ; V[100000002]` |
+| `max-message-fuzz-integers` | `msg MAX / 100000001 / 100000002` | fuzz=1 | `V[100000001] ; V[100000001]` | `V[100000002] ; V[100000002]` |
+
+**R3** (Deviation 53, 5 rows)
+
+| case | operation | settings | crate (= model) | oracle |
+| --- | --- | --- | --- | --- |
+| `max-missing-argument` | `bif MAX / 1 / / 3` | digits=9 | `S 40.5 ; S 40.5` | `S 93.903 ; S 93.903` |
+| `min-missing-argument` | `bif MIN / 1 / / 3` | digits=9 | `S 40.5 ; S 40.5` | `S 93.903 ; S 93.903` |
+| `max-message-missing-first` | `msg MAX / '55' / / 77` | digits=9 | `S 93.903 ; S 93.903` | `S 40.5 ; S 40.5` |
+| `max-message-missing-middle` | `msg MAX / '55' / 77 / / 88` | digits=9 | `S 93.903 ; S 93.903` | `S 40.5 ; S 40.5` |
+| `min-message-missing-first` | `msg MIN / '55' / / 77` | digits=9 | `S 93.903 ; S 93.903` | `S 40.5 ; S 40.5` |
+
+**R6** (Deviation 53, 4 rows)
+
+| case | operation | settings | crate (= model) | oracle |
+| --- | --- | --- | --- | --- |
+| `div-zero-dividend` | `infix / / 0 / 1234567890.5` | digits=9 | `V[0] ; L[1234567890.5]` | `V[0] ; V[0]` |
+| `div-zero-dividend-string` | `infix / / '0' / 1234567890.5` | digits=9 | `V[0] ; L[1234567890.5]` | `V[0] ; V[0]` |
+| `intdiv-zero-dividend` | `infix % / 0 / 1234567890.5` | digits=9 | `V[0] ; L[1234567890.5]` | `V[0] ; V[0]` |
+| `rem-zero-dividend` | `infix // / 0 / 1234567890.5` | digits=9 | `V[0] ; L[1234567890.5]` | `V[0] ; V[0]` |
+
+**description** (Deviation 53, 7 rows)
+
+| case | operation | settings | crate (= model) | oracle |
+| --- | --- | --- | --- | --- |
+| `describe-prefix-literal` | `prefix - / 1234567890.5` | digits=9 | `V[-1.23456789E+9] ; L[1234567890.5]` | `V[-1.23456789E+9] ; L[1.2345678905E+9]` |
+| `describe-mul-literal` | `infix * / 1234567890.5 / 1` | digits=9 | `V[1.23456789E+9] ; L[1234567890.5]` | `V[1.23456789E+9] ; L[1.2345678905E+9]` |
+| `describe-pow-literal` | `infix ** / 1234567890.5 / 1` | digits=9 | `V[1.23456789E+9] ; L[1234567890.5]` | `V[1.23456789E+9] ; L[1.2345678905E+9]` |
+| `describe-intdiv-literal` | `infix % / 1234567890.5 / 1` | digits=9 | `S 26.11 ; L[1234567890.5]` | `S 26.11 ; L[1.2345678905E+9]` |
+| `describe-max-literal` | `bif MAX / 1 / 12345.5` | digits=3 | `V[1.23E+4] ; L[1.23455E+4]` | `V[1.23E+4] ; L[12345.5]` |
+| `describe-do-literal` | `do count / 12345.5` | digits=3 | `S 26.2 ; L[1.23455E+4]` | `S 26.2 ; L[12345.5]` |
+| `describe-max-trailing` | `bif MAX / 15 / 16.0` | digits=1 | `V[2E+1] ; L[1.60E+1]` | `V[2E+1] ; L[16.0]` |
+
+**wide-integer** (Deviation 44, 10 rows)
+
+| case | operation | settings | crate (= model) | oracle |
+| --- | --- | --- | --- | --- |
+| `max-wide-argument` | `bif MAX / 2 / 1111111111` | digits=9 | `V[1.11111111E+9] ; V[1.11111111E+9]` | `V[1111111111] ; V[1111111111]` |
+| `max-message-wide-argument` | `msg MAX / 2 / 1111111111` | digits=9 | `V[1.11111111E+9] ; V[1.11111111E+9]` | `V[1111111111] ; V[1111111111]` |
+| `max-trailing-zeros` | `bif MAX / 2 / 1000000000` | digits=9 | `V[1.00000000E+9] ; V[1.00000000E+9]` | `V[1000000000] ; V[1000000000]` |
+| `maxstr-literal` | `bif MAX / 1 / 1111111111` | digits=9 | `V[1.11111111E+9] ; V[1.11111111E+9]` | `V[1111111111] ; V[1111111111]` |
+| `maxmin-11` | `msg MAX / 1 / 1111111111` | digits=9 | `V[1.11111111E+9] ; V[1.11111111E+9]` | `V[1111111111] ; V[1111111111]` |
+| `min-lone-wide` | `bif MIN / 12345` | digits=3 | `V[1.23E+4] ; V[1.23E+4]` | `V[12345] ; V[12345]` |
+| `msg-min-lone-wide` | `msg MIN / 12345` | digits=3 | `V[1.23E+4] ; V[1.23E+4]` | `V[12345] ; V[12345]` |
+| `max-wide-rounds-up` | `bif MAX / 1 / 2 / 1111111115` | digits=9 | `V[1.11111112E+9] ; V[1.11111112E+9]` | `V[1111111115] ; V[1111111115]` |
+| `max-engineering-wide` | `bif MAX / 2 / 11111111111` | form=engineering | `V[11.1111111E+9] ; V[11.1111111E+9]` | `V[11111111111] ; V[11111111111]` |
+| `fuzz-engineering-integer` | `bif MAX / 123 / 1240` | digits=3 fuzz=1 form=engineering | `V[1.24E+3] ; V[1.24E+3]` | `V[1240] ; V[1240]` |
+
+**written-value** (Deviation 44, 6 rows)
+
+| case | operation | settings | crate (= model) | oracle |
+| --- | --- | --- | --- | --- |
+| `maxstr-string` | `bif MAX / 1 / '1111111111'` | digits=9 | `V[1.11111111E+9] ; V[1.11111111E+9]` | `V[1.11111111E+9] ; L[1111111111]` |
+| `max-fuzz-strings` | `bif MAX / '100000001' / '100000002'` | fuzz=1 | `V[100000001] ; V[100000001]` | `V[100000001] ; L[100000002]` |
+| `min-fuzz-strings` | `bif MIN / '100000002' / '100000001'` | fuzz=1 | `V[100000002] ; V[100000002]` | `V[100000002] ; L[100000001]` |
+| `max-fuzz-strings-short` | `bif MAX / '11' / '12'` | digits=8 fuzz=7 | `V[11] ; V[11]` | `V[11] ; L[12]` |
+| `max-message-fuzz-strings` | `msg MAX / '100000001' / '100000002'` | fuzz=1 | `V[100000001] ; V[100000001]` | `V[100000001] ; L[100000002]` |
+| `min-negative-wide-string` | `bif MIN / '-5' / '-1111111111'` | digits=9 | `V[-1.11111111E+9] ; V[-1.11111111E+9]` | `V[-1.11111111E+9] ; L[-1111111111]` |
+
+**do-count** (Deviation 47, 3 rows)
+
+| case | operation | settings | crate (= model) | oracle |
+| --- | --- | --- | --- | --- |
+| `do-count-wide` | `do count / 1111111111` | digits=9 | `S 26.2 ; L[1111111111]` | `V[ran] ; V[ran]` |
+| `do-for-wide` | `do for / 1111111111` | digits=9 | `S 26.3 ; L[1111111111]` | `V[ran] ; V[ran]` |
+| `do-count-trailing-zeros` | `do count / 1000000000` | digits=9 | `S 26.2 ; L[1000000000]` | `V[ran] ; V[ran]` |
+
+### Checks
+
+| command | exit |
+| --- | --- |
+| `cargo build --release -j 4 -p rexx-exec --bin rexx` | 0 |
+| `cargo fmt --all --check` | 0 |
+| `cargo clippy -j 4 -p rexx-exec -p rexx-num --all-targets -- -D warnings` | 0 |
+| `cargo test --release -p rexx-exec --lib` | 0 (1157 passed) |
+| `cargo test --release -p rexx-num` | 0 |
+| refusal tables + `licensed_divergences` + `numeric_model` (`r2/checks-tables.txt`) | 0 |
+| `cargo test --release -p rexx-parse --test sourceline_oracle` | 0 |
+| `REXX_CORPUS_GATE=1 ... --test corpus` (`r2/checks-corpus.txt`) | 0, 1148 of 1148 |
+| `REXX_SUITE_GATE=1 ... l3_core_suite`, table at `t6.14/r2/suite/table.tsv` | **0, 402 groups green** |
+
+Against `t6.14/suite-r2/tests.tsv`, the one changed row is the SysFileTree flake, which moved back
+to passed.
+
+### Perf
+
+`t6.14/r2/callgrind.txt`, with parent `t6.14/rexx-head` (`7a6eb8778`, the last measured head
+before round 1) and head `bc176f5e8`, exit 0. The delta with libc subtracted is at most +0.0004%
+on every program, and rexxcps is +0.0000% (61 instructions). So round 1's rexxcps +0.0565% went
+with R7, whose new LOSTDIGITS checks were the only change to the paths rexxcps runs. Nothing is
+over +0.05%, so there was nothing to trace.
