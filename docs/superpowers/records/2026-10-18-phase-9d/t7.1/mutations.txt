@@ -1,0 +1,72 @@
+M1 build 0 
+SAME stackframe_library_routine_executable.rex
+DIFF stackframe_merged_library_executable.rex
+7,8d6
+< live ROUTINE TESTNESTEDATTACH Routine 1
+< live PROGRAM  Routine 0
+SAME object_scope_override_nil.rex
+
+M1 restored
+M2 build 0 
+DIFF stackframe_library_routine_executable.rex
+16c16
+< copy ROUTINE TestRaiseException0 Routine 1 0 0
+---
+> copy ROUTINE TestRaiseException0 Routine 0 1 0
+SAME stackframe_merged_library_executable.rex
+SAME object_scope_override_nil.rex
+
+M2 restored
+M4 build 0 
+SAME stackframe_library_routine_executable.rex
+SAME stackframe_merged_library_executable.rex
+DIFF object_scope_override_nil.rex
+7c7
+< named zz | zz | zz | an Object | azz 2
+---
+> named The NIL object | The NIL object | The NIL object | an Object | aThe NIL object 14
+10c10
+< slot zz 1,zz,3
+---
+> slot The NIL object 1,The NIL object,3
+12,18c12,15
+< operator Object "zz" does not understand message "+".
+< unknown Object "zz" does not understand message "FROB".
+< later copy zz zz
+< copy named cc zz zz
+< number 12 13
+< missing 93.903
+< kept 12
+---
+> operator Object "The NIL object" does not understand message "+".
+> unknown Object "The NIL object" does not understand message "FROB".
+> later copy The NIL object The NIL object
+> copy named cc The NIL object The NIL object
+1,3c1,3
+<     39 *-* y = .nil
+<        >>>   "12"
+<     40 *-* trace off
+---
+>     33 *-* say 'number' .nil (.nil~objectName + 1)
+> Error 41 running /home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-18-phase-9d/t7-scratch/w1/object_scope_override_nil.rex line 33:  Bad arithmetic conversion.
+> Error 41.1:  Nonnumeric value ("The NIL object") used in arithmetic operation.
+1c1
+< 0
+---
+> 215
+
+M4 restored
+M5 build 0 
+SAME stackframe_library_routine_executable.rex
+SAME stackframe_merged_library_executable.rex
+DIFF object_scope_override_nil.rex
+4c4
+< hash 1 0
+---
+> hash 0 0
+6c6
+< copy of copy 0 The NIL object 1
+---
+> copy of copy 0 The NIL object 0
+
+M5 restored

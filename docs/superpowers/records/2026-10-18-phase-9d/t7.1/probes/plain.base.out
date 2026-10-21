@@ -1,0 +1,7 @@
+.Array~copy -> 93.970 COPY method is not supported for object The Array class.
+.zz~copy -> 93.970 COPY method is not supported for object The ZZ class.
+.context~copy -> 93.970 COPY method is not supported for object a RexxContext.
+.RexxInfo~copy -> 93.970 COPY method is not supported for object a RexxInfo.
+.nil~copy -> 97.1 Object "The NIL object" does not understand message "COPY".
+ok .nil~objectName = "q" 0
+ok .context~stackFrames[1]~copy~class~id StackFrame

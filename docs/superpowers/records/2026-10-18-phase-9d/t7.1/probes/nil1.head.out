@@ -1,0 +1,11 @@
+copy isNil 0 0 1 0 1
+isA 1 1
+table 2 1
+sent zz | zz | an Object | The NIL object
+result 0
+copy after zz | zz
+zz
+in string xzz
+12
+cc 12
+cc

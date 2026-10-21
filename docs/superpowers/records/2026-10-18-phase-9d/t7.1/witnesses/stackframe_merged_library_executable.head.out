@@ -1,0 +1,9 @@
+call ROUTINE TESTRAISEEXCEPTION0 Routine 1
+call PROGRAM  Routine 0
+function ROUTINE TESTRAISEEXCEPTION0 Routine 1
+function PROGRAM  Routine 0
+loaded 1
+live METHOD STRING Method 0
+live ROUTINE TESTNESTEDATTACH Routine 1
+live PROGRAM  Routine 0
+attach 98.951

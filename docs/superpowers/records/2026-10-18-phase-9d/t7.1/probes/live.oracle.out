@@ -1,0 +1,4 @@
+METHOD STRING Method 0
+ROUTINE TESTNESTEDATTACH Routine 1
+PROGRAM /home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-18-phase-9d/t7-scratch/p5/live.rex Routine 0
+raised 98.951

@@ -1,0 +1,18 @@
+call ROUTINE R Routine 1 1 0
+call PROGRAM  Routine 0 0 0
+function ROUTINE R Routine 1 1 0
+function PROGRAM  Routine 0 0 0
+nested ROUTINE R Routine 1 1 0
+nested ROUTINE Q Routine 0 0 1
+nested PROGRAM  Routine 0 0 0
+exported ROUTINE TESTRAISEEXCEPTION0 Routine 1 1 0
+exported PROGRAM  Routine 0 0 0
+call method ROUTINE TestRaiseException0 Routine 1 1 0
+call method METHOD CALL Method 0 0 0
+call method PROGRAM  Routine 0 0 0
+callWith ROUTINE TestRaiseException0 Routine 1 1 0
+callWith METHOD CALLWITH Method 0 0 0
+callWith PROGRAM  Routine 0 0 0
+copy ROUTINE TestRaiseException0 Routine 1 0 0
+copy METHOD CALL Method 0 0 0
+copy PROGRAM  Routine 0 0 0

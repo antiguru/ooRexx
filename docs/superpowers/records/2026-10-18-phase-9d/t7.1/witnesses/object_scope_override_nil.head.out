@@ -1,0 +1,18 @@
+copy 0 0 0 Object 1
+renders The NIL object | The NIL object | The NIL object | an Object
+hidden 0 0 0 1
+hash 1 0
+table 2 n c
+copy of copy 0 The NIL object 1
+named zz | zz | zz | an Object | azz 2
+result 0 1
+earlier copy The NIL object
+slot zz 1,zz,3
+compare 0 0 0
+operator Object "zz" does not understand message "+".
+unknown Object "zz" does not understand message "FROB".
+later copy zz zz
+copy named cc zz zz
+number 12 13
+missing 93.903
+kept 12

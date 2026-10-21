@@ -1,0 +1,10 @@
+a ROUTINE R Routine 1 0
+a PROGRAM /home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-18-phase-9d/t7-scratch/p5/sf2.rex Routine 0 0
+b ROUTINE TestRaiseException0 Routine 1 0
+b METHOD CALL Method 0 0
+b PROGRAM /home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-18-phase-9d/t7-scratch/p5/sf2.rex Routine 0 0
+d ROUTINE R Routine 1 0
+d PROGRAM /home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-18-phase-9d/t7-scratch/p5/sf2.rex Routine 0 0
+f ROUTINE R Routine 1 0
+f ROUTINE Q Routine 0 1
+f PROGRAM /home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-18-phase-9d/t7-scratch/p5/sf2.rex Routine 0 0

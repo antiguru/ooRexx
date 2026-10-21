@@ -1,0 +1,7 @@
+copy ROUTINE TestRaiseException0 Routine 1 0
+copy METHOD CALL Method 0 0
+copy PROGRAM /home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-18-phase-9d/t7-scratch/p5/sf9.rex Routine 0 0
+viam ROUTINE R Routine 0 1
+viam ROUTINE CALL Routine 0 0
+viam METHOD CALL Method 0 0
+viam PROGRAM /home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-18-phase-9d/t7-scratch/p5/sf9.rex Routine 0 0
