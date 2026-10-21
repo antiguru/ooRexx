@@ -1,0 +1,6 @@
+fn 1 answered ext 1
+fn swap raised 98.941
+fn 3 answered 3
+call 1 answered ext 1
+call swap raised 98.941
+call 3 answered 3

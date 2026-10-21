@@ -456,3 +456,106 @@ gives `memory allocation of 2032 bytes failed`, rc none. The repin's unpin skipp
 1. The canonical hot path is +1 Ir per call over round 2: the miss flag. It is not zero, as the
    brief asked.
 2. Q4 is unchanged here; it is queued.
+
+## Fix round 4
+
+Commits: `8d8ff8f68` (I-3 and m-4), `7c88a1283` (a dead forget site removed), and the records
+and report commit after them. Records: `t7.1/r4/`.
+
+**I-3.** `site_resolution_before_arguments` answers "kept" only for a `Settled` hit: a routine
+the site holds from an earlier return, which is what the oracle's `externalTarget` holds.
+`RexxActivation::externalCall` (`execution/RexxActivation.cpp:3062-3077`) hands a routine back
+for caching only from `findRoutine`; a file it searched for is never cached. A hit of the kind
+`Resolved::kept_until_routines_change` names is still handed on with its generation, and does
+not count as kept, since `settle_after_arguments` may replace it under this call. So
+`Op::CallExpr` and `Op::Call` forget on a raise unless the site held a `Settled` answer on
+entry. A raise through such a cached answer whose generation did not move forgets the cache
+entry as well, and the next call searches again, which the oracle does on every call.
+
+`begin_call_tree` had a second forget site, behind `resolved_after_arguments`. It was dead:
+that function fails only when `site_resolution_before_arguments` already had, and that returns
+before it remembers anything, so the slot it would clear is empty, or stale on its generation
+and about to miss. Made unconditional and made never at `8d8ff8f68`, it is green on every
+witness (`r4/mutations.txt`, `D1-true` and `D1-false`). `7c88a1283` removes it; each call op
+has one forget site.
+
+Witness `lang/call_site_fresh_routine_raises.rex`, with `y.rex` in its `.d/` and the library
+path in its `.env`: at each of the four ops' sites the first call runs the external file, the
+second call's argument rebinds the name to a raising copy so the call resolves afresh after its
+arguments and raises, and the third call runs the copy the name was rebound to. It is identical
+to the oracle at head. Round 3's binary answers `cascade function 3 raised 98.941` and
+`cascade call 3 raised 98.941` where the oracle answers `3 answered 3`
+(`r4/witnesses/call_site_fresh_routine_raises.r3.out`).
+
+**m-4.** Witness `lang/call_site_kept_routine_raises_cascade.rex`: `call_site_kept_routine_raises`
+with `~~length` on every argument, which takes `Op::Call` and `Op::CallExpr`. Identical to the
+oracle at head and at round 3's binary.
+
+Mutations (`r4/mutations.txt`), each forget site made unconditional and made never, on the
+three witnesses against the oracle. Each mutant is red on one witness and every other witness
+stays identical:
+
+| site | unconditional | never |
+|---|---|---|
+| `begin_call_args` (`Op::CallArgs`) | `call_site_kept_routine_raises`, both function lines `2 raised 98.941` | `call_site_fresh_routine_raises`, `function 3 raised 98.941` |
+| `begin_call_expr` (`Op::CallExpr`) | `..._cascade`, both function lines | fresh, `cascade function 3 raised` |
+| `begin_call_named` (`Op::CallNamed`) | `call_site_kept_routine_raises`, both call lines | fresh, `call 3 raised` |
+| `begin_call_tree` (`Op::Call`) | `..._cascade`, both call lines and `argument 3` | fresh, `cascade call 3 raised` |
+
+Probes (`r4/probes/`, oracle, round 3's binary and head): the re-review's `gen-moves-tree` and
+`gen-moves-tree-canon` are identical at head and differ at round 3; `gen-moves`, `raise-twice`,
+`raise-twice-tree`, `interp-loop-fn`, `witness-tree`, `reentry-ops` and round 3's `which`,
+`rebind`, `kept-raise`, `kept-raise-fn` and `kept-raise-canon` are identical on both. `reentry`
+(Q5) and `rexx-raise` (Q4) differ on both; both are queued.
+`call_site_routine_copy_lifetime.rex` and `call_site_kept_routine_raises.rex` are identical on
+both (`r4/witnesses/`).
+
+### Checks (round 4, at `7c88a1283`)
+
+| command | exit |
+|---|---|
+| `cargo fmt --all --check` | 0 |
+| `cargo clippy -p rexx-exec --all-targets -- -D warnings` (`checks-clippy.txt`, `Checking rexx-exec` present) | 0 |
+| `cargo test --release -p rexx-exec --lib` | 0, 1169 passed |
+| `closed_phases`, `owners`, `phase_ten_reasons`, `refusal_dispositions`, `refusal_sites`, `representation_refusals` | 0 |
+| `REXX_CORPUS_GATE=1 ... --test corpus` | 0, 1158 of 1158 matching |
+| `cargo test --release -p rexx-parse --test sourceline_oracle` | 0 |
+| `native_entries`, `library_routine_memory` (23 passed, 9.07 s), `concurrency_tests`, `gate_table_d` | 0 |
+
+The suite harness was not run this round; the brief's check list does not name it.
+
+### Perf (round 4)
+
+`r4/callgrind.txt`: parent `cg-9d/t7.1-r3/rexx-head`, head `cg-9d/t7.1-r4/rexx-head`, exit 0.
+
+| program | own delta, libc subtracted | own delta, whole process |
+|---|---|---|
+| startup | 0.0000 | +0.0015 |
+| interpret | 0.0000 | +0.0001 |
+| parse | 0.0000 (-138 Ir) | +0.0002 |
+| churn | 0.0000 | +0.0003 |
+| sayloop | 0.0000 | +0.0011 |
+
+Hot path (`r4/hot-callgrind.txt`, the re-review's four programs at 100000 and 200000 calls to
+the canonical object, per-call slope in Ir):
+
+| op (program) | round 3 | round 4 | change |
+|---|---|---|---|
+| `Op::CallNamed` (`hot`) | 2502.12 | 2502.08 | 0 |
+| `Op::CallArgs` (`hotfn`) | 2575.12 | 2575.12 | 0 |
+| `Op::CallExpr` (`hotexpr`) | 3733.12 | 3734.12 | +1 |
+| `Op::Call` (`hottree`) | 3660.16 | 3661.12 | +1 |
+
+The source change on the two tree ops' hit path is the flag's value, which the two hit branches
+no longer share. The intercepts move by under 10k Ir.
+
+### Concerns (round 4)
+
+1. `Op::CallExpr` and `Op::Call` are +1 Ir per call over round 3, on the hit path. A zero-cost
+   shape exists: leave the flag as it was and, on the cold raise path, compare the slot's
+   generation with the one the resolution carried. It was not built: m-5's class, and the
+   brief accepted m-5.
+2. A raise through a cached lookup-every-call answer whose generation did not move now forgets
+   the cache entry, so the next call at that site searches again. The oracle searches on every
+   call, so nothing observable changes; the cost is one search per such raise.
+3. Q4 and Q5 are unchanged; both are queued.

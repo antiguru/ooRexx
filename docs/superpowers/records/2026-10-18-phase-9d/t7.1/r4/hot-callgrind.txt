@@ -1,0 +1,26 @@
+# PROG.rex N canon, valgrind --tool=callgrind, whole-process Ir. r3 = cg-9d/t7.1-r3/rexx-head (f26488100's code), head = cg-9d/t7.1-r4/rexx-head (7c88a1283). Programs: t7-fix4-scratch/cg/, copied from t7-rereview3-scratch/cg/.
+r3 hot 100000 Collected : 369989725
+r3 hot 200000 Collected : 620201620
+r3 hotfn 100000 Collected : 377292397
+r3 hotfn 200000 Collected : 634804557
+r3 hotexpr 100000 Collected : 493102286
+r3 hotexpr 200000 Collected : 866414038
+r3 hottree 100000 Collected : 485789350
+r3 hottree 200000 Collected : 851805367
+head hot 100000 Collected : 369991484
+head hot 200000 Collected : 620199552
+head hotfn 100000 Collected : 377294533
+head hotfn 200000 Collected : 634806581
+head hotexpr 100000 Collected : 493204155
+head hotexpr 200000 Collected : 866615820
+head hottree 100000 Collected : 485895229
+head hottree 200000 Collected : 852007389
+# per-call slope (Ir at 200000 - Ir at 100000) / 100000, and the intercept 2 * Ir(100000) - Ir(200000)
+head hot slope 2502.08068 intercept 119783416
+r3 hot slope 2502.11895 intercept 119777830
+head hotexpr slope 3734.11665 intercept 119792490
+r3 hotexpr slope 3733.11752 intercept 119790534
+head hotfn slope 2575.12048 intercept 119782485
+r3 hotfn slope 2575.12160 intercept 119780237
+head hottree slope 3661.12160 intercept 119783069
+r3 hottree slope 3660.16017 intercept 119773333

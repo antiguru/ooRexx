@@ -1,0 +1,12 @@
+function 1 answered ext 1
+function swap raised 98.941
+function 3 answered 3
+call 1 answered ext 1
+call swap raised 98.941
+call 3 answered 3
+cascade function 1 answered ext 1
+cascade function swap raised 98.941
+cascade function 3 answered 3
+cascade call 1 answered ext 1
+cascade call swap raised 98.941
+cascade call 3 answered 3

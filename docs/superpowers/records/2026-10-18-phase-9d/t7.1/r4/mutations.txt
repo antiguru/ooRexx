@@ -1,0 +1,105 @@
+# Each mutant: one line of rust/crates/rexx-exec/src/ir/drive.rs at 7c88a1283 edited by sed, built with --profile mutation, run on the three witnesses from a fresh directory beside the oracle (t7-fix4-scratch/mutate.sh). Per witness: the stdout diff, oracle < > mutant; stderr and rc were identical throughout. drive.rs restored from a saved copy after each build; git diff empty.
+
+== A-true: begin_call_args line 2043: 'if missed && started.is_err() {' -> 'if started.is_err() {' (build finished: 1)
+-- call_site_kept_routine_raises: out
+9c9
+< copy function 2 answered 2
+---
+> copy function 2 raised 98.941
+12c12
+< canonical function 2 answered 2
+---
+> canonical function 2 raised 98.941
+-- call_site_kept_routine_raises_cascade: identical
+-- call_site_fresh_routine_raises: identical
+
+== A-false: begin_call_args line 2043: 'if missed && started.is_err() {' -> 'if false && started.is_err() {' (build finished: 1)
+-- call_site_kept_routine_raises: identical
+-- call_site_kept_routine_raises_cascade: identical
+-- call_site_fresh_routine_raises: out
+3c3
+< function 3 answered 3
+---
+> function 3 raised 98.941
+
+== B-true: begin_call_expr line 2100: 'if !kept && started.is_err() {' -> 'if started.is_err() {' (build finished: 1)
+-- call_site_kept_routine_raises: identical
+-- call_site_kept_routine_raises_cascade: out
+9c9
+< copy function 2 answered 2
+---
+> copy function 2 raised 98.941
+12c12
+< canonical function 2 answered 2
+---
+> canonical function 2 raised 98.941
+-- call_site_fresh_routine_raises: identical
+
+== B-false: begin_call_expr line 2100: 'if !kept && started.is_err() {' -> 'if false && started.is_err() {' (build finished: 1)
+-- call_site_kept_routine_raises: identical
+-- call_site_kept_routine_raises_cascade: identical
+-- call_site_fresh_routine_raises: out
+9c9
+< cascade function 3 answered 3
+---
+> cascade function 3 raised 98.941
+
+== C-true: begin_call_named line 2172: 'if missed {' -> 'if true {' (build finished: 1)
+-- call_site_kept_routine_raises: out
+3c3
+< copy call 2 answered 2
+---
+> copy call 2 raised 98.941
+6c6
+< canonical call 2 answered 2
+---
+> canonical call 2 raised 98.941
+-- call_site_kept_routine_raises_cascade: identical
+-- call_site_fresh_routine_raises: identical
+
+== C-false: begin_call_named line 2172: 'if missed {' -> 'if false {' (build finished: 1)
+-- call_site_kept_routine_raises: identical
+-- call_site_kept_routine_raises_cascade: identical
+-- call_site_fresh_routine_raises: out
+6c6
+< call 3 answered 3
+---
+> call 3 raised 98.941
+
+== D-true: begin_call_tree line 2233: 'if !kept {' -> 'if true {' (build finished: 1)
+-- call_site_kept_routine_raises: identical
+-- call_site_kept_routine_raises_cascade: out
+3c3
+< copy call 2 answered 2
+---
+> copy call 2 raised 98.941
+6c6
+< canonical call 2 answered 2
+---
+> canonical call 2 raised 98.941
+16c16
+< argument 3 answered 3
+---
+> argument 3 raised 98.941
+-- call_site_fresh_routine_raises: identical
+
+== D-false: begin_call_tree line 2233: 'if !kept {' -> 'if false {' (build finished: 1)
+-- call_site_kept_routine_raises: identical
+-- call_site_kept_routine_raises_cascade: identical
+-- call_site_fresh_routine_raises: out
+12c12
+< cascade call 3 answered 3
+---
+> cascade call 3 raised 98.941
+
+# The forget site behind resolved_after_arguments, at 8d8ff8f68 (drive.rs line 2220, before 7c88a1283 removed it), built from that commit's drive.rs:
+
+== D1-true: begin_call_tree line 2220 at 8d8ff8f68: 'if !kept {' -> 'if true {' (build finished: 1)
+-- call_site_kept_routine_raises: identical
+-- call_site_kept_routine_raises_cascade: identical
+-- call_site_fresh_routine_raises: identical
+
+== D1-false: begin_call_tree line 2220 at 8d8ff8f68: 'if !kept {' -> 'if false {' (build finished: 1)
+-- call_site_kept_routine_raises: identical
+-- call_site_kept_routine_raises_cascade: identical
+-- call_site_fresh_routine_raises: identical
