@@ -133,3 +133,111 @@ Head against the pin, libc subtracted: startup -0.1206, interpret -4.6330, parse
    a process running several instances can tell.
 7. Plain `.nil~copy` and `.nil~objectName=` are 97.1 on both sides (`nil_hidden_methods.rex`),
    which rexxref's "only the methods of the Object class" does not say. Not acted on.
+
+## Fix round 1
+
+Commits: `b7c45ef45` (the items below), `c0d2d69f1` (a `.nil` sentinel in place of an `Option`, for
+perf), and the records and report commit after them. Records: `t7.1/r1/`.
+
+1. **COPY of a class object, a RexxContext or .RexxInfo raises 93.970 on every route** (Moritz,
+   2026-10-21). One `copy_object` arm raises `Raised::copy_not_supported` over the receiver's
+   string value; `Loud::uncopyable_copy` and its refusal-sites row are gone. The seven `implement`
+   rows of `refusals.tsv` read `done (Task 7.1)`, with a header line saying so. Witnesses:
+   `lang/object_copy_uncopyable_receivers.rex` (the plain `~copy` of `.Array`, a `::class`,
+   `.context` and `.RexxInfo`, 93.970 on both sides, identical to the oracle), and
+   `dispatch::tests::a_scope_override_copy_of_an_uncopyable_object_raises` for the scope-override
+   route, which the corpus cannot hold until the Deviation licenses it. `r1/probes/copyrules.rex`
+   records both routes on both sides: the oracle answers `override copied Class`, `Class`,
+   `RexxContext`, `RexxInfo` where this crate raises 93.970.
+2. **I1: a copied library Routine reached by name answers the copy.** `Resolved::MergedLibraryRoutine`
+   carries the `Routine` the lookup found, `.nil` for the one standing for the code:
+   `MergedRoutine::LibraryObject` and a written `.routines` entry that is not the canonical object
+   carry it. At the call, `Interp::found_routine_object` checks the copy is live and runs that code,
+   then roots it globally. That covers the call-site cache keeping the resolution for the body's
+   life, as the oracle's instruction keeps the routine. A copy collected before its first call
+   answers `RoutineObject::Gone`, so the frame has no executable and refuses through
+   `frame_without_executable` (its doc and GUARD row now name this case). Witness:
+   `lang/stackframe_library_routine_copy_executable.rex` (addRoutine copy, `.routines['Y'] =
+   copy` by CALL and as a function, all `1 0`, identical to the oracle). Probes `r1/probes/addr.rex`
+   and `wr.rex` now match too.
+   **Measured:** `Option<ObjRef>` in the variant widened `Resolved` and cost parse +0.077% and churn
+   +0.053% (libc subtracted, against `t7.1/rexx-head`). A `.nil` sentinel keeps the payload at
+   the old 16 bytes, and that cost is gone (below).
+3. **M1:** the same witness reads a copy's `~call` from a live `.context~stackFrames` over
+   `TestNestedAttach` (`live TestNestedAttach 1 0`). It prints ROUTINE frames only, because this
+   crate's live stack lists no `METHOD CALL` level for a `~call` where the oracle does
+   (`r1/probes/livecopy.rex`, the only difference). That is concern 5's class, which predates
+   this task.
+4. **M2: base's behaviour is restored.** `blame_native_routine` takes `native_reraise` first, then
+   returns early on a recorded failure site, so the early return no longer keeps the flag.
+5. **M3:** `the_scanner_reads_each_owner_form` reads the `Owner::Phase9` form from a fixture
+   constructor.
+6. **M4:** `value::tests::a_named_nil_renders_its_name_through_every_reader` reads `.nil` through
+   `to_text`, `try_text` and `text_len` before and after `set_nil_name`, in the release `--lib` run.
+
+Mutations (`r1/mutations.txt`), each red: `found_routine_object` always answering the canonical
+object (`addRoutine`/`routines`/`function` lines); the live-frame arm ignoring the frame's object
+(`live` line); RexxContext moved from the 93.970 arm to the copying arm (the unit test answers
+`copied RexxContext`); `text_len_inner`'s `.nil` arm back to the fixed text (the unit test). The
+first R3 attempt did not compile and is recorded as such beside its rerun.
+
+### Checks (round 1, at `c0d2d69f1`'s code)
+
+| command | exit |
+|---|---|
+| `cargo fmt --all --check` | 0 |
+| `cargo clippy -p rexx-exec --all-targets -- -D warnings` | 0 |
+| `cargo test --release -p rexx-exec --lib` (`r1/checks-lib.txt`) | 0, 1169 passed |
+| the refusal tables with `representation_refusals`, `owners`, `closed_phases`, `phase_ten_reasons` | 0 |
+| `REXX_CORPUS_GATE=1 cargo test --release -p rexx-exec --test corpus` | 0, 1154 of 1154 matching |
+| `cargo test --release -p rexx-parse --test sourceline_oracle` | 0 |
+| `method_bodies`, `native_entries`, `library_routine_memory`, `concurrency_tests`, `gate_table_d` (`r1/checks-touched.txt`, at `b7c45ef45`) | 0 |
+
+Collect on every allocation (`r1/stress.txt`, an in-process probe): the five Task 7.1 witnesses
+answer the same plain and under stress. `collect_stress` itself was not rerun; it is red at base
+(concern 3).
+
+### Perf (round 1)
+
+`r1/callgrind.txt`: `bench-programs/callgrind.sh -B 0.5 -j 4 -p "startup interpret parse churn
+sayloop" -o .../cg-9d/t7.1-r1-run pin=.../rexx-run parent=cg-9d/t7.1/rexx-head
+head=cg-9d/t7.1-r1/rexx-head`, exit 0. Own delta, libc subtracted, head less parent: startup
+0.0000, interpret 0.0000, parse 0.0000, churn 0.0000, sayloop -0.0001.
+
+### Deviation candidate (for the controller to write as Deviation 63)
+
+* **Title:** COPY OF A CLASS OBJECT, A REXXCONTEXT OR .REXXINFO RAISES 93.970 ON EVERY ROUTE.
+* **Rule:** `Object~copy` reached through a scope override (`.Message~new(o, .array~of('COPY',
+  .Object))~send`) on a class object, a RexxContext or `.RexxInfo` raises 93.970, `COPY method is
+  not supported for object <o's string value>`, as the plain `~copy` does on both sides.
+* **Measurement:** the oracle copies through the override. `copied Class 0 Array 2` (built-in
+  class), `copied Class 0 ZZ m 0` (a `::class`), `copied RexxContext`, `copied RexxInfo 0` (seeds
+  `copy_class_message`, `copy_class_rexx_message`, `copy_context_message`, `copy_rexxinfo`;
+  `t7.1/probes/`, `t7.1/r1/probes/copyrules.rex`). Its class copy shares the original's method
+  dictionary and instance behaviour until a `define` (`t7.1/probes/cls1.rex`).
+  `RexxClass::copyRexx` (`classes/ClassClass.cpp:161-171`) is commented "to keep Class objects
+  from being copied"; the scope override reaches `RexxObject::copyRexx` instead.
+* **rexxref:** `fundclasses.xml:63-65` ("the copy method is forbidden for Class and all other
+  class objects, and will result in an error"); `utilityclasses.xml:7934-7942` (RexxInfo: "other
+  instances cannot be created or copied"); `utilityclasses.xml:7545`, `:7549`, `:7574`
+  (RexxContext: "They cannot be directly created by the user", and the comments "new() and copy()
+  are forbidden", "copy() is forbidden").
+* **Witnessed by** `dispatch::tests::a_scope_override_copy_of_an_uncopyable_object_raises`
+  (`rust/crates/rexx-exec/src/dispatch/tests.rs`), the override route on all four receivers, and
+  `rust/corpus/lang/object_copy_uncopyable_receivers.rex`, the plain route, oracle-identical.
+  If the controller wants the oracle side asserted too, the program in the unit test fits a
+  `licensed_divergences.rs` row. Its `oracle_stdout` would be the four `copied` lines of
+  `copyrules.oracle.out`'s `override` rows, and the row needs the Deviation's `LICENSED DIVERGENCE
+  WITNESS:` marker in the same commit.
+
+### Concerns (round 1)
+
+1. `RoutineObject::Gone` is reachable only if the call's own arguments drop the copy from its
+   table and a collection runs before the call. No probe did that, and the GUARD row says so.
+2. A copied *internal* routine (REXX package, `MergedRoutine::InternalObject`) reached by name
+   has the same shape. `MergedInternal` drops the object, and `build_internal_frame_at` answers the
+   canonical one. It is outside these rows and was not probed. Proposed owner: the controller.
+3. Concern 5 above now has a second instance: a live `~call` on a library routine lists no
+   `METHOD CALL` frame (`r1/probes/livecopy.rex`).
+4. Each copy a call by name runs is rooted for the life of the process, one global root per
+   distinct copy.

@@ -1,0 +1,4 @@
+live METHOD STRING 0 Method
+live ROUTINE TestNestedAttach 0 Routine
+live METHOD CALL 0 Method
+raised 98.951

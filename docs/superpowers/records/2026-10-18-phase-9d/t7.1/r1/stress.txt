@@ -1,0 +1,5 @@
+lang/stackframe_library_routine_copy_executable.rex plain 0 stress 0 collections 273 same true
+lang/object_copy_uncopyable_receivers.rex plain 0 stress 0 collections 225 same true
+lang/stackframe_library_routine_executable.rex plain 0 stress 0 collections 521 same true
+lang/stackframe_merged_library_executable.rex plain 0 stress 0 collections 208 same true
+lang/object_scope_override_nil.rex plain 0 stress 0 collections 309 same true

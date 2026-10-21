@@ -1,0 +1,40 @@
+R1 build 0 
+DIFF stackframe_library_routine_copy_executable.rex
+1,3c1,3
+< addRoutine X 1 0 Routine
+< routines Y 1 0 Routine
+< function Y 1 0 Routine
+---
+> addRoutine X 0 1 Routine
+> routines Y 0 1 Routine
+> function Y 0 1 Routine
+
+R1 restored
+R2 build 0 
+DIFF stackframe_library_routine_copy_executable.rex
+4c4
+< live TestNestedAttach 1 0 Routine
+---
+> live TestNestedAttach 0 1 Routine
+
+R2 restored
+R3 test rc 101 []
+R3 restored
+R4 test rc 101 ['test value::tests::a_named_nil_renders_its_name_through_every_reader ... FAILED', 'test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1168 filtered out; finished in 0.00s']
+R4 restored
+R3 (rerun as a compiling mutant: Context moved from the 93.970 arm to the Package copy arm)
+test dispatch::tests::a_scope_override_copy_of_an_uncopyable_object_raises ... FAILED
+  left: ... "copied RexxContext\n" ...
+R3 restored
+R1 build 0 
+DIFF stackframe_library_routine_copy_executable.rex
+1,3c1,3
+< addRoutine X 1 0 Routine
+< routines Y 1 0 Routine
+< function Y 1 0 Routine
+---
+> addRoutine X 0 1 Routine
+> routines Y 0 1 Routine
+> function Y 0 1 Routine
+
+R1 restored

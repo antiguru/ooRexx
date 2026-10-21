@@ -2273,7 +2273,8 @@ fn a_native_tails_objects_are_rooted_only_while_it_is_parked() {
 /// `RexxContext` and `.RexxInfo` raises 93.970, as the plain `~copy` does on
 /// both sides: rexxref forbids copying each (`fundclasses.xml:63-65`,
 /// `utilityclasses.xml:7934-7942`, `:7549`). Measured, the oracle copies
-/// each through the override (`t7.1/r1/copyrules.rex`).
+/// each through the override
+/// (`docs/superpowers/records/2026-10-18-phase-9d/t7.1/r1/probes/copyrules.rex`).
 #[test]
 fn a_scope_override_copy_of_an_uncopyable_object_raises() {
     let source = "do o over .array~of(.Array, .zz, .context, .RexxInfo)\n\

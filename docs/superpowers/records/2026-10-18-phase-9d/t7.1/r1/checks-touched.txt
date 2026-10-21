@@ -1,0 +1,414 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1m 16s
+     Running tests/concurrency_tests.rs (/tmp/claude-1000/t7-target/release/deps/concurrency_tests-4765e34985e2f118)
+
+running 54 tests
+test group_runs::the_outcome_table_of_the_object_group ... ok
+test group_runs::the_outcome_table_of_the_message_group ... ok
+test group_runs::the_outcome_table_of_the_trace_object_group ... ok
+test group_runs::the_outcome_table_of_the_guard_group_in_both_modes ... ok
+test group_runs::whole_groups::a_run_agrees_but_for_the_count_only_when_the_rest_agrees ... ok
+test group_runs::whole_groups::every_differing_test_is_fixed_or_has_a_row ... ok
+test group_runs::the_s3_rows_of_the_derived_list_in_both_modes ... ok
+test group_runs::the_s2_rows_of_the_derived_list_in_both_modes ... ok
+test group_runs::the_runner_passes_a_passing_group_and_reports_an_altered_test_as_differing ... ok
+test group_runs::whole_groups::outcomes_differing_in_stderr_alone_are_not_counted_only ... ok
+test group_runs::the_alarm_and_ticker_groups_pass_in_both_modes ... ok
+test group_runs::the_message_start_tests_under_every_opportunity ... ok
+test group_runs::whole_groups::outcomes_differing_only_in_the_count_are_counted_only ... ok
+test byte_exact_copies::skip_changes_only_the_renamed_methods_line ... ok
+test group_runs::whole_groups::sim_gate::a_passing_rerun_is_a_determinism_red_outside_the_real_clock ... ok
+test group_runs::whole_groups::outcomes_differing_in_count_and_status_are_not_counted_only ... ok
+test group_runs::whole_groups::each_group_of_the_derived_list_in_one_run_in_both_modes ... ok
+test group_runs::whole_groups::one_oracle_outcome_is_not_counted_only ... ok
+test group_runs::whole_groups::sim_gate::a_key_names_its_failing_tests ... ok
+test group_runs::whole_groups::sim_gate::a_run_is_compared_without_its_sim_lines ... ok
+test group_runs::whole_groups::sim_gate::a_seed_is_derived_by_rule_and_the_mix_repeats_every_seven ... ok
+test group_runs::whole_groups::sim_gate::a_run_ending_where_no_listed_outcome_ends_is_red ... ok
+test group_runs::whole_groups::sim_gate::a_seeded_run_repeats_in_a_fresh_process ... ok
+test group_runs::whole_groups::sim_gate::the_oracle_sets_grow_only_under_refresh ... ok
+test group_runs::whole_groups::sim_gate::calibration ... ok
+test group_runs::whole_groups::sim_gate::the_seeded_gate ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test byte_exact_copies::mark_starts_keeps_a_byte_that_is_not_utf_8 ... ok
+test group_runs::whole_groups::the_differing_tests_are_read_from_every_key ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test group_runs::whole_groups::sim_gate::the_self_test_runs_only_virtual_clock_rows ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test byte_exact_copies::without_rxfuncquery_keeps_a_byte_that_is_not_utf_8 ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test the_detector_tells_an_instruction_from_a_name_that_only_looks_like_one ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test the_derived_list_is_the_committed_one ... ok
+test the_derived_list_holds_the_groups_the_spec_names ... ok
+test group_runs::whole_groups::sim_gate::the_table_holds_the_parts_the_spec_names ... ok
+
+test result: ok. 54 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests/gate_table_d.rs (/tmp/claude-1000/t7-target/release/deps/gate_table_d-1fcfd1362481a2d7)
+
+running 23 tests
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test every_closed_phase_this_table_owns_rows_for_is_gated ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test the_verdict_function_partitions_the_descriptor_cube ... ok
+==============================================================================
+rexx-exec gate table D -- the directive and option surface (corpus/docs/directive-options.txt)
+*** REPORT MODE -- NOT THE GATE. Set REXX_CORPUS_GATE=1 to run this as the gate. ***
+79 rows, one committed probe each under corpus/gate-tables/directives/. stderr is compared raw on every row.
+
+the four bootstrap shapes the usage column's scan reaches:
+  a quoted class name, MIXINCLASS, and INHERIT naming more than one class
+    StreamClasses.orx:115
+  a quoted SUBCLASS target
+    StreamClasses.orx:371
+  an install-time ::CONSTANT sending a private class method of its own class
+    StreamClasses.orx:548, StreamClasses.orx:549
+  a directive carrying its body on the same physical line
+    CoreClasses.orx:151, CoreClasses.orx:152, CoreClasses.orx:153, CoreClasses.orx:154, CoreClasses.orx:155, CoreClasses.orx:156, and 6 more
+
+rows (verdict / loud / owning phase / row / .orx usage / probe, whose directory is named above):
+  agree          loud=no  5a                            ::ANNOTATE   ATTRIBUTE    subkeyword       core=- stream=-                              annotate__attribute__subkeyword.rex
+  agree          loud=no  5a                            ::ANNOTATE   CLASS        subkeyword       core=- stream=-                              annotate__class__subkeyword.rex
+  agree          loud=no  5a                            ::ANNOTATE   CONSTANT     subkeyword       core=- stream=-                              annotate__constant__subkeyword.rex
+  agree          loud=no  5a                            ::ANNOTATE   METHOD       subkeyword       core=- stream=-                              annotate__method__subkeyword.rex
+  agree          loud=no  5a                            ::ANNOTATE   PACKAGE      subkeyword       core=- stream=-                              annotate__package__subkeyword.rex
+  agree          loud=no  5a                            ::ANNOTATE   ROUTINE      subkeyword       core=- stream=-                              annotate__routine__subkeyword.rex
+  agree          loud=no  5a                            ::ATTRIBUTE  ABSTRACT     subkeyword       core=- stream=-                              attribute__abstract__subkeyword.rex
+  agree          loud=no  5a                            ::ATTRIBUTE  CLASS        subkeyword       core=CoreClasses.orx:4018 +4 stream=-        attribute__class__subkeyword.rex
+  agree          loud=no  5b                            ::ATTRIBUTE  DELEGATE     subkeyword       core=- stream=-                              attribute__delegate__subkeyword.rex
+  agree          loud=no  5a                            ::ATTRIBUTE  EXTERNAL     subkeyword       core=- stream=-                              attribute__external__subkeyword.rex
+  agree          loud=no  5a                            ::ATTRIBUTE  GET          subkeyword       core=CoreClasses.orx:1578 +8 stream=StreamClasses.orx:801 +2 attribute__get__subkeyword.rex
+  agree          loud=no  5a                            ::ATTRIBUTE  GUARDED      subkeyword       core=- stream=-                              attribute__guarded__subkeyword.rex
+  agree          loud=no  5a                            ::ATTRIBUTE  PACKAGE      subkeyword       core=- stream=-                              attribute__package__subkeyword.rex
+  agree          loud=no  5a                            ::ATTRIBUTE  PRIVATE      subkeyword       core=- stream=-                              attribute__private__subkeyword.rex
+  agree          loud=no  5a                            ::ATTRIBUTE  PROTECTED    subkeyword       core=- stream=-                              attribute__protected__subkeyword.rex
+  agree          loud=no  5a                            ::ATTRIBUTE  PUBLIC       subkeyword       core=- stream=-                              attribute__public__subkeyword.rex
+  agree          loud=no  5a                            ::ATTRIBUTE  SET          subkeyword       core=CoreClasses.orx:4024 stream=StreamClasses.orx:841 +1 attribute__set__subkeyword.rex
+  agree          loud=no  5a                            ::ATTRIBUTE  UNGUARDED    subkeyword       core=CoreClasses.orx:1578 +5 stream=-        attribute__unguarded__subkeyword.rex
+  agree          loud=no  5a                            ::ATTRIBUTE  UNPROTECTED  subkeyword       core=- stream=-                              attribute__unprotected__subkeyword.rex
+  agree          loud=no  5a                            ::CLASS      ABSTRACT     subkeyword       core=- stream=-                              class__abstract__subkeyword.rex
+  agree          loud=no  deferred-parse-error-rendering ::CLASS      CLASS        subkeyword       core=- stream=-                              class__class__subkeyword.rex
+  agree          loud=no  5a                            ::CLASS      INHERIT      subkeyword       core=CoreClasses.orx:2184 +1 stream=StreamClasses.orx:115 +1 class__inherit__subkeyword.rex
+  agree          loud=no  5a                            ::CLASS      METACLASS    subkeyword       core=- stream=-                              class__metaclass__subkeyword.rex
+  agree          loud=no  5a                            ::CLASS      MIXINCLASS   subkeyword       core=CoreClasses.orx:729 +16 stream=StreamClasses.orx:54 +3 class__mixinclass__subkeyword.rex
+  agree          loud=no  5a                            ::CLASS      PRIVATE      subkeyword       core=- stream=-                              class__private__subkeyword.rex
+  agree          loud=no  5a                            ::CLASS      PUBLIC       subkeyword       core=CoreClasses.orx:729 +26 stream=StreamClasses.orx:54 +6 class__public__subkeyword.rex
+  agree          loud=no  5a                            ::CLASS      SUBCLASS     subkeyword       core=CoreClasses.orx:1470 +3 stream=StreamClasses.orx:371 class__subclass__subkeyword.rex
+  agree          loud=no  5a                            ::METHOD     ABSTRACT     subkeyword       core=CoreClasses.orx:730 +18 stream=StreamClasses.orx:56 +5 method__abstract__subkeyword.rex
+  agree          loud=no  5a                            ::METHOD     ATTRIBUTE    subkeyword       core=- stream=-                              method__attribute__subkeyword.rex
+  agree          loud=no  5a                            ::METHOD     CLASS        subkeyword       core=CoreClasses.orx:1238 +55 stream=StreamClasses.orx:440 +16 method__class__subkeyword.rex
+  agree          loud=no  5b                            ::METHOD     DELEGATE     subkeyword       core=- stream=-                              method__delegate__subkeyword.rex
+  agree          loud=no  5a                            ::METHOD     EXTERNAL     subkeyword       core=CoreClasses.orx:1590 +4 stream=StreamClasses.orx:127 +60 method__external__subkeyword.rex
+  agree          loud=no  5a                            ::METHOD     GUARDED      subkeyword       core=- stream=-                              method__guarded__subkeyword.rex
+  agree          loud=no  5a                            ::METHOD     PACKAGE      subkeyword       core=- stream=-                              method__package__subkeyword.rex
+  agree          loud=no  5a                            ::METHOD     PRIVATE      subkeyword       core=CoreClasses.orx:193 +8 stream=StreamClasses.orx:242 +28 method__private__subkeyword.rex
+  agree          loud=no  5a                            ::METHOD     PROTECTED    subkeyword       core=- stream=-                              method__protected__subkeyword.rex
+  agree          loud=no  5a                            ::METHOD     PUBLIC       subkeyword       core=- stream=-                              method__public__subkeyword.rex
+  agree          loud=no  5a                            ::METHOD     UNGUARDED    subkeyword       core=CoreClasses.orx:1443 +9 stream=StreamClasses.orx:358 +1 method__unguarded__subkeyword.rex
+  agree          loud=no  5a                            ::METHOD     UNPROTECTED  subkeyword       core=- stream=-                              method__unprotected__subkeyword.rex
+  agree          loud=no  5c                            ::OPTIONS    ALL          subkeyword       core=- stream=-                              options__all__subkeyword.rex
+  agree          loud=no  5c                            ::OPTIONS    CONDITION    value-of(ALL)    core=- stream=-                              options__condition__value_of_all.rex
+  agree          loud=no  5c                            ::OPTIONS    CONDITION    value-of(ERROR)  core=- stream=-                              options__condition__value_of_error.rex
+  agree          loud=no  5c                            ::OPTIONS    CONDITION    value-of(FAILURE) core=- stream=-                              options__condition__value_of_failure.rex
+  agree          loud=no  5c                            ::OPTIONS    CONDITION    value-of(LOSTDIGITS) core=- stream=-                              options__condition__value_of_lostdigits.rex
+  agree          loud=no  5c                            ::OPTIONS    CONDITION    value-of(NOSTRING) core=- stream=-                              options__condition__value_of_nostring.rex
+  agree          loud=no  5c                            ::OPTIONS    CONDITION    value-of(NOTREADY) core=- stream=-                              options__condition__value_of_notready.rex
+  agree          loud=no  5c                            ::OPTIONS    CONDITION    value-of(NOVALUE) core=- stream=-                              options__condition__value_of_novalue.rex
+  agree          loud=no  5c                            ::OPTIONS    DIGITS       subkeyword       core=- stream=-                              options__digits__subkeyword.rex
+  agree          loud=no  5c                            ::OPTIONS    ENGINEERING  value-of(FORM)   core=- stream=-                              options__engineering__value_of_form.rex
+  agree          loud=no  5c                            ::OPTIONS    ERROR        subkeyword       core=- stream=-                              options__error__subkeyword.rex
+  agree          loud=no  5c                            ::OPTIONS    ERROR        value-of(NOVALUE) core=- stream=-                              options__error__value_of_novalue.rex
+  agree          loud=no  5c                            ::OPTIONS    FAILURE      subkeyword       core=- stream=-                              options__failure__subkeyword.rex
+  agree          loud=no  5c                            ::OPTIONS    FORM         subkeyword       core=- stream=-                              options__form__subkeyword.rex
+  agree          loud=no  5c                            ::OPTIONS    FUZZ         subkeyword       core=- stream=-                              options__fuzz__subkeyword.rex
+  agree          loud=no  5c                            ::OPTIONS    INHERIT      value-of(NUMERIC) core=- stream=-                              options__inherit__value_of_numeric.rex
+  agree          loud=no  5c                            ::OPTIONS    LOSTDIGITS   subkeyword       core=- stream=-                              options__lostdigits__subkeyword.rex
+  agree          loud=no  5c                            ::OPTIONS    NOINHERIT    value-of(NUMERIC) core=- stream=-                              options__noinherit__value_of_numeric.rex
+  agree          loud=no  5c                            ::OPTIONS    NOPROLOG     subkeyword       core=- stream=-                              options__noprolog__subkeyword.rex
+  agree          loud=no  5c                            ::OPTIONS    NOSTRING     subkeyword       core=- stream=-                              options__nostring__subkeyword.rex
+  agree          loud=no  5c                            ::OPTIONS    NOTREADY     subkeyword       core=- stream=-                              options__notready__subkeyword.rex
+  agree          loud=no  5c                            ::OPTIONS    NOVALUE      subkeyword       core=- stream=-                              options__novalue__subkeyword.rex
+  agree          loud=no  5c                            ::OPTIONS    NUMERIC      subkeyword       core=- stream=-                              options__numeric__subkeyword.rex
+  agree          loud=no  5c                            ::OPTIONS    PROLOG       subkeyword       core=- stream=-                              options__prolog__subkeyword.rex
+  agree          loud=no  5c                            ::OPTIONS    SCIENTIFIC   value-of(FORM)   core=- stream=-                              options__scientific__value_of_form.rex
+  agree          loud=no  5c                            ::OPTIONS    SYNTAX       value-of(ALL)    core=- stream=-                              options__syntax__value_of_all.rex
+  agree          loud=no  5c                            ::OPTIONS    SYNTAX       value-of(ERROR)  core=- stream=-                              options__syntax__value_of_error.rex
+  agree          loud=no  5c                            ::OPTIONS    SYNTAX       value-of(FAILURE) core=- stream=-                              options__syntax__value_of_failure.rex
+  agree          loud=no  5c                            ::OPTIONS    SYNTAX       value-of(LOSTDIGITS) core=- stream=-                              options__syntax__value_of_lostdigits.rex
+  agree          loud=no  5c                            ::OPTIONS    SYNTAX       value-of(NOSTRING) core=- stream=-                              options__syntax__value_of_nostring.rex
+  agree          loud=no  5c                            ::OPTIONS    SYNTAX       value-of(NOTREADY) core=- stream=-                              options__syntax__value_of_notready.rex
+  agree          loud=no  5c                            ::OPTIONS    SYNTAX       value-of(NOVALUE) core=- stream=-                              options__syntax__value_of_novalue.rex
+  agree          loud=no  5c                            ::OPTIONS    TRACE        subkeyword       core=- stream=-                              options__trace__subkeyword.rex
+  agree          loud=no  7                             ::REQUIRES   LIBRARY      subkeyword       core=- stream=-                              requires__library__subkeyword.rex
+  agree          loud=no  5d                            ::REQUIRES   NAMESPACE    subkeyword       core=- stream=-                              requires__namespace__subkeyword.rex
+  agree          loud=no  5c                            ::RESOURCE   END          subkeyword       core=- stream=-                              resource__end__subkeyword.rex
+  agree          loud=no  deferred-parse-error-rendering ::RESOURCE   LIBRARY      subkeyword       core=- stream=-                              resource__library__subkeyword.rex
+  agree          loud=no  7                             ::ROUTINE    EXTERNAL     subkeyword       core=- stream=-                              routine__external__subkeyword.rex
+  agree          loud=no  5c                            ::ROUTINE    PRIVATE      subkeyword       core=- stream=-                              routine__private__subkeyword.rex
+  agree          loud=no  5c                            ::ROUTINE    PUBLIC       subkeyword       core=- stream=-                              routine__public__subkeyword.rex
+
+verdicts, over every row of this table:
+  agree: 79
+  loud (this crate declined rather than answered): 0
+
+by owning phase -- rows, and rows not yet `agree`:
+  5a: 36 rows, 0 not yet `agree`
+  5b: 2 rows, 0 not yet `agree`
+  5c: 36 rows, 0 not yet `agree`
+  5d: 1 rows, 0 not yet `agree`
+  7: 2 rows, 0 not yet `agree`
+  deferred-parse-error-rendering: 2 rows, 0 not yet `agree`
+
+gated by this run: 0 row(s) whose owning phase is closing or closed and whose verdict is not `agree`
+*** REPORT MODE -- NOT THE GATE. A non-`agree` row above is a row still waiting on the task that owns it, not a failing test. Set REXX_CORPUS_GATE=1 with REXX_PHASE_GATE to make a phase's rows an exit status. ***
+==============================================================================
+test directive_option_gate_table ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.18s
+
+     Running tests/library_routine_memory.rs (/tmp/claude-1000/t7-target/release/deps/library_routine_memory-0a65dc3dbf24c2b4)
+
+running 21 tests
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test imported_routines_sent_in_a_loop_run_under_the_oracles_memory_cap ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.53s
+
+     Running tests/method_bodies.rs (/tmp/claude-1000/t7-target/release/deps/method_bodies-9eb34df4dfe0a3aa)
+
+running 23 tests
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test every_verdict_parses_back_from_its_label ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test the_regression_rule_is_the_two_rules_it_states ... ok
+test no_row_started_diverging_or_stopped_answering has been running for over 60 seconds
+==============================================================================
+rexx-exec method-body table (D76) -- whether each documented method works (corpus/method-bodies.txt)
+*** REPORT MODE -- NOT THE GATE. Set REXX_CORPUS_GATE=1 to run this as the gate. ***
+1347 row(s) over corpus/docs/class-methods.txt, one zero-argument send each. The oracle ran 3959 time(s): the rows pass one did not classify.
+
+verdicts, over every row of this table:
+  answers: 1312
+  loud: 17
+  unanswered: 5
+  uncomparable: 8
+  unstable: 5
+
+by (class, arm) -- rows, and what they did:
+  Alarm                        instance  7    row(s): answers=6 unstable=1
+  AlarmNotification            instance  2    row(s): answers=2
+  Array                        class     2    row(s): answers=2
+  Array                        instance  44   row(s): answers=44
+  Bag                          class     2    row(s): answers=2
+  Bag                          instance  28   row(s): answers=28
+  Buffer                       class     1    row(s): answers=1
+  CaselessColumnComparator     instance  2    row(s): answers=2
+  CaselessComparator           instance  1    row(s): answers=1
+  CaselessDescendingComparator instance  1    row(s): answers=1
+  CircularQueue                class     2    row(s): answers=2
+  CircularQueue                instance  47   row(s): answers=47
+  Class                        class     1    row(s): answers=1
+  Class                        instance  31   row(s): answers=31
+  Collection                   instance  19   row(s): answers=19
+  ColumnComparator             instance  2    row(s): answers=2
+  Comparable                   instance  1    row(s): answers=1
+  Comparator                   instance  1    row(s): answers=1
+  DateTime                     class     18   row(s): answers=17 unstable=1
+  DateTime                     instance  76   row(s): answers=75 unstable=1
+  DescendingComparator         instance  1    row(s): answers=1
+  Directory                    class     2    row(s): answers=2
+  Directory                    instance  31   row(s): answers=31
+  EventSemaphore               class     1    row(s): answers=1
+  EventSemaphore               instance  5    row(s): answers=4 loud=1
+  File                         class     10   row(s): answers=10
+  File                         instance  50   row(s): answers=50
+  IdentityTable                class     2    row(s): answers=2
+  IdentityTable                instance  24   row(s): answers=24
+  InputOutputStream            instance  11   row(s): answers=11
+  InputStream                  instance  10   row(s): answers=10
+  InvertingComparator          instance  2    row(s): answers=2
+  List                         class     2    row(s): answers=2
+  List                         instance  38   row(s): answers=38
+  MapCollection                class     1    row(s): answers=1
+  MapCollection                instance  20   row(s): answers=20
+  Message                      class     1    row(s): answers=1
+  Message                      instance  20   row(s): answers=18 loud=2
+  MessageNotification          instance  1    row(s): answers=1
+  Method                       class     3    row(s): answers=3
+  Method                       instance  17   row(s): answers=17
+  Monitor                      instance  4    row(s): answers=4
+  MutableBuffer                class     1    row(s): answers=1
+  MutableBuffer                instance  51   row(s): answers=51
+  MutexSemaphore               class     1    row(s): answers=1
+  MutexSemaphore               instance  3    row(s): answers=3
+  NumericComparator            instance  2    row(s): answers=2
+  Object                       class     1    row(s): answers=1
+  Object                       instance  31   row(s): answers=29 unstable=2
+  Orderable                    instance  19   row(s): answers=19
+  OrderedCollection            instance  34   row(s): answers=34
+  OutputStream                 instance  10   row(s): answers=10
+  Package                      class     2    row(s): answers=2
+  Package                      instance  38   row(s): answers=38
+  Pointer                      class     1    row(s): answers=1
+  Pointer                      instance  5    row(s): unanswered=5
+  Properties                   class     3    row(s): answers=3
+  Properties                   instance  39   row(s): answers=39
+  Queue                        class     2    row(s): answers=2
+  Queue                        instance  43   row(s): answers=43
+  Relation                     class     2    row(s): answers=2
+  Relation                     instance  28   row(s): answers=28
+  RexxContext                  instance  15   row(s): answers=15
+  RexxInfo                     instance  28   row(s): answers=28
+  RexxQueue                    class     5    row(s): answers=1 loud=4
+  RexxQueue                    instance  13   row(s): answers=3 loud=10
+  Routine                      class     3    row(s): answers=3
+  Routine                      instance  8    row(s): answers=8
+  Set                          class     2    row(s): answers=2
+  Set                          instance  24   row(s): answers=24
+  SetCollection                instance  19   row(s): answers=19
+  Singleton                    class     1    row(s): answers=1
+  StackFrame                   instance  10   row(s): answers=10
+  Stem                         class     2    row(s): answers=2
+  Stem                         instance  27   row(s): answers=25 uncomparable=2
+  Stream                       class     1    row(s): answers=1
+  Stream                       instance  24   row(s): answers=24
+  StreamSupplier               class     1    row(s): answers=1
+  StreamSupplier               instance  8    row(s): answers=8
+  String                       class     17   row(s): answers=17
+  String                       instance  118  row(s): answers=112 uncomparable=6
+  StringTable                  class     2    row(s): answers=2
+  StringTable                  instance  29   row(s): answers=29
+  Supplier                     class     1    row(s): answers=1
+  Supplier                     instance  7    row(s): answers=7
+  Table                        class     2    row(s): answers=2
+  Table                        instance  24   row(s): answers=24
+  Ticker                       instance  6    row(s): answers=6
+  TimeSpan                     class     10   row(s): answers=10
+  TimeSpan                     instance  47   row(s): answers=47
+  TraceObject                  class     12   row(s): answers=12
+  TraceObject                  instance  2    row(s): answers=2
+  Validate                     class     13   row(s): answers=13
+  VariableReference            instance  4    row(s): answers=4
+  WeakReference                class     1    row(s): answers=1
+  WeakReference                instance  1    row(s): answers=1
+
+every row this crate answered without agreeing, and every unstable row:
+  unstable  Object hashCode (instance arm) [the oracle]
+            the oracle answered "\u{1f}|�jƀ��\n" and then "\u{1f}|?�\u{16}���\n"
+  unstable  Object identityHash (instance arm) [the oracle]
+            the oracle answered "-139808344056849\n" and then "-140094184387601\n"
+  unstable  Alarm scheduledTime (instance arm) [this crate]
+            two runs of one engine differ; the last was rc=0 out="2026-10-22T18:50:07.125087\n" err=""
+  unstable  DateTime new (class arm) [this crate]
+            two runs of one engine differ; the last was rc=0 out="2026-10-21T15:03:30.031133\n" err=""
+  unstable  DateTime elapsed (instance arm) [this crate]
+            two runs of one engine differ; the last was rc=0 out="2484.11:59:26.161582\n" err=""
+
+regressions this run: 0. other drift from the committed table: 0.
+*** REPORT MODE -- NOT THE GATE. A non-`agree` row above is a row still waiting on the task that owns it, not a failing test. Set REXX_CORPUS_GATE=1 with REXX_PHASE_GATE to make a phase's rows an exit status. ***
+==============================================================================
+test no_row_started_diverging_or_stopped_answering ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 103.96s
+
+     Running tests/native_entries.rs (/tmp/claude-1000/t7-target/release/deps/native_entries-22d1091a5c2bd58f)
+
+running 24 tests
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test every_family_has_a_program_and_every_program_has_a_family ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test the_implemented_entry_points_are_the_ones_the_plan_names ... ok
+test no_family_program_is_a_corpus_row ... ok
+test invoking_an_unimplemented_entry_point_is_loud_and_names_its_phase ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
