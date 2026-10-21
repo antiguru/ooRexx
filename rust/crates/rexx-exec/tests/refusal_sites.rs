@@ -714,7 +714,7 @@ fn the_scanner_finds_constructors_and_only_constructors() {
     assert!(
         derived
             .iter()
-            .any(|(kind, name, _, _)| kind == "Loud" && name == "native_method"),
+            .any(|(kind, name, _, _)| kind == "Loud" && name == "unbound_method"),
         "the scanner missed a constructor `impl Loud` defines"
     );
     assert!(

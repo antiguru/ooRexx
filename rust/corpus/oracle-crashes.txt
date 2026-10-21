@@ -1657,8 +1657,8 @@ the Phase 9d Task 3 review and again by the controller, 1 run each, under the st
 from a fresh empty directory. The review found the same crash on Set, Bag, Table, Directory,
 StringTable, Relation, IdentityTable and Properties. `Class~new` builds an object without the
 hash class's own allocation, and the class's native methods then read a layout it lacks. This
-crate refuses `ITEMS` on the Stem with `method "ITEMS" of class "Stem" is not implemented`
-(rc 120), and answers on Set (`0`, rc 0). No upstream ticket.
+crate refuses `ITEMS` on the Stem with `method "ITEMS" of a "Stem" built without its store is
+not implemented` (rc 120), and answers on Set (`0`, rc 0). No upstream ticket.
 
 ## 51. A `.TRACEOUTPUT` destination with no `LINEOUT`, the failure untrapped
 

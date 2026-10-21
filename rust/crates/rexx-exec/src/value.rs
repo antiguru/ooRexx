@@ -284,7 +284,7 @@ impl Interp {
     /// recursive `Body::Stem` arm below does not re-run it at every hop.
     fn text_len_inner(&mut self, value: ObjRef) -> usize {
         match value.decode() {
-            Decoded::Nil => return b"The NIL object".len(),
+            Decoded::Nil => return self.nil_name().len(),
             Decoded::SmallInt(n) => {
                 let at = write_small_int(&mut self.text_scratch, n);
                 return TEXT_SCRATCH - at;
@@ -516,7 +516,7 @@ impl Interp {
     )]
     pub(crate) fn to_text(&mut self, value: ObjRef) -> Cow<'_, [u8]> {
         match value.decode() {
-            Decoded::Nil => return Cow::Borrowed(b"The NIL object"),
+            Decoded::Nil => return Cow::Borrowed(self.nil_name()),
             // Rendered into the same scratch field the inline arm below uses,
             // for the same reason: `to_string` would allocate a `Vec` per
             // read, and a tagged integer is a value that exists precisely so
@@ -651,6 +651,17 @@ impl Interp {
         }
     }
 
+    /// What `.nil` renders as: the name `~objectName=` gave it, or `The NIL
+    /// object`.
+    pub(crate) fn nil_name(&self) -> &[u8] {
+        self.nil_name.as_deref().unwrap_or(b"The NIL object")
+    }
+
+    /// Gives `.nil` the name `name`, as `~objectName=` does.
+    pub(crate) fn set_nil_name(&mut self, name: &[u8]) {
+        self.nil_name = Some(name.into());
+    }
+
     /// The name `~objectName=` gave an instance, or `None` for one that still
     /// answers its class's default -- and `None` for every other value kind.
     pub(crate) fn instance_name(&self, value: ObjRef) -> Option<Vec<u8>> {
@@ -664,7 +675,7 @@ impl Interp {
     /// this value has no bytes anywhere for a shared borrow to reach.
     pub(crate) fn try_text(&self, value: ObjRef) -> Option<&[u8]> {
         match value.decode() {
-            Decoded::Nil => return Some(b"The NIL object"),
+            Decoded::Nil => return Some(self.nil_name()),
             Decoded::SmallInt(_) => return None,
             // A third cause of `None`, and the same one as a small integer:
             // the bytes live in the handle, which is a `Copy` local here, so

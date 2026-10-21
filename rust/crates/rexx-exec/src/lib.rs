@@ -692,13 +692,68 @@ impl Loud {
         }
     }
 
-    /// A message that **resolved** to a primitive method this crate has no
-    /// code for.
-    fn native_method(name: &[u8], scope: &str) -> Loud {
+    /// A message that **resolved** to a method no table holds code for. No
+    /// program reaches it: the probes behind `refusals.tsv`'s `dispatch.rs`
+    /// row sent every documented method with its required arguments, and
+    /// every scope override, and each resolved method answered.
+    #[cold]
+    fn unbound_method(name: &[u8], scope: &str) -> Loud {
         let shown = String::from_utf8_lossy(name);
         Loud {
+            message: owned_message(&format!("method \"{shown}\" of class \"{scope}\""), None),
+        }
+    }
+
+    /// A hash collection method sent to an instance of `class` that has no
+    /// store, which only `Class~new` sent with `.Class` as the scope builds,
+    /// and which the oracle answers by dying (`corpus/oracle-crashes.txt`
+    /// entry 50).
+    #[cold]
+    fn hash_collection_without_store(method: &[u8], class: &str) -> Loud {
+        let shown = String::from_utf8_lossy(method);
+        Loud {
             message: owned_message(
-                &format!("method \"{shown}\" of class \"{scope}\""),
+                &format!("method \"{shown}\" of a \"{class}\" built without its store"),
+                None,
+            ),
+        }
+    }
+
+    /// `StackFrame~executable` on a frame built with no executable: a package
+    /// hook's, one built from a failure's site rather than from an
+    /// activation, and one whose activation answered none. No program
+    /// reaches it: `refusals.tsv`'s `context.rs` row found only a library
+    /// routine's frame, which answers.
+    #[cold]
+    fn frame_without_executable() -> Loud {
+        Loud {
+            message: owned_message("the executable of a stack frame built without one", None),
+        }
+    }
+
+    /// `Object~copy` through a scope override on a `Directory` or
+    /// `StringTable` the interpreter built for itself. No program reaches it:
+    /// by `refusals.tsv`'s `object_protocol.rs` rows, the interpreter builds
+    /// neither for a program, and `.environment`, `.local` and a package's
+    /// tables are instance stores.
+    #[cold]
+    fn interpreter_table_copy(class: &str) -> Loud {
+        Loud {
+            message: owned_message(
+                &format!("Object~copy of the interpreter's own {class}"),
+                None,
+            ),
+        }
+    }
+
+    /// `Object~copy` through a scope override on an object rexxref says
+    /// cannot be copied -- a class object, a `RexxContext` or `RexxInfo` --
+    /// which the oracle copies. Held for Moritz's ruling (plan Ruled 13).
+    #[cold]
+    fn uncopyable_copy(kind: &str) -> Loud {
+        Loud {
+            message: owned_message(
+                &format!("Object~copy through a scope override on {kind}"),
                 Some(Owner::Phase9),
             ),
         }
@@ -1142,7 +1197,7 @@ fn instruction_owner(kind: &InstructionKind) -> Option<Owner> {
         // evaluates it and settles `RESULT`. `None` in the same sense
         // `DotVariable` is `None` below -- the variant is implemented, and
         // the sub-cases with no code here fail loudly through `Loud::
-        // receiver_class`/`Loud::native_method` rather than answering.
+        // receiver_class`/`Loud::unbound_method` rather than answering.
         InstructionKind::Message { .. } => None,
         // `EXPOSE` binds its names to the receiving object's scope pool.
         // `None` in the same sense `Message` above is: the variant executes,
@@ -1334,6 +1389,9 @@ struct Interp {
     /// Where an inline string's bytes, or a tagged integer's rendering, are
     /// put so that [`Interp::to_text`] can hand back a borrow of them.
     text_scratch: [u8; crate::value::TEXT_SCRATCH],
+    /// The name `~objectName=` gave `.nil`, which every rendering of it
+    /// answers; `None` for `The NIL object`.
+    nil_name: Option<Box<[u8]>>,
     /// The parse cache a handle-inline string has nowhere to keep. See
     /// `value::TextNumbers`, which owns the rule and the measurement.
     text_numbers: crate::value::TextNumbers,
@@ -2097,6 +2155,10 @@ struct NativeFrame {
     /// A routine's [`Interp::library_codes`] row, `None` for a method or a
     /// package hook.
     code: Option<usize>,
+    /// The `Routine` object a routine's `~call` ran, which its `StackFrame`
+    /// answers; `None` for a call made by name, whose frame answers the one
+    /// object standing for [`NativeFrame::code`].
+    executable: Option<ObjRef>,
     /// The handle-carried values this call asked a kept `CSTRING` of, each
     /// counted once in [`Interp::kept_holders`].
     kept: rustc_hash::FxHashSet<ObjRef>,
@@ -2124,6 +2186,7 @@ impl NativeFrame {
         out.extend([self.owner, self.scope, self.receiver]);
         out.extend(self.arguments.iter().copied().flatten());
         out.extend(self.argument_list);
+        out.extend(self.executable);
         out.extend(self.lent.iter().copied());
         out.extend(
             [self.additional, self.result, self.condition]
@@ -2225,6 +2288,7 @@ impl Interp {
             key_buffer: Vec::new(),
             parse_buffers: Vec::new(),
             text_scratch: [0; crate::value::TEXT_SCRATCH],
+            nil_name: None,
             text_numbers: crate::value::TextNumbers::new(),
             result_buffer: std::cell::Cell::new(Vec::new()),
             library_search: library_search_of(&env),
@@ -3109,6 +3173,7 @@ impl Interp {
             key_buffer: _,
             parse_buffers: _,
             text_scratch: _,
+            nil_name: _,
             // Handle-inline strings, which are their own bytes and have no
             // slot to recycle.
             text_numbers: _,

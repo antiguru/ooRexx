@@ -607,7 +607,7 @@ fn begin_routine(
     if let Some(code) = code {
         let name = interp.library_code_key(code).procedure.clone();
         return interp
-            .run_library_routine(code, &name, &values)
+            .run_library_routine(code, &name, &values, Some(receiver))
             .map(|started| match started {
                 crate::run::Started::Ran(value) => NativeStarted::Ran(value),
                 crate::run::Started::Entered => NativeStarted::Entered(super::Then::Pass),

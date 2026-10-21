@@ -914,12 +914,14 @@ pub(crate) fn native_method_executable(
 pub(crate) fn build_native_frame_at(interp: &mut Interp, row: usize) -> Result<ObjRef, Failure> {
     let native = &interp.activity.native_handles[row];
     let caller = native.caller;
-    let (method, name, receiver, scope, arguments) = (
+    let (method, name, receiver, scope, arguments, code, ran) = (
         native.method,
         native.name.clone(),
         native.receiver,
         native.scope,
         native.arguments.clone(),
+        native.code,
+        native.executable,
     );
     let (kind, target, trace_text) = if method {
         let scope = interp.scope_id(scope);
@@ -950,7 +952,9 @@ pub(crate) fn build_native_frame_at(interp: &mut Interp, row: usize) -> Result<O
         let name = interp.to_text(name).to_vec();
         interp.method_executable(scope, &name).ok()
     } else {
-        None
+        // Measured, oracle rc 0: a frame answers the object `~call` was sent
+        // to, and for a call by name the object `.routines` holds.
+        ran.or_else(|| code.map(|code| interp.library_routine_object(code)))
     };
     let mut entries = vec![
         (key::TYPE, kind),
@@ -1204,8 +1208,8 @@ fn frame_arguments(
 
 /// `StackFrameClass::getExecutable`: the `Method` or `Routine` the frame's
 /// level was running, `.nil` for a `COMPILE` frame. A frame built without
-/// one refuses: a library routine level's, one built from a failure's site
-/// rather than from an activation, and one whose [`executable_at`] failed.
+/// one refuses: a package hook's, one built from a failure's site rather
+/// than from an activation, and one whose [`executable_at`] failed.
 fn frame_executable(
     interp: &mut Interp,
     _cleared: Cleared,
@@ -1216,7 +1220,7 @@ fn frame_executable(
         Some(Body::Native(native)) => native
             .entry(key::EXECUTABLE)
             .map(Some)
-            .ok_or_else(|| Loud::native_method(b"EXECUTABLE", "StackFrame").into()),
+            .ok_or_else(|| Loud::frame_without_executable().into()),
         _ => Err(Loud::receiver_class(NOT_A_FRAME).into()),
     }
 }

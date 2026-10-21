@@ -886,7 +886,7 @@ impl Interp {
         // manager is asked.
         if let Resolved::MergedLibraryRoutine(code) = resolved {
             return self
-                .run_library_routine(code, name, &arguments[from..])
+                .run_library_routine(code, name, &arguments[from..], None)
                 .map(library_begun);
         }
         if let Resolved::MergedInternal(row) = resolved {
@@ -897,7 +897,7 @@ impl Interp {
         if let Resolved::Routine(installed) = resolved {
             if let Some(code) = self.library_routine_code(installed) {
                 return self
-                    .run_library_routine(code, name, &arguments[from..])
+                    .run_library_routine(code, name, &arguments[from..], None)
                     .map(library_begun);
             }
             if let Some(row) = self.rexx_routine_row(installed) {

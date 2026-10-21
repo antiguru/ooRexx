@@ -158,6 +158,7 @@ fn a_stale_native_frame_token_is_refused() {
             result: None,
             condition: None,
             code: None,
+            executable: None,
             kept: rustc_hash::FxHashSet::default(),
             lent: Vec::new(),
             caller: Some(caller),

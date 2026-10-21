@@ -784,7 +784,7 @@ fn the_scanner_reads_each_owner_form() {
     let constructors = constructors(&sources());
     let owners = owners(&constructors);
     assert_eq!(
-        owners.get("native_method").map(|(owner, _)| owner),
+        owners.get("uncopyable_copy").map(|(owner, _)| owner),
         Some(&Owner::Phase("Phase 9".to_string()))
     );
     assert_eq!(

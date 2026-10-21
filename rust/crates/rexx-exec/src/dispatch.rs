@@ -2555,7 +2555,7 @@ impl Interp {
         // successful send has no use for it, and every send would otherwise
         // pay for the copy.
         let scope = self.scope_id(resolution.scope);
-        Err(Loud::native_method(name, &scope).into())
+        Err(Loud::unbound_method(name, &scope).into())
     }
 
     /// **Step two of a send** (D24): run what [`Interp::resolve_in`] found.
@@ -4044,20 +4044,28 @@ impl Interp {
     }
 
     /// The same for a routine of a loaded library, whose level carries the
-    /// package its shared code reports, if any.
+    /// package its shared code reports, if any. `ran` is the `Routine` object
+    /// a `~call` ran, and with none the frame answers the one object standing
+    /// for the [`Interp::library_codes`] row `code`.
     pub(crate) fn blame_native_routine(
         &mut self,
         name: &[u8],
         program: Option<ProgramId>,
         arguments: &[Option<ObjRef>],
+        ran: Option<ObjRef>,
+        code: Option<usize>,
     ) {
+        if self.activity.failure_site.is_some() {
+            return;
+        }
         let package = program.map(|program| self.package_path(program).to_vec());
+        let executable = ran.or_else(|| code.map(|code| self.library_routine_object(code)));
         let level = NativeLevel {
             method: false,
             name,
             target: ObjRef::NIL,
             arguments,
-            executable: None,
+            executable,
             activation: Some(NativeActivationLevel {
                 package: program.map(Package::Program),
                 reraised: std::mem::take(&mut self.activity.native_reraise),

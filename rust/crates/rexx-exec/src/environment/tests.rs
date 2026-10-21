@@ -331,7 +331,7 @@ fn assert_delivery_refusal_ends_the_run(source: &str, n: u32) {
     assert_eq!(stdout, "");
     assert_eq!(
         stderr,
-        "rexx-exec: method \"ITEMS\" of class \"Stem\" is not implemented (Phase 9)\n"
+        "rexx-exec: method \"ITEMS\" of a \"Stem\" built without its store is not implemented\n"
     );
 }
 

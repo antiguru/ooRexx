@@ -207,11 +207,15 @@ pub(super) fn hash_value(interp: &mut Interp, receiver: ObjRef) -> u64 {
         Ok(Primitive::String | Primitive::SmallInt) => string_hash(&interp.to_text(receiver)),
         Ok(Primitive::Class(class)) => string_hash(interp.classes().id_string(class).as_bytes()),
         // `RexxString::getHashValue` is the bytes' hash for a subclass
-        // instance as well.
-        Ok(Primitive::Instance { .. }) => match super::string::subclass_text(interp, receiver) {
-            Some(text) => string_hash(text),
-            None => receiver.bits(),
-        },
+        // instance as well, and a copy of `.nil` keeps `.nil`'s member.
+        Ok(Primitive::Instance { behaviour, .. }) => {
+            let nil = interp.object_model().nil_behaviour;
+            match super::string::subclass_text(interp, receiver) {
+                Some(text) => string_hash(text),
+                None if behaviour == nil => NIL_HASH,
+                None => receiver.bits(),
+            }
+        }
         _ => receiver.bits(),
     }
 }
@@ -481,11 +485,9 @@ pub(super) fn native_object_name_set(
         Primitive::String | Primitive::SmallInt => {
             return Err(Loud::object_name_of_a_value().into());
         }
-        // `.nil`'s own behaviour hides `OBJECTNAME=`, so only a borrowed
-        // method object reaches it here.
-        Primitive::Object => {
-            return Err(Loud::native_method(b"OBJECTNAME=", "Object").into());
-        }
+        // `.nil`'s own behaviour hides `OBJECTNAME=`, so only a scope
+        // override reaches it here.
+        Primitive::Object => interp.set_nil_name(&name),
     }
     Ok(None)
 }
@@ -635,9 +637,8 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
         Ok(Primitive::Array) => rexx_core::BehaviourId::ARRAY,
         Ok(Primitive::Stem) => rexx_core::BehaviourId::STEM,
         // A value carried in its handle is its own copy (D15).
-        Ok(Primitive::String | Primitive::SmallInt) if interp.heap.get(receiver).is_none() => {
-            return Ok(receiver);
-        }
+        Ok(Primitive::SmallInt) => return Ok(receiver),
+        Ok(Primitive::String) if interp.heap.get(receiver).is_none() => return Ok(receiver),
         Ok(Primitive::String) => rexx_core::BehaviourId::STRING,
         // `StackFrameClass` has no `copy` of its own: measured, oracle rc 0,
         // a frame's copy is a different object answering the same `~type`,
@@ -655,7 +656,16 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
         }
         // `PackageClass::copy`: a field copy, then `deepCopy`'s tables.
         Ok(Primitive::Package) => rexx_core::BehaviourId::OBJECT,
-        Ok(_) => return Err(Loud::native_method(b"COPY", "Object").into()),
+        // Reached only through a scope override, `.nil`'s own behaviour
+        // hiding `COPY`.
+        Ok(Primitive::Object) => return Ok(copy_nil(interp)),
+        Ok(Primitive::Class(_)) => return Err(Loud::uncopyable_copy("a class object").into()),
+        Ok(Primitive::Context) => return Err(Loud::uncopyable_copy("a RexxContext").into()),
+        Ok(Primitive::RexxInfo) => return Err(Loud::uncopyable_copy("the RexxInfo").into()),
+        Ok(Primitive::Directory) => return Err(Loud::interpreter_table_copy("Directory").into()),
+        Ok(Primitive::StringTable(_)) => {
+            return Err(Loud::interpreter_table_copy("StringTable").into());
+        }
         Err(kind) => return Err(Loud::unknown_receiver(kind).into()),
     };
     // The allocation below collects first, and while the cloned body is a
@@ -703,6 +713,27 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
         interp.heap.set_uninit(copy);
     }
     Ok(copy)
+}
+
+/// `.nil`'s copy, left on the temps: a distinct `Object` with `.nil`'s
+/// methods and its name, as `RexxObject::copy` clones it
+/// (`classes/ObjectClass.cpp:554`). Measured, oracle rc 0: the copy is not
+/// `.nil`, renders `The NIL object` and answers `an Object` for
+/// `~defaultName`.
+fn copy_nil(interp: &mut Interp) -> ObjRef {
+    let model = interp.object_model();
+    let (class, behaviour) = (model.object, model.nil_behaviour);
+    let body = Body::Instance {
+        class,
+        behaviour,
+        name: Some(interp.nil_name().into()),
+        pools: rexx_core::ScopePools::new(),
+        own: None,
+        native: None,
+    };
+    let copy = interp.alloc_charged(BehaviourId::OBJECT, body);
+    interp.roots.activity_mut().push_temp(copy);
+    copy
 }
 
 /// `MessageClass::copy` (`classes/MessageClass.cpp:182`): a copy keeps no

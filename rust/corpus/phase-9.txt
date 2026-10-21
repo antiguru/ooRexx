@@ -329,3 +329,8 @@ lang/lostdigits_fuzz_compare.rex
 lang/lostdigits_do_count.rex
 # 9d Task 6.15: APPEND writes at the end, and a LINES count leaves the stream READY.
 lang/stream_append_writes_at_end.rex
+# 9d Task 7.1: a library routine frame's executable, and COPY and OBJECTNAME= on .nil
+# through a scope override.
+lang/stackframe_library_routine_executable.rex
+lang/stackframe_merged_library_executable.rex
+lang/object_scope_override_nil.rex

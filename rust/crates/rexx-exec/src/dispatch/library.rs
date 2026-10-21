@@ -161,14 +161,16 @@ impl Interp {
         args: &[Option<ObjRef>],
     ) -> Result<Started<Option<ObjRef>>, Failure> {
         let code = self.package_routine_code(slot);
-        self.run_library_routine(code, &name.to_ascii_uppercase(), args)
+        self.run_library_routine(code, &name.to_ascii_uppercase(), args, None)
     }
 
     /// Runs the library routine [`Interp::library_codes`] row `code` is
     /// against `args`, and answers what the extension returned, or `Entered`
     /// as [`Interp::run_library_method`] does.
     ///
-    /// `name` is the name the traceback's `Compiled routine` line gives.
+    /// `name` is the name the traceback's `Compiled routine` line gives, and
+    /// `executable` the `Routine` object a `~call` ran, `None` for a call by
+    /// name.
     ///
     /// # Errors
     /// The condition the extension raised, whatever converting an argument or
@@ -179,6 +181,7 @@ impl Interp {
         code: usize,
         name: &[u8],
         args: &[Option<ObjRef>],
+        executable: Option<ObjRef>,
     ) -> Result<Started<Option<ObjRef>>, Failure> {
         let Some(entry) = self
             .library_code_routine(code)
@@ -189,6 +192,7 @@ impl Interp {
         let held = HeldCall::Routine(entry.held());
         let exits = self.leaves_driver();
         self.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, name, args, Some(code));
+        self.native_frame_mut().executable = executable;
         pin_enter!(self, crate::pinning::PinKind::NativeApiCallback);
         let program = self.library_code_program(code);
         self.native_frame_mut().packaged = program.is_some();
@@ -215,6 +219,7 @@ impl Interp {
     ) -> Result<Option<ObjRef>, Failure> {
         self.root_native_answer(&answered);
         let trapped = self.call_trapped_native_condition();
+        let (ran, code) = (self.native_frame().executable, self.native_frame().code);
         let popped = self.pop_native_frame();
         pin_leave!(self);
         self.collect_under_stress();
@@ -229,7 +234,7 @@ impl Interp {
             }
         };
         if outcome.is_err() {
-            self.blame_native_routine(name, program, args);
+            self.blame_native_routine(name, program, args, ran, code);
         }
         outcome
     }
@@ -663,6 +668,7 @@ impl Interp {
                 result: None,
                 condition: None,
                 code: None,
+                executable: None,
                 kept: rustc_hash::FxHashSet::default(),
                 lent: Vec::new(),
                 caller: None,
@@ -677,6 +683,7 @@ impl Interp {
         frame.method = receiver.is_some();
         frame.receiver = receiver.unwrap_or(ObjRef::NIL);
         frame.code = code;
+        frame.executable = None;
         frame.caller = self.running_activation().map(|activation| activation.id);
         frame.id = self.next_native_id();
         frame.packaged = false;

@@ -211,7 +211,7 @@ fn refusal_outside(
         return Loud::receiver_class(kind).into();
     }
     match interp.receiver_class_id(receiver) {
-        Some(id) => Loud::native_method(method, &id).into(),
+        Some(id) => Loud::hash_collection_without_store(method, &id).into(),
         None => Loud::unknown_receiver(kind).into(),
     }
 }

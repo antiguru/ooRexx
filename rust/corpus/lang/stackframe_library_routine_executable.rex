@@ -1,0 +1,39 @@
+/* StackFrame~executable on a library routine's frame, taken from the
+   condition it raises: called by its directive's name, as a function, from a
+   routine, by a name the library exports, and through ~call, ~callWith and a
+   copy's ~call. */
+r = .routines~r
+signal on syntax name s1
+call r 93900
+s1: call show 'call', condition('O'), r
+signal on syntax name s2
+x = r(93900)
+s2: call show 'function', condition('O'), r
+signal on syntax name s3
+call q
+s3: call show 'nested', condition('O'), r
+signal on syntax name s4
+call TestRaiseException0 93900
+s4: call show 'exported', condition('O'), r
+signal on syntax name s5
+r~call(93900)
+s5: call show 'call method', condition('O'), r
+signal on syntax name s6
+r~callWith(.array~of(93900))
+s6: call show 'callWith', condition('O'), r
+c = r~copy
+signal on syntax name s7
+c~call(93900)
+s7: call show 'copy', condition('O'), c
+exit 0
+::routine show
+  use arg tag, condition, expected
+  do f over condition~stackFrames
+    e = f~executable
+    name = f~name
+    if f~type == 'PROGRAM' then name = ''
+    say tag f~type name e~class~id (e == expected) (e == .routines~r) (e == .routines~q)
+  end
+::routine r external 'LIBRARY orxfunction TestRaiseException0'
+::routine q
+  call r 93900
