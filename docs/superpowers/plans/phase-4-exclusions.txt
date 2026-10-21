@@ -2555,6 +2555,131 @@ DEVIATIONS -- permanent, chosen
      FORMAT's decimal-part exponent trigger applies only below one
      (`base/bif/FORMAT`). The model takes the interpreters' answer for both.
 
+ 54. CHARS AND LINES ON A TRANSIENT STREAM TAKE NO INPUT (Phase 9d). OWNER:
+     none.
+
+     Ruled by Moritz 2026-10-20 ("New Deviation"). On a transient stream,
+     the default input stream included, CHARS and LINES answer 1 while data
+     waits or the state cannot be learned and 0 otherwise, and the next read
+     returns what waited (rexxref iostrms.xml:189-193, funct.xml:1475-1487).
+     This crate asks the kernel how many bytes wait (FIONREAD). The oracle's
+     `SysFile::hasData` (common/platform/unix/SysFile.cpp:1322-1333) reads a
+     byte to test for data and cannot put it back: after `abcd` and `e` are
+     written to a FIFO, its CHARS, LINES and LINES Count answer 1 each and the
+     following `charin(f,,2)` answers `de`, where this crate answers `ab`.
+     With `/dev/null` as standard input the oracle's LINES answers 1 and
+     this crate's 0, so `do while lines() > 0` ends. Measured by Phase 9d
+     Task 6.15 (docs/superpowers/records/2026-10-18-phase-9d/t6.15/r1/probes/transient-counts.rex).
+     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES, rule transient-counts-read).
+
+ 55. A STREAM OPENED WRITE READS NOTHING (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-20 ("Docs, revert on ooTest"). OPEN WRITE
+     "opens the stream for writing only", and line positioning on a file open
+     only for writing gives an error (rexxref funct.xml:4302, 4454-4455).
+     Here CHARIN, LINEIN and ARRAYIN on such a stream refuse with ERROR,
+     CHARS and LINES answer 0, QUERY POSITION defaults to the write
+     position, and on a text stream a line SEEK answers 0 and a LINEOUT with
+     a line number answers 1, both NOTREADY, moving and writing nothing. The
+     oracle opens read-write: `charin(f,3,1)` after `OPEN WRITE` on a
+     three-line file answers `n`, and `lineout(f,'X',2)` writes line 2. A
+     record stream opened WRITE still positions by line, as ooTest
+     base/bif/LINEOUT `TEST_BINARY` asserts under Deviation 46. No ooTest
+     row changed (Phase 9d Task 6.15 fix round 1).
+     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES and departures-oracle.tsv, rule write-only).
+
+ 56. LINE POSITIONS COUNT LINE ENDS FROM THE POSITION (Phase 9d). OWNER:
+     none.
+
+     Ruled by Moritz 2026-10-20 ("Docs, revert on ooTest"). A relative line
+     SEEK counts from the line the position is in, and LINEIN, LINEOUT and a
+     line SEEK naming a line land at that line's start, whatever an earlier
+     operation left (rexxref iostrms.xml:476-490, funct.xml:3088-3090,
+     3201-3203). The oracle counts from a line number it tracks, which a
+     character operation zeroes: after `charin(f,6,1)` its `seek +1 read
+     line` answers 1 and reads `line1`, where this crate answers 3 and
+     `line3`, and `linein(f,2)` after a query at character 9 reads `ne2`
+     where this crate reads `line2`. No ooTest row changed (Phase 9d Task
+     6.15 fix round 1).
+     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES and departures-oracle.tsv, rule line-position).
+
+ 57. QUERY POSITION ... LINE ANSWERS THE LINE THE POSITION IS IN (Phase 9d).
+     OWNER: none.
+
+     Ruled by Moritz 2026-10-20 ("Docs, revert on ooTest"). The answer is one
+     more than the line ends before the position, and 0 for a READ stream's
+     write position (rexxref funct.xml:4550-4555). On a three-line file the
+     oracle answers from its tracked line number: write position 8 is line 3
+     there and 2 here, the read position at the end 3 there and 4 here, and
+     read position 7 after `charin(f,7,0)` 3 there and 2 here. No ooTest row
+     changed (Phase 9d Task 6.15 fix round 1).
+     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES and departures-oracle.tsv, rule line-query).
+
+ 58. LINES COUNT ANSWERS THE LINES THAT REMAIN (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-20 ("Docs, revert on ooTest"). `lines(f,'C')`
+     "returns the actual number of lines remaining in the stream" (rexxref
+     funct.xml:3306-3307), counted from the read position. After
+     `charin(f,2,1)` two LINES Counts answer `3 2` on the oracle and `3 3`
+     here, and after `linein(f,n)` the oracle answers 2 and -1 where 3 and 1
+     lines remain (Phase 9d Task 6.15 fix round 4 re-review). When another
+     writer changes the stream, the count may be stale, as the documentation
+     allows (iostrms.xml:495-500). No ooTest row
+     changed (Phase 9d Task 6.15 fix round 1).
+     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES, rule lines-count).
+
+ 59. A SEEK BELOW POSITION 1, OR OF A READ STREAM'S WRITE POSITION, FAILS
+     (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-20 ("0 + NOTREADY"). SEEK returns the new
+     position "or an appropriate error message otherwise" (rexxref
+     funct.xml:4427-4429), and a READ stream has no write position (4299).
+     Such a SEEK answers 0, raises NOTREADY and moves nothing here. The
+     oracle answers `seek <99 read` on an 18-byte file with 118 on a NOBUFFER
+     stream and the unchecked position on a buffered one, `seek -9 read`
+     from 4 with `0 ERROR` and a read position of -1, and `seek =2 write` on
+     a READ stream with 2. Measured by Phase 9d Task 6.15 (case
+     `seek-invalid`).
+     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES and departures-oracle.tsv, rule invalid-seek).
+
+ 60. A CTRL-Z IN A STREAM IS DATA (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-20 ("Data everywhere, Deviation"). rexxref
+     honours `'1a'x` as end of file only in a program's source and says
+     Unix-like systems use no end-of-file character (intro.xml:3322-3330),
+     so no stream operation treats a trailing `'1a'x` specially here. On
+     `'ab'||'0a'x||'1a'x` the oracle reports write position 4 on BOTH and
+     APPEND opens, and its CHAROUT and LINEOUT at the end overwrite the
+     ctrl-Z (`61620A51`, `61620A780A`); with APPEND its bytes land after it
+     while it still reports 4. This crate reports 5 and keeps the ctrl-Z
+     (`61620A1A51`, `61620A1A780A`). Measured by Phase 9d Task 6.15
+     (docs/superpowers/records/2026-10-18-phase-9d/t6.15/r2/probes/ctrlz.rex).
+     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES and departures-oracle.tsv, rule ctrlz-is-data).
+
+ 61. ON A RECORD STREAM OPENED APPEND, LINEOUT COMPLETES THE RECORD AT THE
+     END (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-20 ("New Deviation"). APPEND writes land at the
+     end (rexxref funct.xml:4309-4312), so the record a LINEOUT completes is
+     the one there (4352-4354). After `charout(f,,15)` on a 21-byte
+     `RECLENGTH 4` stream opened APPEND, the oracle's `lineout(f,'abc')`
+     raises a bare 93, because it sizes the room from position 15; this crate
+     writes `abc ` at 21. Measured by Phase 9d Task 6.15 (generated `g4s3`).
+     Witnessed by tests/stream_model.rs (departures-oracle.tsv, rule append-record).
+
+ 62. A READ PAST THE END IS NOTREADY (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-20 ("NOTREADY, Deviation"). A CHARIN that reads
+     nothing at the end, on a file, a transient stream or the default input,
+     leaves the stream NOTREADY with description `NOTREADY:EOF`, as LINEIN
+     does, and so does a record-stream LINEIN that reads nothing: rexxref's
+     NOTREADY example is a read beyond the end (streamclasses.xml:1638-1652).
+     A read that fails with an errno is still ERROR. The oracle leaves
+     `ERROR:0` for both: a bare `charin(f)` at the end of an 18-byte file,
+     and `s~charin(, 2)` past the end. No ooTest row changed (Phase 9d Task
+     6.15 fix round 2).
+     Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES and departures-oracle.tsv, rule charin-eof-notready).
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 

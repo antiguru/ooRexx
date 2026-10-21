@@ -63,52 +63,51 @@ const CASES: &str = "tests/stream_model/cases";
 const CRATE_RUN_LIMIT: std::time::Duration = std::time::Duration::from_secs(120);
 
 /// The named cases whose native oracle answer differs from the model: the
-/// case, the Deviation that licenses it (0 for a rule Phase 9d Task 6.15
-/// proposes as a new Deviation), the rule, and the oracle's first item that
-/// differs. [`oracle_rule`] must name the same rule from the answers.
+/// case, the Deviation that licenses it (0 for a rule proposed as a new
+/// one), the rule, and the oracle's first item that differs. [`oracle_rule`] must name the same rule from the answers.
 const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
-    ("charin-bounds", 0, "charin-eof-notready", "CI= ERROR 19 19"),
+    ("charin-bounds", 62, "charin-eof-notready", "CI= ERROR 19 19"),
     (
         "line-mark-after-write",
-        0,
+        57,
         "line-query",
         "Q_read_line=1 READY 19 8",
     ),
-    ("devnull-empty", 0, "charin-eof-notready", "CI= ERROR 1 1"),
+    ("devnull-empty", 62, "charin-eof-notready", "CI= ERROR 1 1"),
     (
         "ctrlz-append-kept",
-        0,
+        60,
         "ctrlz-is-data",
         "O_both_append_nobuffer=READY: READY 6 1",
     ),
     (
         "ctrlz-is-data",
-        0,
+        60,
         "ctrlz-is-data",
         "O_both_nobuffer=READY: READY 6 1",
     ),
     (
         "line-seek-relative-after-charin",
-        0,
+        56,
         "line-position",
         "S_+1_read_line=1 READY 19 1",
     ),
     (
         "linein-line-from-mid-line",
-        0,
+        56,
         "line-position",
         "LI_2=ne2 READY 19 13",
     ),
-    ("lines-count-repeated", 0, "lines-count", "LC=2 READY 19 3"),
+    ("lines-count-repeated", 58, "lines-count", "LC=2 READY 19 3"),
     (
         "read-line-after-positioning",
-        0,
+        57,
         "line-query",
         "Q_read_line=1 READY 19 7",
     ),
     (
         "read-line-at-end",
-        0,
+        57,
         "line-query",
         "Q_read_line=3 READY 19 19",
     ),
@@ -124,7 +123,7 @@ const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
         "seek-from-end",
         "S_<3_read=22 READY 19 22",
     ),
-    ("seek-invalid", 0, "invalid-seek", "S_-9_read=0 ERROR 19 -1"),
+    ("seek-invalid", 59, "invalid-seek", "S_-9_read=0 ERROR 19 -1"),
     (
         "seek-relative",
         49,
@@ -139,17 +138,17 @@ const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
     ),
     (
         "transient-counts",
-        0,
+        54,
         "transient-counts-read",
         "CI_2=de READY 1 1",
     ),
     (
         "write-line-query",
-        0,
+        57,
         "line-query",
         "Q_write_line=3 READY 8 1",
     ),
-    ("write-only-reads", 0, "write-only", "CI_1_3=n READY 19 4"),
+    ("write-only-reads", 55, "write-only", "CI_1_3=n READY 19 4"),
 ];
 
 /// A file's content before a scenario, by name.
@@ -874,7 +873,7 @@ fn oracle_rule(
         && oracle.result == model.result
         && same_positions;
     if read_past_the_end {
-        return Some((0, "charin-eof-notready"));
+        return Some((62, "charin-eof-notready"));
     }
     if scenario.transient {
         let counted = scenario.ops[..at]
@@ -882,7 +881,7 @@ fn oracle_rule(
             .any(|op| matches!(op.as_str(), "CH" | "LN" | "LC"));
         return match words[0] {
             _ if !opened.contains("nobuffer") => Some((48, "transient-no-seek")),
-            "CI" | "LI" if counted => Some((0, "transient-counts-read")),
+            "CI" | "LI" if counted => Some((54, "transient-counts-read")),
             _ => None,
         };
     }
@@ -893,14 +892,14 @@ fn oracle_rule(
             && oracle.write.parse::<i64>().ok()
                 == model.write.parse::<i64>().ok().map(|w| w - 1) =>
         {
-            Some((0, "ctrlz-is-data"))
+            Some((60, "ctrlz-is-data"))
         }
         "LO" | "LE"
             if appending
                 && opened.contains("binary")
                 && (oracle.result != model.result || oracle.write != model.write) =>
         {
-            Some((0, "append-record"))
+            Some((61, "append-record"))
         }
         "S" | "P" | "LO" | "LP"
             if write_only
@@ -908,9 +907,9 @@ fn oracle_rule(
                 && model.state == "NOTREADY"
                 && oracle.state != "NOTREADY" =>
         {
-            Some((0, "write-only"))
+            Some((55, "write-only"))
         }
-        "S" | "P" if model.result == "0" && model.state == "NOTREADY" => Some((0, "invalid-seek")),
+        "S" | "P" if model.result == "0" && model.state == "NOTREADY" => Some((59, "invalid-seek")),
         "S" | "P"
             if !by_line
                 && (op.contains('+') || op.contains(" -"))
@@ -922,7 +921,7 @@ fn oracle_rule(
             Some((49, "seek-from-end"))
         }
         "S" | "P" if by_line && (oracle.result != model.result || !same_positions) => {
-            Some((0, "line-position"))
+            Some((56, "line-position"))
         }
         "CI" | "LI"
             if write_only
@@ -930,25 +929,25 @@ fn oracle_rule(
                     || oracle.state != model.state
                     || oracle.read != model.read) =>
         {
-            Some((0, "write-only"))
+            Some((55, "write-only"))
         }
-        "CH" | "LN" | "LC" if write_only && oracle.result != "0" => Some((0, "write-only")),
+        "CH" | "LN" | "LC" if write_only && oracle.result != "0" => Some((55, "write-only")),
         "Q" if write_only
             && words.len() < 2
             && oracle.result == oracle.read
             && model.result == model.write =>
         {
-            Some((0, "write-only"))
+            Some((55, "write-only"))
         }
         "LI" if line_numbered && (oracle.result != model.result || oracle.read != model.read) => {
-            Some((0, "line-position"))
+            Some((56, "line-position"))
         }
-        "LO" | "LP" if line_numbered && oracle.write != model.write => Some((0, "line-position")),
-        "Q" if by_line && same_positions && oracle.state == model.state => Some((0, "line-query")),
+        "LO" | "LP" if line_numbered && oracle.write != model.write => Some((56, "line-position")),
+        "Q" if by_line && same_positions && oracle.state == model.state => Some((57, "line-query")),
         "LC" if same_positions
             && (oracle.result != model.result || oracle.state != model.state) =>
         {
-            Some((0, "lines-count"))
+            Some((58, "lines-count"))
         }
         _ => None,
     }
