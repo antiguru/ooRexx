@@ -2982,11 +2982,20 @@ impl Interp {
                             if matches!(flow, Flow::Next) {
                                 break 'ended Ok(END_OF_BODY);
                             }
-                            match self.apply_flow(code, flow) {
-                                Ok(Some(ended)) => break 'ended Ok(ended),
-                                Ok(None) => next = Next::Body,
-                                Err(failure) => break 'ended Err(failure),
+                            let mut flow = flow;
+                            loop {
+                                match self.apply_flow(code, flow) {
+                                    Ok(Some(ended)) => break 'ended Ok(ended),
+                                    Ok(None) => break,
+                                    // A `LEAVE` or `ITERATE` that matched nothing raises
+                                    // 28.x here, and it is trapped like any clause's error.
+                                    Err(failure) => match self.offer_to_trap(failure) {
+                                        Ok(trapped) => flow = trapped,
+                                        Err(failure) => break 'ended Err(failure),
+                                    },
+                                }
                             }
+                            next = Next::Body;
                         }
                     };
                     // Released on both paths rather than only on `Ok`: the loud

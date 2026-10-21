@@ -1,0 +1,48 @@
+count 47
+/* A LEAVE or ITERATE that matches no active loop raises 28.x, which
+ * SIGNAL ON SYNTAX traps with SIGL at that clause, in the program, in an
+ * internal call and inside an INTERPRET. */
+call t1
+call t2
+call t3
+call t4
+call t5
+call t6
+say 'done'
+exit
+t1: signal on syntax name t1s
+  do i = 1 to 2
+    leave zz
+  end
+  return
+t1s: say 't1' condition('C') rc sigl condition('O')~code i; return
+t2: signal on syntax name t2s
+  do j = 1 to 2
+    iterate yy
+  end
+  return
+t2s: say 't2' rc sigl condition('O')~code j; return
+t3: signal on syntax name t3s
+  leave
+  return
+t3s: say 't3' rc sigl condition('O')~code; return
+t4: signal on syntax name t4s
+  iterate
+  return
+t4s: say 't4' rc sigl condition('O')~code; return
+t5: signal on syntax name t5s
+  call inner
+  return
+inner:
+  do k = 1 to 3
+    nop
+  end
+  leave ww
+  return
+t5s: say 't5' rc sigl condition('O')~code; return
+t6: signal on syntax name t6s
+  do m = 1 to 2
+    interpret 'leave vv'
+  end
+  return
+t6s: say 't6' rc sigl condition('O')~code m; return

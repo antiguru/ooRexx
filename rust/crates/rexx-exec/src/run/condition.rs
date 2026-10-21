@@ -792,7 +792,11 @@ impl Interp {
         let traps = &frame.traps;
         traps
             .get(condition)
-            .or_else(|| traps.get(b"ANY".as_slice()))
+            .or_else(|| {
+                traps
+                    .get(b"ANY".as_slice())
+                    .filter(|any| !any.call || call_on_any_takes(condition))
+            })
             .cloned()
     }
 
@@ -1434,6 +1438,14 @@ impl Sender {
 /// A `RAISE`'s condition name as `Raised::condition` carries it.
 fn condition_name(name: &[u8]) -> Cow<'static, str> {
     Cow::Owned(String::from_utf8_lossy(name).into_owned())
+}
+
+/// Whether a `CALL ON ANY` trap takes `condition` (`TrapHandler::canHandle`).
+fn call_on_any_takes(condition: &[u8]) -> bool {
+    !matches!(
+        condition,
+        b"SYNTAX" | b"NOVALUE" | b"LOSTDIGITS" | b"NOMETHOD" | b"NOSTRING"
+    )
 }
 
 /// `RexxActivation::trap` while a line typed at a debug pause runs: every

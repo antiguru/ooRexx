@@ -352,3 +352,8 @@ lang/call_site_fresh_routine_raises.rex
 lang/routine_start_call.rex
 lang/uninit_drain_interpret_signal.rex
 lang/uninit_drain_trace_line.rex
+# 9d Task 8.2: conditions and tracebacks.
+lang/leave_iterate_trapped.rex
+lang/raise_return_call_on_any.rex
+lang/unknown_frameless_traceback.rex
+lang/while_retest_blame.rex

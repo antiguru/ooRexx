@@ -1452,7 +1452,20 @@ impl Interp {
                             Ok(true) => {}
                             Ok(false) => break 'header HeaderOutcome::Stop,
                             Err(failure) => {
-                                it.record_failure_at(source, do_instruction, loop_indent);
+                                match header_clause {
+                                    HeaderClause::Do => {
+                                        it.record_failure_at(source, do_instruction, loop_indent);
+                                    }
+                                    HeaderClause::End => {
+                                        it.record_failure_at(source, end_instruction, loop_indent);
+                                    }
+                                    HeaderClause::Iterate { .. } => {
+                                        it.record_failure_site_at(
+                                            iterate_site.clone(),
+                                            loop_indent,
+                                        );
+                                    }
+                                }
                                 return Err(failure);
                             }
                         }
@@ -1503,6 +1516,7 @@ impl Interp {
                 // to it.
                 DoOutcome::FellThrough => {
                     header_clause = HeaderClause::End;
+                    self.enter_clause_index(end_index);
                     if self.trace_mode().all
                         && let Some((line, text)) = self.clause_site(source, end_instruction)
                     {
@@ -1950,6 +1964,7 @@ impl Interp {
             }
             DoOutcome::FellThrough => {
                 flat.header_clause = HeaderClause::End;
+                self.enter_clause_index(flat.end_index);
                 // `END` echoes for a pass that fell through to it and for no
                 // other, exactly as `run_repeating`'s own arm does.
                 if echoing
@@ -2209,7 +2224,19 @@ impl Interp {
                 ) {
                     Ok(held) => held,
                     Err(failure) => {
-                        it.blame_while_failure(code, source, do_index, loop_indent);
+                        match blame {
+                            HeaderClause::Do => {
+                                it.blame_while_failure(code, source, do_index, loop_indent);
+                            }
+                            _ => it.blame_header_failure(
+                                code,
+                                source,
+                                blame,
+                                site,
+                                end_index,
+                                loop_indent,
+                            ),
+                        }
                         return Err(failure);
                     }
                 };

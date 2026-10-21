@@ -3087,11 +3087,7 @@ impl Interp {
         // `INTERPRET` clause stays in force for this activation -- the
         // answer the oracle gives the frame beneath its own
         // `FRAME_INTERPRET` one.
-        if self.activity.clause_line_override.is_none() {
-            self.activity.clause_state.current_clause_index = index;
-        } else {
-            self.activity.fragment_clause = index;
-        }
+        self.enter_clause_index(index);
         let entry = self.enter_clause(line, counted);
         // **`Echo::Gated` asks whether the setting in force echoes this
         // clause; `Echo::Compiled` is a clause whose chunk already answered
@@ -3114,6 +3110,17 @@ impl Interp {
             entry,
             frame,
             temps_at_entry,
+        }
+    }
+
+    /// Makes the instruction at `index` the clause the frame readers see:
+    /// the activation's own, or the running fragment's.
+    #[inline(always)]
+    pub(crate) fn enter_clause_index(&mut self, index: usize) {
+        if self.activity.clause_line_override.is_none() {
+            self.activity.clause_state.current_clause_index = index;
+        } else {
+            self.activity.fragment_clause = index;
         }
     }
 

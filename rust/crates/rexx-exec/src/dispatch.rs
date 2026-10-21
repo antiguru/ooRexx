@@ -3828,18 +3828,59 @@ impl Interp {
         self.roots.activity_mut().push_temp(arguments);
         let missed = self.text(name);
         self.roots.activity_mut().push_temp(missed);
-        let forwarded = pinned!(
-            self,
-            crate::pinning::PinKind::Unknown,
-            self.invoke(
-                resolution,
-                receiver,
-                UNKNOWN,
-                &[Some(missed), Some(arguments)],
-            )
-        );
+        let unknown_args = [Some(missed), Some(arguments)];
+        let forwarded = match self.frameless_unknown(resolution, receiver) {
+            Some(run) => {
+                match seam::clear(self, receiver, UNKNOWN, &unknown_args, resolution.method) {
+                    Ok(seam::Clearance::Cleared(cleared) | seam::Clearance::Checked(cleared)) => {
+                        pinned!(
+                            self,
+                            crate::pinning::PinKind::Unknown,
+                            run(self, cleared, receiver, &unknown_args)
+                        )
+                    }
+                    Ok(seam::Clearance::Answered(result)) => Ok(result),
+                    Err(failure) => Err(failure),
+                }
+            }
+            None => pinned!(
+                self,
+                crate::pinning::PinKind::Unknown,
+                self.invoke(resolution, receiver, UNKNOWN, &unknown_args)
+            ),
+        };
         self.roots.activity_mut().pop_frame(frame);
         forwarded
+    }
+
+    /// The primitive `UNKNOWN` a send the receiver does not understand runs
+    /// without a level of its own: `processUnknown` calls it directly for a
+    /// `Stem`, a `VariableReference`, and a `Directory` or `StringTable` of
+    /// the base class (`StemClass.cpp:277`, `VariableReference.cpp:241`,
+    /// `HashCollection.cpp:989`).
+    fn frameless_unknown(
+        &mut self,
+        resolution: Resolution,
+        receiver: ObjRef,
+    ) -> Option<NativeMethod> {
+        let Ok(Invocable::Native(NativeEntry {
+            body: NativeBody::Run(run),
+            ..
+        })) = self.invocable(resolution, UNKNOWN)
+        else {
+            return None;
+        };
+        let classes = self.classes();
+        let system = |name| {
+            classes.lookup(name).or_else(|| classes.system_lookup(name)) == Some(resolution.scope)
+        };
+        if system("Stem") || system("VariableReference") {
+            return Some(run);
+        }
+        if !(system("Directory") || system("StringTable")) {
+            return None;
+        }
+        (self.class_of_value(receiver) == Some(resolution.scope)).then_some(run)
     }
 
     /// The condition a send raises when the receiver's behaviour answers
