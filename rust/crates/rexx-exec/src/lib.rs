@@ -721,9 +721,11 @@ impl Loud {
 
     /// `StackFrame~executable` on a frame built with no executable: a package
     /// hook's, one built from a failure's site rather than from an
-    /// activation, and one whose activation answered none. No program
-    /// reaches it: `refusals.tsv`'s `context.rs` row found only a library
-    /// routine's frame, which answers.
+    /// activation, one whose activation answered none, and a library
+    /// routine's whose copy was collected between the call's lookup and its
+    /// run ([`RoutineObject::Gone`]). No program reaches it: `refusals.tsv`'s
+    /// `context.rs` row found only a library routine's frame, which answers,
+    /// and the last needs the call's own arguments to drop the copy.
     #[cold]
     fn frame_without_executable() -> Loud {
         Loud {
@@ -742,19 +744,6 @@ impl Loud {
             message: owned_message(
                 &format!("Object~copy of the interpreter's own {class}"),
                 None,
-            ),
-        }
-    }
-
-    /// `Object~copy` through a scope override on an object rexxref says
-    /// cannot be copied -- a class object, a `RexxContext` or `RexxInfo` --
-    /// which the oracle copies. Held for Moritz's ruling (plan Ruled 13).
-    #[cold]
-    fn uncopyable_copy(kind: &str) -> Loud {
-        Loud {
-            message: owned_message(
-                &format!("Object~copy through a scope override on {kind}"),
-                Some(Owner::Phase9),
             ),
         }
     }
@@ -1904,8 +1893,9 @@ impl MergedRoutine {
     pub(crate) fn resolved(self) -> run::Resolved {
         match self {
             MergedRoutine::Installed(installed, _) => run::Resolved::Routine(installed),
-            MergedRoutine::Library(code) | MergedRoutine::LibraryObject(code, _) => {
-                run::Resolved::MergedLibraryRoutine(code)
+            MergedRoutine::Library(code) => run::Resolved::MergedLibraryRoutine(code, None),
+            MergedRoutine::LibraryObject(code, object) => {
+                run::Resolved::MergedLibraryRoutine(code, Some(object))
             }
             MergedRoutine::Internal(index) | MergedRoutine::InternalObject(index, _) => {
                 run::Resolved::MergedInternal(&internal_routines::INTERNAL_ROUTINES[index])
@@ -2155,10 +2145,8 @@ struct NativeFrame {
     /// A routine's [`Interp::library_codes`] row, `None` for a method or a
     /// package hook.
     code: Option<usize>,
-    /// The `Routine` object a routine's `~call` ran, which its `StackFrame`
-    /// answers; `None` for a call made by name, whose frame answers the one
-    /// object standing for [`NativeFrame::code`].
-    executable: Option<ObjRef>,
+    /// What a routine's `StackFrame` answers for `~executable`.
+    executable: RoutineObject,
     /// The handle-carried values this call asked a kept `CSTRING` of, each
     /// counted once in [`Interp::kept_holders`].
     kept: rustc_hash::FxHashSet<ObjRef>,
@@ -2180,13 +2168,28 @@ struct NativeFrame {
     temps_floor: usize,
 }
 
+/// What a library routine's `StackFrame` answers for `~executable`.
+#[derive(Copy, Clone, Debug)]
+pub(crate) enum RoutineObject {
+    /// The one `Routine` object standing for the frame's library code, which
+    /// `.routines`, `findRoutine` and `loadExternalRoutine` answer.
+    OfCode,
+    /// This `Routine` object: the one `~call` was sent to, or the copy a call
+    /// by name found.
+    Given(ObjRef),
+    /// A copy a call by name found, collected since: the frame answers none.
+    Gone,
+}
+
 impl NativeFrame {
     fn object_roots(&self, out: &mut Vec<ObjRef>) {
         out.extend(self.locals.roots());
         out.extend([self.owner, self.scope, self.receiver]);
         out.extend(self.arguments.iter().copied().flatten());
         out.extend(self.argument_list);
-        out.extend(self.executable);
+        if let RoutineObject::Given(object) = self.executable {
+            out.push(object);
+        }
         out.extend(self.lent.iter().copied());
         out.extend(
             [self.additional, self.result, self.condition]

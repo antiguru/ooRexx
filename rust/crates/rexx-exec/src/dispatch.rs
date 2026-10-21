@@ -4044,22 +4044,22 @@ impl Interp {
     }
 
     /// The same for a routine of a loaded library, whose level carries the
-    /// package its shared code reports, if any. `ran` is the `Routine` object
-    /// a `~call` ran, and with none the frame answers the one object standing
-    /// for the [`Interp::library_codes`] row `code`.
+    /// package its shared code reports, if any. `ran` and `code` are what the
+    /// routine's frame held, from which [`Interp::routine_executable`] answers.
     pub(crate) fn blame_native_routine(
         &mut self,
         name: &[u8],
         program: Option<ProgramId>,
         arguments: &[Option<ObjRef>],
-        ran: Option<ObjRef>,
+        ran: crate::RoutineObject,
         code: Option<usize>,
     ) {
+        let reraised = std::mem::take(&mut self.activity.native_reraise);
         if self.activity.failure_site.is_some() {
             return;
         }
         let package = program.map(|program| self.package_path(program).to_vec());
-        let executable = ran.or_else(|| code.map(|code| self.library_routine_object(code)));
+        let executable = self.routine_executable(ran, code);
         let level = NativeLevel {
             method: false,
             name,
@@ -4068,7 +4068,7 @@ impl Interp {
             executable,
             activation: Some(NativeActivationLevel {
                 package: program.map(Package::Program),
-                reraised: std::mem::take(&mut self.activity.native_reraise),
+                reraised,
             }),
         };
         self.blame_native_level(Raised::compiled_routine_line(name), package, level);

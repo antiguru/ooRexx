@@ -884,6 +884,18 @@ fn nil_has_a_string_value_and_the_booleans_are_plain_strings() {
     assert_eq!(&*interp.to_text(false_value), b"0");
 }
 
+/// A name `~objectName=` gives `.nil` is what each of the three readers of a
+/// handle's bytes answers for it, the length reader included.
+#[test]
+fn a_named_nil_renders_its_name_through_every_reader() {
+    let mut interp = Interp::new();
+    assert_eq!(interp.text_len(ObjRef::NIL), b"The NIL object".len());
+    interp.set_nil_name(b"zz");
+    assert_eq!(&*interp.to_text(ObjRef::NIL), b"zz");
+    assert_eq!(interp.try_text(ObjRef::NIL), Some(&b"zz"[..]));
+    assert_eq!(interp.text_len(ObjRef::NIL), 2);
+}
+
 #[test]
 fn nonnumeric_text_and_nil_both_collapse_to_not_numeric() {
     let mut interp = Interp::new();

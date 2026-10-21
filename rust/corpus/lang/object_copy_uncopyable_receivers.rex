@@ -1,0 +1,15 @@
+/* COPY of a built-in class object, a Rexx-defined class object, a
+   RexxContext and .RexxInfo: each raises 93.970 naming the receiver. */
+do o over .array~of(.Array, .zz, .context, .RexxInfo)
+  call try o
+end
+exit 0
+try: procedure
+  use arg o
+  signal on syntax name refused
+  c = o~copy
+  say 'copied' c~class~id
+  return
+refused: say condition('O')~code condition('O')~message
+  return
+::class zz

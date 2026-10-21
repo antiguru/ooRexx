@@ -1213,7 +1213,11 @@ impl Interp {
                 source: crate::ExecutableSource::Loaded { code },
                 installed: None,
                 ..
-            }) => Ok(crate::run::Resolved::MergedLibraryRoutine(code)),
+            }) => {
+                let copy =
+                    (self.library_routine_objects.get(&code) != Some(&object)).then_some(object);
+                Ok(crate::run::Resolved::MergedLibraryRoutine(code, copy))
+            }
             _ if let Some(row) = self.rexx_routine_object(object) => {
                 Ok(crate::run::Resolved::MergedInternal(row))
             }
@@ -1232,7 +1236,7 @@ impl Interp {
             crate::run::Resolved::Routine(installed) => {
                 crate::MergedRoutine::Installed(installed, self.program_package(installed.program)?)
             }
-            crate::run::Resolved::MergedLibraryRoutine(code) => {
+            crate::run::Resolved::MergedLibraryRoutine(code, _) => {
                 if self.library_routine_objects.get(&code) == Some(&object) {
                     crate::MergedRoutine::Library(code)
                 } else {

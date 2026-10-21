@@ -149,6 +149,51 @@ impl Interp {
         self.settle_native_call(answered, popped, packaged, trapped)
     }
 
+    /// What a call by name to library code `code` ran: the copy the lookup
+    /// found, or the one object standing for `code`. A copy is held from its
+    /// first call on, since the call site keeps the resolution naming it for
+    /// as long as its body lives, as the oracle's instruction keeps the
+    /// routine; one collected before that answers [`RoutineObject::Gone`].
+    pub(crate) fn found_routine_object(
+        &mut self,
+        code: usize,
+        copy: Option<ObjRef>,
+    ) -> crate::RoutineObject {
+        let Some(object) = copy else {
+            return crate::RoutineObject::OfCode;
+        };
+        let runs_code = matches!(
+            self.executable_sources.get(&object),
+            Some(crate::ExecutableRecord {
+                source: crate::ExecutableSource::Loaded { code: held },
+                ..
+            }) if *held == code
+        );
+        if self.heap.get(object).is_none() || !runs_code {
+            return crate::RoutineObject::Gone;
+        }
+        self.roots.add_global(
+            &format!("a library routine copy a call found, {}", object.bits()),
+            object,
+        );
+        crate::RoutineObject::Given(object)
+    }
+
+    /// `StackFrame~executable` for a library routine's frame that held `ran`
+    /// and ran library code `code`: measured, oracle rc 0, the object `~call`
+    /// was sent to or a call by name found.
+    pub(crate) fn routine_executable(
+        &mut self,
+        ran: crate::RoutineObject,
+        code: Option<usize>,
+    ) -> Option<ObjRef> {
+        match ran {
+            crate::RoutineObject::OfCode => code.map(|code| self.library_routine_object(code)),
+            crate::RoutineObject::Given(object) => Some(object),
+            crate::RoutineObject::Gone => None,
+        }
+    }
+
     /// Runs the routine a [`Interp::package_routine`] slot names, as the call
     /// named `name` passed it.
     ///
@@ -161,7 +206,12 @@ impl Interp {
         args: &[Option<ObjRef>],
     ) -> Result<Started<Option<ObjRef>>, Failure> {
         let code = self.package_routine_code(slot);
-        self.run_library_routine(code, &name.to_ascii_uppercase(), args, None)
+        self.run_library_routine(
+            code,
+            &name.to_ascii_uppercase(),
+            args,
+            crate::RoutineObject::OfCode,
+        )
     }
 
     /// Runs the library routine [`Interp::library_codes`] row `code` is
@@ -169,8 +219,7 @@ impl Interp {
     /// as [`Interp::run_library_method`] does.
     ///
     /// `name` is the name the traceback's `Compiled routine` line gives, and
-    /// `executable` the `Routine` object a `~call` ran, `None` for a call by
-    /// name.
+    /// `executable` what the routine's `StackFrame` answers.
     ///
     /// # Errors
     /// The condition the extension raised, whatever converting an argument or
@@ -181,7 +230,7 @@ impl Interp {
         code: usize,
         name: &[u8],
         args: &[Option<ObjRef>],
-        executable: Option<ObjRef>,
+        executable: crate::RoutineObject,
     ) -> Result<Started<Option<ObjRef>>, Failure> {
         let Some(entry) = self
             .library_code_routine(code)
@@ -668,7 +717,7 @@ impl Interp {
                 result: None,
                 condition: None,
                 code: None,
-                executable: None,
+                executable: crate::RoutineObject::OfCode,
                 kept: rustc_hash::FxHashSet::default(),
                 lent: Vec::new(),
                 caller: None,
@@ -683,7 +732,7 @@ impl Interp {
         frame.method = receiver.is_some();
         frame.receiver = receiver.unwrap_or(ObjRef::NIL);
         frame.code = code;
-        frame.executable = None;
+        frame.executable = crate::RoutineObject::OfCode;
         frame.caller = self.running_activation().map(|activation| activation.id);
         frame.id = self.next_native_id();
         frame.packaged = false;

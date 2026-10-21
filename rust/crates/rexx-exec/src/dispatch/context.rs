@@ -952,9 +952,7 @@ pub(crate) fn build_native_frame_at(interp: &mut Interp, row: usize) -> Result<O
         let name = interp.to_text(name).to_vec();
         interp.method_executable(scope, &name).ok()
     } else {
-        // Measured, oracle rc 0: a frame answers the object `~call` was sent
-        // to, and for a call by name the object `.routines` holds.
-        ran.or_else(|| code.map(|code| interp.library_routine_object(code)))
+        interp.routine_executable(ran, code)
     };
     let mut entries = vec![
         (key::TYPE, kind),

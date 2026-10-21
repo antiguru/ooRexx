@@ -884,9 +884,10 @@ impl Interp {
         // A library routine merged into the package, and a `::ROUTINE` bound
         // to native code, run no activation either, and are found before the
         // manager is asked.
-        if let Resolved::MergedLibraryRoutine(code) = resolved {
+        if let Resolved::MergedLibraryRoutine(code, copy) = resolved {
+            let executable = self.found_routine_object(code, copy);
             return self
-                .run_library_routine(code, name, &arguments[from..], None)
+                .run_library_routine(code, name, &arguments[from..], executable)
                 .map(library_begun);
         }
         if let Resolved::MergedInternal(row) = resolved {
@@ -897,7 +898,12 @@ impl Interp {
         if let Resolved::Routine(installed) = resolved {
             if let Some(code) = self.library_routine_code(installed) {
                 return self
-                    .run_library_routine(code, name, &arguments[from..], None)
+                    .run_library_routine(
+                        code,
+                        name,
+                        &arguments[from..],
+                        crate::RoutineObject::OfCode,
+                    )
                     .map(library_begun);
             }
             if let Some(row) = self.rexx_routine_row(installed) {
@@ -912,7 +918,7 @@ impl Interp {
             Resolved::Builtin(_) => unreachable!("the builtin path returns before this"),
             Resolved::Internal(_) => unreachable!("the internal path returns before this"),
             Resolved::LibraryRoutine(_)
-            | Resolved::MergedLibraryRoutine(_)
+            | Resolved::MergedLibraryRoutine(..)
             | Resolved::MergedInternal(_) => {
                 unreachable!("a library or merged internal routine is run before this")
             }

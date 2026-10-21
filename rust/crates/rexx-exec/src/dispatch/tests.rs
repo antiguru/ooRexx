@@ -2268,3 +2268,30 @@ fn a_native_tails_objects_are_rooted_only_while_it_is_parked() {
         );
     }
 }
+
+/// `.Object`'s COPY through a scope override on a class object, a
+/// `RexxContext` and `.RexxInfo` raises 93.970, as the plain `~copy` does on
+/// both sides: rexxref forbids copying each (`fundclasses.xml:63-65`,
+/// `utilityclasses.xml:7934-7942`, `:7549`). Measured, the oracle copies
+/// each through the override (`t7.1/r1/copyrules.rex`).
+#[test]
+fn a_scope_override_copy_of_an_uncopyable_object_raises() {
+    let source = "do o over .array~of(.Array, .zz, .context, .RexxInfo)\n\
+                  \x20 call override o\n\
+                  end\n\
+                  exit 0\n\
+                  override: procedure\n\
+                  \x20 use arg o\n\
+                  \x20 signal on syntax name d\n\
+                  \x20 c = .Message~new(o, .array~of('COPY', .Object))~send\n\
+                  \x20 say 'copied' c~class~id\n\
+                  \x20 return\n\
+                  d: say condition('O')~code condition('O')~message\n\
+                  \x20 return\n\
+                  ::class zz\n";
+    let expected = "93.970 COPY method is not supported for object The Array class.\n\
+                    93.970 COPY method is not supported for object The ZZ class.\n\
+                    93.970 COPY method is not supported for object a RexxContext.\n\
+                    93.970 COPY method is not supported for object a RexxInfo.\n";
+    assert_eq!(run_source(source), (0, expected.to_string(), String::new()));
+}

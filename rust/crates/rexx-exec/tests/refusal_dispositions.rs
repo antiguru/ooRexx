@@ -781,12 +781,26 @@ fn every_ownerless_refusal_has_a_disposition() {
 /// a measurement and not a scan of nothing.
 #[test]
 fn the_scanner_reads_each_owner_form() {
-    let constructors = constructors(&sources());
-    let owners = owners(&constructors);
+    // The `Owner::Phase9` form, read from a fixture.
+    let fixture = "\
+impl Loud {
+    fn nine() -> Loud {
+        Loud {
+            message: owned_message(\"y\", Some(Owner::Phase9)),
+        }
+    }
+}
+";
+    let fixture_owners = owners(&constructors(&[(
+        "src/lib.rs".to_string(),
+        code_lines(fixture),
+    )]));
     assert_eq!(
-        owners.get("uncopyable_copy").map(|(owner, _)| owner),
+        fixture_owners.get("nine").map(|(owner, _)| owner),
         Some(&Owner::Phase("Phase 9".to_string()))
     );
+    let constructors = constructors(&sources());
+    let owners = owners(&constructors);
     assert_eq!(
         owners.get("named_semaphore").map(|(owner, _)| owner),
         Some(&Owner::None),

@@ -659,9 +659,14 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
         // Reached only through a scope override, `.nil`'s own behaviour
         // hiding `COPY`.
         Ok(Primitive::Object) => return Ok(copy_nil(interp)),
-        Ok(Primitive::Class(_)) => return Err(Loud::uncopyable_copy("a class object").into()),
-        Ok(Primitive::Context) => return Err(Loud::uncopyable_copy("a RexxContext").into()),
-        Ok(Primitive::RexxInfo) => return Err(Loud::uncopyable_copy("the RexxInfo").into()),
+        // rexxref forbids copying each of these on every route
+        // (`fundclasses.xml:63-65`, `utilityclasses.xml:7934-7942`, `:7549`):
+        // the oracle's own `copyRexx` raises 93.970 for a plain send, and a
+        // scope override reaches `RexxObject::copy`, which copies.
+        Ok(Primitive::Class(_) | Primitive::Context | Primitive::RexxInfo) => {
+            let target = interp.string_value_text(receiver);
+            return Err(Raised::copy_not_supported(&target).into());
+        }
         Ok(Primitive::Directory) => return Err(Loud::interpreter_table_copy("Directory").into()),
         Ok(Primitive::StringTable(_)) => {
             return Err(Loud::interpreter_table_copy("StringTable").into());
