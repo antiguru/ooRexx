@@ -1,0 +1,41 @@
+P1 no pin build 0 
+DIFF call_site_routine_copy_lifetime.rex
+8,11d7
+< stale frame Z Routine 0 1
+< exported 1 answered 7
+< exported 2 raised 98.941
+< exported 3 raised 98.941
+0a1
+> rexx-exec: a message send to a value whose object is no longer live is not implemented
+1c1
+< 0
+---
+> 120
+
+P1 no pin restored
+P2 no forget on raise build 0 
+DIFF call_site_routine_copy_lifetime.rex
+2,3c2,3
+< answered then answered 93900
+< kept answered 93900
+---
+> answered then raised Y 1 0 0
+> kept raised Y 1 0 0
+5c5
+< canonical raised X 1
+---
+> canonical raised X 0
+
+P2 no forget on raise restored
+P3 no generation on a .routines write build 0 
+DIFF call_site_routine_copy_lifetime.rex
+10,11c10,11
+< exported 2 raised 98.941
+< exported 3 raised 98.941
+---
+> exported 2 answered 7
+> exported 3 answered 7
+
+P3 no generation on a .routines write restored
+P4 unpin skipped, g-raise-site n=100000 done 100000 rss=392028KB t=4.15s 
+P4 unpin skipped, g-raise-site n=200000 done 200000 rss=743568KB t=8.60s 

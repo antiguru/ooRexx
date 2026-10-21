@@ -241,3 +241,137 @@ head=cg-9d/t7.1-r1/rexx-head`, exit 0. Own delta, libc subtracted, head less par
    `METHOD CALL` frame (`r1/probes/livecopy.rex`).
 4. Each copy a call by name runs is rooted for the life of the process, one global root per
    distinct copy.
+
+## Fix round 2
+
+Commits: `9a5621ec0` (the items below), `f84c45029` (the pin derived from the kept resolution, for
+perf), and the records and report commit after them. Records: `t7.1/r2/`.
+
+**I-1: not the preferred fix, and why.** The brief asked for copies to stay valid only until
+`routine_generation` moves. Built and run, that reproduced the oracle less well than base on
+both behaviours it changes:
+
+* **Which routine runs.** Once a call returns, the oracle keeps its routine at the instruction for
+  the instruction's life (`RexxInstructionCall::execute`, `instructions/CallInstruction.cpp:190-197`:
+  `setField(externalTarget, ...)` after `externalCall`). A later rebind of the name does not reach
+  that site. `r2/probes/recode.rex` rebinds `Y` from a copy of `i` to a copy of `r`. On the
+  oracle and at base the site keeps running `i` (`answered 93900`); the generation design ran `r`
+  (`raised 93.900`).
+* **The frame.** `which.rex`'s third line: the oracle answers `answered 93900` (the kept `c2`), and
+  the generation design answered `raised Y 0 0 1` (it re-resolved to `c3`).
+
+What landed instead keeps the oracle's lifetime:
+
+* A call site **pins** the `Routine` copy its kept resolution names, through `Interp::repin` and a
+  count per copy in `Interp::pinned_copies`. One global root is held per copy while any site keeps
+  it.
+* The pin is dropped when the site resolves to something else, when a raised call makes the site
+  forget, and when the chunk is dropped: `prune_program_rows`, and the INTERPRET fragment's end,
+  which walks nothing when nothing is pinned.
+* No root is added per call and no `format!` runs per call. A pin or an unpin happens only on a
+  call-site miss, or on a raise from a copy.
+* `RoutineObject::Gone` is deleted: a copy is live because its site pins it or the lookup just
+  read it from its table. A `debug_assert` in `found_routine_object` holds that.
+
+Memory (`r2/rss.txt`, peak RSS, the re-review's loops plus `g-raise-site.rex`, which rebinds a
+fresh raising copy at one site each pass):
+
+| program | n | oracle | head | base `3b24a6445` |
+|---|---|---|---|---|
+| g-routines-interp | 100000 | 20332 KB | 47228 KB | 46956 KB |
+| g-routines-interp | 200000 | 20012 KB | 46372 KB | 46968 KB |
+| g-add-interp | 200000 | 20616 KB | 46012 KB | 46304 KB |
+| g-routines-site | 200000 | 20060 KB | 49984 KB | 49844 KB |
+| g-raise-site | 100000 | 20772 KB | 38904 KB | 38920 KB |
+| g-raise-site | 200000 | 20612 KB | 39084 KB | 39680 KB |
+
+Head is flat and equal to base. With the unpin skipped (`r2/mutations.txt`, P4), g-raise-site
+grows to 392028 KB and then 743568 KB.
+
+Calls to a copy (`r2/hot-callgrind.txt`, `hot.rex 100000`, whole-process Ir):
+
+| calls to | head | base | change |
+|---|---|---|---|
+| a copy | 369873445 | 368571586 | +0.35% |
+| the canonical object | 369893344 | 368594230 | +0.35% |
+
+That is about 13 Ir per call, the same for both. An intermediate build that checked the copy's
+record on every call measured 374266381 (+1.55%).
+
+Wall clock on `g-raise-site.rex` 200000 is 3.85 s at head against 3.63 s at base: the pin and
+unpin on each raise.
+
+**Q1.** A call that raises makes its site forget its resolution (`Interp::forget_site`, in every
+call op that keeps a site: `begin_call_args`, `begin_call_expr`, `begin_call_named` and
+`begin_call_tree`), so the next call looks the name up again, as the oracle does. The forget
+covers calls whose error comes back through the op: library and native routines and builtins. A
+Rexx routine runs in an activation of its own, so its raise does not pass through the op, and
+its site keeps its resolution as before.
+
+**Q2.** `note_routines_write` moves `routine_generation`, so a site whose routine the oracle looks
+up on every call sees a `.ROUTINES` write (`r2/probes/gen.rex`, `q2.rex`: head equals the oracle,
+base answered `7` after the write).
+
+**m-1, witness** `lang/call_site_routine_copy_lifetime.rex`:
+
+* Q1, and the rebind-to-canonical line (`raised first ... 1 0 0`, `answered then`, `kept`,
+  `raising copy`, `canonical raised X 1`).
+* A kept copy whose table entry was rebound and dropped, run again after 300000 allocations
+  (`stale frame Z Routine 0 1`).
+* Q2 through a library-exported name (`exported 2 raised`).
+
+It is identical to the oracle. Base differs on the four Q1 lines, the stale frame and the Q2
+lines. Mutations, each red on the witness (`r2/mutations.txt`):
+
+* no pin: rc 120, `a message send to a value whose object is no longer live`;
+* no forget on raise: `answered then raised Y 1 0 0`;
+* no generation move on a `.ROUTINES` write: `exported 2 answered 7`.
+
+**m-2.** `frame_without_executable`'s doc and its GUARD row no longer name a collected copy: that
+path is gone. Round 1's concern 1 was false, as the re-review measured: a call's arguments run
+before its lookup.
+
+Re-review probes (`r2/probes/`, head against the oracle): `which`, `recode`, `rebind`, `gen`,
+`rooted`, `gone`, `stale` and `q2` are identical. `gone3/4/5` (the activation depth limit) differ
+at base too, and `gone3` differs run to run on this crate. The depth the limit trips at moves.
+
+### Checks (round 2, at `f84c45029`'s code)
+
+| command | exit |
+|---|---|
+| `cargo fmt --all --check` | 0 |
+| `cargo clippy -p rexx-exec --all-targets -- -D warnings` | 0 |
+| `cargo test --release -p rexx-exec --lib` | 0, 1169 passed |
+| refusal tables, `representation_refusals`, `owners`, `closed_phases`, `phase_ten_reasons` | 0 |
+| `REXX_CORPUS_GATE=1 ... --test corpus` | 0, 1155 of 1155 matching |
+| `cargo test --release -p rexx-parse --test sourceline_oracle` | 0 |
+| `native_entries`, `library_routine_memory`, `concurrency_tests`, `gate_table_d` | 0 |
+| `REXX_SUITE_GATE=1 ... --test suite l3_core_suite` (`r2/suite/`) | 101 then 0. The first run's only changed row is the known flake `SysFileTree TEST_TREE_DIRECTORY` (`run-1.txt`, `tests-1.tsv`); the second run matches `t6.15/r3/suite/tests.tsv` row for row. The run at `9a5621ec0` also matched it. |
+
+### Perf (round 2)
+
+`r2/callgrind.txt`: `callgrind.sh -B 0.5 -j 4 -p "startup interpret parse churn sayloop"`, pin
+`rexx-run`, parent `cg-9d/t7.1-r1/rexx-head`, head `cg-9d/t7.1-r2/rexx-head`, exit 0.
+
+| program | own delta, libc subtracted | own delta, whole process |
+|---|---|---|
+| startup | -0.0003 | -0.0015 |
+| interpret | +0.0190 | +0.0109 |
+| parse | 0.0000 | 0.0000 |
+| churn | 0.0000 | -0.0002 |
+| sayloop | 0.0000 | -0.0008 |
+
+A pin field on each `CallSite`, the first build, cost interpret +0.18% (libc subtracted). It also
+moved parse and churn by about -0.15%, a layout effect with no code behind it. The pin is now
+read off the kept resolution, so `CallSite` keeps its old size.
+
+### Concerns (round 2)
+
+1. **I-1 is answered with the oracle's lifetime, not the brief's mechanism**, for the measured
+   reasons above. The brief's mechanism is one edit away, in `kept_until_routines_change`, if the
+   controller still wants it. It changes which routine runs in `recode.rex`.
+2. **Q1 covers raises that come back through the call op.** A raise inside a Rexx routine's own
+   activation leaves its site's resolution kept. In the oracle, that site would look the name up
+   again.
+3. `Interp::pinned_copies` is a count keyed by `ObjRef`: GC pin bookkeeping, not object state.
+4. Q3 (copied REXX-package routines) is the controller's queued item, as the brief says.

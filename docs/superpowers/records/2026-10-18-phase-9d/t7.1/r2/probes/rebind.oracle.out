@@ -1,0 +1,7 @@
+routines 1 Y 1 0 Routine
+routines 2 Y 1 0 Routine
+routines 3 Y 1 0 Routine
+addRoutine 1 X 1 0 Routine
+addRoutine 2 X 1 0 Routine
+addRoutine 3 X 1 0 Routine
+routines canon Y 1 1 Routine

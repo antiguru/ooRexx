@@ -1,0 +1,10 @@
+# p3/hot.rex 100000 {copy|canon}, valgrind --tool=callgrind, whole-process Ir.
+# base = 3b24a6445; head(final) = f84c45029's code. Earlier head lines are this round's intermediate builds.
+head copy rc 0 Collected : 374266381
+head canon rc 0 Collected : 369283706
+base copy rc 0 Collected : 368571586
+base canon rc 0 Collected : 368594230
+head copy rc 0 Collected : 369166721
+head canon rc 0 Collected : 369188035
+head(final) copy rc 0 Collected : 369873445
+head(final) canon rc 0 Collected : 369893344

@@ -1,0 +1,12 @@
+g-routines-interp.rex n=100000 | oracle: done 100000 1 rss=20332KB t=0.40s  | head: done 100000 1 rss=47228KB t=2.29s  | base: done 100000 1 rss=46956KB t=2.27s 
+g-routines-interp.rex n=200000 | oracle: done 200000 1 rss=20012KB t=0.81s  | head: done 200000 1 rss=46372KB t=4.56s  | base: done 200000 1 rss=46968KB t=4.52s 
+g-add-interp.rex n=100000 | oracle: done 100000 1 rss=20528KB t=0.42s  | head: done 100000 1 rss=46140KB t=2.21s  | base: done 100000 1 rss=46776KB t=2.14s 
+g-add-interp.rex n=200000 | oracle: done 200000 1 rss=20616KB t=0.84s  | head: done 200000 1 rss=46012KB t=4.37s  | base: done 200000 1 rss=46304KB t=4.31s 
+g-ctrl-interp.rex n=100000 | oracle: done 100000 1 rss=20276KB t=0.40s  | head: done 100000 1 rss=46956KB t=2.09s  | base: done 100000 1 rss=46976KB t=2.10s 
+g-ctrl-interp.rex n=200000 | oracle: done 200000 1 rss=20100KB t=0.79s  | head: done 200000 1 rss=46572KB t=4.21s  | base: done 200000 1 rss=46556KB t=4.21s 
+g-routines-site.rex n=100000 | oracle: done 100000 1 rss=20928KB t=0.05s  | head: done 100000 1 rss=50024KB t=0.44s  | base: done 100000 1 rss=50108KB t=0.42s 
+g-routines-site.rex n=200000 | oracle: done 200000 1 rss=20060KB t=0.10s  | head: done 200000 1 rss=49984KB t=0.83s  | base: done 200000 1 rss=49844KB t=0.82s 
+g-add-site.rex n=100000 | oracle: done 100000 1 rss=20336KB t=0.06s  | head: done 100000 1 rss=50176KB t=0.40s  | base: done 100000 1 rss=49804KB t=0.40s 
+g-add-site.rex n=200000 | oracle: done 200000 1 rss=20304KB t=0.11s  | head: done 200000 1 rss=49708KB t=0.76s  | base: done 200000 1 rss=49944KB t=0.73s 
+g-raise-site.rex n=100000 | oracle: done 100000 rss=20772KB t=0.89s  | head: done 100000 rss=38904KB t=1.92s  | base: done 100000 rss=38920KB t=1.84s 
+g-raise-site.rex n=200000 | oracle: done 200000 rss=20612KB t=1.78s  | head: done 200000 rss=39084KB t=3.85s  | base: done 200000 rss=39680KB t=3.63s 

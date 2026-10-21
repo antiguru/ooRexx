@@ -1,0 +1,24 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `release` profile [optimized + debuginfo] target(s) in 23.54s
+     Running tests/suite.rs (/tmp/claude-1000/t7-target/release/deps/suite-edb8ccd5504785e7)
+
+running 1 test
+test l3_core_suite has been running for over 60 seconds
+test l3_core_suite ... FAILED
+
+failures:
+
+---- l3_core_suite stdout ----
+suite: 402 groups, 1 red, table /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t7.1/r2/suite/table.tsv, verdicts /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t7.1/r2/suite/verdicts.tsv
+
+thread 'l3_core_suite' (4126096) panicked at crates/rexx-exec/tests/suite.rs:1100:5:
+1 of 402 groups are not green; each reason is in /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t7.1/r2/suite/verdicts.tsv
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    l3_core_suite
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 51 filtered out; finished in 257.62s
+
+error: test failed, to rerun pass `-p rexx-exec --test suite`
