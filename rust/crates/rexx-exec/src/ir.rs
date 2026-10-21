@@ -485,13 +485,12 @@ impl Hints {
 const CALL_SITE_CACHE: bool = true;
 
 /// One call site's kept resolution, or none yet, with the
-/// `Interp::routine_generation` it was made under, and the `Routine` copy the
-/// site keeps alive, as the oracle's instruction keeps its routine: the site
-/// pins it ([`Interp::repin`]) for as long as it names it or the chunk lives.
+/// `Interp::routine_generation` it was made under. A `Routine` copy the kept
+/// resolution names is pinned ([`Interp::repin`]) while the site keeps it, as
+/// the oracle's instruction keeps its routine.
 struct CallSite {
     resolved: Cell<Option<Resolved>>,
     generation: Cell<u32>,
-    pinned: Cell<ObjRef>,
 }
 
 impl CallSite {
@@ -499,8 +498,12 @@ impl CallSite {
         CallSite {
             resolved: Cell::new(None),
             generation: Cell::new(0),
-            pinned: Cell::new(ObjRef::NIL),
         }
+    }
+
+    /// The copy the kept resolution names, or `.nil`.
+    fn pinned(&self) -> ObjRef {
+        self.resolved.get().map_or(ObjRef::NIL, Resolved::copy)
     }
 
     /// The kept resolution, or `None` where it is one the oracle looks up
@@ -514,17 +517,16 @@ impl CallSite {
     }
 
     fn set(&self, resolved: Resolved, generation: u32) -> Repin {
+        let repin = Repin::to(self.pinned(), resolved.copy());
         self.resolved.set(Some(resolved));
         self.generation.set(generation);
-        let repin = Repin::to(self.pinned.get(), resolved);
-        self.pinned.set(resolved.copy());
         repin
     }
 
-    /// Drops the kept resolution and keeps the pin, which the next
-    /// resolution replaces or keeps.
-    fn clear(&self) {
+    fn clear(&self) -> Repin {
+        let repin = Repin::to(self.pinned(), ObjRef::NIL);
         self.resolved.set(None);
+        repin
     }
 }
 
@@ -599,9 +601,10 @@ impl Calls {
     }
 
     /// Drops what site `at` kept, so its next call resolves again.
-    fn forget(&self, at: u16) {
-        if let Some(slot) = self.slots.get(at as usize) {
-            slot.clear();
+    fn forget(&self, at: u16) -> Repin {
+        match self.slots.get(at as usize) {
+            Some(slot) => slot.clear(),
+            None => Repin::NONE,
         }
     }
 }
@@ -795,7 +798,7 @@ impl Chunk {
         self.calls
             .slots
             .iter()
-            .map(|slot| slot.pinned.get())
+            .map(CallSite::pinned)
             .filter(|copy| *copy != ObjRef::NIL)
     }
 
@@ -803,8 +806,8 @@ impl Chunk {
     /// call's routine only once the call has returned
     /// (`RexxInstructionCall::execute`, `instructions/CallInstruction.cpp:193-197`).
     #[cold]
-    fn forget_call(&self, at: u16) {
-        self.calls.forget(at);
+    fn forget_call(&self, at: u16) -> Repin {
+        self.calls.forget(at)
     }
 
     /// The message name send site `at` sends, or `None` for a site this

@@ -274,9 +274,8 @@ impl Repin {
         pin: ObjRef::NIL,
     };
 
-    /// The change from `held` to the copy `resolved` names.
-    pub(crate) fn to(held: ObjRef, resolved: Resolved) -> Repin {
-        let pin = resolved.copy();
+    /// The change from holding `held` to holding `pin`.
+    pub(crate) fn to(held: ObjRef, pin: ObjRef) -> Repin {
         if pin == held {
             return Repin::NONE;
         }

@@ -2041,7 +2041,7 @@ impl Interp {
             self.activity.depth -= 1;
         }
         if started.is_err() {
-            chunk.forget_call(site);
+            self.forget_site(chunk, site);
         }
         started
     }
@@ -2097,7 +2097,7 @@ impl Interp {
             self.activity.depth -= 1;
         }
         if started.is_err() {
-            chunk.forget_call(site);
+            self.forget_site(chunk, site);
         }
         started
     }
@@ -2167,7 +2167,7 @@ impl Interp {
         let base_indent = self.activity.clause_state.current_value_indent;
         let started = self
             .begin_subroutine_over_pushed_args(resolved, name, mark)
-            .inspect_err(|_| chunk.forget_call(site))?;
+            .inspect_err(|_| self.forget_site(chunk, site))?;
         Ok((started, base_indent))
     }
 
@@ -2210,7 +2210,7 @@ impl Interp {
         let resolution = self.site_resolution_before_arguments(chunk, site, name, !*literal);
         let resolution = self
             .resolved_after_arguments(code, resolution, args)
-            .inspect_err(|_| chunk.forget_call(site))?;
+            .inspect_err(|_| self.forget_site(chunk, site))?;
         let base_indent = self.activity.clause_state.current_value_indent;
         let begun = self
             .begin_invoke_call(
@@ -2221,7 +2221,7 @@ impl Interp {
                 CallType::Subroutine,
                 CallEntry::Written,
             )
-            .inspect_err(|_| chunk.forget_call(site))?;
+            .inspect_err(|_| self.forget_site(chunk, site))?;
         Ok((subroutine_started(begun), base_indent))
     }
 
@@ -4121,6 +4121,13 @@ fn op_at(chunk: &Chunk, target: usize) -> Result<u32, Failure> {
 }
 
 impl Interp {
+    /// Drops what call site `site` kept, for a call that raised.
+    #[cold]
+    fn forget_site(&mut self, chunk: &Chunk, site: u16) {
+        let repin = chunk.forget_call(site);
+        self.repin(repin);
+    }
+
     /// A call op's resolution before its arguments run, for an op that
     /// evaluates them itself: the site's kept answer, or the part of the
     /// resolution the oracle decides before the arguments, kept when it

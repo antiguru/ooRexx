@@ -86,8 +86,8 @@ impl Interp {
         self.heap.release_immortal(interned_from, |handle| {
             chunk.interned_values().any(|value| value == handle)
         });
-        for copy in chunk.pinned_copies().collect::<Vec<_>>() {
-            self.unpin_copy(copy);
+        if !self.pinned_copies.is_empty() {
+            self.unpin_chunk_copies(&chunk);
         }
         let flow = match ran {
             Ok(flow) => flow,

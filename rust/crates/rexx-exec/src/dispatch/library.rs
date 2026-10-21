@@ -193,6 +193,14 @@ impl Interp {
         }
     }
 
+    /// Drops the holds `chunk`'s call sites have, for a chunk being dropped.
+    #[cold]
+    pub(crate) fn unpin_chunk_copies(&mut self, chunk: &crate::ir::Chunk) {
+        for copy in chunk.pinned_copies().collect::<Vec<_>>() {
+            self.unpin_copy(copy);
+        }
+    }
+
     /// Drops one call site's hold on `copy`.
     #[cold]
     pub(crate) fn unpin_copy(&mut self, copy: ObjRef) {
