@@ -53,9 +53,14 @@ fn require_mut(interp: &mut Interp, receiver: ObjRef) -> Result<&mut StreamState
 /// class defines `makeString` writes what the method returns.
 /// The refusal's own `Compiled method` traceback line comes from the dispatch
 /// layer, not from here -- measured, blaming it at this site as well puts the
-/// line in twice.
+/// line in twice. It is a marshalling raise: measured, oracle,
+/// `.stdout~lineout(.nil)` is `Error 88 running REXX:`.
 fn write_text(interp: &mut Interp, value: ObjRef) -> Result<Vec<u8>, Failure> {
-    let text = super::required_string_argument(interp, value, 1)?;
+    let Some(text) = interp.blamed_string_conversion(value)? else {
+        let mut raised = Raised::argument_needs_a_string_value(1);
+        marshalling(&mut raised);
+        return Err(raised.into());
+    };
     Ok(interp.to_text(text).into_owned())
 }
 

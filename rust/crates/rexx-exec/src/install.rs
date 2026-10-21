@@ -534,6 +534,9 @@ impl Interp {
     /// bound the same code. `None` where there is neither.
     pub(crate) fn external_package_path(&self, method: MethodId) -> Option<Vec<u8>> {
         let program = self.external_package_program(method)?;
+        if self.library_programs.contains(&program) {
+            return Some(LIBRARY_PACKAGE_NAME.to_vec());
+        }
         Some(self.package_path(program).to_vec())
     }
 

@@ -1649,6 +1649,21 @@ fn check_message_deadlock(interp: &Interp, message: ObjRef) -> Result<(), Failur
     }
 }
 
+impl Interp {
+    /// The condition object's `TRACEBACK` lines, which `Activity::display`
+    /// prints (`concurrency/Activity.cpp:1417`).
+    pub(crate) fn traceback_lines(&mut self, object: ObjRef) -> Result<Vec<Vec<u8>>, Failure> {
+        let lines = match self.condition_entry(object, b"TRACEBACK") {
+            Some(traceback) => super::collection::list_items(self, traceback)?,
+            None => Vec::new(),
+        };
+        Ok(lines
+            .into_iter()
+            .map(|line| self.string_value_text(line))
+            .collect())
+    }
+}
+
 /// [`native_message_result`] once the send has completed. A send made again
 /// between the wake and this read has cleared the outcome, which answers
 /// `.nil`.
@@ -1659,16 +1674,7 @@ fn message_result(interp: &mut Interp, message: ObjRef) -> Result<Option<ObjRef>
             let Some(object) = interp.native_entry(message, MESSAGE_CONDITION) else {
                 return Err(Failure::Raised(raised));
             };
-            // `Activity::display` prints the object's `TRACEBACK`
-            // (`concurrency/Activity.cpp:1417`).
-            let lines = match interp.condition_entry(object, b"TRACEBACK") {
-                Some(traceback) => super::collection::list_items(interp, traceback)?,
-                None => Vec::new(),
-            };
-            let lines = lines
-                .into_iter()
-                .map(|line| interp.string_value_text(line))
-                .collect();
+            let lines = interp.traceback_lines(object)?;
             interp.reraise_kept_condition(*raised, object, lines)
         }
         Some(None) => {

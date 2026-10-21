@@ -1,0 +1,21 @@
+/* An untrapped RAISE PROPAGATE reports the condition object's traceback: the
+ * clauses the handler ran to reach the propagate, through an internal call and
+ * an INTERPRET, add no line, and the report names the line of the clause the
+ * routine's caller re-raises it in. */
+say 'start'
+call outer
+say 'not reached'
+exit
+::routine outer
+  signal on syntax
+  say 1/0
+  return
+syntax:
+  say 'handler' condition('O')~code
+  call s
+  return
+s:
+  interpret 'call t'
+  return
+t:
+  raise propagate

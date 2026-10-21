@@ -386,6 +386,7 @@ pub(crate) struct FailureLevels {
     reraised: bool,
     reraised_object: Option<ObjRef>,
     reraise_leaving: usize,
+    propagate_absorb: usize,
     failed_sends: Vec<ObjRef>,
 }
 
@@ -3502,6 +3503,11 @@ impl Interp {
     /// Closes off the level that is unwinding now, so the level above it can
     /// record its own clause.
     pub(crate) fn seal_site_level(&mut self) {
+        if self.activity.propagate_absorb > 0 {
+            self.activity.propagate_absorb -= 1;
+            self.activity.failure_frame = None;
+            return;
+        }
         if matches!(
             self.activity.failure_site,
             Some(FailureSite::Reraised { .. })
@@ -3713,6 +3719,7 @@ impl Interp {
             reraised: std::mem::take(&mut activity.failure_reraised),
             reraised_object: activity.reraised_object.take(),
             reraise_leaving: std::mem::take(&mut activity.reraise_leaving),
+            propagate_absorb: std::mem::take(&mut activity.propagate_absorb),
             failed_sends: std::mem::take(&mut activity.failed_sends),
         };
         self.root_failure_levels(&kept);
@@ -3733,6 +3740,7 @@ impl Interp {
             reraised: activity.failure_reraised,
             reraised_object: activity.reraised_object,
             reraise_leaving: activity.reraise_leaving,
+            propagate_absorb: activity.propagate_absorb,
             failed_sends: activity.failed_sends.clone(),
         };
         self.root_failure_levels(&kept);
@@ -3763,6 +3771,7 @@ impl Interp {
         activity.failure_reraised = kept.reraised;
         activity.reraised_object = kept.reraised_object;
         activity.reraise_leaving = kept.reraise_leaving;
+        activity.propagate_absorb = kept.propagate_absorb;
         activity.failed_sends = kept.failed_sends;
     }
 
@@ -3778,6 +3787,7 @@ impl Interp {
         self.activity.failure_reraised = false;
         self.activity.reraised_object = None;
         self.activity.reraise_leaving = 0;
+        self.activity.propagate_absorb = 0;
         self.activity.failed_sends.clear();
     }
 

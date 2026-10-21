@@ -357,3 +357,7 @@ lang/leave_iterate_trapped.rex
 lang/raise_return_call_on_any.rex
 lang/unknown_frameless_traceback.rex
 lang/while_retest_blame.rex
+lang/raise_propagate_traceback.rex
+lang/raise_propagate_return_line.rex
+lang/reply_propagate_traceback.rex
+lang/stream_boundary_report.rex

@@ -171,6 +171,10 @@ pub(crate) struct Activity {
     /// How many of the levels that `RAISE PROPAGATE` leaves are still to be
     /// left, which add no frame and no origin: the object has its frames.
     pub(crate) reraise_leaving: usize,
+    /// How many level boundaries a `RAISE PROPAGATE` still crosses below the
+    /// level whose trap took the condition, which seal no site: the trapping
+    /// level's own site is the one the propagate restored.
+    pub(crate) propagate_absorb: usize,
     /// **F3's own perimeter, found by review -- and corrected twice more,
     /// each correction found by re-verifying the previous one rather than
     /// trusting it.** When an absorbed `WhenCase` (`run.rs`'s own doc
@@ -462,6 +466,7 @@ impl Activity {
             native_frames_owed: Vec::new(),
             reraised_object: None,
             reraise_leaving: 0,
+            propagate_absorb: 0,
             pending_result: None,
             pending_rc: None,
             indent_offset: 0,
@@ -608,6 +613,7 @@ impl Activity {
             native_frames_owed,
             reraised_object,
             reraise_leaving: _,
+            propagate_absorb: _,
             pending_result,
             pending_rc,
             indent_offset: _,

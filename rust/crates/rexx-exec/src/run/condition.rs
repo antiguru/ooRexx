@@ -16,6 +16,7 @@ use super::{
     HandlerExit, Interp, Loud, Novalue, Number, ObjRef, PendingTrap, Raise, Raised, Rc, ReplyState,
     Search, Trap, TrappedCondition, body_of, raise_syntax_condition,
 };
+use crate::error::FailureSite;
 
 impl Interp {
     /// `SIGNAL ON`/`OFF` and `CALL ON`/`OFF`, which are one instruction with
@@ -513,6 +514,7 @@ impl Interp {
         self.hold_origin_package(origin);
         let propagated = std::mem::take(&mut self.activity.failure_propagated);
         let reraised = std::mem::take(&mut self.activity.failure_reraised);
+        self.activity.propagate_absorb = 0;
         self.set_sigl(self.activity.clause_state.line());
         if let Some(rc) = &raised.rc {
             let value = self.text(rc);
@@ -556,10 +558,12 @@ impl Interp {
             }));
         // What a later `RAISE PROPAGATE` re-raises. See `exec_raise_
         // propagate` for what is and is not measured about it.
+        let replied = self.activation().reply != ReplyState::None;
         self.activation_mut().cold_mut().active_condition = Some(Rc::new(ActiveCondition {
             raised: *raised,
             site,
             sites,
+            replied,
         }));
         // **The failed clause's own boundary, and the one place it can
         // happen** (fix round 3). `Op::Clause`'s region ends a *completing*
@@ -673,6 +677,7 @@ impl Interp {
                 raised,
                 site: None,
                 sites: Vec::new(),
+                replied: false,
             }));
         let key: Box<[u8]> = pending.condition.clone();
         // The entry the trap was found under, `ANY` where the condition has
@@ -1191,15 +1196,28 @@ impl Interp {
         raised.delivery.search = Search::Nobody;
         raised.delivery.positionless = true;
         // The original condition's echo stack, put back exactly as it stood
-        // when the trap cleared it. `record_failure_at` is first-wins, so
-        // restoring a full `failure_site` is also what stops this `raise
-        // propagate` clause recording itself over the clause that actually
-        // raised -- measured, the oracle echoes line 8 (`say 1/0`), not line
-        // 12 (`raise propagate`).
+        // when the trap cleared it: the report is the object's `TRACEBACK`.
+        // `record_failure_at` is first-wins, so restoring a full
+        // `failure_site` is also what stops this `raise propagate` clause
+        // recording itself over the clause that actually raised -- measured,
+        // the oracle echoes line 8 (`say 1/0`), not line 12 (`raise
+        // propagate`) -- and the levels below the trapping one seal nothing.
         let (site, sites) = (active.site.clone(), active.sites.clone());
         self.clear_failure_levels();
         self.activity.failure_site = site;
         self.activity.failure_sites = sites;
+        let trapper = self.trapping_depth(&active);
+        self.activity.propagate_absorb = trapper + self.fragments_within(trapper);
+        // A `REPLY` since the trap left the levels above the trapping one on
+        // the sender's activity, and the object's traceback still has them.
+        if !active.replied
+            && self
+                .frame_at(trapper)
+                .is_some_and(|frame| frame.reply != ReplyState::None)
+            && let Some(object) = self.activation().condition().and_then(|c| c.object)
+        {
+            self.propagate_after_reply(object)?;
+        }
         // `RexxActivation::raise` pops the level and `Activity::
         // reraiseException`s the same object (`execution/RexxActivation.cpp:
         // 1840`). Measured: without a `RETURN` tail, from an internal call it
@@ -1211,10 +1229,60 @@ impl Interp {
             raised.delivery.positionless = false;
             raised.position = 0;
             self.reraise_failure_levels();
+            // Re-raised at or below the trapping level, whose clauses the
+            // object's traceback does not show, the report names the line
+            // of the clause it is re-raised in (`Activity::reraiseException`).
+            if sender.depth <= trapper {
+                let line = self.clause_of(sender.depth).line;
+                let marker = FailureSite::Reraised { line, name: None };
+                self.activity.failure_sites.push(marker);
+            }
             self.activity.reraised_object = self.activation().condition().and_then(|c| c.object);
             self.activity.reraise_leaving = sender.depth;
         }
         Err(raised.into())
+    }
+
+    /// The levels of a propagate whose trapping activation has replied since
+    /// its trap: the object's whole `TRACEBACK`, and no level left on this
+    /// activity adds one.
+    #[cold]
+    #[inline(never)]
+    fn propagate_after_reply(&mut self, object: ObjRef) -> Result<(), Failure> {
+        let lines = self.traceback_lines(object)?;
+        let kept = self.activity.failure_sites.len() + 1;
+        let above = lines
+            .into_iter()
+            .skip(kept)
+            .map(|text| FailureSite::Rendered {
+                text,
+                package: None,
+            });
+        let site = self.activity.failure_site.take();
+        self.activity.failure_sites.extend(site);
+        self.activity.failure_sites.extend(above);
+        self.activity.failure_site = Some(FailureSite::Reraised {
+            line: 0,
+            name: None,
+        });
+        self.activity.propagate_absorb = 0;
+        Ok(())
+    }
+
+    /// The depth of the level whose trap took `active`: the outermost of the
+    /// internal calls from the running one outward that share its condition.
+    fn trapping_depth(&self, active: &Rc<ActiveCondition>) -> usize {
+        let shares = |depth| {
+            self.frame_at(depth)
+                .and_then(|frame| frame.cold.as_deref())
+                .and_then(|cold| cold.active_condition.as_ref())
+                .is_some_and(|held| Rc::ptr_eq(held, active))
+        };
+        let mut trapper = 0;
+        while shares(trapper + 1) {
+            trapper += 1;
+        }
+        trapper
     }
 
     /// `RAISE PROPAGATE` of a condition other than `SYNTAX`. Like a tail-less

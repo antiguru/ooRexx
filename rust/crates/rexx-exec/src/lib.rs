@@ -1320,6 +1320,8 @@ struct ActiveCondition {
     raised: Raised,
     site: Option<FailureSite>,
     sites: Vec<FailureSite>,
+    /// Whether the trapping activation had replied when its trap fired.
+    replied: bool,
 }
 
 /// A condition waiting for the current clause to finish before its `CALL ON`
