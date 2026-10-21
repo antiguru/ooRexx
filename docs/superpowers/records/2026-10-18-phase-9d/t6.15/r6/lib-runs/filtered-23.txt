@@ -1,0 +1,12 @@
+
+running 7 tests
+test input::tests::a_file_console_reads_what_is_appended ... ok
+test input::tests::a_file_console_leaves_the_descriptor_at_the_read_position ... ok
+test input::tests::a_file_console_recounts_a_grown_file ... ok
+test input::tests::a_file_console_starts_where_the_descriptor_is ... ok
+test input::tests::a_file_console_has_one_read_position ... ok
+test input::tests::a_seek_past_the_end_of_a_file_console ... ok
+test input::tests::a_file_console_counts_lines_once ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 1159 filtered out; finished in 0.00s
+

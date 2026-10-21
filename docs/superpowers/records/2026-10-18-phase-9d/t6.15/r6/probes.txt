@@ -1,0 +1,36 @@
+two.five       oracle rc=0 one|two|16|
+two.five       head   rc=0 one|two|16|
+two.five       r5     rc=0 one|one|24|
+two.five       r4     rc=0 one|two|16|
+h1cat.five     oracle rc=0 one|rc=0|two|three|four|five|
+h1cat.five     head   rc=0 one|rc=0|two|three|four|five|
+h1cat.five     r5     rc=0 one|rc=0|one|two|three|four|five|
+h1cat.five     r4     rc=0 one|rc=0|two|three|four|five|
+two2.five      oracle rc=0 L one|M two|
+two2.five      head   rc=0 L one|two|three|M four|
+two2.five      r5     rc=0 L one|two|two|M two|
+two2.five      r4     rc=0 L one|one|two|M two|
+wc1.five       oracle rc=0 L one|0|C 20 1|
+wc1.five       head   rc=0 L one|20|C 0 0|
+wc1.five       r5     rc=0 L one|20|C 20 1|
+wc1.five       r4     rc=0 L one|24|C 20 1|
+childwc.in22   oracle rc=0 5|0|C 16 1|
+childwc.in22   head   rc=0 5|16|C 0 0|
+childwc.in22   r5     rc=0 5|16|C 16 1|
+childwc.in22   r4     rc=0 5|22|C 16 1|
+childwc.b4096  oracle rc=0 4095|5|C 5 1|
+childwc.b4096  head   rc=0 4095|5|C 0 0|
+childwc.b4096  r5     rc=0 4095|5|C 5 1|
+childwc.b4096  r4     rc=0 4095|4101|C 5 1|
+childwc.big    oracle rc=0 29|7773694|C 7777760 1|
+childwc.big    head   rc=0 29|7777760|C 0 0|
+childwc.big    r5     rc=0 29|7777760|C 7777760 1|
+childwc.big    r4     rc=0 29|7777790|C 7777760 1|
+child.in22     oracle rc=0 L hello|M world|N 10 1|
+child.in22     head   rc=0 L hello|world|third|lastM |N 0 0|
+child.in22     r5     rc=0 L hello|world|third|lastM world|N 10 1|
+child.in22     r4     rc=0 L hello|hello|world|third|lastM world|N 10 1|
+exitcat.in22   oracle rc=0 hello|rc=0|
+exitcat.in22   head   rc=0 hello|rc=0|world|third|last
+exitcat.in22   r5     rc=0 hello|rc=0|world|third|last
+exitcat.in22   r4     rc=0 hello|rc=0|hello|world|third|last

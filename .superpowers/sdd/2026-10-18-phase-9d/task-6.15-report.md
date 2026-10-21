@@ -1091,3 +1091,101 @@ parent: 0.0000 on startup, interpret, parse, churn and sayloop.
 3. **A successor process sees the rest only after a normal end.** The sync on drop does not run
    when the interpreter is killed by a signal; the offset then stands wherever the last chunk
    read left it.
+
+## Fix round 6
+
+Brief: `task-6.15-fix-r6.md`. Re-review: `task-6.15-rereview-r5.md`. Status: DONE_WITH_CONCERNS.
+
+### Commits
+
+* `0da8c4c64`: the conditional sync and the adoption in `input.rs`, the adoption after every
+  ended command (`command.rs`'s `command_ended`, `rexxutil/process.rs`'s `cls`), the row
+  `a_command_moves_the_shared_read_position` and the shortened `FILE_CHILD_PROGRAM` in
+  `input_oracle.rs`, the unit test `a_command_that_consumed_moves_the_read_position`, and one
+  temporary file name per console test.
+* The records commit that follows holds `t6.15/r6/` and this section.
+
+### Important 1: the descriptor is the read position commands share
+
+* `FileConsole::sync_offset` seeks only when the descriptor's offset is not the read position,
+  which is exactly when the console's own reads moved it: after a command returns,
+  `FileConsole::adopt_offset` takes the read position from the offset, drops the line mark and
+  the read-ahead, and the two agree until the console reads again. So a command, or a
+  successor process, continues from where the previous command stopped, and a program that
+  has read hands over the bytes after its read position.
+* `Interp::adopt_input_offset` runs in `command_ended`, which every spawned command reaches
+  from `run_command` and `end_blocked_command`, and in `SysCls` after its child (a null
+  standard input there, so nothing moves). A registered command handler spawns nothing and
+  adopts nothing.
+* Measured (`r6/probes.txt`, per channel in `r6/witnesses/`), on `five.txt` (`one` to `five`,
+  24 bytes) unless named:
+
+  | probe | oracle | head | r5 | r4 |
+  | --- | --- | --- | --- | --- |
+  | `two` (`'head -1'`, `'head -1'`, `'wc -c'`) | `one / two / 16` | `one / two / 16` | `one / one / 24` | `one / two / 16` |
+  | `h1` (`'head -1'`) then `cat` in the shell | `one / two..five` | `one / two..five` | `one / one..five` | `one / two..five` |
+  | `two2` (`linein()`, `'head -1'`, `'head -1'`, `linein()`) | `L one / M two` | `L one / two / three / M four` | `L one / two / two / M two` | `L one / one / two / M two` |
+  | `wc1` (`linein()`, `'wc -c'`, `chars() lines()`) | `L one / 0 / C 20 1` | `L one / 20 / C 0 0` | `L one / 20 / C 20 1` | `L one / 24 / C 20 1` |
+  | `childwc` on `in22.txt`, `b4096.txt`, the 200000-line file: the child | 0, 5, 7773694 | 16, 5, 7777760 | 16, 5, 7777760 | 22, 4101, 7777790 |
+  | `exit` (`linein()`) then `cat` in the shell, `in22.txt` | nothing | `world / third / last` | the same | `hello / world / third / last` |
+
+  `two` and `h1` are the re-review's required observables and answer as r3, r4 and the oracle
+  do. Every child still sees the bytes after the read position. What is new is the row after
+  a command that consumed: `two2` reads on from where the second `head` stopped, and `wc1`'s
+  counts answer 0 once `wc` has taken everything, where the oracle's buffered position is
+  untouched by its children. That is the ruling's "the program's next read must start there",
+  and it is an oracle departure the ruling makes; `FILE_CHILD_PROGRAM` no longer prints the
+  counts after `wc`, so its row stays oracle-identical.
+* Rows, gated and oracle-identical: `a_command_moves_the_shared_read_position` (`one / two /
+  16`) and `a_file_console_hands_a_command_what_is_unread` (`4095 / 5`). Unit test
+  `a_command_that_consumed_moves_the_read_position`: a seek on a duplicate stands for the
+  command; after `adopt_offset` the console counts and reads from there, a sync with nothing
+  read since moves nothing, and a sync after a read puts the offset at the read position.
+
+### Important 2: one temporary file per console test
+
+* `a_file_console_leaves_the_descriptor_at_the_read_position` now uses `console("sync", ..)`
+  and `a_file_console_starts_where_the_descriptor_is` writes `rexx-file-console-<pid>-start`;
+  every other `console(..)` caller already had a name of its own (`adopt`, `count`, `grow`,
+  `midline`, `past`, `position`, `recount`).
+* `r6/lib-runs/summary.txt`: the release `--lib` binary of `0da8c4c64`, run from
+  `crates/rexx-exec` with the default test threads, 40 times in full: 1166 passed every time,
+  no non-zero exit; 40 times filtered to `file_console`: 7 passed every time. (A first set of
+  40 runs from `rust/` failed the same three `rexxutil` and `library` tests every time, which
+  resolve paths against the crate directory; the console tests passed in those too.)
+
+### Checks
+
+From `rust/`, `CARGO_TARGET_DIR=/tmp/claude-1000/t615r6-target/head`, `CARGO_INCREMENTAL=0`,
+`-j 4`; outputs in `t6.15/r6/`, statuses in `checks-status.txt` with the commit they ran on.
+
+| command | exit |
+| --- | --- |
+| `cargo fmt --all --check` (`checks-fmt.txt`) | 0 |
+| `memcap 8G cargo clippy -p rexx-exec -p rexx-core --all-targets -- -D warnings` (`checks-clippy.txt`) | 0 |
+| `memcap 16G cargo test -p rexx-exec --test stream_model --no-fail-fast`, debug (`checks-stream-model-debug.txt`) | 0, 26 passed |
+| the same, `--release` (`checks-stream-model.txt`) | 0, 26 passed |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test --release -p rexx-exec --test input_oracle` (`checks-input-oracle.txt`) | 0, 26 passed |
+| `memcap 16G cargo test --release -p rexx-exec --lib` (`checks-lib.txt`) | 0, 1166 passed |
+| refusal tables + `licensed_divergences` + `numeric_model` (`checks-tables.txt`) | 0 |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test --release -p rexx-exec --test corpus` (`checks-corpus.txt`) | 0, 1149 of 1149 |
+
+### Perf
+
+`t6.15/r6/callgrind.txt`: `callgrind.sh -B 0.5 -j 4 -p "startup interpret parse churn
+sayloop"`, pin `rexx-run`, parent `cg-9d/t6.15-r5/rexx-head` (ae39e1981), head
+`cg-9d/t6.15-r6/rexx-head` (0da8c4c64), exit 0. Own deltas with libc subtracted, head less
+parent: 0.0000 on startup, parse, churn and sayloop, -0.0001 on interpret.
+
+### Concerns (round 6)
+
+1. **The adoption is an oracle departure by ruling.** After a command that consumed standard
+   input, the program reads on from where the command stopped (`two2`: `L one / two / three /
+   M four`) and its counts say what is left from there (`wc1`: `C 0 0`), where the oracle's
+   buffered position is untouched (`L one / M two`, `C 20 1`). The ruling asked for exactly
+   this; it is not written up as a Deviation here.
+2. **A command's own seek is what makes `two` answer `one / two`.** `head` leaves the
+   descriptor after the line it printed on a seekable input; a reader that takes a whole
+   buffer and does not seek back (`cat`, `wc`) leaves the descriptor at the end, and the next
+   command or read gets nothing. That is the same on r3, r4 and the oracle.
+3. **The sync on drop still does not run when the interpreter dies by a signal.**
