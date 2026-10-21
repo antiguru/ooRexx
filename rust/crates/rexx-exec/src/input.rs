@@ -104,6 +104,9 @@ struct FileConsole {
     buffered_at: u64,
     /// The size the line count was taken at; a changed size drops the count.
     counted_size: Option<u64>,
+    /// The descriptor's offset where this console's own reads, walks and
+    /// syncs last left it; any other offset was moved by a command.
+    left_at: std::cell::Cell<Option<u64>>,
 }
 
 impl FileConsole {
@@ -139,7 +142,14 @@ impl FileConsole {
             buffered: Vec::new(),
             buffered_at: 0,
             counted_size: None,
+            left_at: std::cell::Cell::new(Some(offset)),
         })
+    }
+
+    /// Records where the console's own use of the descriptor left its offset.
+    fn note_offset(&self) {
+        use std::io::Seek;
+        self.left_at.set((&self.open.file).stream_position().ok());
     }
 
     /// The read position, as `read_from` takes it.
@@ -157,6 +167,7 @@ impl FileConsole {
         }
         self.buffered = read_from(&mut self.open.file, at, STDIN_CHUNK).unwrap_or_default();
         self.buffered_at = at;
+        self.note_offset();
         !self.buffered.is_empty()
     }
 
@@ -239,7 +250,9 @@ impl FileConsole {
             }
         }
         let position = self.open.read_position;
-        lines_after(&mut self.open, position).unwrap_or(0)
+        let left = lines_after(&mut self.open, position).unwrap_or(0);
+        self.note_offset();
+        left
     }
 
     /// CHARIN's start: moves the read position to character `position`,
@@ -258,6 +271,7 @@ impl FileConsole {
     fn seek_line(&mut self, line: u64) {
         let (_, at) = crate::lines::seek_line(&mut self.open, as_position(line), 0);
         self.open.read_position = at;
+        self.note_offset();
     }
 
     /// Puts the descriptor's offset at the read position where the console's
@@ -273,15 +287,22 @@ impl FileConsole {
         {
             let _ = (&self.open.file).seek(SeekFrom::Start(want));
         }
+        self.note_offset();
     }
 
     /// Takes the read position from the descriptor's offset, where a command
     /// that read the descriptor left it. The line mark and the read-ahead go.
+    /// An offset where the console itself left it means no command read, and
+    /// nothing moves.
     fn adopt_offset(&mut self) {
         use std::io::Seek;
         let Ok(offset) = (&self.open.file).stream_position() else {
             return;
         };
+        if self.left_at.get() == Some(offset) {
+            return;
+        }
+        self.left_at.set(Some(offset));
         self.open.read_position = as_position(offset + 1);
         self.open.line_mark = None;
         self.open.line_mark_digest = None;
@@ -1150,6 +1171,22 @@ mod tests {
             Some(14),
             "read, so moved to the read position"
         );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// A command that read nothing leaves the read position alone, even
+    /// when the console read on while the command ran.
+    #[test]
+    fn a_command_that_read_nothing_moves_nothing() {
+        let (mut c, path) = console("idle", b"one\ntwo\nthree\nfour\n");
+        assert_eq!(c.read_line(), b"one\n");
+        c.sync_offset();
+        assert_eq!(c.read_line(), b"two\n");
+        c.adopt_offset();
+        assert_eq!(c.read_line(), b"three\n");
+        assert_eq!(c.lines_left(), 1);
+        c.adopt_offset();
+        assert_eq!(c.read_line(), b"four\n");
         let _ = std::fs::remove_file(&path);
     }
 
