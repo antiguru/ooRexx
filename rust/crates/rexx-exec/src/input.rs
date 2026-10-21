@@ -173,12 +173,27 @@ impl FileConsole {
             let found = ahead.iter().position(|byte| *byte == b'\n');
             let take = found.map_or(ahead.len(), |at| at + 1);
             line.extend_from_slice(&ahead[..take]);
-            self.open.read_position += take as i64;
+            self.advance(take, i64::from(found.is_some()));
             if found.is_some() {
                 break;
             }
         }
         line
+    }
+
+    /// Moves the read position over `taken` characters holding `line_ends`
+    /// line ends. A line mark at the old position moves with it, so a count
+    /// after a loop of reads walks nothing; its debug digest is dropped, as
+    /// a mark moved without a walk cannot vouch for one.
+    fn advance(&mut self, taken: usize, line_ends: i64) {
+        let from = self.open.read_position;
+        self.open.read_position += taken as i64;
+        if let Some((mark, line)) = self.open.line_mark
+            && mark == from
+        {
+            self.open.line_mark = Some((self.open.read_position, line + line_ends));
+            self.open.line_mark_digest = None;
+        }
     }
 
     /// Up to `wanted` bytes from the read position, short only at the end of
@@ -189,7 +204,8 @@ impl FileConsole {
             let ahead = self.ahead();
             let take = ahead.len().min(wanted - out.len());
             out.extend_from_slice(&ahead[..take]);
-            self.open.read_position += take as i64;
+            let line_ends = ahead[..take].iter().filter(|byte| **byte == b'\n').count();
+            self.advance(take, line_ends as i64);
         }
         out
     }

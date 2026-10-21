@@ -80,8 +80,9 @@ pub(crate) fn line_count(
     open: &mut rexx_core::OpenFile,
     record_length: u64,
 ) -> std::io::Result<u64> {
-    let size = size_of(&open.file);
-    if let Some(whole) = size.checked_div(record_length) {
+    if record_length > 0 {
+        let size = size_of(&open.file);
+        let whole = size.checked_div(record_length).unwrap_or(0);
         return Ok(whole + u64::from(!size.is_multiple_of(record_length)));
     }
     if let Some(total) = open.line_total {
@@ -97,7 +98,8 @@ pub(crate) fn line_count(
     let total = count_lines_from(&mut open.file, 1)?;
     open.line_total = Some(total);
     if cfg!(debug_assertions) {
-        open.line_total_digest = digest_before(&mut open.file, size as i64 + 1);
+        let end = size_of(&open.file) as i64 + 1;
+        open.line_total_digest = digest_before(&mut open.file, end);
     }
     Ok(total)
 }
