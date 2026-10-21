@@ -375,3 +375,84 @@ read off the kept resolution, so `CallSite` keeps its old size.
    again.
 3. `Interp::pinned_copies` is a count keyed by `ObjRef`: GC pin bookkeeping, not object state.
 4. Q3 (copied REXX-package routines) is the controller's queued item, as the brief says.
+
+## Fix round 3
+
+Commits: `d6daeeaca` (I-2 and m-3), and the records and report commit after it. Records:
+`t7.1/r3/`.
+
+**I-2.** A call op forgets its site only when this call missed there (it resolved and remembered)
+and then raised:
+
+* `begin_call_args` and `begin_call_named` carry a `missed` flag out of their miss arm.
+* `site_resolution_before_arguments` returns whether the site had a kept answer on entry, which
+  `begin_call_expr` and `begin_call_tree` read.
+* A routine kept from an earlier return stays kept through a later raise, as the oracle's
+  `externalTarget` does (`instructions/CallInstruction.cpp:167-197`). `forget_site`'s doc says so.
+
+Witness `lang/call_site_kept_routine_raises.rex`: the CALL form and the function form, each with a
+copy and with the canonical object. Each keeps a routine, rebinds the name, raises through the
+kept routine (`abc raised 88.907`), and then still runs the kept one (`2 answered 2`). It is
+identical to the oracle. With the forget made unconditional, those four `2` lines turn red
+(`2 raised 98.941`).
+
+The witness's argument section (a raise in an argument) matches the oracle, but that mutation
+does not reach it: in the CALL form the arguments run in ops ahead of the call op, so their raise
+never comes back through it.
+
+Q1's own line and the rebind-to-canonical line are unchanged: `call_site_routine_copy_lifetime.rex`,
+`r3/probes/which.rex` and `rebind.rex` are identical to the oracle. The re-review's
+`kept-raise.rex`, `kept-raise-fn.rex` and `kept-raise-canon.rex` are identical too.
+`rexx-raise.rex` still differs; that is Q4, which is queued.
+
+Hot path (`r3/hot-callgrind.txt`, `hot.rex` at 100000 and 200000 calls, per-call slope in Ir):
+
+| calls to | round 2 | round 3 | change |
+|---|---|---|---|
+| the canonical object | 2501.1 | 2502.1 | +1 |
+| a copy | 2501.2 | 2502.1 | +1 |
+
+The +1 Ir is the miss flag. The fixed part is unchanged.
+
+**m-3.** `tests/library_routine_memory.rs` gains `run_capped`, which runs a `main.rex` under the
+oracle's `ulimit -v 1048576`; the existing test now goes through it. Two new tests use it:
+
+* `interpreted_calls_to_fresh_routine_copies_run_under_the_oracles_memory_cap`: the re-review's
+  INTERPRET shape at 400000 passes.
+* `a_raising_routine_copy_rebound_at_one_site_runs_under_the_oracles_memory_cap`: a raising copy
+  rebound at one site, at 300000 passes.
+
+Each goes red with its unpin disabled (`r3/mutations.txt`). The INTERPRET-end unpin disabled
+gives `memory allocation of 2032 bytes failed`, rc none. The repin's unpin skipped gives
+`memory allocation of 19136528 bytes failed`. The test binary runs in 9.66 s.
+
+### Checks (round 3, at `d6daeeaca`)
+
+| command | exit |
+|---|---|
+| `cargo fmt --all --check` | 0 |
+| `cargo clippy -p rexx-exec --all-targets -- -D warnings` | 0 |
+| `cargo test --release -p rexx-exec --lib` | 0, 1169 passed |
+| refusal tables, `representation_refusals`, `owners`, `closed_phases`, `phase_ten_reasons` | 0 |
+| `REXX_CORPUS_GATE=1 ... --test corpus` | 0, 1156 of 1156 matching |
+| `cargo test --release -p rexx-parse --test sourceline_oracle` | 0 |
+| `native_entries`, `library_routine_memory` (23 passed), `concurrency_tests`, `gate_table_d` | 0 |
+| `REXX_SUITE_GATE=1 ... --test suite l3_core_suite` (`r3/suite/`) | 0, `tests.tsv` identical to `r2/suite/tests.tsv` |
+
+### Perf (round 3)
+
+`r3/callgrind.txt`: parent `cg-9d/t7.1-r2/rexx-head`, head `cg-9d/t7.1-r3/rexx-head`, exit 0.
+
+| program | own delta, libc subtracted | own delta, whole process |
+|---|---|---|
+| startup | 0.0000 | -0.0019 |
+| interpret | -0.0045 | -0.0020 |
+| parse | 0.0000 | -0.0001 |
+| churn | 0.0000 | -0.0004 |
+| sayloop | 0.0000 | -0.0011 |
+
+### Concerns (round 3)
+
+1. The canonical hot path is +1 Ir per call over round 2: the miss flag. It is not zero, as the
+   brief asked.
+2. Q4 is unchanged here; it is queued.

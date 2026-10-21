@@ -1,0 +1,16 @@
+copy call 1 answered 1
+copy call abc raised 88.907
+copy call 2 answered 2
+canonical call 1 answered 1
+canonical call abc raised 88.907
+canonical call 2 answered 2
+copy function 1 answered 1
+copy function abc raised 88.907
+copy function 2 answered 2
+canonical function 1 answered 1
+canonical function abc raised 88.907
+canonical function 2 answered 2
+argument 1 answered 1
+argument V raised 41.1
+argument arg raises raised 44.1
+argument 3 answered 3

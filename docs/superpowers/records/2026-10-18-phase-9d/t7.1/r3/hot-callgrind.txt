@@ -1,0 +1,9 @@
+# hot.rex N {copy|canon}, valgrind --tool=callgrind, whole-process Ir. r2 = cg-9d/t7.1-r2/rexx-head (f84c45029), r3 = d6daeeaca's code.
+r2 copy 100000 Collected : 369868204
+r2 copy 200000 Collected : 619984191
+r2 canon 100000 Collected : 369893083
+r2 canon 200000 Collected : 620005189
+r3 copy 100000 Collected : 369971801
+r3 copy 200000 Collected : 620184079
+r3 canon 100000 Collected : 369993333
+r3 canon 200000 Collected : 620204963

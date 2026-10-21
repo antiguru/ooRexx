@@ -1,0 +1,34 @@
+F forget on a hit too build 0 
+DIFF call_site_kept_routine_raises.rex
+3c3
+< copy call 2 answered 2
+---
+> copy call 2 raised 98.941
+6c6
+< canonical call 2 answered 2
+---
+> canonical call 2 raised 98.941
+9c9
+< copy function 2 answered 2
+---
+> copy function 2 raised 98.941
+12c12
+< canonical function 2 answered 2
+---
+> canonical function 2 raised 98.941
+
+F forget on a hit too restored
+U interpret-end unpin disabled test rc 101
+test interpreted_calls_to_fresh_routine_copies_run_under_the_oracles_memory_cap ... FAILED
+assertion `left == right` failed
+  left: (None, "", "memory allocation of 2032 bytes failed\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n")
+ right: (Some(0), "done 1\n", "")
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 22 filtered out; finished in 3.80s
+U interpret-end unpin disabled restored
+R repin unpin skipped test rc 101
+test a_raising_routine_copy_rebound_at_one_site_runs_under_the_oracles_memory_cap ... FAILED
+assertion `left == right` failed
+  left: (None, "", "memory allocation of 19136528 bytes failed\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n")
+ right: (Some(0), "done\n", "")
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 22 filtered out; finished in 4.91s
+R repin unpin skipped restored
