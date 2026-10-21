@@ -1,6 +1,18 @@
 **RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** derive the semantics; follow the model; Deviation where the oracle departs.
 
-**OPEN: Deviation candidates for Moritz, found by Phase 9d Task 6.8.** Neither is copied, neither is witnessed, and no suite test depends on either.
+**RULED by Moritz 2026-10-21, all three:**
+* List order: the crate keeps rexxref's left-to-right order for DROP, EXPOSE and PROCEDURE EXPOSE
+  lists; one Deviation covers the order and the PROCEDURE EXPOSE handler split, recorded as an oracle
+  bug ("Source order, oracle bug"). Cause: `processVariableList` pushes plain names to the front of
+  `subTerms` (`pushSubTerm`) but queues `(name)` selectors at the back (`subTerms->queue`,
+  InstructionParser.cpp:4523), while the instruction constructors pop expecting every item pushed
+  (DropInstruction.cpp:63-69), so a mixed list runs selectors reversed, then plain names.
+* Empty stem name by identity: covered by Deviation 4 (string representation unspecified); a
+  sentence goes into Deviation 4, no new number ("Under Deviation 4").
+* `.context~variables` lists an alias under the name it is reachable by (`Z.`); Deviation
+  ("List Z., Deviation").
+
+**Found by Phase 9d Task 6.8.** Neither is copied, neither is witnessed, and no suite test depends on either.
 
 # Variable references: two oracle behaviours that look like artefacts
 

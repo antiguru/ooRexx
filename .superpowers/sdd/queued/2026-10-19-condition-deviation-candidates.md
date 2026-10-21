@@ -1,6 +1,16 @@
 **RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** derive the semantics; follow the model; Deviation where the oracle departs.
 
-**OPEN: Deviation candidates for Moritz, found by the Phase 9d Task 6.9 review.** Both predate Task 6.9.
+**RULED by Moritz 2026-10-21, all three:**
+* A failed trap handler call taken by SIGNAL ON SYNTAX signals at once; no clause runs after it and
+  SIGL names the failing clause; Deviation ("Signal at once, Deviation").
+* A non-SYNTAX `RAISE ... RETURN|EXIT expr` sets the condition object's RESULT entry, as rexxref
+  says; Deviation recorded as an oracle bug (`RexxActivation::raise` passes `result`, not
+  `resultObj`, RexxActivation.cpp:1827); revert if ooTest breaks ("Add RESULT, oracle bug"). A crate
+  change.
+* A 16.1 from a SIGNAL trap inside INTERPRET keeps the PROGRAM frame's file name; Deviation
+  ("Keep file name, Deviation").
+
+**Found by the Phase 9d Task 6.9 review.** Both predate Task 6.9.
 
 # Conditions: two oracle behaviours to rule on
 
