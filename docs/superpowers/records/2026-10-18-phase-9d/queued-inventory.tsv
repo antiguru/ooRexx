@@ -227,3 +227,9 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointe
 2026-10-21-stdin-linein-then-charin.md	divergence	-	closed:3cd8cff5c	its own CLOSED line; Task 6.15 fix round 4 gives a file standard input one read position, and a start on a piped one is 93.958 on both sides	closed:3cd8cff5c
 2026-10-21-redirected-target-timed-line-flake.md	process	-	9d	flaky timed line in a gated corpus program	9d
 2026-10-21-quick-native-calls-wall-bound-flake.md	process	-	9d	lib test bounded by 1 ms wall time flakes under load	9d
+2026-10-21-routine-new-call-frames.md	divergence	-	9d	frames of .Routine~new(...)~call name the wrong executable	9d
+2026-10-21-main-program-executable-annotations.md	divergence	-	9d	.context~executable~annotations refuses from the main program	9d
+2026-10-21-lineout-nil-names-file.md	divergence	-	9d	.stdout~lineout(.nil) renders with the running file	9d
+2026-10-21-copied-package-routine-executable.md	divergence	-	9d	a copied REXX-package routine frame answers the canonical Routine	9d
+2026-10-21-raise-in-routine-keeps-call-site.md	divergence	-	9d	a raise inside a ::routine leaves its call site resolution kept	9d
+2026-10-21-call-site-reads-kept-before-arguments.md	divergence	-	9d	CallExpr and Call read the kept routine before the arguments	9d

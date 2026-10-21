@@ -2680,6 +2680,30 @@ DEVIATIONS -- permanent, chosen
      6.15 fix round 2).
      Witnessed by tests/stream_model.rs (ORACLE_DEPARTURES and departures-oracle.tsv, rule charin-eof-notready).
 
+ 63. COPY OF A CLASS OBJECT, A REXXCONTEXT OR .REXXINFO RAISES 93.970 ON
+     EVERY ROUTE (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-21 ("93.970, Deviation. Record this as an oracle
+     bug."). rexxref forbids copying all three: "the copy method is forbidden
+     for Class and all other class objects, and will result in an error"
+     (fundclasses.xml:63-65), RexxInfo "other instances cannot be created or
+     copied" (utilityclasses.xml:7934-7942), and RexxContext's copy is
+     forbidden (utilityclasses.xml:7545, 7549, 7574). A plain `~copy` raises
+     93.970 on both sides. ORACLE BUG: through a scope override, as in
+     `.Message~new(o, .array~of('COPY', .Object))~send`, the oracle reaches
+     `RexxObject::copyRexx` instead of `RexxClass::copyRexx`
+     (classes/ClassClass.cpp:161-171, commented "to keep Class objects from
+     being copied") and copies: `copied Class 0 Array 2` for a built-in class,
+     `copied Class 0 ZZ m 0` for a `::class`, whose copy shares the original's
+     method dictionary, `copied RexxContext` and `copied RexxInfo 0`. This
+     crate raises 93.970 on every route, a scope override, `~send`,
+     `~sendWith`, `~start`, `copy:super` from a metaclass and a run of
+     `.Object~instanceMethod('COPY')` included. Measured by Phase 9d Task 7.1
+     (docs/superpowers/records/2026-10-18-phase-9d/t7.1/r1/probes/copyrules.rex).
+     Witnessed by dispatch::tests::a_scope_override_copy_of_an_uncopyable_object_raises
+     (rust/crates/rexx-exec/src/dispatch/tests.rs) and
+     corpus/lang/object_copy_uncopyable_receivers.rex.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 
