@@ -129,23 +129,26 @@ impl Interp {
                 Err(failure)
             }
             other => {
-                // An `INTERPRET` activation leaves through the `RETURNED` block
-                // that runs the `UNINIT`s a collection readied
-                // (`RexxActivation.cpp:676-705`), a `SIGNAL` out of it too
-                // (`signalTo`, `:2096-2100`).
                 if !self.uninit_ready.is_empty() {
-                    let returned = match &other {
-                        Flow::Next | Flow::Signal(_) => Some(None),
-                        Flow::Return(value) | Flow::Exit(value) => Some(*value),
-                        _ => None,
-                    };
-                    if let Some(value) = returned {
-                        self.run_uninits_at_return(value)?;
-                    }
+                    self.drain_leaving_fragment(&other)?;
                 }
                 Ok(other)
             }
         }
+    }
+
+    /// An `INTERPRET` activation leaves through the `RETURNED` block that runs
+    /// the `UNINIT`s a collection readied (`RexxActivation.cpp:676-705`), a
+    /// `SIGNAL` out of it too (`signalTo`, `:2096-2100`).
+    #[cold]
+    #[inline(never)]
+    fn drain_leaving_fragment(&mut self, flow: &Flow) -> Result<(), Failure> {
+        let value = match flow {
+            Flow::Next | Flow::Signal(_) => None,
+            Flow::Return(value) | Flow::Exit(value) => *value,
+            _ => return Ok(()),
+        };
+        self.run_uninits_at_return(value)
     }
 
     /// Drops one `DROP` target: a plain variable, a whole stem, one tail, or
