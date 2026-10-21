@@ -338,3 +338,5 @@ lang/object_scope_override_nil.rex
 # rexxref forbids copying.
 lang/stackframe_library_routine_copy_executable.rex
 lang/object_copy_uncopyable_receivers.rex
+# 9d Task 7.1 fix round 2: a call site keeps the routine a call found once the call returns.
+lang/call_site_routine_copy_lifetime.rex

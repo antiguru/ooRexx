@@ -150,34 +150,60 @@ impl Interp {
     }
 
     /// What a call by name to library code `code` ran: the copy the lookup
-    /// found, or for `.nil` the one object standing for `code`. A copy is held from its
-    /// first call on, since the call site keeps the resolution naming it for
-    /// as long as its body lives, as the oracle's instruction keeps the
-    /// routine; one collected before that answers [`RoutineObject::Gone`].
-    pub(crate) fn found_routine_object(
-        &mut self,
-        code: usize,
-        copy: ObjRef,
-    ) -> crate::RoutineObject {
+    /// found, or for `.nil` the one object standing for `code`. The copy is
+    /// live: the call site that kept it pins it ([`Interp::repin`]), and one
+    /// just looked up is in the table the lookup read.
+    pub(crate) fn found_routine_object(&self, code: usize, copy: ObjRef) -> crate::RoutineObject {
         if copy == ObjRef::NIL {
             return crate::RoutineObject::OfCode;
         }
-        let object = copy;
-        let runs_code = matches!(
-            self.executable_sources.get(&object),
-            Some(crate::ExecutableRecord {
-                source: crate::ExecutableSource::Loaded { code: held },
-                ..
-            }) if *held == code
+        debug_assert!(
+            self.heap.get(copy).is_some()
+                && matches!(
+                    self.executable_sources.get(&copy),
+                    Some(crate::ExecutableRecord {
+                        source: crate::ExecutableSource::Loaded { code: held },
+                        ..
+                    }) if *held == code
+                ),
+            "a call by name found a Routine copy that is gone or runs other code"
         );
-        if self.heap.get(object).is_none() || !runs_code {
-            return crate::RoutineObject::Gone;
+        crate::RoutineObject::Given(copy)
+    }
+
+    /// Applies a call site's [`crate::run::Repin`]: a `Routine` copy stays
+    /// rooted while any call site keeps it, as the oracle's instruction keeps
+    /// its routine for the instruction's life.
+    #[inline]
+    pub(crate) fn repin(&mut self, repin: crate::run::Repin) {
+        if repin.pin != ObjRef::NIL {
+            self.pin_copy(repin.pin);
         }
-        self.roots.add_global(
-            &format!("a library routine copy a call found, {}", object.bits()),
-            object,
-        );
-        crate::RoutineObject::Given(object)
+        if repin.unpin != ObjRef::NIL {
+            self.unpin_copy(repin.unpin);
+        }
+    }
+
+    #[cold]
+    fn pin_copy(&mut self, copy: ObjRef) {
+        let count = self.pinned_copies.entry(copy).or_insert(0);
+        *count += 1;
+        if *count == 1 {
+            self.roots.add_global(&pinned_copy_key(copy), copy);
+        }
+    }
+
+    /// Drops one call site's hold on `copy`.
+    #[cold]
+    pub(crate) fn unpin_copy(&mut self, copy: ObjRef) {
+        let Some(count) = self.pinned_copies.get_mut(&copy) else {
+            return;
+        };
+        *count -= 1;
+        if *count == 0 {
+            self.pinned_copies.remove(&copy);
+            self.roots.remove_global(&pinned_copy_key(copy));
+        }
     }
 
     /// `StackFrame~executable` for a library routine's frame that held `ran`
@@ -191,7 +217,6 @@ impl Interp {
         match ran {
             crate::RoutineObject::OfCode => code.map(|code| self.library_routine_object(code)),
             crate::RoutineObject::Given(object) => Some(object),
-            crate::RoutineObject::Gone => None,
         }
     }
 
@@ -2039,4 +2064,10 @@ fn terminated(bytes: &[u8]) -> Box<[u8]> {
     owned.extend_from_slice(bytes);
     owned.push(0);
     owned.into_boxed_slice()
+}
+
+/// The [`rexx_core::RootSet::add_global`] key a pinned `Routine` copy is held
+/// under.
+fn pinned_copy_key(copy: ObjRef) -> String {
+    format!("a Routine copy a call site keeps, {}", copy.bits())
 }

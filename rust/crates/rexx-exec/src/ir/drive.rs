@@ -2029,7 +2029,8 @@ impl Interp {
                 let (name, search_labels) = target()?;
                 spelling = name;
                 let resolved = self.resolve_call(name, search_labels)?;
-                chunk.remember_call(site, resolved, self.routine_generation);
+                let repin = chunk.remember_call(site, resolved, self.routine_generation);
+                self.repin(repin);
                 resolved
             }
         };
@@ -2038,6 +2039,9 @@ impl Interp {
         let started = self.begin_call_over_pushed_args(resolved, spelling, mark);
         if !matches!(started, Ok(Started::Entered)) {
             self.activity.depth -= 1;
+        }
+        if started.is_err() {
+            chunk.forget_call(site);
         }
         started
     }
@@ -2091,6 +2095,9 @@ impl Interp {
         let started = self.begin_eval_call(code, resolution, name, args);
         if !matches!(started, Ok(Started::Entered)) {
             self.activity.depth -= 1;
+        }
+        if started.is_err() {
+            chunk.forget_call(site);
         }
         started
     }
@@ -2150,14 +2157,17 @@ impl Interp {
             }
             None => {
                 let resolved = self.resolve_call(name, !*literal)?;
-                chunk.remember_call(site, resolved, self.routine_generation);
+                let repin = chunk.remember_call(site, resolved, self.routine_generation);
+                self.repin(repin);
                 resolved
             }
         };
         // Captured before the callee runs, which overwrites
         // `current_value_indent` with its own clauses'.
         let base_indent = self.activity.clause_state.current_value_indent;
-        let started = self.begin_subroutine_over_pushed_args(resolved, name, mark)?;
+        let started = self
+            .begin_subroutine_over_pushed_args(resolved, name, mark)
+            .inspect_err(|_| chunk.forget_call(site))?;
         Ok((started, base_indent))
     }
 
@@ -2198,16 +2208,20 @@ impl Interp {
             return Err(Loud::call_op_off_its_node().into());
         };
         let resolution = self.site_resolution_before_arguments(chunk, site, name, !*literal);
-        let resolution = self.resolved_after_arguments(code, resolution, args)?;
+        let resolution = self
+            .resolved_after_arguments(code, resolution, args)
+            .inspect_err(|_| chunk.forget_call(site))?;
         let base_indent = self.activity.clause_state.current_value_indent;
-        let begun = self.begin_invoke_call(
-            code,
-            resolution,
-            name,
-            args,
-            CallType::Subroutine,
-            CallEntry::Written,
-        )?;
+        let begun = self
+            .begin_invoke_call(
+                code,
+                resolution,
+                name,
+                args,
+                CallType::Subroutine,
+                CallEntry::Written,
+            )
+            .inspect_err(|_| chunk.forget_call(site))?;
         Ok((subroutine_started(begun), base_indent))
     }
 
@@ -4118,7 +4132,7 @@ impl Interp {
     /// with the generation it was read under, since the arguments can write a
     /// routine table before it is used.
     fn site_resolution_before_arguments<'c>(
-        &self,
+        &mut self,
         chunk: &'c Chunk,
         site: u16,
         name: &[u8],
@@ -4138,7 +4152,8 @@ impl Interp {
         }
         Ok(match self.resolve_fixed_call(name, search_labels)? {
             Some(resolved) => {
-                chunk.remember_call(site, resolved, generation);
+                let repin = chunk.remember_call(site, resolved, generation);
+                self.repin(repin);
                 CallResolution::Settled(resolved)
             }
             None => CallResolution::AfterArguments {

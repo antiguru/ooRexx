@@ -247,6 +247,41 @@ impl Resolved {
                 | Resolved::External
         )
     }
+
+    /// The `Routine` copy this resolution names, or `.nil`.
+    pub(crate) fn copy(self) -> ObjRef {
+        match self {
+            Resolved::MergedLibraryRoutine(_, copy) => copy,
+            _ => ObjRef::NIL,
+        }
+    }
+}
+
+/// How a call site's kept copy changed when it remembered a resolution: the
+/// copy it no longer holds and the one it holds now, each `.nil` for none.
+/// [`Interp::repin`] applies it.
+#[must_use]
+#[derive(Clone, Copy)]
+pub(crate) struct Repin {
+    pub(crate) unpin: ObjRef,
+    pub(crate) pin: ObjRef,
+}
+
+impl Repin {
+    /// No change.
+    pub(crate) const NONE: Repin = Repin {
+        unpin: ObjRef::NIL,
+        pin: ObjRef::NIL,
+    };
+
+    /// The change from `held` to the copy `resolved` names.
+    pub(crate) fn to(held: ObjRef, resolved: Resolved) -> Repin {
+        let pin = resolved.copy();
+        if pin == held {
+            return Repin::NONE;
+        }
+        Repin { unpin: held, pin }
+    }
 }
 
 /// Where a `LEAVE`/`ITERATE` instruction itself sits, captured the instant

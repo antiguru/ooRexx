@@ -508,7 +508,8 @@ impl Interp {
         }
         let resolved = self.resolve_routine_call(name)?;
         if let Some(site) = site {
-            site.remember(resolved, self.routine_generation);
+            let repin = site.remember(resolved, self.routine_generation);
+            self.repin(repin);
         }
         Ok(resolved)
     }

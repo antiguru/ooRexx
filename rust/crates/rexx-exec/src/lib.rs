@@ -721,11 +721,9 @@ impl Loud {
 
     /// `StackFrame~executable` on a frame built with no executable: a package
     /// hook's, one built from a failure's site rather than from an
-    /// activation, one whose activation answered none, and a library
-    /// routine's whose copy was collected between the call's lookup and its
-    /// run ([`RoutineObject::Gone`]). No program reaches it: `refusals.tsv`'s
-    /// `context.rs` row found only a library routine's frame, which answers,
-    /// and the last needs the call's own arguments to drop the copy.
+    /// activation, and one whose activation answered none. No program reaches
+    /// it: `refusals.tsv`'s `context.rs` row found only a library routine's
+    /// frame, which answers.
     #[cold]
     fn frame_without_executable() -> Loud {
         Loud {
@@ -1381,6 +1379,9 @@ struct Interp {
     /// The name `~objectName=` gave `.nil`, which every rendering of it
     /// answers; `None` for `The NIL object`.
     nil_name: Option<Box<[u8]>>,
+    /// How many call sites keep each `Routine` copy alive ([`Interp::repin`]),
+    /// each copy rooted once while any does.
+    pinned_copies: FxHashMap<ObjRef, u32>,
     /// The parse cache a handle-inline string has nowhere to keep. See
     /// `value::TextNumbers`, which owns the rule and the measurement.
     text_numbers: crate::value::TextNumbers,
@@ -2177,8 +2178,6 @@ pub(crate) enum RoutineObject {
     /// This `Routine` object: the one `~call` was sent to, or the copy a call
     /// by name found.
     Given(ObjRef),
-    /// A copy a call by name found, collected since: the frame answers none.
-    Gone,
 }
 
 impl NativeFrame {
@@ -2292,6 +2291,7 @@ impl Interp {
             parse_buffers: Vec::new(),
             text_scratch: [0; crate::value::TEXT_SCRATCH],
             nil_name: None,
+            pinned_copies: FxHashMap::default(),
             text_numbers: crate::value::TextNumbers::new(),
             result_buffer: std::cell::Cell::new(Vec::new()),
             library_search: library_search_of(&env),
@@ -3177,6 +3177,8 @@ impl Interp {
             parse_buffers: _,
             text_scratch: _,
             nil_name: _,
+            // Held through the global roots they name.
+            pinned_copies: _,
             // Handle-inline strings, which are their own bytes and have no
             // slot to recycle.
             text_numbers: _,
@@ -3535,13 +3537,18 @@ impl Interp {
             self.last_plan = None;
         }
         let mut interned = Vec::new();
+        let mut pinned = Vec::new();
         self.chunks.retain(|(key, _), chunk| {
             let keep = !dead(&key.program);
             if !keep {
                 interned.extend(chunk.interned_values());
+                pinned.extend(chunk.pinned_copies());
             }
             keep
         });
+        for copy in pinned {
+            self.unpin_copy(copy);
+        }
         if !interned.is_empty() {
             let interned: rustc_hash::FxHashSet<ObjRef> = interned.into_iter().collect();
             self.heap

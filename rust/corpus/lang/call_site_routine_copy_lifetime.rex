@@ -1,0 +1,77 @@
+/* A call site keeps the routine a call by name found once the call has
+   returned, for as long as the site lives, and a call that raised keeps
+   nothing: the next call looks the name up again. A kept copy outlives the
+   table entry that held it and a collection. A write to .ROUTINES is seen by
+   a site whose routine is looked up on every call. */
+c1 = .routines~r~copy
+c2 = .routines~i~copy
+c3 = .routines~r~copy
+.routines['Y'] = c1
+call cy 'raised first'
+.routines['Y'] = c2
+call cy 'answered then'
+.routines['Y'] = c3
+call cy 'kept'
+.routines['X'] = .routines~r~copy
+call cx 'raising copy'
+.routines['X'] = .routines~r
+call cx 'canonical'
+.routines['Z'] = .routines~i~copy
+.local~hash = .routines['Z']~identityHash
+call cz 1
+.routines['Z'] = .routines~r
+drop c1 c2 c3
+do k = 1 to 300000
+  a = .array~of(k, k || 'x', .directory~new)
+end
+call cz 'abc'
+do k = 1 to 3
+  if k = 2 then .routines['TESTINTARG'] = .routines~r
+  call ct k
+end
+exit 0
+cy: procedure expose c1 c2 c3
+  use arg tag
+  signal on syntax name s
+  call y 93900
+  say tag 'answered' result
+  return
+s: do f over condition('O')~stackFrames
+    e = f~executable
+    if f~type == 'ROUTINE' then say tag 'raised' f~name (e == c1) (e == c2) (e == c3)
+  end
+  return
+cx: procedure
+  use arg tag
+  signal on syntax name s1
+  call x 93900
+  say tag 'answered' result
+  return
+s1: do f over condition('O')~stackFrames
+    e = f~executable
+    if f~type == 'ROUTINE' then say tag 'raised' f~name (e == .routines~r)
+  end
+  return
+cz: procedure
+  use arg v
+  signal on syntax name s2
+  call z v
+  say 'stale answered' result
+  return
+s2: c = condition('O')
+  say 'stale raised' c~code
+  do f over c~stackFrames
+    e = f~executable
+    if f~type == 'ROUTINE' then say 'stale frame' f~name e~class~id (e == .routines~i) (e~identityHash == .hash)
+  end
+  return
+ct: procedure
+  use arg k
+  signal on syntax name s3
+  call TestIntArg 7
+  say 'exported' k 'answered' result
+  return
+s3: say 'exported' k 'raised' condition('O')~code
+  return
+::routine i external 'LIBRARY orxfunction TestIntArg'
+::routine r external 'LIBRARY orxfunction TestRaiseException0'

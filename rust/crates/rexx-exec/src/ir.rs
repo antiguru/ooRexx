@@ -20,7 +20,7 @@ use rexx_parse::{Operator, PrefixOp, SymbolId};
 use crate::error::Raised;
 use crate::eval::SymbolRead;
 use crate::run::{
-    HeaderRole, QueueKeyword, Resolved, ReturnKeyword, raised_if_not_logical,
+    HeaderRole, QueueKeyword, Repin, Resolved, ReturnKeyword, raised_if_not_logical,
     raised_when_not_logical,
 };
 use crate::trace::ChunkTrace;
@@ -485,10 +485,13 @@ impl Hints {
 const CALL_SITE_CACHE: bool = true;
 
 /// One call site's kept resolution, or none yet, with the
-/// `Interp::routine_generation` it was made under.
+/// `Interp::routine_generation` it was made under, and the `Routine` copy the
+/// site keeps alive, as the oracle's instruction keeps its routine: the site
+/// pins it ([`Interp::repin`]) for as long as it names it or the chunk lives.
 struct CallSite {
     resolved: Cell<Option<Resolved>>,
     generation: Cell<u32>,
+    pinned: Cell<ObjRef>,
 }
 
 impl CallSite {
@@ -496,6 +499,7 @@ impl CallSite {
         CallSite {
             resolved: Cell::new(None),
             generation: Cell::new(0),
+            pinned: Cell::new(ObjRef::NIL),
         }
     }
 
@@ -509,9 +513,18 @@ impl CallSite {
         Some(resolved)
     }
 
-    fn set(&self, resolved: Resolved, generation: u32) {
+    fn set(&self, resolved: Resolved, generation: u32) -> Repin {
         self.resolved.set(Some(resolved));
         self.generation.set(generation);
+        let repin = Repin::to(self.pinned.get(), resolved);
+        self.pinned.set(resolved.copy());
+        repin
+    }
+
+    /// Drops the kept resolution and keeps the pin, which the next
+    /// resolution replaces or keeps.
+    fn clear(&self) {
+        self.resolved.set(None);
     }
 }
 
@@ -575,12 +588,20 @@ impl Calls {
     /// name nothing has yet, and a file the search would find next time must
     /// not be masked by this table -- the same reason a raising resolution
     /// was never cached.
-    fn remember(&self, at: u16, resolved: Resolved, generation: u32) {
+    fn remember(&self, at: u16, resolved: Resolved, generation: u32) -> Repin {
         if matches!(resolved, Resolved::Unresolved) {
-            return;
+            return Repin::NONE;
         }
+        match self.slots.get(at as usize) {
+            Some(slot) => slot.set(resolved, generation),
+            None => Repin::NONE,
+        }
+    }
+
+    /// Drops what site `at` kept, so its next call resolves again.
+    fn forget(&self, at: u16) {
         if let Some(slot) = self.slots.get(at as usize) {
-            slot.set(resolved, generation);
+            slot.clear();
         }
     }
 }
@@ -764,8 +785,26 @@ impl Chunk {
     }
 
     /// Records what call site `at` resolved to ([`Calls::remember`]).
-    fn remember_call(&self, at: u16, resolved: Resolved, generation: u32) {
-        self.calls.remember(at, resolved, generation);
+    fn remember_call(&self, at: u16, resolved: Resolved, generation: u32) -> Repin {
+        self.calls.remember(at, resolved, generation)
+    }
+
+    /// Every `Routine` copy this chunk's call sites pin, for the caller
+    /// dropping it.
+    pub(crate) fn pinned_copies(&self) -> impl Iterator<Item = ObjRef> + '_ {
+        self.calls
+            .slots
+            .iter()
+            .map(|slot| slot.pinned.get())
+            .filter(|copy| *copy != ObjRef::NIL)
+    }
+
+    /// Drops what call site `at` kept ([`Calls::forget`]): the oracle keeps a
+    /// call's routine only once the call has returned
+    /// (`RexxInstructionCall::execute`, `instructions/CallInstruction.cpp:193-197`).
+    #[cold]
+    fn forget_call(&self, at: u16) {
+        self.calls.forget(at);
     }
 
     /// The message name send site `at` sends, or `None` for a site this
@@ -790,8 +829,8 @@ pub(crate) struct CallSiteSlot<'a> {
 
 impl CallSiteSlot<'_> {
     /// Records `resolved` at the site, under `generation`.
-    pub(crate) fn remember(self, resolved: Resolved, generation: u32) {
-        self.chunk.remember_call(self.at, resolved, generation);
+    pub(crate) fn remember(self, resolved: Resolved, generation: u32) -> Repin {
+        self.chunk.remember_call(self.at, resolved, generation)
     }
 }
 
