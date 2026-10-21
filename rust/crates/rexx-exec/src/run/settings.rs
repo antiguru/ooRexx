@@ -205,8 +205,9 @@ impl Interp {
         self.trace_invocation(">I>", &subject, &package);
     }
 
-    /// `<I<`, on every way a routine activation can end.
-    pub(crate) fn trace_invocation_exit(&mut self) {
+    /// `<I<`, on every way a routine activation can end, with what `ending`
+    /// answers, the value it ends with, rooted while the line is delivered.
+    pub(crate) fn trace_invocation_exit(&mut self, ending: impl FnOnce() -> Option<ObjRef>) {
         if self.activation().trace_entry != TraceEntry::Done {
             return;
         }
@@ -222,7 +223,12 @@ impl Interp {
         let package = self
             .program_display_name(self.activation().program_id)
             .to_vec();
+        let parked = self
+            .roots
+            .activity_mut()
+            .park(ending().into_iter().collect());
         self.trace_invocation("<I<", &subject, &package);
+        self.roots.activity_mut().release(parked);
     }
 
     /// What the running activation announces itself as, or `None` when it

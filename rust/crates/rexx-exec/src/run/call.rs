@@ -930,14 +930,6 @@ impl Interp {
             Resolved::Unresolved => unreachable!("an unresolved name raises just above"),
         };
 
-        // The caller's own program and body selector, which a label callee
-        // inherits: the same pair `resolve_call` searched, read again here
-        // rather than threaded out of it, because what they are wanted for is
-        // building the callee rather than finding it.
-        let program = Rc::clone(&self.activation().program);
-        let program_id = self.activation().program_id;
-        let selector = self.activation().body;
-
         // `SIGL`, set here rather than before the argument loop above: the
         // oracle's own `internalCall` (`RexxActivation.cpp`, read directly)
         // receives its arguments already evaluated by its caller, so they
@@ -973,6 +965,11 @@ impl Interp {
                 // because the frame is not this activation's to free. Task
                 // 5's `PROCEDURE` is what will ever push a frame of its own.
                 let caller = self.activation();
+                // The caller's own program and body selector, which a label
+                // callee inherits: the same pair `resolve_call` searched.
+                let program = Rc::clone(&caller.program);
+                let program_id = caller.program_id;
+                let selector = caller.body;
                 let plan = Rc::clone(&caller.plan);
                 let frame = caller.frame;
                 // The `call_type` parameter is deliberately not read here: an
@@ -1090,8 +1087,11 @@ impl Interp {
                 // declared. The caller's settings go with it for
                 // `::OPTIONS NUMERIC INHERIT`, the one option that reads
                 // them.
-                let start =
-                    self.package_start(installed.program, Some(&self.activation().settings));
+                // A routine started on an activity of its own has no caller.
+                let start = self.package_start(
+                    installed.program,
+                    self.running_activation().map(|caller| &caller.settings),
+                );
                 let frame = self.roots.push_slots(plan.len());
                 let mut callee = Activation::routine(
                     callee_id,
@@ -1185,7 +1185,11 @@ impl Interp {
         // callee's own -- its `trace_entry` state and its `TRACE` setting.
         // `RexxActivation::termination` is where the C++ puts it, which is
         // likewise inside the activation.
-        self.trace_invocation_exit();
+        self.trace_invocation_exit(|| match &ended {
+            Ok(ended) => ended.value_ref(),
+            Err(Failure::Exited(value)) => *value,
+            Err(_) => None,
+        });
 
         // Popped on both paths, and unconditionally: `run_activation`'s own
         // loop asserts the activation stack is where it found it after every

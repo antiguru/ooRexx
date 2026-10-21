@@ -361,6 +361,33 @@ fn call_on_halt_takes_a_signal() {
     );
 }
 
+/// The halt reaches a trace destination's `LINEOUT` spinning inside a
+/// delivery, whose `SIGNAL ON HALT` ends the spin. Measured, the oracle 10 of
+/// 10 under `timeout -s TERM 1`.
+#[test]
+fn sigterm_reaches_a_spinning_trace_destination() {
+    halts(
+        "trace_destination",
+        ".traceoutput~destination(.dst~new)\ntrace r\nx = 1\ntrace off\n\
+         say 'after' .local~halted\n\
+         ::class dst\n::method lineout\n\
+         \x20 if .local~halted == 1 then return 0\n\
+         \x20 signal on halt\n\
+         \x20 do forever; end\n\
+         halt:\n\
+         \x20 .local~halted = 1\n\
+         \x20 return 0\n",
+        "",
+        "TERM",
+        Launch::Plain,
+        &Ended {
+            code: Some(0),
+            stdout: "after 1\n".to_string(),
+            stderr: String::new(),
+        },
+    );
+}
+
 /// This crate hands `ready` to stdout only once the loop ends, so the
 /// signal goes after a second.
 #[test]

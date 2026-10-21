@@ -346,3 +346,9 @@ lang/call_site_kept_routine_raises.rex
 # raise through a routine the call resolved afresh keeps nothing.
 lang/call_site_kept_routine_raises_cascade.rex
 lang/call_site_fresh_routine_raises.rex
+
+# 9d Task 8.1: Routine~start with no caller activation, and the UNINIT drain at a SIGNAL out of an
+# INTERPRET and at a delivered trace line.
+lang/routine_start_call.rex
+lang/uninit_drain_interpret_signal.rex
+lang/uninit_drain_trace_line.rex

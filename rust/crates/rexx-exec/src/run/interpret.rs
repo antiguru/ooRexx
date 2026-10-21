@@ -131,10 +131,11 @@ impl Interp {
             other => {
                 // An `INTERPRET` activation leaves through the `RETURNED` block
                 // that runs the `UNINIT`s a collection readied
-                // (`RexxActivation.cpp:676-705`).
+                // (`RexxActivation.cpp:676-705`), a `SIGNAL` out of it too
+                // (`signalTo`, `:2096-2100`).
                 if !self.uninit_ready.is_empty() {
                     let returned = match &other {
-                        Flow::Next => Some(None),
+                        Flow::Next | Flow::Signal(_) => Some(None),
                         Flow::Return(value) | Flow::Exit(value) => Some(*value),
                         _ => None,
                     };

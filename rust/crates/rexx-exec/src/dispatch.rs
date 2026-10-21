@@ -3548,6 +3548,9 @@ impl Interp {
             value,
             continuation,
         } = *replied;
+        // Parked while the rest is filed: the spawner's frame it records is
+        // a fresh allocation.
+        let parked = self.roots.activity_mut().park(value.into_iter().collect());
         // The body ended before its next clause, so no split ran. The
         // oracle still spawns the empty rest, which announces itself again.
         let (callee, continuation) = match continuation {
@@ -3566,6 +3569,7 @@ impl Interp {
                 self.recycle_activation(callee);
             }
         }
+        self.roots.activity_mut().release(parked);
         Some(value)
     }
 

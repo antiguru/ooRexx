@@ -141,6 +141,13 @@ impl Ended {
             Ended::Returned(value) | Ended::Exited(value) => value,
         }
     }
+
+    /// [`Ended::value`] without consuming it.
+    pub(crate) fn value_ref(&self) -> Option<ObjRef> {
+        match self {
+            Ended::Returned(value) | Ended::Exited(value) => *value,
+        }
+    }
 }
 
 /// Who emits a stepped clause's own `*-*` line
@@ -367,8 +374,9 @@ pub(crate) enum QueueKeyword {
 }
 
 /// The levels a failure has left on the activity, set aside by
-/// [`Interp::write_holding_last`].
-struct FailureLevels {
+/// [`Interp::write_holding_last`] and kept across a trace line's delivery.
+#[derive(Clone)]
+pub(crate) struct FailureLevels {
     site: Option<FailureSite>,
     sites: Vec<FailureSite>,
     frame: Option<ObjRef>,
@@ -3700,21 +3708,44 @@ impl Interp {
             reraise_leaving: std::mem::take(&mut activity.reraise_leaving),
             failed_sends: std::mem::take(&mut activity.failed_sends),
         };
-        let objects: Vec<ObjRef> = kept
+        self.root_failure_levels(&kept);
+        kept
+    }
+
+    /// A copy of the levels a failure has left, which stay in place, with
+    /// their objects pushed as temps as [`Interp::take_failure_levels`] does.
+    pub(crate) fn copy_failure_levels(&mut self) -> FailureLevels {
+        let activity = &self.activity;
+        let kept = FailureLevels {
+            site: activity.failure_site.clone(),
+            sites: activity.failure_sites.clone(),
+            frame: activity.failure_frame,
+            frames: activity.failure_frames.clone(),
+            origin: activity.failure_origin,
+            propagated: activity.failure_propagated,
+            reraised: activity.failure_reraised,
+            reraised_object: activity.reraised_object,
+            reraise_leaving: activity.reraise_leaving,
+            failed_sends: activity.failed_sends.clone(),
+        };
+        self.root_failure_levels(&kept);
+        kept
+    }
+
+    fn root_failure_levels(&mut self, kept: &FailureLevels) {
+        let temps = self.roots.activity_mut();
+        for &object in kept
             .frame
             .iter()
             .chain(&kept.frames)
             .chain(&kept.reraised_object)
             .chain(&kept.failed_sends)
-            .copied()
-            .collect();
-        for object in objects {
-            self.roots.activity_mut().push_temp(object);
+        {
+            temps.push_temp(object);
         }
-        kept
     }
 
-    fn restore_failure_levels(&mut self, kept: FailureLevels) {
+    pub(crate) fn restore_failure_levels(&mut self, kept: FailureLevels) {
         let activity = &mut self.activity;
         activity.failure_site = kept.site;
         activity.failure_sites = kept.sites;

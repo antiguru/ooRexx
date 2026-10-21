@@ -531,6 +531,7 @@ impl Interp {
             slots.push(Some(value));
         }
         let array = self.alloc_charged(rexx_core::BehaviourId::ARRAY, Body::array(slots));
+        self.roots.activity_mut().push_temp(array);
         if let Some(rendered) = self.result_text(array) {
             self.trace_result(indent, &rendered);
         }

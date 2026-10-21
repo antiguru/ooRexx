@@ -1,0 +1,27 @@
+/* Routine~start runs the routine on an activity with no caller activation:
+ * its arguments, its PARSE SOURCE call type, its own NUMERIC settings, a
+ * routine with no result, one that raises, and two started from a label. */
+r = .routine~new('x', 'use arg a, b; parse source . how .; .local~seen = a b how; return a + b')
+m = r~start('CALL', 3, 4)
+say m~class~id m~result .local~seen
+w = .routine~new('y', 'arg n; return n * 2')
+say w~start('CALLWITH', .array~of(21))~result
+d = .routine~new('z', 'numeric digits 5; return 1/3 digits()')
+say d~start('CALL')~result
+e = .routine~new('q', 'return')
+n = e~start('CALL')
+n~wait
+say n~hasResult n~completed
+f = .routine~new('f', 'raise syntax 40.1 array("f")')
+k = f~start('CALL')
+k~wait
+say k~hasError k~errorCondition~code
+call bump
+say .local~cnt
+exit
+bump:
+  .local~cnt = 0
+  s = .routine~new('s', '.local~cnt = .local~cnt + 1')
+  s~start('CALL')~wait
+  s~start('CALL')~wait
+  return

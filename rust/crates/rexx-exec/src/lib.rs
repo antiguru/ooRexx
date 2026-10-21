@@ -2888,7 +2888,10 @@ impl Interp {
             self.capture_activation_frame(failure);
         }
         if own_level {
-            self.trace_invocation_exit();
+            self.trace_invocation_exit(|| match &exit {
+                Ok(value) | Err(Failure::Exited(value)) => *value,
+                Err(_) => None,
+            });
         }
         // Main's untrapped failure gives its failed sends their object while
         // main's level is still live, as the oracle's is built at the raise.

@@ -220,6 +220,10 @@ impl Interp {
             self.activity.procedure_permitted,
             self.activity.region_procedure_permitted,
         );
+        // A failure the delivery leaves no trace of must not leave its levels
+        // either: they would join the report the line may be part of.
+        let temps = self.roots.activity_mut().push_frame();
+        let outer = self.copy_failure_levels();
         let (values, mark) = self.take_value_buffer();
         let delivered = pinned!(
             self,
@@ -233,6 +237,13 @@ impl Interp {
         ) = permitted;
         self.activity.routing_trace = false;
         self.deliveries.pop();
+        let to_standard_error = delivered.is_err() && self.routes_to_standard_error();
+        let queued =
+            delivered.is_err() && !to_standard_error && self.running_activation().is_some();
+        if !queued {
+            self.restore_failure_levels(outer);
+            self.roots.activity_mut().pop_frame(temps);
+        }
         match delivered {
             Ok(Delivered::Sent | Delivered::KeptBack) => {}
             Ok(Delivered::ToStandardError) => {
@@ -250,7 +261,7 @@ impl Interp {
             // A failure before the line reached a destination of the
             // program's own, such as making the `TraceObject` with the stack
             // exhausted, leaves the line to the error stream.
-            Err(_) if self.routes_to_standard_error() => {
+            Err(_) if to_standard_error => {
                 self.trace.extend_from_slice(&line);
                 if ended {
                     self.trace.push(b'\n');

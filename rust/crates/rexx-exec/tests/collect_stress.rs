@@ -129,11 +129,14 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
 /// the two loads: `library_package_retried.rex` prints `its class The K3
 /// class` where it stands at `its class .K3`, and
 /// `requires_manager_rename.rex` prints `second load 1 4 events` where it
-/// stands at `2 events`. Each still exits and writes stderr as its plain run
-/// does.
+/// stands at `2 events`. `uninit_drain_trace_line.rex` prints whether an
+/// `UNINIT` ran between two clauses, and a collection at every allocation runs
+/// it inside the earlier clause. Each still exits and writes stderr as its
+/// plain run does.
 const COLLECTION_TIMED_PROGRAMS: &[&str] = &[
     "lang/library_package_retried.rex",
     "lang/requires_manager_rename.rex",
+    "lang/uninit_drain_trace_line.rex",
 ];
 
 /// The phase subset files that exist in the corpus directory, sorted.
