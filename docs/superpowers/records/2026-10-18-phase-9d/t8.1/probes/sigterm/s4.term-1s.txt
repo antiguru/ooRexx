@@ -1,0 +1,5 @@
+     10 base rc=0 out=after 1| err=
+     10 head rc=0 out=after 1| err=
+     10 oracle rc=0 out=after 1| err=
+sig.rex oracle timeout -k 5 2: rc=137 out=     3 *-* x = 1|
+sig.rex head timeout -k 5 2: rc=137 out=

@@ -1,3 +1,5 @@
+**CLOSED 2026-10-21 by Phase 9d Task 8.1 (fb86ce94f).** Two more panics the first one hid are fixed with it; the subset's remaining divergences are reported in `.superpowers/sdd/2026-10-18-phase-9d/task-8.1-report.md`.
+
 **OPEN, queued 2026-10-20 by the controller; proposed 9d (a rooting defect in a gated stress test).**
 
 # collect_stress panics on lang/raise_additional_array.rex

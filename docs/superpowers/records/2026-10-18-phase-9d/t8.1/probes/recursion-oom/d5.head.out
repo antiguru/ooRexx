@@ -1,0 +1,11 @@
+    15 *-*     return 1/0
+    16 *-* call spin k - 1
+    16 *-* call spin k - 1
+    16 *-* call spin k - 1
+    16 *-* call spin k - 1
+    16 *-* call spin k - 1
+    11 *-* call spin 5
+  1457 *-* Method UNKNOWN with scope "Monitor" in package "REXX" (no source available).
+     4 *-* x = 1
+Error 42 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.1/probes/recursion-oom/d5.rex line 15:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

@@ -1,3 +1,5 @@
+**CLOSED 2026-10-21 by Phase 9d Task 8.1 (e909de2d4).** The trace-line half already held at the base `f1480269a`.
+
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** not probed, its probes were in /tmp and are gone; UNINITs never drain and memory grows to 356 MB against 24 MB.
 
 # UNINIT drain misses an INTERPRET left by SIGNAL, and trace lines

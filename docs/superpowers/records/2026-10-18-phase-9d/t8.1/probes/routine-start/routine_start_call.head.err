@@ -1,0 +1,4 @@
+     1 *-* raise syntax 40.1 array("f")
+       *-* Compiled method "CALL" with scope "Routine".
+Error 40 running f line 1:  Incorrect call to routine.
+Error 40.1:  External routine "f" failed.

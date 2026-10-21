@@ -1,0 +1,11 @@
+# collect-on-every-allocation, one program at a time, base f1480269a test binary with a probe test (run_program_collect_every_alloc, RUN_DEADLINE*10)
+raise_additional_array: thread 'rexx-interp' (298686) panicked at crates/rexx-exec/src/dispatch.rs:1799:9: a live value 
+reply_as_the_last_clause: thread 'rexx-interp' (298705) panicked at crates/rexx-exec/src/dispatch.rs:1799:9: a live value 
+package_option_writes: thread 'rexx-interp' (298724) panicked at crates/rexx-exec/src/dispatch.rs:1799:9: a live value 
+
+# the_l0_subset at e909de2d4 (checks-touched.txt): the subset's remaining divergences
+lang/call_site_routine_copy_lifetime.rex: plain
+lang/call_site_fresh_routine_raises.rex: plain
+# the same two at base, stress, LD_LIBRARY_PATH=oracle lib (no sidecar directory): first stdout lines
+call_site_routine_copy_lifetime: T81 exit=0 collections=1501087|stdout=raised first raised Y 1 0 0|answered then raised Y 1 0 0|kept raised Y 1 0 0|
+call_site_fresh_routine_raises: T81 exit=0 collections=594|stdout=function 1 raised 43.1|function swap raised 98.941|function 3 raised 98.941|

@@ -1,0 +1,9 @@
+# rec.rex, a build carrying fb86ce94f's route.rs change before it was committed, memcap 2G timeout -s KILL 500, /usr/bin/time maxrss and wall
+rc=245
+Command exited with non-zero status 245
+maxrss=77840kB wall=317.67
+stdout lines: 10002
+stdout tail:
+     4 *-* x = 1
+Error 11 running rec.rex line 9:  Control stack full.
+Error 11.1:  Insufficient control stack space; cannot continue execution.

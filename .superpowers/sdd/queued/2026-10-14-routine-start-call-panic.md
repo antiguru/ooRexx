@@ -1,3 +1,5 @@
+**CLOSED 2026-10-21 by Phase 9d Task 8.1 (fb86ce94f).** Part 2 is not fixed: any expression register keeps its value until reused, not only a call's; reported in `.superpowers/sdd/2026-10-18-phase-9d/task-8.1-report.md`.
+
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** own probe: a panic "a live activation", rc 101, where the oracle prints 1; its file marks it PRIORITY.
 
 # Routine~start('CALL') panics; a call's return value outlives the call

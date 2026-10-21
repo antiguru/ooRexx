@@ -105,7 +105,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-10-trace-c-command-echo.md	divergence	queued-probes/cc2/cc2.rex:1	9d	probe still lacks the 3 *-* address command 'false' echo here	9d
 2026-10-10-translation-error-inserts.md	divergence	queued-probes/cs/cs.rex:1,queued-probes/e103/e103.rex:1	closed:Phase 9c Tasks 3 and 4	CLOSED in its first line; both probes agree	closed:Phase 9c Tasks 3 and 4
 2026-10-10-trapped-header-comparison-holds-to-object.md	divergence	queued-probes/lkJ/lkJ.rex:1	not-a-divergence	probe still differs only in when UNINIT runs, which is collection timing (Moritz 2026-09-01: gc ordering is unpredictable)	not-a-divergence
-2026-10-10-uninit-drain-signal-interpret-and-trace.md	divergence	-	9d	not probed, its probes were in /tmp and are gone; UNINITs never drain and memory grows to 356 MB against 24 MB	9d
+2026-10-10-uninit-drain-signal-interpret-and-trace.md	divergence	-	9d	closed:e909de2d4	closed:e909de2d4
 2026-10-10-upstream-do-to-identity.md	oracle bug	queued-probes/doto/doto.rex:1	not-a-divergence	upstream report; Deviation 25 is the crate's rule	not-a-divergence
 2026-10-10-upstream-zero-pass-do-reexecute.md	oracle bug	queued-probes/z26/z26.rex:1	not-a-divergence	upstream report; Deviation 26 is the crate's rule	not-a-divergence
 2026-10-10-variable-reference-concatenation.md	divergence	queued-probes/b1/b1.rex:1	9d	probe still differs: (>zz) || 'x' drops the reference's string value here	9d
@@ -131,7 +131,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-14-class-side-defaultname.md	divergence	queued-probes/clsdn/clsdn.rex:1	9d	own probe: DN on the oracle, The WITHNAME class here	9d
 2026-10-14-filespec-string-arg.md	divergence	queued-probes/fspec/fspec.rex:1	9d	own probe: 88.909 on the oracle, a K rc 0 here; the same fix as native-routine-arguments-not-strings	9d
 2026-10-14-native-method-frames.md	divergence	-	9d-cluster:native-stack-frames	names StackFrame TESTNATIVECODEFRAME, that cluster's test	9d-cluster:native-stack-frames
-2026-10-14-routine-start-call-panic.md	divergence	queued-probes/rstart/rstart.rex:1	9d	own probe: a panic "a live activation", rc 101, where the oracle prints 1; its file marks it PRIORITY	9d
+2026-10-14-routine-start-call-panic.md	divergence	queued-probes/rstart/rstart.rex:1	9d	closed:fb86ce94f	closed:fb86ce94f
 2026-10-15-9b1-task-8b-review-minors.md	divergence	queued-probes/m1var/m1var.rex:1,queued-probes/m4def/m4def.rex:1	9d	own probes: m1 lists Z here and A on the oracle, m4 answers the new source here and the old one on the oracle	9d
 2026-10-15-executable-flags-and-result.md	divergence	-	9d	no probe recorded; the oracle is still to be measured	9d
 2026-10-15-isguarded-copy-and-additional.md	divergence	queued-probes/isg/isg.rex:1,queued-probes/addl/addl.rex:1	9d	the review's probes still differ: isGuarded 1 against 0, additional[1] a against the whole string	9d
@@ -186,7 +186,7 @@ gate:phase-9a-gate.md:482	process	-	9d	no probe; sim calibration not re-derived,
 gate:phase-9a-gate.md:483	process	-	9d	Moritz 2026-10-13: under the simulation clock or licensed, owner 9d; its Flaky row is in suite-licences.txt:8, the S2 list has none	9d
 gate:phase-9a-gate.md:485	divergence	-	9d-cluster:redirected-command-holds-baton	TEST_MAKESTRING passed at the 9c close; scclient and sfclient are that cluster's	9d-cluster:redirected-command-holds-baton
 gate:phase-9a-gate.md:488	divergence	-	9d	Task 4 owns TEST35_DIRECTIVES and TEST47_MULTILINEFLOWCOLLECTIONS	9d
-gate:phase-9b1-gate.md:115	divergence	queued-probes/rstart/rstart.rex:1	9d	a pointer to 2026-10-14-routine-start-call-panic.md, which still panics	9d
+gate:phase-9b1-gate.md:115	divergence	queued-probes/rstart/rstart.rex:1	9d	closed:fb86ce94f	closed:fb86ce94f
 gate:phase-9b1-gate.md:117	process	-	closed:pointer	a list of queued files, each with its own row here	closed:pointer
 gate:phase-9b1-gate.md:121	design	-	9d	Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal	9d
 gate:phase-9b1-gate.md:123	oracle bug	-	not-a-divergence	upstream reports, not copied (WeakReference to a held .true; oracle-crashes entry 49)	not-a-divergence
@@ -216,14 +216,14 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointe
 2026-10-19-local-novalue-hook.md	divergence	-	9d	gap	9d
 2026-10-19-sortwith-on-foreign-class.md	divergence	-	9d	gap	9d
 2026-10-18-class-methods-no-argument.md	divergence	-	9d	gap	9d
-2026-10-19-sigterm-in-trace-delivery.md	divergence	-	9d	gap	9d
+2026-10-19-sigterm-in-trace-delivery.md	divergence	-	9d	closed:fb86ce94f	closed:fb86ce94f
 2026-10-19-guarded-trace-destination-spin.md	divergence	-	9d	9d if lifting the pinned-guard-wait limit is tractable, else Phase 10	9d
-2026-10-19-trace-destination-recursion-oom.md	divergence	-	9d	Task 6.10 regression	9d
+2026-10-19-trace-destination-recursion-oom.md	divergence	-	9d	closed:fb86ce94f	closed:fb86ce94f
 2026-10-18-sysfiletree-tree-directory-flaky.md	process	-	9d	flaky test	9d
 2026-10-20-halt-after-signal-on-syntax.md	divergence	-	9d	broken report for a HALT taken at a SIGNAL ON SYNTAX label	9d
 2026-10-20-lineout-buffered-until-close.md	divergence	-	not-a-divergence	oracle buffers lineout to a named stream until close; rexxref permits write-through (Moritz 2026-10-20)	not-a-divergence
 2026-10-20-call-on-delayed-reraise.md	divergence	-	9d	a CALL ON condition raised again while delayed runs the handler twice	9d
-2026-10-20-collect-stress-raise-additional-array.md	defect	-	9d	collect_stress panics: a live value freed on the RAISE ADDITIONAL path	9d
+2026-10-20-collect-stress-raise-additional-array.md	defect	-	9d	closed:fb86ce94f	closed:fb86ce94f
 2026-10-21-stdin-linein-then-charin.md	divergence	-	closed:3cd8cff5c	its own CLOSED line; Task 6.15 fix round 4 gives a file standard input one read position, and a start on a piped one is 93.958 on both sides	closed:3cd8cff5c
 2026-10-21-redirected-target-timed-line-flake.md	process	-	9d	flaky timed line in a gated corpus program	9d
 2026-10-21-quick-native-calls-wall-bound-flake.md	process	-	9d	lib test bounded by 1 ms wall time flakes under load	9d

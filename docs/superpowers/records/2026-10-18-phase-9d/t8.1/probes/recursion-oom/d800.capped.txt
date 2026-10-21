@@ -1,0 +1,4 @@
+rc=134
+base stdout lines 0; stderr: maxrss=431592kB wall=0.71
+rc=214
+head stdout lines 806; stderr: maxrss=44756kB wall=1.59

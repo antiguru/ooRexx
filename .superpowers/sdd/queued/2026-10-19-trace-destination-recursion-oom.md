@@ -1,3 +1,5 @@
+**CLOSED 2026-10-21 by Phase 9d Task 8.1 (fb86ce94f).** Memory is bounded; the run takes about 5 minutes at the 10000-level limit, reported in `.superpowers/sdd/2026-10-18-phase-9d/task-8.1-report.md`.
+
 **RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** Task 6.10 regression.
 
 **OPEN: found by the Phase 9d Task 6.10 round-2 re-review, a regression of Task 6.10 against `d2e55befa`.** A trace destination that recurses to the control-stack limit on every line is OOM-killed instead of ending.

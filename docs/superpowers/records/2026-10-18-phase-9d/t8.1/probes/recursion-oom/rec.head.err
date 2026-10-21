@@ -1,0 +1,1 @@
+/home/moritz/.local/bin/memcap: line 67: 297923 Killed                     ( echo "$BASHPID" > "$cg/cgroup.procs"; exec "$@" )

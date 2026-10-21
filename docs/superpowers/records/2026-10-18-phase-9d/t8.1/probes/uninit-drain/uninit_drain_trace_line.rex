@@ -1,0 +1,27 @@
+/* A delivered trace line runs the UNINITs a collection readied: the counter
+ * read in the clause that allocates and the one read in the next clause
+ * differ once a collection ran in the first, because the second clause's
+ * echo is delivered before it is evaluated. */
+c = .counter~new
+.local~c = c
+hits = 0
+call run
+say 'drained at a trace line' (hits > 0)
+exit
+run:
+do i = 1 to 600
+  trace a
+  o = .u~new
+  o = .nil
+  a = length(copies('x', 200000) || i) + c~n
+  hits = hits + (c~n > a - 200000 - length(i))
+  trace off
+end
+return
+::class counter
+::attribute n
+::method init; expose n; n = 0
+::method bump; expose n; n = n + 1
+::class u
+::method uninit
+  .local~c~bump

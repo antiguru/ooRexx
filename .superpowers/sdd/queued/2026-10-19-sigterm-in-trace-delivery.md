@@ -1,3 +1,5 @@
+**CLOSED 2026-10-21 by Phase 9d Task 8.1 (fb86ce94f).** No change: the halt is raised inside the delivery, and both interpreters keep running because the untrapped HALT's report goes to the same spinning destination; witness `signals.rs` `sigterm_reaches_a_spinning_trace_destination`.
+
 **RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** gap.
 
 **OPEN: found by the Phase 9d Task 6.10 review, not yet ruled.** A crate process looping inside a trace delivery ignores SIGTERM.
