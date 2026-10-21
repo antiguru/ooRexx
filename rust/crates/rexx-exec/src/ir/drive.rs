@@ -2016,14 +2016,14 @@ impl Interp {
             _ => Err(Failure::from(Loud::call_op_off_its_node())),
         };
         let mut spelling: &[u8] = b"";
-        let resolved = match chunk.resolved_call(site, self.routine_generation) {
+        let (resolved, missed) = match chunk.resolved_call(site, self.routine_generation) {
             Some(resolved) => {
                 #[cfg(test)]
                 count_call_site_hit();
                 if !matches!(resolved, crate::run::Resolved::Builtin(_)) {
                     spelling = target()?.0;
                 }
-                resolved
+                (resolved, false)
             }
             None => {
                 let (name, search_labels) = target()?;
@@ -2031,7 +2031,7 @@ impl Interp {
                 let resolved = self.resolve_call(name, search_labels)?;
                 let repin = chunk.remember_call(site, resolved, self.routine_generation);
                 self.repin(repin);
-                resolved
+                (resolved, true)
             }
         };
         let probe = 0u8;
@@ -2040,7 +2040,7 @@ impl Interp {
         if !matches!(started, Ok(Started::Entered)) {
             self.activity.depth -= 1;
         }
-        if started.is_err() {
+        if missed && started.is_err() {
             self.forget_site(chunk, site);
         }
         started
@@ -2089,14 +2089,15 @@ impl Interp {
             return Err(Loud::call_op_off_its_node().into());
         };
         let (name, search_labels) = call_target_name(code, target);
-        let resolution = self.site_resolution_before_arguments(chunk, site, name, search_labels)?;
+        let (resolution, kept) =
+            self.site_resolution_before_arguments(chunk, site, name, search_labels)?;
         let probe = 0u8;
         self.enter_eval_node(&raw const probe)?;
         let started = self.begin_eval_call(code, resolution, name, args);
         if !matches!(started, Ok(Started::Entered)) {
             self.activity.depth -= 1;
         }
-        if started.is_err() {
+        if !kept && started.is_err() {
             self.forget_site(chunk, site);
         }
         started
@@ -2149,17 +2150,17 @@ impl Interp {
         // table read the same way. The name comes off the instruction here
         // rather than off a node, which is why this op needs no address where
         // `Op::CallArgs` does.
-        let resolved = match chunk.resolved_call(site, self.routine_generation) {
+        let (resolved, missed) = match chunk.resolved_call(site, self.routine_generation) {
             Some(resolved) => {
                 #[cfg(test)]
                 count_call_site_hit();
-                resolved
+                (resolved, false)
             }
             None => {
                 let resolved = self.resolve_call(name, !*literal)?;
                 let repin = chunk.remember_call(site, resolved, self.routine_generation);
                 self.repin(repin);
-                resolved
+                (resolved, true)
             }
         };
         // Captured before the callee runs, which overwrites
@@ -2167,7 +2168,11 @@ impl Interp {
         let base_indent = self.activity.clause_state.current_value_indent;
         let started = self
             .begin_subroutine_over_pushed_args(resolved, name, mark)
-            .inspect_err(|_| self.forget_site(chunk, site))?;
+            .inspect_err(|_| {
+                if missed {
+                    self.forget_site(chunk, site);
+                }
+            })?;
         Ok((started, base_indent))
     }
 
@@ -2208,9 +2213,14 @@ impl Interp {
             return Err(Loud::call_op_off_its_node().into());
         };
         let resolution = self.site_resolution_before_arguments(chunk, site, name, !*literal);
+        let kept = matches!(resolution, Ok((_, true)));
         let resolution = self
-            .resolved_after_arguments(code, resolution, args)
-            .inspect_err(|_| self.forget_site(chunk, site))?;
+            .resolved_after_arguments(code, resolution.map(|(resolution, _)| resolution), args)
+            .inspect_err(|_| {
+                if !kept {
+                    self.forget_site(chunk, site);
+                }
+            })?;
         let base_indent = self.activity.clause_state.current_value_indent;
         let begun = self
             .begin_invoke_call(
@@ -2221,7 +2231,11 @@ impl Interp {
                 CallType::Subroutine,
                 CallEntry::Written,
             )
-            .inspect_err(|_| self.forget_site(chunk, site))?;
+            .inspect_err(|_| {
+                if !kept {
+                    self.forget_site(chunk, site);
+                }
+            })?;
         Ok((subroutine_started(begun), base_indent))
     }
 
@@ -4121,7 +4135,10 @@ fn op_at(chunk: &Chunk, target: usize) -> Result<u32, Failure> {
 }
 
 impl Interp {
-    /// Drops what call site `site` kept, for a call that raised.
+    /// Drops what call site `site` kept, for a call that resolved there and
+    /// raised. A routine the site kept from an earlier call stays kept: the
+    /// oracle sets `externalTarget` once a call returns and never clears it
+    /// (`instructions/CallInstruction.cpp:167-197`).
     #[cold]
     fn forget_site(&mut self, chunk: &Chunk, site: u16) {
         let repin = chunk.forget_call(site);
@@ -4131,7 +4148,7 @@ impl Interp {
     /// A call op's resolution before its arguments run, for an op that
     /// evaluates them itself: the site's kept answer, or the part of the
     /// resolution the oracle decides before the arguments, kept when it
-    /// decides one.
+    /// decides one; and whether the site had a kept answer on entry.
     ///
     /// **A raise is deliberately not recorded**: `resolve_fixed_call` answers
     /// `Err` for a name it refuses, and a site that raised asks again. A kept
@@ -4144,20 +4161,23 @@ impl Interp {
         site: u16,
         name: &[u8],
         search_labels: bool,
-    ) -> Result<CallResolution<'c>, Failure> {
+    ) -> Result<(CallResolution<'c>, bool), Failure> {
         let generation = self.routine_generation;
         if let Some(resolved) = chunk.resolved_call(site, generation) {
             #[cfg(test)]
             count_call_site_hit();
             if !resolved.kept_until_routines_change() {
-                return Ok(CallResolution::Settled(resolved));
+                return Ok((CallResolution::Settled(resolved), true));
             }
-            return Ok(CallResolution::AfterArguments {
-                kept: Some((resolved, generation)),
-                site: Some(chunk.call_site_slot(site)),
-            });
+            return Ok((
+                CallResolution::AfterArguments {
+                    kept: Some((resolved, generation)),
+                    site: Some(chunk.call_site_slot(site)),
+                },
+                true,
+            ));
         }
-        Ok(match self.resolve_fixed_call(name, search_labels)? {
+        let resolution = match self.resolve_fixed_call(name, search_labels)? {
             Some(resolved) => {
                 let repin = chunk.remember_call(site, resolved, generation);
                 self.repin(repin);
@@ -4167,7 +4187,8 @@ impl Interp {
                 kept: None,
                 site: Some(chunk.call_site_slot(site)),
             },
-        })
+        };
+        Ok((resolution, false))
     }
 }
 

@@ -1,0 +1,75 @@
+/* A call site keeps the routine its first call returned from, and a raise
+   through that kept routine does not undo it: after the name is rebound, the
+   site still runs the routine it kept. In the CALL and the function form,
+   for a copy and for the canonical object, and for a raise in an argument. */
+.routines['A'] = .routines~i~copy
+call ca 1
+.routines['A'] = .routines~r~copy
+call ca 'abc'
+call ca 2
+.routines['B'] = .routines~i
+call cb 1
+.routines['B'] = .routines~r
+call cb 'abc'
+call cb 2
+.routines['C'] = .routines~i~copy
+call fc 1
+.routines['C'] = .routines~r~copy
+call fc 'abc'
+call fc 2
+.routines['D'] = .routines~i
+call fd 1
+.routines['D'] = .routines~r
+call fd 'abc'
+call fd 2
+.routines['E'] = .routines~i~copy
+call ce 1
+.routines['E'] = .routines~r~copy
+call ce 'arg raises'
+call ce 3
+exit 0
+ca: procedure
+  use arg v
+  signal on syntax name sa
+  call a v
+  say 'copy call' v 'answered' result
+  return
+sa: say 'copy call' v 'raised' condition('O')~code
+  return
+cb: procedure
+  use arg v
+  signal on syntax name sb
+  call b v
+  say 'canonical call' v 'answered' result
+  return
+sb: say 'canonical call' v 'raised' condition('O')~code
+  return
+fc: procedure
+  use arg v
+  signal on syntax name sc
+  z = c(v)
+  say 'copy function' v 'answered' z
+  return
+sc: say 'copy function' v 'raised' condition('O')~code
+  return
+fd: procedure
+  use arg v
+  signal on syntax name sd
+  z = d(v)
+  say 'canonical function' v 'answered' z
+  return
+sd: say 'canonical function' v 'raised' condition('O')~code
+  return
+ce: procedure
+  use arg v
+  signal on syntax name se
+  call e f(v)
+  say 'argument' v 'answered' result
+  return
+se: say 'argument' v 'raised' condition('O')~code
+  return
+f: procedure
+  if arg(1) = 'arg raises' then return 1 + 'x'
+  return arg(1)
+::routine i external 'LIBRARY orxfunction TestIntArg'
+::routine r external 'LIBRARY orxfunction TestRaiseException0'
