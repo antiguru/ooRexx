@@ -6,8 +6,8 @@ file name (under .superpowers/sdd/queued/) or gate line (docs/superpowers/plans/
 item follows the Task 8 template (task-8-brief.md): witness from its probe (the triage probe beside
 task-8-triage.tsv is a start), shown red; fix, or stop and report where the oracle is wrong; witness
 matches; the item's file gets `**CLOSED <date> by Phase 9d Task 8.<n> (<sha>).**` as its first line
-and its inventory row (docs/superpowers/records/2026-10-18-phase-9d/queued-inventory.tsv) last two
-columns `closed:<sha>`. A gate-line item is closed by a line in the instance's report and a row
+and its inventory row (docs/superpowers/records/2026-10-18-phase-9d/queued-inventory.tsv) `proposed` and `ruled` columns (4 and 6)
+`closed:<sha>`, leaving the reason column as it is. A gate-line item is closed by a line in the instance's report and a row
 `gate:<file>:<line>	closed:<sha>` appended to t8.<n>/closed.tsv. Semantics follow plan Ruled 13
 (derive from rexxref, follow what you can model); a new oracle departure goes to the controller, never
 into a Deviation. Cost if the batching is wrong: larger reviews.
