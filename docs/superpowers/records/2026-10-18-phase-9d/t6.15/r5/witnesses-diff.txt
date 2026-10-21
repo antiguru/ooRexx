@@ -1,0 +1,44 @@
+DIFF pos.file
+15c15
+< H 16 1 1
+---
+> H 16 1 3
+17c17
+< I 4 1 -1
+---
+> I 4 1 1
+SAME pos.pipe
+DIFF past.file
+6c6
+< [] 0 0 NOTREADY:EOF
+---
+> [last] 0 0 READY:
+SAME past.pipe
+SAME zero.file
+SAME zero.pipe
+SAME zeroline.file
+SAME zeroline.pipe
+SAME neg.file
+SAME neg.pipe
+DIFF count.file
+7c7
+< D 3 1
+---
+> D 2 1
+SAME count.pipe
+DIFF lenzero.file
+6,7c6,7
+< B 16 1 3
+< [world]
+---
+> B 10 1 2
+> [third]
+SAME lenzero.pipe
+SAME linepos.file
+SAME linepos.pipe
+SAME linepos-named.file
+DIFF count-named.file
+7c7
+< D 3 1
+---
+> D 2 1

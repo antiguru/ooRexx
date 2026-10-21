@@ -1,0 +1,5 @@
+       *-* Compiled method "CHARIN" with scope "Stream".
+  1457 *-* Method UNKNOWN with scope "Monitor" in package "REXX" (no source available).
+     1 *-* say '[' || charin(, 0) || ']'
+Error 93 running REXX line 1457:  Incorrect call to method.
+Error 93.907:  Method argument 1 must be a positive whole number; found "0".

@@ -978,3 +978,116 @@ parent: startup +0.0005, interpret 0.0000, parse +0.0001, churn 0.0000, sayloop 
    so a start there is 93.958 from `input_seek_char` rather than from
    `refuse_transient_position`; the oracle says 93.958 for anything that is not a regular
    file. Not measured on a socket.
+
+## Fix round 5
+
+Brief: `task-6.15-fix-r5.md`. Re-review: `task-6.15-rereview-r4.md`. Status: DONE_WITH_CONCERNS.
+
+### Commits
+
+* `47e5ad8de`: `lines.rs`, the file console over an `OpenFile`, the descriptor sync before a
+  command (`command.rs`'s `start`, `rexxutil/process.rs`'s `cls`) and on drop, the
+  `input_oracle.rs` row `a_file_console_hands_a_command_what_is_unread`, and the unit tests.
+* `ae39e1981`: a read on the console carries the line mark it starts on; `line_count` takes the
+  size only where it needs it.
+* `9a886720e`: `corpus/refusal-sites.tsv` re-derived (`REXX_REFUSAL_SITES_REFRESH`): `mod lines;`
+  moved every `lib.rs` row down one line, and nothing else in the table changed.
+* The records commit that follows holds `t6.15/r5/` and this section.
+
+### Important 1: the descriptor's offset is the read position whenever another process can see it
+
+* `FileConsole::sync_offset` seeks the descriptor, a duplicate of fd 0 sharing its open file
+  description, to the read position. `Interp::sync_input_offset` calls it in `command::start`
+  before any ADDRESS command spawns, redirected or not, and in `SysCls`; `impl Drop for
+  FileConsole` calls it, which is the interpreter's end. The console's own reads go through
+  `lines::read_from`, so the offset moves while the program runs and is put back before
+  anything else can read from it.
+* Measured (`r5/child-probes.txt`, per channel in `r5/witnesses/`), what the child or successor
+  reads, as `wc -c` counts it:
+
+  | probe | input | oracle | head | r4 | r3 | after the read position |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | `childwc` (`linein()`, `address system 'wc -c'`) | `in22.txt` | 0 | 16 | 22 | 0 | 16 |
+  | `childwc` | `b4096.txt` (a 4096-byte first line, then `rest`) | 5 | 5 | 4101 | 0 | 5 |
+  | `childwc` | the 7,777,790-byte 200000-line file | 7773694 | 7777760 | 7777790 | 7769598 | 7777760 |
+  | `exit` (`(rexx one.rex; wc -c) < in22.txt`) | `in22.txt` | 0 | 16 | 22 | 0 | 16 |
+
+  `chars()` after the command answers the same figure on every binary (`C 16 1`, `C 5 1`,
+  `C 7777760 1`), which is the documented answer. The oracle hands over what is left after its
+  own 4096-byte read, round 3 what is left after its 8192-byte chunk, round 4 the whole file
+  again. `child.rex` (`linein()`, `address system 'cat'`, `linein()`) prints the three unread
+  lines between `L hello` and `M world` here, where round 4 printed all four. The pipe is
+  unchanged (`child.pipe.*`: `L hello / M world / N 1 1` on both).
+* Row `a_file_console_hands_a_command_what_is_unread`, gated and oracle-identical: the first line
+  fills the oracle's read exactly, so both answer `4095 / 5 / C 5 1`. Unit test
+  `a_file_console_leaves_the_descriptor_at_the_read_position`: a duplicate of the descriptor
+  stands at the read position after `sync_offset` and after the console is dropped.
+
+### Important 2: one copy of the line code
+
+* `lines.rs` holds `CHUNK`, `as_position`, `offset_of`, `read_from`, `size_of`,
+  `count_lines_from`, `line_count`, `digest_before`, `mark_intact`, `total_intact`, `set_mark`,
+  `lines_after`, `seek_line`, `seek_forward_lines`, `line_of` and `line_ends_between`, moved
+  from `stream.rs` as they were, `pub(crate)`; `stream.rs` imports the ones it calls.
+* `FileConsole` holds an `OpenFile` (its `read_position`, `line_mark`, `line_total` and digests)
+  and calls `lines_after`, `seek_line`, `read_from` and `size_of`. Its own walkers and line
+  tracking are gone. What it adds is `counted_size`, the file's size at the last count: nothing
+  here writes the file, so the stream's write-side invalidation does not apply, and a changed
+  size drops the count instead.
+* `FileConsole::advance` carries a line mark sitting at the old position along with a read, its
+  digest dropped, so a count after each read walks nothing and a Count loop stays linear.
+* Answers unchanged: round 4's probe set re-run on head answers byte for byte as round 4's head
+  did on every probe, and differs from the oracle on the same five file-side cases
+  (`r5/witnesses-diff.txt`); `grow.in22` is round 4's `B 11 1 2 / [more] / C 6 1 1`.
+* Perf: `r5/callgrind.txt`, own deltas against the round-4 head 0.0000 on every program.
+  Loops (`r5/loops/callgrind.tsv`, Ir with libc and ld subtracted, per line added between 5000
+  and 10000 lines): `loop` 22,494 here against round 4's 22,449, `loopc` 23,385 against 23,146.
+  Wall seconds at 200000 lines, two runs each (`wall.tsv`): `loop` 0.608 and 0.652 against
+  0.632 and 0.663, `loopc` 0.748 and 0.858 against 0.716 and 0.716 (oracle 0.424 and 0.451).
+  The Count loop pays one more `fstat` per count (`lines_left` and `line_of` each take the
+  size) and a seek and read where round 4 used `pread`.
+
+### Minor 1: the size check is witnessed
+
+* `a_file_console_recounts_a_grown_file` counts 3, reads `a`, counts 2, has another writer append
+  `x\ny\n`, and counts 4.
+* Mutation `counted_at == size` to `counted_at <= size` (`r5/mutation/size-check-le.txt`): that
+  test fails with `left: 2, right: 4` and the other file-console tests pass. Reversed by a literal
+  `sed`; `grep` finds `==` once and `<=` nowhere.
+* `grow2.abc`, the re-review's program with the append on the standard input file: `A 3 a / B 8
+  4` here, `A 3 a / B 4 2` on the oracle (its stale size and count, iostrms.xml:495-500).
+
+### Checks
+
+From `rust/`, `CARGO_TARGET_DIR=/tmp/claude-1000/t615r5-target/head`, `CARGO_INCREMENTAL=0`,
+`-j 4`; outputs in `t6.15/r5/`, statuses in `checks-status.txt` with the commit each ran on.
+
+| command | exit |
+| --- | --- |
+| `cargo fmt --all --check` | 0 |
+| `memcap 8G cargo clippy -p rexx-exec -p rexx-core --all-targets -- -D warnings` | 0 |
+| `memcap 16G cargo test -p rexx-exec --test stream_model --no-fail-fast`, debug (`checks-stream-model-debug.txt`) | 0, 26 passed |
+| the same, `--release` (`checks-stream-model.txt`) | 0, 26 passed |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test --release -p rexx-exec --test input_oracle` (`checks-input-oracle.txt`) | 0, 25 passed |
+| `memcap 16G cargo test --release -p rexx-exec --lib` (`checks-lib.txt`) | 0, 1165 passed |
+| refusal tables + `licensed_divergences` + `numeric_model` on `ae39e1981` (`checks-tables-stale.txt`) | 101, `refusal_sites` on the moved `lib.rs` rows |
+| the same on `9a886720e` (`checks-tables.txt`) | 0 |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test --release -p rexx-exec --test corpus` (`checks-corpus.txt`) | 0, 1149 of 1149 |
+
+### Perf
+
+`t6.15/r5/callgrind.txt`: `callgrind.sh -B 0.5 -j 4 -p "startup interpret parse churn
+sayloop"`, pin `rexx-run`, parent `cg-9d/t6.15-r4/rexx-head` (3cd8cff5c), head
+`cg-9d/t6.15-r5/rexx-head` (ae39e1981), exit 0. Own deltas with libc subtracted, head less
+parent: 0.0000 on startup, interpret, parse, churn and sayloop.
+
+### Concerns (round 5)
+
+1. **The oracle's child sees what is left after the oracle's own buffer**, not after the read
+   position, so the gated row uses an input where the two coincide and the general case is a
+   probe (`childwc.in22`, `childwc.big`, `exit.in22`).
+2. **The Count loop's wall time is up at 200000 lines** against round 4 (0.748 and 0.858 against
+   0.716 and 0.716), from syscalls rather than instructions; it stays linear.
+3. **A successor process sees the rest only after a normal end.** The sync on drop does not run
+   when the interpreter is killed by a signal; the offset then stands wherever the last chunk
+   read left it.

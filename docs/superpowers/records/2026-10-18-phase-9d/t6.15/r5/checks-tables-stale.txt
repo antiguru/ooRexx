@@ -1,0 +1,721 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1m 04s
+     Running tests/closed_phases.rs (/tmp/claude-1000/t615r5-target/head/release/deps/closed_phases-3cfa171e9c650a2a)
+
+running 8 tests
+test the_row_check_tells_an_open_owner_from_a_resolved_one ... ok
+test the_row_check_reads_owners_in_any_case_and_no_negated_resolution ... ok
+test the_row_check_reads_only_a_resolution_that_opens_a_clause ... ok
+test no_owner_table_names_a_closed_phase ... ok
+test no_open_exclusions_row_names_a_closed_phase ... ok
+test the_literal_scan_finds_a_phase_inside_a_longer_text ... ok
+test the_scan_finds_an_open_phase_it_is_not_asked_about ... ok
+test no_refusal_names_a_closed_phase ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/licensed_divergences.rs (/tmp/claude-1000/t615r5-target/head/release/deps/licensed_divergences-1a5eeb8015a6b38e)
+
+running 22 tests
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test the_prose_rows_and_this_table_name_the_same_divergences ... ok
+test the_licensed_divergences_still_diverge_exactly_as_recorded ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/numeric_model.rs (/tmp/claude-1000/t615r5-target/head/release/deps/numeric_model-b701d75852381e9d)
+
+running 23 tests
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test every_licensing_deviation_names_this_test ... ok
+test the_model_answers_every_case_as_this_crate_does ... ok
+test on_the_oracle_the_model_parts_only_where_the_numeric_deviations_say ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.44s
+
+     Running tests/owners.rs (/tmp/claude-1000/t615r5-target/head/release/deps/owners-be250cab58084e2f)
+
+running 6 tests
+test variant_counts_match_the_audited_split ... ok
+test assert_owner_strings_are_split_table_phases ... ok
+test out_of_scope_set_matches_the_committed_expectation ... ok
+test only_backslash_is_unreachable ... ok
+test every_excluded_builtin_names_a_phase_that_owes_it ... ok
+test the_two_harnesses_include_this_exact_file ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/phase_ten_reasons.rs (/tmp/claude-1000/t615r5-target/head/release/deps/phase_ten_reasons-de950fe94203c4e4)
+
+running 5 tests
+test an_inline_test_module_is_left_out_and_its_neighbours_are_not ... ok
+test a_test_module_file_resolves_where_rustc_finds_it ... ok
+test every_excluded_builtin_names_a_reason_the_enum_knows ... ok
+test no_production_literal_names_phase_10 ... ok
+test the_scan_reads_the_test_modules_it_leaves_out ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/refusal_dispositions.rs (/tmp/claude-1000/t615r5-target/head/release/deps/refusal_dispositions-83c94d000fb66f06)
+
+running 3 tests
+test the_check_finds_each_kind_of_disagreement ... ok
+test the_scanner_reads_each_owner_form ... ok
+test every_ownerless_refusal_has_a_disposition ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/refusal_sites.rs (/tmp/claude-1000/t615r5-target/head/release/deps/refusal_sites-dd9d226747a50c09)
+
+running 5 tests
+test every_send_surface_row_is_walked ... ok
+test the_answers_more_than_one_row_shares_are_the_recorded_ones ... ok
+test the_scanner_finds_constructors_and_only_constructors ... ok
+test the_table_holds_every_constructor_the_source_defines ... FAILED
+test a_reached_row_carries_its_own_site_identifier_and_an_unreached_one_does_not ... ok
+
+failures:
+
+---- the_table_holds_every_constructor_the_source_defines stdout ----
+
+thread 'the_table_holds_every_constructor_the_source_defines' (3237796) panicked at crates/rexx-exec/tests/refusal_sites.rs:522:5:
+corpus/refusal-sites.tsv disagrees with crates/rexx-exec/src; re-derive it rather than editing the disagreeing row.
+  in the source, not the table: [
+    (
+        "Loud",
+        "array_index_hole",
+        "send",
+        "crates/rexx-exec/src/lib.rs:709",
+    ),
+    (
+        "Loud",
+        "binary_operator",
+        "body",
+        "crates/rexx-exec/src/lib.rs:505",
+    ),
+    (
+        "Loud",
+        "call_op_off_its_node",
+        "ir",
+        "crates/rexx-exec/src/lib.rs:948",
+    ),
+    (
+        "Loud",
+        "chunk_map_too_short",
+        "ir",
+        "crates/rexx-exec/src/lib.rs:872",
+    ),
+    (
+        "Loud",
+        "chunk_refused",
+        "body",
+        "crates/rexx-exec/src/lib.rs:881",
+    ),
+    (
+        "Loud",
+        "classic_style_routine",
+        "send",
+        "crates/rexx-exec/src/lib.rs:824",
+    ),
+    (
+        "Loud",
+        "constant_out_of_range",
+        "ir",
+        "crates/rexx-exec/src/lib.rs:956",
+    ),
+    (
+        "Loud",
+        "conversion_raised",
+        "send",
+        "crates/rexx-exec/src/lib.rs:804",
+    ),
+    (
+        "Loud",
+        "entry_method_without_a_value",
+        "send",
+        "crates/rexx-exec/src/lib.rs:718",
+    ),
+    (
+        "Loud",
+        "environment_entry",
+        "body+send",
+        "crates/rexx-exec/src/lib.rs:688",
+    ),
+    (
+        "Loud",
+        "environment_symbol",
+        "body+send",
+        "crates/rexx-exec/src/lib.rs:677",
+    ),
+    (
+        "Loud",
+        "expose_receiver",
+        "body",
+        "crates/rexx-exec/src/lib.rs:786",
+    ),
+    (
+        "Loud",
+        "expression",
+        "body",
+        "crates/rexx-exec/src/lib.rs:497",
+    ),
+    (
+        "Loud",
+        "fork_child",
+        "body",
+        "crates/rexx-exec/src/lib.rs:559",
+    ),
+    (
+        "Loud",
+        "handle_descriptor",
+        "send",
+        "crates/rexx-exec/src/lib.rs:832",
+    ),
+    (
+        "Loud",
+        "immovable_reply",
+        "body",
+        "crates/rexx-exec/src/lib.rs:992",
+    ),
+    (
+        "Loud",
+        "instruction",
+        "body+ir",
+        "crates/rexx-exec/src/lib.rs:444",
+    ),
+    (
+        "Loud",
+        "internal_routine",
+        "body",
+        "crates/rexx-exec/src/lib.rs:531",
+    ),
+    (
+        "Loud",
+        "inverted_wait",
+        "body",
+        "crates/rexx-exec/src/lib.rs:980",
+    ),
+    (
+        "Loud",
+        "jump_out_of_range",
+        "ir",
+        "crates/rexx-exec/src/lib.rs:898",
+    ),
+    (
+        "Loud",
+        "library_procedure_gone",
+        "send",
+        "crates/rexx-exec/src/lib.rs:742",
+    ),
+    (
+        "Loud",
+        "library_source",
+        "body",
+        "crates/rexx-exec/src/lib.rs:765",
+    ),
+    (
+        "Loud",
+        "loader_environment",
+        "body",
+        "crates/rexx-exec/src/lib.rs:647",
+    ),
+    (
+        "Loud",
+        "loop_op_off_its_node",
+        "body+ir",
+        "crates/rexx-exec/src/lib.rs:922",
+    ),
+    (
+        "Loud",
+        "metaclass_new_reused_class",
+        "send",
+        "crates/rexx-exec/src/lib.rs:585",
+    ),
+    (
+        "Loud",
+        "missing_body",
+        "body+ir+send",
+        "crates/rexx-exec/src/lib.rs:853",
+    ),
+    (
+        "Loud",
+        "named_semaphore",
+        "body",
+        "crates/rexx-exec/src/lib.rs:543",
+    ),
+    (
+        "Loud",
+        "native_method",
+        "send",
+        "crates/rexx-exec/src/lib.rs:697",
+    ),
+    (
+        "Loud",
+        "numeric_form_without_expression",
+        "body",
+        "crates/rexx-exec/src/lib.rs:794",
+    ),
+    (
+        "Loud",
+        "object_method",
+        "send",
+        "crates/rexx-exec/src/lib.rs:756",
+    ),
+    (
+        "Loud",
+        "object_name_of_a_value",
+        "send",
+        "crates/rexx-exec/src/lib.rs:597",
+    ),
+    (
+        "Loud",
+        "op_not_driven",
+        "body+ir",
+        "crates/rexx-exec/src/lib.rs:890",
+    ),
+    (
+        "Loud",
+        "operator_operand",
+        "body",
+        "crates/rexx-exec/src/lib.rs:662",
+    ),
+    (
+        "Loud",
+        "parse_trigger_operand",
+        "body",
+        "crates/rexx-exec/src/lib.rs:843",
+    ),
+    (
+        "Loud",
+        "receiver_class",
+        "body+send",
+        "crates/rexx-exec/src/lib.rs:575",
+    ),
+    (
+        "Loud",
+        "redirection",
+        "body",
+        "crates/rexx-exec/src/lib.rs:637",
+    ),
+    (
+        "Loud",
+        "register_not_logical",
+        "ir",
+        "crates/rexx-exec/src/lib.rs:906",
+    ),
+    (
+        "Loud",
+        "scheduler_inconsistency",
+        "body+ir+send",
+        "crates/rexx-exec/src/lib.rs:972",
+    ),
+    (
+        "Loud",
+        "select_op_off_its_node",
+        "ir",
+        "crates/rexx-exec/src/lib.rs:914",
+    ),
+    (
+        "Loud",
+        "setup_method",
+        "send",
+        "crates/rexx-exec/src/lib.rs:775",
+    ),
+    (
+        "Loud",
+        "signal_op_off_its_node",
+        "ir",
+        "crates/rexx-exec/src/lib.rs:931",
+    ),
+    (
+        "Loud",
+        "stale_handle",
+        "send",
+        "crates/rexx-exec/src/lib.rs:813",
+    ),
+    (
+        "Loud",
+        "store_op_off_its_node",
+        "ir",
+        "crates/rexx-exec/src/lib.rs:940",
+    ),
+    (
+        "Loud",
+        "string_answer_not_a_string",
+        "send",
+        "crates/rexx-exec/src/lib.rs:610",
+    ),
+    (
+        "Loud",
+        "unknown_receiver",
+        "body+send",
+        "crates/rexx-exec/src/lib.rs:627",
+    ),
+    (
+        "Loud",
+        "unreadable_collection",
+        "send",
+        "crates/rexx-exec/src/lib.rs:733",
+    ),
+    (
+        "Loud",
+        "unrecorded_executable",
+        "send",
+        "crates/rexx-exec/src/lib.rs:864",
+    ),
+    (
+        "Loud",
+        "unresolved_call",
+        "body",
+        "crates/rexx-exec/src/lib.rs:514",
+    ),
+    (
+        "Loud",
+        "unsatisfiable_wait",
+        "body",
+        "crates/rexx-exec/src/lib.rs:964",
+    ),
+]
+  in the table, not the source: [
+    (
+        "Loud",
+        "array_index_hole",
+        "send",
+        "crates/rexx-exec/src/lib.rs:708",
+    ),
+    (
+        "Loud",
+        "binary_operator",
+        "body",
+        "crates/rexx-exec/src/lib.rs:504",
+    ),
+    (
+        "Loud",
+        "call_op_off_its_node",
+        "ir",
+        "crates/rexx-exec/src/lib.rs:947",
+    ),
+    (
+        "Loud",
+        "chunk_map_too_short",
+        "ir",
+        "crates/rexx-exec/src/lib.rs:871",
+    ),
+    (
+        "Loud",
+        "chunk_refused",
+        "body",
+        "crates/rexx-exec/src/lib.rs:880",
+    ),
+    (
+        "Loud",
+        "classic_style_routine",
+        "send",
+        "crates/rexx-exec/src/lib.rs:823",
+    ),
+    (
+        "Loud",
+        "constant_out_of_range",
+        "ir",
+        "crates/rexx-exec/src/lib.rs:955",
+    ),
+    (
+        "Loud",
+        "conversion_raised",
+        "send",
+        "crates/rexx-exec/src/lib.rs:803",
+    ),
+    (
+        "Loud",
+        "entry_method_without_a_value",
+        "send",
+        "crates/rexx-exec/src/lib.rs:717",
+    ),
+    (
+        "Loud",
+        "environment_entry",
+        "body+send",
+        "crates/rexx-exec/src/lib.rs:687",
+    ),
+    (
+        "Loud",
+        "environment_symbol",
+        "body+send",
+        "crates/rexx-exec/src/lib.rs:676",
+    ),
+    (
+        "Loud",
+        "expose_receiver",
+        "body",
+        "crates/rexx-exec/src/lib.rs:785",
+    ),
+    (
+        "Loud",
+        "expression",
+        "body",
+        "crates/rexx-exec/src/lib.rs:496",
+    ),
+    (
+        "Loud",
+        "fork_child",
+        "body",
+        "crates/rexx-exec/src/lib.rs:558",
+    ),
+    (
+        "Loud",
+        "handle_descriptor",
+        "send",
+        "crates/rexx-exec/src/lib.rs:831",
+    ),
+    (
+        "Loud",
+        "immovable_reply",
+        "body",
+        "crates/rexx-exec/src/lib.rs:991",
+    ),
+    (
+        "Loud",
+        "instruction",
+        "body+ir",
+        "crates/rexx-exec/src/lib.rs:443",
+    ),
+    (
+        "Loud",
+        "internal_routine",
+        "body",
+        "crates/rexx-exec/src/lib.rs:530",
+    ),
+    (
+        "Loud",
+        "inverted_wait",
+        "body",
+        "crates/rexx-exec/src/lib.rs:979",
+    ),
+    (
+        "Loud",
+        "jump_out_of_range",
+        "ir",
+        "crates/rexx-exec/src/lib.rs:897",
+    ),
+    (
+        "Loud",
+        "library_procedure_gone",
+        "send",
+        "crates/rexx-exec/src/lib.rs:741",
+    ),
+    (
+        "Loud",
+        "library_source",
+        "body",
+        "crates/rexx-exec/src/lib.rs:764",
+    ),
+    (
+        "Loud",
+        "loader_environment",
+        "body",
+        "crates/rexx-exec/src/lib.rs:646",
+    ),
+    (
+        "Loud",
+        "loop_op_off_its_node",
+        "body+ir",
+        "crates/rexx-exec/src/lib.rs:921",
+    ),
+    (
+        "Loud",
+        "metaclass_new_reused_class",
+        "send",
+        "crates/rexx-exec/src/lib.rs:584",
+    ),
+    (
+        "Loud",
+        "missing_body",
+        "body+ir+send",
+        "crates/rexx-exec/src/lib.rs:852",
+    ),
+    (
+        "Loud",
+        "named_semaphore",
+        "body",
+        "crates/rexx-exec/src/lib.rs:542",
+    ),
+    (
+        "Loud",
+        "native_method",
+        "send",
+        "crates/rexx-exec/src/lib.rs:696",
+    ),
+    (
+        "Loud",
+        "numeric_form_without_expression",
+        "body",
+        "crates/rexx-exec/src/lib.rs:793",
+    ),
+    (
+        "Loud",
+        "object_method",
+        "send",
+        "crates/rexx-exec/src/lib.rs:755",
+    ),
+    (
+        "Loud",
+        "object_name_of_a_value",
+        "send",
+        "crates/rexx-exec/src/lib.rs:596",
+    ),
+    (
+        "Loud",
+        "op_not_driven",
+        "body+ir",
+        "crates/rexx-exec/src/lib.rs:889",
+    ),
+    (
+        "Loud",
+        "operator_operand",
+        "body",
+        "crates/rexx-exec/src/lib.rs:661",
+    ),
+    (
+        "Loud",
+        "parse_trigger_operand",
+        "body",
+        "crates/rexx-exec/src/lib.rs:842",
+    ),
+    (
+        "Loud",
+        "receiver_class",
+        "body+send",
+        "crates/rexx-exec/src/lib.rs:574",
+    ),
+    (
+        "Loud",
+        "redirection",
+        "body",
+        "crates/rexx-exec/src/lib.rs:636",
+    ),
+    (
+        "Loud",
+        "register_not_logical",
+        "ir",
+        "crates/rexx-exec/src/lib.rs:905",
+    ),
+    (
+        "Loud",
+        "scheduler_inconsistency",
+        "body+ir+send",
+        "crates/rexx-exec/src/lib.rs:971",
+    ),
+    (
+        "Loud",
+        "select_op_off_its_node",
+        "ir",
+        "crates/rexx-exec/src/lib.rs:913",
+    ),
+    (
+        "Loud",
+        "setup_method",
+        "send",
+        "crates/rexx-exec/src/lib.rs:774",
+    ),
+    (
+        "Loud",
+        "signal_op_off_its_node",
+        "ir",
+        "crates/rexx-exec/src/lib.rs:930",
+    ),
+    (
+        "Loud",
+        "stale_handle",
+        "send",
+        "crates/rexx-exec/src/lib.rs:812",
+    ),
+    (
+        "Loud",
+        "store_op_off_its_node",
+        "ir",
+        "crates/rexx-exec/src/lib.rs:939",
+    ),
+    (
+        "Loud",
+        "string_answer_not_a_string",
+        "send",
+        "crates/rexx-exec/src/lib.rs:609",
+    ),
+    (
+        "Loud",
+        "unknown_receiver",
+        "body+send",
+        "crates/rexx-exec/src/lib.rs:626",
+    ),
+    (
+        "Loud",
+        "unreadable_collection",
+        "send",
+        "crates/rexx-exec/src/lib.rs:732",
+    ),
+    (
+        "Loud",
+        "unrecorded_executable",
+        "send",
+        "crates/rexx-exec/src/lib.rs:863",
+    ),
+    (
+        "Loud",
+        "unresolved_call",
+        "body",
+        "crates/rexx-exec/src/lib.rs:513",
+    ),
+    (
+        "Loud",
+        "unsatisfiable_wait",
+        "body",
+        "crates/rexx-exec/src/lib.rs:963",
+    ),
+]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    the_table_holds_every_constructor_the_source_defines
+
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+
+error: test failed, to rerun pass `-p rexx-exec --test refusal_sites`
