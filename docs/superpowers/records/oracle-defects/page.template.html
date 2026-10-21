@@ -1,0 +1,97 @@
+<title>ooRexx Oracle Defects</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&display=swap">
+<style>
+/* Layout: a filter rail over a ledger of defect rows; each row opens to repro, cause and status. */
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --fg:#1b2230; --muted:#5d6779; --line:#d9dee7;
+  --accent:#2f5bd3; --crash:#c43c2c; --wrong:#b7791f; --cosmetic:#6b7a90; --loss:#8e2bb0;
+  --code-bg:#eef1f6;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161d; --surface:#1a2029; --fg:#e4e8ef; --muted:#9aa4b5; --line:#2c3441;
+  --accent:#7d9cf0; --crash:#ef6e5e; --wrong:#e2a64a; --cosmetic:#93a1b6; --loss:#c77de0; --code-bg:#222a35; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161d; --surface:#1a2029; --fg:#e4e8ef; --muted:#9aa4b5; --line:#2c3441;
+  --accent:#7d9cf0; --crash:#ef6e5e; --wrong:#e2a64a; --cosmetic:#93a1b6; --loss:#c77de0; --code-bg:#222a35; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:15px/1.55 var(--body)}
+.wrap{max-width:1100px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:22px}
+h1{font:800 clamp(28px,4.4vw,44px)/1.05 var(--display);margin:0;letter-spacing:-.01em;text-wrap:balance}
+.lede{color:var(--muted);max-width:68ch;margin:0}
+.lede code{font:13px var(--mono)}
+.stats{display:flex;flex-wrap:wrap;gap:10px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 14px;min-width:0;display:flex;flex-direction:column}
+.stat b{font:700 22px/1.1 var(--display);font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:end;position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding-block:10px;z-index:5;border-bottom:1px solid var(--line)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:10}
+.f{display:flex;flex-direction:column;gap:4px;min-width:0}
+.f label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+select,input{font:14px var(--body);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 9px;max-width:100%}
+input#q{width:min(320px,80vw)}
+select:focus-visible,input:focus-visible,summary:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.count{font-size:13px;color:var(--muted);margin-left:auto;font-variant-numeric:tabular-nums}
+.list{display:flex;flex-direction:column;gap:8px}
+details{background:var(--surface);border:1px solid var(--line);border-radius:8px;border-left:4px solid var(--sev,var(--line))}
+details[data-sev="crash"]{--sev:var(--crash)} details[data-sev="wrong answer"]{--sev:var(--wrong)}
+details[data-sev="cosmetic"]{--sev:var(--cosmetic)} details[data-sev="data loss"]{--sev:var(--loss)}
+summary{cursor:pointer;list-style:none;padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:6px 14px;align-items:baseline}
+summary::-webkit-details-marker{display:none}
+.t{font-weight:700;min-width:0}
+.tags{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.tag{font:600 11px/1 var(--mono);padding:4px 7px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.tag.sev{color:var(--sev);border-color:var(--sev)}
+.st{grid-column:1/-1;font:12px var(--mono);color:var(--muted);min-width:0;overflow-wrap:anywhere}
+.body{padding:0 14px 14px;display:grid;grid-template-columns:120px 1fr;gap:8px 16px}
+.body dt{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding-top:3px}
+.body dd{margin:0;min-width:0;overflow-wrap:anywhere}
+pre{margin:0;background:var(--code-bg);border-radius:6px;padding:10px 12px;overflow-x:auto;font:13px/1.5 var(--mono)}
+.src{font:12px var(--mono);color:var(--muted)}
+.empty{color:var(--muted);padding:24px 0}
+@media (max-width:620px){summary{grid-template-columns:1fr}.tags{justify-content:flex-start}.body{grid-template-columns:1fr}.body dt{padding-top:6px}}
+@media (prefers-reduced-motion:no-preference){details[open] .body{animation:fade .18s ease-out}}
+@keyframes fade{from{opacity:.4}to{opacity:1}}
+</style>
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:10px">
+    <h1>ooRexx Oracle Defects</h1>
+    <p class="lede">Known defects in the C++ ooRexx 5.3 interpreter that the Rust rewrite measures against: crashes, wrong results and inconsistencies. Gathered from <code>rust/corpus/oracle-crashes.txt</code>, the numbered Deviations in <code>phase-4-exclusions.txt</code>, the queued items and the filed SourceForge tickets, with the date each entry was added, newest first. Last updated __UPDATED__. Figures are quoted from each source, not re-run for this page.</p>
+  </header>
+  <div class="stats" id="stats"></div>
+  <div class="filters" role="search">
+    <div class="f"><label for="q">Search</label><input id="q" type="search" placeholder="title, repro, cause, C++ file…"></div>
+    <div class="f"><label for="cat">Category</label><select id="cat"></select></div>
+    <div class="f"><label for="area">Area</label><select id="area"></select></div>
+    <div class="f"><label for="sev">Severity</label><select id="sev"></select></div>
+    <div class="count" id="count" aria-live="polite"></div>
+  </div>
+  <div class="list" id="list"></div>
+</div>
+<script type="application/json" id="data">__DATA__</script>
+<script>
+const D=JSON.parse(document.getElementById('data').textContent).sort((p,q)=>(q.added||'').localeCompare(p.added||''));
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function opts(sel,key,label){const vals=[...new Set(D.map(x=>x[key]).filter(Boolean))].sort();
+  sel.innerHTML='<option value="">All '+label+'</option>'+vals.map(v=>'<option>'+esc(v)+'</option>').join('');}
+opts($('cat'),'category','categories');opts($('area'),'area','areas');opts($('sev'),'severity','severities');
+function stats(){const by=k=>D.reduce((m,x)=>(m[x[k]]=(m[x[k]]||0)+1,m),{});const c=by('category');
+  const items=[['entries',D.length],...Object.entries(c).sort((a,b)=>b[1]-a[1])];
+  $('stats').innerHTML=items.map(([k,v])=>'<div class="stat"><b>'+v+'</b><span>'+esc(k)+'</span></div>').join('');}
+const row=(k,v,pre)=>v?'<dt>'+k+'</dt><dd>'+(pre?'<pre>'+esc(v)+'</pre>':esc(v))+'</dd>':'';
+function render(){const q=$('q').value.trim().toLowerCase(),c=$('cat').value,a=$('area').value,s=$('sev').value;
+  const out=D.filter(x=>(!c||x.category===c)&&(!a||x.area===a)&&(!s||x.severity===s)&&
+    (!q||Object.values(x).join(' ').toLowerCase().includes(q)));
+  $('count').textContent=out.length+' of '+D.length;
+  $('list').innerHTML=out.length?out.map(x=>'<details data-sev="'+esc(x.severity)+'"><summary><span class="t">'+esc(x.title)+
+    '</span><span class="tags"><span class="tag sev">'+esc(x.severity)+'</span><span class="tag">'+esc(x.category)+'</span><span class="tag">'+esc(x.area)+
+    '</span><span class="tag">added '+esc(x.added)+'</span></span><span class="st">'+esc(x.status)+'</span></summary><dl class="body">'+
+    row('Repro',x.repro,true)+row('Oracle',x.oracle)+row('Expected',x.expected)+row('Cause',x.cause)+row('Rust crate',x.crate)+
+    '<dt>Source</dt><dd class="src">'+esc(x.source)+'</dd></dl></details>').join(''):'<p class="empty">No entry matches these filters. Clear the search or pick "All".</p>';}
+['q','cat','area','sev'].forEach(id=>$(id).addEventListener('input',render));
+stats();render();
+</script>
