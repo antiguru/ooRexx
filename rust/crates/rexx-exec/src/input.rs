@@ -93,9 +93,10 @@ pub(crate) fn read_stdin_chunk() -> Vec<u8> {
 /// position, which CHARIN's start and LINEIN's line move (rexxref
 /// funct.xml:1314-1322 and :3080-3094), and whose counts are taken from that
 /// position (iostrms.xml:155-165), with [`crate::lines`]'s walkers and line
-/// cache on an [`rexx_core::OpenFile`]. The descriptor's offset is put at the
-/// read position whenever another process may read on from it: before a
-/// command starts, and when the console is dropped.
+/// cache on an [`rexx_core::OpenFile`]. The descriptor's offset is the read
+/// position whenever another process may read from it: it is put there before
+/// a command starts and when the console is dropped, and taken from there
+/// when a command has returned.
 struct FileConsole {
     open: rexx_core::OpenFile,
     /// Bytes read ahead, from character position `buffered_at`.
@@ -259,11 +260,32 @@ impl FileConsole {
         self.open.read_position = at;
     }
 
-    /// Puts the descriptor's offset at the read position, for whatever reads
-    /// the descriptor next.
+    /// Puts the descriptor's offset at the read position where the console's
+    /// own reads moved it, for whatever reads the descriptor next. Where they
+    /// did not, the offset is where the last command left it, which is the
+    /// read position already.
     fn sync_offset(&self) {
         use std::io::{Seek, SeekFrom};
-        let _ = (&self.open.file).seek(SeekFrom::Start(self.position().saturating_sub(1)));
+        let want = self.position().saturating_sub(1);
+        if (&self.open.file)
+            .stream_position()
+            .is_ok_and(|at| at != want)
+        {
+            let _ = (&self.open.file).seek(SeekFrom::Start(want));
+        }
+    }
+
+    /// Takes the read position from the descriptor's offset, where a command
+    /// that read the descriptor left it. The line mark and the read-ahead go.
+    fn adopt_offset(&mut self) {
+        use std::io::Seek;
+        let Ok(offset) = (&self.open.file).stream_position() else {
+            return;
+        };
+        self.open.read_position = as_position(offset + 1);
+        self.open.line_mark = None;
+        self.open.line_mark_digest = None;
+        self.buffered.clear();
     }
 }
 
@@ -711,6 +733,14 @@ impl Interp {
         }
     }
 
+    /// Takes `.STDIN`'s read position from the descriptor's offset, after a
+    /// child that inherited the descriptor has returned.
+    pub(crate) fn adopt_input_offset(&mut self) {
+        if let Source::File(file) = &mut self.input.source {
+            file.adopt_offset();
+        }
+    }
+
     /// Moves `.STDIN`'s read position to character `position` for a CHARIN
     /// start: `Some(false)` past the end, where nothing moves, and `None`
     /// when standard input is not a regular file.
@@ -1068,7 +1098,7 @@ mod tests {
     #[test]
     fn a_file_console_leaves_the_descriptor_at_the_read_position() {
         use std::io::Seek;
-        let (mut c, path) = console("offset", b"hello\nworld\nthird\n");
+        let (mut c, path) = console("sync", b"hello\nworld\nthird\n");
         assert_eq!(c.read_line(), b"hello\n");
         let shared = c.open.file.try_clone().expect("the descriptor duplicates");
         assert_ne!(
@@ -1084,6 +1114,41 @@ mod tests {
             (&shared).stream_position().ok(),
             Some(9),
             "dropped at the read position"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// A command that read the descriptor moved it, and the console reads on
+    /// from there; a sync with nothing read since leaves what the command
+    /// consumed consumed.
+    #[test]
+    fn a_command_that_consumed_moves_the_read_position() {
+        use std::io::{Seek, SeekFrom};
+        let (mut c, path) = console("adopt", b"one\ntwo\nthree\nfour\n");
+        let mut shared = c.open.file.try_clone().expect("the descriptor duplicates");
+        c.sync_offset();
+        shared
+            .seek(SeekFrom::Start(4))
+            .expect("a command consumed `one`");
+        c.adopt_offset();
+        assert_eq!(c.chars_left(), 15);
+        c.sync_offset();
+        assert_eq!(
+            shared.stream_position().ok(),
+            Some(4),
+            "nothing read, nothing moved back"
+        );
+        shared
+            .seek(SeekFrom::Start(8))
+            .expect("a command consumed `two`");
+        c.adopt_offset();
+        assert_eq!(c.read_line(), b"three\n");
+        assert_eq!(c.lines_left(), 1);
+        c.sync_offset();
+        assert_eq!(
+            shared.stream_position().ok(),
+            Some(14),
+            "read, so moved to the read position"
         );
         let _ = std::fs::remove_file(&path);
     }
@@ -1109,7 +1174,7 @@ mod tests {
     fn a_file_console_starts_where_the_descriptor_is() {
         use std::io::Seek;
         let path =
-            std::env::temp_dir().join(format!("rexx-file-console-{}-offset", std::process::id()));
+            std::env::temp_dir().join(format!("rexx-file-console-{}-start", std::process::id()));
         std::fs::write(&path, b"hello\nworld\n").expect("the console file is written");
         let mut file = std::fs::File::open(&path).expect("the console file opens");
         file.seek(std::io::SeekFrom::Start(6))

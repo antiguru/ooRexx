@@ -965,6 +965,7 @@ impl Interp {
         ended: &Waited,
         held: Option<Failure>,
     ) -> Result<CommandOutcome, Failure> {
+        self.adopt_input_offset();
         let finished = match io {
             Some(context) => context.finish(self, &ended.out, &ended.err, held),
             None => Ok(()),

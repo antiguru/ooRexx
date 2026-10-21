@@ -655,7 +655,14 @@ say 'L' chars() lines() .stdin~lines
 const FILE_CHILD_PROGRAM: &str = "\
 say length(linein())
 address system 'wc -c'
-say 'C' chars() lines()
+";
+
+/// The program the shared-position row runs: each command reads on from
+/// where the one before it stopped.
+const FILE_COMMANDS_PROGRAM: &str = "\
+'head -1'
+'head -1'
+address system 'wc -c'
 ";
 
 /// Runs `program` on both interpreters with `input` as a regular file on
@@ -769,5 +776,29 @@ fn a_file_console_hands_a_command_what_is_unread() {
     input.extend_from_slice(b"\nrest\n");
     let (rust, cpp) = file_console_outputs("file-child", FILE_CHILD_PROGRAM, &input);
     assert_eq!(rust, cpp, "what a command reads after a LINEIN");
-    assert_eq!(cpp, "4095\n5\nC 5 1\n", "the command read the rest");
+    assert_eq!(cpp, "4095\n5\n", "the command read the rest");
+}
+
+/// Standard input's descriptor is the read position commands share: what one
+/// command consumed, the next does not see again, and a command's own seek
+/// (`head` leaves the descriptor after the line it printed) is kept.
+#[test]
+fn a_command_moves_the_shared_read_position() {
+    if !gate_mode() {
+        eprintln!(
+            "*** SKIPPED -- the shared-position comparison needs the oracle and runs \
+             only with {GATE_ENV} set. ***"
+        );
+        return;
+    }
+    let (rust, cpp) = file_console_outputs(
+        "file-commands",
+        FILE_COMMANDS_PROGRAM,
+        b"one\ntwo\nthree\nfour\nfive\n",
+    );
+    assert_eq!(rust, cpp, "what each command reads");
+    assert_eq!(
+        cpp, "one\ntwo\n16\n",
+        "the commands read on from each other"
+    );
 }

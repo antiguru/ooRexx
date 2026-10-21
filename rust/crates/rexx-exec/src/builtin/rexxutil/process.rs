@@ -64,7 +64,9 @@ pub(crate) fn cls(
     }
     command.current_dir(std::ffi::OsStr::from_bytes(interp.cwd_bytes()));
     interp.sync_input_offset();
-    let status = match command.output() {
+    let output = command.output();
+    interp.adopt_input_offset();
+    let status = match output {
         Ok(output) => {
             interp.write_out(&output.stdout);
             interp.write_err(&output.stderr);
