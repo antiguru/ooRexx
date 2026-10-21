@@ -198,8 +198,9 @@ pub(crate) enum Resolved {
     /// package's own lookup, as its `Interp::library_codes` row: found where a
     /// `::ROUTINE` is, before the security manager is asked, and run under the
     /// name as the call wrote it. The object is the `Routine` the lookup found
-    /// where it is not the one standing for the row: a copy a program added.
-    MergedLibraryRoutine(usize, Option<ObjRef>),
+    /// where it is not the one standing for the row, a copy a program added,
+    /// and `.nil` where it is: an `Option` would widen every `Resolved`.
+    MergedLibraryRoutine(usize, ObjRef),
     /// An internal package routine a `::REQUIRES ... LIBRARY` merged into the
     /// running package's own lookup, found and run as
     /// [`Resolved::MergedLibraryRoutine`] is.

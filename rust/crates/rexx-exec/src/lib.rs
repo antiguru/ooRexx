@@ -1893,9 +1893,9 @@ impl MergedRoutine {
     pub(crate) fn resolved(self) -> run::Resolved {
         match self {
             MergedRoutine::Installed(installed, _) => run::Resolved::Routine(installed),
-            MergedRoutine::Library(code) => run::Resolved::MergedLibraryRoutine(code, None),
+            MergedRoutine::Library(code) => run::Resolved::MergedLibraryRoutine(code, ObjRef::NIL),
             MergedRoutine::LibraryObject(code, object) => {
-                run::Resolved::MergedLibraryRoutine(code, Some(object))
+                run::Resolved::MergedLibraryRoutine(code, object)
             }
             MergedRoutine::Internal(index) | MergedRoutine::InternalObject(index, _) => {
                 run::Resolved::MergedInternal(&internal_routines::INTERNAL_ROUTINES[index])

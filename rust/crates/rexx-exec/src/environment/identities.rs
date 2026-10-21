@@ -1214,8 +1214,11 @@ impl Interp {
                 installed: None,
                 ..
             }) => {
-                let copy =
-                    (self.library_routine_objects.get(&code) != Some(&object)).then_some(object);
+                let copy = if self.library_routine_objects.get(&code) == Some(&object) {
+                    ObjRef::NIL
+                } else {
+                    object
+                };
                 Ok(crate::run::Resolved::MergedLibraryRoutine(code, copy))
             }
             _ if let Some(row) = self.rexx_routine_object(object) => {

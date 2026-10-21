@@ -150,18 +150,19 @@ impl Interp {
     }
 
     /// What a call by name to library code `code` ran: the copy the lookup
-    /// found, or the one object standing for `code`. A copy is held from its
+    /// found, or for `.nil` the one object standing for `code`. A copy is held from its
     /// first call on, since the call site keeps the resolution naming it for
     /// as long as its body lives, as the oracle's instruction keeps the
     /// routine; one collected before that answers [`RoutineObject::Gone`].
     pub(crate) fn found_routine_object(
         &mut self,
         code: usize,
-        copy: Option<ObjRef>,
+        copy: ObjRef,
     ) -> crate::RoutineObject {
-        let Some(object) = copy else {
+        if copy == ObjRef::NIL {
             return crate::RoutineObject::OfCode;
-        };
+        }
+        let object = copy;
         let runs_code = matches!(
             self.executable_sources.get(&object),
             Some(crate::ExecutableRecord {
