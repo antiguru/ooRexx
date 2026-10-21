@@ -71,6 +71,7 @@ pub use sim::{
 // `.input`: one line position, shared by every construct that reads a line,
 // and the queue-first rule `PULL` follows on top of it.
 mod input;
+mod lines;
 use input::Input;
 
 // The per-body resolution plan (D16): `Plan`, `BodyKey`, `ProgramId`, the

@@ -696,6 +696,7 @@ fn start(
             err: Vec::new(),
         })
     };
+    interp.sync_input_offset();
     let mut builder = match handler {
         Handler::Shell(shell) => {
             let mut builder = std::process::Command::new(format!("{SHELL_DIRECTORY}/{shell}"));

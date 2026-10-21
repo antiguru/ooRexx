@@ -651,6 +651,13 @@ say '[' || linein() || ']' .stdin~description
 say 'L' chars() lines() .stdin~lines
 ";
 
+/// The program the child row runs: what a command inherits after a LINEIN.
+const FILE_CHILD_PROGRAM: &str = "\
+say length(linein())
+address system 'wc -c'
+say 'C' chars() lines()
+";
+
 /// Runs `program` on both interpreters with `input` as a regular file on
 /// standard input, and answers both standard outputs once the exit codes
 /// agree.
@@ -742,4 +749,25 @@ fn a_file_console_has_one_read_position() {
         cpp.contains("\n[l]\nC 19 1 4\n[hel]\n[lo]\n"),
         "the oracle did not position the file: {cpp}"
     );
+}
+
+/// A command the program runs inherits standard input at the read position,
+/// so it reads what the program has not. The first line fills the oracle's
+/// own 4096-byte read exactly, which is where its descriptor stands after
+/// one LINEIN; here the descriptor stands at the read position whatever the
+/// line's length.
+#[test]
+fn a_file_console_hands_a_command_what_is_unread() {
+    if !gate_mode() {
+        eprintln!(
+            "*** SKIPPED -- the file-child comparison needs the oracle and runs \
+             only with {GATE_ENV} set. ***"
+        );
+        return;
+    }
+    let mut input = vec![b'a'; 4095];
+    input.extend_from_slice(b"\nrest\n");
+    let (rust, cpp) = file_console_outputs("file-child", FILE_CHILD_PROGRAM, &input);
+    assert_eq!(rust, cpp, "what a command reads after a LINEIN");
+    assert_eq!(cpp, "4095\n5\nC 5 1\n", "the command read the rest");
 }

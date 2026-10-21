@@ -32,6 +32,7 @@ use std::io::{BufRead, Cursor, Read};
 use rexx_core::ObjRef;
 
 use crate::invocation::ProgramInput;
+use crate::lines::{as_position, lines_after, offset_of, read_from, size_of};
 use crate::{Failure, Interp};
 
 /// `.input`'s position: the one line cursor every input construct advances.
@@ -91,19 +92,17 @@ pub(crate) fn read_stdin_chunk() -> Vec<u8> {
 /// A standard input that is a regular file: a persistent stream with one read
 /// position, which CHARIN's start and LINEIN's line move (rexxref
 /// funct.xml:1314-1322 and :3080-3094), and whose counts are taken from that
-/// position (iostrms.xml:155-165). The file is read in place, so the
-/// descriptor's own offset never moves.
+/// position (iostrms.xml:155-165), with [`crate::lines`]'s walkers and line
+/// cache on an [`rexx_core::OpenFile`]. The descriptor's offset is put at the
+/// read position whenever another process may read on from it: before a
+/// command starts, and when the console is dropped.
 struct FileConsole {
-    file: std::fs::File,
-    /// The offset of the next byte to read.
-    position: u64,
-    /// The line `position` lies in, once something has counted it.
-    line: Option<u64>,
-    /// The file's lines, with the size they were counted at.
-    total: Option<(u64, u64)>,
-    /// Bytes read ahead, from `buffered_at`.
+    open: rexx_core::OpenFile,
+    /// Bytes read ahead, from character position `buffered_at`.
     buffered: Vec<u8>,
     buffered_at: u64,
+    /// The size the line count was taken at; a changed size drops the count.
+    counted_size: Option<u64>,
 }
 
 impl FileConsole {
@@ -123,51 +122,46 @@ impl FileConsole {
         if !file.metadata().ok()?.file_type().is_file() {
             return None;
         }
-        let position = file.stream_position().unwrap_or(0);
+        let offset = file.stream_position().unwrap_or(0);
         Some(FileConsole {
-            file,
-            position,
-            line: (position == 0).then_some(1),
-            total: None,
+            open: rexx_core::OpenFile {
+                file,
+                read_position: as_position(offset + 1),
+                write_position: 1,
+                pending: None,
+                transient: false,
+                line_mark: None,
+                line_total: None,
+                line_mark_digest: None,
+                line_total_digest: None,
+            },
             buffered: Vec::new(),
             buffered_at: 0,
+            counted_size: None,
         })
     }
 
-    fn size(&self) -> u64 {
-        self.file.metadata().map(|meta| meta.len()).unwrap_or(0)
+    /// The read position, as `read_from` takes it.
+    fn position(&self) -> u64 {
+        offset_of(self.open.read_position)
     }
 
-    /// Up to `len` bytes at `offset`: empty at the end of the file or on an
-    /// error.
-    fn read_at(&self, offset: u64, len: usize) -> Vec<u8> {
-        use std::os::unix::fs::FileExt;
-        let mut out = vec![0u8; len];
-        let read = loop {
-            match self.file.read_at(&mut out, offset) {
-                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
-                read => break read.unwrap_or(0),
-            }
-        };
-        out.truncate(read);
-        out
-    }
-
-    /// Makes `buffered` hold the byte at the read position, answering
+    /// Makes `buffered` hold the character at the read position, answering
     /// whether the file has one.
     fn fill(&mut self) -> bool {
+        let at = self.position();
         let end = self.buffered_at + self.buffered.len() as u64;
-        if self.position >= self.buffered_at && self.position < end {
+        if at >= self.buffered_at && at < end {
             return true;
         }
-        self.buffered = self.read_at(self.position, STDIN_CHUNK);
-        self.buffered_at = self.position;
+        self.buffered = read_from(&mut self.open.file, at, STDIN_CHUNK).unwrap_or_default();
+        self.buffered_at = at;
         !self.buffered.is_empty()
     }
 
     /// The buffered bytes from the read position on, after [`FileConsole::fill`].
     fn ahead(&self) -> &[u8] {
-        let from = usize::try_from(self.position.saturating_sub(self.buffered_at)).unwrap_or(0);
+        let from = usize::try_from(self.position().saturating_sub(self.buffered_at)).unwrap_or(0);
         self.buffered.get(from..).unwrap_or_default()
     }
 
@@ -179,11 +173,8 @@ impl FileConsole {
             let found = ahead.iter().position(|byte| *byte == b'\n');
             let take = found.map_or(ahead.len(), |at| at + 1);
             line.extend_from_slice(&ahead[..take]);
-            self.position += take as u64;
+            self.open.read_position += take as i64;
             if found.is_some() {
-                if let Some(current) = &mut self.line {
-                    *current += 1;
-                }
                 break;
             }
         }
@@ -198,132 +189,71 @@ impl FileConsole {
             let ahead = self.ahead();
             let take = ahead.len().min(wanted - out.len());
             out.extend_from_slice(&ahead[..take]);
-            self.position += take as u64;
-        }
-        if let Some(current) = &mut self.line {
-            *current += out.iter().filter(|byte| **byte == b'\n').count() as u64;
+            self.open.read_position += take as i64;
         }
         out
     }
 
-    /// CHARS: the bytes from the read position to the end of the file.
+    /// CHARS: the characters from the read position to the end of the file.
     fn chars_left(&self) -> u64 {
-        self.size().saturating_sub(self.position)
+        let left = size_of(&self.open.file) as i64 - (self.open.read_position - 1);
+        u64::try_from(left).unwrap_or(0)
     }
 
-    /// LINES Normal: whether any byte remains.
+    /// LINES Normal: whether any character remains.
     fn has_data(&mut self) -> bool {
         self.fill()
     }
 
     /// LINES Count: the lines from the read position on, a last line with no
-    /// line end included. The file's line count is kept while its size stays,
-    /// so a loop of counts and reads costs one count.
+    /// line end included, from the line cache. Nothing here writes the file,
+    /// so the count is dropped when the file's size changes instead.
     fn lines_left(&mut self) -> u64 {
-        let size = self.size();
-        if self.position >= size {
+        let size = size_of(&self.open.file);
+        if self.open.read_position > size as i64 {
             return 0;
         }
-        let line = self.line();
-        let total = match self.total {
-            Some((total, counted_at)) if counted_at == size => total,
+        match self.counted_size {
+            Some(counted_at) if counted_at == size => {}
             _ => {
-                let total = line - 1 + self.lines_from(self.position, size);
-                self.total = Some((total, size));
-                total
+                self.open.line_total = None;
+                self.open.line_total_digest = None;
+                self.counted_size = Some(size);
             }
-        };
-        (total + 1).saturating_sub(line)
-    }
-
-    /// The line the read position lies in: one more than the line ends before
-    /// it (rexxref iostrms.xml:476-483).
-    fn line(&mut self) -> u64 {
-        if let Some(line) = self.line {
-            return line;
         }
-        let line = 1 + self.line_ends_between(0, self.position);
-        self.line = Some(line);
-        line
-    }
-
-    /// The line ends at offsets `from` up to, not including, `to`.
-    fn line_ends_between(&self, from: u64, to: u64) -> u64 {
-        let mut count = 0;
-        let mut at = from;
-        while at < to {
-            let want = usize::try_from((to - at).min(STDIN_CHUNK as u64)).unwrap_or(STDIN_CHUNK);
-            let chunk = self.read_at(at, want);
-            if chunk.is_empty() {
-                break;
-            }
-            count += chunk.iter().filter(|byte| **byte == b'\n').count() as u64;
-            at += chunk.len() as u64;
-        }
-        count
-    }
-
-    /// The lines from `from` to `size`, which lies past it: the line ends
-    /// there, and one more for a last line without one.
-    fn lines_from(&self, from: u64, size: u64) -> u64 {
-        let ends = self.line_ends_between(from, size);
-        let last = self.read_at(size - 1, 1);
-        ends + u64::from(last.first().is_some_and(|byte| *byte != b'\n'))
-    }
-
-    /// Whether the read position is the start of its line.
-    fn at_line_start(&self) -> bool {
-        self.position == 0 || self.read_at(self.position - 1, 1) == b"\n"
+        let position = self.open.read_position;
+        lines_after(&mut self.open, position).unwrap_or(0)
     }
 
     /// CHARIN's start: moves the read position to character `position`,
     /// counted from 1, answering `false` past the end of the file, where
     /// nothing moves (`StreamInfo::setCharReadPosition`).
     fn seek_char(&mut self, position: u64) -> bool {
-        let Some(offset) = position.checked_sub(1) else {
-            return false;
-        };
-        if offset >= self.size() {
+        if position == 0 || position > size_of(&self.open.file) {
             return false;
         }
-        self.line = match self.line {
-            Some(line) if offset >= self.position => {
-                Some(line + self.line_ends_between(self.position, offset))
-            }
-            _ => None,
-        };
-        self.position = offset;
+        self.open.read_position = as_position(position);
         true
     }
 
     /// LINEIN's line: moves the read position to the start of line `line`,
-    /// or to the end of the file when it has fewer lines
-    /// (`SysFile::seekForwardLines`). Line ends are walked from the read
-    /// position when it lies on an earlier line, else from the start.
+    /// or to the end of the file when it has fewer lines.
     fn seek_line(&mut self, line: u64) {
-        let (mut at, mut reached) = match self.line {
-            Some(current) if current == line && self.at_line_start() => return,
-            Some(current) if current < line => (self.position, current),
-            _ => (0, 1),
-        };
-        'walk: while reached < line {
-            let chunk = self.read_at(at, STDIN_CHUNK);
-            if chunk.is_empty() {
-                break;
-            }
-            for (index, byte) in chunk.iter().enumerate() {
-                if *byte == b'\n' {
-                    reached += 1;
-                    if reached == line {
-                        at += index as u64 + 1;
-                        break 'walk;
-                    }
-                }
-            }
-            at += chunk.len() as u64;
-        }
-        self.position = at;
-        self.line = Some(reached);
+        let (_, at) = crate::lines::seek_line(&mut self.open, as_position(line), 0);
+        self.open.read_position = at;
+    }
+
+    /// Puts the descriptor's offset at the read position, for whatever reads
+    /// the descriptor next.
+    fn sync_offset(&self) {
+        use std::io::{Seek, SeekFrom};
+        let _ = (&self.open.file).seek(SeekFrom::Start(self.position().saturating_sub(1)));
+    }
+}
+
+impl Drop for FileConsole {
+    fn drop(&mut self) {
+        self.sync_offset();
     }
 }
 
@@ -757,6 +687,14 @@ impl Interp {
         self.input.remaining_lines(count)
     }
 
+    /// Puts standard input's descriptor offset at `.STDIN`'s read position,
+    /// for a child that inherits the descriptor.
+    pub(crate) fn sync_input_offset(&self) {
+        if let Source::File(file) = &self.input.source {
+            file.sync_offset();
+        }
+    }
+
     /// Moves `.STDIN`'s read position to character `position` for a CHARIN
     /// start: `Some(false)` past the end, where nothing moves, and `None`
     /// when standard input is not a regular file.
@@ -1051,14 +989,15 @@ mod tests {
         bytes.push_str("tail");
         let (mut c, path) = console("count", bytes.as_bytes());
         let mut step = 0;
-        while c.position < bytes.len() as u64 {
+        while c.position() <= bytes.len() as u64 {
+            let offset = c.position() - 1;
             assert_eq!(
                 c.lines_left(),
-                lines_in(bytes.as_bytes(), c.position),
-                "at {}",
-                c.position
+                lines_in(bytes.as_bytes(), offset),
+                "at {offset}"
             );
-            assert_eq!(c.total, Some((301, bytes.len() as u64)), "counted once");
+            assert_eq!(c.open.line_total, Some(301), "counted once");
+            assert_eq!(c.counted_size, Some(bytes.len() as u64));
             if step % 3 == 1 {
                 c.read_bytes(5);
             } else {
@@ -1079,7 +1018,57 @@ mod tests {
             lines_in(bytes.as_bytes(), 99),
             "a seek forwards"
         );
-        assert_eq!(c.total, Some((301, bytes.len() as u64)));
+        assert_eq!(c.open.line_total, Some(301));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Appends `bytes` to the console's file, as another writer would.
+    fn append(path: &std::path::Path, bytes: &[u8]) {
+        use std::io::Write;
+        std::fs::OpenOptions::new()
+            .append(true)
+            .open(path)
+            .and_then(|mut file| file.write_all(bytes))
+            .expect("the console file grows");
+    }
+
+    /// A count taken before another writer appended is not reused after: the
+    /// file is counted again at its new size.
+    #[test]
+    fn a_file_console_recounts_a_grown_file() {
+        let (mut c, path) = console("recount", b"a\nb\nc\n");
+        assert_eq!(c.lines_left(), 3);
+        assert_eq!(c.read_line(), b"a\n");
+        assert_eq!(c.lines_left(), 2);
+        append(&path, b"x\ny\n");
+        assert_eq!(c.lines_left(), 4, "b, c and the two appended lines");
+        assert_eq!(c.counted_size, Some(10));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// The descriptor's offset is the read position once the console syncs
+    /// it, and when the console is dropped, so a process reading the
+    /// descriptor next starts where the program stopped.
+    #[test]
+    fn a_file_console_leaves_the_descriptor_at_the_read_position() {
+        use std::io::Seek;
+        let (mut c, path) = console("offset", b"hello\nworld\nthird\n");
+        assert_eq!(c.read_line(), b"hello\n");
+        let shared = c.open.file.try_clone().expect("the descriptor duplicates");
+        assert_ne!(
+            (&shared).stream_position().ok(),
+            Some(6),
+            "the read moved the offset elsewhere"
+        );
+        c.sync_offset();
+        assert_eq!((&shared).stream_position().ok(), Some(6));
+        assert_eq!(c.read_bytes(3), b"wor");
+        drop(c);
+        assert_eq!(
+            (&shared).stream_position().ok(),
+            Some(9),
+            "dropped at the read position"
+        );
         let _ = std::fs::remove_file(&path);
     }
 
@@ -1087,16 +1076,11 @@ mod tests {
     /// the new bytes and the next line is the appended one.
     #[test]
     fn a_file_console_reads_what_is_appended() {
-        use std::io::Write;
         let (mut c, path) = console("grow", b"a\nb\n");
         assert_eq!(c.read_line(), b"a\n");
         assert_eq!(c.read_line(), b"b\n");
         assert_eq!(counts(&mut c), (0, 0, false));
-        std::fs::OpenOptions::new()
-            .append(true)
-            .open(&path)
-            .and_then(|mut file| file.write_all(b"more\nlines"))
-            .expect("the console file grows");
+        append(&path, b"more\nlines");
         assert_eq!(counts(&mut c), (10, 2, true));
         assert_eq!(c.read_line(), b"more\n");
         assert_eq!(counts(&mut c), (5, 1, true));
