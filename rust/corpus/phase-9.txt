@@ -342,3 +342,7 @@ lang/object_copy_uncopyable_receivers.rex
 lang/call_site_routine_copy_lifetime.rex
 # 9d Task 7.1 fix round 3: a raise through a kept routine does not undo the keeping.
 lang/call_site_kept_routine_raises.rex
+# 9d Task 7.1 fix round 4: the same through the call ops that evaluate their own arguments, and a
+# raise through a routine the call resolved afresh keeps nothing.
+lang/call_site_kept_routine_raises_cascade.rex
+lang/call_site_fresh_routine_raises.rex

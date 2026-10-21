@@ -1,0 +1,68 @@
+/* A call that resolves its routine afresh and raises through it keeps
+   nothing: the site's next call sees the next rebind. Each site's first call
+   runs an external file, a resolution that is searched for on every call.
+   The second call's argument rebinds the name to a raising copy, so the call
+   resolves afresh after its arguments and raises. The name is then rebound
+   to a working copy, which the third call runs. In the function and the CALL
+   form, with the arguments run as the call's own ops and then as message
+   cascades the call evaluates itself. */
+ci = .routines~i~copy
+cr = .routines~r~copy
+call fy 1
+call fy 'swap'
+.routines['Y'] = ci
+call fy 3
+.routines~remove('Y')
+call cy 1
+call cy 'swap'
+.routines['Y'] = ci
+call cy 3
+.routines~remove('Y')
+call fz 1
+call fz 'swap'
+.routines['Y'] = ci
+call fz 3
+.routines~remove('Y')
+call cz 1
+call cz 'swap'
+.routines['Y'] = ci
+call cz 3
+exit 0
+fy: procedure expose ci cr
+  use arg v
+  signal on syntax name sfy
+  z = y(f(v))
+  say 'function' v 'answered' z
+  return
+sfy: say 'function' v 'raised' condition('O')~code
+  return
+cy: procedure expose ci cr
+  use arg v
+  signal on syntax name scy
+  call y f(v)
+  say 'call' v 'answered' result
+  return
+scy: say 'call' v 'raised' condition('O')~code
+  return
+fz: procedure expose ci cr
+  use arg v
+  signal on syntax name sfz
+  z = y(f(v)~~length)
+  say 'cascade function' v 'answered' z
+  return
+sfz: say 'cascade function' v 'raised' condition('O')~code
+  return
+cz: procedure expose ci cr
+  use arg v
+  signal on syntax name scz
+  call y f(v)~~length
+  say 'cascade call' v 'answered' result
+  return
+scz: say 'cascade call' v 'raised' condition('O')~code
+  return
+f: procedure expose ci cr
+  if arg(1) <> 'swap' then return arg(1)
+  .routines['Y'] = cr
+  return 2
+::routine i external 'LIBRARY orxfunction TestIntArg'
+::routine r external 'LIBRARY orxfunction TestRaiseException0'

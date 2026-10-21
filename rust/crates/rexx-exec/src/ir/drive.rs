@@ -4148,13 +4148,15 @@ impl Interp {
     /// A call op's resolution before its arguments run, for an op that
     /// evaluates them itself: the site's kept answer, or the part of the
     /// resolution the oracle decides before the arguments, kept when it
-    /// decides one; and whether the site had a kept answer on entry.
+    /// decides one; and whether the site holds a routine kept from an earlier
+    /// return, which a raise through it leaves kept.
     ///
     /// **A raise is deliberately not recorded**: `resolve_fixed_call` answers
     /// `Err` for a name it refuses, and a site that raised asks again. A kept
     /// answer of a kind the oracle searches for on every call is handed on
     /// with the generation it was read under, since the arguments can write a
-    /// routine table before it is used.
+    /// routine table before it is used; it is not a routine the site kept,
+    /// since [`Interp::settle_after_arguments`] may replace it under this call.
     fn site_resolution_before_arguments<'c>(
         &mut self,
         chunk: &'c Chunk,
@@ -4174,7 +4176,7 @@ impl Interp {
                     kept: Some((resolved, generation)),
                     site: Some(chunk.call_site_slot(site)),
                 },
-                true,
+                false,
             ));
         }
         let resolution = match self.resolve_fixed_call(name, search_labels)? {
