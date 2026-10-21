@@ -2214,13 +2214,11 @@ impl Interp {
         };
         let resolution = self.site_resolution_before_arguments(chunk, site, name, !*literal);
         let kept = matches!(resolution, Ok((_, true)));
-        let resolution = self
-            .resolved_after_arguments(code, resolution.map(|(resolution, _)| resolution), args)
-            .inspect_err(|_| {
-                if !kept {
-                    self.forget_site(chunk, site);
-                }
-            })?;
+        let resolution = self.resolved_after_arguments(
+            code,
+            resolution.map(|(resolution, _)| resolution),
+            args,
+        )?;
         let base_indent = self.activity.clause_state.current_value_indent;
         let begun = self
             .begin_invoke_call(
