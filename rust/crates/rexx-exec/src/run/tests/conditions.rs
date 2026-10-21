@@ -1064,3 +1064,28 @@ fn a_handler_that_fails_at_a_clause_boundary_blames_that_clause() {
             .collect::<Vec<_>>()
     );
 }
+
+/// rexxref (Condition traps, CALL ON): the same condition raised again in
+/// the clause that raised it, while its trap is delayed, is ignored for ERROR
+/// and FAILURE, and for any other condition delivered once the first handler
+/// returns. The oracle segfaults on this shape (`corpus/oracle-crashes.txt`).
+#[test]
+fn a_condition_raised_again_while_its_call_trap_is_delayed() {
+    for (condition, raise, handled) in [
+        ("error", "error 5", "h ERROR\n"),
+        ("failure", "failure 6", "h FAILURE\n"),
+        ("user c1", "user c1", "h USER C1\nh USER C1\n"),
+        ("notready", "notready", "h NOTREADY\nh NOTREADY\n"),
+    ] {
+        let mut interp = Interp::new();
+        let program = format!(
+            "call on {condition} name h\nzr = ra() + ra()\nsay 'zr' zr\nexit\n\
+             ra: raise {raise} return 1\nh: say 'h' condition('C'); return\n"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&say_output(&mut interp, program.as_bytes())),
+            format!("{handled}zr 2\n"),
+            "{condition}"
+        );
+    }
+}

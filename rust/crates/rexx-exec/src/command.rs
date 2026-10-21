@@ -1226,12 +1226,7 @@ impl Interp {
     /// Whether a `CALL ON` delivery of `condition` is already queued for the
     /// running activation, which puts its trap in the delayed state.
     fn call_trap_delayed(&self, condition: &[u8]) -> bool {
-        let here = self.activation().id;
-        self.activity.pending_traps.iter().any(|pending| {
-            !pending.request
-                && pending.activation == here
-                && pending.condition.eq_ignore_ascii_case(condition)
-        })
+        self.call_trap_delayed_at(self.activation().id, condition)
     }
 
     /// The running activity's innermost waiting command clause, where it is

@@ -571,8 +571,10 @@ impl Interp {
         // nothing yet knows whether it will be trapped here or unwind the
         // activation. This is the point where that is decided in favour of
         // "trapped here, execution continues", so it is the point where a
-        // `CALL ON` handler queued by the same clause is owed its run.
-        if let Some(exit) = self.deliver_pending_traps()? {
+        // `CALL ON` handler queued by the same clause is owed its run. A halt
+        // request waits for the label's clause: measured, the oracle reports
+        // an untrapped one there, and `SIGL` names it for a trapped one.
+        if let Some(exit) = self.deliver_pending(false)? {
             return Ok(Flow::Exit(exit.value()));
         }
         Ok(Flow::Signal(target))
@@ -582,6 +584,12 @@ impl Interp {
     /// conditions were queued, and stops early only if one of them ends the
     /// program.
     pub(crate) fn deliver_pending_traps(&mut self) -> Result<Option<HandlerExit>, Failure> {
+        self.deliver_pending(true)
+    }
+
+    /// [`Interp::deliver_pending_traps`], leaving a halt request queued where
+    /// `requests` is false.
+    fn deliver_pending(&mut self, requests: bool) -> Result<Option<HandlerExit>, Failure> {
         // Snapshotted rather than re-read, so that anything a handler queues
         // lands beyond the prefix this boundary is answering for.
         let mut owed = self.activity.pending_traps.len();
@@ -602,7 +610,11 @@ impl Interp {
                 .pending_traps
                 .iter()
                 .take(owed)
-                .position(|pending| pending.activation == here && pending.fragment_depth == depth)
+                .position(|pending| {
+                    pending.activation == here
+                        && pending.fragment_depth == depth
+                        && (requests || !pending.request)
+                })
             else {
                 return Ok(None);
             };
@@ -785,6 +797,20 @@ impl Interp {
             // `active_condition` again, so it is left as it is.
             Ok(exited @ Ended::Exited(_)) => Ok(HandlerExit::from_ended(exited)),
         }
+    }
+
+    /// Whether a `CALL ON` delivery of `condition` is already queued for
+    /// `activation`, which puts its trap in the delayed state.
+    pub(crate) fn call_trap_delayed_at(
+        &self,
+        activation: crate::activation::ActivationId,
+        condition: &[u8],
+    ) -> bool {
+        self.activity.pending_traps.iter().any(|pending| {
+            !pending.request
+                && pending.activation == activation
+                && pending.condition.eq_ignore_ascii_case(condition)
+        })
     }
 
     /// The trap the activation at `depth` has enabled, or `None` past the
@@ -1053,6 +1079,15 @@ impl Interp {
         match trap {
             Some(trap) if trap.call && sender.reply_issued && result.is_some() => {
                 Err(Raised::return_after_reply().into())
+            }
+            // rexxref (Condition traps, CALL ON): an ERROR or FAILURE raised
+            // again while the trap is delayed is ignored.
+            Some(trap)
+                if trap.call
+                    && matches!(raise.condition.as_ref(), b"ERROR" | b"FAILURE")
+                    && caller.is_some_and(|caller| self.call_trap_delayed_at(caller, &name)) =>
+            {
+                Ok(finish(result))
             }
             // A `CALL ON` trap resumes, so the condition waits for the
             // caller's current clause to finish -- `deliver_pending_traps`

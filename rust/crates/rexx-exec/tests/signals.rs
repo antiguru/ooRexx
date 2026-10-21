@@ -594,6 +594,43 @@ fn call_on_halt_sees_an_abandoned_command() {
 
 /// A long builtin in a short loop: the halt is served when the builtin
 /// returns, not at the clause count's next check.
+/// A halt pending when a `SIGNAL ON SYNTAX` trap takes the clause's error is
+/// raised at the label's clause: untrapped it reports that clause, and a
+/// `SIGNAL ON HALT` handler sees it as `SIGL`, with the SYNTAX trap's `RC`.
+/// The oracle's bytes, measured.
+#[test]
+fn sigint_pending_at_a_syntax_trap_is_raised_at_the_label() {
+    halts(
+        "syntaxlabel",
+        "signal on syntax name raised\nsay 'ready'\nx = SysSleep(5) + 'a'\nraised:\n\
+         say 'trapped' condition('c')\nexit\n",
+        "ready\n",
+        "INT",
+        Launch::Plain,
+        &Ended {
+            code: Some(252),
+            stdout: "ready\n".to_string(),
+            stderr: "     4 *-* raised:\n\
+                     Error 4 running PROGRAM line 4:  Program interrupted.\n\
+                     Error 4.1:  Program interrupted with HALT condition.\n"
+                .to_string(),
+        },
+    );
+    halts(
+        "syntaxlabelhalt",
+        "signal on halt\nsignal on syntax name raised\nsay 'ready'\nx = SysSleep(5) + 'a'\n\
+         raised:\nsay 'trapped' condition('c')\nexit\nhalt: say 'HALT' rc sigl\n",
+        "ready\n",
+        "INT",
+        Launch::Plain,
+        &Ended {
+            code: Some(0),
+            stdout: "ready\nHALT 41 5\n".to_string(),
+            stderr: String::new(),
+        },
+    );
+}
+
 #[test]
 fn sigint_halts_after_a_long_builtin() {
     halts(
