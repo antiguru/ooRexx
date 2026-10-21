@@ -66,7 +66,12 @@ const CRATE_RUN_LIMIT: std::time::Duration = std::time::Duration::from_secs(120)
 /// case, the Deviation that licenses it (0 for a rule proposed as a new
 /// one), the rule, and the oracle's first item that differs. [`oracle_rule`] must name the same rule from the answers.
 const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
-    ("charin-bounds", 62, "charin-eof-notready", "CI= ERROR 19 19"),
+    (
+        "charin-bounds",
+        62,
+        "charin-eof-notready",
+        "CI= ERROR 19 19",
+    ),
     (
         "line-mark-after-write",
         57,
@@ -123,7 +128,12 @@ const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
         "seek-from-end",
         "S_<3_read=22 READY 19 22",
     ),
-    ("seek-invalid", 59, "invalid-seek", "S_-9_read=0 ERROR 19 -1"),
+    (
+        "seek-invalid",
+        59,
+        "invalid-seek",
+        "S_-9_read=0 ERROR 19 -1",
+    ),
     (
         "seek-relative",
         49,
