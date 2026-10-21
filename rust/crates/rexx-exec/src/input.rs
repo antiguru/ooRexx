@@ -90,7 +90,7 @@ pub(crate) fn read_stdin_chunk() -> Vec<u8> {
 
 /// A standard input that is a regular file: a persistent stream with one read
 /// position, which CHARIN's start and LINEIN's line move (rexxref
-/// funct.xml:1314-1322 and :3080-3087), and whose counts are taken from that
+/// funct.xml:1314-1322 and :3080-3094), and whose counts are taken from that
 /// position (iostrms.xml:155-165). The file is read in place, so the
 /// descriptor's own offset never moves.
 struct FileConsole {

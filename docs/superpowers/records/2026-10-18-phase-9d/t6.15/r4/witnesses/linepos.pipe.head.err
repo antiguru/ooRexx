@@ -1,0 +1,5 @@
+       *-* Compiled method "CHARIN" with scope "Stream".
+  1457 *-* Method UNKNOWN with scope "Monitor" in package "REXX" (no source available).
+     2 *-* say '[' || charin(, 2, 0) || ']' chars()
+Error 93 running REXX line 1457:  Incorrect call to method.
+Error 93.958:  Positioning of transient streams is not valid.

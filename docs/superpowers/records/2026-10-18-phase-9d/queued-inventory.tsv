@@ -223,3 +223,6 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointe
 2026-10-20-halt-after-signal-on-syntax.md	divergence	-	9d	broken report for a HALT taken at a SIGNAL ON SYNTAX label	9d
 2026-10-20-lineout-buffered-until-close.md	divergence	-	not-a-divergence	oracle buffers lineout to a named stream until close; rexxref permits write-through (Moritz 2026-10-20)	not-a-divergence
 2026-10-20-call-on-delayed-reraise.md	divergence	-	9d	a CALL ON condition raised again while delayed runs the handler twice	9d
+2026-10-20-collect-stress-raise-additional-array.md	defect	-	9d	collect_stress panics: a live value freed on the RAISE ADDITIONAL path	9d
+2026-10-21-stdin-linein-then-charin.md	divergence	-	closed:3cd8cff5c	its own CLOSED line; Task 6.15 fix round 4 gives a file standard input one read position, and a start on a piped one is 93.958 on both sides	closed:3cd8cff5c
+2026-10-21-redirected-target-timed-line-flake.md	process	-	9d	flaky timed line in a gated corpus program	9d

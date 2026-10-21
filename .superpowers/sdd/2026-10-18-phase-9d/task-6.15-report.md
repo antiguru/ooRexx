@@ -818,3 +818,163 @@ From `rust/`, `CARGO_TARGET_DIR=<scratchpad>/t615-target`, `CARGO_INCREMENTAL=0`
    here changes it. It is a queue candidate.
 2. **`command_redirected_target_waits_elsewhere.rex` can mismatch on a timed line**, as in 6.14.
 3. `collect_stress` still fails at `raise_additional_array.rex`, as at the task base.
+
+## Fix round 4
+
+Brief: `task-6.15-fix-r4.md`. Re-review: `task-6.15-rereview-r3.md`. Status: DONE_WITH_CONCERNS.
+
+### Commits
+
+* `3cd8cff5c`: `FileConsole` in `input.rs`, the standard-input positioning in
+  `dispatch/stream.rs`'s `charin` and `linein`, and the `input_oracle.rs` rows
+  `console-charin-after-linein` and `a_file_console_has_one_read_position`.
+* The records commit that follows holds `t6.15/r4/`, this section, the queued item's close and
+  its inventory row, and one widened rexxref citation in `input.rs`.
+
+### Important 1: `lines()` on a file standard input is linear
+
+* A standard input that is a regular file is `Source::File`, a `FileConsole`: a read position,
+  the file read in place at it through a buffer of `STDIN_CHUNK`, the line the position lies in
+  once something has counted it, and the file's line count with the size it was counted at.
+  `stdin_file_remaining` is gone.
+* LINES Normal answers whether a byte remains at the position, from the buffer or one read
+  (rexxref funct.xml:3296-3306): no scan.
+* LINES Count scans from the position once and keeps the file's line count. Reads advance the
+  position's line as they pass line ends, so each later count is the kept total less the lines
+  before the position's line, for as long as the file's size stays. A changed size recounts, and
+  a position at or past the end answers 0.
+* CHARS is the size less the position. `exhausted` plays no part for a file console, so a file
+  that grows after its end was read is read on (`r4/witnesses/grow.file.*`), where round 3 kept
+  answering 0 and the null string.
+* Measurements in `r4/loops/`: the inputs are
+  `awk -v n=N 'BEGIN{for(i=1;i<=n;i++) printf "line %d of the input, number %d\n", i, i}'` at
+  5000, 10000, 20000 and 200000 lines; `loop.rex` is `do while lines() > 0`, `loopc.rex` is
+  `do while lines(, 'C') > 0`, each reading one line per pass, with `loopu.rex` (`do until
+  lines() = 0`) and `loopchar.rex` (`do while chars() > 0`, 100 characters per pass) beside
+  them. Head is `cg-9d/t6.15-r4/rexx-head` (3cd8cff5c), base a release build of 7a7441c6c, r3
+  `cg-9d/t6.15-r3/rexx-head` (01a7ca716), the oracle `build/bin/rexx`. Wall seconds
+  (`wall.tsv`, one run each, the file as standard input):
+
+  | program | lines | head | base | r3 | oracle |
+  | --- | --- | --- | --- | --- | --- |
+  | loop | 5000 | 0.052 | 0.057 | 0.220 | 0.030 |
+  | loop | 10000 | 0.085 | 0.088 | 0.769 | 0.031 |
+  | loop | 20000 | 0.124 | 0.128 | 3.061 | 0.053 |
+  | loop | 200000 | 0.603 | 0.666 | not run | 0.378 |
+  | loopc | 5000 | 0.078 | 0.081 | 0.248 | 0.021 |
+  | loopc | 10000 | 0.096 | 0.065 | 0.769 | 0.031 |
+  | loopc | 20000 | 0.139 | 0.100 | 3.047 | 0.059 |
+  | loopc | 200000 | 0.681 | 0.654 | not run | 0.424 |
+
+  Callgrind Ir with libc and ld subtracted (`callgrind.tsv`; `cgsum.py` on a run shaped like
+  `callgrind.sh`'s `one`, since the script takes no standard input), at 5000 and 10000 lines,
+  and the Ir per line added between them:
+
+  | program | binary | 5000 | 10000 | per line |
+  | --- | --- | --- | --- | --- |
+  | loop | head | 169,629,874 | 281,876,898 | 22,449 |
+  | loop | base | 170,119,083 | 282,862,364 | 22,549 |
+  | loop | r3 | 2,305,768,012 | 8,837,847,837 | 1,306,416 |
+  | loop | oracle | 67,291,025 | 132,318,709 | 13,006 |
+  | loopc | head | 173,075,682 | 288,804,602 | 23,146 |
+  | loopc | base | 170,883,550 | 284,386,831 | 22,701 |
+  | loopc | r3 | 2,307,667,273 | 8,841,672,110 | 1,306,801 |
+  | loopc | oracle | 77,831,545 | 153,524,394 | 15,139 |
+
+  Head's cost per line is the base's, where r3's grows with what is left of the file. The
+  base's `lines(, 'C')` never counted (round 3 added the count), so its loopc cost is the
+  Normal one.
+* The answers are round 3's: `a_file_console_counts_what_is_left` passes, and
+  `r4/witnesses/pos.file.*` opens `A 22 1 4` and `B 16 1 3` on both sides.
+
+### The queued item: one read position on a file standard input
+
+* The rule (rexxref funct.xml:1314-1322 and :3080-3094, iostrms.xml:155-165): a persistent
+  stream has one read position, from which CHARIN and LINEIN read and which both advance;
+  CHARIN's `start` and LINEIN's `line` set it, and neither may be given for a transient
+  stream. `charin(, 3)` is therefore character 3 with the default length 1, not three
+  characters: the queued item's account of the oracle's answer was a misreading, and its first
+  line now says so. The oracle answers `l` there (round 3's `stdin-file.oracle.stdout`,
+  `r4/witnesses/pos.file.oracle.out`).
+* `FileConsole::seek_char` moves to the character when it is within the file and answers
+  `false` past the end, where `charin` answers the null string in `NOTREADY:EOF` and moves
+  nothing (`StreamInfo::setCharReadPosition`; `r4/witnesses/past.file.*`). A start on a
+  standard input that is not a regular file is 93.958, which `refuse_transient_position`
+  already raised for a pipe or a terminal.
+* `FileConsole::seek_line` walks line ends to the start of the line, from the position when it
+  lies on an earlier line and else from the start of the file, and stops at the end of the file
+  for a line past the last one. A seek to the line the position lies in goes back to its start.
+* `.stdin`'s `charin`, `linein`, `chars` and `lines` go through the same console, so
+  `.stdin~charin(2, 2)` and `.stdin~linein(4)` position too.
+* Witnesses, gated and oracle-identical (`r4/checks-input-oracle.txt`):
+  `console-charin-after-linein` (piped: `linein()`, then `charin(, , 3)` answers `wor`, then
+  `charin(, 3)` is 93.958 and rc 163) and `a_file_console_has_one_read_position` (a file:
+  every move and count of `FILE_POSITION_PROGRAM`, with the description after a start past the
+  end). Unit tests in `input.rs` run the console over a temporary file: the same sequence,
+  seeks past the end, a line seek from mid-line and over every line, the count cache against a
+  fresh count after every read and after seeks either way, a file that grows after its end was
+  read, and the descriptor's offset as the starting position.
+* Probes in `r4/probes/`, run on `in22.txt` (`hello`, `world`, `third`, `last`, no final line
+  end) as a file and as a pipe, witnesses in `r4/witnesses/`, the comparison in
+  `r4/witnesses-diff.txt`: the error probes (`zero`, `neg`, `zeroline`: 93.907 on a file,
+  93.958 on a pipe), `linepos`, `linepos-named` and every pipe run agree with the oracle on all
+  three channels. The file runs that differ are below.
+
+### Oracle departures seen
+
+Each is the oracle's cached line information or cached size, each falls under Deviation
+candidate 5's rule (LINES Count from the read position) or the ruling that a count may go stale
+under another writer (iostrms.xml:495-500), and nothing here copies them.
+* `pos.file` H and I: after `linein(, 1)` and `linein(, 3)` the oracle's Count answers 1 and
+  -1 where 3 and 1 lines remain (`StreamInfo::lines` answers
+  `stream_line_size - lineReadPosition + 1` from a cache `setLineReadPosition` does not
+  refresh). `count.file` D and `count-named.file` D: the oracle answers 3 where 2 remain, on
+  the standard input and on a named stream alike, which is candidate 5's own measurement.
+* `lenzero.file`: `linein(, 3, 0)` after a CHARIN moved the position leaves the oracle at line
+  2 (CHARS 16, then `world`) where line 3 starts at character 13 (CHARS 10, then `third`).
+  `linepos.file`, the same seeks without the earlier `linein()`, agrees on both sides.
+* `past.file`: `linein(, 4)` after a line read found the end of the file answers the null
+  string on the oracle and `last` here; `charin(, 1)` right after reads `h` on both.
+* `grow.file`: lines appended by `address system` after the end was read are counted here
+  (CHARS 11, LINES 1, Count 2) and not by the oracle (0 0 0), which reads the appended line all
+  the same.
+
+### Checks
+
+From `rust/`, `CARGO_TARGET_DIR=/tmp/claude-1000/t615r4-target/head`, `CARGO_INCREMENTAL=0`,
+`-j 4`; outputs in `t6.15/r4/`, each exit status in `checks-status.txt` with the commit it ran
+on (3cd8cff5c) as its first line.
+
+| command | exit |
+| --- | --- |
+| `cargo fmt --all --check` | 0 |
+| `memcap 8G cargo clippy -p rexx-exec -p rexx-core --all-targets -- -D warnings` | 0 |
+| `memcap 16G cargo test -p rexx-exec --test stream_model --no-fail-fast`, debug (`checks-stream-model-debug.txt`) | 0, 26 passed |
+| the same, `--release` (`checks-stream-model.txt`) | 0, 26 passed |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test --release -p rexx-exec --test input_oracle` (`checks-input-oracle.txt`) | 0, 24 passed |
+| `memcap 16G cargo test --release -p rexx-exec --lib` (`checks-lib.txt`) | 0, 1163 passed |
+| refusal tables + `licensed_divergences` + `numeric_model` (`checks-tables.txt`) | 0 |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test --release -p rexx-exec --test corpus` (`checks-corpus.txt`) | 0, 1149 of 1149 |
+
+### Perf
+
+`t6.15/r4/callgrind.txt`: `callgrind.sh -B 0.5 -j 4 -p "startup interpret parse churn
+sayloop"`, pin `rexx-run`, parent `cg-9d/t6.15-r3/rexx-head` (01a7ca716), head
+`cg-9d/t6.15-r4/rexx-head` (3cd8cff5c), exit 0. Own deltas with libc subtracted, head less
+parent: startup +0.0005, interpret 0.0000, parse +0.0001, churn 0.0000, sayloop +0.0003.
+
+### Concerns (round 4)
+
+1. **The queued item described the oracle wrongly**, as answering three characters where it
+   answers the one at position 3. Its first line now carries the measured answer and the
+   rule; the inventory row is `closed:3cd8cff5c` in `proposed` and `ruled`, with a prose
+   `reason`, the file's own convention for a closed row.
+2. **The oracle's LINES Count is wrong after a LINEIN line, on a named stream as on standard
+   input**, and `linein(, n, 0)` after a CHARIN lands on the wrong line: both from the cache
+   behind Deviation candidate 5. The `r4/probes/` programs are the measurements, should the
+   controller want them on that candidate.
+3. **Standard input that is neither a regular file nor a pipe or terminal** (a socket, a
+   directory) is "not transient" to `rexx.rs`'s classification and not a file console here,
+   so a start there is 93.958 from `input_seek_char` rather than from
+   `refuse_transient_position`; the oracle says 93.958 for anything that is not a regular
+   file. Not measured on a socket.

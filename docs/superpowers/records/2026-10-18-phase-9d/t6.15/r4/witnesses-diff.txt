@@ -1,0 +1,53 @@
+DIFF count.file
+7c7
+< D 3 1
+---
+> D 2 1
+DIFF count-named.file
+7c7
+< D 3 1
+---
+> D 2 1
+SAME count.pipe rc=0
+DIFF grow.file
+2c2
+< B 0 0 0
+---
+> B 11 1 2
+4c4
+< C 0 0 0
+---
+> C 6 1 1
+DIFF lenzero.file
+6,7c6,7
+< B 16 1 3
+< [world]
+---
+> B 10 1 2
+> [third]
+SAME lenzero.pipe rc=163
+SAME linepos.file rc=0
+SAME linepos-named.file rc=0
+SAME linepos.pipe rc=163
+SAME neg.file rc=163
+SAME neg.pipe rc=163
+DIFF past.file
+6c6
+< [] 0 0 NOTREADY:EOF
+---
+> [last] 0 0 READY:
+SAME past.pipe rc=163
+DIFF pos.file
+15c15
+< H 16 1 1
+---
+> H 16 1 3
+17c17
+< I 4 1 -1
+---
+> I 4 1 1
+SAME pos.pipe rc=163
+SAME zero.file rc=163
+SAME zeroline.file rc=163
+SAME zeroline.pipe rc=163
+SAME zero.pipe rc=163

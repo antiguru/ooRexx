@@ -1,0 +1,61 @@
+program	lines	binary	wall_s	output	rc
+loop	5000	head	0.052	5000 0 0 	0
+loop	5000	base	0.057	5000 0 0 	0
+loop	5000	r3	0.220	5000 0 0 	0
+loop	5000	oracle	0.030	5000 0 0 	0
+loop	10000	head	0.085	10000 0 0 	0
+loop	10000	base	0.088	10000 0 0 	0
+loop	10000	r3	0.769	10000 0 0 	0
+loop	10000	oracle	0.031	10000 0 0 	0
+loop	20000	head	0.124	20000 0 0 	0
+loop	20000	base	0.128	20000 0 0 	0
+loop	20000	r3	3.061	20000 0 0 	0
+loop	20000	oracle	0.053	20000 0 0 	0
+loop	200000	head	0.603	200000 0 0 	0
+loop	200000	base	0.666	200000 0 0 	0
+loop	200000	oracle	0.378	200000 0 0 	0
+loopc	5000	head	0.078	5000 0 0 	0
+loopc	5000	base	0.081	5000 0 0 	0
+loopc	5000	r3	0.248	5000 0 0 	0
+loopc	5000	oracle	0.021	5000 0 0 	0
+loopc	10000	head	0.096	10000 0 0 	0
+loopc	10000	base	0.065	10000 0 0 	0
+loopc	10000	r3	0.769	10000 0 0 	0
+loopc	10000	oracle	0.031	10000 0 0 	0
+loopc	20000	head	0.139	20000 0 0 	0
+loopc	20000	base	0.100	20000 0 0 	0
+loopc	20000	r3	3.047	20000 0 0 	0
+loopc	20000	oracle	0.059	20000 0 0 	0
+loopc	200000	head	0.681	200000 0 0 	0
+loopc	200000	base	0.654	200000 0 0 	0
+loopc	200000	oracle	0.424	200000 0 0 	0
+loopu	5000	head	0.082	5000 	0
+loopu	5000	base	0.070	5000 	0
+loopu	5000	r3	0.247	5000 	0
+loopu	5000	oracle	0.026	5000 	0
+loopu	10000	head	0.095	10000 	0
+loopu	10000	base	0.097	10000 	0
+loopu	10000	r3	0.766	10000 	0
+loopu	10000	oracle	0.032	10000 	0
+loopu	20000	head	0.091	20000 	0
+loopu	20000	base	0.125	20000 	0
+loopu	20000	r3	2.979	20000 	0
+loopu	20000	oracle	0.058	20000 	0
+loopu	200000	head	0.625	200000 	0
+loopu	200000	base	0.693	200000 	0
+loopu	200000	oracle	0.381	200000 	0
+loopchar	5000	head	0.063	177786 0 0 	0
+loopchar	5000	base	0.039	177786 0 0 	0
+loopchar	5000	r3	0.145	177786 0 0 	0
+loopchar	5000	oracle	0.016	177786 0 0 	0
+loopchar	10000	head	0.046	357788 0 0 	0
+loopchar	10000	base	0.047	357788 0 0 	0
+loopchar	10000	r3	0.294	357788 0 0 	0
+loopchar	10000	oracle	0.020	357788 0 0 	0
+loopchar	20000	head	0.084	737788 0 0 	0
+loopchar	20000	base	0.091	737788 0 0 	0
+loopchar	20000	r3	1.146	737788 0 0 	0
+loopchar	20000	oracle	0.036	737788 0 0 	0
+loopchar	200000	head	0.317	7777790 0 0 	0
+loopchar	200000	base	0.267	7777790 0 0 	0
+loopchar	200000	oracle	0.156	7777790 0 0 	0
