@@ -123,9 +123,10 @@ pub(crate) struct Activity {
     /// The clause regions `Interp::drive`'s levels stopped at a call op,
     /// innermost last.
     pub(crate) parked_calls: Vec<crate::ir::drive::ParkedCall>,
-    /// What the call site of a call op whose callee was just entered keeps
-    /// once that callee returns, until the op claims it.
-    pub(crate) entered_keep: Option<crate::run::SiteKeep>,
+    /// What the call sites of entered call ops keep once their callees
+    /// return, each with its op's parked call's index in
+    /// [`Activity::parked_calls`], innermost last.
+    pub(crate) parked_keeps: Vec<(usize, crate::run::SiteKeep)>,
     /// The levels `Interp::drive` left for a callee, innermost last.
     pub(crate) parked_levels: Vec<crate::ir::drive::ParkedLevel>,
     /// A `REPLY` continuation's level, until its first run parks it
@@ -465,7 +466,7 @@ impl Activity {
             frames: Vec::new(),
             call_tails: Vec::new(),
             parked_calls: Vec::new(),
-            entered_keep: None,
+            parked_keeps: Vec::new(),
             parked_levels: Vec::new(),
             replied_level: None,
             native_tails: Vec::new(),
@@ -611,7 +612,7 @@ impl Activity {
             call_tails: _,
             parked_calls: _,
             // A kept copy is pinned while its call runs.
-            entered_keep: _,
+            parked_keeps: _,
             parked_levels: _,
             // Its registers are the record's parked values.
             replied_level: _,

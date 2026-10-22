@@ -573,8 +573,8 @@ impl Interp {
     }
 
     /// Ends or hands on `keep`, for its call through `slot` that `ended`: a
-    /// call that entered a body leaves it on the activity for the op that
-    /// entered it ([`Interp::end_entered_keep`]).
+    /// call that entered a body files it on the activity under the index its
+    /// op's parked call takes ([`Interp::take_entered_keep`]).
     pub(crate) fn site_call(
         &mut self,
         slot: crate::ir::CallSiteSlot<'_>,
@@ -583,11 +583,8 @@ impl Interp {
     ) {
         match ended {
             SiteCall::Entered => {
-                debug_assert!(
-                    self.activity.entered_keep.is_none(),
-                    "an entered call's keep was left unclaimed"
-                );
-                self.activity.entered_keep = Some(keep);
+                let at = self.activity.parked_calls.len();
+                self.activity.parked_keeps.push((at, keep));
             }
             SiteCall::Returned | SiteCall::Raised => {
                 self.end_site_keep(slot.chunk(), keep, ended == SiteCall::Returned);
@@ -614,10 +611,23 @@ impl Interp {
         }
     }
 
-    /// Ends the keep an entered call left on the activity, if it left one,
-    /// for its callee that `returned` or not.
+    /// The keep filed for the parked call the next push would make, which
+    /// a call op entered with no parked call: one its own callee has not had
+    /// the chance to file under the same index.
+    pub(crate) fn take_entered_keep(&mut self) -> Option<SiteKeep> {
+        let at = self.activity.parked_calls.len();
+        match self.activity.parked_keeps.last() {
+            Some((filed, _)) if *filed == at => {
+                self.activity.parked_keeps.pop().map(|(_, keep)| keep)
+            }
+            _ => None,
+        }
+    }
+
+    /// Ends the keep an entered call filed, if it filed one, for its callee
+    /// that `returned` or not.
     pub(crate) fn end_entered_keep(&mut self, chunk: &crate::ir::Chunk, returned: bool) {
-        if let Some(keep) = self.activity.entered_keep.take() {
+        if let Some(keep) = self.take_entered_keep() {
             self.end_site_keep(chunk, keep, returned);
         }
     }
@@ -652,7 +662,7 @@ impl Interp {
                 .map(Started::Ran);
         }
         let mut values = std::mem::take(&mut self.activity.value_buffer);
-        let started = self.begin_call_over_values(resolved, name, &mut values, mark, None);
+        let started = self.begin_call_over_values(resolved, name, &mut values, mark);
         values.truncate(mark);
         self.lend_stack(self.entered_body(&started), values);
         started
@@ -670,7 +680,7 @@ impl Interp {
     ) -> Result<Started<ObjRef>, Failure> {
         let mut values = std::mem::take(&mut self.activity.value_buffer);
         let started =
-            self.begin_call_over_values(resolved, name, &mut values, mark, Some((slot, keep)));
+            self.begin_kept_call_over_values(resolved, name, &mut values, mark, slot, keep);
         values.truncate(mark);
         self.lend_stack(self.entered_body(&started), values);
         started
@@ -762,6 +772,7 @@ impl Interp {
     /// the row and `Routine~call` pass. `args` is lent to the routine's
     /// level while it runs, so a live `.context~stackFrames` reads the
     /// arguments without a copy, and is handed back unchanged.
+    #[inline(always)]
     pub(crate) fn run_internal_as(
         &mut self,
         row: &'static crate::internal_routines::InternalRoutine,
@@ -848,20 +859,21 @@ impl Interp {
         })
     }
 
-    /// [`Interp::begin_call_over_pushed_args`] with the run in hand.
-    fn begin_call_over_values(
+    /// [`Interp::begin_call_over_values`] for a call whose site `slot` keeps
+    /// `keep` once the call returns.
+    #[cold]
+    #[inline(never)]
+    fn begin_kept_call_over_values(
         &mut self,
         resolved: Resolved,
         name: &[u8],
         values: &mut Vec<Option<ObjRef>>,
         mark: usize,
-        keep: Option<(crate::ir::CallSiteSlot<'_>, SiteKeep)>,
+        slot: crate::ir::CallSiteSlot<'_>,
+        keep: SiteKeep,
     ) -> Result<Started<ObjRef>, Failure> {
-        let Some((slot, keep)) = keep else {
-            return self.begin_unkept_call_over_values(resolved, name, values, mark);
-        };
         if let Resolved::Internal(_) | Resolved::LibraryRoutine(_) = resolved {
-            let started = self.begin_unkept_call_over_values(resolved, name, values, mark);
+            let started = self.begin_call_over_values(resolved, name, values, mark);
             self.site_call(slot, keep, SiteCall::of(&started));
             return started;
         }
@@ -880,8 +892,9 @@ impl Interp {
         function_started(begun?, name)
     }
 
-    /// [`Interp::begin_call_over_values`] for a call with nothing to keep.
-    fn begin_unkept_call_over_values(
+    /// [`Interp::begin_call_over_pushed_args`] with the run in hand.
+    #[inline(always)]
+    fn begin_call_over_values(
         &mut self,
         resolved: Resolved,
         name: &[u8],
@@ -1729,6 +1742,7 @@ impl Interp {
     /// the argument stack above `mark`, up to the point its callee's body
     /// would run: the argument run is lent out, turned into `Argument`s, and
     /// removed again whichever way the call went on.
+    #[inline(always)]
     pub(crate) fn begin_subroutine_over_pushed_args(
         &mut self,
         resolved: Resolved,
@@ -1777,6 +1791,7 @@ impl Interp {
 }
 
 /// A begun function call as a call op starts it.
+#[inline(always)]
 pub(crate) fn function_started(begun: Begun, name: &[u8]) -> Result<Started<ObjRef>, Failure> {
     match begun {
         Begun::Done(ended) => function_value(ended, name).map(Started::Ran),
@@ -1810,6 +1825,7 @@ pub(crate) fn subroutine_started(begun: Begun) -> Started<Ended> {
 }
 
 /// A function call's value, from the way its callee ended.
+#[inline(always)]
 fn function_value(ended: Ended, name: &[u8]) -> Result<ObjRef, Failure> {
     match ended {
         // `EXIT` inside the routine, or the routine falling off its own

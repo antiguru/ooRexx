@@ -120,8 +120,6 @@ pub(crate) struct ParkedCall {
     /// A `DO`/`LOOP` header's values the region had accumulated.
     header: Option<Box<LoopHeaderValues>>,
     deliver: Deliver,
-    /// What the call op's site keeps once its callee returns.
-    keep: Option<SiteKeep>,
 }
 
 /// Where a parked call's answer goes.
@@ -2201,11 +2199,30 @@ impl Interp {
         // Captured before the callee runs, which overwrites
         // `current_value_indent` with its own clauses'.
         let base_indent = self.activity.clause_state.current_value_indent;
-        let started = self.begin_subroutine_over_pushed_args(resolved, name, mark);
         if let Some(keep) = keep {
-            self.site_call(chunk.call_site_slot(site), keep, SiteCall::of(&started));
+            let started = self.begin_kept_subroutine(chunk, site, resolved, name, mark, keep)?;
+            return Ok((started, base_indent));
         }
-        Ok((started?, base_indent))
+        let started = self.begin_subroutine_over_pushed_args(resolved, name, mark)?;
+        Ok((started, base_indent))
+    }
+
+    /// [`Interp::begin_call_named`]'s call for a resolution its site keeps
+    /// once the call returns.
+    #[cold]
+    #[inline(never)]
+    fn begin_kept_subroutine(
+        &mut self,
+        chunk: &Chunk,
+        site: u16,
+        resolved: Resolved,
+        name: &[u8],
+        mark: usize,
+        keep: SiteKeep,
+    ) -> Result<Started<Ended>, Failure> {
+        let started = self.begin_subroutine_over_pushed_args(resolved, name, mark);
+        self.site_call(chunk.call_site_slot(site), keep, SiteCall::of(&started));
+        started
     }
 
     /// One [`crate::ir::Op::Call`], its callee's body run on this Rust stack.
@@ -2600,7 +2617,6 @@ impl Interp {
             header,
             deliver,
         } = park;
-        let keep = self.activity.entered_keep.take();
         self.activity.parked_calls.push(ParkedCall {
             clause_pc,
             at,
@@ -2611,7 +2627,6 @@ impl Interp {
             debugging,
             header,
             deliver,
-            keep,
         });
     }
 
@@ -3246,11 +3261,13 @@ impl Interp {
         source: Option<&ProgramSource>,
         base: usize,
         len: usize,
-        mut parked: ParkedCall,
+        parked: ParkedCall,
         base_indent: usize,
         ended: Result<Ended, Failure>,
     ) -> Result<Exit, Failure> {
-        self.end_parked_keep(chunk, &mut parked, ended.is_ok());
+        if !self.activity.parked_keeps.is_empty() {
+            self.end_parked_keep(chunk, ended.is_ok());
+        }
         let ran = self
             .finish_call(ended)
             .and_then(|ended| self.settle_call_result(ended, base_indent))
@@ -3276,14 +3293,17 @@ impl Interp {
         source: Option<&ProgramSource>,
         base: usize,
         len: usize,
-        mut parked: ParkedCall,
+        parked: ParkedCall,
         ended: Result<Ended, Failure>,
     ) -> Result<Exit, Failure> {
-        self.end_parked_keep(chunk, &mut parked, ended.is_ok());
         let delivered = match parked.deliver {
-            Deliver::Register(dst) => self
-                .finish_function_op(ended)
-                .map(|value| registers.set(dst, value)),
+            Deliver::Register(dst) => {
+                if !self.activity.parked_keeps.is_empty() {
+                    self.end_parked_keep(chunk, ended.is_ok());
+                }
+                self.finish_function_op(ended)
+                    .map(|value| registers.set(dst, value))
+            }
             Deliver::Send => self.finish_send_op(chunk, registers, parked.at, ended),
             Deliver::Flow(_) => Err(Loud::op_not_driven("a parked CALL resumed mid-region").into()),
             Deliver::Exec => Err(Loud::op_not_driven("a parked instruction with a callee").into()),
@@ -3348,10 +3368,14 @@ impl Interp {
         source: Option<&ProgramSource>,
         base: usize,
         len: usize,
-        mut parked: ParkedCall,
+        parked: ParkedCall,
         sent: Result<Option<ObjRef>, Failure>,
     ) -> Result<Exit, Failure> {
-        self.end_parked_keep(chunk, &mut parked, sent.is_ok());
+        if matches!(parked.deliver, Deliver::Register(_) | Deliver::Flow(_))
+            && !self.activity.parked_keeps.is_empty()
+        {
+            self.end_parked_keep(chunk, sent.is_ok());
+        }
         let delivered = match parked.deliver {
             Deliver::Send => self.deliver_woken_send(chunk, registers, parked.at, sent),
             Deliver::Exec => sent.map(|_| ()).inspect_err(|_| self.abandon_guard_exec()),
@@ -3373,6 +3397,7 @@ impl Interp {
                 return self.leave_parked(code, chunk, source, base, len, parked, ran);
             }
         };
+        let mut parked = parked;
         if matches!(parked.deliver, Deliver::Exec) {
             // The region goes on from the instruction's own op.
             parked.at -= 1;
@@ -4229,9 +4254,9 @@ impl Interp {
     }
 
     /// Runs the body a call op of `chunk` just entered, ending the keep it
-    /// left ([`Interp::end_entered_keep`]).
+    /// filed ([`Interp::take_entered_keep`]).
     fn run_entered(&mut self, chunk: &Chunk) -> Result<Ended, Failure> {
-        let keep = self.activity.entered_keep.take();
+        let keep = self.take_entered_keep();
         let ended = self.run_activation();
         if let Some(keep) = keep {
             self.end_site_keep(chunk, keep, ended.is_ok());
@@ -4261,9 +4286,19 @@ impl Interp {
         }
     }
 
-    /// Ends the keep `parked` holds, for its callee that `returned` or not.
-    fn end_parked_keep(&mut self, chunk: &Chunk, parked: &mut ParkedCall, returned: bool) {
-        if let Some(keep) = parked.keep.take() {
+    /// Ends the keep of the parked call just popped, if it has one, for its
+    /// callee that `returned` or not.
+    #[cold]
+    #[inline(never)]
+    fn end_parked_keep(&mut self, chunk: &Chunk, returned: bool) {
+        let popped = self.activity.parked_calls.len();
+        if self
+            .activity
+            .parked_keeps
+            .last()
+            .is_some_and(|(at, _)| *at == popped)
+            && let Some((_, keep)) = self.activity.parked_keeps.pop()
+        {
             self.end_site_keep(chunk, keep, returned);
         }
     }
