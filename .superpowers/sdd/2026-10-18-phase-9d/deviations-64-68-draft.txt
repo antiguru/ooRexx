@@ -68,7 +68,8 @@
      names line 3 in most runs, line 6 (this crate's answer) in the others.
      Measured by Phase 9d Task 8.2 and its review
      (t8.2/probes/message-start/msgstart.rex, t8.2/r1/message-start/).
-     Witnessed by WITNESS-TBD.
+     Witnessed by run::tests::conditions::a_started_messages_report_names_the_line_that_raised
+     (rust/crates/rexx-exec/src/run/tests/conditions.rs).
 
  68. A STEM SUBCLASS'S UNKNOWN METHOD RUNS (Phase 9d). OWNER: none.
 
@@ -80,5 +81,7 @@
      runs: `x = .ss~new('S.'); say x~nosuch` raises 97.1 on the oracle, and
      answers the override's `mine NOSUCH` here
      (`StringHashCollection::processUnknown` guards the same bypass with
-     `isBaseClass()`). Measured by Phase 9d Task 8.2.
-     Witnessed by WITNESS-TBD.
+     `isBaseClass()`). Measured by Phase 9d Task 8.2
+     (t8.2/addon/stem_subclass_unknown.rex).
+     Witnessed by run::tests::conditions::a_stem_subclasss_unknown_method_answers
+     (rust/crates/rexx-exec/src/run/tests/conditions.rs).
