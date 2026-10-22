@@ -11,8 +11,10 @@
 
 //! The compiled program image `rexxc` writes: the oracle's `#!` line and
 //! `ProgramMetaData` header layout (`classes/support/ProgramMetaData.cpp`),
-//! with this build's own magic number and format version, then the checked
-//! source. No compatibility is promised between versions of this crate.
+//! with this build's own magic number and format version, then the name of
+//! the routine the image holds, as a 4-byte little-endian length and its
+//! bytes, then the checked source. No compatibility is promised between
+//! versions of this crate.
 
 use rexx_inventory::errors::{E3_903, E3_905};
 use rexx_parse::{ProgramSource, SourceKind};
@@ -46,7 +48,10 @@ const LENGTH_AT: usize = 40;
 const MAGIC: u16 = 0x7273;
 
 /// This crate's image format.
-const FORMAT_VERSION: u16 = 1;
+const FORMAT_VERSION: u16 = 2;
+
+/// The width of the routine name's length.
+const NAME_LENGTH_BYTES: usize = 4;
 
 /// The base64 line length, `ProgramMetaData::encodingChunkLength`.
 const CHUNK: usize = 72;
@@ -56,8 +61,9 @@ const CHUNK: usize = 72;
 pub enum Restore {
     /// Program source: after an optional `#!` line, neither tag.
     Source,
-    /// An image this build writes, and the source it holds.
-    Compiled(Vec<u8>),
+    /// An image this build writes: the source it holds and the name it
+    /// gives that source's routine.
+    Compiled { source: Vec<u8>, name: Vec<u8> },
     /// A header this build does not write, or a damaged image: 3.903.
     Rejected,
     /// The encoded tag over text the oracle's base64 decoder refuses: 3.905.
@@ -77,13 +83,23 @@ fn header_prefix() -> [u8; LENGTH_AT] {
     header
 }
 
-/// The image of `source`: binary, or with `encode` the encoded tag and the
-/// base64 of header and source in lines of [`CHUNK`] digits.
-pub fn write_image(source: &[u8], encode: bool) -> Vec<u8> {
-    let mut image = Vec::with_capacity(HEADER_BYTES + source.len());
+/// The image of `source`, whose routine is called `name`: the oracle names
+/// a translated program's routine for the file it was read from and keeps
+/// that name in the image (`RoutineClass::flatten`,
+/// `classes/RoutineClass.cpp:148`). Binary, or with `encode` the encoded tag
+/// and the base64 of the image in lines of [`CHUNK`] digits.
+///
+/// # Panics
+/// If `name` is longer than a `u32` counts.
+pub fn write_image(source: &[u8], name: &[u8], encode: bool) -> Vec<u8> {
+    let mut image =
+        Vec::with_capacity(HEADER_BYTES + NAME_LENGTH_BYTES + name.len() + source.len());
     image.extend_from_slice(&header_prefix());
     let length = u64::try_from(source.len()).expect("a source length fits a u64");
     image.extend_from_slice(&length.to_le_bytes());
+    let name_length = u32::try_from(name.len()).expect("a program name fits a u32");
+    image.extend_from_slice(&name_length.to_le_bytes());
+    image.extend_from_slice(name);
     image.extend_from_slice(source);
     let mut out = SHEBANG.to_vec();
     if encode {
@@ -161,24 +177,41 @@ fn joined_source(lines: &[&[u8]], name: &[u8]) -> Option<Result<ProgramSource, R
 #[inline(never)]
 fn restored(image: Restore, name: &[u8]) -> Result<ProgramSource, Raised> {
     match image {
-        Restore::Compiled(source) => Ok(ProgramSource::compiled(source)),
+        Restore::Compiled { source, name } => Ok(ProgramSource::compiled(source, name.into())),
         Restore::Rejected => Err(Raised::raise(E3_903, [name.to_vec()])),
         Restore::Undecodable => Err(Raised::raise(E3_905, [name.to_vec()])),
         Restore::Source => unreachable!("both callers answer source themselves"),
     }
 }
 
-/// The source behind a header this build writes, with its length exact.
+/// The name and source behind a header this build writes, with the source's
+/// length exact.
 fn image_source(image: &[u8]) -> Restore {
-    let Some((header, source)) = image.split_at_checked(HEADER_BYTES) else {
+    let Some((header, rest)) = image.split_at_checked(HEADER_BYTES) else {
         return Restore::Rejected;
     };
     let (prefix, length) = header.split_at(LENGTH_AT);
     let length = u64::from_le_bytes(length.try_into().expect("an 8-byte length field"));
-    if prefix != header_prefix() || u64::try_from(source.len()).ok() != Some(length) {
+    if prefix != header_prefix() {
         return Restore::Rejected;
     }
-    Restore::Compiled(source.to_vec())
+    let Some((name_length, rest)) = rest.split_at_checked(NAME_LENGTH_BYTES) else {
+        return Restore::Rejected;
+    };
+    let name_length = u32::from_le_bytes(name_length.try_into().expect("a 4-byte length field"));
+    let Some((name, source)) = usize::try_from(name_length)
+        .ok()
+        .and_then(|name_length| rest.split_at_checked(name_length))
+    else {
+        return Restore::Rejected;
+    };
+    if u64::try_from(source.len()).ok() != Some(length) {
+        return Restore::Rejected;
+    }
+    Restore::Compiled {
+        source: source.to_vec(),
+        name: name.to_vec(),
+    }
 }
 
 /// `StringUtil::decodeBase64` (`classes/support/StringUtil.cpp:1743`): line
@@ -232,31 +265,40 @@ mod tests {
 
     const SOURCE: &[u8] = b"say 'hello'\n::routine r\nreturn 1\n";
 
+    const NAME: &[u8] = b"/d/p.rex";
+
+    fn compiled(source: &[u8], name: &[u8]) -> Restore {
+        Restore::Compiled {
+            source: source.to_vec(),
+            name: name.to_vec(),
+        }
+    }
+
     #[test]
     fn both_forms_round_trip() {
         for encode in [false, true] {
-            let image = write_image(SOURCE, encode);
+            let image = write_image(SOURCE, NAME, encode);
             assert!(image.starts_with(b"#!/usr/bin/env rexx\n/**/@REXX"));
-            assert_eq!(restore(&image), Restore::Compiled(SOURCE.to_vec()));
+            assert_eq!(restore(&image), compiled(SOURCE, NAME));
         }
-        assert_eq!(
-            restore(&write_image(b"", true)),
-            Restore::Compiled(Vec::new())
-        );
+        assert_eq!(restore(&write_image(b"", b"", true)), compiled(b"", b""));
     }
 
     #[test]
     fn the_binary_form_is_the_oracle_layout() {
-        let image = write_image(SOURCE, false);
-        assert_eq!(image.len(), SHEBANG.len() + HEADER_BYTES + SOURCE.len());
+        let image = write_image(SOURCE, NAME, false);
+        let name_at = SHEBANG.len() + HEADER_BYTES + NAME_LENGTH_BYTES;
+        assert_eq!(image.len(), name_at + NAME.len() + SOURCE.len());
         assert_eq!(&image[20..36], b"/**/@REXX\0\0\0\0\0\0\0");
         assert_ne!(u16::from_le_bytes([image[36], image[37]]), 11111);
-        assert_eq!(&image[SHEBANG.len() + HEADER_BYTES..], SOURCE);
+        assert_eq!(&image[name_at - NAME_LENGTH_BYTES..name_at], &[8, 0, 0, 0]);
+        assert_eq!(&image[name_at..name_at + NAME.len()], NAME);
+        assert_eq!(&image[name_at + NAME.len()..], SOURCE);
     }
 
     #[test]
     fn the_encoded_form_has_full_lines_and_ends_in_a_line_end() {
-        let image = write_image(&[b'x'; 500], true);
+        let image = write_image(&[b'x'; 500], NAME, true);
         let body = &image[SHEBANG.len() + ENCODED_TAG.len()..];
         let lines: Vec<&[u8]> = body.split(|&byte| byte == b'\n').collect();
         assert_eq!(lines.last(), Some(&&b""[..]));
@@ -271,7 +313,7 @@ mod tests {
 
     #[test]
     fn a_foreign_or_damaged_header_is_rejected() {
-        let image = write_image(SOURCE, false);
+        let image = write_image(SOURCE, NAME, false);
         let mut oracle = image.clone();
         oracle[36..38].copy_from_slice(&11111u16.to_le_bytes());
         let mut version = image.clone();
@@ -280,22 +322,37 @@ mod tests {
         past[SHEBANG.len() + LENGTH_AT] += 1;
         let mut short = image.clone();
         short[SHEBANG.len() + LENGTH_AT] -= 1;
-        for damaged in [oracle, version, past, short] {
+        let name_length = SHEBANG.len() + HEADER_BYTES;
+        let mut long_name = image.clone();
+        long_name[name_length] += 1;
+        let mut short_name = image.clone();
+        short_name[name_length] -= 1;
+        let mut huge_name = image.clone();
+        huge_name[name_length + 3] = 0xff;
+        for damaged in [
+            oracle, version, past, short, long_name, short_name, huge_name,
+        ] {
             assert_eq!(restore(&damaged), Restore::Rejected);
         }
-        for cut in [SHEBANG.len() + 10, SHEBANG.len() + 30, image.len() - 1] {
+        for cut in [
+            SHEBANG.len() + 10,
+            SHEBANG.len() + 30,
+            SHEBANG.len() + HEADER_BYTES + 2,
+            SHEBANG.len() + HEADER_BYTES + NAME_LENGTH_BYTES + 3,
+            image.len() - 1,
+        ] {
             assert_eq!(restore(&image[..cut]), Restore::Rejected, "cut at {cut}");
         }
-        let encoded = write_image(SOURCE, true);
+        let encoded = write_image(SOURCE, NAME, true);
         let mut foreign = b"#!/usr/bin/env rexx\n/**/@REXX@\n".to_vec();
         foreign.extend_from_slice(b"QUJD\n");
         assert_eq!(restore(&foreign), Restore::Rejected);
-        assert!(matches!(restore(&encoded), Restore::Compiled(_)));
+        assert!(matches!(restore(&encoded), Restore::Compiled { .. }));
     }
 
     #[test]
     fn broken_base64_is_undecodable() {
-        let encoded = write_image(SOURCE, true);
+        let encoded = write_image(SOURCE, NAME, true);
         let at = SHEBANG.len() + ENCODED_TAG.len() + 5;
         let mut broken = encoded.clone();
         broken[at] = b'!';
@@ -336,11 +393,13 @@ mod tests {
 
     #[test]
     fn a_restored_source_is_not_traceable() {
-        let source = program_source(write_image(SOURCE, false), b"p").expect("restored");
+        let source = program_source(write_image(SOURCE, NAME, false), b"p").expect("restored");
         assert!(!source.is_traceable());
+        assert_eq!(source.image_name(), Some(NAME));
         assert_eq!(source.line(1), Some(&b"say 'hello'"[..]));
         let plain = program_source(SOURCE.to_vec(), b"p").expect("source");
         assert!(plain.is_traceable());
+        assert_eq!(plain.image_name(), None);
         let refused = program_source(b"/**/@REXX@\n!!!!\n".to_vec(), b"p").err();
         assert_eq!(
             refused.map(|raised| (raised.number, raised.sub)),
@@ -350,7 +409,7 @@ mod tests {
 
     #[test]
     fn only_lines_whose_second_is_the_encoded_tag_are_restored() {
-        let image = write_image(SOURCE, true);
+        let image = write_image(SOURCE, NAME, true);
         let lines: Vec<&[u8]> = image.split(|&byte| byte == b'\n').collect();
         let restored = lines_source(&lines, b"p")
             .expect("an image")

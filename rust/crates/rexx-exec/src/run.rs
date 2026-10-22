@@ -78,8 +78,8 @@ mod condition;
 // `CALL` and function calls: resolving the name, running the arguments, entering the callee.
 mod call;
 pub(crate) use call::{
-    Begun, CallEntry, CallResolution, CallTail, InternalName, MAX_ACTIVATION_DEPTH, Started,
-    function_started, subroutine_started,
+    Begun, CallEntry, CallResolution, CallTail, InternalName, MAX_ACTIVATION_DEPTH, SiteCall,
+    SiteKeep, Started, function_started, subroutine_started,
 };
 #[cfg(test)]
 use call::{Entered, entered_receiver};
@@ -210,8 +210,10 @@ pub(crate) enum Resolved {
     MergedLibraryRoutine(usize, ObjRef),
     /// An internal package routine a `::REQUIRES ... LIBRARY` merged into the
     /// running package's own lookup, found and run as
-    /// [`Resolved::MergedLibraryRoutine`] is.
-    MergedInternal(&'static crate::internal_routines::InternalRoutine),
+    /// [`Resolved::MergedLibraryRoutine`] is, with the `Routine` the lookup
+    /// found where it is not the one standing for the row and `.nil` where it
+    /// is.
+    MergedInternal(&'static crate::internal_routines::InternalRoutine, ObjRef),
     /// An external Rexx file the search found for this name, entered the way
     /// [`Resolved::Library`] is: a whole program with its own directives and
     /// its own `ProgramId`.
@@ -258,7 +260,7 @@ impl Resolved {
     /// The `Routine` copy this resolution names, or `.nil`.
     pub(crate) fn copy(self) -> ObjRef {
         match self {
-            Resolved::MergedLibraryRoutine(_, copy) => copy,
+            Resolved::MergedLibraryRoutine(_, copy) | Resolved::MergedInternal(_, copy) => copy,
             _ => ObjRef::NIL,
         }
     }

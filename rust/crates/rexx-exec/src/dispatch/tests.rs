@@ -2248,6 +2248,7 @@ fn a_native_tails_objects_are_rooted_only_while_it_is_parked() {
             receiver,
             args: [None, Some(argument)].into(),
         }),
+        entered: None,
     });
     let held = [
         (then, "started message"),

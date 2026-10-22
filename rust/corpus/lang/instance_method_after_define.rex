@@ -1,0 +1,15 @@
+/* An instance made before its class's define keeps the method it was made
+   with: it runs it, and instanceMethod answers it, the object Class~method
+   answered before the define included. */
+o = .c~new
+m0 = .c~method('FOO')
+.c~define('FOO', 'return "new"')
+say o~foo .c~new~foo
+say o~instanceMethod('FOO')~source~makestring (o~instanceMethod('FOO') == m0) (o~instanceMethod('FOO') == .c~method('FOO'))
+say .c~new~instanceMethod('FOO')~source~makestring (.c~new~instanceMethod('FOO') == .c~method('FOO'))
+p = .c~new
+.c~define('FOO', 'return "third"')
+say p~instanceMethod('FOO')~source~makestring (p~instanceMethod('FOO') == p~instanceMethod('FOO')) (p~instanceMethod('FOO') == m0)
+::class c
+::method foo
+  return "old"

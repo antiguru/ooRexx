@@ -1,0 +1,18 @@
+/* A method copied, made unguarded and installed by enhanced: inside it
+   .context~executable is the object the enhanced instance holds, which keeps
+   the copy's guard flag; a guarded copy keeps its own. */
+m = .k~method('BODY2')~copy~~setUnguarded
+say m~isGuarded
+e = .object~enhanced(.directory~of(('BAR', m)))
+.local~e = e
+say e~bar
+say e~instanceMethod('BAR')~isGuarded (e~instanceMethod('BAR') == m)
+m2 = .k~method('BODY2')~copy
+e2 = .object~enhanced(.directory~of(('BAR', m2)))
+.local~e = e2
+say e2~bar
+say .k~new~body2
+::class k
+::method body2
+  x = .context~executable
+  return 'bar' x~isGuarded (x == .e~instanceMethod('BAR')) (x == .k~method('BODY2'))

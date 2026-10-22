@@ -308,6 +308,9 @@ pub(crate) struct NativeTail {
     then: Then,
     /// The method's traceback line for a failure, where a send made it.
     blame: Option<NativeBlame>,
+    /// The activation the method entered, which `.context~stackFrames`
+    /// lists the method's own frame behind.
+    entered: Option<crate::activation::ActivationId>,
 }
 
 /// What [`Interp::blame_native_method`] names for one send.
@@ -395,8 +398,34 @@ impl Interp {
     /// where this crate has none), where one did.
     pub(crate) fn entering_native_frame(&mut self) -> Option<(ObjRef, ObjRef)> {
         let depth = self.activity.call_tails.len();
-        let tail = self.activity.native_tails.last()?;
-        let blame = tail.blame.as_ref().filter(|_| tail.depth == depth)?;
+        let row = self.activity.native_tails.len().checked_sub(1)?;
+        if self.activity.native_tails[row].depth != depth {
+            return None;
+        }
+        self.entering_frame_at(row)
+    }
+
+    /// The rows of [`Activity::native_tails`](crate::activity::Activity)
+    /// whose sent primitive method entered activation `entered`, innermost
+    /// first.
+    pub(crate) fn entering_tails(
+        &self,
+        entered: crate::activation::ActivationId,
+    ) -> impl Iterator<Item = usize> + '_ {
+        self.activity
+            .native_tails
+            .iter()
+            .enumerate()
+            .rev()
+            .filter(move |(_, tail)| tail.blame.is_some() && tail.entered == Some(entered))
+            .map(|(row, _)| row)
+    }
+
+    /// The `StackFrame` of the sent primitive method in row `row` of
+    /// [`Activity::native_tails`](crate::activity::Activity), and its
+    /// `Method` object, or `None` for a row no send made.
+    pub(crate) fn entering_frame_at(&mut self, row: usize) -> Option<(ObjRef, ObjRef)> {
+        let blame = self.activity.native_tails.get(row)?.blame.as_ref()?;
         let (name, scope, receiver, args) = (
             blame.name.clone(),
             blame.scope,
@@ -3167,9 +3196,13 @@ impl Interp {
     /// Parks `then` beside the [`crate::run::CallTail`] on top.
     fn push_native_tail(&mut self, then: Then, blame: Option<NativeBlame>) {
         let depth = self.activity.call_tails.len();
-        self.activity
-            .native_tails
-            .push(NativeTail { depth, then, blame });
+        let entered = self.running_activation().map(|activation| activation.id);
+        self.activity.native_tails.push(NativeTail {
+            depth,
+            then,
+            blame,
+            entered,
+        });
     }
 
     /// A [`NativeBegin`]'s outcome, with the activation it entered run on
@@ -4050,18 +4083,23 @@ impl Interp {
 
     /// The same for a routine of an internal package, whose traceback line
     /// names the routine alone and upcased -- measured, `filespec('D')` is
-    /// reported for `Filespec` as `"FILESPEC"`.
+    /// reported for `Filespec` as `"FILESPEC"`. `given` is the `Routine` the
+    /// call ran, `.nil` for the one standing for the row.
     pub(crate) fn blame_internal_routine(
         &mut self,
         row: &'static crate::internal_routines::InternalRoutine,
         name: &[u8],
         arguments: &[Option<ObjRef>],
         failure: &Failure,
+        given: ObjRef,
     ) {
         if self.activity.failure_site.is_some() {
             return;
         }
-        let executable = self.internal_routine_object(crate::internal_routines::index_of(row));
+        let executable = match given {
+            ObjRef::NIL => self.internal_routine_object(crate::internal_routines::index_of(row)),
+            given => given,
+        };
         let level = NativeLevel {
             method: false,
             name,

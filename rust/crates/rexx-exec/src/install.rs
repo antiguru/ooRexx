@@ -1929,12 +1929,13 @@ impl Interp {
             symbols,
             ..
         } = parsed;
+        let routine_name = source.image_name().unwrap_or(name).into();
         let program = Rc::new(Program {
             source,
             main: CodeBody::default(),
             directives: vec![Directive {
                 kind: DirectiveKind::Routine(Box::new(rexx_parse::RoutineDirective {
-                    name: name.into(),
+                    name: routine_name,
                     access: Access::default(),
                     external: None,
                     body: Some(main),
@@ -2007,7 +2008,8 @@ impl Interp {
     /// `LanguageParser::generateRoutine` and `generateMethod`
     /// (`parser/LanguageParser.cpp:624`) over a parsed source: its main body
     /// becomes the executable, its directives install into a package of its
-    /// own whose parent is `parent`, and `record` names that package.
+    /// own whose parent is `parent`, and `record` names that package. A
+    /// routine restored from an image keeps the name the image gives it.
     pub(crate) fn install_executable(
         &mut self,
         parsed: Program,
@@ -2026,7 +2028,7 @@ impl Interp {
         directives.push(Directive {
             kind: if routine {
                 DirectiveKind::Routine(Box::new(rexx_parse::RoutineDirective {
-                    name: name.into(),
+                    name: source.image_name().unwrap_or(name).into(),
                     access: Access::default(),
                     external: None,
                     body: Some(main),
@@ -2611,6 +2613,20 @@ impl Interp {
         }
     }
 
+    /// The name directive `directive` of `program` gives its `::ROUTINE`:
+    /// upcased unless it was quoted.
+    pub(crate) fn routine_directive_name(&self, program: ProgramId, directive: usize) -> Vec<u8> {
+        match self
+            .programs
+            .get(program)
+            .and_then(|program| program.directives.get(directive))
+            .map(|directive| &directive.kind)
+        {
+            Some(DirectiveKind::Routine(routine)) => routine.name.to_vec(),
+            _ => Vec::new(),
+        }
+    }
+
     /// One `::ROUTINE` over the arguments given, for the rows of
     /// `executable.rs`'s `RESUMABLE_METHODS`, up to the point its body would
     /// run.
@@ -2704,8 +2720,8 @@ impl Interp {
             activation.condition_syntax = start.syntax;
         }
         // The oracle's own message name for this run, which is the string
-        // `GlobalNames::CONSTANT_DIRECTIVE` holds (`memory/GlobalNames.h:84`).
-        // The failure path this crate has a witness for does not print it:
+        // `GlobalNames::CONSTANT_DIRECTIVE` holds (`memory/GlobalNames.h:84`)
+        // and `.context~name` answers. The failure path this crate has a witness for does not print it:
         // measured, a condition raised inside a class method the expression
         // calls echoes that method's clause above the `::CONSTANT` and the
         // `::CLASS`, and names no method.
@@ -2717,6 +2733,7 @@ impl Interp {
                 receiver: Some(class),
             },
         );
+        self.record_call_convention();
         let self_slot = self.slot_of(b"SELF");
         self.set_variable(frame, self_slot, class);
         let super_slot = self.slot_of(b"SUPER");

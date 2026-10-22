@@ -53,6 +53,8 @@ pub struct ProgramSource {
     /// the image holds and shows none of it: no lines, no trace, and a
     /// traceback line naming the program in place of the clause.
     traceable: bool,
+    /// The name the image gives the routine it holds, for a restored source.
+    image_name: Option<Box<[u8]>>,
 }
 
 impl ProgramSource {
@@ -66,6 +68,7 @@ impl ProgramSource {
                 kind,
                 interpret_line: 1,
                 traceable: true,
+                image_name: None,
             };
         }
 
@@ -108,15 +111,24 @@ impl ProgramSource {
             kind,
             interpret_line: 1,
             traceable: true,
+            image_name: None,
         }
     }
 
     /// The source a compiled image holds: a [`SourceKind::Program`] that is
-    /// not [traceable](ProgramSource::is_traceable).
-    pub fn compiled(text: Vec<u8>) -> Self {
+    /// not [traceable](ProgramSource::is_traceable), with the name the image
+    /// gives its routine.
+    pub fn compiled(text: Vec<u8>, name: Box<[u8]>) -> Self {
         let mut source = ProgramSource::new(text, SourceKind::Program);
         source.traceable = false;
+        source.image_name = Some(name);
         source
+    }
+
+    /// The name a compiled image gives the routine it holds, or `None` for a
+    /// source that is no image's.
+    pub fn image_name(&self) -> Option<&[u8]> {
+        self.image_name.as_deref()
     }
 
     /// A [`SourceKind::Lines`] source: the line index is given rather than
@@ -142,6 +154,7 @@ impl ProgramSource {
             kind: SourceKind::Lines,
             interpret_line: 1,
             traceable: true,
+            image_name: None,
         }
     }
 

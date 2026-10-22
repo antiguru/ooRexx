@@ -249,7 +249,16 @@ impl Interp {
     ) -> Result<ObjRef, Failure> {
         let key = (class, class_side, Box::<[u8]>::from(name));
         if let Some(found) = self.method_objects.get(&key).copied() {
-            return Ok(found);
+            if self
+                .executable_sources
+                .get(&found)
+                .is_some_and(|held| held.installed == record.installed)
+            {
+                return Ok(found);
+            }
+            // A method `define` has since replaced, which an instance made
+            // before the `define` still runs: the object standing for it.
+            return self.replaced_method_object(class, class_side, name, scope, record);
         }
         let method_class = self.method_class();
         let object = self.native_instance(method_class);
@@ -266,6 +275,39 @@ impl Interp {
         self.method_objects.insert(key, object);
         // The dictionary entry the caller found, which is what its
         // annotations are keyed by.
+        self.attach_annotations(object, Annotated::Member(class, class_side, name.into()));
+        Ok(object)
+    }
+
+    /// The `Method` object for `record`'s method, which its class's
+    /// dictionary no longer holds: the one already standing for it, or a new
+    /// one that the dictionary's own entry keeps its place beside.
+    #[cold]
+    fn replaced_method_object(
+        &mut self,
+        class: ObjRef,
+        class_side: bool,
+        name: &[u8],
+        scope: ObjRef,
+        record: crate::ExecutableRecord,
+    ) -> Result<ObjRef, Failure> {
+        if let Some(method) = record.installed
+            && let Some(found) = self.executable_objects.get(&method).copied()
+        {
+            return Ok(found);
+        }
+        let method_class = self.method_class();
+        let object = self.native_instance(method_class);
+        self.record_executable(object, record)?;
+        if let Some(method) = record.installed {
+            self.executable_objects.insert(method, object);
+        }
+        let held = self.heap.get_mut(object).expect("just allocated");
+        let Body::Native(native) = &mut held.body else {
+            unreachable!("allocated as Body::Native by native_instance")
+        };
+        native.set_scope(scope);
+        self.class_owns(class, object);
         self.attach_annotations(object, Annotated::Member(class, class_side, name.into()));
         Ok(object)
     }
@@ -380,6 +422,17 @@ impl Interp {
             };
             return self.method_object(scope, false, name, scope, record);
         }
+        // A method the receiver's own behaviour holds, as `enhanced` installs
+        // one: the object standing for that identity, which `instanceMethod`
+        // answers too.
+        if let Some(resolution) = self.lookup(receiver, name, None)
+            && resolution.scope == scope
+            && runs(self, resolution.method)
+            && let Some(object) = self.executable_objects.get(&resolution.method).copied()
+            && self.heap.get(object).is_some()
+        {
+            return Ok(object);
+        }
         // A `run`'s activation carries its own object, so what is left is a
         // directive's body a class no longer reaches by this name: the
         // object standing for its identity, the first minted where a copy
@@ -487,6 +540,10 @@ impl Interp {
                 owns_installed: false,
             },
         )?;
+        // No directive annotates a main section, so its table is empty.
+        let site = Annotated::Compiled(self.compiled_methods);
+        self.compiled_methods += 1;
+        self.attach_annotations(object, site);
         Ok(object)
     }
 
@@ -1222,7 +1279,13 @@ impl Interp {
                 Ok(crate::run::Resolved::MergedLibraryRoutine(code, copy))
             }
             _ if let Some(row) = self.rexx_routine_object(object) => {
-                Ok(crate::run::Resolved::MergedInternal(row))
+                let index = crate::internal_routines::index_of(row);
+                let copy = if self.internal_routine_objects[index] == Some(object) {
+                    ObjRef::NIL
+                } else {
+                    object
+                };
+                Ok(crate::run::Resolved::MergedInternal(row, copy))
             }
             _ => Err(crate::Loud::receiver_class(
                 "a .ROUTINES entry that is not a routine this crate built",
@@ -1246,7 +1309,7 @@ impl Interp {
                     crate::MergedRoutine::LibraryObject(code, object)
                 }
             }
-            crate::run::Resolved::MergedInternal(row) => {
+            crate::run::Resolved::MergedInternal(row, _) => {
                 let index = crate::internal_routines::index_of(row);
                 if self.internal_routine_objects[index] == Some(object) {
                     crate::MergedRoutine::Internal(index)

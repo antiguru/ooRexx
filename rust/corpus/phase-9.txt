@@ -364,3 +364,15 @@ lang/stream_boundary_report.rex
 lang/stream_boundary_arity.rex
 lang/until_retest_blame.rex
 lang/unknown_forward_unasked.rex
+# 9d Task 8.3: call sites read and keep after the arguments and the call, Routine~call frames and
+# names, copied routines, main and install contexts, and three executable answers.
+lang/call_site_reentry_reads_after_arguments.rex
+lang/call_site_reentry_raise_keeps.rex
+lang/call_site_routine_raise_forgets.rex
+lang/routine_call_frame_names.rex
+lang/routine_copy_internal_executable.rex
+lang/main_executable_annotations.rex
+lang/context_name_install.rex
+lang/instance_method_after_define.rex
+lang/enhanced_unguarded_copy_executable.rex
+lang/raise_syntax_string_additional.rex

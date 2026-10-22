@@ -1,0 +1,54 @@
+/* A routine run by Routine~call, ~callWith or ~[] runs under its own name:
+   the name it was created under, a directive's own spelling, the file name
+   newFile was given, or the main program's path. The primitive method that
+   ran it is a frame of its own, as every primitive method that entered a
+   Rexx body is. */
+if arg(1) == 'main' then do
+  do f over .context~stackframes; say 'main' f~type f~name; end
+  return .context~name
+end
+r = .Routine~new('MyName', .array~of("do f over .context~stackframes", "say f~type '|' f~name '|' f~line '|' (f~target == .context~executable) '|' (f~executable == .routine~method('CALL')) '|' f~arguments~items '|' f~traceline '|' (f~context == .nil)", "end", "return .context~name"))
+say r~call(1, 2)
+say r~callWith(.array~of(3))
+say r~copy[4]
+names = "return .context~stackframes[1]~name '|' .context~name '|' .context~package~name"
+say .Routine~new('', names)~call
+say .Routine~newFile('sub/sf.rex')~call
+say .Routine~newFile('./sub/sf.rex')~call
+say .routines~foo~call
+say .context~package~findRoutine('foo')~copy~call
+say .routines~bar~call
+say .Package~new('PKG', .array~of("::routine pr public", "return .context~name"))~findRoutine('pr')~call
+say .context~executable~call('main')
+s = .Routine~new('srt', "a = .array~of(3,1,2); a~sortWith(.cmp~new); return a~makestring('l', ',')")
+say s~call
+o = .c~new
+o~send('m')
+o~sendWith('m', .array~new)
+.message~new(o, 'm')~send
+signal on syntax
+.routines~bad~callWith(.array~of(9))
+exit
+syntax:
+c = condition('O')
+do f over c~stackframes
+  say 'C' f~type '|' f~name '|' f~traceline
+end
+exit
+::routine foo
+return .context~stackframes[1]~name '|' .context~name
+::routine 'bar'
+return .context~stackframes[1]~name '|' .context~name
+::routine bad
+say 1/0
+::class cmp
+::method compare
+  use arg l, r
+  if .local~compared \== 1 then do f over .context~stackframes; say 'cmp' f~type f~name; end
+  .local~compared = 1
+  return l - r
+::class c
+::method init
+  do f over .context~stackframes; say 'init' f~type f~name; end
+::method m
+  do f over .context~stackframes; say 'm' f~type f~name; end

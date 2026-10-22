@@ -1900,8 +1900,12 @@ impl MergedRoutine {
             MergedRoutine::LibraryObject(code, object) => {
                 run::Resolved::MergedLibraryRoutine(code, object)
             }
-            MergedRoutine::Internal(index) | MergedRoutine::InternalObject(index, _) => {
-                run::Resolved::MergedInternal(&internal_routines::INTERNAL_ROUTINES[index])
+            MergedRoutine::Internal(index) => run::Resolved::MergedInternal(
+                &internal_routines::INTERNAL_ROUTINES[index],
+                ObjRef::NIL,
+            ),
+            MergedRoutine::InternalObject(index, object) => {
+                run::Resolved::MergedInternal(&internal_routines::INTERNAL_ROUTINES[index], object)
             }
         }
     }
@@ -2726,7 +2730,40 @@ impl Interp {
         {
             return Ok(None);
         }
+        if call_type == CallType::Requires {
+            return self.run_prologue(program, program_id, caller_settings);
+        }
         self.run_main(program, program_id, call_type, address, caller_settings)
+    }
+
+    /// A package's prologue, run under the package's own name and no
+    /// arguments, as `PackageClass::runProlog` calls it
+    /// (`classes/PackageClass.cpp:2128`-`:2137`).
+    #[inline(never)]
+    fn run_prologue(
+        &mut self,
+        program: Rc<Program>,
+        program_id: ProgramId,
+        caller_settings: Option<Settings>,
+    ) -> Result<Option<ObjRef>, Failure> {
+        let name = Rc::from(self.program_display_name(program_id));
+        let saved = std::mem::replace(
+            &mut self.activity.call_context,
+            CallContext {
+                name,
+                arguments: Rc::from(&[][..]),
+                receiver: None,
+            },
+        );
+        let ran = self.run_main(
+            program,
+            program_id,
+            CallType::Requires,
+            None,
+            caller_settings,
+        );
+        self.activity.call_context = saved;
+        ran
     }
 
     /// `Routine~call` on the `Routine` object standing for a program's own

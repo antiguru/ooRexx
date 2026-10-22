@@ -24,9 +24,9 @@ use crate::eval::{SymbolRead, call_target_name};
 use crate::plan::Plan;
 use crate::run::{
     Absorbed, CallEntry, CallResolution, ConditionTrace, Echo, Ended, Flow, LoopHeaderValues,
-    QueueKeyword, ReturnKeyword, SelectEscape, SelectResume, Started, SteppedClause, absorb,
-    otherwise_range, otherwise_resume, select_escape, select_parts, subroutine_started,
-    when_resume, when_targets,
+    QueueKeyword, Resolved, ReturnKeyword, SelectEscape, SelectResume, SiteCall, SiteKeep, Started,
+    SteppedClause, absorb, otherwise_range, otherwise_resume, select_escape, select_parts,
+    subroutine_started, when_resume, when_targets,
 };
 use crate::scheduler::{ExecOutcome, Scheduler};
 use crate::{Code, Failure, Interp, Loud, Raised};
@@ -120,6 +120,8 @@ pub(crate) struct ParkedCall {
     /// A `DO`/`LOOP` header's values the region had accumulated.
     header: Option<Box<LoopHeaderValues>>,
     deliver: Deliver,
+    /// What the call op's site keeps once its callee returns.
+    keep: Option<SiteKeep>,
 }
 
 /// Where a parked call's answer goes.
@@ -1977,10 +1979,11 @@ impl Interp {
             Started::Ran(value) => Ok(value),
             Started::Entered if self.activity.native_park.is_some() => {
                 self.activity.depth -= 1;
+                self.end_entered_keep(chunk, false);
                 Err(self.refuse_unrooted_park())
             }
             Started::Entered => {
-                let ended = self.run_activation();
+                let ended = self.run_entered(chunk);
                 self.finish_function_op(ended)
             }
         }
@@ -2016,32 +2019,41 @@ impl Interp {
             _ => Err(Failure::from(Loud::call_op_off_its_node())),
         };
         let mut spelling: &[u8] = b"";
-        let (resolved, missed) = match chunk.resolved_call(site, self.routine_generation) {
+        let generation = self.routine_generation;
+        let (resolved, keep) = match chunk.resolved_call(site, generation) {
             Some(resolved) => {
                 #[cfg(test)]
                 count_call_site_hit();
-                if !matches!(resolved, crate::run::Resolved::Builtin(_)) {
+                if !matches!(resolved, Resolved::Builtin(_)) {
                     spelling = target()?.0;
                 }
-                (resolved, false)
+                (resolved, None)
             }
             None => {
                 let (name, search_labels) = target()?;
                 spelling = name;
                 let resolved = self.resolve_call(name, search_labels)?;
-                let repin = chunk.remember_call(site, resolved, self.routine_generation);
-                self.repin(repin);
-                (resolved, true)
+                (
+                    resolved,
+                    self.missed_site(chunk, site, resolved, generation),
+                )
             }
         };
         let probe = 0u8;
-        self.enter_eval_node(&raw const probe)?;
-        let started = self.begin_call_over_pushed_args(resolved, spelling, mark);
+        if let Err(failure) = self.enter_eval_node(&raw const probe) {
+            if let Some(keep) = keep {
+                self.end_site_keep(chunk, keep, false);
+            }
+            return Err(failure);
+        }
+        let started = self.begin_call_over_pushed_args(
+            resolved,
+            spelling,
+            mark,
+            keep.map(|keep| (chunk.call_site_slot(site), keep)),
+        );
         if !matches!(started, Ok(Started::Entered)) {
             self.activity.depth -= 1;
-        }
-        if missed && started.is_err() {
-            self.forget_site(chunk, site);
         }
         started
     }
@@ -2062,10 +2074,11 @@ impl Interp {
             Started::Ran(value) => Ok(value),
             Started::Entered if self.activity.native_park.is_some() => {
                 self.activity.depth -= 1;
+                self.end_entered_keep(chunk, false);
                 Err(self.refuse_unrooted_park())
             }
             Started::Entered => {
-                let ended = self.run_activation();
+                let ended = self.run_entered(chunk);
                 self.finish_function_op(ended)
             }
         }
@@ -2089,16 +2102,12 @@ impl Interp {
             return Err(Loud::call_op_off_its_node().into());
         };
         let (name, search_labels) = call_target_name(code, target);
-        let (resolution, kept) =
-            self.site_resolution_before_arguments(chunk, site, name, search_labels)?;
+        let resolution = self.site_resolution_before_arguments(chunk, site, name, search_labels)?;
         let probe = 0u8;
         self.enter_eval_node(&raw const probe)?;
         let started = self.begin_eval_call(code, resolution, name, args);
         if !matches!(started, Ok(Started::Entered)) {
             self.activity.depth -= 1;
-        }
-        if !kept && started.is_err() {
-            self.forget_site(chunk, site);
         }
         started
     }
@@ -2123,7 +2132,7 @@ impl Interp {
         argc: u16,
     ) -> Result<Flow, Failure> {
         let (started, base_indent) = self.begin_call_named(clause, chunk, site, argc)?;
-        self.complete_subroutine(started, base_indent)
+        self.complete_site_subroutine(chunk, started, base_indent)
     }
 
     /// [`Interp::run_call_named`] up to the point its callee's body would
@@ -2150,30 +2159,29 @@ impl Interp {
         // table read the same way. The name comes off the instruction here
         // rather than off a node, which is why this op needs no address where
         // `Op::CallArgs` does.
-        let (resolved, missed) = match chunk.resolved_call(site, self.routine_generation) {
+        let generation = self.routine_generation;
+        let (resolved, keep) = match chunk.resolved_call(site, generation) {
             Some(resolved) => {
                 #[cfg(test)]
                 count_call_site_hit();
-                (resolved, false)
+                (resolved, None)
             }
             None => {
                 let resolved = self.resolve_call(name, !*literal)?;
-                let repin = chunk.remember_call(site, resolved, self.routine_generation);
-                self.repin(repin);
-                (resolved, true)
+                (
+                    resolved,
+                    self.missed_site(chunk, site, resolved, generation),
+                )
             }
         };
         // Captured before the callee runs, which overwrites
         // `current_value_indent` with its own clauses'.
         let base_indent = self.activity.clause_state.current_value_indent;
-        let started = self
-            .begin_subroutine_over_pushed_args(resolved, name, mark)
-            .inspect_err(|_| {
-                if missed {
-                    self.forget_site(chunk, site);
-                }
-            })?;
-        Ok((started, base_indent))
+        let started = self.begin_subroutine_over_pushed_args(resolved, name, mark);
+        if let Some(keep) = keep {
+            self.site_call(chunk.call_site_slot(site), keep, SiteCall::of(&started));
+        }
+        Ok((started?, base_indent))
     }
 
     /// One [`crate::ir::Op::Call`], its callee's body run on this Rust stack.
@@ -2186,7 +2194,7 @@ impl Interp {
         site: u16,
     ) -> Result<Flow, Failure> {
         let (started, base_indent) = self.begin_call_tree(code, chunk, clause, site)?;
-        self.complete_subroutine(started, base_indent)
+        self.complete_site_subroutine(chunk, started, base_indent)
     }
 
     /// One [`crate::ir::Op::Call`] up to the point its callee's body would
@@ -2213,27 +2221,16 @@ impl Interp {
             return Err(Loud::call_op_off_its_node().into());
         };
         let resolution = self.site_resolution_before_arguments(chunk, site, name, !*literal);
-        let kept = matches!(resolution, Ok((_, true)));
-        let resolution = self.resolved_after_arguments(
-            code,
-            resolution.map(|(resolution, _)| resolution),
-            args,
-        )?;
+        let resolution = self.resolved_after_arguments(code, resolution, args)?;
         let base_indent = self.activity.clause_state.current_value_indent;
-        let begun = self
-            .begin_invoke_call(
-                code,
-                resolution,
-                name,
-                args,
-                CallType::Subroutine,
-                CallEntry::Written,
-            )
-            .inspect_err(|_| {
-                if !kept {
-                    self.forget_site(chunk, site);
-                }
-            })?;
+        let begun = self.begin_invoke_call(
+            code,
+            resolution,
+            name,
+            args,
+            CallType::Subroutine,
+            CallEntry::Written,
+        )?;
         Ok((subroutine_started(begun), base_indent))
     }
 
@@ -2579,6 +2576,7 @@ impl Interp {
             header,
             deliver,
         } = park;
+        let keep = self.activity.entered_keep.take();
         self.activity.parked_calls.push(ParkedCall {
             clause_pc,
             at,
@@ -2589,6 +2587,7 @@ impl Interp {
             debugging,
             header,
             deliver,
+            keep,
         });
     }
 
@@ -3223,10 +3222,11 @@ impl Interp {
         source: Option<&ProgramSource>,
         base: usize,
         len: usize,
-        parked: ParkedCall,
+        mut parked: ParkedCall,
         base_indent: usize,
         ended: Result<Ended, Failure>,
     ) -> Result<Exit, Failure> {
+        self.end_parked_keep(chunk, &mut parked, ended.is_ok());
         let ran = self
             .finish_call(ended)
             .and_then(|ended| self.settle_call_result(ended, base_indent))
@@ -3252,9 +3252,10 @@ impl Interp {
         source: Option<&ProgramSource>,
         base: usize,
         len: usize,
-        parked: ParkedCall,
+        mut parked: ParkedCall,
         ended: Result<Ended, Failure>,
     ) -> Result<Exit, Failure> {
+        self.end_parked_keep(chunk, &mut parked, ended.is_ok());
         let delivered = match parked.deliver {
             Deliver::Register(dst) => self
                 .finish_function_op(ended)
@@ -3323,9 +3324,10 @@ impl Interp {
         source: Option<&ProgramSource>,
         base: usize,
         len: usize,
-        parked: ParkedCall,
+        mut parked: ParkedCall,
         sent: Result<Option<ObjRef>, Failure>,
     ) -> Result<Exit, Failure> {
+        self.end_parked_keep(chunk, &mut parked, sent.is_ok());
         let delivered = match parked.deliver {
             Deliver::Send => self.deliver_woken_send(chunk, registers, parked.at, sent),
             Deliver::Exec => sent.map(|_| ()).inspect_err(|_| self.abandon_guard_exec()),
@@ -3347,7 +3349,6 @@ impl Interp {
                 return self.leave_parked(code, chunk, source, base, len, parked, ran);
             }
         };
-        let mut parked = parked;
         if matches!(parked.deliver, Deliver::Exec) {
             // The region goes on from the instruction's own op.
             parked.at -= 1;
@@ -4142,49 +4143,34 @@ fn op_at(chunk: &Chunk, target: usize) -> Result<u32, Failure> {
 }
 
 impl Interp {
-    /// Drops what call site `site` kept, for a call that resolved there and
-    /// raised. A routine the site kept from an earlier call stays kept: the
-    /// oracle sets `externalTarget` once a call returns and never clears it
-    /// (`instructions/CallInstruction.cpp:167-197`).
-    #[cold]
-    fn forget_site(&mut self, chunk: &Chunk, site: u16) {
-        let repin = chunk.forget_call(site);
-        self.repin(repin);
-    }
-
     /// A call op's resolution before its arguments run, for an op that
     /// evaluates them itself: the site's kept answer, or the part of the
     /// resolution the oracle decides before the arguments, kept when it
-    /// decides one; and whether the site holds a routine kept from an earlier
-    /// return, which a raise through it leaves kept.
+    /// decides one.
     ///
     /// **A raise is deliberately not recorded**: `resolve_fixed_call` answers
-    /// `Err` for a name it refuses, and a site that raised asks again. A kept
-    /// answer of a kind the oracle searches for on every call is handed on
-    /// with the generation it was read under, since the arguments can write a
-    /// routine table before it is used; it is not a routine the site kept,
-    /// since [`Interp::settle_after_arguments`] may replace it under this call.
+    /// `Err` for a name it refuses, and a site that raised asks again. An
+    /// answer of a kind the oracle searches for on every call is read again
+    /// once the arguments have run, since they can write a routine table or
+    /// call through this site before it is used, as the oracle reads
+    /// `externalTarget` after them (`expression/ExpressionFunction.cpp:184-189`).
     fn site_resolution_before_arguments<'c>(
         &mut self,
         chunk: &'c Chunk,
         site: u16,
         name: &[u8],
         search_labels: bool,
-    ) -> Result<(CallResolution<'c>, bool), Failure> {
+    ) -> Result<CallResolution<'c>, Failure> {
         let generation = self.routine_generation;
         if let Some(resolved) = chunk.resolved_call(site, generation) {
             #[cfg(test)]
             count_call_site_hit();
             if !resolved.kept_until_routines_change() {
-                return Ok((CallResolution::Settled(resolved), true));
+                return Ok(CallResolution::Settled(resolved));
             }
-            return Ok((
-                CallResolution::AfterArguments {
-                    kept: Some((resolved, generation)),
-                    site: Some(chunk.call_site_slot(site)),
-                },
-                false,
-            ));
+            return Ok(CallResolution::AfterArguments {
+                site: Some(chunk.call_site_slot(site)),
+            });
         }
         let resolution = match self.resolve_fixed_call(name, search_labels)? {
             Some(resolved) => {
@@ -4193,11 +4179,69 @@ impl Interp {
                 CallResolution::Settled(resolved)
             }
             None => CallResolution::AfterArguments {
-                kept: None,
                 site: Some(chunk.call_site_slot(site)),
             },
         };
-        Ok((resolution, false))
+        Ok(resolution)
+    }
+
+    /// What call site `site` does with `resolved`, which a call that found
+    /// nothing kept there resolved under `generation`: a label or a builtin
+    /// is kept at once, as the oracle fixes both when the clause resolves,
+    /// and anything else is a [`SiteKeep`] for when the call returns.
+    fn missed_site(
+        &mut self,
+        chunk: &Chunk,
+        site: u16,
+        resolved: Resolved,
+        generation: u32,
+    ) -> Option<SiteKeep> {
+        if let Resolved::Label(_) | Resolved::Builtin(_) = resolved {
+            let repin = chunk.remember_call(site, resolved, generation);
+            self.repin(repin);
+            return None;
+        }
+        Some(self.site_keep(site, resolved, generation))
+    }
+
+    /// Runs the body a call op of `chunk` just entered, ending the keep it
+    /// left ([`Interp::end_entered_keep`]).
+    fn run_entered(&mut self, chunk: &Chunk) -> Result<Ended, Failure> {
+        let keep = self.activity.entered_keep.take();
+        let ended = self.run_activation();
+        if let Some(keep) = keep {
+            self.end_site_keep(chunk, keep, ended.is_ok());
+        }
+        ended
+    }
+
+    /// [`Interp::complete_subroutine`] for a `CALL` op of `chunk`, ending the
+    /// keep an entered callee left.
+    fn complete_site_subroutine(
+        &mut self,
+        chunk: &Chunk,
+        started: Started<Ended>,
+        base_indent: usize,
+    ) -> Result<Flow, Failure> {
+        match started {
+            Started::Entered if self.activity.native_park.is_some() => {
+                self.end_entered_keep(chunk, false);
+                Err(self.refuse_unrooted_park())
+            }
+            Started::Entered => {
+                let ended = self.run_entered(chunk);
+                let ended = self.finish_call(ended)?;
+                self.settle_call_result(ended, base_indent)
+            }
+            Started::Ran(_) => self.complete_subroutine(started, base_indent),
+        }
+    }
+
+    /// Ends the keep `parked` holds, for its callee that `returned` or not.
+    fn end_parked_keep(&mut self, chunk: &Chunk, parked: &mut ParkedCall, returned: bool) {
+        if let Some(keep) = parked.keep.take() {
+            self.end_site_keep(chunk, keep, returned);
+        }
     }
 }
 

@@ -522,12 +522,6 @@ impl CallSite {
         self.generation.set(generation);
         repin
     }
-
-    fn clear(&self) -> Repin {
-        let repin = Repin::to(self.pinned(), ObjRef::NIL);
-        self.resolved.set(None);
-        repin
-    }
 }
 
 /// One chunk's resolution table: a slot per call op -- [`Op::Call`] and
@@ -596,14 +590,6 @@ impl Calls {
         }
         match self.slots.get(at as usize) {
             Some(slot) => slot.set(resolved, generation),
-            None => Repin::NONE,
-        }
-    }
-
-    /// Drops what site `at` kept, so its next call resolves again.
-    fn forget(&self, at: u16) -> Repin {
-        match self.slots.get(at as usize) {
-            Some(slot) => slot.clear(),
             None => Repin::NONE,
         }
     }
@@ -802,14 +788,6 @@ impl Chunk {
             .filter(|copy| *copy != ObjRef::NIL)
     }
 
-    /// Drops what call site `at` kept ([`Calls::forget`]): the oracle keeps a
-    /// call's routine only once the call has returned
-    /// (`RexxInstructionCall::execute`, `instructions/CallInstruction.cpp:193-197`).
-    #[cold]
-    fn forget_call(&self, at: u16) -> Repin {
-        self.calls.forget(at)
-    }
-
     /// The message name send site `at` sends, or `None` for a site this
     /// chunk does not have.
     pub(crate) fn send_name(&self, at: u32) -> Option<&[u8]> {
@@ -817,7 +795,7 @@ impl Chunk {
     }
 
     /// Call site `at`, lent to a call that resolves after its arguments.
-    fn call_site_slot(&self, at: u16) -> CallSiteSlot<'_> {
+    pub(crate) fn call_site_slot(&self, at: u16) -> CallSiteSlot<'_> {
         CallSiteSlot { chunk: self, at }
     }
 }
@@ -834,6 +812,23 @@ impl CallSiteSlot<'_> {
     /// Records `resolved` at the site, under `generation`.
     pub(crate) fn remember(self, resolved: Resolved, generation: u32) -> Repin {
         self.chunk.remember_call(self.at, resolved, generation)
+    }
+
+    /// What the site keeps under `generation` ([`Calls::resolved`]).
+    pub(crate) fn resolved(self, generation: u32) -> Option<Resolved> {
+        self.chunk.resolved_call(self.at, generation)
+    }
+
+    /// The site's index in its chunk.
+    pub(crate) fn site(self) -> u16 {
+        self.at
+    }
+}
+
+impl<'a> CallSiteSlot<'a> {
+    /// The chunk the site is in.
+    pub(crate) fn chunk(self) -> &'a Chunk {
+        self.chunk
     }
 }
 

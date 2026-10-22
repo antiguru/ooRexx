@@ -2293,24 +2293,6 @@ DEVIATIONS -- permanent, chosen
      rust/crates/rexx-exec/tests/compiled.rs
      `a_foreign_or_damaged_image_is_refused` pins this crate's 3.903.
 
-     KNOWN GAP BESIDE DEVIATION 41, not a deviation: AN ACTIVATION ENTERED
-     THROUGH `Routine~call` IS NAMED `CALL` (Phase 9c Task 9, queued).
-     The oracle names it for the routine (`RoutineClass::callRexx`,
-     interpreter/classes/RoutineClass.cpp:209), so `StackFrame~name` answers
-     `ROUTINE MYNAME` for `.Routine~new('MYNAME', ...)~call` where this crate
-     answers `ROUTINE CALL`, measured 2026-10-17 by the Task 9 review. A
-     restored routine's traceback line shows it: the oracle prints
-     `Routine <the path rexxc translated>`, because the name is flattened
-     with the routine (RoutineClass.cpp:148) and restore renames only the
-     package (interpreter/classes/support/ProgramMetaData.cpp:190-191), and
-     this crate prints `Routine CALL`
-     (docs/superpowers/records/2026-10-15-phase-9c/task-9-step1/routine-object/).
-     A fix names the activation for the routine, and then the image must
-     carry the routine's name.
-     .superpowers/sdd/queued/2026-10-17-routine-call-frame-name.md has the
-     witnesses and the oracle sites.
-     OWNER: none.
-
  42. SYSFORK IS REFUSED (Phase 9). OWNER: none.
 
      Ruled by Moritz 2026-10-17: "we can chose not to support SysFork, at
@@ -6610,25 +6592,11 @@ programs at cb13f0033 on both sides and on 9ff11e465: every transcript held.
   The oracle evaluates the arguments first (CallInstruction.cpp:436, then
   :450). Silent when trapped. NO OWNER: namespaces are the package model's.
 
-  A ::routine WHOSE CALL RAISED STAYS KEPT AT ITS CALL SITE. An internal
-  routine sub: calls foo(), which raises 42.3 (trapped); then
-  .context~package~addRoutine('FOO', r); then sub: again:
-    oracle: pass1 raised 42.3 / sub 2 added 2
-    this:   pass1 raised 42.3 / pass2 raised 42.3
-  The oracle keeps a resolution with setField after externalCall returns
-  (ExpressionFunction.cpp:210-214, CallInstruction.cpp:193-197), so a raised
-  call keeps nothing; this crate keeps it before the call. Silent. NO OWNER.
-
   TRACE I AND TRACE R OF A FUNCTION CALL TO AN EXTERNAL FILE LACK THE >>> LINE.
   For x = ext(1) and x = ext(id(2)), after >F>   EXT => "ext 1" the oracle
   prints >>>   "ext 1"; this crate does not. The CALL forms and every other
   routine kind agree. NO OWNER: trace rendering of external calls, which no
   open phase names.
-
-  A LIBRARY ROUTINE'S Routine~call TRACEBACK ALSO LACKS
-  *-* Compiled method "CALL" with scope "Routine". beside the Compiled routine
-  line the entry above names (loadExternalRoutine('myname', ...)~call('x'),
-  trapped; the untrapped report agrees). Same owner as that entry.
 
   THREE ITEMS SURFACE TASK 2 RAISED AND DID NOT RECORD ABOVE, as its report
   and the re-review of fix round 3 describe them; not re-run for this entry:

@@ -67,14 +67,54 @@ pub(crate) enum CallResolution<'a> {
     /// routine, or a `findRoutine` answer a call site keeps.
     Settled(Resolved),
     /// Searched for once the arguments have run, as `externalCall` is
-    /// (`expression/ExpressionFunction.cpp:185-210`). `kept` is a call site's
-    /// answer that [`Resolved::kept_until_routines_change`] names, with the
-    /// `Interp::routine_generation` it was read under, used again where the
-    /// arguments moved no generation. `site` keeps the answer taken.
+    /// (`expression/ExpressionFunction.cpp:185-210`): what `site` keeps by
+    /// then, or a search whose answer `site` keeps once the call returns.
     AfterArguments {
-        kept: Option<(Resolved, u32)>,
         site: Option<crate::ir::CallSiteSlot<'a>>,
     },
+}
+
+/// What a call site keeps once the call through it that found `resolved`
+/// under `generation` returns: the oracle sets `externalTarget` only after
+/// `externalCall` comes back (`instructions/CallInstruction.cpp:191-197`,
+/// `expression/ExpressionFunction.cpp:206-210`), so a call that raised keeps
+/// nothing. The copy `resolved` names is pinned until the call ends.
+#[derive(Clone, Copy)]
+pub(crate) struct SiteKeep {
+    pub(crate) site: u16,
+    resolved: Resolved,
+    generation: u32,
+}
+
+/// How a call through a call site ended, for its [`SiteKeep`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SiteCall {
+    /// The callee came back, with or without a value.
+    Returned,
+    /// The callee's body was entered and has yet to end.
+    Entered,
+    /// The call raised.
+    Raised,
+}
+
+impl SiteCall {
+    /// How a start `started` ended.
+    pub(crate) fn of<T>(started: &Result<Started<T>, Failure>) -> SiteCall {
+        match started {
+            Ok(Started::Ran(_)) => SiteCall::Returned,
+            Ok(Started::Entered) => SiteCall::Entered,
+            Err(_) => SiteCall::Raised,
+        }
+    }
+
+    /// How a begun call `begun` ended.
+    fn of_begun(begun: &Result<Begun, Failure>) -> SiteCall {
+        match begun {
+            Ok(Begun::Done(_)) => SiteCall::Returned,
+            Ok(Begun::Entered) => SiteCall::Entered,
+            Err(_) => SiteCall::Raised,
+        }
+    }
 }
 
 /// Which of the two activation-pushing outcomes a resolved call took, kept
@@ -451,8 +491,12 @@ impl Interp {
                 )?)),
             }
         }
-        let resolved = self.settle_after_arguments(resolution, name)?;
-        self.begin_evaluated_call(resolved, name, arguments, call_type, entry)
+        let (resolved, keep) = self.settle_after_arguments(resolution, name)?;
+        let begun = self.begin_evaluated_call(resolved, name, arguments, call_type, entry);
+        if let Some((slot, keep)) = keep {
+            self.site_call(slot, keep, SiteCall::of_begun(&begun));
+        }
+        begun
     }
 
     /// [`Interp::begin_invoke_call`] past its argument loop, over `arguments`
@@ -491,27 +535,91 @@ impl Interp {
         Ok(begun)
     }
 
-    /// What a call runs, once its arguments have run.
-    fn settle_after_arguments(
+    /// What a call runs, once its arguments have run, and what its site is
+    /// to keep once it returns.
+    fn settle_after_arguments<'c>(
         &mut self,
-        resolution: CallResolution<'_>,
+        resolution: CallResolution<'c>,
         name: &[u8],
-    ) -> Result<Resolved, Failure> {
-        let (kept, site) = match resolution {
-            CallResolution::Settled(resolved) => return Ok(resolved),
-            CallResolution::AfterArguments { kept, site } => (kept, site),
+    ) -> Result<(Resolved, Option<(crate::ir::CallSiteSlot<'c>, SiteKeep)>), Failure> {
+        let site = match resolution {
+            CallResolution::Settled(resolved) => return Ok((resolved, None)),
+            CallResolution::AfterArguments { site } => site,
         };
-        if let Some((resolved, generation)) = kept
-            && generation == self.routine_generation
+        let generation = self.routine_generation;
+        if let Some(site) = site
+            && let Some(resolved) = site.resolved(generation)
         {
-            return Ok(resolved);
+            return Ok((resolved, None));
         }
         let resolved = self.resolve_routine_call(name)?;
-        if let Some(site) = site {
-            let repin = site.remember(resolved, self.routine_generation);
+        Ok((
+            resolved,
+            site.map(|site| (site, self.site_keep(site.site(), resolved, generation))),
+        ))
+    }
+
+    /// A [`SiteKeep`] for call site `site`, its copy pinned.
+    pub(crate) fn site_keep(&mut self, site: u16, resolved: Resolved, generation: u32) -> SiteKeep {
+        let copy = resolved.copy();
+        if copy != ObjRef::NIL {
+            self.pin_copy(copy);
+        }
+        SiteKeep {
+            site,
+            resolved,
+            generation,
+        }
+    }
+
+    /// Ends or hands on `keep`, for its call through `slot` that `ended`: a
+    /// call that entered a body leaves it on the activity for the op that
+    /// entered it ([`Interp::end_entered_keep`]).
+    pub(crate) fn site_call(
+        &mut self,
+        slot: crate::ir::CallSiteSlot<'_>,
+        keep: SiteKeep,
+        ended: SiteCall,
+    ) {
+        match ended {
+            SiteCall::Entered => {
+                debug_assert!(
+                    self.activity.entered_keep.is_none(),
+                    "an entered call's keep was left unclaimed"
+                );
+                self.activity.entered_keep = Some(keep);
+            }
+            SiteCall::Returned | SiteCall::Raised => {
+                self.end_site_keep(slot.chunk(), keep, ended == SiteCall::Returned);
+            }
+        }
+    }
+
+    /// Ends `keep`: its site keeps the resolution where the call `returned`.
+    pub(crate) fn end_site_keep(
+        &mut self,
+        chunk: &crate::ir::Chunk,
+        keep: SiteKeep,
+        returned: bool,
+    ) {
+        if returned {
+            let repin = chunk
+                .call_site_slot(keep.site)
+                .remember(keep.resolved, keep.generation);
             self.repin(repin);
         }
-        Ok(resolved)
+        let copy = keep.resolved.copy();
+        if copy != ObjRef::NIL {
+            self.unpin_copy(copy);
+        }
+    }
+
+    /// Ends the keep an entered call left on the activity, if it left one,
+    /// for its callee that `returned` or not.
+    pub(crate) fn end_entered_keep(&mut self, chunk: &crate::ir::Chunk, returned: bool) {
+        if let Some(keep) = self.activity.entered_keep.take() {
+            self.end_site_keep(chunk, keep, returned);
+        }
     }
 
     /// The resolution a call without a site of its own starts from: what
@@ -520,10 +628,7 @@ impl Interp {
     pub(crate) fn unkept_resolution(fixed: Option<Resolved>) -> CallResolution<'static> {
         match fixed {
             Some(resolved) => CallResolution::Settled(resolved),
-            None => CallResolution::AfterArguments {
-                kept: None,
-                site: None,
-            },
+            None => CallResolution::AfterArguments { site: None },
         }
     }
 
@@ -531,14 +636,18 @@ impl Interp {
     /// to the point its callee's body would run. The run above `mark` is
     /// removed; an entered callee keeps the stack until
     /// [`Interp::finish_function`] hands it back.
+    ///
+    /// `keep` is what the call's site keeps once the call returns.
     pub(crate) fn begin_call_over_pushed_args(
         &mut self,
         resolved: Resolved,
         name: &[u8],
         mark: usize,
+        keep: Option<(crate::ir::CallSiteSlot<'_>, SiteKeep)>,
     ) -> Result<Started<ObjRef>, Failure> {
         // The builtin path, which runs no activation -- the same shortcut
-        // `begin_eval_call` takes and for the same measured reason.
+        // `begin_eval_call` takes and for the same measured reason. A builtin
+        // is kept where it resolves, so it has no `keep`.
         if let Resolved::Builtin(target) = resolved {
             return self
                 .run_over_pushed_args(mark, |interp, values| {
@@ -547,7 +656,7 @@ impl Interp {
                 .map(Started::Ran);
         }
         let mut values = std::mem::take(&mut self.activity.value_buffer);
-        let started = self.begin_call_over_values(resolved, name, &mut values, mark);
+        let started = self.begin_call_over_values(resolved, name, &mut values, mark, keep);
         values.truncate(mark);
         self.lend_stack(self.entered_body(&started), values);
         started
@@ -646,6 +755,20 @@ impl Interp {
         args: &mut Vec<Option<ObjRef>>,
         from: usize,
     ) -> Result<Started<ObjRef>, Failure> {
+        self.run_internal_given(row, name, args, from, ObjRef::NIL)
+    }
+
+    /// [`Interp::run_internal_as`] for the `Routine` object `executable`
+    /// standing for the row, `.nil` for the row's own, which its frame
+    /// answers.
+    pub(crate) fn run_internal_given(
+        &mut self,
+        row: &'static crate::internal_routines::InternalRoutine,
+        name: InternalName<'_>,
+        args: &mut Vec<Option<ObjRef>>,
+        from: usize,
+        executable: ObjRef,
+    ) -> Result<Started<ObjRef>, Failure> {
         let Some(body) = row.body else {
             let owner = row
                 .owner
@@ -661,6 +784,7 @@ impl Interp {
         level.caller = caller;
         level.row = row;
         level.from = from;
+        level.executable = executable;
         level.name = match name {
             InternalName::Upper => LevelName::Upper,
             InternalName::Row => LevelName::Row,
@@ -687,13 +811,19 @@ impl Interp {
             match name {
                 InternalName::Upper => {
                     let upper = row.name.to_ascii_uppercase();
-                    self.blame_internal_routine(row, upper.as_bytes(), values, failure);
+                    self.blame_internal_routine(row, upper.as_bytes(), values, failure, executable);
                 }
                 InternalName::Row => {
-                    self.blame_internal_routine(row, row.name.as_bytes(), values, failure);
+                    self.blame_internal_routine(
+                        row,
+                        row.name.as_bytes(),
+                        values,
+                        failure,
+                        executable,
+                    );
                 }
                 InternalName::Called(name) => {
-                    self.blame_internal_routine(row, name, values, failure);
+                    self.blame_internal_routine(row, name, values, failure, executable);
                 }
             }
         }
@@ -706,6 +836,38 @@ impl Interp {
 
     /// [`Interp::begin_call_over_pushed_args`] with the run in hand.
     fn begin_call_over_values(
+        &mut self,
+        resolved: Resolved,
+        name: &[u8],
+        values: &mut Vec<Option<ObjRef>>,
+        mark: usize,
+        keep: Option<(crate::ir::CallSiteSlot<'_>, SiteKeep)>,
+    ) -> Result<Started<ObjRef>, Failure> {
+        let Some((slot, keep)) = keep else {
+            return self.begin_unkept_call_over_values(resolved, name, values, mark);
+        };
+        if let Resolved::Internal(_) | Resolved::LibraryRoutine(_) = resolved {
+            let started = self.begin_unkept_call_over_values(resolved, name, values, mark);
+            self.site_call(slot, keep, SiteCall::of(&started));
+            return started;
+        }
+        // Kept before the callee's value is checked: the oracle keeps a
+        // routine that returned nothing to a function call
+        // (`expression/ExpressionFunction.cpp:206-216`).
+        let begun = self.begin_call(
+            resolved,
+            name,
+            values,
+            mark,
+            CallType::Function,
+            CallEntry::Written,
+        );
+        self.site_call(slot, keep, SiteCall::of_begun(&begun));
+        function_started(begun?, name)
+    }
+
+    /// [`Interp::begin_call_over_values`] for a call with nothing to keep.
+    fn begin_unkept_call_over_values(
         &mut self,
         resolved: Resolved,
         name: &[u8],
@@ -891,9 +1053,9 @@ impl Interp {
                 .run_library_routine(code, name, &arguments[from..], executable)
                 .map(library_begun);
         }
-        if let Resolved::MergedInternal(row) = resolved {
+        if let Resolved::MergedInternal(row, copy) = resolved {
             return self
-                .run_internal_as(row, InternalName::Called(name), arguments, from)
+                .run_internal_given(row, InternalName::Called(name), arguments, from, copy)
                 .map(internal_begun);
         }
         if let Resolved::Routine(installed) = resolved {
@@ -920,7 +1082,7 @@ impl Interp {
             Resolved::Internal(_) => unreachable!("the internal path returns before this"),
             Resolved::LibraryRoutine(_)
             | Resolved::MergedLibraryRoutine(..)
-            | Resolved::MergedInternal(_) => {
+            | Resolved::MergedInternal(..) => {
                 unreachable!("a library or merged internal routine is run before this")
             }
             Resolved::Label(target) => Entered::Label(target),

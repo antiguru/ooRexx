@@ -1,0 +1,12 @@
+/* A ::CONSTANT expression runs under the name ::CONSTANT, and a package's
+   prologue under the package's own name and no arguments, whoever loads
+   it: a ::REQUIRES of a file newFile loads, or .Package~new. */
+say .c~k
+call sub 'zz'
+p = .Package~new('pk', .array~of("say 'pk' arg() .context~name"))
+exit
+sub: r = .Routine~newFile('p.rex')
+say 'sub' arg(1) .context~name
+return
+::class c
+::constant k (digits() .context~name .context~args~items)

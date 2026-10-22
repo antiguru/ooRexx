@@ -52,7 +52,7 @@ fn main() -> ExitCode {
     let image = compile
         .output
         .as_ref()
-        .map(|_| compiled::write_image(&text, compile.encode));
+        .map(|_| compiled::write_image(&text, found.as_os_str().as_bytes(), compile.encode));
     let outcome = launcher::translate(&found, text);
     let _ = std::io::stdout().write_all(&outcome.stdout);
     let _ = std::io::stdout().flush();

@@ -570,11 +570,15 @@ pub(crate) enum LiveLevel {
     Internal(usize),
     /// This row of [`Activity::fragments`].
     Fragment(usize),
+    /// This row of [`Activity::native_tails`]: a sent primitive method that
+    /// entered the activation listed before it.
+    Entering(usize),
 }
 
 /// Every level of the running stack, innermost first: before each
 /// activation, the native calls it made and then the fragments running in
-/// it, each innermost first.
+/// it, each innermost first, and after it the sent primitive methods that
+/// entered it.
 pub(crate) fn live_levels(interp: &Interp) -> Vec<LiveLevel> {
     let mut levels = Vec::new();
     for (depth, activation) in interp.frames().enumerate() {
@@ -601,6 +605,7 @@ pub(crate) fn live_levels(interp: &Interp) -> Vec<LiveLevel> {
             }
         }
         levels.push(LiveLevel::Activation(depth));
+        levels.extend(interp.entering_tails(id).map(LiveLevel::Entering));
     }
     levels
 }
@@ -613,6 +618,10 @@ pub(crate) fn build_live_frame(interp: &mut Interp, level: LiveLevel) -> Result<
         LiveLevel::Method(row) => build_method_level_frame(interp, row),
         LiveLevel::Internal(row) => build_internal_frame_at(interp, row),
         LiveLevel::Fragment(row) => build_fragment_frame(interp, row),
+        LiveLevel::Entering(row) => interp
+            .entering_frame_at(row)
+            .map(|(frame, _)| frame)
+            .ok_or_else(|| Loud::unknown_receiver("a native level no send made").into()),
     }
 }
 
@@ -981,9 +990,12 @@ fn build_internal_frame_at(interp: &mut Interp, row: usize) -> Result<ObjRef, Fa
         crate::activity::LevelName::Called => level.called.clone(),
     };
     let arguments = level.arguments[level.from..].to_vec();
-    let (caller, row) = (level.caller, level.row);
+    let (caller, row, given) = (level.caller, level.row, level.executable);
     let depth = caller_depth(interp, caller)?;
-    let executable = interp.internal_routine_object(crate::internal_routines::index_of(row));
+    let executable = match given {
+        ObjRef::NIL => interp.internal_routine_object(crate::internal_routines::index_of(row)),
+        given => given,
+    };
     Ok(build_native_level_frame(
         interp,
         Some(depth),

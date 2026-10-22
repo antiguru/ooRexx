@@ -91,6 +91,21 @@ faile.rxo
 rc> 0
 
 compile
+named.rex
+named.rxo
+-s
+----
+rc> 0
+
+compile
+named.rex
+namede.rxo
+-s
+-e
+----
+rc> 0
+
+compile
 sub/p.rex
 sub/p.rxo
 -s
@@ -461,3 +476,18 @@ rc> 243
 err>      2 *-* /**/@
 err> Error 13 running DIR/libe.rxo line 2:  Invalid character in program.
 err> Error 13.1:  Incorrect character in program "@" ('40'X).
+
+# A routine restored from an image and run by Routine~call keeps the name
+# rexxc gave it, the path of the file it translated; called by name it is
+# named by the call.
+rexx
+names.rex
+----
+rc> 0
+out> newfile DIR/named.rex | DIR/named.rex | named.rxo
+out> new DIR/named.rex | DIR/named.rex | rn
+out> call named.rxo | named.rxo | DIR/named.rxo
+out> in fail
+out>      2 *-* Routine DIR/fail.rex in package "fail.rxo" (no source available).
+out>        *-* Compiled method "CALL" with scope "Routine".
+out>      6 *-* .Routine~newFile('fail.rxo')~call

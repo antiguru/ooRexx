@@ -934,9 +934,9 @@ impl Interp {
             // (1,2)`: `>K>   "ADDITIONAL" => "an Array"`.
             let traced = self.string_value_text(value);
             self.trace_keyword(indent, "ADDITIONAL", &traced);
-            if converted && slots.is_none() && self.operator_operand_gap(value).is_some() {
-                // `requestArray`, and 98.939 for `TheNilObject` or a
-                // multi-dimensional answer.
+            if converted && slots.is_none() {
+                // `requestArray`, a string's lines included, and 98.939 for
+                // `TheNilObject` or a multi-dimensional answer.
                 let Some(array) = self.single_dimension_request(value)? else {
                     return Err(Raised::syntax_additional().into());
                 };

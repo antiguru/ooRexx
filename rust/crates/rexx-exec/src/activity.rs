@@ -123,6 +123,9 @@ pub(crate) struct Activity {
     /// The clause regions `Interp::drive`'s levels stopped at a call op,
     /// innermost last.
     pub(crate) parked_calls: Vec<crate::ir::drive::ParkedCall>,
+    /// What the call site of a call op whose callee was just entered keeps
+    /// once that callee returns, until the op claims it.
+    pub(crate) entered_keep: Option<crate::run::SiteKeep>,
     /// The levels `Interp::drive` left for a callee, innermost last.
     pub(crate) parked_levels: Vec<crate::ir::drive::ParkedLevel>,
     /// A `REPLY` continuation's level, until its first run parks it
@@ -377,6 +380,9 @@ pub(crate) struct InternalLevel {
     pub(crate) arguments: Rc<Vec<Option<ObjRef>>>,
     /// Where the call's arguments start in [`InternalLevel::arguments`].
     pub(crate) from: usize,
+    /// The `Routine` object the call ran, or `.nil` for the one standing
+    /// for the row.
+    pub(crate) executable: ObjRef,
 }
 
 /// The name an [`InternalLevel`]'s frame reports.
@@ -400,6 +406,7 @@ impl InternalLevel {
             called: Vec::new(),
             arguments: Rc::new(Vec::new()),
             from: 0,
+            executable: ObjRef::NIL,
         }
     }
 }
@@ -458,6 +465,7 @@ impl Activity {
             frames: Vec::new(),
             call_tails: Vec::new(),
             parked_calls: Vec::new(),
+            entered_keep: None,
             parked_levels: Vec::new(),
             replied_level: None,
             native_tails: Vec::new(),
@@ -586,8 +594,8 @@ impl Activity {
             native_spares: _,
             // A running call's arguments are its caller's temps, and a slot
             // above the depth holds an emptied buffer.
-            internal_levels: _,
-            internal_depth: _,
+            internal_levels,
+            internal_depth,
             method_levels,
             clause_state: _,
             // The `DO OVER` snapshot sits in a register held for the loop's
@@ -602,6 +610,8 @@ impl Activity {
             // registers stay reserved in the arena.
             call_tails: _,
             parked_calls: _,
+            // A kept copy is pinned while its call runs.
+            entered_keep: _,
             parked_levels: _,
             // Its registers are the record's parked values.
             replied_level: _,
@@ -719,6 +729,12 @@ impl Activity {
             out.push(level.receiver);
             out.extend(level.arguments.iter().flatten().copied());
         }
+        out.extend(
+            internal_levels[..*internal_depth]
+                .iter()
+                .map(|level| level.executable)
+                .filter(|executable| *executable != ObjRef::NIL),
+        );
         if let Some(park) = native_park {
             park.object_roots(out);
         }

@@ -1,0 +1,9 @@
+count 8
+/* The main program's executable carries an empty annotation table, from the
+   main program and from an internal routine it calls. */
+say .context~executable~annotations~items
+say .context~executable~annotation('x')
+say .context~executable~annotations~class
+call sub
+exit
+sub: say 'sub' .context~executable~annotations~items (.context~executable~annotations == .context~executable~annotations)

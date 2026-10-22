@@ -185,7 +185,7 @@ impl Interp {
     }
 
     #[cold]
-    fn pin_copy(&mut self, copy: ObjRef) {
+    pub(crate) fn pin_copy(&mut self, copy: ObjRef) {
         let count = self.pinned_copies.entry(copy).or_insert(0);
         *count += 1;
         if *count == 1 {

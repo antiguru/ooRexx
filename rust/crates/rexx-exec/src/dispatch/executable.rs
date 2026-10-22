@@ -179,7 +179,7 @@ fn declared_flag(interp: &Interp, source: ExecutableSource, which: Flag) -> bool
 
 /// `Routine`'s methods that run the routine, entered by their begin halves.
 pub(super) static RESUMABLE_METHODS: &[(&str, &str, Arity, NativeBegin)] = &[
-    ("Routine", "[]", Arity::Counted, call),
+    ("Routine", "[]", Arity::Counted, call_index),
     ("Routine", "CALL", Arity::Counted, call),
     ("Routine", "CALLWITH", Arity::Fixed(1), call_with),
 ];
@@ -543,7 +543,17 @@ fn call(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<NativeStarted, Failure> {
-    begin_routine(interp, receiver, args.to_vec(), b"CALL")
+    begin_routine(interp, receiver, args.to_vec(), None, (b"CALL", args))
+}
+
+/// [`call`] sent as `[]`.
+fn call_index(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<NativeStarted, Failure> {
+    begin_routine(interp, receiver, args.to_vec(), None, (b"[]", args))
 }
 
 /// `RoutineClass::callWithRexx`: the same call over an argument array.
@@ -557,7 +567,7 @@ fn call_with(
         return Err(Raised::missing_method_argument(1).into());
     };
     let values = super::array_argument(interp, array, super::ArrayArgument::Positional)?;
-    begin_routine(interp, receiver, values, b"CALL")
+    begin_routine(interp, receiver, values, None, (b"CALLWITH", args))
 }
 
 /// `CallRoutineDispatcher::run` (`concurrency/RexxStartDispatcher.cpp:207`):
@@ -575,18 +585,24 @@ pub(crate) fn call_routine_directly(
         Some(array) => super::array_argument(interp, array, super::ArrayArgument::Positional)?,
         None => Vec::new(),
     };
-    let started = begin_routine(interp, routine, values, b"")?;
+    let started = begin_routine(interp, routine, values, Some(b""), (b"", &[]))?;
     interp.complete_native(started)
 }
 
 /// The half [`call`] and [`call_with`] share, once the arguments are values,
-/// `name` being what the routine's frame is called, up to the point a Rexx
-/// routine's body would run.
+/// `name` being what a Rexx routine's frame is called, or `None` for the
+/// routine's own name (`executableName`, which `RoutineClass::callRexx` runs
+/// it under, `classes/RoutineClass.cpp:205-211`): a directive's name, the
+/// name a compiled image gives it, or the name its package was created under. Up to the point a Rexx routine's body
+/// would run. `sent` is the message that runs it and that message's own
+/// arguments, which a routine run to its end here lists as a frame of its
+/// own; an empty name for none.
 fn begin_routine(
     interp: &mut Interp,
     receiver: ObjRef,
     mut values: Vec<Option<ObjRef>>,
-    name: &[u8],
+    name: Option<&[u8]>,
+    sent: (&[u8], &[Option<ObjRef>]),
 ) -> Result<NativeStarted, Failure> {
     let Some(record) = interp.executable_sources.get(&receiver).copied() else {
         return Err(Loud::unrecorded_executable().into());
@@ -621,7 +637,7 @@ fn begin_routine(
     };
     if let Some(row) = row {
         return interp
-            .run_internal_as(row, crate::run::InternalName::Row, &mut values, 0)
+            .run_internal_given(row, crate::run::InternalName::Row, &mut values, 0, receiver)
             .map(|started| match started {
                 Started::Ran(value) => NativeStarted::Ran(Some(value)),
                 Started::Entered => NativeStarted::Entered(Then::Pass),
@@ -631,11 +647,46 @@ fn begin_routine(
         let crate::ExecutableSource::Main { program } = record.source else {
             return Err(Loud::unrecorded_executable().into());
         };
-        return interp
-            .call_program_main(program, values, name)
-            .map(NativeStarted::Ran);
+        let name = match name {
+            Some(name) => name.to_vec(),
+            None => match interp
+                .programs
+                .get(program)
+                .and_then(|program| program.source.image_name())
+            {
+                Some(name) => name.to_vec(),
+                None => interp.program_display_name(program).to_vec(),
+            },
+        };
+        let (message, arguments) = sent;
+        let level = (!message.is_empty())
+            .then(|| interp.lookup(receiver, message, None))
+            .flatten();
+        if let Some(resolution) = level {
+            let caller = interp.running_activation().map(|activation| activation.id);
+            interp
+                .activity
+                .method_levels
+                .push(crate::activity::MethodLevel {
+                    caller,
+                    name: message.into(),
+                    scope: resolution.scope,
+                    method: resolution.method,
+                    receiver,
+                    arguments: arguments.into(),
+                });
+        }
+        let ran = interp.call_program_main(program, values, &name);
+        if level.is_some() {
+            interp.activity.method_levels.pop();
+        }
+        return ran.map(NativeStarted::Ran);
     };
-    let started = interp.begin_installed_routine(program, directive, &mut values, name)?;
+    let name = match name {
+        Some(name) => name.to_vec(),
+        None => interp.routine_directive_name(program, directive),
+    };
+    let started = interp.begin_installed_routine(program, directive, &mut values, &name)?;
     // `.context~executable` inside answers the object the call came through:
     // measured, oracle rc 0, `r~call == r` and `r~copy~call == r~copy`.
     if let NativeStarted::Entered(_) = started {

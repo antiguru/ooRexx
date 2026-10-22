@@ -82,7 +82,6 @@ fn run_directory(rel_path: &str) -> PathBuf {
 /// it observed beside this list whenever the two differ, and a program added to
 /// the corpus that collects nothing belongs here.
 const NO_ALLOCATION_PROGRAMS: &[&str] = &[
-    "lang/call_trace_nested.rex",
     "lang/comparison_families.rex",
     "lang/comparison_operators_remaining.rex",
     "lang/deep_nested_expr.rex",
@@ -91,22 +90,14 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/do_counter_rep.rex",
     "lang/do_counter_until.rex",
     "lang/do_counter_while.rex",
-    "lang/do_ctrl_class.rex",
     "lang/do_loop_forms.rex",
-    "lang/do_to_class.rex",
     "lang/exit_no_value.rex",
     "lang/exit_with_value.rex",
     "lang/if_else_chain.rex",
     "lang/iterate_from_select.rex",
     "lang/loop_counter.rex",
     "lang/loop_label_counter.rex",
-    "lang/message_assignment_form.rex",
     "lang/message_instruction.rex",
-    "lang/message_send_scope_override.rex",
-    "lang/message_send_unknown_method.rex",
-    "lang/message_send_unknown_method_on_a_number.rex",
-    "lang/message_send_unknown_method_on_nil.rex",
-    "lang/mutation_controlled_order.rex",
     "lang/no_trailing_newline.rex",
     "lang/options.rex",
     "lang/scope_case_text_absorbed.rex",
@@ -116,9 +107,6 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/select_when_bodies.rex",
     "lang/string_caseless.rex",
     "lang/string_compare.rex",
-    "lang/trace_numeric_request.rex",
-    "lang/trace_output.rex",
-    "lang/trace_results.rex",
     "num/comparison.rex",
 ];
 
