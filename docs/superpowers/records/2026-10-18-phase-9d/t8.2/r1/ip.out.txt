@@ -1,0 +1,10 @@
+--- crate rc=0
+[stdout]
+h 1 in-interpret
+x in-interpret
+[stderr]
+--- oracle rc=0
+[stdout]
+h 0 The NIL object
+x in-interpret
+[stderr]

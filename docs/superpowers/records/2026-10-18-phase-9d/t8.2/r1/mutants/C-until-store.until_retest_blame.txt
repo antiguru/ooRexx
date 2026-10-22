@@ -1,0 +1,30 @@
+--- crate rc=0
+[stdout]
+  g 1     11 *-*         nop
+  g 2     11 *-*         nop
+42.3
+  [    26 *-*               return 1 / 0]
+  [    11 *-*         nop]
+  [     4 *-* call try 1]
+  g 1     13 *-*         iterate
+  g 2     14 *-*         if i = 1 
+42.3
+  [    26 *-*               return 1 / 0]
+  [    14 *-*         if i = 1 ]
+  [     5 *-* call try 2]
+[stderr]
+--- oracle rc=0
+[stdout]
+  g 1     11 *-*         end
+  g 2     11 *-*         end
+42.3
+  [    26 *-*               return 1 / 0]
+  [    11 *-*         end]
+  [     4 *-* call try 1]
+  g 1     13 *-*         iterate
+  g 2     14 *-*         end
+42.3
+  [    26 *-*               return 1 / 0]
+  [    14 *-*         end]
+  [     5 *-* call try 2]
+[stderr]

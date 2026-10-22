@@ -98,9 +98,11 @@ each has a unit test (below).
 ### 2026-10-01-message-start-result-traceback.md (open, reported)
 
 Stopped: the oracle's answer is a data race. Probe `probes/message-start/msgstart.rex`
-(`o~start('boom')~result`, `boom` does `say 1/0` on line 6). Oracle, 20 runs: both reports name
-line 3, interleaved 19 times and sequential once. Head, 5 runs, one outcome: the started activity's
-report names line 6, then `result`'s re-raise names line 3. `MessageDispatcher::handleError` calls
+(`o~start('boom')~result`, `boom` does `say 1/0` on line 6). The oracle's outcome is a race whose
+frequency depends on the machine: here 40 of 40 runs (20 serial, 20 four at a time,
+`t8.2/r1/message-start/`) gave line 3 in both reports, interleaved or not; the review measured 12 of
+20 interleaved with line 3 twice and 8 of 20 sequential, line 6 then line 3, byte-identical to this
+crate. Head, 20 runs, one outcome: line 6, then `result`'s re-raise names line 3. `MessageDispatcher::handleError` calls
 `message->error(c)`, which wakes the `result` waiter, before `activity->error` displays the same
 condition object; the waiter's `Activity::reraiseException` writes POSITION 3 into that object
 first. rexxref (`fundclasses.xml:1656-1661`) says only that `result` raises the error again; POSITION
@@ -124,11 +126,17 @@ Witnessed by `run::tests::conditions::a_failed_trap_handler_call_signals_at_once
 Rule: RESULT holds "Any result specified on the RETURN or EXIT options of a RAISE instruction".
 Measurement (`probes/condition-candidates/b.rex`, `r.rex`): oracle `mh hasResult 0 The NIL object`
 for RETURN, EXIT and a SIGNAL ON trap; this crate `mh 1 first`, `mh 1 second`, `sh 1 third`, and no
-entry for a tail with no value; SYNTAX already agreed (`s.rex`, `1 x` on both). rexxref
-`condtra.xml:738-741`. Oracle cause: `RexxActivation::raise` passes the member `result`, not
+entry for a tail with no value; SYNTAX already agreed (`s.rex`, `1 x` on both). A second
+observable follows: a tail-less `RAISE PROPAGATE` of the trapped USER condition returns the original
+RETURN value to the caller (`t8.2/r1/pn.rex`: oracle `h 0 The NIL object` / `back RESULT`, this
+crate `h 1 w1` / `back w1`), since the propagate keeps the condition's RETURN information (rexxref
+`instrc.xml:2913-2917`; the oracle's own propagate branch reads RESULT back,
+`RexxActivation.cpp:1801-1804`). Inside an INTERPRET the entry is set too (`t8.2/r1/ut2.rex`: oracle
+`oh 0 The NIL object`, this crate `oh 1 from-interpret`). rexxref `condtra.xml:738-741`. Oracle cause: `RexxActivation::raise` passes the member `result`, not
 `resultObj`, to `createConditionObject` (`RexxActivation.cpp:1827`; the SYNTAX branch at `:1851`
 passes `resultObj`).
-Witnessed by `run::tests::conditions::a_raise_tail_value_is_the_condition_objects_result`;
+Witnessed by `run::tests::conditions::a_raise_tail_value_is_the_condition_objects_result`, which
+asserts the entry, the propagate's returned `w1` and the INTERPRET shape;
 `corpus/lang/raise_result_and_sender.rex` leaves the affected lines uncompared.
 
 **3. A 16.1 from a SIGNAL trap inside INTERPRET keeps the PROGRAM frame's file name.**
@@ -141,8 +149,8 @@ which runs the program as `/w/c.rex` and asserts `sf PROGRAM 4 [/w/c.rex] 16.1`.
 
 ## Other departures from the oracle (not Deviations; for a ruling)
 
-* **Message~start report position** (item above). Oracle: line 3 in both reports. Here: 6 in the
-  started activity's, 3 in `result`'s. rexxref `condtra.xml:769-771`, `fundclasses.xml:1656-1661`.
+* **Message~start report position** (item above). Oracle: a race between line 3 in both reports
+  and line 6 then line 3. Here: always 6 in the started activity's, 3 in `result`'s. rexxref `condtra.xml:769-771`, `fundclasses.xml:1656-1661`.
 * **An UNKNOWN a Stem subclass defines.** `x = .ss~new('S.'); say x~nosuch` with
   `::method unknown` on `ss`: oracle 97.1 (it never looks the override up, `StemClass::processUnknown`
   forwards to the value), here the override runs (`mine NOSUCH`, `7`). rexxref `provide.xml:514-519`
@@ -155,8 +163,9 @@ which runs the program as `/w/c.rex` and asserts `sf PROGRAM 4 [/w/c.rex] 16.1`.
 
 1. **Message~start's error report reads a position another thread wrote.** Repro
    `probes/message-start/msgstart.rex`. Oracle: the started activity's report says
-   `running ... line 3`, the line of `say m~result`, in 20 of 20 runs. Expected: line 6, where the
-   condition was raised. Cause: `MessageDispatcher::handleError` (`MessageDispatcher.cpp:64-72`) calls
+   `running ... line 3`, the line of `say m~result`, when the waiter's re-raise wins the race (40 of
+   40 runs on this machine, 12 of 20 in the review's), and line 6 otherwise. Expected: line 6, where
+   the condition was raised. Cause: `MessageDispatcher::handleError` (`MessageDispatcher.cpp:64-72`) calls
    `message->error(c)` before `activity->error(...)`, so the waiting `result` runs
    `Activity::reraiseException` (`Activity.cpp:1330-1341`), which puts its own POSITION, PROGRAM and
    PACKAGE into the same condition object the started activity then displays.
@@ -214,12 +223,13 @@ Against the pin every program stays under +0.5% (largest churn +0.1870%). churn'
 `begin_invoke` (+201K instructions in `cgdiff.py`), which this task does not touch. The first run
 (`callgrind-run1.txt`, exit 1: churn +0.5171% against the pin) had `invocable` outlined from
 `begin_invoke` (+1.99M) and the per-pass END store; the second (`callgrind-run2.txt`) still had the
-outlining. `a52fa561b` removes both.
+outlining. `a52fa561b` removes both. Superseded by Fix round 1's figures: the remaining churn delta
+was the second `seam::clear` call site this task added.
 
 ## Concerns
 
-1. churn's own delta is +0.0326% whole process but +0.0530% with libc subtracted, over the 0.05 line
-   on that column; it sits in `begin_invoke`, which this task did not edit (code layout).
+1. (Closed in Fix round 1.) churn's own delta was +0.0530% with libc subtracted, from this task's
+   second `seam::clear` call site changing `begin_invoke`'s inlining.
 2. `corpus/lang/raise_result_and_sender.rex` was edited so its non-propagated USER lines no longer
    compare RESULT;
    the controller may prefer a licensed-divergence row once Deviation candidate 2 is written.
@@ -227,3 +237,43 @@ outlining. `a52fa561b` removes both.
    unchanged; both need a ruling.
 4. The INTERPRET clause's traceback indent and the subclass UNKNOWN stack frame above are
    pre-existing and not queued.
+
+## Fix round 1
+
+Review `task-8.2-review.md`; brief `task-8.2-fix-r1.md`. Code `77fded0db`; records `t8.2/r1/`.
+
+* **I1.** The RESULT unit test now also asserts the tail-less `RAISE PROPAGATE` returning `w1` to the
+  caller and a raise inside an INTERPRET; Deviation candidate 2 above states both, with both answers.
+* **I2.** `corpus/lang/stream_boundary_arity.rex`: `.stdout~description(1)` untrapped. Identical to
+  the oracle at head; with `install.rs`'s library-package check reverted it reports
+  `Error 88 running <path>:` for `Error 88 running REXX:` (`r1/mutants/A-install-rs.*`).
+* **I3.** Re-measured (`r1/message-start/outcomes.txt`, `outcomes-parallel.txt`): oracle 20 of 20
+  serial and 20 of 20 four-at-a-time runs with line 3 twice; head 20 of 20 line 6 then line 3. The
+  item, the departure and the oracle-defect entry above now describe a race with both measured
+  frequencies.
+* **M1.** The frameless UNKNOWNs no longer call `seam::clear`: each primitive's work is split from
+  its native wrapper (`hash_unknown`, `stem_unknown`, `reference_unknown`) and `unknown_or_nomethod`
+  runs it directly, as `processUnknown` does without a send. Round 1's second `seam::clear` call also
+  broke `tests/dispatch_seam.rs`' one-chokepoint count, which round 1 did not run; it passes now.
+  Own deltas (`r1/callgrind.txt`, head minus parent against the pin), whole process / libc
+  subtracted: startup +0.0062 / -0.0001, interpret -0.0007 / -0.0023, parse +0.0004 / 0.0000, churn
+  +0.0012 / 0.0000, sayloop +0.0041 / -0.0001. Against the pin all stay under +0.5% (largest churn
+  +0.1550%).
+* **M2.** The mask in `raise_result_and_sender.rex` covers only a non-SYNTAX condition that was not
+  propagated, the ruled difference; the INTERPRET raise is witnessed by the unit test (I1).
+* **M3, M4.** The doc block is back on `sigint_halts_after_a_long_builtin`; the condition tests'
+  docs carry no task numbers.
+* **M5.** The `run_repeating` edits are reverted: no repeating WHILE loop falls back to that path
+  (mutating its END arm left `while_retest_blame`, and a labelled-loop variant of it written for the
+  purpose, identical to the oracle; `r1/mutants/B-*` records the first). The flat UNTIL path's END store, which round 1 left unwitnessed, has
+  `corpus/lang/until_retest_blame.rex`: identical to the oracle at head, and red without the store
+  (`r1/mutants/C-*`: the routine sees `nop` and `if i = 1` as its caller's clause).
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` (`r1/checks-fmt.txt`) | 0 |
+| `memcap 16G cargo clippy -j 4 -p rexx-exec -p rexx-parse --all-targets -- -D warnings` (`r1/checks-clippy.txt`) | 0 |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --lib --test collect_stress --test signals --test dispatch_seam --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions` (`r1/checks-touched.txt`) | 101: `--lib` 1173 passed; `collect_stress` fails only on `call_site_routine_copy_lifetime.rex` and `call_site_fresh_routine_raises.rex`, as at base; every other binary passed |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`r1/checks-corpus.txt`) | 0, 29 passed, 1 ignored |
+| `memcap 16G cargo test -j 4 --release -p rexx-parse --test sourceline_oracle` (`r1/checks-srcl.txt`) | 0 |
+| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../t8.2/r1/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`r1/suite/`) | 0; no changed row against `t8.1/suite/tests.tsv` |

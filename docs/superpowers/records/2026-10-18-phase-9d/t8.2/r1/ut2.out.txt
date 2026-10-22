@@ -1,0 +1,14 @@
+--- crate rc=0
+[stdout]
+h 1 w1
+back w1
+oh 1 from-interpret
+interpreted from-interpret
+[stderr]
+--- oracle rc=0
+[stdout]
+h 0 The NIL object
+back RESULT
+oh 0 The NIL object
+interpreted from-interpret
+[stderr]

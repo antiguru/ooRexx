@@ -1,0 +1,6 @@
+     6 *-* say 1/0
+Error 42 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.2/probes/message-start/msgstart.rex line 3:  Arithmetic overflow/underflow.
+     6 *-* say 1/0
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+Error 42 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.2/probes/message-start/msgstart.rex line 3:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
