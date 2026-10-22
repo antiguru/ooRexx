@@ -40,7 +40,7 @@ the controller a Deviation candidate block for each of the three).
 ## 8.4 Install order, directives, scanner
 2026-10-18-duplicate-member-checked-at-install.md, 2026-10-18-install-error-names-caller-file.md,
 2026-10-17-library-bind-before-options.md, gate:phase-9c-gate.md:142, gate:phase-9c-gate.md:145,
-2026-10-17-scanner-reports-later-clause-error.md, 2026-10-18-options-trace-constant-expression.md.
+2026-10-17-scanner-reports-later-clause-error.md, 2026-10-18-options-trace-constant-expression.md, 2026-10-22-constant-frame-and-executable.md.
 
 ## 8.5 Variables
 2026-09-30-drop-unset-stem-symbol.md, 2026-10-19-local-novalue-hook.md, 2026-10-19-variable-reference-gaps.md,
