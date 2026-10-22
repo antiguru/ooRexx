@@ -1,3 +1,5 @@
+**RULED by Moritz 2026-10-22 ("Line 6, oracle bug"): the crate reports where the condition was raised; Deviation, recorded as an oracle bug (MessageDispatcher::handleError, MessageDispatcher.cpp:64-72).**
+
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** traceback and report now agree; the report still names line 3 on the oracle and line 9 here.
 
 # 2026-10-01-message-start-result-traceback

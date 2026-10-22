@@ -233,3 +233,5 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointe
 2026-10-21-copied-package-routine-executable.md	divergence	-	9d	a copied REXX-package routine frame answers the canonical Routine	9d
 2026-10-21-raise-in-routine-keeps-call-site.md	divergence	-	9d	a raise inside a ::routine leaves its call site resolution kept	9d
 2026-10-21-call-site-reads-kept-before-arguments.md	divergence	-	9d	CallExpr and Call read the kept routine before the arguments	9d
+2026-10-22-interpret-clause-traceback-indent.md	divergence	-	9d	traceback indents the INTERPRET clause by the fragment nesting	9d
+2026-10-22-directory-subclass-unknown-frame.md	divergence	-	9d	stackframes lacks a Directory subclass METHOD UNKNOWN frame	9d
