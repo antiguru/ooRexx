@@ -3863,10 +3863,10 @@ impl Interp {
         resolution: Resolution,
         receiver: ObjRef,
     ) -> Option<NativeMethod> {
-        let Ok(Invocable::Native(NativeEntry {
+        let Some(&NativeEntry {
             body: NativeBody::Run(run),
             ..
-        })) = self.invocable(resolution, UNKNOWN)
+        }) = self.object_model().natives.get(resolution.method)
         else {
             return None;
         };

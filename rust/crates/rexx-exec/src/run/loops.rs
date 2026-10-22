@@ -1964,7 +1964,6 @@ impl Interp {
             }
             DoOutcome::FellThrough => {
                 flat.header_clause = HeaderClause::End;
-                self.enter_clause_index(flat.end_index);
                 // `END` echoes for a pass that fell through to it and for no
                 // other, exactly as `run_repeating`'s own arm does.
                 if echoing
@@ -2033,6 +2032,9 @@ impl Interp {
             return Err(Loud::instruction(&code.body.instructions[flat.do_index].kind).into());
         };
         let until_line = flat.header_line();
+        if matches!(flat.header_clause, HeaderClause::End) {
+            self.enter_clause_index(flat.end_index);
+        }
         let (do_indent, loop_indent, resume) = (flat.do_indent, flat.loop_indent, flat.resume);
         // The re-echoed `END` clause just above leaves `current_value_indent`
         // untouched -- `trace_clause` does not set it -- so without this the
@@ -2183,6 +2185,11 @@ impl Interp {
         let resume = flat.resume;
         let (do_index, end_index) = (flat.do_index, flat.end_index);
         let blame = flat.header_clause;
+        // The `END` is the clause a test that calls a routine runs in, as the
+        // frame readers see it.
+        if matches!(blame, HeaderClause::End) {
+            self.enter_clause_index(end_index);
+        }
         let site = &flat.iterate_site;
         let state = &mut flat.state;
         let counter = &mut flat.counter;
