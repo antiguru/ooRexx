@@ -26,7 +26,7 @@
   "expected": "",
   "cause": "BuiltinFunctions.cpp:1163 range check 'yearday < 0 || yearday > YEAR_DAYS + 1' lets 0 pass; RexxDateTime::setDay (RexxDateTime.cpp:457-475) computes month=0; 'M' reads monthNames[month-1] (RexxDateTime.cpp:526).",
   "source": "rust/corpus/oracle-crashes.txt entry 2; memory/oorexx-oracle-crashing-probes.md; memory/oorexx-filed-tickets-2026-08.md",
-  "status": "SF #2082 (filed 2026-08-22, open)",
+  "status": "FIXED upstream r13250 (SF #2082; now Error 40.19), per Josep (ooRexx maintainer) 2026-10-22, repros run on trunk r13285; was: SF #2082 (filed 2026-08-22, open)",
   "crate": "Not stated in the sources beyond the Rust port having wrapped a usize and aborted rc 101 before it was fixed."
  },
  {
@@ -41,7 +41,7 @@
   "expected": "range is a window; the oracle's own twin caselessPos gives 0 for 'axan'~caselessPos('an',1,3).",
   "cause": "StringUtil::pos (classes/support/StringUtil.cpp:206-253): rescan from haypointer+1 with the same length, so every rescan ends at endpointer+1.",
   "source": "rust/corpus/oracle-crashes.txt entry 3; docs/superpowers/plans/phase-4-exclusions.txt Deviation 3; memory/oorexx-pos-window-overrun.md; memory/oorexx-filed-tickets-2026-08.md",
-  "status": "SF #2083 (filed 2026-08-22, open) + deviation 3",
+  "status": "FIXED upstream r13268 (SF #2083), per Josep (ooRexx maintainer) 2026-10-22, repros run on trunk r13285; was: SF #2083 (filed 2026-08-22, open) + deviation 3",
   "crate": "Reproduces the in-string overrun (find_forward); declines the past-the-end NUL match and answers 0 (Deviation 3, licensed by Moritz 2026-08-14)."
  },
  {
@@ -86,7 +86,7 @@
   "expected": "",
   "cause": "ArrayClass::validateIndex (classes/ArrayClass.cpp:1219-1226) takes indirect->items() (non-empty count) with indirect->data() (raw slots); validateSingleDimensionIndex then calls index[0]->requiredPositive on OREF_NULL (:1264).",
   "source": "rust/corpus/oracle-crashes.txt entry 6; memory/oorexx-filed-tickets-2026-08.md",
-  "status": "SF #2085 (filed 2026-08-22, open)",
+  "status": "FIXED upstream r13264 (SF #2085; now Error 98.975), per Josep (ooRexx maintainer) 2026-10-22, repros run on trunk r13285; was: SF #2085 (filed 2026-08-22, open)",
   "crate": "Refuses with Loud::array_index_hole; no oracle behaviour to match."
  },
  {
@@ -356,7 +356,7 @@
   "expected": "",
   "cause": "Not established.",
   "source": "rust/corpus/oracle-crashes.txt entry 20",
-  "status": "crash entry 20 (no upstream ticket)",
+  "status": "FIXED upstream r13251 (SF #2093; now Error 11.1, trapped by SIGNAL ON SYNTAX), per Josep (ooRexx maintainer) 2026-10-22, repros run on trunk r13285; was: crash entry 20 (no upstream ticket)",
   "crate": "Prints 'start', 'caught 11 SYNTAX' and an empty line, rc 0."
  },
  {
@@ -626,7 +626,7 @@
   "expected": "A Rexx error condition (40.922/40.923/40.924) instead of a crash.",
   "cause": "Activity::cleanupStackFrame (Activity.cpp:1685) via popStackFrame (:1705) from NativeActivation::callNativeRoutine (:1453): popStackFrame pops until it finds target; target already gone, activations->pop() returns NULL, cleanupStackFrame(NULL) dereferences it. Chain RexxStemSort (InterpreterAPI.cpp:428) -> NativeActivation::stemSort (:3559) -> StemClass::sort (StemClass.cpp:1605). Two candidate fixes (NULL guard masks it; root fix is unwinding the frame before the pop).",
   "source": "rust/corpus/oracle-crashes.txt entry 37; memory/oorexx-sysstemsort-crash-2068.md; memory/oorexx-filed-tickets-2026-07.md",
-  "status": "SF #2068 (open upstream, commented with one-line repro and root cause)",
+  "status": "FIXED upstream r13284, test r13285 (SF #2068; re-reported as #2120), per Josep (ooRexx maintainer) 2026-10-22, repros run on trunk r13285; was: SF #2068 (open upstream, commented with one-line repro and root cause)",
   "crate": "Reports the STRING-method case at rc 163 with Compiled routine \"SYSSTEMSORT\" in the traceback; raises 40.919/40.921/40.922+ like the trapped oracle."
  },
  {
@@ -656,7 +656,7 @@
   "expected": "Move copies and unlinks, answering 0.",
   "cause": "temporaryFilename (platform/unix/SysFileSystem.cpp at oracle cb9563364) returns without setting errInfo on success, so moveFile answers stack garbage; also formats the spare name into a 7-byte snprintf bound.",
   "source": "rust/corpus/oracle-crashes.txt entry 39",
-  "status": "crash entry 39 (fourth mode: undefined answer); fixed in this checkout's interpreter/ (both noted)",
+  "status": "FIXED upstream r13260 (SF #2098), per Josep (ooRexx maintainer) 2026-10-22, repros run on trunk r13285; was: crash entry 39 (fourth mode: undefined answer); fixed in this checkout's interpreter/ (both noted)",
   "crate": "Copies and unlinks, answering 0."
  },
  {
@@ -896,7 +896,7 @@
   "expected": "",
   "cause": "CommandIOContext::resolveConflicts (CommandIOContext.cpp:131) wraps output, where error was meant, in a BufferingOutputTarget when the error target is also the input; with no output target it wraps NULL.",
   "source": "rust/corpus/oracle-crashes.txt entry 56",
-  "status": "crash entry 56 (no upstream ticket)",
+  "status": "FIXED upstream r13262 (SF #2087), per Josep (ooRexx maintainer) 2026-10-22, repros run on trunk r13285; was: crash entry 56 (no upstream ticket)",
   "crate": "Answers 'error only 1 [in]', rc 0."
  },
  {
@@ -1526,7 +1526,7 @@
   "expected": "0 1",
   "cause": "RexxInteger::notOp lacks a '!' (oorexx-devel 2026-10-17, Josep Maria).",
   "source": ".superpowers/sdd/queued/2026-10-17-oracle-not-op-forwarding-bug-2117.md",
-  "status": "SF #2117 (queued file ruled NOT A DIVERGENCE 2026-10-18)",
+  "status": "FIXED upstream r13272, tests r13273 (SF #2117), per Josep (ooRexx maintainer) 2026-10-22, repros run on trunk r13285; was: SF #2117 (queued file ruled NOT A DIVERGENCE 2026-10-18)",
   "crate": "Answers the right 0 1; not copied."
  },
  {
@@ -1556,7 +1556,7 @@
   "expected": "",
   "cause": "",
   "source": "memory/oorexx-filed-tickets-2026-07.md",
-  "status": "SF #2069 (filed 2026-07-25, verified fix, no regression)",
+  "status": "FIXED upstream r13179-r13195 (SF #2069), per Josep (ooRexx maintainer) 2026-10-22, repros run on trunk r13285; was: SF #2069 (filed 2026-07-25, verified fix, no regression)",
   "crate": ""
  },
  {
@@ -1571,7 +1571,7 @@
   "expected": "",
   "cause": "",
   "source": "memory/oorexx-filed-tickets-2026-07.md",
-  "status": "SF #2070 (filed 2026-07-25, verified fix, symbol gone from both)",
+  "status": "FIXED upstream r13179-r13195 (SF #2070), per Josep (ooRexx maintainer) 2026-10-22, repros run on trunk r13285; was: SF #2070 (filed 2026-07-25, verified fix, symbol gone from both)",
   "crate": ""
  },
  {
@@ -1586,7 +1586,7 @@
   "expected": "",
   "cause": "",
   "source": "memory/oorexx-filed-tickets-2026-07.md",
-  "status": "SF #2071 (filed 2026-07-25; defect real, mechanism corrected)",
+  "status": "FIXED upstream r13179-r13195 (SF #2071), per Josep (ooRexx maintainer) 2026-10-22, repros run on trunk r13285; was: SF #2071 (filed 2026-07-25; defect real, mechanism corrected)",
   "crate": ""
  },
  {
@@ -1601,7 +1601,7 @@
   "expected": "",
   "cause": "",
   "source": "memory/oorexx-filed-tickets-2026-07.md",
-  "status": "SF #2072 (filed 2026-07-25)",
+  "status": "FIXED upstream r13179-r13195 (SF #2072), per Josep (ooRexx maintainer) 2026-10-22, repros run on trunk r13285; was: SF #2072 (filed 2026-07-25)",
   "crate": ""
  },
  {
@@ -1631,7 +1631,7 @@
   "expected": "",
   "cause": "",
   "source": "memory/oorexx-filed-tickets-2026-07.md",
-  "status": "SF #2074 (filed 2026-07-25)",
+  "status": "FIXED upstream r13179-r13195 (SF #2074), per Josep (ooRexx maintainer) 2026-10-22, repros run on trunk r13285; was: SF #2074 (filed 2026-07-25)",
   "crate": ""
  },
  {
@@ -1661,7 +1661,7 @@
   "expected": "",
   "cause": "",
   "source": "memory/oorexx-filed-tickets-2026-07.md",
-  "status": "SF #2077 (filed 2026-07-25; verified one-line fix)",
+  "status": "FIXED upstream r13179-r13195 (SF #2077), per Josep (ooRexx maintainer) 2026-10-22, repros run on trunk r13285; was: SF #2077 (filed 2026-07-25; verified one-line fix)",
   "crate": ""
  },
  {
@@ -1676,7 +1676,7 @@
   "expected": "",
   "cause": "SysMutex Interpreter::resourceLock is a namespace-scope static in Interpreter.cpp whose dynamic initialiser runs after _rexx_init (platform/unix/SystemInitialization.cpp); Interpreter::startInterpreter's ResourceSection does nothing so the !isActive() bootstrap test is unsynchronised. Fix on branch concurrency-dispatch-fixes: function-local static.",
   "source": "memory/oorexx-resource-lock-dead.md; memory/oorexx-concurrent-bootstrap-crash.md; memory/oorexx-activity-dispatch-crash.md; memory/oorexx-filed-tickets-2026-07.md",
-  "status": "SF #2078 (filed 2026-07-26; most serious finding); SF #2020 commented 2026-07-26 with the A/B; fixed on a local branch, not upstream",
+  "status": "FIXED upstream r13179-r13195 (SF #2078), per Josep (ooRexx maintainer) 2026-10-22, repros run on trunk r13285; was: SF #2078 (filed 2026-07-26; most serious finding); SF #2020 commented 2026-07-26 with the A/B; fixed on a local branch, not upstream",
   "crate": ""
  },
  {
@@ -1706,7 +1706,7 @@
   "expected": "",
   "cause": "RexxActivation.hpp:652, Activity.hpp:384-385; ActivityManager::yieldCurrentActivity, Activity::yield, RexxActivation::yield.",
   "source": "memory/oorexx-remaining-tsan-races.md",
-  "status": "fixed on local branch concurrency-dispatch-fixes (atomic yieldRequested flag, 2026-07-26); not filed",
+  "status": "FIXED upstream r13188, per Josep (ooRexx maintainer) 2026-10-22, repros run on trunk r13285; was: fixed on local branch concurrency-dispatch-fixes (atomic yieldRequested flag, 2026-07-26); not filed",
   "crate": ""
  },
  {
