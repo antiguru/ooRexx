@@ -2,7 +2,8 @@
    object's RESULT, and RAISE PROPAGATE RETURN or EXIT expr replaces it. A
    RETURN tail offers the condition to the raising level's sender, which for
    an INTERPRET fragment is the activation running it. After a REPLY a raise
-   that returns a value is 98.936. */
+   that returns a value is 98.936. The RESULT of a raise of another condition
+   that was not propagated is left out: the oracle drops it. */
 signal on syntax name s1
 raise syntax 40.12 additional (1, 'x', '3B') exit ('abc')
 s1: call show 's1', condition('C'), condition('O')
@@ -52,6 +53,7 @@ main_handler: call show 'main_handler', condition('C'), condition('O'); return
 use arg tag, name, o
 if o~hasIndex('RESULT') then value = o~result
 else value = '(none)'
+if name \== 'SYNTAX', \o~propagated then value = '(not compared)'
 say tag name 'result='value 'propagated='o~propagated
 
 ::routine syntax_propagated
