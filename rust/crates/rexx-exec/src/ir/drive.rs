@@ -2019,8 +2019,7 @@ impl Interp {
             _ => Err(Failure::from(Loud::call_op_off_its_node())),
         };
         let mut spelling: &[u8] = b"";
-        let generation = self.routine_generation;
-        let (resolved, keep) = match chunk.resolved_call(site, generation) {
+        let (resolved, keep) = match chunk.resolved_call(site, self.routine_generation) {
             Some(resolved) => {
                 #[cfg(test)]
                 count_call_site_hit();
@@ -2033,24 +2032,49 @@ impl Interp {
                 let (name, search_labels) = target()?;
                 spelling = name;
                 let resolved = self.resolve_call(name, search_labels)?;
+                let generation = self.routine_generation;
                 (
                     resolved,
                     self.missed_site(chunk, site, resolved, generation),
                 )
             }
         };
+        if let Some(keep) = keep {
+            return self.begin_kept_call_args(chunk, site, resolved, spelling, mark, keep);
+        }
+        let probe = 0u8;
+        self.enter_eval_node(&raw const probe)?;
+        let started = self.begin_call_over_pushed_args(resolved, spelling, mark);
+        if !matches!(started, Ok(Started::Entered)) {
+            self.activity.depth -= 1;
+        }
+        started
+    }
+
+    /// [`Interp::begin_call_args`] past a resolution its site is to keep
+    /// once the call returns.
+    #[cold]
+    #[inline(never)]
+    fn begin_kept_call_args(
+        &mut self,
+        chunk: &Chunk,
+        site: u16,
+        resolved: Resolved,
+        spelling: &[u8],
+        mark: usize,
+        keep: SiteKeep,
+    ) -> Result<Started<ObjRef>, Failure> {
         let probe = 0u8;
         if let Err(failure) = self.enter_eval_node(&raw const probe) {
-            if let Some(keep) = keep {
-                self.end_site_keep(chunk, keep, false);
-            }
+            self.end_site_keep(chunk, keep, false);
             return Err(failure);
         }
-        let started = self.begin_call_over_pushed_args(
+        let started = self.begin_kept_call_over_pushed_args(
             resolved,
             spelling,
             mark,
-            keep.map(|keep| (chunk.call_site_slot(site), keep)),
+            chunk.call_site_slot(site),
+            keep,
         );
         if !matches!(started, Ok(Started::Entered)) {
             self.activity.depth -= 1;

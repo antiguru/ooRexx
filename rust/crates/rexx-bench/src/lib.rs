@@ -82,6 +82,9 @@ pub static PROGRAMS: &[&str] = &[
     // INTERPRET of a fragment holding a long literal, which compiles a chunk
     // per pass.
     "interpret",
+    // `Class~define` with instances live under each definition, which
+    // retires behaviours a collection then frees.
+    "define",
 ];
 
 /// Programs in `bench-programs/` that the criterion harness deliberately does

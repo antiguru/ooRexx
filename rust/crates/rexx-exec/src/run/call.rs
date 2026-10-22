@@ -636,18 +636,14 @@ impl Interp {
     /// to the point its callee's body would run. The run above `mark` is
     /// removed; an entered callee keeps the stack until
     /// [`Interp::finish_function`] hands it back.
-    ///
-    /// `keep` is what the call's site keeps once the call returns.
     pub(crate) fn begin_call_over_pushed_args(
         &mut self,
         resolved: Resolved,
         name: &[u8],
         mark: usize,
-        keep: Option<(crate::ir::CallSiteSlot<'_>, SiteKeep)>,
     ) -> Result<Started<ObjRef>, Failure> {
         // The builtin path, which runs no activation -- the same shortcut
-        // `begin_eval_call` takes and for the same measured reason. A builtin
-        // is kept where it resolves, so it has no `keep`.
+        // `begin_eval_call` takes and for the same measured reason.
         if let Resolved::Builtin(target) = resolved {
             return self
                 .run_over_pushed_args(mark, |interp, values| {
@@ -656,7 +652,25 @@ impl Interp {
                 .map(Started::Ran);
         }
         let mut values = std::mem::take(&mut self.activity.value_buffer);
-        let started = self.begin_call_over_values(resolved, name, &mut values, mark, keep);
+        let started = self.begin_call_over_values(resolved, name, &mut values, mark, None);
+        values.truncate(mark);
+        self.lend_stack(self.entered_body(&started), values);
+        started
+    }
+
+    /// [`Interp::begin_call_over_pushed_args`] for a call whose site `slot`
+    /// keeps `keep` once the call returns, which no builtin is.
+    pub(crate) fn begin_kept_call_over_pushed_args(
+        &mut self,
+        resolved: Resolved,
+        name: &[u8],
+        mark: usize,
+        slot: crate::ir::CallSiteSlot<'_>,
+        keep: SiteKeep,
+    ) -> Result<Started<ObjRef>, Failure> {
+        let mut values = std::mem::take(&mut self.activity.value_buffer);
+        let started =
+            self.begin_call_over_values(resolved, name, &mut values, mark, Some((slot, keep)));
         values.truncate(mark);
         self.lend_stack(self.entered_body(&started), values);
         started
