@@ -1,3 +1,5 @@
+**CLOSED 2026-10-22 by Phase 9d Task 8.3 (68e7f15d5).**
+
 **OPEN, queued 2026-10-21 by the controller; proposed 9d.**
 
 # Frames of `.Routine~new(...)~call` name the wrong executable

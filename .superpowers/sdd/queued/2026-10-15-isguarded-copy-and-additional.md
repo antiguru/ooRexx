@@ -1,3 +1,5 @@
+**CLOSED 2026-10-22 by Phase 9d Task 8.3 (68e7f15d5).**
+
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** the review's probes still differ: isGuarded 1 against 0, additional[1] a against the whole string.
 
 # Two divergences found by 9b1 Task 8 review (pre-existing)

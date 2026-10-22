@@ -1,0 +1,3 @@
+     6 *-* say c~additional~class c~additional~items '['c~additional[1]']' c~message
+Error 97 running DIR/raise_syntax_string_additional.rex line 6:  Object method not found.
+Error 97.1:  Object "abc" does not understand message "ITEMS".

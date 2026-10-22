@@ -1,0 +1,8 @@
+newfile DIR/named.rex | DIR/named.rex | named.rxo
+new DIR/named.rex | DIR/named.rex | rn
+call named.rxo | named.rxo | DIR/named.rxo
+in fail
+     2 *-* Routine DIR/fail.rex in package "fail.rxo" (no source available).
+       *-* Compiled method "CALL" with scope "Routine".
+     6 *-* .Routine~newFile('fail.rxo')~call
+rc=0

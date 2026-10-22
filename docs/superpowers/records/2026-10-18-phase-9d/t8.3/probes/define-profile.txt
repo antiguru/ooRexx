@@ -1,0 +1,7 @@
+# callgrind --inclusive, bench-programs/define.rex, head 8d409845b's binary (cg-9d/t8.3/rexx-head2), cg-9d/t8.3/define.head.cg
+1,694,243,501 PROGRAM TOTALS
+441,200,620 (26.04%) Interp::collect_now
+146,208,218 (8.63%) ClassGraph::rebuild_behaviour
+132,277,950 (7.81%) ClassGraph::define
+125,084,957 (7.38%) Interp::free_unheld_behaviours (6 calls)
+# with the named-method HashSet replaced by a sorted candidate list (not kept): 124,239,190 (7.33%), cg-9d/t8.3/define.head3.cg

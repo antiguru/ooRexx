@@ -1,0 +1,10 @@
+ROUTINE Y 1 0
+PROGRAM DIR/routine_copy_internal_executable.rex 0 0
+2 ROUTINE Filespec 1 0
+2 METHOD CALL 0 0
+2 PROGRAM DIR/routine_copy_internal_executable.rex 0 0
+3 ROUTINE Filespec 0 1
+3 METHOD CALL 0 0
+3 PROGRAM DIR/routine_copy_internal_executable.rex 0 0
+4 ROUTINE Y 1 0
+4 PROGRAM DIR/routine_copy_internal_executable.rex 0 0

@@ -1,0 +1,44 @@
+ROUTINE | MyName | 1 | 0 | 0 | 2 |      1 *-* do f over .context~stackframes | 0
+METHOD | CALL | The NIL object | 1 | 1 | 2 |        *-* Compiled method "CALL" with scope "Routine". | 1
+PROGRAM | DIR/routine_call_frame_names.rex | 11 | 0 | 0 | 0 |     11 *-* say r~call(1, 2) | 0
+MyName
+ROUTINE | MyName | 1 | 0 | 0 | 1 |      1 *-* do f over .context~stackframes | 0
+METHOD | CALLWITH | The NIL object | 1 | 0 | 1 |        *-* Compiled method "CALLWITH" with scope "Routine". | 1
+PROGRAM | DIR/routine_call_frame_names.rex | 12 | 0 | 0 | 0 |     12 *-* say r~callWith(.array~of(3)) | 0
+MyName
+ROUTINE | MyName | 1 | 0 | 0 | 1 |      1 *-* do f over .context~stackframes | 0
+METHOD | [] | The NIL object | 1 | 0 | 1 |        *-* Compiled method "[]" with scope "Routine". | 1
+PROGRAM | DIR/routine_call_frame_names.rex | 13 | 0 | 0 | 0 |     13 *-* say r~copy[4] | 0
+MyName
+ |  | 
+sub/sf.rex | sub/sf.rex | sub/sf.rex
+./sub/sf.rex | ./sub/sf.rex | ./sub/sf.rex
+FOO | FOO
+FOO | FOO
+bar | bar
+PR
+main ROUTINE DIR/routine_call_frame_names.rex
+main METHOD CALL
+main PROGRAM DIR/routine_call_frame_names.rex
+DIR/routine_call_frame_names.rex
+cmp METHOD COMPARE
+cmp METHOD SORTWITH
+cmp ROUTINE srt
+cmp METHOD CALL
+cmp PROGRAM DIR/routine_call_frame_names.rex
+1,2,3
+init METHOD INIT
+init METHOD NEW
+init PROGRAM DIR/routine_call_frame_names.rex
+m METHOD M
+m METHOD SEND
+m PROGRAM DIR/routine_call_frame_names.rex
+m METHOD M
+m METHOD SENDWITH
+m PROGRAM DIR/routine_call_frame_names.rex
+m METHOD M
+m METHOD SEND
+m PROGRAM DIR/routine_call_frame_names.rex
+C ROUTINE | BAD |     43 *-* say 1/0
+C METHOD | CALLWITH |        *-* Compiled method "CALLWITH" with scope "Routine".
+C PROGRAM | DIR/routine_call_frame_names.rex |     30 *-* .routines~bad~callWith(.array~of(9))

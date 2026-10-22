@@ -1,0 +1,6 @@
+       *-* Compiled routine "TestRaiseException0".
+       *-* Compiled method "CALL" with scope "Routine".
+     3 *-* r~call('x')
+ROUTINE TestRaiseException0
+METHOD CALL
+PROGRAM DIR/l.rex

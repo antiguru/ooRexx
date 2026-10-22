@@ -1,0 +1,13 @@
+# each witness from a fresh copy of its corpus file and fixtures, LD_LIBRARY_PATH=oracle lib on all sides
+# base = 80f0fab1c (scratch worktree build), head = 8d409845b
+witness	base vs oracle	head vs oracle
+call_site_reentry_reads_after_arguments	differs (DIFF out )	identical
+call_site_reentry_raise_keeps	differs (DIFF out )	identical
+call_site_routine_raise_forgets	differs (DIFF out )	identical
+routine_call_frame_names	differs (DIFF out )	identical
+routine_copy_internal_executable	differs (DIFF out )	identical
+main_executable_annotations	differs (DIFF out DIFF err DIFF rc )	identical
+context_name_install	differs (DIFF out )	identical
+instance_method_after_define	differs (DIFF out )	identical
+enhanced_unguarded_copy_executable	differs (DIFF out )	identical
+raise_syntax_string_additional	differs (DIFF out DIFF err DIFF rc )	identical

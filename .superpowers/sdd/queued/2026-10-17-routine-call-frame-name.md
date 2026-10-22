@@ -1,3 +1,5 @@
+**CLOSED 2026-10-22 by Phase 9d Task 8.3 (68e7f15d5).**
+
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: ROUTINE MYNAME on the oracle, ROUTINE CALL here.
 
 # Divergence: an activation entered through `Routine~call` is named `CALL`

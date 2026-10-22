@@ -33,7 +33,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-01-message-notify-single-slot.md	divergence	queued-probes/re2a/re2a.rex:1,queued-probes/re2b/re2b.rex:1	closed:probe agrees	RESOLVED by Phase 6 S2-S5 Task 7 fix round 1; re2a 1 0 0 and re2b 0 1 0 1 0 on both	closed:probe agrees
 2026-10-01-message-start-result-traceback.md	divergence	queued-probes/msr/msr.rex:1	closed:137cba4af	traceback and report now agree; the report still names line 3 on the oracle and line 9 here	closed:137cba4af
 2026-10-01-reply-continuation-state-visibility.md	divergence	queued-probes/replyvis/replyvis.rex:1	closed:probe agrees	own probe from the text: the later guarded send reads the continuation's write on both	closed:probe agrees
-2026-10-01-routine-call-context-name.md	divergence	queued-probes/rcn/rcn.rex:1	9d	probe still differs: .context~name is RR on the oracle and CALL here; same fix as routine-call-frame-name	9d
+2026-10-01-routine-call-context-name.md	divergence	queued-probes/rcn/rcn.rex:1	closed:68e7f15d5	probe still differs: .context~name is RR on the oracle and CALL here; same fix as routine-call-frame-name	closed:68e7f15d5
 2026-10-01-setmethod-run-fall-to-unknown.md	divergence	queued-probes/smrun/smrun.rex:1	closed:probe agrees	own probe: setMethod and run answer "m ran" and "run ran" on both	closed:probe agrees
 2026-10-01-syntax-unwind-superlinear.md	perf	queued-probes/unwind/unwind.rex:1	closed:e8a19b2e6	RESOLVED in its first line; depth 2000 agrees (h 44.1), test appends_and_reads_copy_slots_linearly	closed:e8a19b2e6
 2026-10-01-time-elapsed-loop-hang.md	divergence	queued-probes/elapsed/elapsed.rex:1	closed:e25925ad8	RESOLVED in its first line; both loops end on both sides	closed:e25925ad8
@@ -134,7 +134,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-14-routine-start-call-panic.md	divergence	queued-probes/rstart/rstart.rex:1	closed:fb86ce94f	own probe: a panic "a live activation", rc 101, where the oracle prints 1; its file marks it PRIORITY	closed:fb86ce94f
 2026-10-15-9b1-task-8b-review-minors.md	divergence	queued-probes/m1var/m1var.rex:1,queued-probes/m4def/m4def.rex:1	9d	own probes: m1 lists Z here and A on the oracle, m4 answers the new source here and the old one on the oracle	9d
 2026-10-15-executable-flags-and-result.md	divergence	-	9d	no probe recorded; the oracle is still to be measured	9d
-2026-10-15-isguarded-copy-and-additional.md	divergence	queued-probes/isg/isg.rex:1,queued-probes/addl/addl.rex:1	9d	the review's probes still differ: isGuarded 1 against 0, additional[1] a against the whole string	9d
+2026-10-15-isguarded-copy-and-additional.md	divergence	queued-probes/isg/isg.rex:1,queued-probes/addl/addl.rex:1	closed:68e7f15d5	the review's probes still differ: isGuarded 1 against 0, additional[1] a against the whole string	closed:68e7f15d5
 2026-10-15-routines-table-silent-none.md	process	-	9d	no probe; environment.rs build_package_string_table and identities.rs find_written_routine still answer Ok(None)	9d
 2026-10-16-bignum-remainder-speed.md	perf	queued-probes/bignum/bignum.rex:1	phase:9.1	probe: output 78 on both, 2000 iterations under 1 s on the oracle and over it here	phase:9.1
 2026-10-16-stream-command-open-missing-file.md	divergence	queued-probes/scopen/scopen.rex:1	9d-cluster:stream-notready-names	probe still differs (91.999 against ERROR:2); the cluster holds the same no-result open command	9d-cluster:stream-notready-names
@@ -142,7 +142,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-17-newmethod-parent-package.md	divergence	-	9d	no witness exists, the difference is read from the code; METHOD is a Phase 9 native-API group	9d
 2026-10-17-oracle-not-op-forwarding-bug-2117.md	oracle bug	queued-probes/notop/notop.rex:1	not-a-divergence	upstream report SF #2117; probe: the oracle answers 1 0 and the crate the right 0 1	not-a-divergence
 2026-10-17-phase-10-corpus-and-rxfunc.md	design	-	phase:10	ruled by Moritz 2026-10-17 (9d plan ruling 3)	phase:10
-2026-10-17-routine-call-frame-name.md	divergence	queued-probes/rcfn/rcfn.rex:1	9d	probe still differs: ROUTINE MYNAME on the oracle, ROUTINE CALL here	9d
+2026-10-17-routine-call-frame-name.md	divergence	queued-probes/rcfn/rcfn.rex:1	closed:68e7f15d5	probe still differs: ROUTINE MYNAME on the oracle, ROUTINE CALL here	closed:68e7f15d5
 2026-10-17-scanner-reports-later-clause-error.md	divergence	queued-probes/scanlater/scanlater.rex:1	9d	probe still differs: 35.1 on line 2 on the oracle, 13.1 on line 3 here	9d
 2026-10-18-upstream-bag-hasitem.md	oracle bug	queued-probes/baghas/baghas.rex:1	not-a-divergence	upstream report; Deviation 45 is the crate's rule	not-a-divergence
 bounds-check-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-21-bounds-check-report.md; item 7 landed (performance-todo.md:1012)	closed:dispatched
@@ -195,7 +195,7 @@ gate:phase-9c-gate.md:139	divergence	queued-probes/scopen/scopen.rex:1	9d-cluste
 gate:phase-9c-gate.md:140	perf	queued-probes/bignum/bignum.rex:1	phase:9.1	a pointer to 2026-10-16-bignum-remainder-speed.md	phase:9.1
 gate:phase-9c-gate.md:141	oracle bug	queued-probes/notop/notop.rex:1	not-a-divergence	a pointer to 2026-10-17-oracle-not-op-forwarding-bug-2117.md	not-a-divergence
 gate:phase-9c-gate.md:142	divergence	queued-probes/libbind/libbind.rex:1	9d	a pointer to 2026-10-17-library-bind-before-options.md	9d
-gate:phase-9c-gate.md:143	divergence	queued-probes/rcfn/rcfn.rex:1	9d	a pointer to 2026-10-17-routine-call-frame-name.md	9d
+gate:phase-9c-gate.md:143	divergence	queued-probes/rcfn/rcfn.rex:1	closed:68e7f15d5	a pointer to 2026-10-17-routine-call-frame-name.md	closed:68e7f15d5
 gate:phase-9c-gate.md:144	divergence	-	9d	a pointer to 2026-10-17-newmethod-parent-package.md	9d
 gate:phase-9c-gate.md:145	divergence	queued-probes/scanlater/scanlater.rex:1	9d	a pointer to 2026-10-17-scanner-reports-later-clause-error.md	9d
 gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointer to 2026-10-13-lossy-path-sites.md	9d
@@ -209,7 +209,7 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointe
 2026-10-19-condition-deviation-candidates.md	divergence	-	closed:9f8be0ec2	derive the semantics; follow the model; Deviation where the oracle departs	closed:9f8be0ec2
 2026-10-18-duplicate-member-checked-at-install.md	divergence	-	9d	gap	9d
 2026-10-18-install-error-names-caller-file.md	divergence	-	9d	gap	9d
-2026-10-19-context-name-during-install.md	divergence	-	9d	gap	9d
+2026-10-19-context-name-during-install.md	divergence	-	closed:68e7f15d5	gap	closed:68e7f15d5
 2026-10-18-options-trace-constant-expression.md	divergence	-	9d	gap	9d
 2026-10-19-index-argument-string-conversion.md	divergence	-	9d	gap	9d
 2026-10-19-variable-reference-gaps.md	divergence	-	9d	gap	9d
@@ -227,12 +227,12 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointe
 2026-10-21-stdin-linein-then-charin.md	divergence	-	closed:3cd8cff5c	its own CLOSED line; Task 6.15 fix round 4 gives a file standard input one read position, and a start on a piped one is 93.958 on both sides	closed:3cd8cff5c
 2026-10-21-redirected-target-timed-line-flake.md	process	-	9d	flaky timed line in a gated corpus program	9d
 2026-10-21-quick-native-calls-wall-bound-flake.md	process	-	9d	lib test bounded by 1 ms wall time flakes under load	9d
-2026-10-21-routine-new-call-frames.md	divergence	-	9d	frames of .Routine~new(...)~call name the wrong executable	9d
-2026-10-21-main-program-executable-annotations.md	divergence	-	9d	.context~executable~annotations refuses from the main program	9d
+2026-10-21-routine-new-call-frames.md	divergence	-	closed:68e7f15d5	frames of .Routine~new(...)~call name the wrong executable	closed:68e7f15d5
+2026-10-21-main-program-executable-annotations.md	divergence	-	closed:68e7f15d5	.context~executable~annotations refuses from the main program	closed:68e7f15d5
 2026-10-21-lineout-nil-names-file.md	divergence	-	closed:12ef5a35c	.stdout~lineout(.nil) renders with the running file	closed:12ef5a35c
-2026-10-21-copied-package-routine-executable.md	divergence	-	9d	a copied REXX-package routine frame answers the canonical Routine	9d
-2026-10-21-raise-in-routine-keeps-call-site.md	divergence	-	9d	a raise inside a ::routine leaves its call site resolution kept	9d
-2026-10-21-call-site-reads-kept-before-arguments.md	divergence	-	9d	CallExpr and Call read the kept routine before the arguments	9d
+2026-10-21-copied-package-routine-executable.md	divergence	-	closed:68e7f15d5	a copied REXX-package routine frame answers the canonical Routine	closed:68e7f15d5
+2026-10-21-raise-in-routine-keeps-call-site.md	divergence	-	closed:68e7f15d5	a raise inside a ::routine leaves its call site resolution kept	closed:68e7f15d5
+2026-10-21-call-site-reads-kept-before-arguments.md	divergence	-	closed:68e7f15d5	CallExpr and Call read the kept routine before the arguments	closed:68e7f15d5
 2026-10-22-interpret-clause-traceback-indent.md	divergence	-	9d	traceback indents the INTERPRET clause by the fragment nesting	9d
 2026-10-22-directory-subclass-unknown-frame.md	divergence	-	9d	stackframes lacks a Directory subclass METHOD UNKNOWN frame	9d
 2026-10-22-lineout-four-args-error.md	divergence	-	9d	lineout with four args raises 88.922 where the oracle raises 88.907	9d

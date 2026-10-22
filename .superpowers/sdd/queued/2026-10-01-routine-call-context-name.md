@@ -1,3 +1,5 @@
+**CLOSED 2026-10-22 by Phase 9d Task 8.3 (68e7f15d5).**
+
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: .context~name is RR on the oracle and CALL here; same fix as routine-call-frame-name.
 
 # 2026-10-01-routine-call-context-name

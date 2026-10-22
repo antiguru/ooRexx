@@ -1,0 +1,16 @@
+# Collections under collect-on-every-allocation (a scratch runner calling
+# run_program_collect_every_alloc), base 80f0fab1c and head 68e7f15d5, for the
+# programs collect_stress's NO_ALLOCATION_PROGRAMS listed that now collect.
+call_trace_nested base:1749 head:1753
+do_ctrl_class base:37 head:37
+do_to_class base:37 head:37
+message_assignment_form base:37 head:37
+message_send_scope_override base:37 head:37
+message_send_unknown_method base:37 head:37
+message_send_unknown_method_on_a_number base:37 head:37
+message_send_unknown_method_on_nil base:37 head:37
+mutation_controlled_order base:176 head:180
+trace_numeric_request base:37 head:37
+trace_output base:560 head:564
+trace_results base:248 head:252
+options base:0 head:0 (control)

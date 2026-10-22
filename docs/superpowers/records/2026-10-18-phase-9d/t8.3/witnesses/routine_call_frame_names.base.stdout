@@ -1,0 +1,35 @@
+ROUTINE | CALL | 1 | 0 | 0 | 2 |      1 *-* do f over .context~stackframes | 0
+PROGRAM | DIR/routine_call_frame_names.rex | 11 | 0 | 0 | 0 |     11 *-* say r~call(1, 2) | 0
+CALL
+ROUTINE | CALL | 1 | 0 | 0 | 1 |      1 *-* do f over .context~stackframes | 0
+PROGRAM | DIR/routine_call_frame_names.rex | 12 | 0 | 0 | 0 |     12 *-* say r~callWith(.array~of(3)) | 0
+CALL
+ROUTINE | CALL | 1 | 0 | 0 | 1 |      1 *-* do f over .context~stackframes | 0
+PROGRAM | DIR/routine_call_frame_names.rex | 13 | 0 | 0 | 0 |     13 *-* say r~copy[4] | 0
+CALL
+CALL | CALL | 
+CALL | CALL | sub/sf.rex
+CALL | CALL | ./sub/sf.rex
+CALL | CALL
+CALL | CALL
+CALL | CALL
+CALL
+main ROUTINE CALL
+main PROGRAM DIR/routine_call_frame_names.rex
+CALL
+cmp METHOD COMPARE
+cmp METHOD SORTWITH
+cmp ROUTINE CALL
+cmp PROGRAM DIR/routine_call_frame_names.rex
+1,2,3
+init METHOD INIT
+init PROGRAM DIR/routine_call_frame_names.rex
+m METHOD M
+m PROGRAM DIR/routine_call_frame_names.rex
+m METHOD M
+m PROGRAM DIR/routine_call_frame_names.rex
+m METHOD M
+m PROGRAM DIR/routine_call_frame_names.rex
+C ROUTINE | CALL |     43 *-* say 1/0
+C METHOD | CALLWITH |        *-* Compiled method "CALLWITH" with scope "Routine".
+C PROGRAM | DIR/routine_call_frame_names.rex |     30 *-* .routines~bad~callWith(.array~of(9))
