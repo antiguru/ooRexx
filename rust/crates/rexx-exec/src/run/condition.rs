@@ -1105,6 +1105,10 @@ impl Interp {
                     position: u32::try_from(self.activity.clause_state.line()).unwrap_or(0),
                     ..Raised::condition(Cow::Owned(String::from_utf8_lossy(&name).into_owned()))
                 };
+                // rexxref (`condtra.xml`, RESULT): the `RETURN` or `EXIT`
+                // value, which the oracle drops (`RexxActivation::raise` passes
+                // its `result` member, `RexxActivation.cpp:1827`).
+                self.activity.pending_result = result;
                 let object = self.build_condition_object(&queued, Some(true))?;
                 self.activity.pending_traps.push_back(PendingTrap {
                     condition: name,
@@ -1153,6 +1157,7 @@ impl Interp {
                 // arm built the condition without it.
                 raised.additional = additional;
                 raised.delivery.search = sender.search();
+                self.activity.pending_result = result;
                 Err(raised.into())
             }
             // Nothing traps it. `HALT` and `NOMETHOD` report; everything else
