@@ -31,11 +31,13 @@ collect_stress passes (`checks-touched.txt`, 72 passed).
 2026-10-01-routine-call-context-name.md.** `Routine~call`, `~callWith` and `~[]` run under the
 routine's own name (`executableName`, `RoutineClass.cpp:205-211`): a directive's name as the AST
 holds it, the name `.Routine~new`/`newFile` was given, or for the main program's executable its path.
-A sent primitive method that entered a Rexx body is now listed by `.context~stackFrames` and in a
-condition's frames behind the activation it entered (`LiveLevel::Entering`, from the native tail,
-which now records the activation it entered). This is general, not `CALL` alone: the oracle lists
-`METHOD NEW` under `INIT`, `METHOD SEND`/`SENDWITH` under a sent method, and `METHOD SORTWITH` and
-`METHOD CALL` under a comparator in a routine; all are witnessed. The main program's executable run by
+A sent primitive method entered through a `NativeTail` begin half (`NEW`, `SEND` and `SENDWITH` of
+`Object` and `Message`, and `Routine`'s `CALL`, `CALLWITH` and `[]`) is now listed by
+`.context~stackFrames` behind the activation it entered (`LiveLevel::Entering`, from the native tail,
+which now records the activation it entered); witnessed for `NEW`, `SEND`, `SENDWITH`, `CALL`,
+`CALLWITH` and `[]`. Condition frames already listed these at base. Primitives that run a Rexx body
+nested rather than through a begin half (`RUN`, `SORT`, `HASITEM`, `REQUEST`, `PUT`) are still
+missing from the live list, as at base. The main program's executable run by
 `~call` runs synchronously, so a `MethodLevel` stands for its `CALL` frame there. The restored
 routine: the image format is version 2 and carries the routine's name after the header (4-byte length
 and bytes); `rexxc` writes the path it translated, and a routine installed from a restored source
@@ -112,22 +114,13 @@ All from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t83-
 
 ## Perf
 
-`callgrind-2.txt`: `bench-programs/callgrind.sh -B 0.5 -j 4 -o .../cg-9d/t8.3-run3 -p "startup
-interpret parse churn sayloop" pin=.../rexx-run parent=.../cg-9d/t8.2/rexx-r1
-head=.../cg-9d/t8.3/rexx-head2`, exit 0. Own delta (head minus parent, against the pin):
-
-| program | whole process | libc subtracted |
-|---|---|---|
-| startup | -0.0046 | +0.0008 |
-| interpret | -0.1878 | +0.0213 |
-| parse | +0.0368 | +0.0386 |
-| churn | +0.0104 | +0.0265 |
-| sayloop | -0.0014 | +0.0004 |
-
-Against the pin every program stays under +0.5% (largest churn +0.1654%). The first run
-(`callgrind.txt`, at `68e7f15d5`) had parse at +0.1095% whole process: `begin_call_args` +1.8M self
-instructions, three per builtin call, from passing the keep down the builtin path. `8d409845b` moves a
-kept call to a cold path of its own.
+Replaced in fix round 1. `r1/callgrind-final.txt`: `bench-programs/callgrind.sh -B 0.5 -j 4 -o
+.../cg-9d/t8.3-r1-final base=.../cg-9d/t8.3-r1/rexx-base head=.../cg-9d/t8.3-r1/rexx-head-3d9cc2da0`,
+every program in the script's `PROGRAMS` (`define` included), BASE `efe8d3f40` against HEAD
+`3d9cc2da0`, 3 rounds. Exit 1, from `SPREAD` alone: pingguard (head 0.0145%) and pingsem (base 0.0157%,
+head 0.0159%), schedule-dependent on both sides. Head against base, libc subtracted, the largest rise
+is dirread +0.0455%; every other program is at most +0.0013% or falls. Whole process, pkglocal is
++0.4170% and compound +0.0592% with libc subtracted 0.0000% for both. The full table is in the record.
 
 ## Concerns
 
@@ -156,3 +149,33 @@ kept call to a cold path of its own.
 ## New oracle defects
 
 None found.
+
+## Fix round 1
+
+Brief `task-8.3-fix-r1.md`, review `task-8.3-review.md`. Code `262b6c72c`, `3d9cc2da0`; records
+`t8.3/r1/`.
+
+* **I1.** `define` is in `callgrind.sh`'s `PROGRAMS` (`262b6c72c`). Run end to end against BASE
+  `efe8d3f40` (`r1/callgrind.txt`), the script showed what the five-program check had not covered:
+  libc subtracted, intcall +2.83%, extcall +1.60%, fibfunc +1.45%, sendloop +0.98%, fibcall +0.69%,
+  dispatchclass +0.70%, dispatch +0.65%. Causes, from `cgdiff.py`: the unkept function call went
+  through one more non-inlined layer (`begin_call_over_values` taking an `Option` keep, then
+  `function_started` and `function_value` outlined), `begin_subroutine_over_pushed_args` stopped
+  being inlined into `begin_call_named`, and `ParkedCall` grew by the keep, which every parked send
+  and call copied. `3d9cc2da0` puts the unkept path back to its base shape (the kept forms are cold
+  functions of their own; `begin_call_over_values`, `begin_subroutine_over_pushed_args`,
+  `function_started`, `function_value` and `run_internal_as` are `#[inline(always)]`) and moves a
+  parked call's keep to `Activity::parked_keeps`, filed under its parked call's index and checked
+  only where a call op resumes. The Perf section above is that run.
+* **M1.** The frame claim now names the primitives entered through a `NativeTail` begin half, and the
+  nested ones still missing from the live list.
+* **M2.** `executable.rs` `begin_routine`'s doc and `install.rs`'s `::CONSTANT` comment are wrapped
+  to 100 columns (`262b6c72c`); no added source line in `crates/*/src` is wider.
+
+Checks at `3d9cc2da0`, from `rust/`: `cargo fmt --all --check` 0 (`r1/checks-fmt.txt`); `memcap 16G
+cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` 0 (`r1/checks-clippy.txt`); the touched
+binaries as in the first round, 0 (`r1/checks-touched.txt`: lib 1175, collect_stress 72, signals 42,
+compiled 2, rexxc 4, the rest passed); `REXX_CORPUS_GATE=1 ... --test corpus` 0, 29 passed
+(`r1/checks-corpus.txt`); the whole suite 0, no changed row against `t8.2/r1/suite/tests.tsv`
+(`r1/suite/`).
+
