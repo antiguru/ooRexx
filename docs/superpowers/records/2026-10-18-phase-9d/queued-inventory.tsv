@@ -237,3 +237,4 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointe
 2026-10-22-directory-subclass-unknown-frame.md	divergence	-	9d	stackframes lacks a Directory subclass METHOD UNKNOWN frame	9d
 2026-10-22-lineout-four-args-error.md	divergence	-	9d	lineout with four args raises 88.922 where the oracle raises 88.907	9d
 2026-10-22-user-raised-in-own-handler.md	divergence	-	9d	a USER raised in its own CALL ON handler is never redelivered	9d
+2026-10-22-security-manager-set-mid-activation.md	divergence	-	9d	an internal call sees a security manager its caller set mid-activation; the oracle keeps the caller's captured settings	9d

@@ -1,0 +1,84 @@
+ 64. A FAILED TRAP HANDLER CALL UNDER SIGNAL ON SYNTAX SIGNALS AT ONCE
+     (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-21 ("Signal at once, Deviation"). The CALL a
+     CALL ON trap makes runs when the raising clause completes (rexxref
+     condtra.xml:438-440); if that CALL fails, its SYNTAX condition is
+     raised there, and SIGNAL ON SYNTAX ends that clause (condtra.xml:468-471),
+     so SIGL names it and no later clause runs. The oracle runs the next
+     clause first: `line4` then `s 40 4`, and `s 43 4` for a handler naming no
+     routine, `s 43 4 43.1` for NOTREADY. This crate answers `s 40 3`,
+     `s 43 3`, `s 43 3 43.1`. Measured by Phase 9d Task 8.2
+     (docs/superpowers/records/2026-10-18-phase-9d/t8.2/probes/condition-candidates/a.rex,
+     a2.rex, a3.rex).
+     Witnessed by run::tests::conditions::a_failed_trap_handler_call_signals_at_once
+     (rust/crates/rexx-exec/src/run/tests/conditions.rs).
+
+ 65. A RAISE RETURN OR EXIT VALUE IS THE CONDITION OBJECT'S RESULT
+     (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-21 ("Add RESULT, oracle bug"). RESULT holds "Any
+     result specified on the RETURN or EXIT options of a RAISE instruction"
+     (rexxref condtra.xml:738-741), for every condition. ORACLE BUG: for a
+     condition other than SYNTAX, `RexxActivation::raise` passes the member
+     `result` instead of `resultObj` to `createConditionObject`
+     (RexxActivation.cpp:1827; the SYNTAX branch at 1851 passes `resultObj`),
+     so the object has no RESULT entry: `mh hasResult 0 The NIL object` for
+     RETURN, EXIT and a SIGNAL ON trap, where this crate answers `mh 1
+     first`, `mh 1 second`, `sh 1 third`. A RAISE with no value sets no
+     entry on either side. Two further observables follow. A tail-less
+     `RAISE PROPAGATE` of the trapped condition keeps its RETURN information
+     (instrc.xml:2913-2917) and returns the original value to the caller:
+     oracle `h 0 The NIL object` and `back RESULT`, this crate `h 1 w1` and
+     `back w1`. A RAISE inside INTERPRET sets the entry too: oracle `oh 0 The
+     NIL object`, this crate `oh 1 from-interpret`. Measured by Phase 9d
+     Task 8.2 (t8.2/probes/condition-candidates/b.rex, r.rex; t8.2/r1/pn.rex,
+     ut2.rex).
+     Witnessed by run::tests::conditions::a_raise_tail_value_is_the_condition_objects_result
+     (rust/crates/rexx-exec/src/run/tests/conditions.rs) and
+     corpus/lang/raise_result_and_sender.rex, which leaves the affected lines
+     uncompared.
+
+ 66. A 16.1 FROM A SIGNAL TRAP INSIDE INTERPRET KEEPS THE PROGRAM FRAME'S
+     NAME (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-21 ("Keep file name, Deviation"). A stack frame
+     of type PROGRAM is the main program's, named by its file; only an
+     INTERPRET frame's name is empty (rexxref utilityclasses.xml:9595-9601).
+     For a SIGNAL to a missing label inside INTERPRET the oracle reports
+     `sf PROGRAM 4 []`; this crate `sf PROGRAM 4 [<path>/c.rex]`. Measured by
+     Phase 9d Task 8.2 (t8.2/probes/condition-candidates/c.rex).
+     Witnessed by run::tests::conditions::a_missing_signal_label_inside_interpret_keeps_the_programs_name
+     (rust/crates/rexx-exec/src/run/tests/conditions.rs).
+
+ 67. A STARTED MESSAGE'S ERROR REPORT NAMES THE LINE THAT RAISED IT
+     (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-22 ("Line 6, oracle bug"). POSITION is "the line
+     number ... at which a condition was raised" (rexxref
+     condtra.xml:769-771), and RESULT raises the error again in the waiter
+     (fundclasses.xml:1656-1661). For `o~start('boom')~result` with `say 1/0`
+     on line 6 of `boom`, this crate's started activity reports line 6 and
+     the waiter's re-raise reports line 3. ORACLE BUG, a race:
+     `MessageDispatcher::handleError` (MessageDispatcher.cpp:64-72) wakes the
+     waiter before it displays the condition, and the waiter's
+     `Activity::reraiseException` (Activity.cpp:1330-1341) writes its own
+     POSITION, PROGRAM and PACKAGE into the same condition object. Which
+     thread writes first varies by machine and load: the started report
+     names line 3 in most runs, line 6 (this crate's answer) in the others.
+     Measured by Phase 9d Task 8.2 and its review
+     (t8.2/probes/message-start/msgstart.rex, t8.2/r1/message-start/).
+     Witnessed by WITNESS-TBD.
+
+ 68. A STEM SUBCLASS'S UNKNOWN METHOD RUNS (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-22 ("Run it, oracle bug"). A message an object
+     has no method for runs the object's UNKNOWN method (rexxref
+     provide.xml:514-519, 527-532). ORACLE BUG: `StemClass::processUnknown`
+     (StemClass.cpp:277-281) forwards to the stem's value without looking the
+     receiver's UNKNOWN up, so a Stem subclass's `::method unknown` never
+     runs: `x = .ss~new('S.'); say x~nosuch` raises 97.1 on the oracle, and
+     answers the override's `mine NOSUCH` here
+     (`StringHashCollection::processUnknown` guards the same bypass with
+     `isBaseClass()`). Measured by Phase 9d Task 8.2.
+     Witnessed by WITNESS-TBD.
