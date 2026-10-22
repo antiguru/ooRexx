@@ -1948,6 +1948,15 @@ pub(super) fn native_hash_unknown(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    hash_unknown(interp, receiver, args)
+}
+
+/// [`native_hash_unknown`]'s work, which `processUnknown` also runs without a send.
+pub(super) fn hash_unknown(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
     let Some(Some(message)) = args.first().copied() else {
         return Err(Raised::missing_method_argument(1).into());
     };

@@ -592,8 +592,6 @@ fn call_on_halt_sees_an_abandoned_command() {
     );
 }
 
-/// A long builtin in a short loop: the halt is served when the builtin
-/// returns, not at the clause count's next check.
 /// A halt pending when a `SIGNAL ON SYNTAX` trap takes the clause's error is
 /// raised at the label's clause: untrapped it reports that clause, and a
 /// `SIGNAL ON HALT` handler sees it as `SIGL`, with the SYNTAX trap's `RC`.
@@ -631,6 +629,8 @@ fn sigint_pending_at_a_syntax_trap_is_raised_at_the_label() {
     );
 }
 
+/// A long builtin in a short loop: the halt is served when the builtin
+/// returns, not at the clause count's next check.
 #[test]
 fn sigint_halts_after_a_long_builtin() {
     halts(

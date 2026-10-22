@@ -1452,20 +1452,7 @@ impl Interp {
                             Ok(true) => {}
                             Ok(false) => break 'header HeaderOutcome::Stop,
                             Err(failure) => {
-                                match header_clause {
-                                    HeaderClause::Do => {
-                                        it.record_failure_at(source, do_instruction, loop_indent);
-                                    }
-                                    HeaderClause::End => {
-                                        it.record_failure_at(source, end_instruction, loop_indent);
-                                    }
-                                    HeaderClause::Iterate { .. } => {
-                                        it.record_failure_site_at(
-                                            iterate_site.clone(),
-                                            loop_indent,
-                                        );
-                                    }
-                                }
+                                it.record_failure_at(source, do_instruction, loop_indent);
                                 return Err(failure);
                             }
                         }
@@ -1516,7 +1503,6 @@ impl Interp {
                 // to it.
                 DoOutcome::FellThrough => {
                     header_clause = HeaderClause::End;
-                    self.enter_clause_index(end_index);
                     if self.trace_mode().all
                         && let Some((line, text)) = self.clause_site(source, end_instruction)
                     {

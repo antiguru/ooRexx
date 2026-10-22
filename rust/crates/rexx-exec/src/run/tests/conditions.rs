@@ -1092,8 +1092,7 @@ fn a_condition_raised_again_while_its_call_trap_is_delayed() {
 
 /// A `CALL ON` handler call that fails is taken by `SIGNAL ON SYNTAX` at
 /// once: no clause runs after it, and `SIGL` names the clause that raised.
-/// The oracle runs the next clause first and names it (Deviation candidate,
-/// Task 8.2 report).
+/// The oracle runs the next clause first and names it.
 #[test]
 fn a_failed_trap_handler_call_signals_at_once() {
     for handler in [
@@ -1114,9 +1113,10 @@ fn a_failed_trap_handler_call_signals_at_once() {
 }
 
 /// rexxref (`condtra.xml`, RESULT): a `RAISE ... RETURN` or `EXIT` value is
-/// the condition object's `RESULT`, for a `CALL ON` and a `SIGNAL ON` trap;
-/// a tail with no value sets none. The oracle sets none at all
-/// (Deviation candidate, Task 8.2 report).
+/// the condition object's `RESULT`, for a `CALL ON` and a `SIGNAL ON` trap,
+/// inside an `INTERPRET` too; a tail with no value sets none. A tail-less
+/// `RAISE PROPAGATE` returns that value to the caller (`instrc.xml`, RAISE
+/// PROPAGATE). The oracle sets no entry, and its propagate returns none.
 #[test]
 fn a_raise_tail_value_is_the_condition_objects_result() {
     let mut interp = Interp::new();
@@ -1134,11 +1134,25 @@ fn a_raise_tail_value_is_the_condition_objects_result() {
         )),
         "mh 1 first\nmh 1 second\nwh 0\nsh 1 third\n"
     );
+    let mut interp = Interp::new();
+    assert_eq!(
+        String::from_utf8_lossy(&say_output_with_directives(
+            &mut interp,
+            b"call on user u name h\ncall t\nsay 'back' result\nsay 'interpreted' ir()\nexit\n\
+              h: c = condition('O'); say 'h' c~hasIndex('RESULT') c~result; return\n\
+              ::routine t\nsignal on user u\ncall r\nreturn 'np'\nu: raise propagate\n\
+              r: raise user u return 'w1'\n\
+              ::routine ir\ncall on user u name oh\n\
+              interpret \"raise user u return 'from-interpret'\"\nreturn 'fell through'\n\
+              oh: c = condition('O'); say 'oh' c~hasIndex('RESULT') c~result; return\n",
+        )),
+        "h 1 w1\nback w1\noh 1 from-interpret\ninterpreted from-interpret\n"
+    );
 }
 
 /// A 16.1 raised by a `SIGNAL` trap inside an `INTERPRET` reports one frame,
 /// the program's, under the program's own name. The oracle's frame carries
-/// the fragment's empty name (Deviation candidate, Task 8.2 report).
+/// the fragment's empty name.
 #[test]
 fn a_missing_signal_label_inside_interpret_keeps_the_programs_name() {
     let outcome = crate::run_program(

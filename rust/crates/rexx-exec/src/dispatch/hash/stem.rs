@@ -517,6 +517,15 @@ fn native_stem_unknown(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    stem_unknown(interp, receiver, args)
+}
+
+/// [`native_stem_unknown`]'s work, which `processUnknown` also runs without a send.
+pub(in crate::dispatch) fn stem_unknown(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
     let receiver = stem_of(interp, receiver, b"UNKNOWN")?;
     let Some(message) = args.first().copied().flatten() else {
         return Err(Raised::missing_method_argument(1).into());

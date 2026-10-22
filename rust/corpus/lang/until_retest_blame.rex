@@ -1,0 +1,27 @@
+/* An UNTIL test runs in the clause that sent control back to the loop: a
+ * routine it calls sees the END or the ITERATE as its caller's clause, and a
+ * failure inside it is blamed there. */
+call try 1
+call try 2
+exit
+try:
+  signal on syntax
+  if arg(1) = 1 then do i = 1 until g(i)
+    nop
+  end
+  else do i = 1 until g(i)
+    if i = 1 then iterate
+  end
+  return
+syntax:
+  say condition('O')~code
+  do line over condition('O')~traceback
+    say '  ['line']'
+  end
+  return
+g: procedure
+  signal off syntax
+  use arg n
+  say '  g' n .context~stackframes[2]~traceline
+  if n = 2 then return 1 / 0
+  return 0

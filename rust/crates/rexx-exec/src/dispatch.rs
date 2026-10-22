@@ -254,6 +254,9 @@ struct NativeEntry {
     body: NativeBody,
 }
 
+/// A primitive `UNKNOWN`'s work run without a send.
+type Unsent = fn(&mut Interp, ObjRef, &[Option<ObjRef>]) -> Result<Option<ObjRef>, Failure>;
+
 /// One primitive method's code.
 #[derive(Copy, Clone)]
 enum NativeBody {
@@ -3830,19 +3833,11 @@ impl Interp {
         self.roots.activity_mut().push_temp(missed);
         let unknown_args = [Some(missed), Some(arguments)];
         let forwarded = match self.frameless_unknown(resolution, receiver) {
-            Some(run) => {
-                match seam::clear(self, receiver, UNKNOWN, &unknown_args, resolution.method) {
-                    Ok(seam::Clearance::Cleared(cleared) | seam::Clearance::Checked(cleared)) => {
-                        pinned!(
-                            self,
-                            crate::pinning::PinKind::Unknown,
-                            run(self, cleared, receiver, &unknown_args)
-                        )
-                    }
-                    Ok(seam::Clearance::Answered(result)) => Ok(result),
-                    Err(failure) => Err(failure),
-                }
-            }
+            Some(run) => pinned!(
+                self,
+                crate::pinning::PinKind::Unknown,
+                run(self, receiver, &unknown_args)
+            ),
             None => pinned!(
                 self,
                 crate::pinning::PinKind::Unknown,
@@ -3858,29 +3853,22 @@ impl Interp {
     /// `Stem`, a `VariableReference`, and a `Directory` or `StringTable` of
     /// the base class (`StemClass.cpp:277`, `VariableReference.cpp:241`,
     /// `HashCollection.cpp:989`).
-    fn frameless_unknown(
-        &mut self,
-        resolution: Resolution,
-        receiver: ObjRef,
-    ) -> Option<NativeMethod> {
-        let Some(&NativeEntry {
-            body: NativeBody::Run(run),
-            ..
-        }) = self.object_model().natives.get(resolution.method)
-        else {
-            return None;
-        };
+    fn frameless_unknown(&mut self, resolution: Resolution, receiver: ObjRef) -> Option<Unsent> {
+        self.object_model().natives.get(resolution.method)?;
         let classes = self.classes();
         let system = |name| {
             classes.lookup(name).or_else(|| classes.system_lookup(name)) == Some(resolution.scope)
         };
-        if system("Stem") || system("VariableReference") {
-            return Some(run);
+        if system("Stem") {
+            return Some(hash::stem::stem_unknown);
+        }
+        if system("VariableReference") {
+            return Some(reference_unknown);
         }
         if !(system("Directory") || system("StringTable")) {
             return None;
         }
-        (self.class_of_value(receiver) == Some(resolution.scope)).then_some(run)
+        (self.class_of_value(receiver) == Some(resolution.scope)).then_some(hash::hash_unknown)
     }
 
     /// The condition a send raises when the receiver's behaviour answers
@@ -4270,6 +4258,15 @@ fn native_reference_value_set(
 fn native_reference_unknown(
     interp: &mut Interp,
     _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    reference_unknown(interp, receiver, args)
+}
+
+/// [`native_reference_unknown`]'s work, which `processUnknown` also runs without a send.
+fn reference_unknown(
+    interp: &mut Interp,
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
