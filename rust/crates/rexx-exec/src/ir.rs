@@ -486,11 +486,13 @@ const CALL_SITE_CACHE: bool = true;
 
 /// One call site's kept resolution, or none yet, with the
 /// `Interp::routine_generation` it was made under. A `Routine` copy the kept
-/// resolution names is pinned ([`Interp::repin`]) while the site keeps it, as
-/// the oracle's instruction keeps its routine.
+/// resolution names, and the program of a `::ROUTINE` it names in a program
+/// other than the chunk's own, are pinned ([`Interp::repin`]) while the site
+/// keeps it, as the oracle's instruction keeps its routine.
 struct CallSite {
     resolved: Cell<Option<Resolved>>,
     generation: Cell<u32>,
+    program: Cell<Option<crate::plan::ProgramId>>,
 }
 
 impl CallSite {
@@ -498,6 +500,7 @@ impl CallSite {
         CallSite {
             resolved: Cell::new(None),
             generation: Cell::new(0),
+            program: Cell::new(None),
         }
     }
 
@@ -516,8 +519,18 @@ impl CallSite {
         Some(resolved)
     }
 
-    fn set(&self, resolved: Resolved, generation: u32) -> Repin {
-        let repin = Repin::to(self.pinned(), resolved.copy());
+    fn set(
+        &self,
+        resolved: Resolved,
+        generation: u32,
+        program: Option<crate::plan::ProgramId>,
+    ) -> Repin {
+        let mut repin = Repin::to(self.pinned(), resolved.copy());
+        let held = self.program.replace(program);
+        if held != program {
+            repin.unpin_program = held;
+            repin.pin_program = program;
+        }
         self.resolved.set(Some(resolved));
         self.generation.set(generation);
         repin
@@ -584,12 +597,18 @@ impl Calls {
     /// name nothing has yet, and a file the search would find next time must
     /// not be masked by this table -- the same reason a raising resolution
     /// was never cached.
-    fn remember(&self, at: u16, resolved: Resolved, generation: u32) -> Repin {
+    fn remember(
+        &self,
+        at: u16,
+        resolved: Resolved,
+        generation: u32,
+        program: Option<crate::plan::ProgramId>,
+    ) -> Repin {
         if matches!(resolved, Resolved::Unresolved) {
             return Repin::NONE;
         }
         match self.slots.get(at as usize) {
-            Some(slot) => slot.set(resolved, generation),
+            Some(slot) => slot.set(resolved, generation, program),
             None => Repin::NONE,
         }
     }
@@ -659,6 +678,8 @@ pub(crate) struct Chunk {
     hints: Hints,
     /// The resolutions [`Op::Call`] reads and writes, one per such op.
     calls: Calls,
+    /// The program whose body this is, for a chunk cached under one.
+    pub(crate) owner: Option<crate::plan::ProgramId>,
 }
 
 impl Chunk {
@@ -773,9 +794,24 @@ impl Chunk {
         self.calls.resolved(at, generation)
     }
 
-    /// Records what call site `at` resolved to ([`Calls::remember`]).
-    fn remember_call(&self, at: u16, resolved: Resolved, generation: u32) -> Repin {
-        self.calls.remember(at, resolved, generation)
+    /// Records what call site `at` resolved to ([`Calls::remember`]),
+    /// pinning `program` for it.
+    fn remember_call(
+        &self,
+        at: u16,
+        resolved: Resolved,
+        generation: u32,
+        program: Option<crate::plan::ProgramId>,
+    ) -> Repin {
+        self.calls.remember(at, resolved, generation, program)
+    }
+
+    /// Every program this chunk's call sites pin, for the caller dropping it.
+    pub(crate) fn pinned_programs(&self) -> impl Iterator<Item = crate::plan::ProgramId> + '_ {
+        self.calls
+            .slots
+            .iter()
+            .filter_map(|slot| slot.program.get())
     }
 
     /// Every `Routine` copy this chunk's call sites pin, for the caller
@@ -809,9 +845,17 @@ pub(crate) struct CallSiteSlot<'a> {
 }
 
 impl CallSiteSlot<'_> {
-    /// Records `resolved` at the site, under `generation`.
+    /// Records `resolved` at the site, under `generation`: a `::ROUTINE` of
+    /// a program other than the chunk's own pins that program.
     pub(crate) fn remember(self, resolved: Resolved, generation: u32) -> Repin {
-        self.chunk.remember_call(self.at, resolved, generation)
+        let program = match resolved {
+            Resolved::Routine(installed) if self.chunk.owner != Some(installed.program) => {
+                Some(installed.program)
+            }
+            _ => None,
+        };
+        self.chunk
+            .remember_call(self.at, resolved, generation, program)
     }
 
     /// What the site keeps under `generation` ([`Calls::resolved`]).

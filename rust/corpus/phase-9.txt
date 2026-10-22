@@ -376,3 +376,5 @@ lang/context_name_install.rex
 lang/instance_method_after_define.rex
 lang/enhanced_unguarded_copy_executable.rex
 lang/raise_syntax_string_additional.rex
+# 9d Task 8.3 fix round 2: a routine only a call site keeps survives a collection.
+lang/call_site_kept_routine_collected.rex

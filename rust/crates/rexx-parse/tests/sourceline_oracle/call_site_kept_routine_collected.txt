@@ -1,0 +1,31 @@
+count 30
+/* A routine only a call site keeps, its .ROUTINES entry removed by its own
+   first call, still runs on the site's later calls after a collection:
+   through an internal function's site, a function call in the main program,
+   and a CALL. */
+.local~rr = .routines
+.routines['F'] = .routine~new('f', 'use arg n; .rr~remove("F"); return "f" n')
+do n = 1 to 3
+  say viaf(n)
+  call filler
+end
+.routines['G'] = .routine~new('g', 'use arg n; .rr~remove("G"); return "g" n')
+do n = 1 to 3
+  say g(n)
+  call filler
+end
+.routines['H'] = .routine~new('h', 'use arg n; .rr~remove("H"); return "h" n')
+do n = 1 to 3
+  call h n
+  say result
+  call filler
+end
+exit
+viaf: return f(arg(1))
+filler: procedure
+  do i = 1 to 20
+    x = copies('a', 1000000)
+  end
+  return
+::routine dummy
+  return 0

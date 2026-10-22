@@ -266,14 +266,18 @@ impl Resolved {
     }
 }
 
-/// How a call site's kept copy changed when it remembered a resolution: the
-/// copy it no longer holds and the one it holds now, each `.nil` for none.
+/// How a call site's pins changed when it remembered a resolution: the copy
+/// it no longer holds and the one it holds now, each `.nil` for none, and the
+/// same for the program it pins.
 /// [`Interp::repin`] applies it.
 #[must_use]
 #[derive(Clone, Copy)]
 pub(crate) struct Repin {
     pub(crate) unpin: ObjRef,
     pub(crate) pin: ObjRef,
+    /// The program the site no longer pins and the one it pins now.
+    pub(crate) unpin_program: Option<crate::plan::ProgramId>,
+    pub(crate) pin_program: Option<crate::plan::ProgramId>,
 }
 
 impl Repin {
@@ -281,14 +285,20 @@ impl Repin {
     pub(crate) const NONE: Repin = Repin {
         unpin: ObjRef::NIL,
         pin: ObjRef::NIL,
+        unpin_program: None,
+        pin_program: None,
     };
 
-    /// The change from holding `held` to holding `pin`.
+    /// The change from holding the copy `held` to holding `pin`.
     pub(crate) fn to(held: ObjRef, pin: ObjRef) -> Repin {
         if pin == held {
             return Repin::NONE;
         }
-        Repin { unpin: held, pin }
+        Repin {
+            unpin: held,
+            pin,
+            ..Repin::NONE
+        }
     }
 }
 

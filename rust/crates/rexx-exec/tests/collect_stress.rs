@@ -1830,6 +1830,38 @@ fn a_swept_rebuilt_executable_leaves_its_identity_alone() {
     );
 }
 
+/// A routine only a call site keeps, its `.ROUTINES` entry removed by its
+/// own first call, still runs on the site's later calls: through an internal
+/// function's site, a function call in the main program, and a `CALL`.
+/// Measured, oracle rc 0 for each form.
+#[test]
+fn a_routine_only_a_call_site_keeps_survives_collection() {
+    for (form, call) in [
+        ("<site-internal>", "say viaf(n)"),
+        ("<site-function>", "say f(n)"),
+        ("<site-call>", "call f n; say result"),
+    ] {
+        assert_stress_prints(
+            form,
+            &format!(
+                concat!(
+                    ".local~rr = .routines\n",
+                    ".routines['F'] = .routine~new('f', 'use arg n; .rr~remove(\"F\"); return \"f\" n')\n",
+                    "do n = 1 to 3\n",
+                    "  {}\n",
+                    "  x = .array~new(20)\n",
+                    "end\n",
+                    "exit\n",
+                    "viaf: return f(arg(1))\n",
+                    "::routine dummy\n",
+                ),
+                call
+            ),
+            "f 1\nf 2\nf 3\n",
+        );
+    }
+}
+
 /// A literal value a variable holds outlives the chunk that interned it: an
 /// `INTERPRET` fragment's, a freed `Method~new` program's, and a literal
 /// `::CONSTANT` of a dropped package. Measured, oracle rc 0 in 3 of 3 runs,

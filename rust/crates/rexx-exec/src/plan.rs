@@ -957,7 +957,8 @@ impl Interp {
         let chunk = match self.chunks.get(&(key, trace)) {
             Some(chunk) => Rc::clone(chunk),
             None => match crate::ir::compile(body, plan, trace) {
-                Ok(chunk) => {
+                Ok(mut chunk) => {
+                    chunk.owner = Some(key.program);
                     let chunk = Rc::new(chunk);
                     self.chunks.insert((key, trace), Rc::clone(&chunk));
                     chunk

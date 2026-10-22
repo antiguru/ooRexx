@@ -182,6 +182,24 @@ impl Interp {
         if repin.unpin != ObjRef::NIL {
             self.unpin_copy(repin.unpin);
         }
+        if let Some(program) = repin.pin_program {
+            *self.pinned_programs.entry(program).or_insert(0) += 1;
+        }
+        if let Some(program) = repin.unpin_program {
+            self.unpin_program(program);
+        }
+    }
+
+    /// Drops one call site's hold on `program`.
+    #[cold]
+    pub(crate) fn unpin_program(&mut self, program: crate::plan::ProgramId) {
+        let Some(count) = self.pinned_programs.get_mut(&program) else {
+            return;
+        };
+        *count -= 1;
+        if *count == 0 {
+            self.pinned_programs.remove(&program);
+        }
     }
 
     #[cold]
@@ -198,6 +216,9 @@ impl Interp {
     pub(crate) fn unpin_chunk_copies(&mut self, chunk: &crate::ir::Chunk) {
         for copy in chunk.pinned_copies().collect::<Vec<_>>() {
             self.unpin_copy(copy);
+        }
+        for program in chunk.pinned_programs().collect::<Vec<_>>() {
+            self.unpin_program(program);
         }
     }
 

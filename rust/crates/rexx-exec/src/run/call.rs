@@ -584,6 +584,13 @@ impl Interp {
         match ended {
             SiteCall::Entered => {
                 let at = self.activity.parked_calls.len();
+                debug_assert!(
+                    self.activity
+                        .parked_keeps
+                        .last()
+                        .is_none_or(|(filed, _)| *filed < at),
+                    "an entered call's keep was left unclaimed"
+                );
                 self.activity.parked_keeps.push((at, keep));
             }
             SiteCall::Returned | SiteCall::Raised => {

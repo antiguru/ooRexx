@@ -1242,6 +1242,7 @@ pub(crate) fn compile(
         consts,
         hints,
         calls,
+        owner: None,
     })
 }
 
