@@ -1168,3 +1168,43 @@ fn a_missing_signal_label_inside_interpret_keeps_the_programs_name() {
         "sf PROGRAM 4 [/w/c.rex] 16.1\n"
     );
 }
+
+/// A started message's untrapped error is reported by its own activity at
+/// the line that raised it, and `result` raises it again at its own line.
+/// The oracle's started report races `result`'s re-raise for the condition
+/// object's `POSITION`.
+#[test]
+fn a_started_messages_report_names_the_line_that_raised() {
+    let outcome = crate::run_program(
+        "/w/m.rex",
+        b"o = .o~new\nm = o~start('boom')\nsay m~result\n::class o\n::method boom\n  say 1/0\n"
+            .to_vec(),
+        crate::Invocation::none(),
+    );
+    assert_eq!(outcome.exit_code, 214);
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stderr),
+        "     6 *-* say 1/0\n\
+         Error 42 running /w/m.rex line 6:  Arithmetic overflow/underflow.\n\
+         Error 42.3:  Arithmetic overflow; divisor must not be zero.\n\
+         \x20    6 *-* say 1/0\n\
+         Error 42 running /w/m.rex line 3:  Arithmetic overflow/underflow.\n\
+         Error 42.3:  Arithmetic overflow; divisor must not be zero.\n"
+    );
+}
+
+/// An UNKNOWN method a Stem subclass defines answers a message the stem
+/// does not understand (rexxref `provide.xml`, UNKNOWN). The oracle forwards
+/// to the stem's value without looking it up, and reports 97.1.
+#[test]
+fn a_stem_subclasss_unknown_method_answers() {
+    let mut interp = Interp::new();
+    assert_eq!(
+        String::from_utf8_lossy(&say_output_with_directives(
+            &mut interp,
+            b"x = .ss~new('S.'); say x~nosuch\n::class ss subclass stem\n\
+              ::method unknown\n  say 'mine' arg(1)\n  return 7\n",
+        )),
+        "mine NOSUCH\n7\n"
+    );
+}

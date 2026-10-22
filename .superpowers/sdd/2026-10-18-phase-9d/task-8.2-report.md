@@ -277,3 +277,27 @@ Review `task-8.2-review.md`; brief `task-8.2-fix-r1.md`. Code `77fded0db`; recor
 | `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`r1/checks-corpus.txt`) | 0, 29 passed, 1 ignored |
 | `memcap 16G cargo test -j 4 --release -p rexx-parse --test sourceline_oracle` (`r1/checks-srcl.txt`) | 0 |
 | `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../t8.2/r1/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`r1/suite/`) | 0; no changed row against `t8.1/suite/tests.tsv` |
+
+## Closing add-on
+
+Brief `task-8.2-addon.md`; witnesses only, no behaviour change. Records `t8.2/addon/`.
+
+* **Re-review Minor 1.** `corpus/lang/unknown_forward_unasked.rex` (the review's `u4.rex`, the
+  security manager answering `0`): identical to the oracle at head; at `9ce1d8384` (scratch worktree
+  build) it prints `sm METHOD UNKNOWN` before `len 3` (`addon/u4.9ce1d8384.txt`).
+* **Deviation 67.** `run::tests::conditions::a_started_messages_report_names_the_line_that_raised`
+  (`crates/rexx-exec/src/run/tests/conditions.rs`) asserts the whole stderr of `msgstart.rex` run as
+  `/w/m.rex`: the started activity's report at line 6, then `result`'s at line 3; 15 of 15 repeated
+  runs pass. Mutation: `report_started_failure`'s report made positionless (`scheduler.rs:2158`,
+  `if false && ...`) turns it red (`addon/mutant-started-report.txt`). A first mutation, dropping
+  the unsealed site there, left it green: the site was already sealed.
+* **Deviation 68.** Probe `addon/stem_subclass_unknown.rex` (oracle 97.1, head `mine NOSUCH` / `7`,
+  `addon/stem_subclass_unknown.head-and-oracle.txt`). Witness
+  `run::tests::conditions::a_stem_subclasss_unknown_method_answers` (same file). Mutation: the
+  UNKNOWN lookup in `unknown_or_nomethod` answering `None` (`dispatch.rs:3813`) gives the oracle's
+  97.1 and turns it red (`addon/mutant-stem-unknown.txt`).
+
+Checks, from `rust/`: `cargo fmt --all --check` 0; `memcap 16G cargo clippy -j 4 -p rexx-exec
+--all-targets -- -D warnings` 0 (`addon/checks-clippy.txt`); `memcap 16G cargo test -j 4 --release
+--no-fail-fast -p rexx-exec --lib --test corpus --test dispatch_seam` 0 (lib 1175 passed) and
+`-p rexx-parse --test sourceline_oracle` 0 (`addon/checks-touched.txt`).

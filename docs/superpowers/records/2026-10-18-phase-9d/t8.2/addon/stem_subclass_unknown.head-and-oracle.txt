@@ -1,0 +1,11 @@
+--- crate rc=0
+[stdout]
+mine NOSUCH
+7
+[stderr]
+--- oracle rc=159
+[stdout]
+[stderr]
+     1 *-* say x~nosuch
+Error 97 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.2/addon/stem_subclass_unknown.rex line 1:  Object method not found.
+Error 97.1:  Object "S." does not understand message "NOSUCH".

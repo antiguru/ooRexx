@@ -1,0 +1,16 @@
+--- crate rc=0
+[stdout]
+len 3
+sm METHOD UNKNOWN
+direct 3
+sm METHOD PM
+prot pm-ran
+[stderr]
+--- oracle rc=0
+[stdout]
+len 3
+sm METHOD UNKNOWN
+direct 3
+sm METHOD PM
+prot pm-ran
+[stderr]

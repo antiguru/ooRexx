@@ -1,0 +1,9 @@
+--- crate rc=0
+[stdout]
+sm METHOD UNKNOWN
+len 3
+sm METHOD UNKNOWN
+direct 3
+sm METHOD PM
+prot pm-ran
+[stderr]

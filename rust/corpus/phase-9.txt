@@ -363,3 +363,4 @@ lang/reply_propagate_traceback.rex
 lang/stream_boundary_report.rex
 lang/stream_boundary_arity.rex
 lang/until_retest_blame.rex
+lang/unknown_forward_unasked.rex
