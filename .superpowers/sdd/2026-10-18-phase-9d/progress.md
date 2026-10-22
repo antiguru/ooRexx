@@ -180,3 +180,4 @@ Task 8.2 closing add-on: DONE 137cba4af (unknown_forward_unasked.rex; Deviation 
 Task 8.3: dispatched t83-impl (opus), BASE 80f0fab1c.
 Task 8.3: DONE_WITH_CONCERNS 68e7f15d5 8d409845b 99fd7ae2b. collect_stress green. Concerns: exclusions entries deleted (Dev 41 known gap, raised-routine-kept, library Routine~call traceback); frames now list primitive methods a send entered; ::CONSTANT frame residual proposed 8.4; m5 define-bench cost proposed perf round.
 Ruling: Task 8.3 concern 3 queued as 2026-10-22-constant-frame-and-executable, added to batch 8.4 — cost if wrong: one more 8.4 item.
+Task 8.3 review: spec COMPLIANT, quality CHANGES REQUESTED (0C/1I/2M; I1 callgrind.sh PROGRAMS lacks define, exits 2). Fix round 1 resumed t83-impl with task-8.3-fix-r1.md. Q1 (live frames omit nested primitives) and Q3 (quadratic executable_at at depth cap) queued into 8.7, Q2 (collect_stress zero-collection drift) into 8.8.

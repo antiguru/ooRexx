@@ -61,9 +61,10 @@ sentence for Deviation 4).
 the oracle: add it to rust/corpus/oracle-crashes.txt), 2026-10-19-index-argument-string-conversion.md,
 2026-10-13-class-named-drops-raised-condition.md, 2026-10-10-security-manager-command-rc-requires.md,
 2026-10-13-security-manager-and-library-key.md, 2026-10-17-newmethod-parent-package.md and
-gate:phase-9c-gate.md:144 (unclear: native NewMethod; witness through the C API test harness or report).
+gate:phase-9c-gate.md:144 (unclear: native NewMethod; witness through the C API test harness or report), 2026-10-22-live-frames-omit-nested-primitives.md,
+2026-10-22-executable-at-quadratic-depth.md.
 
 ## 8.8 Process items, unclear items, and items triage found fixed
 Every `process` and `unclear` row of task-8-triage.tsv not named above, the gate lines
 phase-9a-gate.md:456-459, and the `fixed` rows (re-check each, then close with `closed:probe agrees`
-and the probe path).
+and the probe path), and 2026-10-22-collect-stress-zero-collection-drift.md.
