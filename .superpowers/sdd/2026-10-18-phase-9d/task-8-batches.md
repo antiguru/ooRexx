@@ -12,6 +12,11 @@ and its inventory row (docs/superpowers/records/2026-10-18-phase-9d/queued-inven
 (derive from rexxref, follow what you can model); a new oracle departure goes to the controller, never
 into a Deviation. Cost if the batching is wrong: larger reviews.
 
+Perf check (controller ruling 2026-10-22, after Task 8.3): run `callgrind.sh` on every program (no
+`-p`) against the instance's BASE, not the five-program set; the five missed a +2.83% call-path
+regression in 8.3. Own delta at most +0.05% libc subtracted on each program; schedule-dependent
+SPREAD flags (pingguard, pingsem) are reported, not failed.
+
 ## 8.1 Crashes and activation lifetime
 2026-10-14-routine-start-call-panic.md (rc 101 panic; first), gate:phase-9b1-gate.md:115,
 2026-10-20-collect-stress-raise-additional-array.md, 2026-10-19-sigterm-in-trace-delivery.md,
