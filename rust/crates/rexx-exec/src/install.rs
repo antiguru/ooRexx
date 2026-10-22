@@ -2721,10 +2721,10 @@ impl Interp {
         }
         // The oracle's own message name for this run, which is the string
         // `GlobalNames::CONSTANT_DIRECTIVE` holds (`memory/GlobalNames.h:84`)
-        // and `.context~name` answers. The failure path this crate has a witness for does not print it:
-        // measured, a condition raised inside a class method the expression
-        // calls echoes that method's clause above the `::CONSTANT` and the
-        // `::CLASS`, and names no method.
+        // and `.context~name` answers. The failure path this crate has a
+        // witness for does not print it: measured, a condition raised inside
+        // a class method the expression calls echoes that method's clause
+        // above the `::CONSTANT` and the `::CLASS`, and names no method.
         let saved_context = std::mem::replace(
             &mut self.activity.call_context,
             CallContext {

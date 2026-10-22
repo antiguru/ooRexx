@@ -44,7 +44,7 @@ out=$(cd "$out" && pwd)
 
 # Every *.rex here, rexxcps and pingpong/*.rex; checked against the directories.
 PINGPONG="pingguard pingmsg pingsem"
-PROGRAMS="alloc alloc4c arith assign churn compound decloop decrender dirread dispatch
+PROGRAMS="alloc alloc4c arith assign churn compound decloop decrender define dirread dispatch
 dispatchclass emptyloop extcall fibcall fibfunc hashnew heapshape intcall interpret nop parse pkglocal sayloop
 sendloop startup strings textnum varlookup rexxcps $PINGPONG"
 on_disk=$(cd "$here" && ls ./*.rex pingpong/*.rex | sed 's|^\./||; s|^pingpong/||; s|\.rex$||' | sort)

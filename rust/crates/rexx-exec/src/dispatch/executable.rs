@@ -593,10 +593,10 @@ pub(crate) fn call_routine_directly(
 /// `name` being what a Rexx routine's frame is called, or `None` for the
 /// routine's own name (`executableName`, which `RoutineClass::callRexx` runs
 /// it under, `classes/RoutineClass.cpp:205-211`): a directive's name, the
-/// name a compiled image gives it, or the name its package was created under. Up to the point a Rexx routine's body
-/// would run. `sent` is the message that runs it and that message's own
-/// arguments, which a routine run to its end here lists as a frame of its
-/// own; an empty name for none.
+/// name a compiled image gives it, or the name its package was created under.
+/// Up to the point a Rexx routine's body would run. `sent` is the message
+/// that runs it and that message's own arguments, which a routine run to its
+/// end here lists as a frame of its own; an empty name for none.
 fn begin_routine(
     interp: &mut Interp,
     receiver: ObjRef,
