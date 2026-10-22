@@ -1,3 +1,4 @@
+**CLOSED 2026-10-22 by Phase 9d Task 8.2 (12ef5a35c).**
 **OPEN, queued 2026-10-21 by the controller; proposed 9d.**
 
 # `.stdout~lineout(.nil)` renders .nil with the running file

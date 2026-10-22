@@ -1,0 +1,7 @@
+--- crate rc=168
+[stdout]
+[stderr]
+       *-* Compiled method "LINEOUT" with scope "Stream".
+     1 *-* .stdout~lineout("x", 1, 2)
+Error 88 running REXX:  Invalid argument.
+Error 88.922:  Too many arguments in invocation; 2 expected.

@@ -1,0 +1,7 @@
+--- crate rc=228
+[stdout]
+[stderr]
+    11 *-*   leave zz
+     1 *-* call t1
+Error 28 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.2/probes/leave-iterate/lv.rex line 11:  Invalid LEAVE or ITERATE.
+Error 28.3:  Symbol following LEAVE ("ZZ") must either match the label of a current loop or block instruction.

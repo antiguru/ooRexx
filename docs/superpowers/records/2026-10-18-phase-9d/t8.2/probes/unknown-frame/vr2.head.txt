@@ -1,0 +1,7 @@
+--- crate rc=214
+[stdout]
+[stderr]
+     1 *-* return 1/0
+     3 *-* say r~go
+Error 42 running GO line 1:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

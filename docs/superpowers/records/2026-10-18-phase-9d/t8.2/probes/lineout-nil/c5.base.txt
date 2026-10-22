@@ -1,0 +1,7 @@
+--- crate rc=168
+[stdout]
+[stderr]
+       *-* Compiled method "CHAROUT" with scope "Stream".
+     1 *-* .stdout~charout(.object~new)
+Error 88 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.2/probes/lineout-nil/c5.rex line 1:  Invalid argument.
+Error 88.909:  Argument 1 must have a string value.

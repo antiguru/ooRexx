@@ -1,0 +1,10 @@
+--- crate rc=0
+[stdout]
+got 1
+cont propagates
+main done
+[stderr]
+     8 *-* x = 1/0
+    12 *-* call s
+Error 42:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

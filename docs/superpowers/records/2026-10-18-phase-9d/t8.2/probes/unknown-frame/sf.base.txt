@@ -1,0 +1,9 @@
+--- crate rc=0
+[stdout]
+METHOD GO 1
+PROGRAM /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.2/probes/unknown-frame/sf.rex 3
+1
+METHOD GO 1
+PROGRAM /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.2/probes/unknown-frame/sf.rex 6
+2
+[stderr]

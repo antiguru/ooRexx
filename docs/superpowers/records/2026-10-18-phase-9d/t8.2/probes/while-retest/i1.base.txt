@@ -1,0 +1,20 @@
+--- crate rc=214
+[stdout]
+  [    17 *-*     return 1 / 0]
+  [     8 *-*   x = f()]
+  [     8 *-*   interpret arg(1)]
+  [     1 *-* call try 'x = f()']
+  [    17 *-*       return 1 / 0]
+  [     8 *-*     x = f();]
+  [     8 *-*     interpret arg(1)]
+  [     2 *-* call try 'do 1; x = f(); end']
+  [    17 *-*     return 1 / 0]
+  [     8 *-*   x = f()]
+  [     8 *-*   interpret arg(1)]
+  [     3 *-* call try 'do 2; nop; end; x = f()']
+[stderr]
+    17 *-*   return 1 / 0
+     4 *-* x = f()
+     4 *-* interpret 'do 2; nop; end; x = f()'
+Error 42 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.2/probes/while-retest/i1.rex line 17:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

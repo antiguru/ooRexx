@@ -1,0 +1,6 @@
+rc=0
+[stdout]
+handler USER C1 
+handler USER C1 
+zr 2
+[stderr]

@@ -1,0 +1,7 @@
+--- crate rc=168
+[stdout]
+[stderr]
+       *-* Compiled method "LINEOUT" with scope "Stream".
+     1 *-* .stdout~lineout("x", "abc")
+Error 88 running REXX:  Invalid argument.
+Error 88.907:  Argument 2 must be in the range -9223372036854775808 to 9223372036854775807; found "abc".

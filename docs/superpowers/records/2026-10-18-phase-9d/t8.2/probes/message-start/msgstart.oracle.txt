@@ -1,0 +1,17 @@
+# 20 oracle runs: count, rc, stderr md5
+19 214 2aba3064
+1 214 d7ab8c95
+== ms-2aba3064.err
+     6 *-* say 1/0
+     6 *-* say 1/0
+Error 42 running /home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-18-phase-9d/t8-triage-0/p/msgstart.rex line 3:  Arithmetic overflow/underflow.
+Error 42 running /home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-18-phase-9d/t8-triage-0/p/msgstart.rex line 3:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+== ms-d7ab8c95.err
+     6 *-* say 1/0
+Error 42 running /home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-18-phase-9d/t8-triage-0/p/msgstart.rex line 3:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+     6 *-* say 1/0
+Error 42 running /home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/sdd/2026-10-18-phase-9d/t8-triage-0/p/msgstart.rex line 3:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

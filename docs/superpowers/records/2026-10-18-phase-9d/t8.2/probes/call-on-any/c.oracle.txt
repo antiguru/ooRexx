@@ -1,0 +1,7 @@
+--- oracle rc=159
+[stdout]
+[stderr]
+     5 *-*   raise nomethod exit
+     2 *-* call r1
+Error 97 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.2/probes/call-on-any/c.rex line 5:  Object method not found.
+Error 97.5:  An unhandled NOMETHOD condition has been raised.

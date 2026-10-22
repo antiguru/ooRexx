@@ -1,0 +1,5 @@
+rc=0
+[stdout]
+handler ERROR 
+zr 2
+[stderr]

@@ -1,0 +1,8 @@
+--- oracle rc=168
+[stdout]
+[stderr]
+       *-* Compiled method "LINEOUT" with scope "Stream".
+   365 *-* Method SAY with scope "Stream" in package "REXX" (no source available).
+     1 *-* .stdout~say(.nil)
+Error 88 running REXX:  Invalid argument.
+Error 88.909:  Argument 1 must have a string value.

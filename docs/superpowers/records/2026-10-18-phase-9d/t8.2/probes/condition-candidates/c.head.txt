@@ -1,0 +1,4 @@
+--- crate rc=0
+[stdout]
+sf PROGRAM 4 [/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.2/probes/condition-candidates/c.rex]
+[stderr]

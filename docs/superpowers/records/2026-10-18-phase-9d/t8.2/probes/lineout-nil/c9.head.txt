@@ -1,0 +1,7 @@
+--- crate rc=168
+[stdout]
+[stderr]
+       *-* Compiled method "DESCRIPTION" with scope "Stream".
+     1 *-* x = .stdout~description(1)
+Error 88 running REXX:  Invalid argument.
+Error 88.922:  Too many arguments in invocation; 0 expected.

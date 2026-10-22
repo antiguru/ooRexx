@@ -1,0 +1,6 @@
+--- oracle rc=159
+[stdout]
+[stderr]
+     3 *-* say r~nosuch
+Error 97 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.2/probes/unknown-frame/vr.rex line 3:  Object method not found.
+Error 97.1:  Object "5" does not understand message "NOSUCH".

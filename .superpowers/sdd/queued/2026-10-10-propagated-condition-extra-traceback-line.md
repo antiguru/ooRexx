@@ -1,3 +1,4 @@
+**CLOSED 2026-10-22 by Phase 9d Task 8.2 (12ef5a35c).**
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: an extra 9 *-* call s line here.
 
 # A condition propagated from an internal call in a handler prints the call's traceback line

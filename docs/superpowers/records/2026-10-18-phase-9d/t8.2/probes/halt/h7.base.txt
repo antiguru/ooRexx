@@ -1,0 +1,6 @@
+--- stdout
+HALT 4
+trapped SYNTAX 41.1
+next
+--- stderr
+--- rc 0

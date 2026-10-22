@@ -1,0 +1,8 @@
+--- oracle rc=214
+[stdout]
+[stderr]
+     8 *-*     say 1/0
+     5 *-*   call inner
+     1 *-* call outer
+Error 42:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

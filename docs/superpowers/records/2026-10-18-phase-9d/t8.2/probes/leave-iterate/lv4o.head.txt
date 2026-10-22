@@ -1,0 +1,4 @@
+--- crate rc=0
+[stdout]
+trapped 4
+[stderr]

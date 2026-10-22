@@ -1,3 +1,4 @@
+**CLOSED 2026-10-22 by Phase 9d Task 8.2 (a52fa561b).**
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** both probes still print an extra Compiled method "UNKNOWN" traceback line here.
 
 # A Directory~setMethod entry adds a `Compiled method "UNKNOWN"` traceback line

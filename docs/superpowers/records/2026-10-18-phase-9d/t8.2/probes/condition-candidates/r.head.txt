@@ -1,0 +1,9 @@
+--- crate rc=0
+[stdout]
+mh 1 first
+x first
+mh 1 second
+r2 second
+wh 0
+sh 1 third
+[stderr]

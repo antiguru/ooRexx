@@ -1,0 +1,1 @@
+.stdout~lineout(.nil)

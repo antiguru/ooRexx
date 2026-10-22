@@ -1,0 +1,6 @@
+--- oracle rc=222
+[stdout]
+[stderr]
+     5 *-*   end
+Error 34 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.2/probes/while-retest/w6.rex line 5:  Logical value not 0 or 1.
+Error 34.3:  Value of expression following WHILE keyword must be exactly "0" or "1"; found "x".

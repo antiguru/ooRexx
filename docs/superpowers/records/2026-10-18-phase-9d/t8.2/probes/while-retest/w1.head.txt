@@ -1,0 +1,18 @@
+--- crate rc=214
+[stdout]
+f 1 SIGL 1
+f 2 SIGL 3
+f 3 SIGL 3
+end1
+g 1 SIGL 6
+g 2 SIGL 8
+g 3 SIGL 8
+end2
+h 0 SIGL 11
+h 1 SIGL 13
+h 2 SIGL 13
+[stderr]
+    26 *-*         return 1/0
+    13 *-*   end
+Error 42 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.2/probes/while-retest/w1.rex line 26:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

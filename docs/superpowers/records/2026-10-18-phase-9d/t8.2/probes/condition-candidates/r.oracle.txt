@@ -1,0 +1,9 @@
+--- oracle rc=0
+[stdout]
+mh 0 The NIL object
+x first
+mh 0 The NIL object
+r2 second
+wh 0
+sh 0 The NIL object
+[stderr]

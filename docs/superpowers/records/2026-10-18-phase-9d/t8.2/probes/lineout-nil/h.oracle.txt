@@ -1,0 +1,7 @@
+--- oracle rc=168
+[stdout]
+[stderr]
+       *-* Compiled method "LINEOUT" with scope "Stream".
+     1 *-* .stdout~lineout(.nil)
+Error 88 running REXX:  Invalid argument.
+Error 88.909:  Argument 1 must have a string value.

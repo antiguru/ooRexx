@@ -1,0 +1,9 @@
+--- oracle rc=0
+[stdout]
+got 1
+cont propagates
+main done
+[stderr]
+     9 *-* x = 1/0
+Error 42:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

@@ -1,0 +1,9 @@
+--- crate rc=214
+[stdout]
+[stderr]
+     5 *-*   say 1/0
+    11 *-*   call t
+     8 *-* call s
+     1 *-* call outer
+Error 42:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

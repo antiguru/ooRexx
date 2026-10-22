@@ -1,0 +1,4 @@
+--- crate rc=0
+[stdout]
+s  40 3
+[stderr]

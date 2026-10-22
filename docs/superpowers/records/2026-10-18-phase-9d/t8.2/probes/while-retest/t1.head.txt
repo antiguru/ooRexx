@@ -1,0 +1,9 @@
+--- crate rc=0
+[stdout]
+     2 *-*   do j = 1 while f(j)
+     4 *-*   end
+[    17 *-*         return 1 / 0]
+[     4 *-*   end]
+17 [    17 *-*         return 1 / 0]
+4 [     4 *-*   end]
+[stderr]

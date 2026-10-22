@@ -1,3 +1,4 @@
+**CLOSED 2026-10-22 by Phase 9d Task 8.2 (918e67f90).**
 **RULED: 9d by the controller, as Moritz ruled the post-Task-2 gaps 2026-10-19 ("proposal ok"); Task 8.** A pending HALT taken at a SIGNAL ON SYNTAX label gives a broken report.
 
 # HALT at a SIGNAL ON SYNTAX label

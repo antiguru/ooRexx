@@ -1,3 +1,4 @@
+**CLOSED 2026-10-22 by Phase 9d Task 8.2 (4acd606e9).**
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: CALL ON ANY traps NOVALUE here; a KNOWN GAP row in phase-4-exclusions.txt.
 
 # RAISE NOVALUE RETURN into a caller reaches its CALL ON ANY

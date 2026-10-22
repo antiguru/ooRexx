@@ -1,0 +1,4 @@
+--- crate rc=0
+[stdout]
+mh hasResult 1 first
+[stderr]

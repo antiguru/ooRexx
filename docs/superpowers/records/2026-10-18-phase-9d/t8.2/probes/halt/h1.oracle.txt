@@ -1,0 +1,6 @@
+--- stdout
+--- stderr
+     1 *-* address system 'echo a; sleep 1.13; echo b' with output using (.Bad~new)
+Error 98 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.2/probes/halt/h1.rex line 1:  Execution error.
+Error 98.923:  Address command redirection failed (Interrupted system call).
+--- rc 158

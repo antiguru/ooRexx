@@ -1,3 +1,4 @@
+**CLOSED 2026-10-22 by Phase 9d Task 8.2 (12ef5a35c).**
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still lacks the sender's 2 *-* say 'got' o~m line here.
 
 # A condition propagated in a REPLY continuation lacks the sender's traceback line

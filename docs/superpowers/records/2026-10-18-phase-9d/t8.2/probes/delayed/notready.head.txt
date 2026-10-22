@@ -1,0 +1,6 @@
+rc=0
+[stdout]
+handler NOTREADY 
+handler NOTREADY 
+zr 2
+[stderr]

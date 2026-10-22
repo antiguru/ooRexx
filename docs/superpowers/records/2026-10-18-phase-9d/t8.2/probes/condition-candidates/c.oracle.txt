@@ -1,0 +1,4 @@
+--- oracle rc=0
+[stdout]
+sf PROGRAM 4 []
+[stderr]

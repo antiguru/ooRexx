@@ -1,3 +1,4 @@
+**CLOSED 2026-10-22 by Phase 9d Task 8.2 (a52fa561b).**
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probes still differ: the second traceback line names the END on the oracle and the DO here.
 
 # 2026-10-02-while-condition-failure-traceback

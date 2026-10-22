@@ -1,0 +1,9 @@
+--- crate rc=214
+[stdout]
+The NIL object
+[stderr]
+     1 *-* return 1/0
+       *-* Compiled method "UNKNOWN" with scope "Directory".
+     4 *-* say d~unknown("GO", .array~new)
+Error 42 running GO line 1:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
