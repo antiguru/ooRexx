@@ -119,7 +119,7 @@ Replaced in fix round 1. `r1/callgrind-final.txt`: `bench-programs/callgrind.sh 
 every program in the script's `PROGRAMS` (`define` included), BASE `efe8d3f40` against HEAD
 `3d9cc2da0`, 3 rounds. Exit 1, from `SPREAD` alone: pingguard (head 0.0145%) and pingsem (base 0.0157%,
 head 0.0159%), schedule-dependent on both sides. Head against base, libc subtracted, the largest rise
-is dirread +0.0455%; every other program is at most +0.0013% or falls. Whole process, pkglocal is
+is dirread +0.0455%, then interpret +0.0235%; every other program is at most +0.0013% or falls. Whole process, pkglocal is
 +0.4170% and compound +0.0592% with libc subtracted 0.0000% for both. The full table is in the record.
 
 ## Concerns
