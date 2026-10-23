@@ -1,0 +1,12 @@
+0
+oracle 100000 maxrss=20664kB
+0
+d6dee4ef4 (root pins) 10000 maxrss=677204kB
+0
+2afe1e16c (traced) 10000 maxrss=57144kB
+/home/moritz/.local/bin/memcap: line 67: 1095036 Killed                     ( echo "$BASHPID" > "$cg/cgroup.procs"; exec "$@" )
+memcap: OOM-killed at the 2G cap (peak 2.0G)
+Command exited with non-zero status 137
+d6dee4ef4 (root pins) 100000 maxrss=5168kB
+0
+2afe1e16c (traced) 100000 maxrss=57360kB

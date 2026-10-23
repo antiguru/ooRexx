@@ -5,43 +5,44 @@
    Compiling serde v1.0.229
    Compiling zmij v1.0.23
    Compiling num-traits v0.2.19
-   Compiling serde_json v1.0.151
    Compiling either v1.16.0
+   Compiling serde_json v1.0.151
    Compiling alloca v0.4.0
-   Compiling plotters-backend v0.3.7
-   Compiling itoa v1.0.18
-   Compiling memchr v2.8.3
-   Compiling serde_derive v1.0.229
    Compiling clap_lex v1.1.0
    Compiling anstyle v1.0.14
+   Compiling plotters-backend v0.3.7
+   Compiling itoa v1.0.18
    Compiling ciborium-io v0.2.2
-   Compiling regex-automata v0.4.14
-   Compiling clap_builder v4.6.2
-   Compiling zerocopy-derive v0.8.52
+   Compiling memchr v2.8.3
+   Compiling serde_derive v1.0.229
    Compiling plotters-svg v0.3.7
+   Compiling zerocopy-derive v0.8.52
+   Compiling clap_builder v4.6.2
+   Compiling regex-automata v0.4.14
    Compiling itertools v0.13.0
-   Compiling half v2.7.1
-   Compiling cast v0.3.0
    Compiling same-file v1.0.6
-   Compiling ciborium-ll v0.2.2
-   Compiling walkdir v2.5.0
-   Compiling ciborium v0.2.2
-   Compiling plotters v0.3.7
-   Compiling page_size v0.6.0
+   Compiling cast v0.3.0
    Compiling criterion-plot v0.8.2
-   Compiling rayon v1.12.0
-   Compiling tinytemplate v1.1.0
-   Compiling clap v4.6.2
+   Compiling half v2.7.1
+   Compiling ciborium-ll v0.2.2
+   Compiling ciborium v0.2.2
+   Compiling walkdir v2.5.0
    Compiling regex v1.12.4
-   Compiling anes v0.1.6
+   Compiling page_size v0.6.0
+   Compiling rayon v1.12.0
+   Compiling plotters v0.3.7
+   Compiling clap v4.6.2
+   Compiling tinytemplate v1.1.0
    Compiling oorandom v11.1.0
+   Compiling anes v0.1.6
    Compiling rexx-parse v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse)
    Compiling criterion v0.8.2
-    Finished `release` profile [optimized + debuginfo] target(s) in 32.04s
-     Running tests/sourceline_oracle.rs (/tmp/claude-1000/t83-target/release/deps/sourceline_oracle-ad800564eb52dc61)
+    Finished `release` profile [optimized + debuginfo] target(s) in 26.91s
+     Running tests/sourceline_oracle.rs (/tmp/claude-1000/t83f2-target/release/deps/sourceline_oracle-ad800564eb52dc61)
 
 running 1 test
 test sourceline_matches_the_interpreter_for_every_corpus_program ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
 
+rc=0

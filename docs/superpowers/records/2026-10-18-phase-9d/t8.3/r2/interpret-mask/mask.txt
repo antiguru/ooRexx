@@ -1,0 +1,35 @@
+== iv.rex
+-- oracle
+f 1
+f 2
+f 3
+rc=0
+-- 9963948e3
+f 1
+f 2
+f 3
+rc=0
+-- 2afe1e16c
+f 1
+f 2
+f 3
+rc=0
+== ix.rex
+-- oracle
+f 1
+f 2
+f 3
+f 4
+rc=0
+-- 9963948e3
+f 1
+f 2
+f 3
+rexx-exec: an activation's body selector names no routine body
+rc=120
+-- 2afe1e16c
+f 1
+f 2
+f 3
+f 4
+rc=0

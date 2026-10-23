@@ -662,7 +662,7 @@ base/rexxutil/SysFileDateTime	oracle	8	8	8			-	-	1	yes	ulimit -v 1048576	8
 base/rexxutil/SysFileDateTime	crate	8	8	8			-	-	1	yes	memcap 2G	8
 base/rexxutil/SysFileSearch	oracle	14	14	14			-	-	1	yes	ulimit -v 1048576	14
 base/rexxutil/SysFileSearch	crate	14	14	14			-	-	1	yes	memcap 2G	14
-base/rexxutil/SysFileTree	oracle	26	26	26			-	-	1	yes	ulimit -v 1048576	26
+base/rexxutil/SysFileTree	oracle	26	26	25	TEST_TREE_DIRECTORY		-	-	1	yes	ulimit -v 1048576	26
 base/rexxutil/SysFileTree	crate	26	26	26			-	-	1	yes	memcap 2G	26
 base/rexxutil/SysFileXXX	oracle	43	43	43			-	-	1	yes	ulimit -v 1048576	43
 base/rexxutil/SysFileXXX	crate	43	43	43			-	-	1	yes	memcap 2G	43

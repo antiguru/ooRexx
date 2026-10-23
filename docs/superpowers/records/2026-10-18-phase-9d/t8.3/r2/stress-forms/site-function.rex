@@ -1,9 +1,16 @@
 .local~rr = .routines
 .routines['F'] = .routine~new('f', 'use arg n; .rr~remove("F"); return "f" n')
 do n = 1 to 3
-  call f n; say result
-  do j = 1 to 20; x = copies("a", 1000000); end
+  say f(n)
+  x = .array~new(20)
 end
 exit
 viaf: return f(arg(1))
 ::routine dummy
+::class thing
+::method viaf
+  return f(arg(1))
+::class cmp
+::method compare
+  say f(arg(1))
+  return 0

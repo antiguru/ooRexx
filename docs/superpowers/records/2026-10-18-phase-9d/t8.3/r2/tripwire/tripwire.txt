@@ -1,0 +1,21 @@
+== mutant (resume_call's end_parked_keep deleted), debug build
+-- tripwire-probe.rex
+1 2
+3 4
+rc=0
+-- t2.rex
+
+thread 'rexx-interp' (1093238) panicked at crates/rexx-exec/src/run/call.rs:587:17:
+an entered call's keep was left unclaimed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+rc=101
+== head, debug build
+-- tripwire-probe.rex
+1 2
+3 4
+rc=0
+-- t2.rex
+1
+2
+end
+rc=0

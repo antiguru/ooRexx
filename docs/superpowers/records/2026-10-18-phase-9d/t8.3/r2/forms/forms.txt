@@ -1,0 +1,28 @@
+internal	oracle: f 1 f 2 f 3 rc=0
+	base: f 1 f 2 rexx-exec: an activation's body selector names no routine body rc=120
+	head: f 1 f 2 f 3 rc=0
+	base differs, head identical
+function	oracle: g 1 g 2 g 3 rc=0
+	base: g 1 g 2 rexx-exec: an activation's body selector names no routine body rc=120
+	head: g 1 g 2 g 3 rc=0
+	base differs, head identical
+call	oracle: h 1 h 2 h 3 rc=0
+	base: h 1 h 2 rexx-exec: an activation's body selector names no routine body rc=120
+	head: h 1 h 2 h 3 rc=0
+	base differs, head identical
+method	oracle: m 1 m 2 m 3 rc=0
+	base: m 1 m 2 rexx-exec: an activation's body selector names no routine body rc=120
+	head: m 1 m 2 m 3 rc=0
+	base differs, head identical
+sortwith	oracle: s 1 s 2 s 3 rc=0
+	base: s 1 s 2 rexx-exec: an activation's body selector names no routine body rc=120
+	head: s 1 s 2 s 3 rc=0
+	base differs, head identical
+interpret	oracle: i 1 i 2 i 3 rc=0
+	base: i 1 i 2 i 3 rc=0
+	head: i 1 i 2 i 3 rc=0
+	base identical, head identical
+cycle	oracle: a 0 a 0 a 0 rc=0
+	base: a 0 a 0 rexx-exec: an activation's body selector names no routine body rc=120
+	head: a 0 a 0 a 0 rc=0
+	base differs, head identical

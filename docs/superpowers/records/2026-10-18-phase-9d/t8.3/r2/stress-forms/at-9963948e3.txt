@@ -1,0 +1,17 @@
+SCRATCH site-call.rex rc=120 stdout="f 1\n" stderr="rexx-exec: an activation's body selector names no routine body\n"
+thread 'routines_whose_sites_keep_each_other_survive_collection' (1094159) panicked at crates/rexx-exec/tests/collect_stress.rs:983:5:
+  left: (120, "a 0\n")
+ right: (0, "a 0\na 0\na 0\n")
+test routines_whose_sites_keep_each_other_survive_collection ... FAILED
+thread 'a_routine_only_a_call_site_keeps_survives_collection' (1094158) panicked at crates/rexx-exec/tests/collect_stress.rs:983:5:
+  left: (120, "f 1\n")
+ right: (0, "f 1\nf 2\nf 3\n")
+test a_routine_only_a_call_site_keeps_survives_collection ... FAILED
+SCRATCH site-cycle.rex rc=120 stdout="a 0\n" stderr="rexx-exec: an activation's body selector names no routine body\n"
+SCRATCH site-function.rex rc=120 stdout="f 1\n" stderr="rexx-exec: an activation's body selector names no routine body\n"
+SCRATCH site-internal.rex rc=120 stdout="f 1\n" stderr="rexx-exec: an activation's body selector names no routine body\n"
+SCRATCH site-interpret.rex rc=0 stdout="f 1\nf 2\nf 3\n" stderr=""
+SCRATCH site-method.rex rc=120 stdout="f 1\n" stderr="rexx-exec: an activation's body selector names no routine body\n"
+SCRATCH site-sortwith.rex rc=120 stdout="f 1\n" stderr="rexx-exec: an activation's body selector names no routine body\n"
+test scratch_site_forms_each ... ok
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 72 filtered out; finished in 0.36s

@@ -1,0 +1,7 @@
+internal: f 1 f 2 rexx-exec: an activation's body selector names no routine body  rc=0
+function: g 1 g 2 rexx-exec: an activation's body selector names no routine body  rc=0
+call: h 1 h 2 rexx-exec: an activation's body selector names no routine body  rc=0
+method: m 1 m 2 rexx-exec: an activation's body selector names no routine body  rc=0
+sortwith: s 1 s 2 rexx-exec: an activation's body selector names no routine body  rc=0
+interpret: i 1 i 2 i 3  rc=0
+cycle: a 0 a 0 rexx-exec: an activation's body selector names no routine body  rc=0
