@@ -1,0 +1,7 @@
+     Running tests/collect_stress.rs (/tmp/claude-1000/t83r2-target-base/release/deps/collect_stress-c1bf28e3b89326bf)
+thread 'a_routine_only_a_call_site_keeps_survives_collection' (970774) panicked at crates/rexx-exec/tests/collect_stress.rs:983:5:
+assertion `left == right` failed: stderr: rexx-exec: an activation's body selector names no routine body
+  left: (120, "f 1\n")
+ right: (0, "f 1\nf 2\nf 3\n")
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 72 filtered out; finished in 0.04s
+error: test failed, to rerun pass `-p rexx-exec --test collect_stress`

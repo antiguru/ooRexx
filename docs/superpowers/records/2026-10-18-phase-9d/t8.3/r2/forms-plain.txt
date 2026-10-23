@@ -1,0 +1,9 @@
+s1 (say viaf(n)) base: f 1 f 2 rexx-exec: an activation's body selector names no routine body  rc=0
+s1 (say viaf(n)) head: f 1 f 2 f 3  rc=0
+s1 oracle: f 1 f 2 f 3 
+s2 (say f(n)) base: f 1 f 2 rexx-exec: an activation's body selector names no routine body  rc=0
+s2 (say f(n)) head: f 1 f 2 f 3  rc=0
+s2 oracle: f 1 f 2 f 3 
+s3 (call f n; say result) base: f 1 f 2 rexx-exec: an activation's body selector names no routine body  rc=0
+s3 (call f n; say result) head: f 1 f 2 f 3  rc=0
+s3 oracle: f 1 f 2 f 3 

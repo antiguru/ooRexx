@@ -176,6 +176,20 @@ impl Interp {
     /// its routine for the instruction's life.
     #[inline]
     pub(crate) fn repin(&mut self, repin: crate::run::Repin) {
+        if repin.pin == ObjRef::NIL
+            && repin.unpin == ObjRef::NIL
+            && repin.pin_program.is_none()
+            && repin.unpin_program.is_none()
+        {
+            return;
+        }
+        self.repin_held(repin);
+    }
+
+    /// [`Interp::repin`] for a change that pins or unpins something.
+    #[cold]
+    #[inline(never)]
+    fn repin_held(&mut self, repin: crate::run::Repin) {
         if repin.pin != ObjRef::NIL {
             self.pin_copy(repin.pin);
         }

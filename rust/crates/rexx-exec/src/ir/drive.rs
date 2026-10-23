@@ -4238,6 +4238,7 @@ impl Interp {
     /// nothing kept there resolved under `generation`: a label or a builtin
     /// is kept at once, as the oracle fixes both when the clause resolves,
     /// and anything else is a [`SiteKeep`] for when the call returns.
+    #[inline(always)]
     fn missed_site(
         &mut self,
         chunk: &Chunk,

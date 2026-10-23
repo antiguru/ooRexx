@@ -1,0 +1,12 @@
+interp 10000 base interp 10000 maxrss=56976kB 
+interp 100000 base interp 100000 maxrss=56616kB 
+nested 10000 base nested 10000 maxrss=56956kB 
+nested 100000 base nested 100000 maxrss=56784kB 
+rexx-exec: an activation's body selector names no routine body Command exited with non-zero status 120 base site 10000 maxrss=45968kB 
+rexx-exec: an activation's body selector names no routine body Command exited with non-zero status 120 base site 100000 maxrss=46216kB 
+interp 10000 head interp 10000 maxrss=56944kB 
+interp 100000 head interp 100000 maxrss=56928kB 
+nested 10000 head nested 10000 maxrss=74664kB 
+nested 100000 head nested 100000 maxrss=74892kB 
+site 10000 head site 10000 maxrss=46180kB 
+site 100000 head site 100000 maxrss=45780kB 
