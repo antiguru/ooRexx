@@ -81,6 +81,11 @@ pub(crate) struct PackageData {
     pub(crate) tables: [Option<ObjRef>; 3],
     /// The value each `::CONSTANT` accessor answers, by declaring directive.
     pub(crate) constants: FxHashMap<usize, ObjRef>,
+    /// The package of each other program's `::ROUTINE` a call site of this
+    /// program keeps, with how many sites keep one of its routines: the
+    /// oracle's instruction holds the routine it keeps
+    /// ([`Interp::hold_site_program`]).
+    pub(crate) site_held: FxHashMap<ObjRef, u32>,
 }
 
 impl PackageFields for PackageData {
@@ -107,6 +112,7 @@ impl PackageFields for PackageData {
             main_routine,
             tables,
             constants,
+            site_held,
         } = self;
         out.extend(*security_manager);
         // The `Routine` objects `~addRoutine` filed as themselves, which the
@@ -132,6 +138,7 @@ impl PackageFields for PackageData {
         out.extend(*main_routine);
         out.extend(tables.iter().flatten().copied());
         out.extend(constants.values().copied());
+        out.extend(site_held.keys().copied());
     }
 
     fn clone_fields(&self) -> Box<dyn PackageFields> {

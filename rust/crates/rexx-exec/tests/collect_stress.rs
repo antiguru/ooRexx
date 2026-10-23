@@ -1832,14 +1832,17 @@ fn a_swept_rebuilt_executable_leaves_its_identity_alone() {
 
 /// A routine only a call site keeps, its `.ROUTINES` entry removed by its
 /// own first call, still runs on the site's later calls: through an internal
-/// function's site, a function call in the main program, and a `CALL`.
-/// Measured, oracle rc 0 for each form.
+/// function's site, a function call in the main program, a `CALL`, a
+/// method's site, a site in a comparator `sortWith` runs, and an
+/// `INTERPRET`'s site. Measured, oracle rc 0 for each form.
 #[test]
 fn a_routine_only_a_call_site_keeps_survives_collection() {
     for (form, call) in [
         ("<site-internal>", "say viaf(n)"),
         ("<site-function>", "say f(n)"),
         ("<site-call>", "call f n; say result"),
+        ("<site-method>", "say .thing~new~viaf(n)"),
+        ("<site-sortwith>", ".array~of(n, n)~sortWith(.cmp~new)"),
     ] {
         assert_stress_prints(
             form,
@@ -1854,12 +1857,52 @@ fn a_routine_only_a_call_site_keeps_survives_collection() {
                     "exit\n",
                     "viaf: return f(arg(1))\n",
                     "::routine dummy\n",
+                    "::class thing\n",
+                    "::method viaf\n",
+                    "  return f(arg(1))\n",
+                    "::class cmp\n",
+                    "::method compare\n",
+                    "  say f(arg(1))\n",
+                    "  return 0\n",
                 ),
                 call
             ),
             "f 1\nf 2\nf 3\n",
         );
     }
+    assert_stress_prints(
+        "<site-interpret>",
+        concat!(
+            ".local~rr = .routines\n",
+            ".routines['F'] = .routine~new('f', 'use arg n; .rr~remove(\"F\"); return \"f\" n')\n",
+            "interpret 'do n = 1 to 3; say f(n); x = .array~new(20); end'\n",
+            "::routine dummy\n",
+        ),
+        "f 1\nf 2\nf 3\n",
+    );
+}
+
+/// Two routines whose call sites keep each other, reachable only through
+/// the first: the first's site holds the second while the first is live.
+/// Measured, oracle rc 0.
+#[test]
+fn routines_whose_sites_keep_each_other_survive_collection() {
+    assert_stress_prints(
+        "<site-cycle>",
+        concat!(
+            ".local~rr = .routines\n",
+            ".routines['A'] = .routine~new('a', 'use arg n; if n > 0 then return b(n - 1);' -\n",
+            "  '.rr~remove(\"A\"); .rr~remove(\"B\"); return \"a\" n')\n",
+            ".routines['B'] = .routine~new('b', 'return a(arg(1))')\n",
+            ".local~ra = .routines['A']\n",
+            "do n = 1 to 3\n",
+            "  say .ra~call(2 * n)\n",
+            "  x = .array~new(20)\n",
+            "end\n",
+            "::routine dummy\n",
+        ),
+        "a 0\na 0\na 0\n",
+    );
 }
 
 /// A literal value a variable holds outlives the chunk that interned it: an

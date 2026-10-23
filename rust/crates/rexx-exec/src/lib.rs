@@ -1384,9 +1384,6 @@ struct Interp {
     /// How many call sites keep each `Routine` copy alive ([`Interp::repin`]),
     /// each copy rooted once while any does.
     pinned_copies: FxHashMap<ObjRef, u32>,
-    /// How many call sites keep a `::ROUTINE` of each program, whose package
-    /// is a root while any does ([`Interp::repin`]).
-    pub(crate) pinned_programs: FxHashMap<ProgramId, u32>,
     /// The parse cache a handle-inline string has nowhere to keep. See
     /// `value::TextNumbers`, which owns the rule and the measurement.
     text_numbers: crate::value::TextNumbers,
@@ -2301,7 +2298,6 @@ impl Interp {
             text_scratch: [0; crate::value::TEXT_SCRATCH],
             nil_name: None,
             pinned_copies: FxHashMap::default(),
-            pinned_programs: FxHashMap::default(),
             text_numbers: crate::value::TextNumbers::new(),
             result_buffer: std::cell::Cell::new(Vec::new()),
             library_search: library_search_of(&env),
@@ -3225,8 +3221,6 @@ impl Interp {
             nil_name: _,
             // Held through the global roots they name.
             pinned_copies: _,
-            // Rooted through their packages, in `Interp::package_roots`.
-            pinned_programs: _,
             // Handle-inline strings, which are their own bytes and have no
             // slot to recycle.
             text_numbers: _,
@@ -3424,18 +3418,16 @@ impl Interp {
     }
 
     /// The package of each program an activation on any activity runs, of
-    /// each program of the interpreter's own library, of each program a
+    /// each program of the interpreter's own library, and of each program a
     /// library code row names, which the oracle keeps for the run: measured,
     /// the package whose `::ROUTINE` first bound `rxmath`'s `RxCalcSqrt` is
-    /// never collected; and of each program a call site keeps a `::ROUTINE`
-    /// of, which the oracle's instruction holds.
+    /// never collected.
     fn package_roots(&self, out: &mut Vec<ObjRef>) {
         let mut programs = Vec::new();
         self.activity.running_programs(&mut programs);
         self.activities.running_programs(&mut programs);
         programs.extend(self.library_programs.iter().copied());
         programs.extend(self.library_codes.iter().flatten().copied());
-        programs.extend(self.pinned_programs.keys().copied());
         out.extend(
             programs
                 .into_iter()
@@ -3588,21 +3580,16 @@ impl Interp {
         }
         let mut interned = Vec::new();
         let mut pinned = Vec::new();
-        let mut pinned_programs = Vec::new();
         self.chunks.retain(|(key, _), chunk| {
             let keep = !dead(&key.program);
             if !keep {
                 interned.extend(chunk.interned_values());
                 pinned.extend(chunk.pinned_copies());
-                pinned_programs.extend(chunk.pinned_programs());
             }
             keep
         });
         for copy in pinned {
             self.unpin_copy(copy);
-        }
-        for program in pinned_programs {
-            self.unpin_program(program);
         }
         if !interned.is_empty() {
             let interned: rustc_hash::FxHashSet<ObjRef> = interned.into_iter().collect();

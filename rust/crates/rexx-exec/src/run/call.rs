@@ -84,9 +84,6 @@ pub(crate) struct SiteKeep {
     pub(crate) site: u16,
     resolved: Resolved,
     generation: u32,
-    /// The program of a `::ROUTINE` it names, where that is not the program
-    /// of the activation making the call.
-    program: Option<crate::plan::ProgramId>,
 }
 
 /// How a call through a call site ended, for its [`SiteKeep`].
@@ -568,17 +565,10 @@ impl Interp {
         if copy != ObjRef::NIL {
             self.pin_copy(copy);
         }
-        let program = match resolved {
-            Resolved::Routine(installed) if installed.program != self.activation().program_id => {
-                Some(installed.program)
-            }
-            _ => None,
-        };
         SiteKeep {
             site,
             resolved,
             generation,
-            program,
         }
     }
 
@@ -617,11 +607,9 @@ impl Interp {
         returned: bool,
     ) {
         if returned {
-            let repin = chunk.call_site_slot(keep.site).remember(
-                keep.resolved,
-                keep.generation,
-                keep.program,
-            );
+            let repin = chunk
+                .call_site_slot(keep.site)
+                .remember(keep.resolved, keep.generation);
             self.repin(repin);
         }
         let copy = keep.resolved.copy();

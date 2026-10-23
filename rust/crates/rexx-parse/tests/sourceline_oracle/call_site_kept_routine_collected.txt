@@ -1,8 +1,9 @@
-count 30
+count 60
 /* A routine only a call site keeps, its .ROUTINES entry removed by its own
    first call, still runs on the site's later calls after a collection:
    through an internal function's site, a function call in the main program,
-   and a CALL. */
+   a CALL, a method's site, a site in a comparator sortWith runs, an
+   INTERPRET's site, and two routines whose sites keep each other. */
 .local~rr = .routines
 .routines['F'] = .routine~new('f', 'use arg n; .rr~remove("F"); return "f" n')
 do n = 1 to 3
@@ -20,6 +21,27 @@ do n = 1 to 3
   say result
   call filler
 end
+.routines['M'] = .routine~new('m', 'use arg n; .rr~remove("M"); return "m" n')
+o = .thing~new
+do n = 1 to 3
+  say o~viam(n)
+  call filler
+end
+.routines['S'] = .routine~new('s', 'use arg n; .rr~remove("S"); return "s" n')
+do n = 1 to 3
+  .array~of(n, n)~sortWith(.cmp~new)
+  call filler
+end
+.routines['I'] = .routine~new('i', 'use arg n; .rr~remove("I"); return "i" n')
+interpret 'do n = 1 to 3; say i(n); call filler; end'
+.routines['A'] = .routine~new('a', 'use arg n; if n > 0 then return b(n - 1);' -
+  '.rr~remove("A"); .rr~remove("B"); return "a" n')
+.routines['B'] = .routine~new('b', 'return a(arg(1))')
+.local~ra = .routines['A']
+do n = 1 to 3
+  say .ra~call(2 * n)
+  call filler
+end
 exit
 viaf: return f(arg(1))
 filler: procedure
@@ -28,4 +50,12 @@ filler: procedure
   end
   return
 ::routine dummy
+  return 0
+::class thing
+::method viam
+  return m(arg(1))
+::class cmp
+::method compare
+  use arg l, r
+  say s(l)
   return 0
