@@ -82,9 +82,18 @@ fn run_directory(rel_path: &str) -> PathBuf {
 /// it observed beside this list whenever the two differ, and a program added to
 /// the corpus that collects nothing belongs here.
 const NO_ALLOCATION_PROGRAMS: &[&str] = &[
+    "lang/class_duplicate_attribute.rex",
+    "lang/class_duplicate_class.rex",
+    "lang/class_duplicate_constant.rex",
+    "lang/class_duplicate_constant_and_method.rex",
+    "lang/class_duplicate_method.rex",
     "lang/comparison_families.rex",
     "lang/comparison_operators_remaining.rex",
     "lang/deep_nested_expr.rex",
+    "lang/directive_annotate_missing_target.rex",
+    "lang/directive_constant_expression_needs_class.rex",
+    "lang/directive_method_external_duplicate_wins.rex",
+    "lang/directive_options_digits_below_fuzz.rex",
     "lang/do_counter_ctrl.rex",
     "lang/do_counter_forever.rex",
     "lang/do_counter_rep.rex",

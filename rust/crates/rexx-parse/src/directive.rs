@@ -16,10 +16,11 @@ use rexx_inventory::errors::{
     E19_915, E19_916, E19_917, E19_918, E19_919, E19_920, E19_921, E19_923, E19_924, E19_925,
     E20_916, E20_919, E20_920, E20_921, E20_924, E20_925, E20_926, E20_929, E20_935, E21_913,
     E21_914, E24_1, E25_11, E25_901, E25_902, E25_903, E25_904, E25_924, E25_925, E25_926, E25_927,
-    E25_928, E25_935, E26_5, E26_6, E35_936, E36_901, E99_905, E99_916, E99_917, E99_925, E99_933,
-    E99_934, E99_935, E99_936, E99_937, E99_938, E99_939, E99_940, E99_943, E99_944, E99_946,
-    E99_947, Msg,
+    E25_928, E25_935, E26_5, E26_6, E33_1, E35_936, E36_901, E99_901, E99_902, E99_903, E99_905,
+    E99_906, E99_916, E99_917, E99_925, E99_931, E99_932, E99_933, E99_934, E99_935, E99_936,
+    E99_937, E99_938, E99_939, E99_940, E99_942, E99_943, E99_944, E99_945, E99_946, E99_947, Msg,
 };
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::ast::{
     Access, Annotate, Annotation, AnnotationTarget, AttributeDirective, AttributeStyle,
@@ -105,27 +106,79 @@ const SUBKEY_SCIENTIFIC: usize = 37;
 /// The marker that ends a `::RESOURCE` body when the directive names none.
 const DEFAULT_RESOURCE_END: &[u8] = b"::END";
 
+/// What the directives parsed so far declare, which a later directive is
+/// checked against while it is parsed: `LanguageParser`'s `activeClass`,
+/// `classDependencies`, `routines`, `resources`, the member tables and the
+/// package's numeric settings.
+pub(crate) struct Declared {
+    /// Whether a `::CLASS` directive came before (`activeClass`,
+    /// `DirectiveParser.cpp:355`).
+    in_class: bool,
+    classes: FxHashSet<Box<[u8]>>,
+    routines: FxHashSet<Box<[u8]>>,
+    resources: FxHashSet<Box<[u8]>>,
+    /// The active class's methods by side (`true` for the class side) and
+    /// upcased name, or before any `::CLASS` the file's `unattachedMethods`.
+    members: FxHashMap<(bool, Box<[u8]>), Member>,
+    digits: usize,
+    fuzz: usize,
+    /// The directives whose `EXTERNAL` the oracle resolves while translating
+    /// (`createNativeMethod`, `PackageManager::resolveRoutine`), in the order
+    /// the parse reached that point.
+    pub(crate) binds: Vec<Directive>,
+}
+
+/// What `::ANNOTATE` asks of a method it names: `isConstant()` and
+/// `isAttribute()`.
+#[derive(Copy, Clone)]
+struct Member {
+    constant: bool,
+    attribute: bool,
+}
+
+impl Default for Declared {
+    fn default() -> Self {
+        Declared {
+            in_class: false,
+            classes: FxHashSet::default(),
+            routines: FxHashSet::default(),
+            resources: FxHashSet::default(),
+            members: FxHashMap::default(),
+            // `Numerics::DEFAULT_DIGITS` and a fuzz of zero.
+            digits: 9,
+            fuzz: 0,
+            binds: Vec::new(),
+        }
+    }
+}
+
 /// Parses the `::` clause the cursor is sitting on, advancing it past that
-/// clause. `in_class` says whether a `::CLASS` directive came before it,
-/// which is the C++ parser's `activeClass` (`DirectiveParser.cpp:355`).
+/// clause, and records what it declares in `declared`.
 pub(crate) fn parse_directive(
     ctx: &ParseCtx,
     cursor: &mut ClauseCursor,
-    in_class: bool,
+    declared: &mut Declared,
 ) -> Result<Directive, ParseError> {
     let clause = cursor
         .next_clause()
         .expect("parse_directive on an exhausted cursor");
-    let mut parser = Dir::new(ctx, clause, in_class);
+    let mut parser = Dir::new(ctx, clause, declared);
     let kind = parser.dispatch(cursor)?;
-    Ok(Directive {
+    // A body check that read past the last clause has met a scanner error
+    // there first, if there is one, before the oracle resolves anything.
+    let bound = parser.bound && !cursor.read_past_end();
+    let directive = Directive {
         kind,
         clause_span: parser.clause.span.clone(),
-    })
+    };
+    if bound {
+        declared.binds.push(directive.clone());
+    }
+    Ok(directive)
 }
 
 /// One directive clause's parse in progress.
-struct Dir<'a> {
+struct Dir<'a, 'd> {
     ctx: &'a ParseCtx<'a>,
     /// Position inside `clause.tokens`.
     cursor: TokenCursor,
@@ -133,12 +186,14 @@ struct Dir<'a> {
     /// The byte offset every error is reported against: the start of the
     /// clause, not of the offending token.
     clause_byte: usize,
-    /// Whether a `::CLASS` directive came before this one.
-    in_class: bool,
+    declared: &'d mut Declared,
+    /// Whether the parse reached the point where the oracle resolves this
+    /// directive's `EXTERNAL`.
+    bound: bool,
 }
 
-impl<'a> Dir<'a> {
-    fn new(ctx: &'a ParseCtx<'a>, clause: Clause, in_class: bool) -> Self {
+impl<'a, 'd> Dir<'a, 'd> {
+    fn new(ctx: &'a ParseCtx<'a>, clause: Clause, declared: &'d mut Declared) -> Self {
         let clause_byte = ctx
             .tokens
             .get(clause.tokens.start)
@@ -148,19 +203,47 @@ impl<'a> Dir<'a> {
             cursor: TokenCursor::new(clause.tokens.clone()),
             clause,
             clause_byte,
-            in_class,
+            declared,
+            bound: false,
         }
     }
 
     /// The CLASS-keyword half of `checkDuplicateMethod`
     /// (`DirectiveParser.cpp:510`-`516`): a class method needs a `::CLASS`
-    /// above it. The duplicate-key half is checked when the package is
-    /// installed.
+    /// above it.
     fn require_class(&self, class_method: bool) -> Result<(), ParseError> {
-        if class_method && !self.in_class {
+        if class_method && !self.declared.in_class {
             return Err(self.error(E99_905, []));
         }
         Ok(())
+    }
+
+    /// The duplicate half of `checkDuplicateMethod`
+    /// (`DirectiveParser.cpp:518`-`529`): `msg` if the active class, or the
+    /// unattached table, already holds `name` on that side, which `name` then
+    /// claims.
+    fn claim(
+        &mut self,
+        name: Box<[u8]>,
+        class_side: bool,
+        member: Member,
+        msg: Msg<0>,
+    ) -> Result<(), ParseError> {
+        match self.declared.members.entry((class_side, name)) {
+            std::collections::hash_map::Entry::Occupied(_) => Err(self.error(msg, [])),
+            std::collections::hash_map::Entry::Vacant(slot) => {
+                slot.insert(member);
+                Ok(())
+            }
+        }
+    }
+
+    /// `findMethod`: the active class's instance method `name`, else its class
+    /// method.
+    fn find_member(&self, name: &[u8]) -> Option<Member> {
+        [false, true]
+            .into_iter()
+            .find_map(|side| self.declared.members.get(&(side, Box::from(name))).copied())
     }
 
     /// `msg` reported against this clause, with `inserts` for its `&1`,
@@ -390,6 +473,17 @@ impl<'a> Dir<'a> {
             Ok(token) => self.value_of(token),
             Err(_) => return Err(self.error(E19_901, [])),
         };
+        // `isDuplicateClass` on the upcased name, then the new `activeClass`
+        // with empty method tables (`DirectiveParser.cpp:349`-`355`).
+        if !self
+            .declared
+            .classes
+            .insert(name.to_ascii_uppercase().into())
+        {
+            return Err(self.error(E99_901, []));
+        }
+        self.declared.in_class = true;
+        self.declared.members.clear();
         let mut class = ClassDirective {
             name,
             access: Access::Default,
@@ -559,6 +653,17 @@ impl<'a> Dir<'a> {
         // (`DirectiveParser.cpp:822`). Measured: `::method m class` with a
         // body holding a syntax error and no `::CLASS` above it is 99.905.
         self.require_class(method.class_method)?;
+        let upper: Box<[u8]> = method.name.to_ascii_uppercase().into();
+        let member = Member {
+            constant: false,
+            attribute: method.attribute,
+        };
+        let setter = || {
+            let mut setter = upper.to_vec();
+            setter.push(b'=');
+            setter.into_boxed_slice()
+        };
+        self.claim(upper.clone(), method.class_method, member, E99_902)?;
 
         // The shapes, in the C++'s own order, because they are not disjoint:
         // ATTRIBUTE combines with each of EXTERNAL and ABSTRACT, and DELEGATE
@@ -571,9 +676,16 @@ impl<'a> Dir<'a> {
             // 99.946 on line 2.
             self.require_variable_name(self.ctx.symbols.name(delegate).as_bytes())?;
             self.check_directive(cursor, E99_946)?;
+            if method.attribute {
+                self.claim(setter(), method.class_method, member, E99_902)?;
+            }
         } else if method.attribute {
+            // The setter's duplicate check comes before the body check here
+            // (`DirectiveParser.cpp:855`).
+            self.claim(setter(), method.class_method, member, E99_902)?;
             self.check_directive(cursor, E99_934)?;
             method.external = self.decode_external(external.as_deref(), false)?;
+            self.bound = method.external.is_some();
             // And here it runs AFTER, and only in the sub-branch that generates
             // the accessor pair (`DirectiveParser.cpp:892`). Measured:
             // `::method 3 attribute` with a body is 99.934 on line 2, while
@@ -590,6 +702,7 @@ impl<'a> Dir<'a> {
         } else {
             method.external = self.decode_external(external.as_deref(), false)?;
             self.check_directive(cursor, E99_936)?;
+            self.bound = true;
         }
         Ok(DirectiveKind::Method(Box::new(method)))
     }
@@ -681,6 +794,22 @@ impl<'a> Dir<'a> {
         // `::attribute 'foo' class` with a body and no `::CLASS` above it is
         // 99.905, not 99.937.
         self.require_class(attribute.class_method)?;
+        let upper: Box<[u8]> = attribute.name.to_ascii_uppercase().into();
+        let mut setter = upper.to_vec();
+        setter.push(b'=');
+        let member = Member {
+            constant: false,
+            attribute: true,
+        };
+        let side = attribute.class_method;
+        match attribute.style {
+            AttributeStyle::Both => {
+                self.claim(upper, side, member, E99_931)?;
+                self.claim(setter.into(), side, member, E99_931)?;
+            }
+            AttributeStyle::Get => self.claim(upper, side, member, E99_931)?,
+            AttributeStyle::Set => self.claim(setter.into(), side, member, E99_931)?,
+        }
 
         // Every shape here checks the body BEFORE decoding the external
         // string, unlike `::METHOD`'s plain external shape. Measured:
@@ -713,6 +842,7 @@ impl<'a> Dir<'a> {
             }
         }
         attribute.external = self.decode_external(external.as_deref(), false)?;
+        self.bound = attribute.external.is_some();
         Ok(DirectiveKind::Attribute(Box::new(attribute)))
     }
 
@@ -789,6 +919,19 @@ impl<'a> Dir<'a> {
         self.required_end(E21_913)?;
         // `Error_Translation_constant_body`. Measured: 99.938 on line 2.
         self.check_directive(cursor, E99_938)?;
+        // The duplicate checks, the class side only under a `::CLASS`, then
+        // `createConstantGetterMethod`'s 99.906 (`DirectiveParser.cpp:1926`-`1933`).
+        let upper: Box<[u8]> = name.to_ascii_uppercase().into();
+        let member = Member {
+            constant: true,
+            attribute: false,
+        };
+        self.claim(upper.clone(), false, member, E99_932)?;
+        if self.declared.in_class {
+            self.claim(upper, true, member, E99_932)?;
+        } else if matches!(value, ConstantValue::Expression(_)) {
+            return Err(self.error(E99_906, []));
+        }
         Ok(DirectiveKind::Constant(Box::new(ConstantDirective {
             name,
             value,
@@ -880,6 +1023,7 @@ impl<'a> Dir<'a> {
                 return Err(self.found(E25_928, Some(token)));
             }
         };
+        self.require_annotation_target(&target)?;
         let mut annotations = Vec::new();
         while !self.at_end() {
             annotations.push(self.annotation()?);
@@ -888,6 +1032,46 @@ impl<'a> Dir<'a> {
             target,
             annotations,
         })))
+    }
+
+    /// 99.945 for a target the directives so far do not declare, which
+    /// `annotateDirective` checks before reading any pair
+    /// (`DirectiveParser.cpp:1983`-`2090`, `processAttributeAnnotations`).
+    fn require_annotation_target(&self, target: &AnnotationTarget) -> Result<(), ParseError> {
+        let attribute = |name: &[u8], side: bool| {
+            let mut setter = name.to_vec();
+            setter.push(b'=');
+            [name, &setter[..]].into_iter().any(|half| {
+                self.declared
+                    .members
+                    .get(&(side, Box::from(half)))
+                    .is_some_and(|member| member.attribute)
+            })
+        };
+        let (kind, name): (&[u8], &[u8]) = match target {
+            AnnotationTarget::Package => return Ok(()),
+            AnnotationTarget::Class(name) if self.declared.classes.contains(name) => return Ok(()),
+            AnnotationTarget::Class(name) => (b"class", name),
+            AnnotationTarget::Routine(name) if self.declared.routines.contains(name) => {
+                return Ok(());
+            }
+            AnnotationTarget::Routine(name) => (b"routine", name),
+            AnnotationTarget::Method(name) if self.find_member(name).is_some() => return Ok(()),
+            AnnotationTarget::Method(name) => (b"method", name),
+            AnnotationTarget::Constant(name)
+                if self.find_member(name).is_some_and(|member| member.constant) =>
+            {
+                return Ok(());
+            }
+            AnnotationTarget::Constant(name) => (b"constant", name),
+            AnnotationTarget::Attribute(name)
+                if attribute(name, false) || attribute(name, true) =>
+            {
+                return Ok(());
+            }
+            AnnotationTarget::Attribute(name) => (b"attribute", name),
+        };
+        Err(self.error(E99_945, [kind.to_vec(), name.to_vec()]))
     }
 
     /// The upcased name an `::ANNOTATE` of the `target` kind requires.
@@ -942,6 +1126,10 @@ impl<'a> Dir<'a> {
                         .filter(|&digits| digits >= 1)
                         .and_then(|digits| usize::try_from(digits).ok())
                         .ok_or_else(|| self.error(E26_5, [value.to_vec()]))?;
+                    if digits <= self.declared.fuzz {
+                        return Err(self.numeric_conflict(digits, self.declared.fuzz));
+                    }
+                    self.declared.digits = digits;
                     options.push(PackageOption::Digits(digits));
                 }
                 Some(SUBDIR_FORM) => {
@@ -973,6 +1161,10 @@ impl<'a> Dir<'a> {
                     let fuzz = whole_number(&value, ARGUMENT_DIGITS)
                         .and_then(|fuzz| usize::try_from(fuzz).ok())
                         .ok_or_else(|| self.error(E26_6, [value.to_vec()]))?;
+                    if fuzz >= self.declared.digits {
+                        return Err(self.numeric_conflict(self.declared.digits, fuzz));
+                    }
+                    self.declared.fuzz = fuzz;
                     options.push(PackageOption::Fuzz(fuzz));
                 }
                 Some(SUBDIR_TRACE) => {
@@ -1028,6 +1220,20 @@ impl<'a> Dir<'a> {
             }
         }
         Ok(DirectiveKind::Options(options))
+    }
+
+    /// 33.1 for a package `digits` that does not exceed its `fuzz`
+    /// (`Error_Expression_result_digits`, `DirectiveParser.cpp:988`, `:1047`).
+    #[cold]
+    #[inline(never)]
+    fn numeric_conflict(&self, digits: usize, fuzz: usize) -> ParseError {
+        self.error(
+            E33_1,
+            [
+                digits.to_string().into_bytes(),
+                fuzz.to_string().into_bytes(),
+            ],
+        )
     }
 
     /// One of the seven condition options and its `SYNTAX`/`CONDITION`
@@ -1112,6 +1318,15 @@ impl<'a> Dir<'a> {
             // `::resource data end "x" extra` is 21.914.
             self.required_end(E21_914)?;
         }
+        // `Error_Translation_duplicate_resource`, before the body is read
+        // (`DirectiveParser.cpp:2316`).
+        if !self
+            .declared
+            .resources
+            .insert(name.to_ascii_uppercase().into())
+        {
+            return Err(self.error(E99_942, []));
+        }
 
         // `scan_resource_if_directive` copies a body for exactly the clause
         // shape enforced above, so a missing one means the marker never came.
@@ -1135,6 +1350,14 @@ impl<'a> Dir<'a> {
     /// `routineDirective` (`DirectiveParser.cpp:2565`).
     fn routine(&mut self, cursor: &ClauseCursor) -> Result<DirectiveKind, ParseError> {
         let name = self.require_name(E19_903)?;
+        // `isDuplicateRoutine`, ahead of the options (`DirectiveParser.cpp:2578`).
+        if !self
+            .declared
+            .routines
+            .insert(name.to_ascii_uppercase().into())
+        {
+            return Err(self.error(E99_903, []));
+        }
         let mut routine = RoutineDirective {
             name,
             access: Access::Default,
@@ -1172,6 +1395,7 @@ impl<'a> Dir<'a> {
                 routine.external = self.decode_external(Some(&spec), true)?;
                 // `Error_Translation_external_routine`.
                 self.check_directive(cursor, E99_939)?;
+                self.bound = true;
             }
             None => routine.body = Some(CodeBody::default()),
         }

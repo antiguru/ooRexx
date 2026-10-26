@@ -1,0 +1,19 @@
+class	expect	line	message	program
+install	98.903	1	Unable to load library "x".	::routine r external "LIBRARY x"\n::options digits 0\n
+install	98.903	1	Unable to load library "x".	::method m attribute external "LIBRARY x"\n::options digits 0\n
+translation	99.902	3	Duplicate ::METHOD directive instruction.	::class c\n::method a\n::method a\n::routine r\nsay (\n
+translation	99.902	3	Duplicate ::METHOD directive instruction.	::class c\n::method a\n::method a\nx = 1 +\n
+translation	99.931	3	Duplicate ::ATTRIBUTE directive instruction.	::class c\n::attribute a\n::attribute a\nsay hi\n
+translation	99.902	3	Duplicate ::METHOD directive instruction.	::class c\n::method m\n::method m\nif\n
+translation	99.902	3	Duplicate ::METHOD directive instruction.	::class c\n::method a\n::method a attribute\nsay 1\n
+translation	99.945	2	::ANNOTATE target routine "NOSUCH" not found.	::routine r\n::annotate routine nosuch a\n
+translation	99.942	4	Duplicate ::RESOURCE directive instruction.	::resource a\nx\n::END\n::resource a\ny\n
+install	98.903	2	Unable to load library "x".	::routine q\n::routine r external "LIBRARY x"\n::routine q\n
+translation	99.903	2	Duplicate ::ROUTINE directive instruction.	::routine r\n::routine r\nsay (\n
+translation	99.901	2	Duplicate ::CLASS directive instruction.	::class c\n::class c\n::routine r external "LIBRARY x"\n
+translation	33.1	1	Value of NUMERIC DIGITS ("9") must exceed value of NUMERIC FUZZ ("9").	::options fuzz 9\n::routine r\n::routine r\n
+translation	99.938	3	Constant methods cannot have a method body.	::constant k 1\n::constant k (1+2)\nsay (\n
+translation	99.932	2	Duplicate ::CONSTANT directive instruction.	::constant k 1\n::constant k (1+2)\n
+translation	99.906	1	A ::CONSTANT directive with an expression requires a matching ::CLASS directive.	::constant k (1+2)\n::routine r\n::routine r\n
+translation	99.902	3	Duplicate ::METHOD directive instruction.	::class c\n::constant k\n::method k class\n
+translation	99.932	3	Duplicate ::CONSTANT directive instruction.	::class c\n::method k class\n::constant k\n

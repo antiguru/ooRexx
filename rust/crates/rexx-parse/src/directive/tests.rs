@@ -26,12 +26,12 @@ use crate::{ProgramSource, SourceKind, scan};
 
 use super::{
     DIR_ANNOTATE, DIR_ATTRIBUTE, DIR_CLASS, DIR_CONSTANT, DIR_METHOD, DIR_OPTIONS, DIR_REQUIRES,
-    DIR_RESOURCE, DIR_ROUTINE, SUBDIR_ABSTRACT, SUBDIR_ALL, SUBDIR_ATTRIBUTE, SUBDIR_CLASS,
-    SUBDIR_CONDITION, SUBDIR_CONSTANT, SUBDIR_DELEGATE, SUBDIR_DIGITS, SUBDIR_END, SUBDIR_ERROR,
-    SUBDIR_EXTERNAL, SUBDIR_FAILURE, SUBDIR_FORM, SUBDIR_FUZZ, SUBDIR_GET, SUBDIR_GUARDED,
-    SUBDIR_INHERIT, SUBDIR_LIBRARY, SUBDIR_LOSTDIGITS, SUBDIR_METACLASS, SUBDIR_METHOD,
-    SUBDIR_MIXINCLASS, SUBDIR_NAMESPACE, SUBDIR_NOPROLOG, SUBDIR_NOSTRING, SUBDIR_NOTREADY,
-    SUBDIR_NOVALUE, SUBDIR_NUMERIC, SUBDIR_PACKAGE, SUBDIR_PRIVATE, SUBDIR_PROLOG,
+    DIR_RESOURCE, DIR_ROUTINE, Declared, SUBDIR_ABSTRACT, SUBDIR_ALL, SUBDIR_ATTRIBUTE,
+    SUBDIR_CLASS, SUBDIR_CONDITION, SUBDIR_CONSTANT, SUBDIR_DELEGATE, SUBDIR_DIGITS, SUBDIR_END,
+    SUBDIR_ERROR, SUBDIR_EXTERNAL, SUBDIR_FAILURE, SUBDIR_FORM, SUBDIR_FUZZ, SUBDIR_GET,
+    SUBDIR_GUARDED, SUBDIR_INHERIT, SUBDIR_LIBRARY, SUBDIR_LOSTDIGITS, SUBDIR_METACLASS,
+    SUBDIR_METHOD, SUBDIR_MIXINCLASS, SUBDIR_NAMESPACE, SUBDIR_NOPROLOG, SUBDIR_NOSTRING,
+    SUBDIR_NOTREADY, SUBDIR_NOVALUE, SUBDIR_NUMERIC, SUBDIR_PACKAGE, SUBDIR_PRIVATE, SUBDIR_PROLOG,
     SUBDIR_PROTECTED, SUBDIR_PUBLIC, SUBDIR_ROUTINE, SUBDIR_SET, SUBDIR_SUBCLASS, SUBDIR_SYNTAX,
     SUBDIR_TRACE, SUBDIR_UNGUARDED, SUBDIR_UNPROTECTED, SUBKEY_ENGINEERING, SUBKEY_INHERIT,
     SUBKEY_NOINHERIT, SUBKEY_SCIENTIFIC, parse_directive,
@@ -61,11 +61,10 @@ fn parse_with_symbols(
         if let Err(e) = translate_block(&ctx, &mut cursor) {
             failure = Some(e);
         }
-        let mut in_class = false;
+        let mut declared = Declared::default();
         while failure.is_none() && cursor.peek().is_some() {
-            match parse_directive(&ctx, &mut cursor, in_class) {
+            match parse_directive(&ctx, &mut cursor, &mut declared) {
                 Ok(mut directive) => {
-                    in_class |= matches!(directive.kind, DirectiveKind::Class(_));
                     // The same dispatch the public entry point uses, rather than
                     // a copy of it, so a directive kind that gains a body cannot
                     // be handled one way here and another way there.

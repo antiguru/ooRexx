@@ -359,6 +359,20 @@ pub fn each_expr<'a>(p: &'a Program, visit: &mut impl FnMut(&'a Expr)) {
     }
 }
 
+/// The translation errors that the directives declared so far decide, rather
+/// than the clause being parsed.
+pub const DECLARATION_ERRORS: &[(u16, u16)] = &[
+    (33, 1),
+    (99, 901),
+    (99, 902),
+    (99, 903),
+    (99, 906),
+    (99, 931),
+    (99, 932),
+    (99, 942),
+    (99, 945),
+];
+
 /// Every `*.rex` file under `dir`, recursively, in a stable order.
 pub fn rex_files_under(dir: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();

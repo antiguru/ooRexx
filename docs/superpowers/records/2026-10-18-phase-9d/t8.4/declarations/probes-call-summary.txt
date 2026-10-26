@@ -1,0 +1,3 @@
+base:differs head:same m4.rex
+base:same head:same m5.rex
+base:same head:same m6.rex

@@ -1,0 +1,37 @@
+/* What the directives declared so far decide is refused while the directive
+   is parsed, before any later clause, and an EXTERNAL the translation
+   resolved before a later clause's error is refused first. */
+call try '::class c', '::method a', '::method a', '::routine r', 'say ('
+call try '::class c', '::method m', '::method m', 'if'
+call try '::class c', '::attribute a', '::attribute a', 'say hi'
+call try '::class c', '::method a', '::method a attribute', 'say 1'
+call try '::class c', '::method a attribute', 'say 1'
+call try '::routine r', '::annotate routine nosuch a'
+call try '::resource a', 'x', '::END', '::resource a', 'y'
+call try '::routine r', '::routine r', 'say ('
+call try '::class c', '::class c', 'say ('
+call try '::options fuzz 9', '::routine r', '::routine r'
+call try '::constant k 1', '::constant k (1+2)', 'say ('
+call try '::constant k (1+2)', '::routine r', '::routine r'
+call try '::routine r external "LIBRARY nosuchlibzz"', '::options digits 0'
+call try '::class c', '::method m attribute external "LIBRARY nosuchlibzz"', '::options digits 0'
+call try '::class c', '::method m external "LIBRARY REXX nosuch"', '::method q', 'say ('
+call try '::routine r external "LIBRARY rexxutil SysNoSuch"', '::routine s', 'say ('
+call try '::routine q', '::routine r external "LIBRARY nosuchlibzz"', '::routine q'
+call try '::routine r external "LIBRARY nosuchlibzz"', 'say' '60'x
+call try '::routine r external "LIBRARY rexxutil SysSleep"', '::routine s', 'say ('
+exit
+
+try:
+  signal on syntax name caught
+  source = .array~new
+  do i = 1 to arg()
+    source~append(arg(i))
+  end
+  r = .Routine~new('t', source)
+  say 'translated'
+  return
+caught:
+  o = condition('o')
+  say o~code o~position o~message
+  return

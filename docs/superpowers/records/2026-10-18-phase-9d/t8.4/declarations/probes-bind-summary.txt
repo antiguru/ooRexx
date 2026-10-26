@@ -1,0 +1,15 @@
+base:same head:same b10.rex
+base:same head:same b11.rex
+base:differs head:differs b12.rex
+base:differs head:same b1.rex
+base:differs head:same b2.rex
+base:same head:same b3.rex
+base:same head:same b4.rex
+base:same head:same b5.rex
+base:differs head:same b6.rex
+base:differs head:same b6t.rex
+base:differs head:same b7.rex
+base:differs head:same b8.rex
+base:same head:same b9.rex
+base:differs head:same badlib2.rex
+base:same head:same badlib.rex

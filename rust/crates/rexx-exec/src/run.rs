@@ -3460,12 +3460,32 @@ impl Interp {
     /// `name` is the source's where it is not the running program: a file or
     /// a package compiled from lines. An `INTERPRET` fragment's clause is
     /// reported at the line of the clause running it.
+    ///
+    /// An `EXTERNAL` the parse passed the oracle's resolution point for
+    /// ([`rexx_parse::Rejected::binds`]) is resolved first, and its refusal is
+    /// reported in place of the parse error, as the oracle's translation meets
+    /// it first.
     pub(crate) fn raise_parse_failure(
         &mut self,
         rejected: &rexx_parse::Rejected,
         name: Option<&[u8]>,
     ) -> Failure {
         let source = &rejected.source;
+        for directive in &rejected.binds {
+            let Err(refusal) = self.resolve_external(&directive.kind) else {
+                continue;
+            };
+            let Failure::Raised(mut raised) = refusal.failure else {
+                return refusal.failure;
+            };
+            let line = source.line_of(directive.clause_span.start);
+            raised.position = u32::try_from(line).unwrap_or(0);
+            let text = source
+                .join_span(directive.clause_span.clone())
+                .map(std::borrow::Cow::into_owned)
+                .unwrap_or_default();
+            return self.raise_translation_failure(*raised, line, text, name);
+        }
         let line = match source.kind() {
             rexx_parse::SourceKind::Interpret => self.activity.clause_state.line(),
             rexx_parse::SourceKind::Program | rexx_parse::SourceKind::Lines => {
@@ -3473,6 +3493,18 @@ impl Interp {
             }
         };
         let (raised, text) = Raised::parse_failure(&rejected.error, source, line);
+        self.raise_translation_failure(raised, line, text, name)
+    }
+
+    /// [`Interp::raise_parse_failure`]'s condition, `raised` echoing `text`
+    /// on `line`.
+    fn raise_translation_failure(
+        &mut self,
+        raised: Raised,
+        line: usize,
+        text: Vec<u8>,
+        name: Option<&[u8]>,
+    ) -> Failure {
         let site = match name {
             Some(name) => FailureSite::Named {
                 line,

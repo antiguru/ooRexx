@@ -56,7 +56,7 @@ use rexx_inventory::errors::E99_914;
 
 use crate::block::translate_block;
 use crate::clause::{ClauseCursor, split_clauses};
-use crate::directive::parse_directive;
+use crate::directive::{Declared, parse_directive};
 use crate::scanner::scan_to_error;
 use crate::selector::SelectorTable;
 use crate::token::ParseCtx;
@@ -91,6 +91,10 @@ pub struct Fragment {
 pub struct Rejected {
     pub error: ParseError,
     pub source: ProgramSource,
+    /// The directives whose `EXTERNAL` the parse passed the oracle's resolution
+    /// point for before it failed, in that order. A failure to resolve one of
+    /// them is reported in place of `error`.
+    pub binds: Vec<Directive>,
 }
 
 /// Parses a whole program from `text`.
@@ -119,7 +123,11 @@ pub fn program_from(source: ProgramSource) -> Result<Program, Rejected> {
             directives: parsed.directives,
             symbols: parsed.symbols,
         }),
-        Err(error) => Err(Rejected { error, source }),
+        Err((error, binds)) => Err(Rejected {
+            error,
+            source,
+            binds,
+        }),
     }
 }
 
@@ -128,7 +136,13 @@ pub fn program_from(source: ProgramSource) -> Result<Program, Rejected> {
 pub fn fragment_from(source: ProgramSource) -> Result<Fragment, Rejected> {
     let parsed = match parse(&source) {
         Ok(parsed) => parsed,
-        Err(error) => return Err(Rejected { error, source }),
+        Err((error, binds)) => {
+            return Err(Rejected {
+                error,
+                source,
+                binds,
+            });
+        }
     };
     debug_assert!(
         parsed.directives.is_empty(),
@@ -156,8 +170,9 @@ struct Parsed {
     symbols: SymbolTable,
 }
 
-/// The composition shared by both entry points.
-fn parse(source: &ProgramSource) -> Result<Parsed, ParseError> {
+/// The composition shared by both entry points. A failure carries
+/// [`Rejected::binds`].
+fn parse(source: &ProgramSource) -> Result<Parsed, (ParseError, Vec<Directive>)> {
     let (scanned, scan_error) = scan_to_error(source);
     // Declared ahead of `ctx`, which borrows it, and dropped with the parse.
     // A `Selector` in the tree holds the name's bytes itself, so what the
@@ -173,12 +188,14 @@ fn parse(source: &ProgramSource) -> Result<Parsed, ParseError> {
         resources: &scanned.resources,
     };
 
-    let mut cursor = ClauseCursor::new(split_clauses(ctx.tokens)?);
-    let parsed = translate(&ctx, &mut cursor);
+    let clauses = split_clauses(ctx.tokens).map_err(|error| (error, Vec::new()))?;
+    let mut cursor = ClauseCursor::new(clauses);
+    let mut declared = Declared::default();
+    let parsed = translate(&ctx, &mut cursor, &mut declared);
     if let Some(error) = scan_error
         && (parsed.is_ok() || cursor.read_past_end())
     {
-        return Err(error);
+        return Err((error, declared.binds));
     }
     match parsed {
         Ok((main, directives)) => Ok(Parsed {
@@ -186,7 +203,7 @@ fn parse(source: &ProgramSource) -> Result<Parsed, ParseError> {
             directives,
             symbols: scanned.symbols,
         }),
-        Err(error) => Err(cursor.echo(error)),
+        Err(error) => Err((cursor.echo(error), declared.binds)),
     }
 }
 
@@ -195,6 +212,7 @@ fn parse(source: &ProgramSource) -> Result<Parsed, ParseError> {
 fn translate(
     ctx: &ParseCtx,
     cursor: &mut ClauseCursor,
+    declared: &mut Declared,
 ) -> Result<(CodeBody, Vec<Directive>), ParseError> {
     let main = translate_block(ctx, cursor)?;
 
@@ -211,10 +229,8 @@ fn translate(
     }
 
     let mut directives: Vec<Directive> = Vec::new();
-    let mut in_class = false;
     while cursor.peek().is_some() {
-        let mut directive = parse_directive(ctx, cursor, in_class)?;
-        in_class |= matches!(directive.kind, DirectiveKind::Class(_));
+        let mut directive = parse_directive(ctx, cursor, declared)?;
         // Only `::METHOD`/`::ATTRIBUTE`/`::ROUTINE` can carry a body, and each
         // already rejects one with its own specific error when its OWN shape
         // does not allow it (`::CONSTANT`'s body is 99.938, for one). Every

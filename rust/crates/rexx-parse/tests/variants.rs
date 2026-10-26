@@ -18,7 +18,8 @@ mod gate_walk;
 use std::collections::HashSet;
 
 use gate_walk::{
-    corpus_dir, each_directive, each_expr, each_instruction, rex_files_under, samples_dir,
+    DECLARATION_ERRORS, corpus_dir, each_directive, each_expr, each_instruction, rex_files_under,
+    samples_dir,
 };
 use rexx_parse::{
     Call, DirectiveKind, ExprKind, InstructionKind, LoopKind, ParseSource, Signal, Trace, Use,
@@ -203,8 +204,11 @@ fn every_variant_is_constructed_by_the_corpus_and_samples() {
 
     for path in &files {
         let text = std::fs::read(path).expect("readable program");
-        let p = parse_program(text)
-            .unwrap_or_else(|e| panic!("{} failed to parse: {e:?}", path.display()));
+        let p = match parse_program(text) {
+            Ok(p) => p,
+            Err(e) if DECLARATION_ERRORS.contains(&(e.code(), e.sub())) => continue,
+            Err(e) => panic!("{} failed to parse: {e:?}", path.display()),
+        };
         each_instruction(&p, &mut |i| {
             instructions.seen.insert(instruction_tag(&i.kind));
             match &i.kind {

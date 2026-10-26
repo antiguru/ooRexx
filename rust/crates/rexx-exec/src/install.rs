@@ -62,25 +62,19 @@ impl Interp {
     /// ::routine z external "LIBRARY nosuchlib nosuchfn"   98.903 rc 158
     /// ::method m external "LIBRARY nosuchlib nosuchfn"    98.903 rc 158
     /// ::method m external "LIBRARY REXX nosuchentry"      90.998 rc 166
-    /// ::annotate routine nosuchrtn          99.945 rc 157
-    /// duplicate ::routine of the same name  99.903 rc 157
     /// ```
     pub(super) fn install_directives(
         &mut self,
         id: ProgramId,
         program: &Rc<Program>,
     ) -> Result<(), Failure> {
-        // **The oracle's first walk, and everything it can answer is answered
-        // here in source order** -- the duplicate names (`::CLASS`,
-        // `::ROUTINE`, `::RESOURCE`, and a member directive's own dictionary
-        // keys), a parenthesised `::CONSTANT` with no `::CLASS` before it, a
-        // `CLASS` keyword with no `::CLASS` before it, an `::ANNOTATE` target
-        // and an `EXTERNAL` library. Measured, `::constant sep (1+2)` alone in
-        // a file is rc 157 with `Error 99.906`, where the identical directive
-        // under a preceding `::CLASS` reaches the install-time evaluation
-        // below instead; and see the table above `directive_gap` for the order this walk is
-        // the first of, and for every probe placing a form in it.
-        let mut saw_class = false;
+        // **The oracle's first walk, in source order**: the `::ANNOTATE`
+        // targets, the `::OPTIONS` settings and the `EXTERNAL` libraries. The
+        // parser has already refused what the declarations alone decide
+        // (duplicate names, a misplaced `::CONSTANT` expression, a missing
+        // `::ANNOTATE` target). See the table above `directive_gap` for the
+        // order this walk is the first of, and for every probe placing a form
+        // in it.
         // The class a member directive's keys are claimed against, and the
         // keys claimed so far. `None` is `LanguageParser`'s `unattachedMethods`
         // table, which is one table for the whole file rather than one per
@@ -91,19 +85,13 @@ impl Interp {
         // whose claimant is of the matching kind, which is `isAttribute()`
         // and `isConstant()` on the method object the C++ finds.
         let mut claimed: FxHashMap<(Option<usize>, bool, Vec<u8>), usize> = FxHashMap::default();
-        // The other two tables the duplicate checks keep, each keyed by the
-        // upcased name and separate from the others, so that a `::CLASS` and a
-        // `::ROUTINE` of one name are not a collision. See
-        // `Raised::duplicate_class` for the probes on both halves.
-        // The class and routine tables carry the declaring directive's index
-        // as well, because an `::ANNOTATE CLASS` or `::ANNOTATE ROUTINE`
-        // resolves its target against exactly these two -- `classDependencies`
-        // and `routines`, the same tables `findClassDirective` and
-        // `findRoutine` read (`parser/DirectiveParser.cpp:230`, `:258`).
+        // The declaring directive of each upcased class and routine name,
+        // which an `::ANNOTATE CLASS` or `::ANNOTATE ROUTINE` resolves its
+        // target against -- `classDependencies` and `routines`, the tables
+        // `findClassDirective` and `findRoutine` read
+        // (`parser/DirectiveParser.cpp:230`, `:258`).
         let mut declared_classes: FxHashMap<Vec<u8>, usize> = FxHashMap::default();
         let mut declared_routines: FxHashMap<Vec<u8>, usize> = FxHashMap::default();
-        let mut declared_resources: rustc_hash::FxHashSet<Vec<u8>> =
-            rustc_hash::FxHashSet::default();
         // What each `::ANNOTATE` recorded, keyed by what its target names.
         // Filled in this walk and converted below, because a target's own
         // object does not exist yet: a `::CLASS` has no class object until
@@ -143,36 +131,11 @@ impl Interp {
             if directive.clause_span.is_empty() {
                 continue;
             }
-            // **Before the arms below, because the oracle checks before it
-            // adds.** `constantDirective` calls `checkDuplicateMethod` ahead
-            // of `createConstantGetterMethod`, which is what raises 99.906
-            // (`parser/DirectiveParser.cpp:1926`, `:1933`), and the two part:
-            // measured, `::constant c 5` then `::constant c (1+2)` with no
-            // `::CLASS` in the file is 99.932 and not 99.906.
-            self.check_member_keys(id, program, directive, current_class, &mut claimed, index)?;
+            claim_member_keys(directive, current_class, &mut claimed, index);
             match &directive.kind {
                 DirectiveKind::Class(class) => {
-                    if declared_classes
-                        .insert(class.name.to_ascii_uppercase(), index)
-                        .is_some()
-                    {
-                        self.blame_directive(id, program, directive);
-                        return Err(Raised::duplicate_class().into());
-                    }
-                    saw_class = true;
+                    declared_classes.insert(class.name.to_ascii_uppercase(), index);
                     current_class = Some(index);
-                }
-                DirectiveKind::Resource(resource) => {
-                    if !declared_resources.insert(resource.name.to_ascii_uppercase()) {
-                        self.blame_directive(id, program, directive);
-                        return Err(Raised::duplicate_resource().into());
-                    }
-                }
-                DirectiveKind::Constant(constant) => {
-                    if matches!(constant.value, ConstantValue::Expression(_)) && !saw_class {
-                        self.blame_directive(id, program, directive);
-                        return Err(Raised::constant_needs_class().into());
-                    }
                 }
                 DirectiveKind::Routine(routine) => {
                     // Resolves nothing outside this file and runs nothing:
@@ -187,17 +150,7 @@ impl Interp {
                     if routine.access == Access::Public {
                         public_routines.insert(name.clone(), installed);
                     }
-                    if routines.insert(name, installed).is_some() {
-                        // A *translation* error on the oracle, not an install
-                        // one: measured, two `::routine zork` directives give
-                        // `Error 99.903: Duplicate ::ROUTINE directive
-                        // instruction.` at rc 157, echoing the second
-                        // directive's own clause. `rexx-parse` does not
-                        // detect it, so it is detected here, where the
-                        // accumulated table is what answers.
-                        self.blame_directive(id, program, directive);
-                        return Err(Raised::duplicate_routine().into());
-                    }
+                    routines.insert(name, installed);
                 }
                 DirectiveKind::Annotate(annotate) => {
                     let target = match annotation_target(
@@ -285,24 +238,6 @@ impl Interp {
                 _ => {}
             }
 
-            // **After the arms above, not before them**, because when one
-            // directive is both a duplicate `::ROUTINE` and an `EXTERNAL`
-            // the oracle answers the duplicate: measured, `::routine dup`
-            // followed by `::routine dup external "LIBRARY nosuchlib
-            // nosuchfn"` is 99.903 rc 157 echoing the second directive, not
-            // 98.903. Reverse that pair and the `EXTERNAL` comes first in the
-            // file and wins, which the walk gives.
-            if matches!(
-                directive.kind,
-                DirectiveKind::Annotate(_)
-                    | DirectiveKind::Routine(_)
-                    | DirectiveKind::Method(_)
-                    | DirectiveKind::Attribute(_)
-            ) && let Some(loud) = directive_gap(&directive.kind)
-            {
-                return Err(loud.into());
-            }
-
             // **The eager bind** (D37), in this walk because the oracle does
             // it while the directive is being translated:
             // `createNativeMethod` raises from inside `methodDirective`
@@ -311,47 +246,34 @@ impl Interp {
             // opening `say "prolog ran"` and carrying one `::METHOD
             // EXTERNAL` on a missing entry point is rc 166 with stdout empty,
             // and the same file naming `file_separator` is rc 0 printing the
-            // prologue.
-            if let Some(missing) = unresolved_external(&directive.kind) {
-                self.blame_directive(id, program, directive);
-                return Err(Raised::external_method_not_found(&missing).into());
-            }
-
-            // The same walk and the same position for a library-backed
-            // `EXTERNAL`: measured, oracle, a file opening `say "prolog ran"`
-            // and carrying `::method x external "LIBRARY zorkolib z"` is
-            // 98.903 rc 158 with stdout empty. Each procedure's shared code is
-            // bound to this package as its directive resolves, where nothing
-            // bound it first, so a later directive's refusal leaves the
-            // binding in place (`createNativeMethod`,
-            // `parser/DirectiveParser.cpp:1381-1388`).
-            for key in self.resolve_directive_library(id, program, directive)? {
+            // prologue. Each procedure's shared code is bound to this package
+            // as its directive resolves, where nothing bound it first, so a
+            // later directive's refusal leaves the binding in place
+            // (`createNativeMethod`, `parser/DirectiveParser.cpp:1381-1388`).
+            let (keys, internal) = match self.resolve_external(&directive.kind) {
+                Ok(resolved) => resolved,
+                Err(refusal) => {
+                    match refusal.blame {
+                        RefusalBlame::None => {}
+                        RefusalBlame::Clause => self.blame_directive(id, program, directive),
+                        RefusalBlame::Package => self.blame_directive_in(id, program, directive),
+                    }
+                    return Err(refusal.failure);
+                }
+            };
+            let installed = InstalledRoutine {
+                program: id,
+                directive: index,
+            };
+            for key in keys {
                 let routine = key.routine;
                 let row = self.library_code(key);
                 self.library_codes[row].get_or_insert(id);
                 if routine {
-                    let installed = InstalledRoutine {
-                        program: id,
-                        directive: index,
-                    };
                     routine_codes.push((installed, row));
                 }
             }
-
-            // An internal package's routine table, found as a library's is:
-            // measured, oracle, `"LIBRARY REXX nosuch"` and `"LIBRARY rexxutil
-            // SysNoSuch"` are 90.999 rc 166 on the directive's line.
-            if let DirectiveKind::Routine(routine) = &directive.kind
-                && let Some((package, entry)) = dispatch::native::internal_routine_entry(routine)
-            {
-                let Some(row) = internal_routines::package_routine(package, &entry) else {
-                    self.blame_directive_in(id, program, directive);
-                    return Err(Raised::external_routine_not_found(&entry).into());
-                };
-                let installed = InstalledRoutine {
-                    program: id,
-                    directive: index,
-                };
+            if let Some(row) = internal {
                 rexx_routines.push((installed, row));
             }
         }
@@ -1106,41 +1028,6 @@ impl Interp {
                 self.record_annotations(&keys, &pairs);
             }
         }
-    }
-
-    /// The duplicate half of `LanguageParser::checkDuplicateMethod`
-    /// (`parser/DirectiveParser.cpp:507`-`:530`): every dictionary key a
-    /// member directive is about to claim, refused if the class it attaches
-    /// to has already been given that key on that side. The CLASS-keyword
-    /// half is the parser's, so a class-side key with no class above it is a
-    /// `::CONSTANT`'s, which claims none there.
-    fn check_member_keys(
-        &mut self,
-        id: ProgramId,
-        program: &Rc<Program>,
-        directive: &Directive,
-        current_class: Option<usize>,
-        claimed: &mut FxHashMap<(Option<usize>, bool, Vec<u8>), usize>,
-        index: usize,
-    ) -> Result<(), Failure> {
-        let constant = matches!(directive.kind, DirectiveKind::Constant(_));
-        for (name, class_side) in member_dictionary_keys(&directive.kind) {
-            if current_class.is_none() && class_side {
-                debug_assert!(
-                    constant,
-                    "the parser refuses a CLASS member with no ::CLASS"
-                );
-                continue;
-            }
-            if claimed
-                .insert((current_class, class_side, name), index)
-                .is_some()
-            {
-                self.blame_directive(id, program, directive);
-                return Err(Raised::duplicate_member(&directive.kind).into());
-            }
-        }
-        Ok(())
     }
 
     /// Records the value of every literal `::CONSTANT` among `attached`.
@@ -2404,21 +2291,59 @@ impl Interp {
         }
     }
 
+    /// The oracle's translation-time resolution of one directive's
+    /// `EXTERNAL`: the library procedures it binds and the internal package
+    /// routine it names, or the refusal. Measured, oracle: a file opening
+    /// `say "prolog ran"` and carrying `::method x external "LIBRARY zorkolib
+    /// z"` is 98.903 rc 158 with stdout empty, and `"LIBRARY REXX nosuch"` and
+    /// `"LIBRARY rexxutil SysNoSuch"` on a `::ROUTINE` are 90.999 rc 166 on the
+    /// directive's line.
+    pub(crate) fn resolve_external(
+        &mut self,
+        kind: &DirectiveKind,
+    ) -> Result<
+        (
+            Vec<LibraryCodeKey>,
+            Option<&'static internal_routines::InternalRoutine>,
+        ),
+        ExternalRefusal,
+    > {
+        let refuse = |failure: Failure, blame| ExternalRefusal { failure, blame };
+        if let Some(loud) = directive_gap(kind) {
+            return Err(refuse(loud.into(), RefusalBlame::None));
+        }
+        if let Some(missing) = unresolved_external(kind) {
+            let raised = Raised::external_method_not_found(&missing);
+            return Err(refuse(raised.into(), RefusalBlame::Clause));
+        }
+        let keys = self
+            .resolve_directive_library(kind)
+            .map_err(|failure| refuse(failure, RefusalBlame::Package))?;
+        let mut internal = None;
+        if let DirectiveKind::Routine(routine) = kind
+            && let Some((package, entry)) = dispatch::native::internal_routine_entry(routine)
+        {
+            let Some(row) = internal_routines::package_routine(package, &entry) else {
+                let raised = Raised::external_routine_not_found(&entry);
+                return Err(refuse(raised.into(), RefusalBlame::Package));
+            };
+            internal = Some(row);
+        }
+        Ok((keys, internal))
+    }
+
     /// The library and the procedures one directive's `EXTERNAL` names,
-    /// resolved at install time so that a program naming a library that is
-    /// not there is refused before its own first clause.
+    /// resolved so that a program naming a library that is not there is
+    /// refused before its own first clause.
     ///
     /// Answers the procedures it bound, and none for a directive whose
     /// `EXTERNAL` names the `REXX` package or none at all; those are
-    /// [`unresolved_external`]'s and [`directive_gap`]'s. `id` is the package
-    /// the directive is in, whose file a failure is reported against.
+    /// [`unresolved_external`]'s and [`directive_gap`]'s.
     fn resolve_directive_library(
         &mut self,
-        id: ProgramId,
-        program: &Rc<Program>,
-        directive: &Directive,
+        kind: &DirectiveKind,
     ) -> Result<Vec<LibraryCodeKey>, Failure> {
-        let external = match &directive.kind {
+        let external = match kind {
             DirectiveKind::Method(method) => dispatch::native::method_external(method),
             DirectiveKind::Attribute(attribute) => dispatch::native::attribute_external(attribute),
             DirectiveKind::Routine(routine) => dispatch::native::routine_external(routine),
@@ -2428,14 +2353,8 @@ impl Interp {
         else {
             return Ok(Vec::new());
         };
-        let routine = matches!(directive.kind, DirectiveKind::Routine(_));
-        let loaded = match self.require_library(&library) {
-            Ok(loaded) => loaded,
-            Err(failure) => {
-                self.blame_directive_in(id, program, directive);
-                return Err(failure);
-            }
-        };
+        let routine = matches!(kind, DirectiveKind::Routine(_));
+        let loaded = self.require_library(&library)?;
         // A routine's procedure is in the routine table and a method's in the
         // method table, and the two are separate exports: measured, oracle,
         // `::routine zzz external "LIBRARY rxmath"` is `90.999 Unable to find
@@ -2450,7 +2369,6 @@ impl Interp {
                     .map(|_| bind.procedure.clone())
             };
             let Some(procedure) = procedure else {
-                self.blame_directive_in(id, program, directive);
                 return Err(if routine {
                     Raised::external_routine_not_found(&bind.procedure).into()
                 } else {
@@ -2835,4 +2753,41 @@ fn offered_library(name: &[u8]) -> Option<rexx_api::load::Library> {
             .find(|(offered, _)| offered == name)
             .map(|(_, make)| make())
     })
+}
+
+/// Files every dictionary key the member `directive` claims under the class
+/// it attaches to, keeping the first claimant of a key. A class-side key with
+/// no class above it is a `::CONSTANT`'s, which claims none there.
+fn claim_member_keys(
+    directive: &Directive,
+    current_class: Option<usize>,
+    claimed: &mut FxHashMap<(Option<usize>, bool, Vec<u8>), usize>,
+    index: usize,
+) {
+    for (name, class_side) in member_dictionary_keys(&directive.kind) {
+        if current_class.is_none() && class_side {
+            continue;
+        }
+        claimed
+            .entry((current_class, class_side, name))
+            .or_insert(index);
+    }
+}
+
+/// A translation-time refusal of a directive's `EXTERNAL`
+/// ([`Interp::resolve_external`]), and how its report blames the directive.
+pub(crate) struct ExternalRefusal {
+    pub(crate) failure: Failure,
+    blame: RefusalBlame,
+}
+
+/// Which clause a refused `EXTERNAL`'s report echoes.
+#[derive(Copy, Clone)]
+enum RefusalBlame {
+    /// None: a loud refusal carries no report.
+    None,
+    /// The directive, named as the running program's clause.
+    Clause,
+    /// The directive, named as its own package's file.
+    Package,
 }

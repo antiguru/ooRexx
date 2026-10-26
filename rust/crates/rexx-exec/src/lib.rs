@@ -4073,9 +4073,14 @@ fn execute_as(
             Err(raised) => return unrestorable_outcome(raised),
         }
     };
+    // A rejected source that passed an `EXTERNAL`'s resolution point needs an
+    // interpreter to resolve it in, which `Interp::raise_parse_failure` does.
     let program = match rexx_parse::program_from(source) {
-        Ok(program) => program,
-        Err(rejected) => return parse_failure_outcome(path, &rejected),
+        Ok(program) => Ok(program),
+        Err(rejected) if rejected.binds.is_empty() => {
+            return parse_failure_outcome(path, &rejected);
+        }
+        Err(rejected) => Err(rejected),
     };
 
     let mut interp = Interp::new();
@@ -4156,9 +4161,10 @@ fn execute_as(
         if let Some(mode) = switch_mode {
             interp.set_switch_mode(mode);
         }
-        match entry {
-            Entry::Translate => interp.translate(program),
-            Entry::Run | Entry::CollectEveryAlloc => interp.run(program),
+        match (entry, program) {
+            (_, Err(rejected)) => Err(interp.raise_parse_failure(&rejected, None)),
+            (Entry::Translate, Ok(program)) => interp.translate(program),
+            (Entry::Run | Entry::CollectEveryAlloc, Ok(program)) => interp.run(program),
         }
     });
     // The whole echo stack, innermost first: the levels `seal_site_level`

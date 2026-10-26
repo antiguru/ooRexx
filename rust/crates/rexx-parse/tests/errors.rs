@@ -14,7 +14,9 @@
 
 use std::path::{Path, PathBuf};
 
-use rexx_parse::{ParseError, ProgramSource, SourceKind, parse_interpret, parse_program};
+use rexx_parse::{
+    ParseError, ProgramSource, SourceKind, parse_interpret, parse_program, program_from,
+};
 
 /// What kind of answer the oracle gave, as the corpus records it.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -220,9 +222,9 @@ fn the_corpus_holds_at_least_the_rows_it_was_measured_with() {
         accepted >= 444,
         "expected at least 444 accepted programs, found {accepted}"
     );
-    // Exact, and the only count here that is: every install-time row is one of
-    // nine hand-classified programs. A tenth has to be argued, not absorbed.
-    assert_eq!(install, 9, "the install-time classification grew");
+    // Exact, and the only count here that is: every install-time row is
+    // hand-classified, so a new one has to be argued, not absorbed.
+    assert_eq!(install, 12, "the install-time classification grew");
 }
 
 #[test]
@@ -366,14 +368,15 @@ fn every_program_the_oracle_translates_this_parser_accepts() {
 }
 
 #[test]
-fn a_rejection_that_is_not_a_translation_error_is_accepted() {
-    // The oracle rejects all nine of these and none of the nine is a translation
-    // error: the failure is that a library or a registered routine could not be
-    // bound, which depends on the machine and never on the program text. It is
-    // NOT that the directive parsed and the interpreter then failed to bind it:
-    // both codes are raised from inside the parser, and `rexxc`, which never
-    // installs anything, reports them. The classification is the corpus's, per
-    // row, so this loop reads it rather than inferring it from 98 or 90.
+fn a_rejection_that_is_not_a_translation_error_is_accepted_or_bound_first() {
+    // None of these is a translation error: the failure is that a library or a
+    // registered routine could not be bound, which depends on the machine and
+    // never on the program text. Both codes are raised from inside the
+    // oracle's parser, and `rexxc`, which never installs anything, reports
+    // them. So the parser accepts the row, or rejects it having recorded the
+    // directive the oracle names as one it resolves before the rejection. The
+    // classification is the corpus's, per row, so this loop reads it rather
+    // than inferring it from 98 or 90.
     let cases = cases();
     let mut wrong = Vec::new();
     let mut checked = 0;
@@ -382,17 +385,26 @@ fn a_rejection_that_is_not_a_translation_error_is_accepted() {
             continue;
         }
         checked += 1;
-        if let Err(e) = parse(&case.program) {
+        let source = ProgramSource::new(case.program.clone(), SourceKind::Program);
+        let Err(rejected) = program_from(source) else {
+            continue;
+        };
+        let bound_line = rejected
+            .binds
+            .first()
+            .map(|directive| rejected.source.line_of(directive.clause_span.start));
+        if bound_line != case.line {
             wrong.push(format!(
-                "row {}: {:?} is not a translation error but was rejected with {e}",
+                "row {}: {:?} was rejected with {} and binds line {bound_line:?} first",
                 case.row,
-                String::from_utf8_lossy(&case.program)
+                String::from_utf8_lossy(&case.program),
+                rejected.error
             ));
         }
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
     assert_eq!(
-        checked, 9,
+        checked, 12,
         "the install-time rows are not all being checked"
     );
 }

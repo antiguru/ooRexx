@@ -1,0 +1,18 @@
+DIFFERS	98.903:1	26.5:2	rc=230	::routine r external "LIBRARY x"\n::options digits 0\n
+DIFFERS	98.903:1	26.5:2	rc=230	::method m attribute external "LIBRARY x"\n::options digits 0\n
+DIFFERS	99.902:3	35.1:5	rc=221	::class c\n::method a\n::method a\n::routine r\nsay (\n
+DIFFERS	99.902:3	35.1:4	rc=221	::class c\n::method a\n::method a\nx = 1 +\n
+DIFFERS	99.931:3	99.937:4	rc=157	::class c\n::attribute a\n::attribute a\nsay hi\n
+DIFFERS	99.902:3	35.929:4	rc=221	::class c\n::method m\n::method m\nif\n
+DIFFERS	99.902:3	99.934:4	rc=157	::class c\n::method a\n::method a attribute\nsay 1\n
+DIFFERS	99.945:2	19.924:2	rc=237	::routine r\n::annotate routine nosuch a\n
+DIFFERS	99.942:4	99.943:4	rc=157	::resource a\nx\n::END\n::resource a\ny\n
+same	98.903:2	98.903:2	rc=158	::routine q\n::routine r external "LIBRARY x"\n::routine q\n
+DIFFERS	99.903:2	35.1:3	rc=221	::routine r\n::routine r\nsay (\n
+same	99.901:2	99.901:2	rc=157	::class c\n::class c\n::routine r external "LIBRARY x"\n
+same	33.1:1	33.1:1	rc=223	::options fuzz 9\n::routine r\n::routine r\n
+same	99.938:3	99.938:3	rc=157	::constant k 1\n::constant k (1+2)\nsay (\n
+same	99.932:2	99.932:2	rc=157	::constant k 1\n::constant k (1+2)\n
+same	99.906:1	99.906:1	rc=157	::constant k (1+2)\n::routine r\n::routine r\n
+same	99.902:3	99.902:3	rc=157	::class c\n::constant k\n::method k class\n
+same	99.932:3	99.932:3	rc=157	::class c\n::method k class\n::constant k\n

@@ -14,7 +14,7 @@
 use crate::Loud;
 use rexx_core::ObjRef;
 use rexx_num::{ArithError, FormatError};
-use rexx_parse::{DirectiveKind, ParseError, ProgramSource};
+use rexx_parse::{ParseError, ProgramSource};
 use std::borrow::Cow;
 
 /// Which activations may trap one raise, walking outward from the one that
@@ -370,37 +370,6 @@ impl Raised {
         raised
     }
 
-    /// 99.903: two `::ROUTINE` directives of the same name in one program.
-    /// No substitutions -- the message names neither.
-    pub(crate) fn duplicate_routine() -> Raised {
-        Raised::syntax(99, 903, Vec::new())
-    }
-
-    /// 99.901: two `::CLASS` directives of one name in one program, and
-    /// 99.942: two `::RESOURCE` directives of one name. No substitutions --
-    /// neither message names anything.
-    pub(crate) fn duplicate_class() -> Raised {
-        Raised::syntax(99, 901, Vec::new())
-    }
-
-    /// See [`Raised::duplicate_class`], which carries the measurements for
-    /// both halves of the pair.
-    pub(crate) fn duplicate_resource() -> Raised {
-        Raised::syntax(99, 942, Vec::new())
-    }
-
-    /// 99.902, 99.931 and 99.932: two member directives of one class writing
-    /// the same dictionary key. No substitutions -- none of the messages
-    /// names anything.
-    pub(crate) fn duplicate_member(kind: &DirectiveKind) -> Raised {
-        let sub = match kind {
-            DirectiveKind::Attribute(_) => 931,
-            DirectiveKind::Constant(_) => 932,
-            _ => 902,
-        };
-        Raised::syntax(99, sub, Vec::new())
-    }
-
     /// 98.909: a `::CLASS` directive naming a `SUBCLASS` or an `INHERIT`
     /// target no name resolves to. One substitution, the target's upcased
     /// spelling.
@@ -559,13 +528,6 @@ impl Raised {
     /// installing. One substitution, the **resolved** path.
     pub(crate) fn circular_requires(path: &[u8]) -> Raised {
         Raised::syntax(98, 952, vec![path.to_vec()])
-    }
-
-    /// 99.906: a `::CONSTANT` directive's parenthesised expression form with
-    /// no `::CLASS` directive anywhere before it in the file. No
-    /// substitutions -- the message names neither directive.
-    pub(crate) fn constant_needs_class() -> Raised {
-        Raised::syntax(99, 906, Vec::new())
     }
 
     /// 99.945: an `::ANNOTATE` named a target the accumulated package does

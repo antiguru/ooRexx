@@ -321,10 +321,27 @@ fn a_fragments_symbol_table_is_its_own_not_shared_across_calls() {
 
 // ---- Step 4: every corpus/lang program parses through this entry point ----
 
+/// The `corpus/lang` programs whose own subject is a translation error the
+/// declarations decide, each with the error the oracle's `rexxc` reports.
+const REFUSED_CORPUS_PROGRAMS: &[(&str, (u16, u16))] = &[
+    ("class_duplicate_attribute.rex", (99, 931)),
+    ("class_duplicate_class.rex", (99, 901)),
+    ("class_duplicate_constant.rex", (99, 932)),
+    ("class_duplicate_constant_and_method.rex", (99, 902)),
+    ("class_duplicate_method.rex", (99, 902)),
+    ("directive_annotate_missing_target.rex", (99, 945)),
+    ("directive_constant_expression_needs_class.rex", (99, 906)),
+    ("directive_method_external_before_duplicate.rex", (99, 902)),
+    ("directive_method_external_duplicate_wins.rex", (99, 902)),
+    ("directive_method_external_source_order.rex", (99, 903)),
+    ("directive_options_digits_below_fuzz.rex", (33, 1)),
+];
+
 #[test]
 fn every_corpus_lang_program_parses() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/lang");
     let mut count = 0;
+    let mut refused = Vec::new();
     for entry in std::fs::read_dir(&dir).expect("corpus/lang exists") {
         let entry = entry.expect("readable directory entry");
         let path = entry.path();
@@ -332,11 +349,22 @@ fn every_corpus_lang_program_parses() {
             continue;
         }
         let text = std::fs::read(&path).expect("readable corpus file");
-        parse_program(text).unwrap_or_else(|e| {
-            panic!("{} failed to parse: {e:?}", path.display());
-        });
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .expect("a file name");
+        match parse_program(text) {
+            Ok(_) => {}
+            Err(e) => refused.push((name.to_string(), (e.code(), e.sub()))),
+        }
         count += 1;
     }
+    refused.sort();
+    let expected: Vec<(String, (u16, u16))> = REFUSED_CORPUS_PROGRAMS
+        .iter()
+        .map(|(name, pair)| (name.to_string(), *pair))
+        .collect();
+    assert_eq!(refused, expected);
     // Gate criterion 2 permits adding more; this counts the directory rather
     // than hard-coding a number, but a directory that silently went empty
     // would make the loop above vacuously pass, so a floor is asserted too.
@@ -356,6 +384,16 @@ fn the_corpus_exercises_at_least_one_directive_with_a_body() {
     for entry in std::fs::read_dir(&dir).expect("corpus/lang exists") {
         let path = entry.expect("readable directory entry").path();
         if path.extension().and_then(|e| e.to_str()) != Some("rex") {
+            continue;
+        }
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .expect("a file name");
+        if REFUSED_CORPUS_PROGRAMS
+            .iter()
+            .any(|(refused, _)| *refused == name)
+        {
             continue;
         }
         let text = std::fs::read(&path).expect("readable corpus file");

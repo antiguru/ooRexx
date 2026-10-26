@@ -380,3 +380,6 @@ lang/raise_syntax_string_additional.rex
 lang/call_site_kept_routine_collected.rex
 # 9d Task 8.4: a scanner error waits for the parse to reach its clause.
 lang/scan_error_waits_for_its_clause.rex
+# 9d Task 8.4: translation checks in source order, and a called file's translation error.
+lang/translation_checks_in_source_order.rex
+lang/translation_error_in_called_file.rex

@@ -551,6 +551,19 @@ fn every_corpus_body_compiles_the_minimum_promotion_set_to_its_own_ops() {
     }
 }
 
+/// The translation errors that the directives declared so far decide.
+const DECLARATION_ERRORS: &[(u16, u16)] = &[
+    (33, 1),
+    (99, 901),
+    (99, 902),
+    (99, 903),
+    (99, 906),
+    (99, 931),
+    (99, 932),
+    (99, 942),
+    (99, 945),
+];
+
 /// The sweep itself, split out so that the test above is the thread it runs
 /// on and nothing else.
 fn sweep_every_corpus_body() {
@@ -563,12 +576,14 @@ fn sweep_every_corpus_body() {
         let path = dir.join(name);
         let text =
             fs::read(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
-        // Loud rather than skipped: a corpus program is a program the oracle
-        // runs, so one this crate cannot parse is a defect and not a case to
-        // step over. A skip here would also shrink the population without
-        // anything saying so.
-        let program = parse_program(text)
-            .unwrap_or_else(|e| panic!("{name}: a corpus program does not parse: {e:?}"));
+        // Loud rather than skipped, except for a program whose subject is a
+        // translation error its declarations decide, which the oracle refuses
+        // as well and which has no body to run.
+        let program = match parse_program(text) {
+            Ok(program) => program,
+            Err(e) if DECLARATION_ERRORS.contains(&(e.code(), e.sub())) => continue,
+            Err(e) => panic!("{name}: a corpus program does not parse: {e:?}"),
+        };
         for (body, what) in bodies(&program) {
             check_body(
                 body,

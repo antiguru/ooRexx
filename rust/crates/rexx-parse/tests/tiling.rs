@@ -15,7 +15,9 @@ mod gate_walk;
 
 use std::ops::Range;
 
-use gate_walk::{body_of_directive, children_of, corpus_dir, each_expr, rex_files_under};
+use gate_walk::{
+    DECLARATION_ERRORS, body_of_directive, children_of, corpus_dir, each_expr, rex_files_under,
+};
 use rexx_parse::{DirectiveKind, Expr, ExprKind, Operator, Program, parse_program};
 
 /// The non-whitespace-class bytes of `text[range]`, each with its offset.
@@ -307,8 +309,13 @@ fn every_corpus_program_tiles() {
     let mut failures = Vec::new();
     for path in &files {
         let text = std::fs::read(path).expect("readable corpus file");
-        let p = parse_program(text.clone())
-            .unwrap_or_else(|e| panic!("{} failed to parse: {e:?}", path.display()));
+        let p = match parse_program(text.clone()) {
+            Ok(p) => p,
+            // A program whose subject is what its declarations refuse has no
+            // tree to tile.
+            Err(e) if DECLARATION_ERRORS.contains(&(e.code(), e.sub())) => continue,
+            Err(e) => panic!("{} failed to parse: {e:?}", path.display()),
+        };
 
         let mut errors = Vec::new();
         each_expr(&p, &mut |e| {
