@@ -209,9 +209,13 @@ impl Interp {
     /// are collected together.
     #[cold]
     pub(crate) fn hold_site_program(&mut self, hold: crate::run::SiteHold, take: bool) {
+        debug_assert!(
+            take || self.site_hold_count != 0,
+            "a site drops a hold no count has"
+        );
         self.site_hold_count = match take {
             true => self.site_hold_count + 1,
-            false => self.site_hold_count.saturating_sub(1),
+            false => self.site_hold_count - 1,
         };
         let (Some(held), Some(package)) = (
             self.program_package(hold.program),

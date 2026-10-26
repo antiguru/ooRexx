@@ -1,0 +1,35 @@
+-    /// At least how many call-site holds are taken and not dropped, so zero
+-    /// when none is ([`Interp::hold_site_program`]).
++    /// How many call-site holds are taken and not dropped
++    /// ([`Interp::hold_site_program`]); a dead program's chunks take theirs
++    /// with them ([`Interp::prune_program_rows`]).
++        let mut holds = 0;
++                holds += chunk.site_holds().count() as u32;
++        // The holder is the dead program, whose package went with it, so only
++        // the count is left to drop.
++        debug_assert!(holds <= self.site_hold_count, "a dead program's chunks hold more than are counted");
++        let _ = holds;
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.03s
+     Running unittests src/lib.rs (/tmp/claude-1000/t83f3-target/debug/deps/rexx_exec-aaedc271dbf1a724)
+
+running 1 test
+test run::tests::a_dead_programs_site_holds_leave_the_count ... FAILED
+
+failures:
+
+---- run::tests::a_dead_programs_site_holds_leave_the_count stdout ----
+
+thread 'run::tests::a_dead_programs_site_holds_leave_the_count' (228323) panicked at crates/rexx-exec/src/run/tests.rs:765:5:
+assertion `left == right` failed: the main body's site is the one live hold
+  left: 21
+ right: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    run::tests::a_dead_programs_site_holds_leave_the_count
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1177 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p rexx-exec --lib`
+exit 101

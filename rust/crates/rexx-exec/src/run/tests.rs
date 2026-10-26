@@ -741,3 +741,29 @@ fn an_interpret_fragments_site_holds_end_with_it() {
     );
     assert_eq!(held(body("interpret 'x = q(i)'").as_bytes()), 0);
 }
+
+/// A collection that frees programs whose sites hold others drops their holds
+/// from the count, leaving it at the live programs' holds.
+#[test]
+fn a_dead_programs_site_holds_leave_the_count() {
+    let mut interp = Interp::new();
+    interp.bootstrap_library().expect("library");
+    let out = say_output_with_directives(
+        &mut interp,
+        b".local['KEEP'] = .context~package\ndo i = 1 to 20\n  \
+          .routines['Q'] = .routine~new('q', 'return arg(1)')\n  \
+          h = .routine~new('h', 'return q(arg(1))')\n  x = h~call(i) q(i)\nend\n\
+          say x\ndrop h\n::routine dummy\n",
+    );
+    assert_eq!(String::from_utf8_lossy(&out), "20 20\n");
+    assert!(
+        interp.site_hold_count > 1,
+        "the dead programs' sites took no holds: {}",
+        interp.site_hold_count
+    );
+    interp.collect_now();
+    assert_eq!(
+        interp.site_hold_count, 1,
+        "the main body's site is the one live hold"
+    );
+}

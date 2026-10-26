@@ -1384,8 +1384,9 @@ struct Interp {
     /// How many call sites keep each `Routine` copy alive ([`Interp::repin`]),
     /// each copy rooted once while any does.
     pinned_copies: FxHashMap<ObjRef, u32>,
-    /// At least how many call-site holds are taken and not dropped, so zero
-    /// when none is ([`Interp::hold_site_program`]).
+    /// How many call-site holds are taken and not dropped
+    /// ([`Interp::hold_site_program`]); a dead program's chunks take theirs
+    /// with them ([`Interp::prune_program_rows`]).
     site_hold_count: u32,
     /// The parse cache a handle-inline string has nowhere to keep. See
     /// `value::TextNumbers`, which owns the rule and the measurement.
@@ -3586,17 +3587,26 @@ impl Interp {
         }
         let mut interned = Vec::new();
         let mut pinned = Vec::new();
+        let mut holds = 0;
         self.chunks.retain(|(key, _), chunk| {
             let keep = !dead(&key.program);
             if !keep {
                 interned.extend(chunk.interned_values());
                 pinned.extend(chunk.pinned_copies());
+                holds += chunk.site_holds().count() as u32;
             }
             keep
         });
         for copy in pinned {
             self.unpin_copy(copy);
         }
+        // The holder is the dead program, whose package went with it, so only
+        // the count is left to drop.
+        debug_assert!(
+            holds <= self.site_hold_count,
+            "a dead program's chunks hold more than are counted"
+        );
+        self.site_hold_count -= holds;
         if !interned.is_empty() {
             let interned: rustc_hash::FxHashSet<ObjRef> = interned.into_iter().collect();
             self.heap
