@@ -1828,5 +1828,20 @@
   "source": "Phase 9d Task 8.2 report",
   "status": "deviation 68",
   "crate": ""
+ },
+ {
+  "id": "constant-expression-method-source-shared",
+  "added": "2026-10-26",
+  "title": "A ::CONSTANT expression method's ~source answers the last constant's clause",
+  "category": "wrong result",
+  "area": "directives",
+  "severity": "cosmetic",
+  "repro": "docs/superpowers/records/2026-10-18-phase-9d/t8.4/constant/probes/f8.rex: three ::CONSTANT expressions in one class, each answering .context~executable; ~source of each",
+  "oracle": "Each answers [::constant g (.context~executable)], the third constant's clause.",
+  "expected": "Each its own directive clause.",
+  "cause": "Not read in the C++; the constant's code location looks shared.",
+  "source": "Phase 9d Task 8.4 report, New oracle defects 1",
+  "status": "reported (not yet ruled)",
+  "crate": "Answers each constant's own clause."
  }
 ]

@@ -244,3 +244,5 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointe
 2026-10-22-collect-stress-zero-collection-drift.md	process	-	9d	collect_stress zero-collection list drifted before Task 8.3; pruned, cause open	9d
 2026-10-26-file-date-time-dst-dependent.md	process	-	9d	rexxutil_file_date_time line 9 differs across the DST change, at base too	9d
 2026-10-26-redirected-target-waits-timing-flake.md	process	-	9d	collect_stress l0 subset flakes on a time(e) > 0.9 check	9d
+2026-10-26-main-program-level-during-requires-install.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/constant/probes/f1.rex	9d	the main PROGRAM level is missing from frames while its own ::REQUIRES install	9d
+2026-10-26-compile-failure-condition-names-caller.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/naming/probes/compile-condition/m.rex	9d	a compile failure condition names the caller package, the oracle the translated file	9d
