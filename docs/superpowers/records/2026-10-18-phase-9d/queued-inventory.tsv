@@ -247,3 +247,4 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointe
 2026-10-26-main-program-level-during-requires-install.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/constant/probes/f1.rex	9d	the main PROGRAM level is missing from frames while its own ::REQUIRES install	9d
 2026-10-26-compile-failure-condition-names-caller.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/naming/probes/compile-condition/m.rex	9d	a compile failure condition names the caller package, the oracle the translated file	9d
 2026-10-26-library-rxmath-error-number.md	divergence	-	9d	LIBRARY rxmath raises 98.903, the oracle 90.998/90.999	9d
+2026-10-27-deadlock-report-shape.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/r2/probes/d2.rex	9d	a guard deadlock prints two reports here, one on the oracle; echoes differ	9d
