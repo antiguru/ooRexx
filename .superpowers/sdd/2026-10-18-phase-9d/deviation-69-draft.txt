@@ -1,0 +1,22 @@
+ 69. A ::CONSTANT EXPRESSION'S METHOD IS ITS OWN DIRECTIVE'S (Phase 9d).
+     OWNER: none.
+
+     Ruled by Moritz 2026-10-26 ("Own clause, oracle bug"). A ::CONSTANT
+     directive defines a method (rexxref dire.xml:535-536); the method a
+     parenthesised value is evaluated by is that directive's, so its
+     `~source` is the directive's own clause, and running it again evaluates
+     that directive's expression. ORACLE BUG: `ClassDirective::addConstantMethod`
+     (ClassDirective.cpp:536-556) appends every expression ::CONSTANT of a
+     class to one `constantInitializer` code object, so `.context~executable`
+     inside any of them is that one method: for three expressions in one
+     class answering `.context~executable`, the oracle answers the third's
+     clause as each one's `~source`, this crate each its own; the method of
+     `::constant e (.context~executable)`, defined and sent, evaluates
+     every expression of the class in order on the oracle and its own
+     here. Measured
+     by Phase 9d Task 8.4 and its fix round
+     (t8.4/constant/probes/f8.rex; t8.4/r1/probes/src.rex, run2.rex;
+     t8.4/r1/three-way-src.txt; the Task 8.4 re-review's run3.rex).
+     Witnessed by tests::a_constant_expressions_method_answers_its_own_clause_as_source
+     and tests::a_constant_expressions_method_runs_its_own_expression
+     (rust/crates/rexx-exec/src/tests.rs).

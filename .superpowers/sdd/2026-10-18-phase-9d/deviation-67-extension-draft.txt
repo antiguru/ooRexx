@@ -6,4 +6,4 @@ Insert after Deviation 67's "Measured by Phase 9d Task 8.2 and its review (...).
      names the waiter's line 2 in both reports, this crate line 9 then line
      2 (t8.4/naming/result-reraise-r1.txt, -r2.txt).
 
-and extend the "Witnessed by" sentence with the HALT witness WITNESS-TBD.
+and extend the "Witnessed by" sentence with the HALT witness run::tests::conditions::a_started_messages_halt_report_names_the_line_that_raised.
