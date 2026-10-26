@@ -68,7 +68,8 @@ the oracle: add it to rust/corpus/oracle-crashes.txt), 2026-10-19-index-argument
 2026-10-13-security-manager-and-library-key.md, 2026-10-17-newmethod-parent-package.md and
 gate:phase-9c-gate.md:144 (unclear: native NewMethod; witness through the C API test harness or report), 2026-10-22-live-frames-omit-nested-primitives.md,
 2026-10-22-executable-at-quadratic-depth.md,
-2026-10-26-main-program-level-during-requires-install.md, 2026-10-26-compile-failure-condition-names-caller.md.
+2026-10-26-main-program-level-during-requires-install.md, 2026-10-26-compile-failure-condition-names-caller.md,
+2026-10-26-library-rxmath-error-number.md.
 
 ## 8.8 Process items, unclear items, and items triage found fixed
 Every `process` and `unclear` row of task-8-triage.tsv not named above, the gate lines

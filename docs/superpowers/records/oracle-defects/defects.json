@@ -1841,7 +1841,7 @@
   "expected": "Each its own directive clause.",
   "cause": "Not read in the C++; the constant's code location looks shared.",
   "source": "Phase 9d Task 8.4 report, New oracle defects 1",
-  "status": "reported (not yet ruled)",
+  "status": "deviation (number pending; Moritz 2026-10-26: \"Own clause, oracle bug\")",
   "crate": "Answers each constant's own clause."
  }
 ]

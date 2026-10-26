@@ -1,0 +1,9 @@
+Insert after Deviation 67's "Measured by Phase 9d Task 8.2 and its review (...)." sentence:
+
+     Extended by Moritz 2026-10-26 ("Extend 67") to every condition a
+     started message raises and `result` raises again, HALT included: for a
+     HALT in a started method (`t8.4/naming/probes/r2.rex`), the oracle
+     names the waiter's line 2 in both reports, this crate line 9 then line
+     2 (t8.4/naming/result-reraise-r1.txt, -r2.txt).
+
+and extend the "Witnessed by" sentence with the HALT witness WITNESS-TBD.
