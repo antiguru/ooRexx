@@ -1,0 +1,35 @@
+/* The Method a ::CONSTANT expression runs as, run under a scope that is
+   not its class (RUN, ENHANCED, SETMETHOD) and named by the message it was
+   sent as. Each class holds one ::CONSTANT. */
+o = .r~new
+o~go
+p = .object~enhanced(.directory~of(('ZZ', .c~e)))
+p~zz
+say 'enhanced instr' var('result')
+signal on syntax name s1
+say p~zz
+s1: say condition('o')~code condition('o')~message
+.c~cgo
+.c~define('FR', .c~e)
+.c~new~fr
+exit
+::class c
+::constant e (.c~frames(.context~executable))
+::method cgo class
+  self~setMethod('YY', self~e)
+  self~yy
+  say 'setMethod instr' var('result')
+::method frames class
+  do f over .context~stackframes
+    say f~type f~name f~line
+  end
+  return arg(1)
+::class r
+::constant e (.context~executable)
+::method go
+  self~run(.r~e)
+  say 'run instr' var('result')
+  signal on syntax name s2
+  say self~run(.r~e)
+s2:
+  say condition('o')~code condition('o')~message

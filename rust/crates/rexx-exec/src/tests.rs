@@ -1405,3 +1405,49 @@ fn a_constant_expressions_method_runs_its_own_expression() {
         "note ran\n7\nran The Method class\n"
     );
 }
+
+/// A run of a `::CONSTANT` expression's method waits for its receiver's guard
+/// while another activity holds it: the started `zz` runs after the guarded
+/// `go` that started it ends, as on the oracle.
+#[test]
+fn a_constant_expressions_method_waits_for_a_held_guard() {
+    let outcome = run_program(
+        "/w/w.rex",
+        b".c~define('ZZ', .c~e)\no = .c~new\no~go\n::class c\n\
+          ::constant e (.c~note(.context~executable))\n::method note class\n\
+          \x20 say 'note ran'\n  return arg(1)\n::method go\n  m = self~start('zz')\n\
+          \x20 call syssleep 0.3\n  say 'go still holds'\n  say 'go done'\n"
+            .to_vec(),
+        crate::Invocation::none(),
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "note ran\ngo still holds\ngo done\nnote ran\n"
+    );
+}
+
+/// A condition a `::CONSTANT` expression's `result` raises again keeps the
+/// line it was raised at, as the oracle's report names it, with no echo of
+/// the directive or its `::CLASS`. The started activity's own report names
+/// its own line (Deviation 67).
+#[test]
+fn a_condition_raised_again_in_a_constant_expression_keeps_its_position() {
+    let outcome = run_program(
+        "/w/g.rex",
+        b"say .c~k\n::class c\n::constant k (.c~u)\n::method u class unguarded\n\
+          \x20 m = self~start('g')\n  say 'waiting'\n  return m~result\n\
+          ::method g class unguarded\n  return 1/0\n"
+            .to_vec(),
+        crate::Invocation::none(),
+    );
+    assert_eq!(outcome.exit_code, 214);
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stderr),
+        "     9 *-* return 1/0\n\
+         Error 42 running /w/g.rex line 9:  Arithmetic overflow/underflow.\n\
+         Error 42.3:  Arithmetic overflow; divisor must not be zero.\n\
+         \x20    9 *-* return 1/0\n\
+         Error 42 running /w/g.rex line 7:  Arithmetic overflow/underflow.\n\
+         Error 42.3:  Arithmetic overflow; divisor must not be zero.\n"
+    );
+}

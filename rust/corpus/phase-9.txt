@@ -394,3 +394,6 @@ lang/constant_expression_trace_labels.rex
 # 9d Task 8.4 fix round 1: the frames of a ::CONSTANT expression echo their directives.
 lang/constant_expression_traceline.rex
 lang/constant_expression_method_runs.rex
+# 9d Task 8.4 fix round 2: a ::CONSTANT expression Method run under any scope and named by its message.
+lang/constant_expression_method_scopes.rex
+lang/constant_expression_method_trace.rex

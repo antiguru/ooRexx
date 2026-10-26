@@ -528,6 +528,17 @@ impl Interp {
             return;
         };
         let program = std::rc::Rc::clone(&activation.program);
+        // A `::CONSTANT` expression's level is stopped on its directive.
+        if let Some(directive) = activation
+            .cold
+            .as_deref()
+            .and_then(|cold| cold.directive_clause)
+            && let Some(declared) = program.directives.get(directive)
+        {
+            let id = activation.program_id;
+            self.blame_directive(id, &program, declared);
+            return;
+        }
         let plan = std::rc::Rc::clone(&activation.plan);
         let (selector, index) = (activation.body, activation.pc);
         let Some(body) = crate::activation::body_of(&program, selector) else {

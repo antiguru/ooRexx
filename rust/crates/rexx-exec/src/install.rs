@@ -1073,6 +1073,7 @@ impl Interp {
                     .position(|declared| std::ptr::eq(declared, class))
             });
             let run = ConstantRun {
+                name: b"::CONSTANT",
                 receiver: class,
                 scope: class,
                 executable: None,
@@ -1081,6 +1082,15 @@ impl Interp {
             match self.eval_constant_expression(id, program, run, index, expr, level) {
                 Ok(value) => self.record_constant_value(id, index, value),
                 Err(failure) => {
+                    // A condition raised again below the expression, by a
+                    // `result` it waited on, keeps the position and echoes it
+                    // was raised with: no level it leaves records a site.
+                    if matches!(
+                        self.activity.failure_site,
+                        Some(FailureSite::Reraised { .. })
+                    ) {
+                        return Err(failure);
+                    }
                     // Two clause echoes, innermost first, matching the
                     // oracle's own report exactly (measured, `::class K` /
                     // `::constant c (1/0)`):
@@ -2656,6 +2666,7 @@ impl Interp {
         level: Option<usize>,
     ) -> Result<ObjRef, Failure> {
         let ConstantRun {
+            name,
             receiver,
             scope: class,
             executable,
@@ -2694,10 +2705,7 @@ impl Interp {
         });
         let frame = self.roots.push_slots(0);
         let activation_id = self.next_activation_id();
-        // The oracle's own message name for this run, which is the string
-        // `GlobalNames::CONSTANT_DIRECTIVE` holds (`memory/GlobalNames.h:84`)
-        // and `.context~name` answers.
-        let name: Rc<[u8]> = Rc::from(&b"::CONSTANT"[..]);
+        let name: Rc<[u8]> = Rc::from(name);
         let mut activation = Activation::method(
             activation_id,
             Rc::clone(program),
@@ -2733,29 +2741,33 @@ impl Interp {
             },
         );
         self.push_activation(activation);
-        // Guarded, as the method object reports.
+        // Guarded, as the method object reports, and waited for here: the
+        // level runs no clause where a queued wait would be served.
         self.reserve_for_method(crate::guards::GuardKey {
             object: receiver,
             scope: class,
         });
+        let reserved = self.serve_guard_wait(false);
         self.enter_directive_clause(line);
         self.record_call_convention();
         let self_slot = self.slot_of(b"SELF");
         self.set_variable(frame, self_slot, receiver);
         let super_slot = self.slot_of(b"SUPER");
-        // `.nil` for the topmost scope, which is what `superScope` answers
-        // there and what `Interp::begin_method` writes for it.
-        let super_scope = self.classes().class_super_scope(class, class);
+        // The receiver's behaviour's super scope, as `Interp::begin_method`
+        // writes it, `.nil` for the topmost scope.
+        let super_scope = self.super_scope_of(receiver, class);
         self.set_variable(frame, super_slot, super_scope.unwrap_or(ObjRef::NIL));
-        self.trace_package_invocation_entry();
-        self.trace_clause(line, 0, &text);
-        let code = Code {
-            body: &empty_body,
-            symbols: &program.symbols,
-            slots: &[],
-            plan: None,
-        };
-        let result = self.eval(&code, expr);
+        let result = reserved.and_then(|()| {
+            self.trace_package_invocation_entry();
+            self.trace_clause(line, 0, &text);
+            let code = Code {
+                body: &empty_body,
+                symbols: &program.symbols,
+                slots: &[],
+                plan: None,
+            };
+            self.eval(&code, expr)
+        });
         if let Ok(value) = result
             && let Some(rendered) = self.result_text(value)
         {
@@ -2782,6 +2794,7 @@ impl Interp {
         generated: GeneratedMethod,
         resolution: dispatch::Resolution,
         receiver: ObjRef,
+        name: &[u8],
         args: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, Failure> {
         let Some(program) = self.programs.get(generated.program).map(Rc::clone) else {
@@ -2797,6 +2810,7 @@ impl Interp {
         };
         let executable = self.executable_objects.get(&resolution.method).copied();
         let run = ConstantRun {
+            name,
             receiver,
             scope: resolution.scope,
             executable,
@@ -2859,7 +2873,12 @@ impl Interp {
     /// package `id` the directive is in (measured, oracle: a `::CLASS` of a
     /// called file naming a missing superclass is `Error 98 running` that
     /// file).
-    fn blame_directive(&mut self, id: ProgramId, program: &Rc<Program>, directive: &Directive) {
+    pub(crate) fn blame_directive(
+        &mut self,
+        id: ProgramId,
+        program: &Rc<Program>,
+        directive: &Directive,
+    ) {
         let (line, text) = self.directive_text(id, program, directive);
         let name = self.program_display_name(id);
         self.activity.failure_site = Some(if *name == *self.program_path {
@@ -2978,6 +2997,10 @@ pub(crate) struct ExternalRefusal {
 /// the `Method` it is the level of where one already stands for it, and its
 /// arguments.
 struct ConstantRun<'a> {
+    /// The level's name: `::CONSTANT` while the package installs, which is
+    /// `GlobalNames::CONSTANT_DIRECTIVE` (`memory/GlobalNames.h:84`), and the
+    /// message name on a run.
+    name: &'a [u8],
     receiver: ObjRef,
     scope: ObjRef,
     executable: Option<ObjRef>,
