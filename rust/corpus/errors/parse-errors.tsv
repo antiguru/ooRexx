@@ -9,8 +9,10 @@
 #                reject it with the same major, sub and line.
 #   install      rexxc rejected it, but for something outside the program
 #                text: it could not bind the program to a library or an
-#                external routine. This parser must ACCEPT it, because
-#                loading a library is not parsing. Every install row is a
+#                external routine. This parser accepts it, or rejects it for a
+#                later error having recorded the directive the oracle names as
+#                one whose EXTERNAL it reached first, because loading a library
+#                is not parsing. Every install row is a
 #                ::ROUTINE or ::METHOD with EXTERNAL "LIBRARY x" or
 #                EXTERNAL "REGISTERED x". Two error classes, 98.903 and
 #                90.999, so a `98.9xx` prefix rule would miss half of it --
@@ -36,11 +38,7 @@
 #                rexxc has no install step at all, yet reports both. Measured:
 #                `nop` then `::routine r external "LIBRARY x"` gives 98.903 on
 #                line 2 with rc 158, and `::routine r external "registered x"`
-#                gives 90.999 on line 1, both from rexxc alone. The decision to
-#                accept these rows is unchanged and rests on the
-#                machine-dependence above; only the mechanism was misdescribed,
-#                and it mattered because Phase 4 could have built an
-#                install-time error ordering on it.
+#                gives 90.999 on line 1, both from rexxc alone.
 #   -            rexxc answered rc 0. The program translates.
 #
 # `message` is the oracle's secondary line after `Error N.M:  `, escaped as

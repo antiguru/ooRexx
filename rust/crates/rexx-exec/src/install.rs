@@ -1066,8 +1066,19 @@ impl Interp {
             let ConstantValue::Expression(expr) = &constant.value else {
                 continue;
             };
-            let level_line = last_class.map(|class| directive_clause(program, class).0);
-            match self.eval_constant_expression(id, program, class, index, expr, level_line) {
+            let level = last_class.and_then(|class| {
+                program
+                    .directives
+                    .iter()
+                    .position(|declared| std::ptr::eq(declared, class))
+            });
+            let run = ConstantRun {
+                receiver: class,
+                scope: class,
+                executable: None,
+                arguments: &[],
+            };
+            match self.eval_constant_expression(id, program, run, index, expr, level) {
                 Ok(value) => self.record_constant_value(id, index, value),
                 Err(failure) => {
                     // Two clause echoes, innermost first, matching the
@@ -2069,6 +2080,12 @@ impl Interp {
             };
         }
         if let Some(generated) = self.generated_methods.get(&method) {
+            if generated.kind == GeneratedKind::ConstantExpression {
+                return ExecutableSource::ConstantExpression {
+                    program: generated.program,
+                    directive: generated.directive,
+                };
+            }
             return ExecutableSource::Directive {
                 program: generated.program,
                 directive: generated.directive,
@@ -2622,44 +2639,57 @@ impl Interp {
     }
 
     /// Runs the `::CONSTANT` expression of `program`'s directive `directive`
-    /// as a method of its own on `class`, as `ClassDirective::resolveConstants`
-    /// does (`instructions/ClassDirective.cpp:257`): a `METHOD` level named
-    /// `::CONSTANT` with `class` as its receiver and scope, stopped on the
-    /// directive's clause, whose executable is a `Method` of its own and
-    /// which the package's `::OPTIONS TRACE` traces as a method. Below it is
-    /// the level installing the package, stopped on `level_line`, the
-    /// `::CLASS` installed last.
+    /// as a method of its own, as `ClassDirective::resolveConstants` does
+    /// (`instructions/ClassDirective.cpp:257`): a guarded `METHOD` level named
+    /// `::CONSTANT` with `run`'s receiver and scope, stopped on the directive's
+    /// clause, whose executable is a `Method` of its own and which the
+    /// package's `::OPTIONS TRACE` traces as a method. While a package
+    /// installs, below it is the level installing the package, stopped on
+    /// directive `level`, the `::CLASS` installed last.
     fn eval_constant_expression(
         &mut self,
         id: ProgramId,
         program: &Rc<Program>,
-        class: ObjRef,
+        run: ConstantRun<'_>,
         directive: usize,
         expr: &Expr,
-        level_line: Option<usize>,
+        level: Option<usize>,
     ) -> Result<ObjRef, Failure> {
+        let ConstantRun {
+            receiver,
+            scope: class,
+            executable,
+            arguments,
+        } = run;
         let empty_body = CodeBody::default();
         // Taken before the frame is pushed, as every activation's is.
         let caller = self.install_caller.clone().flatten();
         let start = self.package_start(id, caller.as_ref());
-        let executable = self.constant_executable(id, directive, class)?;
+        let executable = match executable {
+            Some(executable) => executable,
+            None => self.constant_executable(id, directive, class)?,
+        };
         let (line, text) = self.directive_text(id, program, &program.directives[directive]);
         let saved_clause = self.save_clause_state();
         let installing = self.install_call.map(|call_type| {
             let frame = self.roots.push_slots(0);
             let level_id = self.next_activation_id();
-            let mut level = Activation::new(
+            let mut installing = Activation::new(
                 level_id,
                 Rc::clone(program),
                 id,
                 Rc::new(Plan::default()),
                 frame,
             );
-            level.call_type = call_type;
-            level.body = None;
-            self.push_activation(level);
+            installing.call_type = call_type;
+            installing.body = None;
+            installing.cold_mut().directive_clause = level;
+            self.push_activation(installing);
             self.record_call_convention();
-            self.enter_directive_clause(level_line.unwrap_or(0));
+            let line = level.map_or(0, |class| {
+                directive_clause(program, &program.directives[class]).0
+            });
+            self.enter_directive_clause(line);
             frame
         });
         let frame = self.roots.push_slots(0);
@@ -2678,7 +2708,7 @@ impl Interp {
             MethodIdentity {
                 name: Rc::clone(&name),
                 scope: class,
-                receiver: class,
+                receiver,
             },
         );
         // It starts from the package's `::OPTIONS` settings, and under
@@ -2693,19 +2723,25 @@ impl Interp {
         // label of its own.
         activation.body = None;
         activation.cold_mut().executable = Some(executable);
+        activation.cold_mut().directive_clause = Some(directive);
         let saved_context = std::mem::replace(
             &mut self.activity.call_context,
             CallContext {
                 name,
-                arguments: Rc::from(&[][..]),
-                receiver: Some(class),
+                arguments: Rc::from(arguments),
+                receiver: Some(receiver),
             },
         );
         self.push_activation(activation);
+        // Guarded, as the method object reports.
+        self.reserve_for_method(crate::guards::GuardKey {
+            object: receiver,
+            scope: class,
+        });
         self.enter_directive_clause(line);
         self.record_call_convention();
         let self_slot = self.slot_of(b"SELF");
-        self.set_variable(frame, self_slot, class);
+        self.set_variable(frame, self_slot, receiver);
         let super_slot = self.slot_of(b"SUPER");
         // `.nil` for the topmost scope, which is what `superScope` answers
         // there and what `Interp::begin_method` writes for it.
@@ -2726,6 +2762,7 @@ impl Interp {
             self.trace_result(0, &rendered);
         }
         self.trace_invocation_exit(|| result.as_ref().ok().copied());
+        self.guard_off_at_end();
         self.activity.call_context = saved_context;
         self.pop_activation();
         self.roots.activity_mut().pop_slots(frame);
@@ -2735,6 +2772,47 @@ impl Interp {
         }
         self.restore_clause_state(saved_clause);
         result
+    }
+
+    /// A `::CONSTANT` expression method sent as `name` to `receiver` in
+    /// `resolution`'s scope: the expression evaluated again, answering
+    /// nothing (measured, oracle: a `define`d copy sent for a result is 91.999).
+    pub(crate) fn run_constant_expression(
+        &mut self,
+        generated: GeneratedMethod,
+        resolution: dispatch::Resolution,
+        receiver: ObjRef,
+        args: &[Option<ObjRef>],
+    ) -> Result<Option<ObjRef>, Failure> {
+        let Some(program) = self.programs.get(generated.program).map(Rc::clone) else {
+            return Err(Loud::missing_body().into());
+        };
+        let Some(DirectiveKind::Constant(constant)) =
+            program.directives.get(generated.directive).map(|d| &d.kind)
+        else {
+            return Err(Loud::missing_body().into());
+        };
+        let ConstantValue::Expression(expr) = &constant.value else {
+            return Err(Loud::missing_body().into());
+        };
+        let executable = self.executable_objects.get(&resolution.method).copied();
+        let run = ConstantRun {
+            receiver,
+            scope: resolution.scope,
+            executable,
+            arguments: args,
+        };
+        let outer = self.install_call.take();
+        let evaluated = self.eval_constant_expression(
+            generated.program,
+            &program,
+            run,
+            generated.directive,
+            expr,
+            None,
+        );
+        self.install_call = outer;
+        evaluated.map(|_| None)
     }
 
     /// The `Method` a `::CONSTANT` expression's evaluation runs as: a fresh
@@ -2750,11 +2828,21 @@ impl Interp {
         let method_class = self.method_class();
         let object = self.native_instance(method_class);
         self.roots.activity_mut().push_temp(object);
+        let method = self.classes().mint_method_id();
+        self.generated_methods.insert(
+            method,
+            GeneratedMethod {
+                program,
+                directive,
+                kind: GeneratedKind::ConstantExpression,
+            },
+        );
+        self.executable_objects.insert(method, object);
         let record = crate::ExecutableRecord {
             source: ExecutableSource::ConstantExpression { program, directive },
-            installed: None,
+            installed: Some(method),
             routine: None,
-            owns_installed: false,
+            owns_installed: true,
         };
         self.record_executable(object, record)?;
         if let Some(rexx_core::Body::Native(native)) =
@@ -2884,4 +2972,14 @@ fn claim_member_keys(
 pub(crate) struct ExternalRefusal {
     pub(crate) failure: Failure,
     echoes: bool,
+}
+
+/// Who a `::CONSTANT` expression's level runs for: its receiver and scope,
+/// the `Method` it is the level of where one already stands for it, and its
+/// arguments.
+struct ConstantRun<'a> {
+    receiver: ObjRef,
+    scope: ObjRef,
+    executable: Option<ObjRef>,
+    arguments: &'a [Option<ObjRef>],
 }

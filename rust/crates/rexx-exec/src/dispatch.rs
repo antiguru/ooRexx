@@ -2936,6 +2936,9 @@ impl Interp {
                 crate::GeneratedKind::Constant => {
                     self.read_constant(cleared, generated, receiver, args)
                 }
+                crate::GeneratedKind::ConstantExpression => {
+                    self.run_constant_expression(generated, resolution, receiver, args)
+                }
                 crate::GeneratedKind::Delegate => {
                     self.send_to_delegate(cleared, generated, resolution, receiver, name, args)
                 }

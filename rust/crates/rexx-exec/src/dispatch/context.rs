@@ -133,6 +133,8 @@ struct Snapshot {
     name: Vec<u8>,
     clause: crate::activation::ClauseSnapshot,
     body: Option<usize>,
+    /// [`crate::activation::ActivationCold::directive_clause`].
+    directive_clause: Option<usize>,
     program: ProgramId,
     target: Option<ObjRef>,
     arguments: Vec<Option<ObjRef>>,
@@ -1079,6 +1081,10 @@ fn read_snapshot(interp: &Interp, depth: usize) -> Result<Snapshot, Failure> {
         name,
         clause: interp.clause_of(depth),
         body: activation.body,
+        directive_clause: activation
+            .cold
+            .as_deref()
+            .and_then(|cold| cold.directive_clause),
         program: activation.program_id,
         target,
         arguments,
@@ -1106,11 +1112,14 @@ fn trace_line_text(interp: &mut Interp, depth: usize, snapshot: &Snapshot) -> Ve
             .programs
             .get(snapshot.program)
             .and_then(|program| {
-                let span = crate::activation::body_of(program, snapshot.body)?
-                    .instructions
-                    .get(snapshot.clause.index)?
-                    .clause_span
-                    .clone();
+                let span = match snapshot.directive_clause {
+                    Some(directive) => program.directives.get(directive)?.clause_span.clone(),
+                    None => crate::activation::body_of(program, snapshot.body)?
+                        .instructions
+                        .get(snapshot.clause.index)?
+                        .clause_span
+                        .clone(),
+                };
                 program.source.join_span(span)
             })
             .map(std::borrow::Cow::into_owned)

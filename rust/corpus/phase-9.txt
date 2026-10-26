@@ -391,3 +391,6 @@ lang/install_error_in_required_file.rex
 lang/constant_expression_level.rex
 lang/constant_expression_trace.rex
 lang/constant_expression_trace_labels.rex
+# 9d Task 8.4 fix round 1: the frames of a ::CONSTANT expression echo their directives.
+lang/constant_expression_traceline.rex
+lang/constant_expression_method_runs.rex

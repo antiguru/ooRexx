@@ -2070,6 +2070,9 @@ enum GeneratedKind {
     /// A `::CONSTANT` accessor: it answers the value its package holds for
     /// the directive.
     Constant,
+    /// The method a `::CONSTANT` expression is evaluated by: run again, it
+    /// evaluates the expression on its receiver and answers nothing.
+    ConstantExpression,
 }
 
 /// The directories `LD_LIBRARY_PATH` names in `environment`.

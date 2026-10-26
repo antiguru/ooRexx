@@ -592,6 +592,10 @@ pub(crate) struct ActivationCold {
     /// `Directory` entry or `Routine~call` ran, or the first
     /// `.context~executable` answered.
     pub(crate) executable: Option<ObjRef>,
+    /// The directive whose clause this level is stopped on, for a level that
+    /// runs no body: a `::CONSTANT` expression's, and the package level
+    /// installing it.
+    pub(crate) directive_clause: Option<usize>,
 }
 
 /// A `USE LOCAL` method's object pool and the names it keeps local
@@ -1014,6 +1018,8 @@ impl Activation {
             locals: _,
             auto_expose,
             executable,
+            // A directive index.
+            directive_clause: _,
         }) = cold.as_deref()
         {
             if let Some(TrappedCondition {

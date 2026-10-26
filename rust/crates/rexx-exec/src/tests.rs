@@ -1347,3 +1347,61 @@ fn every_library_program_passes_the_declaration_checks() {
         }
     }
 }
+
+/// Each `::CONSTANT` expression's method answers its own directive clause as
+/// its source, continuation lines included. The oracle answers the last
+/// `::CONSTANT` clause for every one of them.
+#[test]
+fn a_constant_expressions_method_answers_its_own_clause_as_source() {
+    let outcome = run_program(
+        "/w/s.rex",
+        b"do n over 'E', 'F', 'G'\n  do l over .c~send(n)~source; say n '['l']'; end\nend\n\
+          ::class c\n::constant e (.context~executable)\n::constant f (.context~executable,\n  )\n\
+          ::method m\n  return 1\n::constant g (.context~executable)\n"
+            .to_vec(),
+        crate::Invocation::none(),
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "E [::constant e (.context~executable)]\nF [::constant f (.context~executable,]\n\
+         F [  )]\nG [::constant g (.context~executable)]\n"
+    );
+}
+
+/// A `::CONSTANT` expression's level holds its class's guard: a guarded class
+/// method it starts and waits on is a deadlock, 98.905, as on the oracle.
+#[test]
+fn a_constant_expression_holds_its_classs_guard() {
+    let outcome = run_program(
+        "/w/g.rex",
+        b"say .c~k\n::class c\n::constant k (.c~u)\n::method u class unguarded\n\
+          \x20 m = self~start('g')\n  return m~result\n::method g class\n  say 'g ran'\n  return 5\n"
+            .to_vec(),
+        crate::Invocation::none(),
+    );
+    assert_eq!(outcome.exit_code, 158);
+    assert!(outcome.stdout.is_empty());
+    assert!(
+        String::from_utf8_lossy(&outcome.stderr)
+            .ends_with("Error 98.905:  Deadlock detected on a guarded method.\n")
+    );
+}
+
+/// Run again, a `::CONSTANT` expression's method evaluates its own
+/// expression. The oracle evaluates another `::CONSTANT`'s: here `K`'s,
+/// printing `note ran` a second time.
+#[test]
+fn a_constant_expressions_method_runs_its_own_expression() {
+    let outcome = run_program(
+        "/w/r.rex",
+        b"say .c~k\n.c~define('ZZ', .c~e)\n.c~new~zz\nsay 'ran' (.c~e~class)\n::class c\n\
+          ::constant k (.c~note)\n::constant e (.context~executable)\n::method note class\n\
+          \x20 say 'note ran'\n  return 7\n"
+            .to_vec(),
+        crate::Invocation::none(),
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "note ran\n7\nran The Method class\n"
+    );
+}

@@ -1193,6 +1193,32 @@ fn a_started_messages_report_names_the_line_that_raised() {
     );
 }
 
+/// The same for a HALT, which an untrapped HALT reports as error 4: the
+/// started activity's report names the line that raised it and the waiter's
+/// its own `result` clause (Deviation 67).
+#[test]
+fn a_started_messages_halt_report_names_the_line_that_raised() {
+    let outcome = crate::run_program(
+        "/w/h.rex",
+        b"m = .o~new~start('go')\nx = m~result\nsay 'after' x\n::class o\n::method go\n\
+          \x20 call sub\n  return 1\nsub:\n  raise halt\n"
+            .to_vec(),
+        crate::Invocation::none(),
+    );
+    assert_eq!(outcome.exit_code, 252);
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stderr),
+        "     9 *-*   raise halt\n\
+         \x20    6 *-* call sub\n\
+         Error 4 running /w/h.rex line 9:  Program interrupted.\n\
+         Error 4.1:  Program interrupted with HALT condition.\n\
+         \x20    9 *-*   raise halt\n\
+         \x20    6 *-* call sub\n\
+         Error 4 running /w/h.rex line 2:  Program interrupted.\n\
+         Error 4.1:  Program interrupted with HALT condition.\n"
+    );
+}
+
 /// An UNKNOWN method a Stem subclass defines answers a message the stem
 /// does not understand (rexxref `provide.xml`, UNKNOWN). The oracle forwards
 /// to the stem's value without looking it up, and reports 97.1.
