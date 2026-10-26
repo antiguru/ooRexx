@@ -72,4 +72,5 @@ gate:phase-9c-gate.md:144 (unclear: native NewMethod; witness through the C API 
 ## 8.8 Process items, unclear items, and items triage found fixed
 Every `process` and `unclear` row of task-8-triage.tsv not named above, the gate lines
 phase-9a-gate.md:456-459, and the `fixed` rows (re-check each, then close with `closed:probe agrees`
-and the probe path), and 2026-10-22-collect-stress-zero-collection-drift.md.
+and the probe path), 2026-10-22-collect-stress-zero-collection-drift.md,
+2026-10-26-file-date-time-dst-dependent.md and 2026-10-26-redirected-target-waits-timing-flake.md.
