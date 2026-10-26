@@ -1833,8 +1833,9 @@ fn a_swept_rebuilt_executable_leaves_its_identity_alone() {
 /// A routine only a call site keeps, its `.ROUTINES` entry removed by its
 /// own first call, still runs on the site's later calls: through an internal
 /// function's site, a function call in the main program, a `CALL`, a
-/// method's site, a site in a comparator `sortWith` runs, and an
-/// `INTERPRET`'s site. Measured, oracle rc 0 for each form.
+/// method's site, a site in a comparator `sortWith` runs, an `INTERPRET`'s
+/// site, and the site of a fragment looping on a routine made inside a
+/// `CALL`. Measured, oracle rc 0 for each form.
 #[test]
 fn a_routine_only_a_call_site_keeps_survives_collection() {
     for (form, call) in [
@@ -1879,6 +1880,20 @@ fn a_routine_only_a_call_site_keeps_survives_collection() {
             "::routine dummy\n",
         ),
         "f 1\nf 2\nf 3\n",
+    );
+    assert_stress_prints(
+        "<site-fragment>",
+        concat!(
+            ".local~rr = .routines\n",
+            "do n = 1 to 3\n",
+            "  call setf\n",
+            "  interpret 'do k = 1 to 3; say f(n k); x = .array~new(20); end'\n",
+            "end\n",
+            "exit\n",
+            "setf: .routines['F'] = .routine~new('f', 'use arg n; .rr~remove(\"F\"); return \"f\" n'); return\n",
+            "::routine dummy\n",
+        ),
+        "f 1 1\nf 1 2\nf 1 3\nf 2 1\nf 2 2\nf 2 3\nf 3 1\nf 3 2\nf 3 3\n",
     );
 }
 
