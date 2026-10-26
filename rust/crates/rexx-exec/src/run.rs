@@ -3518,32 +3518,42 @@ impl Interp {
                 indent: 0,
             },
         };
-        if self.activity.failure_frame.is_none() {
-            let mut trace_line = Vec::new();
-            site.push_trace_line(&mut trace_line);
-            let program = match name {
-                Some(name) => name.to_vec(),
-                None => self
-                    .running_program()
-                    .map(|id| self.program_display_name(id).to_vec())
-                    .unwrap_or_default(),
-            };
-            // `CompileActivationFrame::executable` is `OREF_NULL`.
-            if let Ok(frame) = crate::dispatch::context::build_ended_frame(
-                self,
-                b"COMPILE",
-                &program,
-                line,
-                &[],
-                &trace_line,
-                Some(ObjRef::NIL),
-            ) {
-                self.activity.failure_frame = Some(frame);
-            }
-        }
+        let program = match name {
+            Some(name) => name.to_vec(),
+            None => self
+                .running_program()
+                .map(|id| self.program_display_name(id).to_vec())
+                .unwrap_or_default(),
+        };
+        self.record_compile_frame(&site, &program);
         self.activity.failure_site.get_or_insert(site);
         self.seal_site_level();
         raised.into()
+    }
+
+    /// The `COMPILE` frame of a translation of `program` failing at `site`,
+    /// unless a frame is already recorded (`LanguageParser::createStackFrame`).
+    pub(crate) fn record_compile_frame(&mut self, site: &FailureSite, program: &[u8]) {
+        if self.activity.failure_frame.is_some() {
+            return;
+        }
+        let Some(line) = site.line() else {
+            return;
+        };
+        let mut trace_line = Vec::new();
+        site.push_trace_line(&mut trace_line);
+        // `CompileActivationFrame::executable` is `OREF_NULL`.
+        if let Ok(frame) = crate::dispatch::context::build_ended_frame(
+            self,
+            b"COMPILE",
+            program,
+            line,
+            &[],
+            &trace_line,
+            Some(ObjRef::NIL),
+        ) {
+            self.activity.failure_frame = Some(frame);
+        }
     }
 
     /// `text`, a file's, parsed as a whole program, or restored where it is

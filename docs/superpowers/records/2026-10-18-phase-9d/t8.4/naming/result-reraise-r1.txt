@@ -1,0 +1,33 @@
+--- oracle rc=214
+[stdout]
+started
+in go
+[stderr]
+     8 *-* y = 1 / 0
+     8 *-* y = 1 / 0
+Error 42 running SCRATCH/res/r1.rex line 3:  Arithmetic overflow/underflow.
+Error 42 running SCRATCH/res/r1.rex line 3:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+--- base rc=214
+[stdout]
+started
+in go
+[stderr]
+     8 *-* y = 1 / 0
+Error 42 running SCRATCH/res/r1.rex line 8:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+     8 *-* y = 1 / 0
+Error 42 running SCRATCH/res/r1.rex line 3:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+--- head rc=214
+[stdout]
+started
+in go
+[stderr]
+     8 *-* y = 1 / 0
+Error 42 running SCRATCH/res/r1.rex line 8:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+     8 *-* y = 1 / 0
+Error 42 running SCRATCH/res/r1.rex line 3:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

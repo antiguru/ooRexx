@@ -1,0 +1,5 @@
+/* A ::CONSTANT expression failing in a required file is reported against
+   that file. */
+say .c~k
+::requires "r.cls"
+::options novalue syntax digits 4

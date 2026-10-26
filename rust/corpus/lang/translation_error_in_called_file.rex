@@ -15,6 +15,7 @@ exit
 
 write: procedure
   parse arg file
+  call stream file, 'c', 'open write replace'
   do i = 2 to arg()
     call lineout file, arg(i)
   end

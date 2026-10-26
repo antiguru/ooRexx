@@ -383,3 +383,7 @@ lang/scan_error_waits_for_its_clause.rex
 # 9d Task 8.4: translation checks in source order, and a called file's translation error.
 lang/translation_checks_in_source_order.rex
 lang/translation_error_in_called_file.rex
+# 9d Task 8.4: an install error names the package it installs.
+lang/install_error_in_called_file.rex
+lang/install_error_in_routine_new.rex
+lang/install_error_in_required_file.rex

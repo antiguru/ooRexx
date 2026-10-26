@@ -163,7 +163,7 @@ impl Interp {
                     ) {
                         Ok(target) => target,
                         Err(missing) => {
-                            self.blame_directive(id, program, directive);
+                            self.blame_translation(id, program, directive);
                             return Err(Raised::missing_annotation_target(
                                 missing.kind,
                                 missing.name,
@@ -213,7 +213,7 @@ impl Interp {
                         options.iter().try_for_each(|option| package.apply(option))
                     };
                     if let Err(error) = outcome {
-                        self.blame_directive(id, program, directive);
+                        self.blame_translation(id, program, directive);
                         return Err(run::raised_from_settings(error).into());
                     }
                     // An arming route of the required-string protocol:
@@ -253,10 +253,8 @@ impl Interp {
             let (keys, internal) = match self.resolve_external(&directive.kind) {
                 Ok(resolved) => resolved,
                 Err(refusal) => {
-                    match refusal.blame {
-                        RefusalBlame::None => {}
-                        RefusalBlame::Clause => self.blame_directive(id, program, directive),
-                        RefusalBlame::Package => self.blame_directive_in(id, program, directive),
+                    if refusal.echoes {
+                        self.blame_translation(id, program, directive);
                     }
                     return Err(refusal.failure);
                 }
@@ -324,8 +322,8 @@ impl Interp {
         let order = match class_install_order(program, &declared) {
             Ok(order) => order,
             Err(blame) => {
-                self.blame_directive(id, program, &program.directives[blame]);
-                let path = self.program_path.clone();
+                self.blame_translation(id, program, &program.directives[blame]);
+                let path = self.program_display_name(id).to_vec();
                 return Err(Raised::cyclic_inheritance(&path).into());
             }
         };
@@ -515,7 +513,7 @@ impl Interp {
                         Ok(loaded) => self.merge_library(id, &requires.name, &loaded)?,
                         Err(failure) => {
                             self.seal_site_level();
-                            self.blame_directive_in(id, program, directive);
+                            self.blame_directive(id, program, directive);
                             return Err(failure);
                         }
                     }
@@ -539,7 +537,7 @@ impl Interp {
                     }
                     Err(failure) => {
                         self.seal_site_level();
-                        self.blame_directive_in(id, program, directive);
+                        self.blame_directive(id, program, directive);
                         return Err(failure);
                     }
                 }
@@ -2308,24 +2306,24 @@ impl Interp {
         ),
         ExternalRefusal,
     > {
-        let refuse = |failure: Failure, blame| ExternalRefusal { failure, blame };
+        let refuse = |failure: Failure, echoes| ExternalRefusal { failure, echoes };
         if let Some(loud) = directive_gap(kind) {
-            return Err(refuse(loud.into(), RefusalBlame::None));
+            return Err(refuse(loud.into(), false));
         }
         if let Some(missing) = unresolved_external(kind) {
             let raised = Raised::external_method_not_found(&missing);
-            return Err(refuse(raised.into(), RefusalBlame::Clause));
+            return Err(refuse(raised.into(), true));
         }
         let keys = self
             .resolve_directive_library(kind)
-            .map_err(|failure| refuse(failure, RefusalBlame::Package))?;
+            .map_err(|failure| refuse(failure, true))?;
         let mut internal = None;
         if let DirectiveKind::Routine(routine) = kind
             && let Some((package, entry)) = dispatch::native::internal_routine_entry(routine)
         {
             let Some(row) = internal_routines::package_routine(package, &entry) else {
                 let raised = Raised::external_routine_not_found(&entry);
-                return Err(refuse(raised.into(), RefusalBlame::Package));
+                return Err(refuse(raised.into(), true));
             };
             internal = Some(row);
         }
@@ -2673,14 +2671,43 @@ impl Interp {
 
     /// Records `directive`'s own clause as the site a directive-time
     /// condition is reported against, so its report carries the same echo
-    /// line the oracle prints above the two `Error` lines.
+    /// line the oracle prints above the two `Error` lines, and names the
+    /// package `id` the directive is in (measured, oracle: a `::CLASS` of a
+    /// called file naming a missing superclass is `Error 98 running` that
+    /// file).
     fn blame_directive(&mut self, id: ProgramId, program: &Rc<Program>, directive: &Directive) {
         let (line, text) = self.directive_text(id, program, directive);
-        self.activity.failure_site = Some(FailureSite::Clause {
-            line,
-            text,
-            indent: 0,
+        let name = self.program_display_name(id);
+        self.activity.failure_site = Some(if *name == *self.program_path {
+            FailureSite::Clause {
+                line,
+                text,
+                indent: 0,
+            }
+        } else {
+            FailureSite::Named {
+                line,
+                indent: 0,
+                text,
+                name: name.to_vec(),
+            }
         });
+    }
+
+    /// [`Interp::blame_directive`] for a refusal the oracle's translation
+    /// raises, whose level is the `COMPILE` frame (measured, oracle: a called
+    /// file's missing library and its cyclic `SUBCLASS` pair both list
+    /// `COMPILE` where a missing superclass lists `ROUTINE`).
+    fn blame_translation(&mut self, id: ProgramId, program: &Rc<Program>, directive: &Directive) {
+        self.blame_directive(id, program, directive);
+        let name = self.program_display_name(id).to_vec();
+        if let Some(site) = self.activity.failure_site.take() {
+            self.record_compile_frame(&site, &name);
+            self.activity
+                .failure_origin
+                .get_or_insert((Package::Program(id), site.line()));
+            self.activity.failure_site = Some(site);
+        }
     }
 
     /// `directive`'s line and the text its traceback line shows: its clause,
@@ -2707,25 +2734,6 @@ impl Interp {
         let name = self.program_display_name(id).to_vec();
         self.capture_site_frame(failure, b"ROUTINE", &name, &[], id);
         self.seal_site_level();
-    }
-
-    /// [`Interp::blame_directive`] for a directive in the package `id`, whose
-    /// report names that package's own file when a `::REQUIRES` loaded it.
-    fn blame_directive_in(&mut self, id: ProgramId, program: &Rc<Program>, directive: &Directive) {
-        let (line, text) = self.directive_text(id, program, directive);
-        self.activity.failure_site = Some(match self.required_paths.get(&id) {
-            Some(path) => FailureSite::Named {
-                line,
-                indent: 0,
-                text,
-                name: path.to_vec(),
-            },
-            None => FailureSite::Clause {
-                line,
-                text,
-                indent: 0,
-            },
-        });
     }
 }
 
@@ -2775,19 +2783,9 @@ fn claim_member_keys(
 }
 
 /// A translation-time refusal of a directive's `EXTERNAL`
-/// ([`Interp::resolve_external`]), and how its report blames the directive.
+/// ([`Interp::resolve_external`]), and whether its report echoes the
+/// directive, which a loud refusal's does not.
 pub(crate) struct ExternalRefusal {
     pub(crate) failure: Failure,
-    blame: RefusalBlame,
-}
-
-/// Which clause a refused `EXTERNAL`'s report echoes.
-#[derive(Copy, Clone)]
-enum RefusalBlame {
-    /// None: a loud refusal carries no report.
-    None,
-    /// The directive, named as the running program's clause.
-    Clause,
-    /// The directive, named as its own package's file.
-    Package,
+    echoes: bool,
 }

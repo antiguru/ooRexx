@@ -1,4 +1,4 @@
-count 30
+count 31
 /* A translation error in a called file is reported against that file,
    from the frame translating it: a duplicate ::ROUTINE, and a library the
    translation fails to load before a later clause's error. */
@@ -16,6 +16,7 @@ exit
 
 write: procedure
   parse arg file
+  call stream file, 'c', 'open write replace'
   do i = 2 to arg()
     call lineout file, arg(i)
   end

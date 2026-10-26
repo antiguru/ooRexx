@@ -1,0 +1,5 @@
+/* A ::CONSTANT expression failing while a .Routine~new source installs is
+   reported against that source's name. */
+r = .Routine~new('x', .array~of('say 1', '::class c', '::constant k ("a" + 1)', -
+  '::class d'))
+say 'made'
