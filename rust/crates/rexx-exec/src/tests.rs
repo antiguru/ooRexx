@@ -9,7 +9,8 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-use super::{Interp, ProgramId, form_name, parse_program, run_program};
+use super::{Interp, ProgramId, form_name, run_program};
+use rexx_parse::parse_program;
 use rexx_parse::{DirectiveKind, Expr, ExprKind, Operator, PrefixOp, Program};
 use std::rc::Rc;
 
@@ -1334,4 +1335,15 @@ fn bytes_a_body_stops_holding_leave_the_live_figure() {
     let outcome = run_program(TEST_PATH, program.to_vec(), crate::Invocation::none());
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(outcome.collections, 12, "the trigger point moved");
+}
+
+/// The library parses without the declaration checks because it is known to
+/// translate; this is what knows it.
+#[test]
+fn every_library_program_passes_the_declaration_checks() {
+    for program in rexx_lib::PROGRAMS {
+        if let Err(error) = parse_program(program.source.to_vec()) {
+            panic!("{}: {error}", program.name);
+        }
+    }
 }

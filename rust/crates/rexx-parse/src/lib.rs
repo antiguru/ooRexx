@@ -102,6 +102,22 @@ pub fn parse_program(text: Vec<u8>) -> Result<Program, ParseError> {
     program_from(ProgramSource::new(text, SourceKind::Program)).map_err(|rejected| rejected.error)
 }
 
+/// Parses a program `text` already known to translate, such as the
+/// interpreter's own library, without checking its directives against the
+/// ones declared before them.
+pub fn parse_known_program(text: Vec<u8>) -> Result<Program, ParseError> {
+    let source = ProgramSource::new(text, SourceKind::Program);
+    match parse(&source, false) {
+        Ok(parsed) => Ok(Program {
+            source,
+            main: parsed.main,
+            directives: parsed.directives,
+            symbols: parsed.symbols,
+        }),
+        Err((error, _)) => Err(error),
+    }
+}
+
 /// Parses a program whose physical lines are given one per element.
 pub fn parse_lines(lines: &[&[u8]]) -> Result<Program, ParseError> {
     program_from(ProgramSource::from_lines(lines)).map_err(|rejected| rejected.error)
@@ -116,7 +132,7 @@ pub fn parse_interpret(text: Vec<u8>) -> Result<Fragment, ParseError> {
 /// Parses `source` as a whole program, answering it back with the error when
 /// it does not parse.
 pub fn program_from(source: ProgramSource) -> Result<Program, Rejected> {
-    match parse(&source) {
+    match parse(&source, true) {
         Ok(parsed) => Ok(Program {
             source,
             main: parsed.main,
@@ -134,7 +150,8 @@ pub fn program_from(source: ProgramSource) -> Result<Program, Rejected> {
 /// Parses `source` as an `INTERPRET` fragment, answering it back with the
 /// error when it does not parse.
 pub fn fragment_from(source: ProgramSource) -> Result<Fragment, Rejected> {
-    let parsed = match parse(&source) {
+    // `INTERPRET` text carries no directive, so it declares nothing to check.
+    let parsed = match parse(&source, false) {
         Ok(parsed) => parsed,
         Err((error, binds)) => {
             return Err(Rejected {
@@ -172,7 +189,7 @@ struct Parsed {
 
 /// The composition shared by both entry points. A failure carries
 /// [`Rejected::binds`].
-fn parse(source: &ProgramSource) -> Result<Parsed, (ParseError, Vec<Directive>)> {
+fn parse(source: &ProgramSource, checked: bool) -> Result<Parsed, (ParseError, Vec<Directive>)> {
     let (scanned, scan_error) = scan_to_error(source);
     // Declared ahead of `ctx`, which borrows it, and dropped with the parse.
     // A `Selector` in the tree holds the name's bytes itself, so what the
@@ -190,30 +207,40 @@ fn parse(source: &ProgramSource) -> Result<Parsed, (ParseError, Vec<Directive>)>
 
     let clauses = split_clauses(ctx.tokens).map_err(|error| (error, Vec::new()))?;
     let mut cursor = ClauseCursor::new(clauses);
-    let mut declared = Declared::default();
-    let parsed = translate(&ctx, &mut cursor, &mut declared);
+    let mut directives = Vec::new();
+    let mut binds = Vec::new();
+    let parsed = translate(&ctx, &mut cursor, checked, &mut directives, &mut binds);
+    let bound = |directives: &[Directive]| -> Vec<Directive> {
+        binds
+            .iter()
+            .map(|&index| directives[index].clone())
+            .collect()
+    };
     if let Some(error) = scan_error
         && (parsed.is_ok() || cursor.read_past_end())
     {
-        return Err((error, declared.binds));
+        return Err((error, bound(&directives)));
     }
     match parsed {
-        Ok((main, directives)) => Ok(Parsed {
+        Ok(main) => Ok(Parsed {
             main,
             directives,
             symbols: scanned.symbols,
         }),
-        Err(error) => Err((cursor.echo(error), declared.binds)),
+        Err(error) => Err((cursor.echo(error), bound(&directives))),
     }
 }
 
 /// The grammar over the clauses `cursor` holds: the main body, then the
-/// directives.
-fn translate(
-    ctx: &ParseCtx,
+/// directives into `directives`, with the index of each one whose `EXTERNAL`
+/// the oracle resolves while translating in `binds`.
+fn translate<'a>(
+    ctx: &'a ParseCtx<'a>,
     cursor: &mut ClauseCursor,
-    declared: &mut Declared,
-) -> Result<(CodeBody, Vec<Directive>), ParseError> {
+    checked: bool,
+    directives: &mut Vec<Directive>,
+    binds: &mut Vec<usize>,
+) -> Result<CodeBody, ParseError> {
     let main = translate_block(ctx, cursor)?;
 
     // `translate` raises 99.914 exactly here, once, before `nextDirective` is
@@ -227,10 +254,20 @@ fn translate(
     {
         return Err(ParseError::raise(E99_914, clause.span.start, []));
     }
+    if cursor.peek().is_none() {
+        return Ok(main);
+    }
 
-    let mut directives: Vec<Directive> = Vec::new();
+    let mut declared = if checked {
+        Declared::default()
+    } else {
+        Declared::unchecked()
+    };
     while cursor.peek().is_some() {
-        let mut directive = parse_directive(ctx, cursor, declared)?;
+        let mut directive = parse_directive(ctx, cursor, &mut declared)?;
+        if declared.bound {
+            binds.push(directives.len());
+        }
         // Only `::METHOD`/`::ATTRIBUTE`/`::ROUTINE` can carry a body, and each
         // already rejects one with its own specific error when its OWN shape
         // does not allow it (`::CONSTANT`'s body is 99.938, for one). Every
@@ -245,7 +282,7 @@ fn translate(
         }
         directives.push(directive);
     }
-    Ok((main, directives))
+    Ok(main)
 }
 
 /// The body slot of a directive that carries one, for the assembler to fill.

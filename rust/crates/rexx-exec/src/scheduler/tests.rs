@@ -9,7 +9,8 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-use crate::{Interp, Invocation, Outcome, SwitchMode, parse_program, run_program};
+use crate::{Interp, Invocation, Outcome, SwitchMode, run_program};
+use rexx_parse::parse_program;
 
 /// A bound on every run here: a program end waits for an activity nothing
 /// can wake.

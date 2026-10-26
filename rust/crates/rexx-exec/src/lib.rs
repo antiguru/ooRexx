@@ -20,7 +20,7 @@ use rexx_core::{Heap, NameMap, ObjRef, Owner, RootSet, SlotRef};
 use rexx_num::Settings;
 use rexx_parse::{
     CodeBody, ExprKind, InstructionKind, Operator, Program, SymbolId, SymbolTable, compound_parts,
-    parse_program,
+    parse_known_program,
 };
 use rustc_hash::FxHashMap;
 use std::rc::Rc;
@@ -2595,7 +2595,7 @@ impl Interp {
         program: &'static rexx_lib::Program,
         arguments: Option<Vec<Option<ObjRef>>>,
     ) -> Result<Option<ObjRef>, Failure> {
-        let parsed = match parse_program(program.source.to_vec()) {
+        let parsed = match parse_known_program(program.source.to_vec()) {
             Ok(parsed) => parsed,
             // A parse failure here is the embedded source, not a program's:
             // `rexx-lib` pins each file's sha256, so this can only fire on a

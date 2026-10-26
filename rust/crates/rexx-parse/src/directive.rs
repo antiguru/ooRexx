@@ -110,22 +110,52 @@ const DEFAULT_RESOURCE_END: &[u8] = b"::END";
 /// checked against while it is parsed: `LanguageParser`'s `activeClass`,
 /// `classDependencies`, `routines`, `resources`, the member tables and the
 /// package's numeric settings.
-pub(crate) struct Declared {
+pub(crate) struct Declared<'a> {
     /// Whether a `::CLASS` directive came before (`activeClass`,
     /// `DirectiveParser.cpp:355`).
     in_class: bool,
-    classes: FxHashSet<Box<[u8]>>,
-    routines: FxHashSet<Box<[u8]>>,
-    resources: FxHashSet<Box<[u8]>>,
-    /// The active class's methods by side (`true` for the class side) and
-    /// upcased name, or before any `::CLASS` the file's `unattachedMethods`.
-    members: FxHashMap<(bool, Box<[u8]>), Member>,
+    /// Made at the first name declared.
+    tables: Option<Box<Tables<'a>>>,
     digits: usize,
     fuzz: usize,
-    /// The directives whose `EXTERNAL` the oracle resolves while translating
-    /// (`createNativeMethod`, `PackageManager::resolveRoutine`), in the order
-    /// the parse reached that point.
-    pub(crate) binds: Vec<Directive>,
+    /// Whether the checks against the declarations run, which a source known
+    /// to translate does without.
+    checked: bool,
+    /// Whether the directive just parsed reached the point where the oracle
+    /// resolves its `EXTERNAL` (`createNativeMethod`,
+    /// `PackageManager::resolveRoutine`).
+    pub(crate) bound: bool,
+}
+
+/// The names [`Declared`] has seen.
+#[derive(Default)]
+struct Tables<'a> {
+    classes: FxHashSet<Name<'a>>,
+    routines: FxHashSet<Name<'a>>,
+    resources: FxHashSet<Name<'a>>,
+    /// The active class's methods by side (`true` for the class side), the
+    /// upcased name and whether it is the `=` setter of that name, or before
+    /// any `::CLASS` the file's `unattachedMethods`.
+    members: FxHashMap<(bool, Name<'a>, bool), Member>,
+}
+
+/// An upcased name, borrowed from the source where it needs no upcasing.
+type Name<'a> = std::borrow::Cow<'a, [u8]>;
+
+/// The member table's key for `name` on a side, `setter` naming its `=`
+/// accessor: a name spelled with the `=` itself files as that accessor, so
+/// `::METHOD "p="` and `::ATTRIBUTE p` meet.
+fn member_key(class_side: bool, name: Name<'_>, setter: bool) -> (bool, Name<'_>, bool) {
+    match name.split_last() {
+        Some((b'=', stem)) if !setter => {
+            let stem = match name {
+                Name::Borrowed(bytes) => Name::Borrowed(&bytes[..bytes.len() - 1]),
+                Name::Owned(_) => Name::Owned(stem.to_vec()),
+            };
+            (class_side, stem, true)
+        }
+        _ => (class_side, name, setter),
+    }
 }
 
 /// What `::ANNOTATE` asks of a method it names: `isConstant()` and
@@ -136,28 +166,42 @@ struct Member {
     attribute: bool,
 }
 
-impl Default for Declared {
+impl Default for Declared<'_> {
     fn default() -> Self {
         Declared {
             in_class: false,
-            classes: FxHashSet::default(),
-            routines: FxHashSet::default(),
-            resources: FxHashSet::default(),
-            members: FxHashMap::default(),
+            tables: None,
             // `Numerics::DEFAULT_DIGITS` and a fuzz of zero.
             digits: 9,
             fuzz: 0,
-            binds: Vec::new(),
+            checked: true,
+            bound: false,
+        }
+    }
+}
+
+impl<'a> Declared<'a> {
+    /// The tables, made where none is yet.
+    fn tables_mut(&mut self) -> &mut Tables<'a> {
+        self.tables.get_or_insert_with(Box::default)
+    }
+
+    /// The state for a source known to translate, which checks nothing
+    /// against the declarations.
+    pub(crate) fn unchecked() -> Self {
+        Declared {
+            checked: false,
+            ..Declared::default()
         }
     }
 }
 
 /// Parses the `::` clause the cursor is sitting on, advancing it past that
 /// clause, and records what it declares in `declared`.
-pub(crate) fn parse_directive(
-    ctx: &ParseCtx,
+pub(crate) fn parse_directive<'a>(
+    ctx: &'a ParseCtx<'a>,
     cursor: &mut ClauseCursor,
-    declared: &mut Declared,
+    declared: &mut Declared<'a>,
 ) -> Result<Directive, ParseError> {
     let clause = cursor
         .next_clause()
@@ -167,14 +211,9 @@ pub(crate) fn parse_directive(
     // A body check that read past the last clause has met a scanner error
     // there first, if there is one, before the oracle resolves anything.
     let bound = parser.bound && !cursor.read_past_end();
-    let directive = Directive {
-        kind,
-        clause_span: parser.clause.span.clone(),
-    };
-    if bound {
-        declared.binds.push(directive.clone());
-    }
-    Ok(directive)
+    let clause_span = parser.clause.span.clone();
+    declared.bound = bound;
+    Ok(Directive { kind, clause_span })
 }
 
 /// One directive clause's parse in progress.
@@ -186,14 +225,14 @@ struct Dir<'a, 'd> {
     /// The byte offset every error is reported against: the start of the
     /// clause, not of the offending token.
     clause_byte: usize,
-    declared: &'d mut Declared,
+    declared: &'d mut Declared<'a>,
     /// Whether the parse reached the point where the oracle resolves this
     /// directive's `EXTERNAL`.
     bound: bool,
 }
 
 impl<'a, 'd> Dir<'a, 'd> {
-    fn new(ctx: &'a ParseCtx<'a>, clause: Clause, declared: &'d mut Declared) -> Self {
+    fn new(ctx: &'a ParseCtx<'a>, clause: Clause, declared: &'d mut Declared<'a>) -> Self {
         let clause_byte = ctx
             .tokens
             .get(clause.tokens.start)
@@ -224,12 +263,21 @@ impl<'a, 'd> Dir<'a, 'd> {
     /// claims.
     fn claim(
         &mut self,
-        name: Box<[u8]>,
+        name: Name<'a>,
+        setter: bool,
         class_side: bool,
         member: Member,
         msg: Msg<0>,
     ) -> Result<(), ParseError> {
-        match self.declared.members.entry((class_side, name)) {
+        if !self.declared.checked {
+            return Ok(());
+        }
+        match self
+            .declared
+            .tables_mut()
+            .members
+            .entry(member_key(class_side, name, setter))
+        {
             std::collections::hash_map::Entry::Occupied(_) => Err(self.error(msg, [])),
             std::collections::hash_map::Entry::Vacant(slot) => {
                 slot.insert(member);
@@ -241,9 +289,37 @@ impl<'a, 'd> Dir<'a, 'd> {
     /// `findMethod`: the active class's instance method `name`, else its class
     /// method.
     fn find_member(&self, name: &[u8]) -> Option<Member> {
-        [false, true]
-            .into_iter()
-            .find_map(|side| self.declared.members.get(&(side, Box::from(name))).copied())
+        let tables = self.declared.tables.as_deref()?;
+        [false, true].into_iter().find_map(|side| {
+            tables
+                .members
+                .get(&member_key(side, Name::Borrowed(name), false))
+                .copied()
+        })
+    }
+
+    /// `token`'s value upcased, borrowed where it needs no upcasing: a
+    /// symbol's, which the scanner has already upcased, or an upper-case
+    /// literal's. Empty where the declarations go unchecked.
+    fn name_key(&self, token: &'a Token) -> Name<'a> {
+        if !self.declared.checked {
+            return Name::Borrowed(&[]);
+        }
+        match &token.kind {
+            TokenKind::Symbol { id, .. } => Name::Borrowed(self.ctx.symbols.name(*id).as_bytes()),
+            TokenKind::Literal { value } if !value.iter().any(u8::is_ascii_lowercase) => {
+                Name::Borrowed(value)
+            }
+            _ => Name::Owned(self.upper_value_of(token).into_vec()),
+        }
+    }
+
+    /// A required name as [`Dir::require_name`] reads it, with its key.
+    fn require_name_key(&mut self, msg: Msg<1>) -> Result<(Box<[u8]>, Name<'a>), ParseError> {
+        match self.next_name() {
+            Ok(token) => Ok((self.value_of(token), self.name_key(token))),
+            Err(found) => Err(self.found(msg, found)),
+        }
     }
 
     /// `msg` reported against this clause, with `inserts` for its `&1`,
@@ -469,21 +545,19 @@ impl<'a, 'd> Dir<'a, 'd> {
     fn class(&mut self) -> Result<DirectiveKind, ParseError> {
         // `Error_Symbol_or_string_class`, raised with no insert
         // (`DirectiveParser.cpp:340`).
-        let name = match self.next_name() {
-            Ok(token) => self.value_of(token),
+        let (name, key) = match self.next_name() {
+            Ok(token) => (self.value_of(token), self.name_key(token)),
             Err(_) => return Err(self.error(E19_901, [])),
         };
         // `isDuplicateClass` on the upcased name, then the new `activeClass`
         // with empty method tables (`DirectiveParser.cpp:349`-`355`).
-        if !self
-            .declared
-            .classes
-            .insert(name.to_ascii_uppercase().into())
-        {
+        if self.declared.checked && !self.declared.tables_mut().classes.insert(key) {
             return Err(self.error(E99_901, []));
         }
         self.declared.in_class = true;
-        self.declared.members.clear();
+        if let Some(tables) = self.declared.tables.as_deref_mut() {
+            tables.members.clear();
+        }
         let mut class = ClassDirective {
             name,
             access: Access::Default,
@@ -577,7 +651,7 @@ impl<'a, 'd> Dir<'a, 'd> {
 
     /// `methodDirective` (`DirectiveParser.cpp:629`).
     fn method(&mut self, cursor: &ClauseCursor) -> Result<DirectiveKind, ParseError> {
-        let name = self.require_name(E19_902)?;
+        let (name, upper) = self.require_name_key(E19_902)?;
         let mut method = MethodDirective {
             name,
             class_method: false,
@@ -653,17 +727,12 @@ impl<'a, 'd> Dir<'a, 'd> {
         // (`DirectiveParser.cpp:822`). Measured: `::method m class` with a
         // body holding a syntax error and no `::CLASS` above it is 99.905.
         self.require_class(method.class_method)?;
-        let upper: Box<[u8]> = method.name.to_ascii_uppercase().into();
         let member = Member {
             constant: false,
             attribute: method.attribute,
         };
-        let setter = || {
-            let mut setter = upper.to_vec();
-            setter.push(b'=');
-            setter.into_boxed_slice()
-        };
-        self.claim(upper.clone(), method.class_method, member, E99_902)?;
+        let side = method.class_method;
+        self.claim(upper.clone(), false, side, member, E99_902)?;
 
         // The shapes, in the C++'s own order, because they are not disjoint:
         // ATTRIBUTE combines with each of EXTERNAL and ABSTRACT, and DELEGATE
@@ -677,12 +746,12 @@ impl<'a, 'd> Dir<'a, 'd> {
             self.require_variable_name(self.ctx.symbols.name(delegate).as_bytes())?;
             self.check_directive(cursor, E99_946)?;
             if method.attribute {
-                self.claim(setter(), method.class_method, member, E99_902)?;
+                self.claim(upper, true, side, member, E99_902)?;
             }
         } else if method.attribute {
             // The setter's duplicate check comes before the body check here
             // (`DirectiveParser.cpp:855`).
-            self.claim(setter(), method.class_method, member, E99_902)?;
+            self.claim(upper, true, side, member, E99_902)?;
             self.check_directive(cursor, E99_934)?;
             method.external = self.decode_external(external.as_deref(), false)?;
             self.bound = method.external.is_some();
@@ -709,7 +778,7 @@ impl<'a, 'd> Dir<'a, 'd> {
 
     /// `attributeDirective` (`DirectiveParser.cpp:1457`).
     fn attribute(&mut self, cursor: &ClauseCursor) -> Result<DirectiveKind, ParseError> {
-        let name = self.require_name(E19_914)?;
+        let (name, upper) = self.require_name_key(E19_914)?;
         let mut attribute = AttributeDirective {
             name,
             style: AttributeStyle::Both,
@@ -794,9 +863,6 @@ impl<'a, 'd> Dir<'a, 'd> {
         // `::attribute 'foo' class` with a body and no `::CLASS` above it is
         // 99.905, not 99.937.
         self.require_class(attribute.class_method)?;
-        let upper: Box<[u8]> = attribute.name.to_ascii_uppercase().into();
-        let mut setter = upper.to_vec();
-        setter.push(b'=');
         let member = Member {
             constant: false,
             attribute: true,
@@ -804,11 +870,11 @@ impl<'a, 'd> Dir<'a, 'd> {
         let side = attribute.class_method;
         match attribute.style {
             AttributeStyle::Both => {
-                self.claim(upper, side, member, E99_931)?;
-                self.claim(setter.into(), side, member, E99_931)?;
+                self.claim(upper.clone(), false, side, member, E99_931)?;
+                self.claim(upper, true, side, member, E99_931)?;
             }
-            AttributeStyle::Get => self.claim(upper, side, member, E99_931)?,
-            AttributeStyle::Set => self.claim(setter.into(), side, member, E99_931)?,
+            AttributeStyle::Get => self.claim(upper, false, side, member, E99_931)?,
+            AttributeStyle::Set => self.claim(upper, true, side, member, E99_931)?,
         }
 
         // Every shape here checks the body BEFORE decoding the external
@@ -896,7 +962,7 @@ impl<'a, 'd> Dir<'a, 'd> {
 
     /// `constantDirective` (`DirectiveParser.cpp:1854`).
     fn constant(&mut self, cursor: &ClauseCursor) -> Result<DirectiveKind, ParseError> {
-        let name = self.require_name(E19_915)?;
+        let (name, upper) = self.require_name_key(E19_915)?;
         let value = match self.peek_real() {
             // No value at all, whose value is the name as written. Measured:
             // `::constant c` is rc 0.
@@ -921,14 +987,13 @@ impl<'a, 'd> Dir<'a, 'd> {
         self.check_directive(cursor, E99_938)?;
         // The duplicate checks, the class side only under a `::CLASS`, then
         // `createConstantGetterMethod`'s 99.906 (`DirectiveParser.cpp:1926`-`1933`).
-        let upper: Box<[u8]> = name.to_ascii_uppercase().into();
         let member = Member {
             constant: true,
             attribute: false,
         };
-        self.claim(upper.clone(), false, member, E99_932)?;
+        self.claim(upper.clone(), false, false, member, E99_932)?;
         if self.declared.in_class {
-            self.claim(upper, true, member, E99_932)?;
+            self.claim(upper, false, true, member, E99_932)?;
         } else if matches!(value, ConstantValue::Expression(_)) {
             return Err(self.error(E99_906, []));
         }
@@ -1023,7 +1088,9 @@ impl<'a, 'd> Dir<'a, 'd> {
                 return Err(self.found(E25_928, Some(token)));
             }
         };
-        self.require_annotation_target(&target)?;
+        if self.declared.checked {
+            self.require_annotation_target(&target)?;
+        }
         let mut annotations = Vec::new();
         while !self.at_end() {
             annotations.push(self.annotation()?);
@@ -1039,20 +1106,36 @@ impl<'a, 'd> Dir<'a, 'd> {
     /// (`DirectiveParser.cpp:1983`-`2090`, `processAttributeAnnotations`).
     fn require_annotation_target(&self, target: &AnnotationTarget) -> Result<(), ParseError> {
         let attribute = |name: &[u8], side: bool| {
-            let mut setter = name.to_vec();
-            setter.push(b'=');
-            [name, &setter[..]].into_iter().any(|half| {
-                self.declared
-                    .members
-                    .get(&(side, Box::from(half)))
+            let tables = self.declared.tables.as_deref();
+            [false, true].into_iter().any(|setter| {
+                tables
+                    .and_then(|tables| {
+                        tables
+                            .members
+                            .get(&member_key(side, Name::Borrowed(name), setter))
+                    })
                     .is_some_and(|member| member.attribute)
             })
         };
         let (kind, name): (&[u8], &[u8]) = match target {
             AnnotationTarget::Package => return Ok(()),
-            AnnotationTarget::Class(name) if self.declared.classes.contains(name) => return Ok(()),
+            AnnotationTarget::Class(name)
+                if self
+                    .declared
+                    .tables
+                    .as_deref()
+                    .is_some_and(|tables| tables.classes.contains(&name[..])) =>
+            {
+                return Ok(());
+            }
             AnnotationTarget::Class(name) => (b"class", name),
-            AnnotationTarget::Routine(name) if self.declared.routines.contains(name) => {
+            AnnotationTarget::Routine(name)
+                if self
+                    .declared
+                    .tables
+                    .as_deref()
+                    .is_some_and(|tables| tables.routines.contains(&name[..])) =>
+            {
                 return Ok(());
             }
             AnnotationTarget::Routine(name) => (b"routine", name),
@@ -1299,7 +1382,7 @@ impl<'a, 'd> Dir<'a, 'd> {
 
     /// `resourceDirective` (`DirectiveParser.cpp:2266`).
     fn resource(&mut self) -> Result<DirectiveKind, ParseError> {
-        let name = self.require_name(E19_920)?;
+        let (name, key) = self.require_name_key(E19_920)?;
         let mut end_marker: Box<[u8]> = Box::from(DEFAULT_RESOURCE_END);
         if !self.at_end() {
             // `Error_Invalid_subkeyword_resource`, for a non-symbol and for
@@ -1320,11 +1403,7 @@ impl<'a, 'd> Dir<'a, 'd> {
         }
         // `Error_Translation_duplicate_resource`, before the body is read
         // (`DirectiveParser.cpp:2316`).
-        if !self
-            .declared
-            .resources
-            .insert(name.to_ascii_uppercase().into())
-        {
+        if self.declared.checked && !self.declared.tables_mut().resources.insert(key) {
             return Err(self.error(E99_942, []));
         }
 
@@ -1349,13 +1428,9 @@ impl<'a, 'd> Dir<'a, 'd> {
 
     /// `routineDirective` (`DirectiveParser.cpp:2565`).
     fn routine(&mut self, cursor: &ClauseCursor) -> Result<DirectiveKind, ParseError> {
-        let name = self.require_name(E19_903)?;
+        let (name, key) = self.require_name_key(E19_903)?;
         // `isDuplicateRoutine`, ahead of the options (`DirectiveParser.cpp:2578`).
-        if !self
-            .declared
-            .routines
-            .insert(name.to_ascii_uppercase().into())
-        {
+        if self.declared.checked && !self.declared.tables_mut().routines.insert(key) {
             return Err(self.error(E99_903, []));
         }
         let mut routine = RoutineDirective {

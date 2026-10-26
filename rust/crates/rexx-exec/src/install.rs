@@ -2309,6 +2309,15 @@ impl Interp {
         ),
         ExternalRefusal,
     > {
+        let external = match kind {
+            DirectiveKind::Method(method) => method.external.is_some(),
+            DirectiveKind::Attribute(attribute) => attribute.external.is_some(),
+            DirectiveKind::Routine(routine) => routine.external.is_some(),
+            _ => false,
+        };
+        if !external {
+            return Ok((Vec::new(), None));
+        }
         let refuse = |failure: Failure, echoes| ExternalRefusal { failure, echoes };
         if let Some(loud) = directive_gap(kind) {
             return Err(refuse(loud.into(), false));
