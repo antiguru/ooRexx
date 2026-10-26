@@ -86,7 +86,7 @@ impl Interp {
         self.heap.release_immortal(interned_from, |handle| {
             chunk.interned_values().any(|value| value == handle)
         });
-        if !self.pinned_copies.is_empty() || chunk.holds_programs() {
+        if !self.pinned_copies.is_empty() || self.site_hold_count != 0 {
             self.unpin_chunk_copies(&chunk);
         }
         let flow = match ran {

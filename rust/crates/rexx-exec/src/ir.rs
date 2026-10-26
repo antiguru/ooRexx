@@ -800,14 +800,6 @@ impl Chunk {
         self.calls.remember(at, resolved, generation, hold)
     }
 
-    /// Whether any of this chunk's call sites holds a program.
-    pub(crate) fn holds_programs(&self) -> bool {
-        self.calls
-            .slots
-            .iter()
-            .any(|slot| slot.held.get().is_some())
-    }
-
     /// Every hold this chunk's call sites have, for the caller dropping it.
     pub(crate) fn site_holds(&self) -> impl Iterator<Item = SiteHold> + '_ {
         self.calls.slots.iter().filter_map(|slot| slot.held.get())

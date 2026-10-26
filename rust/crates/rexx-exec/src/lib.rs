@@ -1384,6 +1384,9 @@ struct Interp {
     /// How many call sites keep each `Routine` copy alive ([`Interp::repin`]),
     /// each copy rooted once while any does.
     pinned_copies: FxHashMap<ObjRef, u32>,
+    /// At least how many call-site holds are taken and not dropped, so zero
+    /// when none is ([`Interp::hold_site_program`]).
+    site_hold_count: u32,
     /// The parse cache a handle-inline string has nowhere to keep. See
     /// `value::TextNumbers`, which owns the rule and the measurement.
     text_numbers: crate::value::TextNumbers,
@@ -2298,6 +2301,7 @@ impl Interp {
             text_scratch: [0; crate::value::TEXT_SCRATCH],
             nil_name: None,
             pinned_copies: FxHashMap::default(),
+            site_hold_count: 0,
             text_numbers: crate::value::TextNumbers::new(),
             result_buffer: std::cell::Cell::new(Vec::new()),
             library_search: library_search_of(&env),
@@ -3221,6 +3225,8 @@ impl Interp {
             nil_name: _,
             // Held through the global roots they name.
             pinned_copies: _,
+            // A count; the holds are traced through the holding packages.
+            site_hold_count: _,
             // Handle-inline strings, which are their own bytes and have no
             // slot to recycle.
             text_numbers: _,
