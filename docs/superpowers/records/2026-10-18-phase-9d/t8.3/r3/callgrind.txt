@@ -1,0 +1,5 @@
+program	base	head	head d%	base -libc	head -libc	head -libc d%	base spread%	head spread%
+nop	9241487680	9241495094	+0.0001	9179543895	9179544364	+0.0000	0.0000	0.0000
+interpret	4143972334	4134590501	-0.2264	1702882095	1703642779	+0.0447	0.0000	0.0000
+intcall	752272783	751204067	-0.1421	598273679	597224509	-0.1754	0.0000	0.0001
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.3-r3/run

@@ -291,9 +291,11 @@ The largest rise with libc subtracted is interpret at +0.0447%, then dirread +0.
 
 ### Concerns (fix round 2)
 
-1. **The fragment's own site is not a red witness.** A site inside an `INTERPRET` string keeping the
-   routine matches the oracle at `9963948e3` too (`forms.txt`, `interpret` and `iv`); the hold it takes
-   is witnessed by the unit test and the growth mutant, not by a program that fails at the red commit.
+1. **The fragment's own site is red at `9963948e3` only for a routine made inside a `CALL`.** Made in
+   the main body, a routine a site inside an `INTERPRET` string keeps matches the oracle at
+   `9963948e3` too (`forms.txt`, `interpret` and `iv`). Made inside a `CALL`, the re-review's `interp2`
+   shape fails there (`task-8.3-rereview-r2.md`, section 1); fix round 3's `<site-fragment>` form is
+   that witness.
 2. **The driver's codegen moves with `Calls`.** One `Cell<bool>` field and its store in
    `Calls::remember` cost nop +4.36% libc subtracted, and `2afe1e16c`, which still had
    `Chunk::owner` and `Calls::pins`, showed the same figure. Proposed owner: the performance round.
@@ -314,3 +316,48 @@ The largest rise with libc subtracted is interpret at +0.0447%, then dirread +0.
 ### New oracle defects (fix round 2)
 
 None found.
+
+## Fix round 3
+
+Brief `task-8.3-fix-r3.md`, re-review `task-8.3-rereview-r2.md`. Code `1be06b24a`, `84be67ab5`;
+records `t8.3/r3/`.
+
+* **M1.** `Interp::prune_program_rows` sums `chunk.site_holds()` over the chunks it drops and
+  subtracts the sum from `site_hold_count`, so the count is exact: the holder is the dead program,
+  whose package went with it, so only the count was left. `hold_site_program`'s release is a plain
+  `- 1` under a `debug_assert` that the count is not zero, and the prune's subtraction is under one
+  that the sum does not exceed the count. Witness `run::tests::a_dead_programs_site_holds_leave_the_count`:
+  `Routine~new` routines whose sites keep fresh routines die, and after `collect_now` the count is 1,
+  the main body's site. With the subtraction replaced by `let _ = holds;` it fails, `left: 21`,
+  `right: 1` (`unit-test-mutant.txt`). This also ends concern 5's cost.
+* **M2.** collect_stress `a_routine_only_a_call_site_keeps_survives_collection` gains the
+  `<site-fragment>` form, the re-review's `interp2` shape with `x = .array~new(20)` as the filler.
+  Oracle: rc 0, `f 1 1` to `f 3 3` in order, empty stderr, in 3 of 3 runs (`oracle-site-fragment/`). At `9963948e3`, the
+  form alone in that tree's collect_stress: `(120, "f 1 1\n")`, stderr "an activation's body
+  selector names no routine body" (`stress-red-9963948e3.txt`). At HEAD it passes. Concern 1 of fix
+  round 2 is corrected above.
+
+**Checks**, from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t83f3-target`, at
+`84be67ab5`:
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` (`checks-fmt.txt`) | 0 |
+| `memcap 16G cargo clippy -j 4 -p rexx-exec -p rexx-parse -p rexx-bench --all-targets -- -D warnings` (`checks-clippy.txt`) | 0 |
+| `memcap 8G cargo test -j 4 -p rexx-exec --lib`, test profile, `debug_assert`s live (`checks-lib-testprofile.txt`, at `1be06b24a`) | 0, 1178 passed |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --lib --test collect_stress --test signals` (`checks-touched.txt`) | 101: lib 1177, signals 42, collect_stress 73 of 74, the failure `the_l0_subset_passes_again_under_collect_on_every_allocation` on `command_redirected_target_waits_elsewhere.rex` (`guard 0 3 waited 1` plain, `waited 0` under stress), fix round 2's concern 4 |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test collect_stress`, rerun (`checks-collect-stress-rerun.txt`) | 0, 74 passed |
+| `memcap 16G cargo test -j 4 -p rexx-exec --test collect_stress`, test profile (`checks-collect-stress-testprofile.txt`) | 0, 74 passed; neither new `debug_assert` fired |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`checks-corpus.txt`) | 101: 1182 of 1183, the one mismatch `rexxutil_file_date_time.rex` (fix round 2's concern 3) |
+
+**Perf** (`callgrind.txt`): `bench-programs/callgrind.sh -B 0.5 -j 3 -p "nop interpret intcall" -o
+/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.3-r3/run base=.../cg-9d/t8.3-r2b/rexx-base-efe8d3f40
+head=.../cg-9d/t8.3-r3/rexx-head-84be67ab5`, exit 0. Libc subtracted, against `efe8d3f40`: nop
++0.0000%, interpret +0.0447%, intcall -0.1754%, each equal to fix round 2's figure, so this round's
+own delta is 0.
+
+### Concerns (fix round 3)
+
+1. **The l0 subset under collection flaked again** on `command_redirected_target_waits_elsewhere.rex`,
+   this time with the plain run printing `waited 1` and the stress run `waited 0`. Fix round 2's
+   concern 4; the rerun passed.
