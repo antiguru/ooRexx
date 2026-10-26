@@ -191,3 +191,4 @@ Task 8.3 fix round 2: t83-fix2 hit the weekly limit 2026-10-23 after 2afe1e16c b
 Task 8.3 fix round 2: DONE_WITH_CONCERNS (t83-fix2b) 3e6dc0426 kept (also the perf fix: nop +4.36% at 2afe1e16c), e581e922c 1bb283e1a 03a2a1e1a ec13c3792. Full callgrind max +0.0447% (interpret). Concerns 3, 4 queued into 8.8; 2 (Calls layout sensitivity) proposed perf round; 5 (site_hold_count after a dead program, time only) for the re-review. PAUSED per Moritz before the re-review.
 Moritz 2026-10-26: Continue (pause lifted).
 Task 8.3: re-review r2 t83-rereview2 (opus) dispatched, package 9963948e3..ec13c3792.
+Task 8.3: re-review r2 APPROVED (0C/0I/2M). Ruling: M1 (site_hold_count never decremented on prune; wraps, leaks) and M2 (no red fragment-site witness) fixed in one bounded round 3 by a fresh implementer t83-fix3 (opus), controller verifies by running; Q-1 (Calls layout) to the perf round — cost if wrong: one more round.
