@@ -189,3 +189,5 @@ Task 8.3 fix round 2: t83-impl stalled after 2041eb468 (no activity since 2026-1
 Task 8.3 fix round 2: fresh implementer t83-fix2 (opus) finishes the round from d6dee4ef4. Ruling: Moritz's pause applies once 8.3 comes back, so finishing 8.3 proceeds — cost if wrong: one agent run he did not want.
 Task 8.3 fix round 2: t83-fix2 hit the weekly limit 2026-10-23 after 2afe1e16c b27ebc5d9; reboot since. Its uncommitted edits (SiteHold refactor, 8 src files) saved unchecked as WIP; fresh finisher t83-fix2b (opus) dispatched for the remainder (checks on the WIP, perf, report).
 Task 8.3 fix round 2: DONE_WITH_CONCERNS (t83-fix2b) 3e6dc0426 kept (also the perf fix: nop +4.36% at 2afe1e16c), e581e922c 1bb283e1a 03a2a1e1a ec13c3792. Full callgrind max +0.0447% (interpret). Concerns 3, 4 queued into 8.8; 2 (Calls layout sensitivity) proposed perf round; 5 (site_hold_count after a dead program, time only) for the re-review. PAUSED per Moritz before the re-review.
+Moritz 2026-10-26: Continue (pause lifted).
+Task 8.3: re-review r2 t83-rereview2 (opus) dispatched, package 9963948e3..ec13c3792.
