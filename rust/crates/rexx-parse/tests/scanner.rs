@@ -724,7 +724,7 @@ fn every_error_the_scanner_raises_matches_the_interpreters_number_and_line() {
     // clause's, not the offending character's: in the third case the clause
     // starts on line 1 and the unclosed comment opens on line 2, and the
     // interpreter reports line 1.
-    let cases: [(&str, (u16, u16, usize)); 18] = [
+    let cases: [(&str, (u16, u16, usize)); 17] = [
         ("/* unclosed\nsay 1", (6, 1, 1)),
         ("say 1\nsay 2 /* opened here\nmore", (6, 1, 2)),
         ("say 1,\n/* unclosed", (6, 1, 1)),
@@ -742,7 +742,6 @@ fn every_error_the_scanner_raises_matches_the_interpreters_number_and_line() {
         ("say c2x('1012'b)", (15, 4, 1)),
         ("say c2x('4 1'x)", (15, 5, 1)),
         ("say c2x('101 01'b)", (15, 6, 1)),
-        ("say 1\n::resource data\nnever terminated", (99, 943, 2)),
     ];
     for (text, expected) in cases {
         assert_eq!(scan_err(text), expected, "{text:?}");
@@ -751,6 +750,21 @@ fn every_error_the_scanner_raises_matches_the_interpreters_number_and_line() {
     let name = "x".repeat(250);
     assert_eq!(kinds(&scan_ok(&format!("{name} = 1")))[0], Tag::Symbol);
     assert_eq!(scan_err(&format!("{name}x = 1")), (30, 1, 1));
+}
+
+#[test]
+fn a_resource_without_its_end_marker_consumes_the_rest_and_records_no_body() {
+    // The directive parser raises 99.943 for the missing body: measured, line 2.
+    let text = "say 1\n::resource data\nnever terminated";
+    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
+    let scanned = scan(&source).expect("scans");
+    assert!(scanned.resources.is_empty());
+    assert_eq!(kinds(&scanned.tokens).last(), Some(&Tag::Eoc));
+    let error = rexx_parse::parse_program(text.as_bytes().to_vec()).expect_err("no marker");
+    assert_eq!(
+        (error.code(), error.sub(), source.line_of(error.byte)),
+        (99, 943, 2)
+    );
 }
 
 #[test]

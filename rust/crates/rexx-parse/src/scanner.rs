@@ -14,7 +14,7 @@
 use std::ops::Range;
 
 use rexx_inventory::errors::{
-    E6_1, E6_2, E6_3, E13_1, E15_1, E15_2, E15_3, E15_4, E15_5, E15_6, E30_1, E99_943, Msg,
+    E6_1, E6_2, E6_3, E13_1, E15_1, E15_2, E15_3, E15_4, E15_5, E15_6, E30_1, Msg,
 };
 
 use crate::token::{
@@ -56,19 +56,32 @@ pub struct Scanned {
 
 /// Tokenises `source`.
 pub fn scan(source: &ProgramSource) -> Result<Scanned, ParseError> {
+    match scan_to_error(source) {
+        (scanned, None) => Ok(scanned),
+        (_, Some(error)) => Err(error),
+    }
+}
+
+/// Tokenises `source` up to the clause holding the first scanner error, and
+/// that error. The tokens stop before the failing clause's first token, so a
+/// parse of them meets every earlier clause as the oracle does, which reads
+/// one clause at a time (`LanguageParser::nextClause`).
+pub(crate) fn scan_to_error(source: &ProgramSource) -> (Scanned, Option<ParseError>) {
     let mut symbols = SymbolTable::default();
     let keywords = Keywords::new(&mut symbols);
     let mut scanner = Scanner::new(source, symbols);
-    if let Err(error) = scanner.run() {
+    let error = scanner.run().err().map(|error| {
         let end = scanner.absolute();
-        return Err(error.echoing(scanner.clause_start..end));
-    }
-    Ok(Scanned {
+        scanner.tokens.truncate(scanner.clause_first);
+        error.echoing(scanner.clause_start..end)
+    });
+    let scanned = Scanned {
         tokens: scanner.tokens,
         symbols: scanner.symbols,
         keywords,
         resources: scanner.resources,
-    })
+    };
+    (scanned, error)
 }
 
 /// `LanguageParser::isSymbolCharacter` (`LanguageParser.hpp:415`): whether
@@ -254,7 +267,7 @@ impl<'a> Scanner<'a> {
             self.prev_blank_significant = token.kind.makes_blank_significant();
             if token.kind.tag() == Tag::Eoc {
                 if self.emit_eoc(token) {
-                    self.scan_resource_if_directive()?;
+                    self.scan_resource_if_directive();
                     self.clause_started = false;
                     self.clause_first = self.tokens.len();
                 }
@@ -871,15 +884,16 @@ impl<'a> Scanner<'a> {
     }
 
     /// If the clause that just closed is a well-formed `::RESOURCE`
-    /// directive, copy its body verbatim up to the end marker.
-    fn scan_resource_if_directive(&mut self) -> Result<(), ParseError> {
+    /// directive, copy its body verbatim up to the end marker. Without the
+    /// marker the rest of the source is consumed and no body is recorded.
+    fn scan_resource_if_directive(&mut self) {
         let eoc = self.tokens.len() - 1;
         // This runs for every clause in the program, so it tests the cheapest
         // discriminator first and allocates nothing for the overwhelming
         // majority that are not directives. A clause's first token is never a
         // blank, because a blank at a clause start is not significant.
         if self.tokens[self.clause_first].kind.tag() != Tag::DColon {
-            return Ok(());
+            return;
         }
 
         // `nextReal` skips blanks, and `::RESOURCE DATA` has a significant
@@ -892,32 +906,32 @@ impl<'a> Scanner<'a> {
                 continue;
             }
             if count == real.len() {
-                return Ok(());
+                return;
             }
             real[count] = index;
             count += 1;
         }
         if count != 3 && count != 5 {
-            return Ok(());
+            return;
         }
         match self.tokens[real[1]].kind {
             TokenKind::Symbol { id, .. } if id == self.resource_id => {}
-            _ => return Ok(()),
+            _ => return,
         }
-        let Some(name) = self.token_value(real[2]) else {
-            return Ok(());
-        };
+        if self.token_value(real[2]).is_none() {
+            return;
+        }
 
         let marker = if count == 5 {
             // The only sub-keyword a `::RESOURCE` accepts is `END`, and it
             // must be a symbol rather than a literal.
             match self.tokens[real[3]].kind {
                 TokenKind::Symbol { id, .. } if id == self.end_id => {}
-                _ => return Ok(()),
+                _ => return,
             }
             match self.token_value(real[4]) {
                 Some(value) => value,
-                None => return Ok(()),
+                None => return,
             }
         } else {
             DEFAULT_RESOURCE_END.to_vec()
@@ -935,11 +949,7 @@ impl<'a> Scanner<'a> {
         let mut lines = Vec::new();
         loop {
             if !self.more_lines() {
-                // Without this the rest of the program would be swallowed.
-                // Measured: error 99.943, reported against the directive.
-                let start = self.tokens[directive].span.start;
-                let end = self.tokens.last().map_or(start, |eoc| eoc.span.end);
-                return Err(missing_resource_end(marker, name, start..end));
+                return;
             }
             if self.check_marker(&marker) {
                 self.next_line();
@@ -950,7 +960,6 @@ impl<'a> Scanner<'a> {
         }
 
         self.resources.push(ResourceBody { directive, lines });
-        Ok(())
     }
 
     /// 13.1 for the character the scan stopped on, which starts at byte
@@ -1002,14 +1011,6 @@ fn unmatched_comment(line: usize, clause_start: usize) -> ParseError {
 #[inline(never)]
 fn name_too_long(bytes: &[u8], clause_start: usize) -> ParseError {
     ParseError::raise(E30_1, clause_start, [bytes.to_ascii_uppercase()])
-}
-
-/// 99.943 for a `::RESOURCE` named `name` whose `marker` never came,
-/// reported against and echoing `directive`.
-#[cold]
-#[inline(never)]
-fn missing_resource_end(marker: Vec<u8>, name: Vec<u8>, directive: Range<usize>) -> ParseError {
-    ParseError::raise(E99_943, directive.start, [marker, name]).echoing(directive)
 }
 
 /// 15.1 or 15.2 for a blank at 1-based position `i` of the literal's text.

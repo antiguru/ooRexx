@@ -1,0 +1,60 @@
+--- oracle rc=0
+[stdout]
+35.1 Incorrect expression detected at "(".
+35.1 Incorrect expression detected at ";".
+35.918 Missing expression following assignment instruction.
+35.1 Incorrect expression detected at "+".
+13.1 Incorrect character in program "
+" ('0A'X).
+13.1 Incorrect character in program "
+" ('0A'X).
+13.1 Incorrect character in program "
+" ('0A'X).
+13.1 Incorrect character in program "
+" ('0A'X).
+6.3 Unmatched double quote (").
+35.1 Incorrect expression detected at "(".
+35.1 Incorrect expression detected at "(".
+6.1 Unmatched comment delimiter ("/*") on line 19.
+[stderr]
+--- base rc=0
+[stdout]
+13.1 Incorrect character in program "
+" ('0A'X).
+13.1 Incorrect character in program "
+" ('0A'X).
+13.1 Incorrect character in program "
+" ('0A'X).
+13.1 Incorrect character in program "" ('01'X).
+13.1 Incorrect character in program "
+" ('0A'X).
+13.1 Incorrect character in program "
+" ('0A'X).
+13.1 Incorrect character in program "
+" ('0A'X).
+13.1 Incorrect character in program "
+" ('0A'X).
+6.3 Unmatched double quote (").
+6.3 Unmatched double quote (").
+6.1 Unmatched comment delimiter ("/*") on line 19.
+6.1 Unmatched comment delimiter ("/*") on line 19.
+[stderr]
+--- head rc=0
+[stdout]
+35.1 Incorrect expression detected at "(".
+35.1 Incorrect expression detected at ";".
+35.918 Missing expression following assignment instruction.
+35.1 Incorrect expression detected at "+".
+13.1 Incorrect character in program "
+" ('0A'X).
+13.1 Incorrect character in program "
+" ('0A'X).
+13.1 Incorrect character in program "
+" ('0A'X).
+13.1 Incorrect character in program "
+" ('0A'X).
+6.3 Unmatched double quote (").
+35.1 Incorrect expression detected at "(".
+35.1 Incorrect expression detected at "(".
+6.1 Unmatched comment delimiter ("/*") on line 19.
+[stderr]

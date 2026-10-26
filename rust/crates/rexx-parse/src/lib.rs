@@ -57,6 +57,7 @@ use rexx_inventory::errors::E99_914;
 use crate::block::translate_block;
 use crate::clause::{ClauseCursor, split_clauses};
 use crate::directive::parse_directive;
+use crate::scanner::scan_to_error;
 use crate::selector::SelectorTable;
 use crate::token::ParseCtx;
 
@@ -157,7 +158,7 @@ struct Parsed {
 
 /// The composition shared by both entry points.
 fn parse(source: &ProgramSource) -> Result<Parsed, ParseError> {
-    let scanned = scan(source)?;
+    let (scanned, scan_error) = scan_to_error(source);
     // Declared ahead of `ctx`, which borrows it, and dropped with the parse.
     // A `Selector` in the tree holds the name's bytes itself, so what the
     // pool's own entry buys is finding a spelling again while the parse is
@@ -173,7 +174,13 @@ fn parse(source: &ProgramSource) -> Result<Parsed, ParseError> {
     };
 
     let mut cursor = ClauseCursor::new(split_clauses(ctx.tokens)?);
-    match translate(&ctx, &mut cursor) {
+    let parsed = translate(&ctx, &mut cursor);
+    if let Some(error) = scan_error
+        && (parsed.is_ok() || cursor.read_past_end())
+    {
+        return Err(error);
+    }
+    match parsed {
         Ok((main, directives)) => Ok(Parsed {
             main,
             directives,

@@ -1224,3 +1224,11 @@ translation	47.3	1	Labels are not allowed within an IF block; found "x".	'x': if
 translation	47.3	3	Labels are not allowed within an IF block; found "A".	nop\na: ,\nif 1 = 1 then b: nop\n
 translation	47.3	1	Labels are not allowed within an IF block; found "A".	a: b: if 1 = 1 then c: nop\n
 translation	47.4	2	Labels are not allowed within a SELECT block; found "WHEN".	a: select\nwhen 1 = 1 then b: nop\nend\n
+translation	35.1	2	Incorrect expression detected at "(".	say 1\nsay (\nsay `\n
+translation	35.1	1	Incorrect expression detected at "+".	x = 1 + ;\nsay 2\nsay 3 \x01\n
+translation	35.1	2	Incorrect expression detected at "(".	say 1\nsay (\n/* never closed\n
+translation	35.1	1	Incorrect expression detected at "(".	say (\nsay "abc\n
+translation	14.5	1	DO or LOOP instruction on line 1 requires matching END.	do i = 1 to 2\n::resource r\nabc\n
+translation	35.1	3	Incorrect expression detected at "(".	say 1\n::routine r\nsay (\n::resource q\nx\n
+translation	13.1	2	Incorrect character in program "`" ('60'X).	if 1\nsay `\n
+translation	13.1	1	Incorrect character in program "`" ('60'X).	say 1; say `; say (\n

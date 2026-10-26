@@ -17,7 +17,8 @@ use rexx_inventory::errors::{
     E20_916, E20_919, E20_920, E20_921, E20_924, E20_925, E20_926, E20_929, E20_935, E21_913,
     E21_914, E24_1, E25_11, E25_901, E25_902, E25_903, E25_904, E25_924, E25_925, E25_926, E25_927,
     E25_928, E25_935, E26_5, E26_6, E35_936, E36_901, E99_905, E99_916, E99_917, E99_925, E99_933,
-    E99_934, E99_935, E99_936, E99_937, E99_938, E99_939, E99_940, E99_944, E99_946, E99_947, Msg,
+    E99_934, E99_935, E99_936, E99_937, E99_938, E99_939, E99_940, E99_943, E99_944, E99_946,
+    E99_947, Msg,
 };
 
 use crate::ast::{
@@ -1112,24 +1113,16 @@ impl<'a> Dir<'a> {
             self.required_end(E21_914)?;
         }
 
-        // A body is always present by now, and the invariant is stated on both
-        // sides rather than only there. `scan_resource_if_directive`
-        // (`scanner.rs:970`) copies a body exactly when the clause holds three or
-        // five real tokens, the second is the symbol `RESOURCE`, the third is a
-        // symbol or a literal, and for five the fourth is the symbol `END` and
-        // the fifth a symbol or a literal. Those are precisely the four
-        // conditions the code above has just enforced, in the same order:
-        // `require_name` for the name, `SUBDIR_END` for the keyword,
-        // `require_name` for the marker, and `required_end` to rule out a sixth
-        // token. Any clause failing one of them left this function through an
-        // error and never reached here. `scan` also owns the missing-marker
-        // error, 99.943, which fails the whole scan before any directive parses.
-        let body = self
+        // `scan_resource_if_directive` copies a body for exactly the clause
+        // shape enforced above, so a missing one means the marker never came.
+        let Some(body) = self
             .ctx
             .resources
             .iter()
             .find(|body| body.directive == self.clause.tokens.start)
-            .expect("scan copies a body for every well-formed ::RESOURCE");
+        else {
+            return Err(self.error(E99_943, [end_marker.into_vec(), name.into_vec()]));
+        };
         Ok(DirectiveKind::Resource(Box::new(Resource {
             name,
             end_marker,

@@ -1,0 +1,331 @@
+######## scan/i1.rex
+--- oracle rc=0
+[stdout]
+35.1 2
+[stderr]
+--- base rc=0
+[stdout]
+13.1 2
+[stderr]
+--- head rc=0
+[stdout]
+35.1 2
+[stderr]
+######## scan/i2.rex
+--- oracle rc=0
+[stdout]
+35.1
+[stderr]
+--- base rc=0
+[stdout]
+13.1
+[stderr]
+--- head rc=0
+[stdout]
+35.1
+[stderr]
+######## scan/i3.rex
+--- oracle rc=0
+[stdout]
+35.918
+[stderr]
+--- base rc=0
+[stdout]
+13.1
+[stderr]
+--- head rc=0
+[stdout]
+35.918
+[stderr]
+######## scan/i4.rex
+--- oracle rc=0
+[stdout]
+13.1
+[stderr]
+--- base rc=0
+[stdout]
+13.1
+[stderr]
+--- head rc=0
+[stdout]
+13.1
+[stderr]
+######## scan/i5.rex
+--- oracle rc=0
+[stdout]
+35.1
+[stderr]
+--- base rc=0
+[stdout]
+13.1
+[stderr]
+--- head rc=0
+[stdout]
+35.1
+[stderr]
+######## scan/s10.rex
+--- oracle rc=243
+[stdout]
+[stderr]
+     1 *-* say `
+Error 13 running SCRATCH/scan/s10.rex line 1:  Invalid character in program.
+Error 13.1:  Incorrect character in program "`" ('60'X).
+--- base rc=243
+[stdout]
+[stderr]
+     1 *-* say `
+Error 13 running SCRATCH/scan/s10.rex line 1:  Invalid character in program.
+Error 13.1:  Incorrect character in program "`" ('60'X).
+--- head rc=243
+[stdout]
+[stderr]
+     1 *-* say `
+Error 13 running SCRATCH/scan/s10.rex line 1:  Invalid character in program.
+Error 13.1:  Incorrect character in program "`" ('60'X).
+######## scan/s11.rex
+--- oracle rc=243
+[stdout]
+[stderr]
+     1 *-* lab: say `
+Error 13 running SCRATCH/scan/s11.rex line 1:  Invalid character in program.
+Error 13.1:  Incorrect character in program "`" ('60'X).
+--- base rc=243
+[stdout]
+[stderr]
+     1 *-* lab: say `
+Error 13 running SCRATCH/scan/s11.rex line 1:  Invalid character in program.
+Error 13.1:  Incorrect character in program "`" ('60'X).
+--- head rc=243
+[stdout]
+[stderr]
+     1 *-* lab: say `
+Error 13 running SCRATCH/scan/s11.rex line 1:  Invalid character in program.
+Error 13.1:  Incorrect character in program "`" ('60'X).
+######## scan/s12.rex
+--- oracle rc=221
+[stdout]
+[stderr]
+     3 *-* say (
+Error 35 running SCRATCH/scan/s12.rex line 3:  Invalid expression.
+Error 35.1:  Incorrect expression detected at "(".
+--- base rc=157
+[stdout]
+[stderr]
+     4 *-* ::resource q
+Error 99 running SCRATCH/scan/s12.rex line 4:  Translation error.
+Error 99.943:  Missing ::RESOURCE end marker "::END" for resource "Q".
+--- head rc=221
+[stdout]
+[stderr]
+     3 *-* say (
+Error 35 running SCRATCH/scan/s12.rex line 3:  Invalid expression.
+Error 35.1:  Incorrect expression detected at "(".
+######## scan/s13.rex
+--- oracle rc=157
+[stdout]
+[stderr]
+     1 *-* ::resource a
+Error 99 running SCRATCH/scan/s13.rex line 1:  Translation error.
+Error 99.943:  Missing ::RESOURCE end marker "::END" for resource "A".
+--- base rc=157
+[stdout]
+[stderr]
+     1 *-* ::resource a
+Error 99 running SCRATCH/scan/s13.rex line 1:  Translation error.
+Error 99.943:  Missing ::RESOURCE end marker "::END" for resource "A".
+--- head rc=157
+[stdout]
+[stderr]
+     1 *-* ::resource a
+Error 99 running SCRATCH/scan/s13.rex line 1:  Translation error.
+Error 99.943:  Missing ::RESOURCE end marker "::END" for resource "A".
+######## scan/s14.rex
+--- oracle rc=157
+[stdout]
+[stderr]
+     4 *-* ::resource a
+Error 99 running SCRATCH/scan/s14.rex line 4:  Translation error.
+Error 99.942:  Duplicate ::RESOURCE directive instruction.
+--- base rc=157
+[stdout]
+[stderr]
+     4 *-* ::resource a
+Error 99 running SCRATCH/scan/s14.rex line 4:  Translation error.
+Error 99.943:  Missing ::RESOURCE end marker "::END" for resource "A".
+--- head rc=157
+[stdout]
+[stderr]
+     4 *-* ::resource a
+Error 99 running SCRATCH/scan/s14.rex line 4:  Translation error.
+Error 99.943:  Missing ::RESOURCE end marker "::END" for resource "A".
+######## scan/s1.rex
+--- oracle rc=221
+[stdout]
+[stderr]
+     2 *-* say (
+Error 35 running SCRATCH/scan/s1.rex line 2:  Invalid expression.
+Error 35.1:  Incorrect expression detected at "(".
+--- base rc=243
+[stdout]
+[stderr]
+     3 *-* say `
+Error 13 running SCRATCH/scan/s1.rex line 3:  Invalid character in program.
+Error 13.1:  Incorrect character in program "`" ('60'X).
+--- head rc=221
+[stdout]
+[stderr]
+     2 *-* say (
+Error 35 running SCRATCH/scan/s1.rex line 2:  Invalid expression.
+Error 35.1:  Incorrect expression detected at "(".
+######## scan/s2.rex
+--- oracle rc=221
+[stdout]
+[stderr]
+     1 *-* x = 1 + ;
+Error 35 running SCRATCH/scan/s2.rex line 1:  Invalid expression.
+Error 35.1:  Incorrect expression detected at "+".
+--- base rc=243
+[stdout]
+[stderr]
+     3 *-* say 3 ?
+Error 13 running SCRATCH/scan/s2.rex line 3:  Invalid character in program.
+Error 13.1:  Incorrect character in program "?" ('01'X).
+--- head rc=221
+[stdout]
+[stderr]
+     1 *-* x = 1 + ;
+Error 35 running SCRATCH/scan/s2.rex line 1:  Invalid expression.
+Error 35.1:  Incorrect expression detected at "+".
+######## scan/s3.rex
+--- oracle rc=243
+[stdout]
+[stderr]
+     3 *-* say `
+Error 13 running SCRATCH/scan/s3.rex line 3:  Invalid character in program.
+Error 13.1:  Incorrect character in program "`" ('60'X).
+--- base rc=243
+[stdout]
+[stderr]
+     3 *-* say `
+Error 13 running SCRATCH/scan/s3.rex line 3:  Invalid character in program.
+Error 13.1:  Incorrect character in program "`" ('60'X).
+--- head rc=243
+[stdout]
+[stderr]
+     3 *-* say `
+Error 13 running SCRATCH/scan/s3.rex line 3:  Invalid character in program.
+Error 13.1:  Incorrect character in program "`" ('60'X).
+######## scan/s4.rex
+--- oracle rc=243
+[stdout]
+[stderr]
+     2 *-* say `
+Error 13 running SCRATCH/scan/s4.rex line 2:  Invalid character in program.
+Error 13.1:  Incorrect character in program "`" ('60'X).
+--- base rc=243
+[stdout]
+[stderr]
+     2 *-* say `
+Error 13 running SCRATCH/scan/s4.rex line 2:  Invalid character in program.
+Error 13.1:  Incorrect character in program "`" ('60'X).
+--- head rc=243
+[stdout]
+[stderr]
+     2 *-* say `
+Error 13 running SCRATCH/scan/s4.rex line 2:  Invalid character in program.
+Error 13.1:  Incorrect character in program "`" ('60'X).
+######## scan/s5.rex
+--- oracle rc=221
+[stdout]
+[stderr]
+     2 *-* say (
+Error 35 running SCRATCH/scan/s5.rex line 2:  Invalid expression.
+Error 35.1:  Incorrect expression detected at "(".
+--- base rc=250
+[stdout]
+[stderr]
+     3 *-* /* never closed
+Error 6 running SCRATCH/scan/s5.rex line 3:  Unmatched "/*" or quote.
+Error 6.1:  Unmatched comment delimiter ("/*") on line 3.
+--- head rc=221
+[stdout]
+[stderr]
+     2 *-* say (
+Error 35 running SCRATCH/scan/s5.rex line 2:  Invalid expression.
+Error 35.1:  Incorrect expression detected at "(".
+######## scan/s6.rex
+--- oracle rc=157
+[stdout]
+[stderr]
+     2 *-* ::resource r
+Error 99 running SCRATCH/scan/s6.rex line 2:  Translation error.
+Error 99.943:  Missing ::RESOURCE end marker "::END" for resource "R".
+--- base rc=157
+[stdout]
+[stderr]
+     2 *-* ::resource r
+Error 99 running SCRATCH/scan/s6.rex line 2:  Translation error.
+Error 99.943:  Missing ::RESOURCE end marker "::END" for resource "R".
+--- head rc=157
+[stdout]
+[stderr]
+     2 *-* ::resource r
+Error 99 running SCRATCH/scan/s6.rex line 2:  Translation error.
+Error 99.943:  Missing ::RESOURCE end marker "::END" for resource "R".
+######## scan/s7.rex
+--- oracle rc=242
+[stdout]
+[stderr]
+     1 *-* do i = 1 to 2
+Error 14 running SCRATCH/scan/s7.rex line 1:  Incomplete DO/LOOP/SELECT/IF.
+Error 14.5:  DO or LOOP instruction on line 1 requires matching END.
+--- base rc=157
+[stdout]
+[stderr]
+     2 *-* ::resource r
+Error 99 running SCRATCH/scan/s7.rex line 2:  Translation error.
+Error 99.943:  Missing ::RESOURCE end marker "::END" for resource "R".
+--- head rc=242
+[stdout]
+[stderr]
+     1 *-* do i = 1 to 2
+Error 14 running SCRATCH/scan/s7.rex line 1:  Incomplete DO/LOOP/SELECT/IF.
+Error 14.5:  DO or LOOP instruction on line 1 requires matching END.
+######## scan/s8.rex
+--- oracle rc=250
+[stdout]
+[stderr]
+     2 *-* say "abc
+Error 6 running SCRATCH/scan/s8.rex line 2:  Unmatched "/*" or quote.
+Error 6.3:  Unmatched double quote (").
+--- base rc=250
+[stdout]
+[stderr]
+     2 *-* say "abc
+Error 6 running SCRATCH/scan/s8.rex line 2:  Unmatched "/*" or quote.
+Error 6.3:  Unmatched double quote (").
+--- head rc=250
+[stdout]
+[stderr]
+     2 *-* say "abc
+Error 6 running SCRATCH/scan/s8.rex line 2:  Unmatched "/*" or quote.
+Error 6.3:  Unmatched double quote (").
+######## scan/s9.rex
+--- oracle rc=221
+[stdout]
+[stderr]
+     1 *-* say (
+Error 35 running SCRATCH/scan/s9.rex line 1:  Invalid expression.
+Error 35.1:  Incorrect expression detected at "(".
+--- base rc=250
+[stdout]
+[stderr]
+     2 *-* say "abc
+Error 6 running SCRATCH/scan/s9.rex line 2:  Unmatched "/*" or quote.
+Error 6.3:  Unmatched double quote (").
+--- head rc=221
+[stdout]
+[stderr]
+     1 *-* say (
+Error 35 running SCRATCH/scan/s9.rex line 1:  Invalid expression.
+Error 35.1:  Incorrect expression detected at "(".

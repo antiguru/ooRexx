@@ -11,6 +11,7 @@
 
 //! Cutting the token vector into clauses.
 
+use std::cell::Cell;
 use std::ops::Range;
 
 use crate::token::{ParseCtx, ParseError, Tag, Token};
@@ -139,6 +140,9 @@ pub(crate) struct ClauseCursor {
     ///    Error 18.1:  IF instruction on line 2 requires matching THEN clause.
     /// ```
     pending_then: Option<(PendingThen, usize)>,
+    /// Whether the parse has asked for a clause after the last one, which is
+    /// where the oracle would have read the clause a scanner error stopped in.
+    read_past_end: Cell<bool>,
 }
 
 impl ClauseCursor {
@@ -149,7 +153,14 @@ impl ClauseCursor {
             pending: None,
             peeled: Vec::new(),
             pending_then: None,
+            read_past_end: Cell::new(false),
         }
+    }
+
+    /// Whether [`ClauseCursor::peek`] or [`ClauseCursor::next_clause`] has
+    /// found no clause left.
+    pub(crate) fn read_past_end(&self) -> bool {
+        self.read_past_end.get()
     }
 
     /// `error` echoing the clause it was reported against: the one holding its
@@ -198,10 +209,15 @@ impl ClauseCursor {
 
     /// The clause being parsed, without consuming it.
     pub(crate) fn peek(&self) -> Option<&Clause> {
-        self.pending
+        let clause = self
+            .pending
             .as_ref()
             .or_else(|| self.peeled.last())
-            .or_else(|| self.clauses.get(self.pos))
+            .or_else(|| self.clauses.get(self.pos));
+        if clause.is_none() {
+            self.read_past_end.set(true);
+        }
+        clause
     }
 
     /// Consume and return the clause being parsed.
@@ -212,9 +228,12 @@ impl ClauseCursor {
         if let Some(c) = self.peeled.pop() {
             return Some(c);
         }
-        let c = self.clauses.get(self.pos)?.clone();
+        let Some(c) = self.clauses.get(self.pos) else {
+            self.read_past_end.set(true);
+            return None;
+        };
         self.pos += 1;
-        Some(c)
+        Some(c.clone())
     }
 
     /// Record that the clause just parsed was an `IF` or `WHEN` whose `THEN`

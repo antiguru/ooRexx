@@ -1287,9 +1287,8 @@ fn a_resource_carries_its_body_verbatim() {
     assert_eq!(err("::resource d \"end\" x\nbody\n::END\n"), (25, 926));
     assert_eq!(err("::resource d end\nbody\n::END\n"), (19, 921));
     assert_eq!(err("::resource d end \"x\" extra\nbody\nx\n"), (21, 914));
-    // The missing marker is the scanner's error, 99.943, and it is a whole-file
-    // failure rather than one directive's. Both the missing and the mis-cased
-    // marker reach it.
+    // The missing marker is 99.943, raised against the directive. Both the
+    // missing and the mis-cased marker reach it.
     assert_eq!(err("::resource d\nbody\n"), (99, 943));
     assert_eq!(err("::resource d\nbody\n::end\n"), (99, 943));
     assert_eq!(err("::resource d end stop\nbody\nstop\n"), (99, 943));

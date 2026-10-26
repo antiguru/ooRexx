@@ -622,30 +622,18 @@ fn the_do_subkey_rows_differ_from_the_oracle_as_deviation_38_says() {
 }
 
 #[test]
-fn the_eager_scan_deviation_still_deviates() {
-    // Task 3.3's recorded deviation, and the only one with no corpus row: this
-    // input holds TWO errors, and a row for it would record our answer as the
-    // expected one and stop the gate being able to see it.
+fn a_scan_error_waits_for_the_parse_to_reach_its_clause() {
+    // The oracle scans one clause at a time (`LanguageParser::nextClause`), so
+    // the earlier parse error wins: measured, 37.2 on line 1.
     let program = b"say )\n\n'unclosed\n";
     let source = ProgramSource::new(program.to_vec(), SourceKind::Program);
     let error = parse_program(program.to_vec()).expect_err("both reject it");
-    assert_eq!(
-        (error.code(), error.sub()),
-        (6, 2),
-        "ours is the unterminated-literal scan error"
-    );
-    assert_eq!(
-        error.line(&source),
-        3,
-        "reported against the literal's clause"
-    );
+    assert_eq!((error.code(), error.sub()), (37, 2));
+    assert_eq!(error.line(&source), 1);
 }
 
 #[test]
-fn the_eager_scan_deviation_needs_both_errors_to_appear() {
-    // The other direction: neither half alone deviates, so the deviation is the
-    // masking and not either error. `say )` on its own is the oracle's own 37.2
-    // on line 1, and the unterminated literal on its own is 6.2 on its own line.
+fn a_scan_error_alone_is_reported_against_its_own_clause() {
     let error = parse_program(b"say )\n".to_vec()).expect_err("a stray paren is an error");
     assert_eq!((error.code(), error.sub()), (37, 2));
     let program = b"nop\n\n'unclosed\n";
@@ -653,34 +641,6 @@ fn the_eager_scan_deviation_needs_both_errors_to_appear() {
     let error = parse_program(program.to_vec()).expect_err("an open literal is an error");
     assert_eq!((error.code(), error.sub()), (6, 2));
     assert_eq!(error.line(&source), 3);
-}
-
-#[test]
-fn no_corpus_row_holds_the_eager_scan_shape() {
-    // The exclusion, asserted rather than assumed: no corpus program may both
-    // fail to scan and hold an earlier parse error. Truncating at the failing
-    // clause's own byte leaves every complete clause before it, so if that prefix
-    // does not parse either, the program has two errors and does not belong here.
-    let cases = cases();
-    let scanner_classes = [6u16, 13, 15, 30];
-    let mut offenders = Vec::new();
-    for case in &cases {
-        let Err(error) = parse(&case.program) else {
-            continue;
-        };
-        let scanner_class =
-            scanner_classes.contains(&error.code()) || (error.code(), error.sub()) == (99, 943);
-        if !scanner_class {
-            continue;
-        }
-        if parse(&case.program[..error.byte]).is_err() {
-            offenders.push(case.row);
-        }
-    }
-    assert!(
-        offenders.is_empty(),
-        "rows holding a scan error that masks an earlier parse error: {offenders:?}"
-    );
 }
 
 // ---- INTERPRET, which the corpus structurally cannot hold ----
@@ -924,7 +884,7 @@ fn the_scan_finds_the_messages_it_was_written_against() {
         assert!(named.contains_key(&pair), "{pair:?} not found");
     }
     assert!(
-        !named.contains_key(&(99, 943)) || named[&(99, 943)].ends_with("scanner.rs"),
+        !named.contains_key(&(99, 943)) || named[&(99, 943)].ends_with("directive.rs"),
         "a constant is attributed to a test file"
     );
 }
