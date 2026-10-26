@@ -1,0 +1,3 @@
+# mutant: 1bb283e1a with run_fragment's unpin test back to !pinned_copies.is_empty() alone (run/interpret.rs:89), release
+interp mut 10000: interp 10000 maxrss=337884kB 0.72s 
+interp mut 100000: /home/moritz/.local/bin/memcap: line 67: 127909 Killed                     ( echo "$BASHPID" > "$cg/cgroup.procs"; exec "$@" ) memcap: OOM-killed at the 2G cap (peak 2.0G) 

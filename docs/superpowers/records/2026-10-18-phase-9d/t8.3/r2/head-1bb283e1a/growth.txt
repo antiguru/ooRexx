@@ -1,0 +1,12 @@
+site head 10000: site 10000 maxrss=46272kB 0.29s 
+site head 100000: site 100000 maxrss=45916kB 2.86s 
+raise head 10000: raise 0 maxrss=63480kB 0.51s 
+raise head 100000: raise 0 maxrss=63000kB 5.03s 
+nested head 10000: nested 10000 maxrss=57164kB 0.60s 
+nested head 100000: nested 100000 maxrss=57184kB 5.74s 
+interp head 10000: interp 10000 maxrss=56684kB 0.52s 
+interp head 100000: interp 100000 maxrss=56696kB 4.87s 
+cycle head 10000: cycle 0 maxrss=57552kB 0.69s 
+cycle head 100000: cycle 0 maxrss=57004kB 6.67s 
+native head 10000: native 10000 maxrss=45680kB 0.29s 
+native head 100000: native 100000 maxrss=45720kB 2.37s 

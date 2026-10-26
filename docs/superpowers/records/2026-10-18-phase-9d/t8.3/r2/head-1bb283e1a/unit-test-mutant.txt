@@ -1,0 +1,7 @@
+# the new run::tests unit test against 1bb283e1a with run/interpret.rs:89 back to !pinned_copies.is_empty() alone
+test run::tests::an_interpret_fragments_site_holds_end_with_it ... FAILED
+thread 'run::tests::an_interpret_fragments_site_holds_end_with_it' (146154) panicked at crates/rexx-exec/src/run/tests.rs:742:5:
+assertion `left == right` failed
+  left: 3
+ right: 0
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1175 filtered out; finished in 0.02s
