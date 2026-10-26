@@ -1,0 +1,58 @@
+--- oracle rc=0
+[stdout]
+METHOD FRAMES 23
+METHOD ::CONSTANT 17
+PROGRAM SCRATCH/r2/constant_expression_method_scopes.rex 27
+run instr 0
+91.999 Message "RUN" did not return a result.
+METHOD FRAMES 23
+METHOD ZZ 17
+PROGRAM SCRATCH/r2/constant_expression_method_scopes.rex 7
+enhanced instr 0
+METHOD FRAMES 23
+METHOD ZZ 17
+PROGRAM SCRATCH/r2/constant_expression_method_scopes.rex 10
+91.999 Message "ZZ" did not return a result.
+METHOD FRAMES 23
+METHOD YY 17
+METHOD CGO 20
+PROGRAM SCRATCH/r2/constant_expression_method_scopes.rex 12
+setMethod instr 0
+METHOD FRAMES 23
+METHOD FR 17
+PROGRAM SCRATCH/r2/constant_expression_method_scopes.rex 14
+[stderr]
+--- base rc=163
+[stdout]
+METHOD FRAMES 23
+PROGRAM ::CONSTANT 0
+[stderr]
+       *-* Compiled method "RUN" with scope "Object".
+    30 *-* self~run(.r~e)
+     5 *-* o~go
+Error 93 running SCRATCH/r2/constant_expression_method_scopes.rex line 30:  Incorrect call to method.
+Error 93.974:  The method argument must be a string, array, or method object.
+--- head rc=0
+[stdout]
+METHOD FRAMES 23
+METHOD ::CONSTANT 17
+PROGRAM SCRATCH/r2/constant_expression_method_scopes.rex 27
+run instr 0
+91.999 Message "RUN" did not return a result.
+METHOD FRAMES 23
+METHOD ZZ 17
+PROGRAM SCRATCH/r2/constant_expression_method_scopes.rex 7
+enhanced instr 0
+METHOD FRAMES 23
+METHOD ZZ 17
+PROGRAM SCRATCH/r2/constant_expression_method_scopes.rex 10
+91.999 Message "ZZ" did not return a result.
+METHOD FRAMES 23
+METHOD YY 17
+METHOD CGO 20
+PROGRAM SCRATCH/r2/constant_expression_method_scopes.rex 12
+setMethod instr 0
+METHOD FRAMES 23
+METHOD FR 17
+PROGRAM SCRATCH/r2/constant_expression_method_scopes.rex 14
+[stderr]

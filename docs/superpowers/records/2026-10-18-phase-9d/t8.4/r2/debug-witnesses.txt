@@ -1,0 +1,13 @@
+# debug build of d2e226538, every Task 8.4 witness, head vs oracle
+head:same corpus/lang/scan_error_waits_for_its_clause.rex
+head:same corpus/lang/translation_checks_in_source_order.rex
+head:differs corpus/lang/translation_error_in_called_file.rex
+head:same corpus/lang/install_error_in_called_file.rex
+head:same corpus/lang/install_error_in_routine_new.rex
+head:same corpus/lang/constant_expression_level.rex
+head:same corpus/lang/constant_expression_trace.rex
+head:same corpus/lang/constant_expression_trace_labels.rex
+head:same corpus/lang/constant_expression_traceline.rex
+head:same corpus/lang/constant_expression_method_runs.rex
+head:same corpus/lang/constant_expression_method_scopes.rex
+head:same corpus/lang/constant_expression_method_trace.rex

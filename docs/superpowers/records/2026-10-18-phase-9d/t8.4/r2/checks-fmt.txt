@@ -1,0 +1,1 @@
+cargo fmt --all --check at d2e226538: exit 0

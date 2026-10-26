@@ -1,0 +1,41 @@
+--- oracle rc=0
+[stdout]
+METHOD FRAMES 6
+         6 *-* do f over .context~stackframes;
+METHOD ::CONSTANT 4
+         4 *-* ::constant e (.c~frames(.context~executable))
+PROGRAM SCRATCH/r2/tb3.rex 3
+         3 *-* ::class c
+METHOD FRAMES 6
+         6 *-* do f over .context~stackframes;
+METHOD ZZ 4
+         4 *-* ::constant e (.c~frames(.context~executable))
+PROGRAM SCRATCH/r2/tb3.rex 2
+         2 *-* .c~new~zz
+[stderr]
+--- base rc=163
+[stdout]
+METHOD FRAMES 6
+         6 *-* do f over .context~stackframes;
+PROGRAM ::CONSTANT 0
+         0 *-* .c~define('ZZ', .c~e)
+[stderr]
+       *-* Compiled method "DEFINE" with scope "Class".
+     1 *-* .c~define('ZZ', .c~e)
+Error 93 running SCRATCH/r2/tb3.rex line 1:  Incorrect call to method.
+Error 93.974:  The method argument must be a string, array, or method object.
+--- head rc=0
+[stdout]
+METHOD FRAMES 6
+         6 *-* do f over .context~stackframes;
+METHOD ::CONSTANT 4
+         4 *-* ::constant e (.c~frames(.context~executable))
+PROGRAM SCRATCH/r2/tb3.rex 3
+         3 *-* ::class c
+METHOD FRAMES 6
+         6 *-* do f over .context~stackframes;
+METHOD ZZ 4
+         4 *-* ::constant e (.c~frames(.context~executable))
+PROGRAM SCRATCH/r2/tb3.rex 2
+         2 *-* .c~new~zz
+[stderr]

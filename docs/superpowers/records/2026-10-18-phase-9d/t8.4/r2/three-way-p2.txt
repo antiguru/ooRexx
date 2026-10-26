@@ -1,0 +1,22 @@
+--- oracle rc=165
+[stdout]
+[stderr]
+     5 *-* say self~run(.c~e)
+     1 *-* o~go;
+Error 91 running SCRATCH/r2/p2.rex line 5:  No result object.
+Error 91.999:  Message "RUN" did not return a result.
+--- base rc=163
+[stdout]
+[stderr]
+       *-* Compiled method "RUN" with scope "Object".
+     5 *-* say self~run(.c~e)
+     1 *-* o~go;
+Error 93 running SCRATCH/r2/p2.rex line 5:  Incorrect call to method.
+Error 93.974:  The method argument must be a string, array, or method object.
+--- head rc=165
+[stdout]
+[stderr]
+     5 *-* say self~run(.c~e)
+     1 *-* o~go;
+Error 91 running SCRATCH/r2/p2.rex line 5:  No result object.
+Error 91.999:  Message "RUN" did not return a result.

@@ -1,0 +1,30 @@
+--- oracle rc=0
+[stdout]
+note a
+keep
+note z
+defined
+note a
+keep
+note z
+zz 0
+[stderr]
+--- base rc=163
+[stdout]
+note a
+keep
+note z
+[stderr]
+       *-* Compiled method "DEFINE" with scope "Class".
+     1 *-* .c~define('ZZ', .c~e)
+Error 93 running SCRATCH/r2/run3.rex line 1:  Incorrect call to method.
+Error 93.974:  The method argument must be a string, array, or method object.
+--- head rc=0
+[stdout]
+note a
+keep
+note z
+defined
+keep
+zz 0
+[stderr]

@@ -1,0 +1,25 @@
+--- oracle rc=158
+[stdout]
+waiting
+[stderr]
+       *-* Compiled method "RESULT" with scope "Message".
+    10 *-* m~result
+     3 *-* o~go
+Error 98 running SCRATCH/r2/g15.rex line 10:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+--- base rc=163
+[stdout]
+[stderr]
+       *-* Compiled method "DEFINE" with scope "Class".
+     1 *-* .c~define('ZZ', .c~e)
+Error 93 running SCRATCH/r2/g15.rex line 1:  Incorrect call to method.
+Error 93.974:  The method argument must be a string, array, or method object.
+--- head rc=158
+[stdout]
+waiting
+[stderr]
+     6 *-* ::constant e (.context~executable)
+Error 98 running SCRATCH/r2/g15.rex line 6:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+Error 98 running SCRATCH/r2/g15.rex line 10:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.

@@ -1,0 +1,12 @@
+# g2.rex oracle, 10 runs: 'running ... line N' sequence and rc
+     10 rc=158 line 6line 6
+# g2.rex head, 10 runs: 'running ... line N' sequence and rc
+     10 rc=158 line 8line 6
+# g9.rex oracle, 10 runs: 'running ... line N' sequence and rc
+     10 rc=214 line 7line 7
+# g9.rex head, 10 runs: 'running ... line N' sequence and rc
+     10 rc=214 line 9line 7
+# g10.rex oracle, 10 runs: 'running ... line N' sequence and rc
+     10 rc=214 line 6line 6
+# g10.rex head, 10 runs: 'running ... line N' sequence and rc
+     10 rc=214 line 8line 6

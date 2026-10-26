@@ -1,0 +1,32 @@
+--- oracle rc=214
+[stdout]
+waiting
+[stderr]
+     9 *-* return 1/0
+     9 *-* return 1/0
+Error 42 running SCRATCH/r2/g9.rex line 7:  Arithmetic overflow/underflow.
+Error 42 running SCRATCH/r2/g9.rex line 7:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+--- base rc=214
+[stdout]
+waiting
+[stderr]
+     9 *-* return 1/0
+Error 42 running SCRATCH/r2/g9.rex line 9:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+     9 *-* return 1/0
+     3 *-* ::constant k (.c~u)
+     2 *-* ::class c
+Error 42 running SCRATCH/r2/g9.rex line 3:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+--- head rc=214
+[stdout]
+waiting
+[stderr]
+     9 *-* return 1/0
+Error 42 running SCRATCH/r2/g9.rex line 9:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+     9 *-* return 1/0
+Error 42 running SCRATCH/r2/g9.rex line 7:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

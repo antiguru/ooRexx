@@ -1,0 +1,18 @@
+--- oracle rc=0
+[stdout]
+run instr 0
+done
+[stderr]
+--- base rc=163
+[stdout]
+[stderr]
+       *-* Compiled method "RUN" with scope "Object".
+     5 *-* self~run(.c~e)
+     1 *-* o~go;
+Error 93 running SCRATCH/r2/p1.rex line 5:  Incorrect call to method.
+Error 93.974:  The method argument must be a string, array, or method object.
+--- head rc=0
+[stdout]
+run instr 0
+done
+[stderr]

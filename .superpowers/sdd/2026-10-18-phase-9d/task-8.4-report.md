@@ -246,8 +246,10 @@ clause, oracle bug").
 * Measurement: `t8.4/constant/probes/f8.rex` and `r1/probes/src.rex`: three expressions in one class,
   each answering `.context~executable`; the oracle answers the third's clause as `~source` of each, this
   crate each its own (`r1/three-way-src.txt`). `r1/probes/run2.rex`: the method of `::constant e
-  (.context~executable)`, `define`d and sent, evaluates `::constant k (.c~note)` on the oracle and its
-  own expression here.
+  (.context~executable)`, `define`d and sent, evaluates every `::CONSTANT` expression of the class in
+  order on the oracle (`r2/probes/run3.rex`: constants `a`, `e`, `z`, `e` the one run, print `note a`,
+  `keep`, `note z` at install and again for the run, `r2/three-way-run3.txt`) and its own expression
+  here (`keep` alone).
 * Witnessed by `tests::a_constant_expressions_method_answers_its_own_clause_as_source` and
   `tests::a_constant_expressions_method_runs_its_own_expression`.
 
@@ -258,4 +260,74 @@ clause, oracle bug").
    separately ruled.
 2. **A run of the constant's method takes the guard on its receiver in the method's scope**, as any
    guarded method does; not probed against the oracle beyond the install-time deadlock.
+
+## Fix round 2
+
+Brief `task-8.4-fix-r2.md`, re-review `task-8.4-rereview-r1.md`. Code `d2e226538`; records
+`t8.4/r2/` (the re-review's probes rebuilt under `r2/probes/`, each run three ways in
+`r2/three-way-*.txt`).
+
+* **C1.** A run's `SUPER` is `super_scope_of(receiver, scope)`, the receiver's behaviour's super
+  scope as `Interp::begin_method` computes it, which answers a `.nil` scope too; the install-time level
+  answers what it did (`class_super_scope(class, class)` for a class receiver). `p1` (`self~run`, as
+  an instruction), `p2` (`say self~run(...)`, 91.999 `Message "RUN"`), `p3` (`.object~enhanced`) and
+  `g14` (`setMethod` in a class method) are identical to the oracle on all three descriptors; each
+  panicked at `b3875ce42` (`r2/red-at-b3875ce42.txt`). Witness
+  `corpus/lang/constant_expression_method_scopes.rex`, each class holding one `::CONSTANT` so the
+  oracle's re-run of every expression of the class (candidate B) is out of the picture; its one other
+  difference on the way there was the `METHOD RUN` level a nested primitive leaves out (Task 8.7's
+  item), avoided by keeping the frame listing off the `run` cases.
+* **I1.** After `reserve_for_method` the level serves its own wait (`serve_guard_wait`), since it
+  runs no clause where a queued wait would be: a run waits for a guard another activity holds. `g4` and
+  `g11`, 5 runs each side, identical every time (`r2/guard-wait-runs.txt`). Witness
+  `tests::a_constant_expressions_method_waits_for_a_held_guard` (`g11`'s shape; 5 of 5 runs pass;
+  `b3875ce42` printed `note ran` before `go still holds`). A deadlock in that wait blames the
+  directive (`blame_first_clause` reads `ActivationCold::directive_clause`), where it named the main
+  program's first clause: `g15.rex`.
+* **I2.** `ConstantRun::name`: `::CONSTANT` while the package installs, the message name on a run.
+  `tb3` (`METHOD ZZ 6`) and `m4` (`>I> Method "ZZ" with scope "C"`) identical. Witness
+  `corpus/lang/constant_expression_method_trace.rex` (`m4`'s shape; differs at `b3875ce42`).
+* **Positions.** rexxref: POSITION is "the line number in source code at which a condition was
+  raised" (`condtra.xml:769`-`:771`), and a `::CONSTANT` defines a method (`dire.xml:535`), so a
+  condition raised below its level keeps the line it was raised at, and only the expression's own
+  failure is blamed on the directive and its `::CLASS`. The failure path now leaves a condition raised
+  again by a `result` the expression waited on (`FailureSite::Reraised`) as it stands: no site is
+  recorded for the directive or the class. Measured, 10 runs per side (`r2/race-runs.txt`): `g2` oracle
+  `line 6 line 6`, crate `line 8 line 6`; `g9` oracle `line 7 line 7`, crate `line 9 line 7`; `g10`
+  (no constant) oracle `line 6 line 6`, crate `line 8 line 6`, all ten identical per side. Each
+  residual is the started activity's report naming its own line, Deviation 67's crate answer; the
+  waiter's report now names the oracle's line with the oracle's echoes. The review's `k2`, `k3`,
+  `t_err` (errors in the expression and in a method it calls) stay identical on all three descriptors.
+  Witness `tests::a_condition_raised_again_in_a_constant_expression_keeps_its_position` (`g9`'s
+  shape; `b3875ce42` named line 3 with the directive and class echoes).
+* **Candidate B's measurement** above now reads the oracle's re-run of every expression of the class
+  (`run3.rex`).
+
+**Checks**, from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t84-target`, at
+`d2e226538`:
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` (`r2/checks-fmt.txt`) | 0 |
+| `memcap 16G cargo clippy -j 4 -p rexx-parse -p rexx-exec --all-targets -- -D warnings` (`r2/checks-clippy.txt`) | 0 |
+| touched binaries as in round 1 (`r2/checks-touched.txt`) | 0: lib 1184, collect_stress 74, every other binary passed |
+| `memcap 16G cargo test -j 4 --release -p rexx-parse` (`r2/checks-parse.txt`) | 0 |
+| `REXX_CORPUS_GATE=1 ... --test corpus` (`r2/checks-corpus.txt`) | 101: 1195 of 1196, the one mismatch `rexxutil_file_date_time.rex` |
+| whole suite (`r2/suite/`) | 0; the four tables identical to `t8.4/r1/suite/` |
+
+A debug build of `d2e226538` ran every Task 8.4 witness (`r2/debug-witnesses.txt`): each identical
+to the oracle except `translation_error_in_called_file`, whose stderr carries its run directory.
+
+**Perf** (`r2/callgrind.txt`): `callgrind.sh -B 0.5 -j 4`, every program, `rexx-head-d2e226538`
+against `rexx-base-f0164456d`, exit 0, no flag. Libc subtracted: startup +0.0269%, pingmsg +0.0259%,
+sayloop +0.0143%, churn +0.0045%; every other program at most +0.0026% or falls.
+
+### Concerns (fix round 2)
+
+1. **A deadlock in a run's guard wait** (`g15.rex`) now blames the directive, but the reports
+   differ from the oracle beyond Deviation 67: the oracle prints two reports, both echoing the
+   directive and naming the waiter's line 10; here the started report names line 6 and the waiter's
+   report echoes nothing. The same deadlock with an ordinary method (`d2.rex`) differs too, and more:
+   the oracle reports once (`Compiled method "RESULT"`, `10 *-* m~result`, `2 *-* o~go`), this crate
+   twice. Pre-existing in the deadlock report shape, not this task's; proposed owner: a queued item.
 

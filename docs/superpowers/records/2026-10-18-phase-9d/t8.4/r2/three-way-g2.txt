@@ -1,0 +1,23 @@
+--- oracle rc=158
+[stdout]
+[stderr]
+     8 *-* say 'g ran'
+     8 *-* say 'g ran'
+Error 98 running SCRATCH/r2/g2.rex line 6:  Execution error.
+Error 98 running SCRATCH/r2/g2.rex line 6:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+Error 98.905:  Deadlock detected on a guarded method.
+--- base rc=0
+[stdout]
+g ran
+5
+[stderr]
+--- head rc=158
+[stdout]
+[stderr]
+     8 *-* say 'g ran'
+Error 98 running SCRATCH/r2/g2.rex line 8:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+     8 *-* say 'g ran'
+Error 98 running SCRATCH/r2/g2.rex line 6:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.

@@ -1,0 +1,30 @@
+--- oracle rc=158
+[stdout]
+waiting
+[stderr]
+     6 *-* return 1
+     6 *-* return 1
+Error 98 running SCRATCH/r2/d2.rex line 10:  Execution error.
+Error 98 running SCRATCH/r2/d2.rex line 10:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+Error 98.905:  Deadlock detected on a guarded method.
+--- base rc=158
+[stdout]
+waiting
+[stderr]
+     6 *-* return 1
+Error 98 running SCRATCH/r2/d2.rex line 6:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+     6 *-* return 1
+Error 98 running SCRATCH/r2/d2.rex line 10:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+--- head rc=158
+[stdout]
+waiting
+[stderr]
+     6 *-* return 1
+Error 98 running SCRATCH/r2/d2.rex line 6:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+     6 *-* return 1
+Error 98 running SCRATCH/r2/d2.rex line 10:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.

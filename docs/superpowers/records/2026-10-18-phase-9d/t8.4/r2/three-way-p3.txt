@@ -1,0 +1,21 @@
+--- oracle rc=165
+[stdout]
+instr 0
+[stderr]
+     4 *-* say p~zz
+Error 91 running SCRATCH/r2/p3.rex line 4:  No result object.
+Error 91.999:  Message "ZZ" did not return a result.
+--- base rc=163
+[stdout]
+[stderr]
+       *-* Compiled method "ENHANCED" with scope "Class".
+     1 *-* p = .object~enhanced(.directory~of(('ZZ', .c~e)))
+Error 93 running SCRATCH/r2/p3.rex line 1:  Incorrect call to method.
+Error 93.974:  The method source argument must be a string, array, or method object.
+--- head rc=165
+[stdout]
+instr 0
+[stderr]
+     4 *-* say p~zz
+Error 91 running SCRATCH/r2/p3.rex line 4:  No result object.
+Error 91.999:  Message "ZZ" did not return a result.

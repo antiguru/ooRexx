@@ -1,0 +1,8 @@
+# g4.rex oracle, 5 runs: stdout
+      5 note ran|hold start|hold end|note ran|zz returned| rc=0
+# g4.rex head, 5 runs: stdout
+      5 note ran|hold start|hold end|note ran|zz returned| rc=0
+# g11.rex oracle, 5 runs: stdout
+      5 note ran|go still holds|go done|note ran| rc=0
+# g11.rex head, 5 runs: stdout
+      5 note ran|go still holds|go done|note ran| rc=0

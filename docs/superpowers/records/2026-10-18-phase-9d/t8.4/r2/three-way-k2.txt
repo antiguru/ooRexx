@@ -1,0 +1,21 @@
+--- oracle rc=214
+[stdout]
+[stderr]
+     3 *-* ::constant k (1/0)
+     2 *-* ::class c
+Error 42 running SCRATCH/r2/k2.rex line 3:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+--- base rc=214
+[stdout]
+[stderr]
+     3 *-* ::constant k (1/0)
+     2 *-* ::class c
+Error 42 running SCRATCH/r2/k2.rex line 3:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+--- head rc=214
+[stdout]
+[stderr]
+     3 *-* ::constant k (1/0)
+     2 *-* ::class c
+Error 42 running SCRATCH/r2/k2.rex line 3:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

@@ -1,0 +1,24 @@
+--- oracle rc=159
+[stdout]
+[stderr]
+     5 *-* x = .nil~nosuch
+     3 *-* ::constant k (.c~m + 1)
+     2 *-* ::class c
+Error 97 running SCRATCH/r2/t_err.rex line 5:  Object method not found.
+Error 97.1:  Object "The NIL object" does not understand message "NOSUCH".
+--- base rc=159
+[stdout]
+[stderr]
+     5 *-* x = .nil~nosuch
+     3 *-* ::constant k (.c~m + 1)
+     2 *-* ::class c
+Error 97 running SCRATCH/r2/t_err.rex line 5:  Object method not found.
+Error 97.1:  Object "The NIL object" does not understand message "NOSUCH".
+--- head rc=159
+[stdout]
+[stderr]
+     5 *-* x = .nil~nosuch
+     3 *-* ::constant k (.c~m + 1)
+     2 *-* ::class c
+Error 97 running SCRATCH/r2/t_err.rex line 5:  Object method not found.
+Error 97.1:  Object "The NIL object" does not understand message "NOSUCH".
