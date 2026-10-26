@@ -712,3 +712,32 @@ fn a_class_directive_is_charged_with_its_methods() {
         "the class's methods were not charged: {attached} against {unattached}"
     );
 }
+
+/// A site keeping a `::ROUTINE` of another program holds that program in its
+/// own program's package, and an `INTERPRET` fragment's site drops its hold
+/// when the fragment ends.
+#[test]
+fn an_interpret_fragments_site_holds_end_with_it() {
+    let held = |source: &[u8]| {
+        let mut interp = Interp::new();
+        let out = say_output_with_directives(&mut interp, source);
+        assert_eq!(String::from_utf8_lossy(&out), "3\n");
+        interp
+            .program_data(ProgramId::nth(0))
+            .expect("the main program has a package")
+            .site_held
+            .len()
+    };
+    let body = |call: &str| {
+        format!(
+            "do i = 1 to 3\n  .routines['Q'] = .routine~new('q', 'return arg(1)')\n  \
+             {call}\nend\nsay x\n::routine dummy\n"
+        )
+    };
+    assert_eq!(
+        held(body("x = q(i)").as_bytes()),
+        1,
+        "the main body's site holds"
+    );
+    assert_eq!(held(body("interpret 'x = q(i)'").as_bytes()), 0);
+}
