@@ -1,0 +1,19 @@
+--- oracle rc=0
+[stdout]
+91.999 Message "ZZ" did not return a result.
+97.2 Object "an Object" cannot accept private message "RUN" from this context.
+instruction 0
+[stderr]
+--- base rc=163
+[stdout]
+[stderr]
+       *-* Compiled method "DEFINE" with scope "Class".
+     4 *-* .c~define('ZZ', e)
+Error 93 running SCRATCH/r1/constant_expression_method_runs.rex line 4:  Incorrect call to method.
+Error 93.974:  The method argument must be a string, array, or method object.
+--- head rc=0
+[stdout]
+91.999 Message "ZZ" did not return a result.
+97.2 Object "an Object" cannot accept private message "RUN" from this context.
+instruction 0
+[stderr]

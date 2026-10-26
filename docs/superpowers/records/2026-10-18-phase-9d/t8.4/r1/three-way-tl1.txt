@@ -1,0 +1,36 @@
+--- oracle rc=0
+[stdout]
+METHOD F 5
+         5 *-* do f over .context~stackframes;
+METHOD ::CONSTANT 3
+         3 *-* ::constant k (.c~f)
+ROUTINE rt 2
+         2 *-* ::class c
+METHOD NEW The NIL object
+           *-* Compiled method "NEW" with scope "Routine".
+PROGRAM SCRATCH/r1/tl1.rex 1
+         1 *-* r = .routine~new('rt', .array~of('say .c~k', '::class c', '::constant k (.c~f)', '::method f class', '  do f over .context~stackframes; say f~type f~name f~line; say "   " f~traceline; end', '  return 1'))
+1
+[stderr]
+--- base rc=0
+[stdout]
+METHOD F 5
+         5 *-* do f over .context~stackframes;
+PROGRAM ::CONSTANT 1
+         1 *-* 
+PROGRAM SCRATCH/r1/tl1.rex 1
+         1 *-* r = .routine~new('rt', .array~of('say .c~k', '::class c', '::constant k (.c~f)', '::method f class', '  do f over .context~stackframes; say f~type f~name f~line; say "   " f~traceline; end', '  return 1'))
+1
+[stderr]
+--- head rc=0
+[stdout]
+METHOD F 5
+         5 *-* do f over .context~stackframes;
+METHOD ::CONSTANT 3
+         3 *-* ::constant k (.c~f)
+ROUTINE rt 2
+         2 *-* ::class c
+PROGRAM SCRATCH/r1/tl1.rex 1
+         1 *-* r = .routine~new('rt', .array~of('say .c~k', '::class c', '::constant k (.c~f)', '::method f class', '  do f over .context~stackframes; say f~type f~name f~line; say "   " f~traceline; end', '  return 1'))
+1
+[stderr]

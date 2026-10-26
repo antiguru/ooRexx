@@ -1,0 +1,33 @@
+--- oracle rc=252
+[stdout]
+[stderr]
+     9 *-*   raise halt
+     9 *-*   raise halt
+     6 *-* call sub
+     6 *-* call sub
+Error 4 running SCRATCH/r1/halt.rex line 2:  Program interrupted.
+Error 4 running SCRATCH/r1/halt.rex line 2:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.
+Error 4.1:  Program interrupted with HALT condition.
+--- base rc=252
+[stdout]
+[stderr]
+     9 *-*   raise halt
+     6 *-* call sub
+Error 4 running SCRATCH/r1/halt.rex line 9:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.
+     9 *-*   raise halt
+     6 *-* call sub
+Error 4 running SCRATCH/r1/halt.rex line 2:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.
+--- head rc=252
+[stdout]
+[stderr]
+     9 *-*   raise halt
+     6 *-* call sub
+Error 4 running SCRATCH/r1/halt.rex line 9:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.
+     9 *-*   raise halt
+     6 *-* call sub
+Error 4 running SCRATCH/r1/halt.rex line 2:  Program interrupted.
+Error 4.1:  Program interrupted with HALT condition.

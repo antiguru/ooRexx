@@ -1,0 +1,47 @@
+--- oracle rc=0
+[stdout]
+METHOD LIVE 10
+        10 *-* do f over .context~stackframes
+METHOD ::CONSTANT 7
+         7 *-* ::constant k (.c~live)
+PROGRAM constant_expression_traceline.rex 6
+         6 *-* ::class c
+METHOD TRAPPED 17
+        17 *-* x = 1 / 0
+METHOD ::CONSTANT 8
+         8 *-* ::constant t (.c~trapped)
+PROGRAM constant_expression_traceline.rex 6
+         6 *-* ::class c
+1
+2
+[stderr]
+--- base rc=0
+[stdout]
+METHOD LIVE 10
+        10 *-* do f over .context~stackframes
+PROGRAM ::CONSTANT 0
+         0 *-* say .c~k
+METHOD TRAPPED 17
+        17 *-* x = 1 / 0
+PROGRAM ::CONSTANT 0
+         0 *-* say .c~k
+1
+2
+[stderr]
+--- head rc=0
+[stdout]
+METHOD LIVE 10
+        10 *-* do f over .context~stackframes
+METHOD ::CONSTANT 7
+         7 *-* ::constant k (.c~live)
+PROGRAM constant_expression_traceline.rex 6
+         6 *-* ::class c
+METHOD TRAPPED 17
+        17 *-* x = 1 / 0
+METHOD ::CONSTANT 8
+         8 *-* ::constant t (.c~trapped)
+PROGRAM constant_expression_traceline.rex 6
+         6 *-* ::class c
+1
+2
+[stderr]

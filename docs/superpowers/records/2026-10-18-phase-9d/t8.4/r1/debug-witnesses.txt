@@ -1,0 +1,11 @@
+# debug build (test-profile assertions live) of the fix-round tree, every Task 8.4 witness: head vs oracle
+base:differs head:same corpus/lang/scan_error_waits_for_its_clause.rex
+base:differs head:same corpus/lang/translation_checks_in_source_order.rex
+base:differs head:differs corpus/lang/translation_error_in_called_file.rex
+base:differs head:same corpus/lang/install_error_in_called_file.rex
+base:differs head:same corpus/lang/install_error_in_routine_new.rex
+base:differs head:same corpus/lang/constant_expression_level.rex
+base:differs head:same corpus/lang/constant_expression_trace.rex
+base:differs head:same corpus/lang/constant_expression_trace_labels.rex
+base:differs head:same corpus/lang/constant_expression_traceline.rex
+base:differs head:same corpus/lang/constant_expression_method_runs.rex

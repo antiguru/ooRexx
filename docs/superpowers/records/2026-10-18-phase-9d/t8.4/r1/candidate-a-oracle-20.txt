@@ -1,0 +1,4 @@
+# r1.rex, oracle, 20 runs: the 'running ... line N' lines in order
+     20 line 3line 3
+# r2.rex, oracle, 20 runs: the 'running ... line N' lines in order
+     20 line 2line 2

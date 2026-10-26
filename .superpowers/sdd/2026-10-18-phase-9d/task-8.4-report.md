@@ -107,7 +107,7 @@ From `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t84-targ
 | `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`checks-corpus.txt`) | 101: 1191 of 1192, the one mismatch `rexxutil_file_date_time.rex` (queued DST item) |
 | `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../t8.4/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`suite/`) | 0; `tests.tsv`, `table.tsv`, `verdicts.tsv` and `oracle-differences.tsv` identical to `t8.3/r2/suite/` |
 
-A debug build of `7fe50bedd` ran every new witness and the constant probes with no assertion firing.
+A debug build of the fix round 1 tree ran every Task 8.4 witness (`r1/debug-witnesses.txt`).
 
 ## Perf
 
@@ -119,8 +119,10 @@ A debug build of `7fe50bedd` ran every new witness and the constant probes with 
 * Rule: rexxref says `result` "also raises an error condition" when the message raised one
   (`fundclasses.xml:1661`). The started activity's own report is of its own raise; the waiter's is of
   the raise in its own clause.
-* Measurement: `t8.4/naming/probes/r1.rex` (`1/0` in a started method, `~result` on line 3). Oracle,
-  8 of 8 runs identical: two reports interleaved line by line, both `Error 42 running ... line 3`.
+* Measurement: `t8.4/naming/probes/r1.rex` (`1/0` in a started method, `~result` on line 3). Oracle:
+  two reports interleaved line by line, both `Error 42 running ... line 3` in 20 of 20 runs
+  (`r1/candidate-a-oracle-20.txt`), while the review saw 1 of 5 give line 8 then line 3; it is
+  Deviation 67's race.
   Crate: the target's report names line 8, then main's names line 3. `r2.rex` (HALT, the `hs9` shape)
   is the same: oracle `line 2` twice, crate `line 9` then `line 2`. In the C++,
   `MessageDispatcher::handleError` posts the condition to the message (`message->error(c)`) before the
@@ -167,3 +169,93 @@ A debug build of `7fe50bedd` ran every new witness and the constant probes with 
 `2026-10-22-constant-frame-and-executable.md` (`7fe50bedd`); their inventory rows read `closed:<sha>`.
 Gate lines: `gate:phase-9c-gate.md:142` closed by `f84e64ee4`, `gate:phase-9c-gate.md:145` by
 `44f1cb56b` (`t8.4/closed.tsv`, and their inventory rows).
+
+## Fix round 1
+
+Brief `task-8.4-fix-r1.md`, review `task-8.4-review.md`. Code `402a6c753`, `2ea743b36`; records
+`t8.4/r1/`.
+
+* **I1.** A level that runs no body carries the directive it is stopped on
+  (`ActivationCold::directive_clause`): the `::CONSTANT` level its own directive, the level installing
+  the package the `::CLASS` installed last. Its clause index names no instruction (`usize::MAX`, set by
+  `enter_directive_clause`), and only then does `trace_line_text` look the directive up
+  (`directive_clause_text`, cold): the first form, reading it on every frame, cost pingmsg +0.073%
+  libc subtracted. Live frames and a trapped condition's `~stackframes` now echo the `::CONSTANT` and
+  the `::CLASS` (the review's `k4`, `tb1`; `tl1` differs only by the `METHOD NEW` level, Task 8.7's
+  item). Witness `corpus/lang/constant_expression_traceline.rex` (in `phase-9.txt`, with its
+  `sourceline_oracle` file): differs at `f0164456d`, identical on all three descriptors at head
+  (`r1/three-way-constant_expression_traceline.txt`).
+* **M1.** `parse-errors.tsv`: an `install` row is accepted, or rejected for a later error having
+  recorded the directive the oracle names as one whose `EXTERNAL` it reached first; the sentence on
+  the decision being unchanged is deleted. `derive.sh` re-derives the file byte for byte (rc 0,
+  `diff` empty).
+* **M2.** `directive_clause_lines`'s comment states the ruled answer. Deviation candidate B below,
+  witnessed by `tests::a_constant_expressions_method_answers_its_own_clause_as_source` (red at
+  `f0164456d`: that build answers the main program's three lines for each, `r1/three-way-src.txt`).
+* **M3.** The candidate A sentence above reads the measured race; the debug sentence now names its
+  record, `r1/debug-witnesses.txt` (a debug build of the fix round tree over every Task 8.4 witness,
+  each identical to the oracle except `translation_error_in_called_file`, whose stderr carries its run
+  directory).
+* **M4 and the review's queue candidate 2.** rexxref says nothing of the method a `::CONSTANT`
+  expression runs as beyond its being a method (`dire.xml:535`); a method that can be listed by
+  `.context~executable` can be sent, copied and defined like any other. The object now carries a
+  method identity minted for it alone (`GeneratedKind::ConstantExpression`, freed with the object):
+  run again it evaluates its own expression on its receiver and answers nothing, so a `define`d copy
+  sent for a result is 91.999 and as an instruction leaves `RESULT` unset, as on the oracle; `run` is
+  the private-method 97.2 for it as for any object. The level is guarded (it reserves the receiver's
+  guard in its class's scope, `reserve_for_method`, and releases it at its end), so the review's
+  `g2.rex` deadlock is 98.905 rc 158 as on the oracle. Witnesses:
+  `corpus/lang/constant_expression_method_runs.rex` (red at `f0164456d`, the loud "no executable
+  record" refusal; identical at head), `tests::a_constant_expression_holds_its_classs_guard` (`g2`'s
+  shape; `f0164456d` prints `g ran` and `5`, rc 0, `r1/three-way-g2.txt`; 5 of 5 runs pass) and
+  `tests::a_constant_expressions_method_runs_its_own_expression`. Two differences remain, both
+  chosen: the oracle evaluates another `::CONSTANT`'s expression when the method is run (`run2.rex`
+  prints `note ran` again; part of candidate B's oracle bug), and `g2`'s two deadlock reports name the
+  started activity's line and the constant's clauses where the oracle's interleave on the waiter's line
+  (Deviation 67's shape).
+* **Deviation 67, HALT.** `run::tests::conditions::a_started_messages_halt_report_names_the_line_that_raised`,
+  the `hs9`/`r2.rex` shape: the started report names line 9, the waiter's line 2. It passes at
+  `f0164456d` as well: the behaviour predates the ruling, and the test pins it.
+
+**Checks**, from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t84-target`, at
+`2ea743b36`:
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` (`r1/checks-fmt.txt`) | 0 |
+| `memcap 16G cargo clippy -j 4 -p rexx-parse -p rexx-exec --all-targets -- -D warnings` (`r1/checks-clippy.txt`) | 0 |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --lib --test collect_stress --test signals --test dispatch_seam --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions --test compiled --test rexxc` (`r1/checks-touched.txt`) | 0: lib 1182, collect_stress 74, every other binary passed |
+| `memcap 16G cargo test -j 4 --release -p rexx-parse` (`r1/checks-parse.txt`) | 0 |
+| `memcap 16G cargo test -j 4 --release -p rexx-core --test unsafe_sites` (`r1/checks-unsafe.txt`) | 0 |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`r1/checks-corpus.txt`) | 101: 1193 of 1194, the one mismatch `rexxutil_file_date_time.rex` |
+| whole suite, `REXX_SUITE_TABLE=.../t8.4/r1/suite/table.tsv` (`r1/suite/`) | 0; the four tables identical to `t8.4/suite/` |
+
+**Perf** (`r1/callgrind.txt`): `bench-programs/callgrind.sh -B 0.5 -j 4 -o
+/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.4/r1final base=.../t8.4/rexx-base-f0164456d
+head=.../t8.4/rexx-head-2ea743b36`, every program, 3 rounds, exit 0, no flag. Libc subtracted, against
+`f0164456d`: startup +0.0263%, pingmsg +0.0252%, sayloop +0.0140%, churn +0.0044%, define +0.0038%;
+every other program is at most +0.0025% or falls.
+
+### Deviation candidate B
+
+**A `::CONSTANT` expression's method reports and runs its own clause** (Moritz 2026-10-26: "Own
+clause, oracle bug").
+* Rule: a `::CONSTANT` directive "defines a method" (rexxref `dire.xml:535`-`:536`); the method a
+  parenthesised value is evaluated by is that directive's, so its `~source` is the directive's own
+  clause and running it evaluates the directive's own expression.
+* Measurement: `t8.4/constant/probes/f8.rex` and `r1/probes/src.rex`: three expressions in one class,
+  each answering `.context~executable`; the oracle answers the third's clause as `~source` of each, this
+  crate each its own (`r1/three-way-src.txt`). `r1/probes/run2.rex`: the method of `::constant e
+  (.context~executable)`, `define`d and sent, evaluates `::constant k (.c~note)` on the oracle and its
+  own expression here.
+* Witnessed by `tests::a_constant_expressions_method_answers_its_own_clause_as_source` and
+  `tests::a_constant_expressions_method_runs_its_own_expression`.
+
+### Concerns (fix round 1)
+
+1. **The started report under `g2`'s deadlock** names its own line and the constant's clauses, where
+   the oracle's two reports both name the waiter's line 6; the same shape as Deviation 67, not
+   separately ruled.
+2. **A run of the constant's method takes the guard on its receiver in the method's scope**, as any
+   guarded method does; not probed against the oracle beyond the install-time deadlock.
+

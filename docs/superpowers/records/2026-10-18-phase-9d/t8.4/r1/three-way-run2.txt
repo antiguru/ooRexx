@@ -1,0 +1,27 @@
+--- oracle rc=0
+[stdout]
+note ran The C class
+7
+defined
+note ran The C class
+91.999
+note ran The C class
+as instruction 0
+[stderr]
+--- base rc=163
+[stdout]
+note ran The C class
+7
+[stderr]
+       *-* Compiled method "DEFINE" with scope "Class".
+     2 *-* .c~define('ZZ', .c~e)
+Error 93 running SCRATCH/r1/run2.rex line 2:  Incorrect call to method.
+Error 93.974:  The method argument must be a string, array, or method object.
+--- head rc=0
+[stdout]
+note ran The C class
+7
+defined
+91.999
+as instruction 0
+[stderr]
