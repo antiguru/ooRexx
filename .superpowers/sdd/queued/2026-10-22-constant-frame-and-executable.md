@@ -1,3 +1,5 @@
+**CLOSED 2026-10-26 by Phase 9d Task 8.4 (7fe50bedd).**
+
 **OPEN, queued 2026-10-22 by the controller; proposed 9d (Task 8.4).**
 
 # A ::CONSTANT's stack frame and executable

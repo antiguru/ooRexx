@@ -1,3 +1,5 @@
+**CLOSED 2026-10-26 by Phase 9d Task 8.4 (44f1cb56b).**
+
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: 35.1 on line 2 on the oracle, 13.1 on line 3 here.
 
 # An invalid character in a later clause is reported before an earlier clause's parse error

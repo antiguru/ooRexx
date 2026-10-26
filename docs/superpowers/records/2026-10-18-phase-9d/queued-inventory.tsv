@@ -138,12 +138,12 @@ item	kind	probe	proposed	reason	ruled
 2026-10-15-routines-table-silent-none.md	process	-	9d	no probe; environment.rs build_package_string_table and identities.rs find_written_routine still answer Ok(None)	9d
 2026-10-16-bignum-remainder-speed.md	perf	queued-probes/bignum/bignum.rex:1	phase:9.1	probe: output 78 on both, 2000 iterations under 1 s on the oracle and over it here	phase:9.1
 2026-10-16-stream-command-open-missing-file.md	divergence	queued-probes/scopen/scopen.rex:1	9d-cluster:stream-notready-names	probe still differs (91.999 against ERROR:2); the cluster holds the same no-result open command	9d-cluster:stream-notready-names
-2026-10-17-library-bind-before-options.md	divergence	queued-probes/libbind/libbind.rex:1	9d	probe still differs: 26.5 on line 2 here, 98.903 on line 1 on the oracle	9d
+2026-10-17-library-bind-before-options.md	divergence	queued-probes/libbind/libbind.rex:1	closed:f84e64ee4	probe still differs: 26.5 on line 2 here, 98.903 on line 1 on the oracle	closed:f84e64ee4
 2026-10-17-newmethod-parent-package.md	divergence	-	9d	no witness exists, the difference is read from the code; METHOD is a Phase 9 native-API group	9d
 2026-10-17-oracle-not-op-forwarding-bug-2117.md	oracle bug	queued-probes/notop/notop.rex:1	not-a-divergence	upstream report SF #2117; probe: the oracle answers 1 0 and the crate the right 0 1	not-a-divergence
 2026-10-17-phase-10-corpus-and-rxfunc.md	design	-	phase:10	ruled by Moritz 2026-10-17 (9d plan ruling 3)	phase:10
 2026-10-17-routine-call-frame-name.md	divergence	queued-probes/rcfn/rcfn.rex:1	closed:68e7f15d5	probe still differs: ROUTINE MYNAME on the oracle, ROUTINE CALL here	closed:68e7f15d5
-2026-10-17-scanner-reports-later-clause-error.md	divergence	queued-probes/scanlater/scanlater.rex:1	9d	probe still differs: 35.1 on line 2 on the oracle, 13.1 on line 3 here	9d
+2026-10-17-scanner-reports-later-clause-error.md	divergence	queued-probes/scanlater/scanlater.rex:1	closed:44f1cb56b	probe still differs: 35.1 on line 2 on the oracle, 13.1 on line 3 here	closed:44f1cb56b
 2026-10-18-upstream-bag-hasitem.md	oracle bug	queued-probes/baghas/baghas.rex:1	not-a-divergence	upstream report; Deviation 45 is the crate's rule	not-a-divergence
 bounds-check-brief.md	perf	-	closed:dispatched	a dispatched performance brief: report .superpowers/sdd/2026-09-21-bounds-check-report.md; item 7 landed (performance-todo.md:1012)	closed:dispatched
 category-rollup-brief.md	perf	-	closed:dispatched	a dispatched performance brief: result docs/superpowers/records/2026-09-20-performance-items/2026-09-22-category-rollup.md	closed:dispatched
@@ -194,10 +194,10 @@ gate:phase-9c-gate.md:138	process	-	9d	a pointer to 2026-10-15-routines-table-si
 gate:phase-9c-gate.md:139	divergence	queued-probes/scopen/scopen.rex:1	9d-cluster:stream-notready-names	a pointer to 2026-10-16-stream-command-open-missing-file.md	9d-cluster:stream-notready-names
 gate:phase-9c-gate.md:140	perf	queued-probes/bignum/bignum.rex:1	phase:9.1	a pointer to 2026-10-16-bignum-remainder-speed.md	phase:9.1
 gate:phase-9c-gate.md:141	oracle bug	queued-probes/notop/notop.rex:1	not-a-divergence	a pointer to 2026-10-17-oracle-not-op-forwarding-bug-2117.md	not-a-divergence
-gate:phase-9c-gate.md:142	divergence	queued-probes/libbind/libbind.rex:1	9d	a pointer to 2026-10-17-library-bind-before-options.md	9d
+gate:phase-9c-gate.md:142	divergence	queued-probes/libbind/libbind.rex:1	closed:f84e64ee4	a pointer to 2026-10-17-library-bind-before-options.md	closed:f84e64ee4
 gate:phase-9c-gate.md:143	divergence	queued-probes/rcfn/rcfn.rex:1	closed:68e7f15d5	a pointer to 2026-10-17-routine-call-frame-name.md	closed:68e7f15d5
 gate:phase-9c-gate.md:144	divergence	-	9d	a pointer to 2026-10-17-newmethod-parent-package.md	9d
-gate:phase-9c-gate.md:145	divergence	queued-probes/scanlater/scanlater.rex:1	9d	a pointer to 2026-10-17-scanner-reports-later-clause-error.md	9d
+gate:phase-9c-gate.md:145	divergence	queued-probes/scanlater/scanlater.rex:1	closed:44f1cb56b	a pointer to 2026-10-17-scanner-reports-later-clause-error.md	closed:44f1cb56b
 gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointer to 2026-10-13-lossy-path-sites.md	9d
 2026-10-18-command-waits-for-background-child.md	divergence	queued-probes/bgcmd/bgcmd.rex:1	9d	a command whose background child keeps stdout open: crate waits to timeout rc 124, oracle returns at once	9d
 2026-10-18-max-integer-unrounded.md	divergence	-	9d	Task 6.14 owns it	9d
@@ -207,10 +207,10 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointe
 2026-10-19-drive-rs-macros.md	design	-	later	after the 9d close	later
 2026-10-19-variable-reference-deviation-candidates.md	divergence	-	9d	derive the semantics; follow the model; Deviation where the oracle departs	9d
 2026-10-19-condition-deviation-candidates.md	divergence	-	closed:9f8be0ec2	derive the semantics; follow the model; Deviation where the oracle departs	closed:9f8be0ec2
-2026-10-18-duplicate-member-checked-at-install.md	divergence	-	9d	gap	9d
+2026-10-18-duplicate-member-checked-at-install.md	divergence	-	closed:f84e64ee4	gap	closed:f84e64ee4
 2026-10-18-install-error-names-caller-file.md	divergence	-	9d	gap	9d
 2026-10-19-context-name-during-install.md	divergence	-	closed:68e7f15d5	gap	closed:68e7f15d5
-2026-10-18-options-trace-constant-expression.md	divergence	-	9d	gap	9d
+2026-10-18-options-trace-constant-expression.md	divergence	-	closed:7fe50bedd	gap	closed:7fe50bedd
 2026-10-19-index-argument-string-conversion.md	divergence	-	9d	gap	9d
 2026-10-19-variable-reference-gaps.md	divergence	-	9d	gap	9d
 2026-10-19-local-novalue-hook.md	divergence	-	9d	gap	9d
@@ -238,7 +238,7 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointe
 2026-10-22-lineout-four-args-error.md	divergence	-	9d	lineout with four args raises 88.922 where the oracle raises 88.907	9d
 2026-10-22-user-raised-in-own-handler.md	divergence	-	9d	a USER raised in its own CALL ON handler is never redelivered	9d
 2026-10-22-security-manager-set-mid-activation.md	divergence	-	9d	an internal call sees a security manager its caller set mid-activation; the oracle keeps the caller's captured settings	9d
-2026-10-22-constant-frame-and-executable.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.3/probes/constant_frames.rex	9d	a ::CONSTANT frame is PROGRAM and its executable a Routine where the oracle has METHOD plus PROGRAM and a Method	9d
+2026-10-22-constant-frame-and-executable.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.3/probes/constant_frames.rex	closed:7fe50bedd	a ::CONSTANT frame is PROGRAM and its executable a Routine where the oracle has METHOD plus PROGRAM and a Method	closed:7fe50bedd
 2026-10-22-live-frames-omit-nested-primitives.md	divergence	-	9d	live stackFrames omit RUN, SORT, HASITEM, REQUEST and PUT frames the oracle lists	9d
 2026-10-22-executable-at-quadratic-depth.md	defect	-	9d	executable_at walks the frame chain once per level, quadratic at the depth cap	9d
 2026-10-22-collect-stress-zero-collection-drift.md	process	-	9d	collect_stress zero-collection list drifted before Task 8.3; pruned, cause open	9d

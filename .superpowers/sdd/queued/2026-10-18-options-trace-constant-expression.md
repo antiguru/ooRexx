@@ -1,3 +1,5 @@
+**CLOSED 2026-10-26 by Phase 9d Task 8.4 (7fe50bedd).**
+
 **RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** gap.
 
 **OPEN: found by Phase 9d Task 6.6, not yet ruled.** `::OPTIONS TRACE` does not trace a `::CONSTANT` expression's method here. The oracle does.
