@@ -72,7 +72,6 @@ base/class/RexxQueue	TEST_BUG_1379	passed	blocked: rexx-exec: the LIBRARY REXX e
 base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADLIBRARYNAME	passed	blocked: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)
 base/directives/ROUTINE	TESTEXTERNALREGISTEREDBADNAME	passed	blocked: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)
 base/keyword/SIGNAL	TEST_SIGNAL_ANY_CONDITION_HALT	passed	blocked: rexx-exec: ADDRESS environment "hostemu" a native package loader registers is not implemented (Phase 10 Extension)
-base/rexxutil/SysFileTree	TEST_TREE_DIRECTORY	failed	passed
 extensions/hostemu/hostemu	TEST_EXECIO_DISKR_DEFAULT	passed	blocked: rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10 Rxapi)
 extensions/hostemu/hostemu	TEST_EXECIO_DISKR_FIFO	passed	blocked: rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10 Rxapi)
 extensions/hostemu/hostemu	TEST_EXECIO_DISKR_LIFO	passed	blocked: rexx-exec: the LIBRARY REXX entry point "rexx_clear_queue" is not implemented (Phase 10 Rxapi)

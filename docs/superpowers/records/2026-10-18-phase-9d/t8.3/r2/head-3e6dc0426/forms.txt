@@ -1,0 +1,10 @@
+# form: oracle stdout+rc | 9963948e3 | 3e6dc0426 (release), stdout and rc, stderr dropped
+internal	oracle: f 1 f 2 f 3 rc=0 	red: differs: f 1 f 2 rc=120 	head: identical
+function	oracle: g 1 g 2 g 3 rc=0 	red: differs: g 1 g 2 rc=120 	head: identical
+call	oracle: h 1 h 2 h 3 rc=0 	red: differs: h 1 h 2 rc=120 	head: identical
+method	oracle: m 1 m 2 m 3 rc=0 	red: differs: m 1 m 2 rc=120 	head: identical
+sortwith	oracle: s 1 s 2 s 3 rc=0 	red: differs: s 1 s 2 rc=120 	head: identical
+interpret	oracle: i 1 i 2 i 3 rc=0 	red: identical	head: identical
+cycle	oracle: a 0 a 0 a 0 rc=0 	red: differs: a 0 a 0 rc=120 	head: identical
+ix	oracle: f 1 f 2 f 3 f 4 rc=0 	red: differs: f 1 f 2 f 3 rc=120 	head: identical
+iv	oracle: f 1 f 2 f 3 rc=0 	red: identical	head: identical

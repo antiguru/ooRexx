@@ -1,0 +1,20 @@
+# debug builds; mut = 3e6dc0426 with resume_call's end_parked_keep call deleted (drive.rs:3269), head = 3e6dc0426
+== mut tripwire-probe
+1 2
+3 4
+rc=0
+== mut t2
+
+thread 'rexx-interp' (40819) panicked at crates/rexx-exec/src/run/call.rs:600:17:
+an entered call's keep was left unclaimed
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+rc=101
+== head tripwire-probe
+1 2
+3 4
+rc=0
+== head t2
+1
+2
+end
+rc=0

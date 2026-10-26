@@ -1,0 +1,11 @@
+test routines_whose_sites_keep_each_other_survive_collection ... FAILED
+test a_routine_only_a_call_site_keeps_survives_collection ... FAILED
+thread 'routines_whose_sites_keep_each_other_survive_collection' (39146) panicked at crates/rexx-exec/tests/collect_stress.rs:983:5:
+assertion `left == right` failed: stderr: rexx-exec: an activation's body selector names no routine body
+  left: (120, "a 0\n")
+ right: (0, "a 0\na 0\na 0\n")
+thread 'a_routine_only_a_call_site_keeps_survives_collection' (39145) panicked at crates/rexx-exec/tests/collect_stress.rs:983:5:
+assertion `left == right` failed: stderr: rexx-exec: an activation's body selector names no routine body
+  left: (120, "f 1\n")
+ right: (0, "f 1\nf 2\nf 3\n")
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 72 filtered out; finished in 0.02s

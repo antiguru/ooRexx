@@ -1,0 +1,12 @@
+# collect_stress the_l0_subset at efe8d3f40, three runs, grep of test lines and the timing program's line
+test the_l0_subset_passes_again_under_collect_on_every_allocation has been running for over 60 seconds
+test the_l0_subset_passes_again_under_collect_on_every_allocation ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 71 filtered out; finished in 209.07s
+test the_l0_subset_passes_again_under_collect_on_every_allocation has been running for over 60 seconds
+test the_l0_subset_passes_again_under_collect_on_every_allocation ... FAILED
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 71 filtered out; finished in 209.59s
+test the_l0_subset_passes_again_under_collect_on_every_allocation has been running for over 60 seconds
+test the_l0_subset_passes_again_under_collect_on_every_allocation ... FAILED
+lang/command_redirected_target_waits_elsewhere.rex: plain exit=0 stdout="O:a slept 1\nO:b slept 0\nO:c slept 0\nsleep 0 3\nO:a waited 1\nO:b waited 0\nO:c waited 0\nsemaphore 0 3\nreleased\nO:a\nO:b\nO:c\nguard 0 3 waited 1\n" stderr=""; stress exit=0 stdout="O:a slept 1\nO:b slept 0\nO:c slept 0\ns
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 71 filtered out; finished in 208.22s
+done

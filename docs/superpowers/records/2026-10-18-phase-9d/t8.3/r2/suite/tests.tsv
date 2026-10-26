@@ -23062,7 +23062,7 @@ base/rexxutil/SysFileTree	TEST_LONG_PATHS_WINDOWSONLY	-	passed	passed
 base/rexxutil/SysFileTree	TEST_NO_ARGS	-	passed	passed
 base/rexxutil/SysFileTree	TEST_ONE_ARG	-	passed	passed
 base/rexxutil/SysFileTree	TEST_SIX_ARGS_TOO_MANY	-	passed	passed
-base/rexxutil/SysFileTree	TEST_TREE_DIRECTORY	-	failed	passed
+base/rexxutil/SysFileTree	TEST_TREE_DIRECTORY	-	passed	passed
 base/rexxutil/SysFileTree	TEST_TREE_SINGLE_FILE	-	passed	passed
 base/rexxutil/SysFileTree	TEST_TREE_SUBDIRECTORIES	-	passed	passed
 base/rexxutil/SysFileTree	TEST_TREE_WINDOWS_TATTRIB	-	passed	passed

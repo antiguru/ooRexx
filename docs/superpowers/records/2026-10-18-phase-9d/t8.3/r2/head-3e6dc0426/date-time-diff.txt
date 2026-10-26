@@ -1,0 +1,11 @@
+# corpus/lang/rexxutil_file_date_time.rex, run 2026-10-26 (after the 2026-10-25 European DST end); diff oracle stdout against each crate build
+== base efe8d3f40
+9c9
+<   1603589400
+---
+>   1603585800
+== head 3e6dc0426
+9c9
+<   1603589400
+---
+>   1603585800
