@@ -559,6 +559,7 @@ impl Interp {
         self.executable_sources.insert(object, record);
         let program = match record.source {
             crate::ExecutableSource::Directive { program, .. }
+            | crate::ExecutableSource::ConstantExpression { program, .. }
             | crate::ExecutableSource::Main { program }
             | crate::ExecutableSource::External { program } => program,
             crate::ExecutableSource::Native | crate::ExecutableSource::Loaded { .. } => {

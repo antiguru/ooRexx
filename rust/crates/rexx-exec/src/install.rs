@@ -12,7 +12,7 @@
 //! Installing a program's directives: requires and namespaces, classes, methods,
 //! attributes and constants, libraries, and the executable records.
 
-use crate::activation::{Activation, CallType};
+use crate::activation::{Activation, CallType, MethodIdentity};
 use crate::directives::{
     AnnotatedSite, FileClasses, annotation_target, attribute_dictionary_keys, class_install_order,
     class_members, directive_clause, directive_gap, member_dictionary_keys, method_dictionary_keys,
@@ -1066,7 +1066,8 @@ impl Interp {
             let ConstantValue::Expression(expr) = &constant.value else {
                 continue;
             };
-            match self.eval_constant_expression(id, program, class, expr) {
+            let level_line = last_class.map(|class| directive_clause(program, class).0);
+            match self.eval_constant_expression(id, program, class, index, expr, level_line) {
                 Ok(value) => self.record_constant_value(id, index, value),
                 Err(failure) => {
                     // Two clause echoes, innermost first, matching the
@@ -1959,8 +1960,10 @@ impl Interp {
             .running_activation()
             .map(|activation| activation.settings.clone());
         let outer = self.install_caller.replace(running.clone());
+        let outer_call = self.install_call.replace(CallType::Requires);
         let installed = self.install_directives(id, &program);
         self.install_caller = outer;
+        self.install_call = outer_call;
         if let Err(failure) = installed {
             self.seal_package_level(&failure, id);
             return Err(failure);
@@ -2111,9 +2114,9 @@ impl Interp {
                     .and_then(|row| self.library_codes[*row])
                     .unwrap_or(program),
             )),
-            ExecutableSource::Main { program } | ExecutableSource::External { program } => {
-                Some(Package::Program(program))
-            }
+            ExecutableSource::ConstantExpression { program, .. }
+            | ExecutableSource::Main { program }
+            | ExecutableSource::External { program } => Some(Package::Program(program)),
             ExecutableSource::Native => Some(Package::Rexx),
             ExecutableSource::Loaded { code } => self
                 .library_codes
@@ -2609,46 +2612,88 @@ impl Interp {
         );
     }
 
-    /// Evaluates a `::CONSTANT` directive's parenthesised expression in the
-    /// second install pass, and answers what it produced.
+    /// Runs the `::CONSTANT` expression of `program`'s directive `directive`
+    /// as a method of its own on `class`, as `ClassDirective::resolveConstants`
+    /// does (`instructions/ClassDirective.cpp:257`): a `METHOD` level named
+    /// `::CONSTANT` with `class` as its receiver and scope, stopped on the
+    /// directive's clause, whose executable is a `Method` of its own and
+    /// which the package's `::OPTIONS TRACE` traces as a method. Below it is
+    /// the level installing the package, stopped on `level_line`, the
+    /// `::CLASS` installed last.
     fn eval_constant_expression(
         &mut self,
         id: ProgramId,
         program: &Rc<Program>,
         class: ObjRef,
+        directive: usize,
         expr: &Expr,
+        level_line: Option<usize>,
     ) -> Result<ObjRef, Failure> {
         let empty_body = CodeBody::default();
         // Taken before the frame is pushed, as every activation's is.
         let caller = self.install_caller.clone().flatten();
         let start = self.package_start(id, caller.as_ref());
-        let frame = self.push_directive_activation(id, program);
-        // `resolveConstants` runs the expression as a method of the package
-        // (`instructions/ClassDirective.cpp:257`), so it starts from the
-        // package's `::OPTIONS` numeric and condition settings, and under
+        let executable = self.constant_executable(id, directive, class)?;
+        let (line, text) = self.directive_text(id, program, &program.directives[directive]);
+        let saved_clause = self.save_clause_state();
+        let installing = self.install_call.map(|call_type| {
+            let frame = self.roots.push_slots(0);
+            let level_id = self.next_activation_id();
+            let mut level = Activation::new(
+                level_id,
+                Rc::clone(program),
+                id,
+                Rc::new(Plan::default()),
+                frame,
+            );
+            level.call_type = call_type;
+            level.body = None;
+            self.push_activation(level);
+            self.record_call_convention();
+            self.enter_directive_clause(level_line.unwrap_or(0));
+            frame
+        });
+        let frame = self.roots.push_slots(0);
+        let activation_id = self.next_activation_id();
+        // The oracle's own message name for this run, which is the string
+        // `GlobalNames::CONSTANT_DIRECTIVE` holds (`memory/GlobalNames.h:84`)
+        // and `.context~name` answers.
+        let name: Rc<[u8]> = Rc::from(&b"::CONSTANT"[..]);
+        let mut activation = Activation::method(
+            activation_id,
+            Rc::clone(program),
+            id,
+            directive,
+            Rc::new(Plan::default()),
+            frame,
+            MethodIdentity {
+                name: Rc::clone(&name),
+                scope: class,
+                receiver: class,
+            },
+        );
+        // It starts from the package's `::OPTIONS` settings, and under
         // `NUMERIC INHERIT` from the installing activation's. Measured:
         // `::constant k (1+b)` under `::OPTIONS NOVALUE SYNTAX` is 98.986,
         // `(1/3)` under `::OPTIONS DIGITS 5` is `0.33333`, and under
         // `NUMERIC INHERIT` in a file a `DIGITS 4` package requires, `0.3333`.
         if let Some(start) = start {
-            let activation = self.activation_mut();
-            activation.settings = start.settings;
-            activation.condition_syntax = start.syntax;
+            start.apply(&mut activation);
         }
-        // The oracle's own message name for this run, which is the string
-        // `GlobalNames::CONSTANT_DIRECTIVE` holds (`memory/GlobalNames.h:84`)
-        // and `.context~name` answers. The failure path this crate has a
-        // witness for does not print it: measured, a condition raised inside
-        // a class method the expression calls echoes that method's clause
-        // above the `::CONSTANT` and the `::CLASS`, and names no method.
+        // No body: the expression is all it runs, so a call in it finds no
+        // label of its own.
+        activation.body = None;
+        activation.cold_mut().executable = Some(executable);
         let saved_context = std::mem::replace(
             &mut self.activity.call_context,
             CallContext {
-                name: Rc::from(&b"::CONSTANT"[..]),
+                name,
                 arguments: Rc::from(&[][..]),
                 receiver: Some(class),
             },
         );
+        self.push_activation(activation);
+        self.enter_directive_clause(line);
         self.record_call_convention();
         let self_slot = self.slot_of(b"SELF");
         self.set_variable(frame, self_slot, class);
@@ -2657,6 +2702,8 @@ impl Interp {
         // there and what `Interp::begin_method` writes for it.
         let super_scope = self.classes().class_super_scope(class, class);
         self.set_variable(frame, super_slot, super_scope.unwrap_or(ObjRef::NIL));
+        self.trace_package_invocation_entry();
+        self.trace_clause(line, 0, &text);
         let code = Code {
             body: &empty_body,
             symbols: &program.symbols,
@@ -2664,9 +2711,49 @@ impl Interp {
             plan: None,
         };
         let result = self.eval(&code, expr);
+        if let Ok(value) = result
+            && let Some(rendered) = self.result_text(value)
+        {
+            self.trace_result(0, &rendered);
+        }
+        self.trace_invocation_exit(|| result.as_ref().ok().copied());
         self.activity.call_context = saved_context;
-        self.pop_directive_activation(frame);
+        self.pop_activation();
+        self.roots.activity_mut().pop_slots(frame);
+        if let Some(level_frame) = installing {
+            self.pop_activation();
+            self.roots.activity_mut().pop_slots(level_frame);
+        }
+        self.restore_clause_state(saved_clause);
         result
+    }
+
+    /// The `Method` a `::CONSTANT` expression's evaluation runs as: a fresh
+    /// one per evaluation, whose scope is `class` (measured, oracle: it is not
+    /// the accessor `class~method` answers, and it reports guarded with every
+    /// other flag clear).
+    fn constant_executable(
+        &mut self,
+        program: ProgramId,
+        directive: usize,
+        class: ObjRef,
+    ) -> Result<ObjRef, Failure> {
+        let method_class = self.method_class();
+        let object = self.native_instance(method_class);
+        self.roots.activity_mut().push_temp(object);
+        let record = crate::ExecutableRecord {
+            source: ExecutableSource::ConstantExpression { program, directive },
+            installed: None,
+            routine: None,
+            owns_installed: false,
+        };
+        self.record_executable(object, record)?;
+        if let Some(rexx_core::Body::Native(native)) =
+            self.heap.get_mut(object).map(|held| &mut held.body)
+        {
+            native.set_scope(class);
+        }
+        Ok(object)
     }
 
     /// Records `directive`'s own clause as the site a directive-time

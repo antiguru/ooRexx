@@ -387,3 +387,7 @@ lang/translation_error_in_called_file.rex
 lang/install_error_in_called_file.rex
 lang/install_error_in_routine_new.rex
 lang/install_error_in_required_file.rex
+# 9d Task 8.4: a ::CONSTANT expression runs as a traced method level.
+lang/constant_expression_level.rex
+lang/constant_expression_trace.rex
+lang/constant_expression_trace_labels.rex

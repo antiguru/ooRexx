@@ -1,0 +1,12 @@
+--- oracle rc=0
+[stdout]
+METHOD FRAMES 6,METHOD ::CONSTANT 3,ROUTINE rt 2,METHOD NEW The NIL object,PROGRAM f4.rex 1
+[stderr]
+--- base rc=0
+[stdout]
+METHOD FRAMES 6,PROGRAM ::CONSTANT 1,PROGRAM f4.rex 1
+[stderr]
+--- head rc=0
+[stdout]
+METHOD FRAMES 6,METHOD ::CONSTANT 3,ROUTINE rt 2,PROGRAM f4.rex 1
+[stderr]

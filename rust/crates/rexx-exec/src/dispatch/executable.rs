@@ -347,9 +347,9 @@ fn set_security_manager(
     // code.
     if rexx_code {
         let program = match source {
-            ExecutableSource::Directive { program, .. } | ExecutableSource::Main { program } => {
-                program
-            }
+            ExecutableSource::Directive { program, .. }
+            | ExecutableSource::ConstantExpression { program, .. }
+            | ExecutableSource::Main { program } => program,
             ExecutableSource::Native
             | ExecutableSource::External { .. }
             | ExecutableSource::Loaded { .. } => unreachable!("native code is not Rexx code"),
@@ -364,7 +364,7 @@ fn set_security_manager(
 /// `setSecurityManager` answers and `~source` reads.
 fn is_rexx_code(interp: &Interp, source: ExecutableSource) -> bool {
     let (program, directive) = match source {
-        ExecutableSource::Main { .. } => return true,
+        ExecutableSource::Main { .. } | ExecutableSource::ConstantExpression { .. } => return true,
         ExecutableSource::Native
         | ExecutableSource::External { .. }
         | ExecutableSource::Loaded { .. } => return false,
@@ -415,11 +415,38 @@ fn source(
             block_source_lines(interp, program, Some(directive))?
         }
         ExecutableSource::Main { program } => block_source_lines(interp, program, None)?,
+        ExecutableSource::ConstantExpression { program, directive } => {
+            directive_clause_lines(interp, program, directive)
+        }
         ExecutableSource::Native
         | ExecutableSource::External { .. }
         | ExecutableSource::Loaded { .. } => Vec::new(),
     };
     array_of_texts(interp, lines).map(Some)
+}
+
+/// The physical lines a `::CONSTANT` expression's method answers as its
+/// source: its own directive clause's. Measured, oracle: of three in one
+/// class, each answers the third one's clause.
+fn directive_clause_lines(interp: &Interp, program: ProgramId, directive: usize) -> Vec<Vec<u8>> {
+    let Some(source) = interp.programs.get(program) else {
+        return Vec::new();
+    };
+    let text = &source.source;
+    let Some(span) = source
+        .directives
+        .get(directive)
+        .map(|d| d.clause_span.clone())
+    else {
+        return Vec::new();
+    };
+    if !text.is_traceable() || span.is_empty() {
+        return Vec::new();
+    }
+    let (first, last) = (text.line_of(span.start), text.line_of(span.end - 1));
+    (first..=last)
+        .filter_map(|line| text.line(line).map(<[u8]>::to_vec))
+        .collect()
 }
 
 /// The physical lines `RexxCode::getSource` answers for one code block:

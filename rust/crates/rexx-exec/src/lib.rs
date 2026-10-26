@@ -1836,6 +1836,10 @@ struct Interp {
     /// The install runs in the activation that then runs the main body, so
     /// a `::CONSTANT` expression and a `::REQUIRES` prologue start from it.
     install_caller: Option<Option<Settings>>,
+    /// While a package's directives install, how the activation that installs
+    /// them was entered, which a `::CONSTANT` expression's level lists below
+    /// it.
+    install_call: Option<CallType>,
     /// The threads native calls and blocking operations run on; last, so
     /// that every island value is dropped before its threads end.
     pool: crate::scheduler::Pool,
@@ -1945,6 +1949,7 @@ impl ExecutableRecord {
     fn names_program(&self, dead: impl Fn(&ProgramId) -> bool) -> bool {
         let source = match &self.source {
             ExecutableSource::Directive { program, .. }
+            | ExecutableSource::ConstantExpression { program, .. }
             | ExecutableSource::Main { program }
             | ExecutableSource::External { program } => Some(program),
             ExecutableSource::Native | ExecutableSource::Loaded { .. } => None,
@@ -1960,6 +1965,12 @@ pub(crate) enum ExecutableSource {
     /// A directive of a program: a `::METHOD`, an `::ATTRIBUTE`, a
     /// `::CONSTANT` or a `::ROUTINE`.
     Directive {
+        program: ProgramId,
+        directive: usize,
+    },
+    /// The method a `::CONSTANT` directive's parenthesised expression runs
+    /// as, which reports on that directive's own clause.
+    ConstantExpression {
         program: ProgramId,
         directive: usize,
     },
@@ -2435,6 +2446,7 @@ impl Interp {
             untranslated: rustc_hash::FxHashSet::default(),
             translate_only: false,
             install_caller: None,
+            install_call: None,
             pool: new_pool(),
         }
     }
@@ -2706,8 +2718,10 @@ impl Interp {
             return Err(Raised::insufficient_stack().into());
         }
         let outer = self.install_caller.replace(caller_settings.clone());
+        let outer_call = self.install_call.replace(call_type);
         let installed = self.install_directives(program_id, &program);
         self.install_caller = outer;
+        self.install_call = outer_call;
         if let Err(failure) = installed {
             if called {
                 let arguments = Rc::clone(&self.activity.call_context.arguments);
@@ -3401,6 +3415,7 @@ impl Interp {
             untranslated: _,
             translate_only: _,
             install_caller: _,
+            install_call: _,
             // Bytes and paths, no `ObjRef` in any of them: the interpreter's
             // own environment, current directory and `SETLOCAL` snapshots are
             // not the collector's.

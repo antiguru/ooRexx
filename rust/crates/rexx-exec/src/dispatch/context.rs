@@ -445,6 +445,12 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
         .frame_at(depth)
         .ok_or_else(|| Failure::from(Raised::context_not_active()))?;
     let program = activation.program_id;
+    // A `::CONSTANT` expression's level has no body and carries its own.
+    if activation.entry == Entry::Method
+        && let Some(executable) = activation.cold.as_deref().and_then(|cold| cold.executable)
+    {
+        return Ok(executable);
+    }
     match (
         activation.entry,
         activation.body,

@@ -1,0 +1,6 @@
+/* Under ::OPTIONS TRACE L a ::CONSTANT expression announces only its entry
+   and exit. */
+say .c~k
+::class c
+::constant k (1+2)
+::options trace l

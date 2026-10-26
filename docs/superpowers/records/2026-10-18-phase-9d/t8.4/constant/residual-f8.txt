@@ -1,0 +1,40 @@
+--- oracle rc=0
+[stdout]
+[::constant g (.context~executable)]
+--
+[::constant g (.context~executable)]
+--
+[::constant g (.context~executable)]
+[stderr]
+--- base rc=0
+[stdout]
+[e = .c~e]
+[do l over e~source; say '['l']'; end]
+[say '--']
+[do l over .c~f~source; say '['l']'; end]
+[say '--']
+[do l over .c~g~source; say '['l']'; end]
+--
+[e = .c~e]
+[do l over e~source; say '['l']'; end]
+[say '--']
+[do l over .c~f~source; say '['l']'; end]
+[say '--']
+[do l over .c~g~source; say '['l']'; end]
+--
+[e = .c~e]
+[do l over e~source; say '['l']'; end]
+[say '--']
+[do l over .c~f~source; say '['l']'; end]
+[say '--']
+[do l over .c~g~source; say '['l']'; end]
+[stderr]
+--- head rc=0
+[stdout]
+[::constant e (.context~executable)]
+--
+[::constant f (.context~executable,]
+[  )]
+--
+[::constant g (.context~executable)]
+[stderr]

@@ -434,6 +434,18 @@ impl Interp {
         let ClauseEntry(()) = entry;
     }
 
+    /// Makes the clause on `line` the running one for an activation with no
+    /// stepped clause of its own, a `::CONSTANT` expression's, before
+    /// [`Interp::restore_clause_state`] puts the caller's back.
+    pub(crate) fn enter_directive_clause(&mut self, line: usize) {
+        self.activity.clause_state = ClauseState {
+            current_value_indent: 0,
+            current_clause_line: line,
+            current_clause_index: 0,
+            instructions_traced_at_entry: self.trace_mode().all,
+        };
+    }
+
     /// Takes a copy of the clause state for `Interp::invoke_call` to put
     /// back after the callee has run.
     pub(crate) fn save_clause_state(&self) -> SavedClauseState {

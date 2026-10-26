@@ -1,0 +1,12 @@
+--- oracle rc=0
+[stdout]
+METHOD FRAMES 5,METHOD ::CONSTANT 2,ROUTINE cfr.cls 1,PROGRAM f1.rex 2
+[stderr]
+--- base rc=0
+[stdout]
+METHOD FRAMES 5,PROGRAM ::CONSTANT 0
+[stderr]
+--- head rc=0
+[stdout]
+METHOD FRAMES 5,METHOD ::CONSTANT 2,ROUTINE cfr.cls 1
+[stderr]
