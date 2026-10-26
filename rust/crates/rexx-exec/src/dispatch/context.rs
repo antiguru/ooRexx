@@ -133,8 +133,6 @@ struct Snapshot {
     name: Vec<u8>,
     clause: crate::activation::ClauseSnapshot,
     body: Option<usize>,
-    /// [`crate::activation::ActivationCold::directive_clause`].
-    directive_clause: Option<usize>,
     program: ProgramId,
     target: Option<ObjRef>,
     arguments: Vec<Option<ObjRef>>,
@@ -447,12 +445,6 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
         .frame_at(depth)
         .ok_or_else(|| Failure::from(Raised::context_not_active()))?;
     let program = activation.program_id;
-    // A `::CONSTANT` expression's level has no body and carries its own.
-    if activation.entry == Entry::Method
-        && let Some(executable) = activation.cold.as_deref().and_then(|cold| cold.executable)
-    {
-        return Ok(executable);
-    }
     match (
         activation.entry,
         activation.body,
@@ -474,6 +466,12 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
             }
             Ok(executable)
         }
+        // A `::CONSTANT` expression's level has no body and carries its own.
+        (Entry::Method, None, _) => activation
+            .cold
+            .as_deref()
+            .and_then(|cold| cold.executable)
+            .ok_or_else(|| Loud::unknown_receiver("a method level with no body").into()),
         (Entry::Routine, Some(directive), _) => {
             if let Some(executable) = activation.cold.as_deref().and_then(|cold| cold.executable) {
                 return Ok(executable);
@@ -1081,10 +1079,6 @@ fn read_snapshot(interp: &Interp, depth: usize) -> Result<Snapshot, Failure> {
         name,
         clause: interp.clause_of(depth),
         body: activation.body,
-        directive_clause: activation
-            .cold
-            .as_deref()
-            .and_then(|cold| cold.directive_clause),
         program: activation.program_id,
         target,
         arguments,
@@ -1112,17 +1106,15 @@ fn trace_line_text(interp: &mut Interp, depth: usize, snapshot: &Snapshot) -> Ve
             .programs
             .get(snapshot.program)
             .and_then(|program| {
-                let span = match snapshot.directive_clause {
-                    Some(directive) => program.directives.get(directive)?.clause_span.clone(),
-                    None => crate::activation::body_of(program, snapshot.body)?
-                        .instructions
-                        .get(snapshot.clause.index)?
-                        .clause_span
-                        .clone(),
-                };
+                let span = crate::activation::body_of(program, snapshot.body)?
+                    .instructions
+                    .get(snapshot.clause.index)?
+                    .clause_span
+                    .clone();
                 program.source.join_span(span)
             })
             .map(std::borrow::Cow::into_owned)
+            .or_else(|| directive_clause_text(interp, depth, snapshot))
             .unwrap_or_default()
     };
     let mut out = Vec::new();
@@ -1136,6 +1128,21 @@ fn trace_line_text(interp: &mut Interp, depth: usize, snapshot: &Snapshot) -> Ve
         out.pop();
     }
     out
+}
+
+/// The clause of the directive a level that runs no body is stopped on
+/// ([`crate::activation::ActivationCold::directive_clause`]), whose clause
+/// index names no instruction.
+#[cold]
+#[inline(never)]
+fn directive_clause_text(interp: &Interp, depth: usize, snapshot: &Snapshot) -> Option<Vec<u8>> {
+    let directive = interp.frame_at(depth)?.cold.as_deref()?.directive_clause?;
+    let program = interp.programs.get(snapshot.program)?;
+    let span = program.directives.get(directive)?.clause_span.clone();
+    program
+        .source
+        .join_span(span)
+        .map(std::borrow::Cow::into_owned)
 }
 
 /// A fresh `Array` over `slots`, an omitted position left empty.

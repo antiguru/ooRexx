@@ -441,7 +441,8 @@ impl Interp {
         self.activity.clause_state = ClauseState {
             current_value_indent: 0,
             current_clause_line: line,
-            current_clause_index: 0,
+            // Names no instruction: the level's frame echoes the directive.
+            current_clause_index: usize::MAX,
             instructions_traced_at_entry: self.trace_mode().all,
         };
     }
