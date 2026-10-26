@@ -194,35 +194,31 @@ impl Interp {
             self.unpin_copy(repin.unpin);
         }
         if let Some(change) = repin.program {
-            if let Some(program) = change.hold {
-                self.hold_site_program(change.holder, program, true);
+            if let Some(hold) = change.hold {
+                self.hold_site_program(hold, true);
             }
-            if let Some(program) = change.release {
-                self.hold_site_program(change.holder, program, false);
+            if let Some(hold) = change.release {
+                self.hold_site_program(hold, false);
             }
         }
     }
 
-    /// Takes (`hold`) or drops one call site's hold on `program`'s package,
-    /// which `holder`'s package traces while any of its sites holds it: an
-    /// edge rather than a root, so packages whose sites keep each other's
-    /// routines are collected together.
+    /// Takes (`take`) or drops one call site's hold: the holder's package
+    /// traces the held program's while any of its sites holds it, an edge
+    /// rather than a root, so packages whose sites keep each other's routines
+    /// are collected together.
     #[cold]
-    pub(crate) fn hold_site_program(
-        &mut self,
-        holder: crate::plan::ProgramId,
-        program: crate::plan::ProgramId,
-        hold: bool,
-    ) {
-        let (Some(held), Some(package)) =
-            (self.program_package(program), self.program_package(holder))
-        else {
+    pub(crate) fn hold_site_program(&mut self, hold: crate::run::SiteHold, take: bool) {
+        let (Some(held), Some(package)) = (
+            self.program_package(hold.program),
+            self.program_package(hold.holder),
+        ) else {
             return;
         };
         let Some(data) = self.package_data_mut(package) else {
             return;
         };
-        if hold {
+        if take {
             *data.site_held.entry(held).or_insert(0) += 1;
         } else if let Some(count) = data.site_held.get_mut(&held) {
             *count -= 1;
@@ -242,16 +238,14 @@ impl Interp {
     }
 
     /// Drops the holds `chunk`'s call sites have, for a chunk being dropped
-    /// while its owner runs.
+    /// while the program holding them runs.
     #[cold]
     pub(crate) fn unpin_chunk_copies(&mut self, chunk: &crate::ir::Chunk) {
         for copy in chunk.pinned_copies().collect::<Vec<_>>() {
             self.unpin_copy(copy);
         }
-        if let Some(holder) = chunk.owner {
-            for program in chunk.held_programs().collect::<Vec<_>>() {
-                self.hold_site_program(holder, program, false);
-            }
+        for hold in chunk.site_holds().collect::<Vec<_>>() {
+            self.hold_site_program(hold, false);
         }
     }
 

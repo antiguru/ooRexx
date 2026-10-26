@@ -84,6 +84,8 @@ pub(crate) struct SiteKeep {
     pub(crate) site: u16,
     resolved: Resolved,
     generation: u32,
+    /// The hold the site takes on a `::ROUTINE` of another program.
+    hold: Option<crate::run::SiteHold>,
 }
 
 /// How a call through a call site ended, for its [`SiteKeep`].
@@ -565,10 +567,21 @@ impl Interp {
         if copy != ObjRef::NIL {
             self.pin_copy(copy);
         }
+        let holder = self.activation().program_id;
+        let hold = match resolved {
+            Resolved::Routine(installed) if installed.program != holder => {
+                Some(crate::run::SiteHold {
+                    holder,
+                    program: installed.program,
+                })
+            }
+            _ => None,
+        };
         SiteKeep {
             site,
             resolved,
             generation,
+            hold,
         }
     }
 
@@ -607,9 +620,10 @@ impl Interp {
         returned: bool,
     ) {
         if returned {
-            let repin = chunk
-                .call_site_slot(keep.site)
-                .remember(keep.resolved, keep.generation);
+            let repin =
+                chunk
+                    .call_site_slot(keep.site)
+                    .remember(keep.resolved, keep.generation, keep.hold);
             self.repin(repin);
         }
         let copy = keep.resolved.copy();

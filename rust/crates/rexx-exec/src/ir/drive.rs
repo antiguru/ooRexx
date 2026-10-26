@@ -4223,7 +4223,7 @@ impl Interp {
         }
         let resolution = match self.resolve_fixed_call(name, search_labels)? {
             Some(resolved) => {
-                let repin = chunk.remember_call(site, resolved, generation);
+                let repin = chunk.remember_call(site, resolved, generation, None);
                 self.repin(repin);
                 CallResolution::Settled(resolved)
             }
@@ -4247,7 +4247,7 @@ impl Interp {
         generation: u32,
     ) -> Option<SiteKeep> {
         if let Resolved::Label(_) | Resolved::Builtin(_) = resolved {
-            let repin = chunk.remember_call(site, resolved, generation);
+            let repin = chunk.remember_call(site, resolved, generation, None);
             self.repin(repin);
             return None;
         }

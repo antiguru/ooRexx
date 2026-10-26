@@ -187,3 +187,4 @@ Task 8.3: re-review r1 APPROVED (0C/0I/1M, Q-A). Ruling: Q-A (call-site slot not
 Moritz 2026-10-22: pause once 8.3 comes back (no 8.4 dispatch until he says).
 Task 8.3 fix round 2: t83-impl stalled after 2041eb468 (no activity since 2026-10-22 19:32, no reply to check-in); stopped 2026-10-23. Its uncommitted edits (7 src files) and partial r2 records saved unreviewed as a WIP commit. Next, on Moritz's word: fresh implementer finishes round 2 from it.
 Task 8.3 fix round 2: fresh implementer t83-fix2 (opus) finishes the round from d6dee4ef4. Ruling: Moritz's pause applies once 8.3 comes back, so finishing 8.3 proceeds — cost if wrong: one agent run he did not want.
+Task 8.3 fix round 2: t83-fix2 hit the weekly limit 2026-10-23 after 2afe1e16c b27ebc5d9; reboot since. Its uncommitted edits (SiteHold refactor, 8 src files) saved unchecked as WIP; fresh finisher t83-fix2b (opus) dispatched for the remainder (checks on the WIP, perf, report).

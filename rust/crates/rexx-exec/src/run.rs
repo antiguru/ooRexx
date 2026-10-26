@@ -278,14 +278,21 @@ pub(crate) struct Repin {
     pub(crate) program: Option<ProgramRepin>,
 }
 
-/// How the program a call site holds changed: `holder` is the program owning
-/// the site's chunk, whose package holds the package of the program a kept
-/// `::ROUTINE` belongs to ([`Interp::hold_site_program`]).
+/// How the program a call site holds changed: the hold it drops and the one
+/// it takes.
 #[derive(Clone, Copy)]
 pub(crate) struct ProgramRepin {
+    pub(crate) release: Option<SiteHold>,
+    pub(crate) hold: Option<SiteHold>,
+}
+
+/// A call site's hold on the program of the `::ROUTINE` it keeps: `holder`,
+/// the program of the activation the site runs in, holds `program`'s package
+/// in its own ([`Interp::hold_site_program`]).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SiteHold {
     pub(crate) holder: crate::plan::ProgramId,
-    pub(crate) release: Option<crate::plan::ProgramId>,
-    pub(crate) hold: Option<crate::plan::ProgramId>,
+    pub(crate) program: crate::plan::ProgramId,
 }
 
 impl Repin {

@@ -57,10 +57,7 @@ impl Interp {
         // catch-all does exactly that for anything it does not own, `Exit`
         // included, with nothing fragment-specific to add.
         let chunk = match crate::ir::compile(&fragment.body, &fragment_plan, self.chunk_trace()) {
-            Ok(mut chunk) => {
-                chunk.owner = Some(self.activation().program_id);
-                chunk
-            }
+            Ok(chunk) => chunk,
             Err(_) => {
                 self.seal_site_level();
                 return Err(Loud::chunk_refused().into());
@@ -89,7 +86,7 @@ impl Interp {
         self.heap.release_immortal(interned_from, |handle| {
             chunk.interned_values().any(|value| value == handle)
         });
-        if chunk.pins() {
+        if !self.pinned_copies.is_empty() || chunk.holds_programs() {
             self.unpin_chunk_copies(&chunk);
         }
         let flow = match ran {
