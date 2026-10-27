@@ -1428,13 +1428,18 @@ impl Interp {
             // the callee has a frame of its own: `procedureExpose` resolves it
             // and makes it in the caller (`exposeLocalCompoundVariable`), and
             // the caller's stem is found here, in the caller's pool.
-            if shape_of(&name) == NameShape::Compound {
+            let shape = shape_of(&name);
+            if shape == NameShape::Compound {
                 let (stem_name, key) = self.split_compound(&name)?;
                 let home = self.read_stem(&stem_name);
                 tails.push((name, stem_name, key, home, traced));
                 continue;
             }
             let slot = self.slot_of(&name);
+            // Exposing a stem uses the caller's stem variable, which creates it.
+            if shape == NameShape::Stem && self.variable(outer, slot).is_none() {
+                self.create_stem_variable(outer, slot, &name);
+            }
             // A name the enclosing method exposed has no frame storage to
             // alias: its home is the object's pool, and the callee gets the
             // same home rather than a slot. Measured -- a class method
@@ -1572,11 +1577,29 @@ impl Interp {
         // `a.1` and `a.2` and the same in another reading them back:
         // `[tail-one][A.2]`, so tail 1 is shared and tail 2 is the method's
         // own local.
-        if shape_of(&name) == NameShape::Compound {
+        let shape = shape_of(&name);
+        if shape == NameShape::Compound {
             return self.expose_object_tail(owner, scope, &name);
         }
         let slot = self.slot_of(&name);
+        if shape == NameShape::Stem {
+            return self.expose_object_stem(slot, InstanceVar { owner, scope, name });
+        }
         self.expose_slot(slot, InstanceVar { owner, scope, name });
+        Ok(())
+    }
+
+    /// [`Interp::bind_exposed`] for a whole stem: exposing it uses the
+    /// object's stem variable, which creates it.
+    #[cold]
+    #[inline(never)]
+    fn expose_object_stem(&mut self, slot: usize, var: InstanceVar) -> Result<(), Failure> {
+        let name = var.name.clone();
+        self.expose_slot(slot, var);
+        let frame = self.activation().frame;
+        if self.variable(frame, slot).is_none() {
+            self.create_stem_variable(frame, slot, &name);
+        }
         Ok(())
     }
 

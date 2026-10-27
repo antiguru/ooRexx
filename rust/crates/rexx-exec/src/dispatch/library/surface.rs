@@ -519,6 +519,8 @@ impl Surface for Interp {
             })),
         );
         self.roots.activity_mut().push_temp(reference);
+        // As `variable_reference` arms it for every reference.
+        self.reqstr_armed = true;
         Some(reference)
     }
 

@@ -1181,17 +1181,6 @@ impl Rendered {
     }
 }
 
-/// The bytes a `>name` reference renders as: the referenced variable's
-/// `stringValue()`.
-pub(crate) fn string_value_of_reference(interp: &mut Interp, value: ObjRef) -> Vec<u8> {
-    match interp.referenced_object(value) {
-        Some(referenced) => interp.string_value_text(referenced),
-        // Unreachable as `None`: the one caller has just matched
-        // `Body::VarRef` on this handle.
-        None => Vec::new(),
-    }
-}
-
 fn small_int_for(value: &Number, created_digits: u32) -> Option<i64> {
     let whole = value.rendered_integer(u64::from(created_digits))?;
     (SMALL_INT_MIN..=SMALL_INT_MAX)

@@ -419,20 +419,16 @@ impl Interp {
                     // the items joined by a newline -- **not**
                     // `stringValue()`, which is `an Array`.
                     Body::Array { .. } => None,
-                    // **The referent's `stringValue()`, not its
-                    // conversion.** `requestString` looks `MAKESTRING` up in
-                    // the receiver's own behaviour rather than sending it,
-                    // and a reference's behaviour holds no such name, so
-                    // limb 4 answers `VariableReference::stringValue`
-                    // (`classes/VariableReference.cpp:249`), which is the
-                    // referent's. Measured, oracle rc 0: `say 'p' >zz` over a
-                    // two-item array is `p an Array` where `say 'p' zz` joins
-                    // the items. `~request('STRING')` is a different route
-                    // and does forward -- `native_reference_request`.
-                    Body::VarRef(_) => {
-                        let text = crate::value::string_value_of_reference(self, value);
-                        return StringConversion::Bytes(text);
-                    }
+                    // **The referenced value's string value**: a string
+                    // value is what `request('STRING')` answers (rexxref
+                    // provide.xml, "Required String Values"), and a
+                    // reference's `request` forwards to the referenced
+                    // variable (utilityclasses.xml, VariableReference
+                    // `request`). An unset variable is its own name.
+                    Body::VarRef(reference) => match self.referenced_value(reference) {
+                        Some(referenced) => Some(referenced),
+                        None => return StringConversion::Bytes(reference.name.to_vec()),
+                    },
                     Body::Instance { .. } => return self.instance_conversion(value),
                     _ => return self.make_string_or_none(value),
                 },

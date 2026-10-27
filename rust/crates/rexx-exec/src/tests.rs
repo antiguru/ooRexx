@@ -1577,3 +1577,44 @@ fn the_context_variables_list_an_alias_under_its_own_name() {
         "Q.\nstem 1 0 1\nsimple 1 0 1\n"
     );
 }
+
+/// A variable reference's string value is its referenced value's, by
+/// `request('STRING')`: an array's items, a `makeString` answer, or for an
+/// object with no string value the reference's `string`. The same in each
+/// position: either operand of `||`, abuttal and blank, `SAY` and a builtin
+/// argument.
+#[test]
+fn a_references_string_value_is_its_referenced_values_in_every_position() {
+    let stdout = clean_stdout(
+        "/w/r.rex",
+        b"q = .array~of('p','q'); o = .k~new; n = .n~new; e = .array~new(2)\n\
+          do w over 'q', 'o', 'n', 'e'\n  interpret 'r = >'w\n\
+          \x20 say w (r || '|') (r'|') (r '|') ('|' || r) ('|'r) ('|' r) length(r)\nend\n\
+          say >q\n::class k\n::method makestring\n  return 'kmake'\n\
+          ::class n\n::method string\n  return 'nstr'\n",
+    );
+    assert_eq!(
+        stdout,
+        "q p\nq| p\nq| p\nq | |p\nq |p\nq | p\nq 3\n\
+         o kmake| kmake| kmake | |kmake |kmake | kmake 5\n\
+         n a N| a N| a N | |a N |a N | a N 3\n\
+         e | |  | | | |  0\n\
+         p\nq\n"
+    );
+}
+
+/// A reference whose referenced value has a string value raises no
+/// `NOSTRING`; one whose value has none does, with the reference as the
+/// condition's object.
+#[test]
+fn a_reference_raises_nostring_only_where_its_value_has_no_string_value() {
+    assert_eq!(
+        clean_stdout(
+            "/w/n.rex",
+            b"q = .array~of('p','q'); d = .directory~new\nsignal on nostring\n\
+              say (>q) || 'x'\nsay length(>q)\nsay 'd' (>d)\nexit\n\
+              nostring: say 'NOSTRING' condition('d') condition('o')~additional~class~id\n"
+        ),
+        "p\nqx\n3\nNOSTRING a Directory VariableReference\n"
+    );
+}

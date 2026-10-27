@@ -1571,6 +1571,9 @@ impl Interp {
                 (VarRefHome::Cell(cell), name)
             }
         };
+        // A reference's string value is its referenced value's conversion,
+        // which a rendering of the reference does not give.
+        self.reqstr_armed = true;
         Ok(self.alloc_with(
             BehaviourId::OBJECT,
             Body::VarRef(Box::new(rexx_core::VarRef { name, home })),

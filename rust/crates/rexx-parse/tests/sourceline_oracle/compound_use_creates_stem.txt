@@ -1,8 +1,8 @@
-count 50
+count 62
 /* Any use of a compound variable creates its stem variable: a read, a drop,
    a VALUE or SYMBOL inquiry, a parse target, through PROCEDURE EXPOSE and
-   on an object variable. SYMBOL of the bare stem name alone creates
-   nothing. */
+   on an object variable. So does exposing the stem itself, by EXPOSE or
+   PROCEDURE EXPOSE. SYMBOL of the bare stem name alone creates nothing. */
 say 'a' symbol('W.')
 drop w.1
 say 'b' symbol('W.') symbol('W.1') symbol('W.2')
@@ -30,6 +30,10 @@ o = .k~new
 o~r
 o~s
 call t2
+call p3; say 'after p3' symbol('C3.')
+lst = 'x'
+call p4; say 'after p4' symbol('D4.')
+o~x
 signal on novalue
 say z9.1
 exit
@@ -42,10 +46,18 @@ t2: procedure
   drop u.5
   say 'u' symbol('U.') .context~variables~items
   return
+p3: procedure expose c3.
+  say 'p3 in' symbol('C3.')
+  return
+p4: procedure expose (lst) d4.
+  return
 ::class k
 ::method r
   expose a2.
   say 'r' a2.1 symbol('A2.')
+::method x
+  expose s3.
+  say 'x' symbol('S3.')
 ::method s
   expose a2.
   say 's' symbol('A2.') a2.~items .context~variables~hasIndex('A2.')

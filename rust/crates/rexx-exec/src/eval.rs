@@ -909,6 +909,25 @@ impl Interp {
         }
     }
 
+    /// A concatenation whose left operand is a reference to an object: the
+    /// reference's own concatenation method joins its string value, the
+    /// referenced value's `request('STRING')` (rexxref fundclasses.xml, the
+    /// Object concatenation methods; utilityclasses.xml, VariableReference
+    /// `request`), rather than the operator being sent on to that value.
+    #[cold]
+    #[inline(never)]
+    fn concat_reference(
+        &mut self,
+        op: Operator,
+        left: ObjRef,
+        right: ObjRef,
+    ) -> Result<ObjRef, Failure> {
+        let left = self.required_string_value(left)?;
+        let right = self.required_string_operand(right, op)?;
+        let separator = (op == Operator::Blank).then_some(b' ');
+        self.concat_values(left, right, separator)
+    }
+
     /// The shared body of `||`/`Abuttal` (no separator) and `Blank` (one
     /// space).
     fn concat_values(
@@ -1310,6 +1329,9 @@ impl Interp {
         // converted at all: measured, `.array + 1` is 97.1 where `1 + .array`
         // is 41.1, and `eval.rs`'s `object_operand_tests` is that half.
         if let Some(target) = self.operator_message_receiver(left) {
+            if is_concatenation(op) && self.as_variable_reference(left).is_some() {
+                return self.concat_reference(op, left, right);
+            }
             return self.send_operator(op.spelling(), target, &[Some(right)]);
         }
         // **A string or number compared with `.nil` answers without reading
