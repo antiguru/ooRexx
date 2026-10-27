@@ -1750,6 +1750,79 @@ fn a_long_chain_of_stem_subclass_instances_is_walked_once() {
     );
 }
 
+/// A message a stem forwards costs the hops it takes and nothing of the chain
+/// beyond them: 20000 `Stem` subclass instances each forwarding `foo` one hop
+/// to the next, sent three times each, end well inside the thread's timeout,
+/// where a walk of the whole chain at each forward would not.
+#[test]
+fn a_forward_answered_after_one_hop_costs_one_hop() {
+    let source = b"as = .array~new(20000)\nfirst = .a~new; t = first\ndo i = 1 to 20000\n  as[i] = t\n\
+                   b = .b~new; b~id = i\n  t[] = b\n  if i < 20000 then do; u = .a~new; b[] = u; t = u; end\n\
+                   else b[] = 'leaf'\nend\ns = 0\ndo 3\n  do i = 1 to 20000\n    s = s + as[i]~foo\n  end\nend\n\
+                   say 'sum' s\n::class a subclass stem\n::class b subclass stem\n::attribute id\n\
+                   ::method foo\n  return self~id\n"
+        .to_vec();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let outcome = run_program("/w/h.rex", source, crate::Invocation::none());
+        let _ = sender.send(outcome);
+    });
+    let outcome = receiver
+        .recv_timeout(std::time::Duration::from_secs(20))
+        .unwrap_or_else(|_| panic!("the forwards did not end"));
+    assert_eq!(
+        outcome.exit_code,
+        0,
+        "{}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "sum 600030000\n");
+}
+
+/// A cycle a stem's value makes while the stem forwards to it, inside the
+/// forward, is 11.1 as soon as the forwards come round, whether the cycle is
+/// a subclass instance's own default, a stem's reference to itself, a
+/// reference to that stem, a `REQUEST`, a `send`, a message object, a
+/// traced method or a conversion. The oracle hangs on these shapes
+/// (`corpus/oracle-crashes.txt`), so each run is bounded by a thread's
+/// timeout.
+#[test]
+fn a_cycle_made_inside_a_forward_is_insufficient_stack() {
+    let bodies = [
+        "t = .m~new; t[] = t; return t~bar",
+        "x. = >x.; return x.~bar",
+        "x. = >x.; return x.~request('foo')",
+        "x. = >x.; return x.~send('BAR')",
+        "x. = >x.; return .message~new(x., 'BAR')~send",
+        "trace i; x. = >x.; return x.~bar",
+        "x. = >x.; q = >x.; return q~bar",
+        "t = .m~new; t[] = >t; return t~bar",
+        "x. = >x.; return length(x.)",
+    ];
+    for body in bodies {
+        let source = format!(
+            "signal on syntax\ns. = .o~new\nsay 'made'\nsay s.~foo\nsay 'end'\nexit\n\
+             syntax: say 'SYNTAX' condition('O')~code; exit\n::class o\n::method unknown\n  {body}\n\
+             ::class m subclass stem\n"
+        )
+        .into_bytes();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let outcome = run_program("/w/i.rex", source, crate::Invocation::none());
+            let _ = sender.send(outcome);
+        });
+        let outcome = receiver
+            .recv_timeout(std::time::Duration::from_secs(20))
+            .unwrap_or_else(|_| panic!("{body:?} did not end"));
+        assert_eq!(outcome.exit_code, 0, "{body:?}");
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stdout),
+            "made\nSYNTAX 11.1\n",
+            "{body:?}"
+        );
+    }
+}
+
 /// A message forwarded through a reference goes to the value the reference
 /// names, a stem whose default is cyclic included: the stem answers what it
 /// answers without its default, and only a conversion of it is 11.1.

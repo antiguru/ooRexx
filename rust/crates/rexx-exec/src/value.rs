@@ -1259,25 +1259,33 @@ impl Interp {
     }
 
     /// Runs `forward`, a message the stem `receiver` forwards to its value.
-    /// The outermost forward walks the chain once: a value that leads back
-    /// to the stem would forward without end, and is 11.1, the error
-    /// unbounded recursion answers. Each forward inside it checks the stack
-    /// instead, which ends a chain made cyclic underneath that walk the way
-    /// an expression level does.
+    /// A value that leads back to the stem forwards without end, which is
+    /// 11.1, the error unbounded recursion answers: the forwards nested in
+    /// one another are counted, the one at each power of two is remembered
+    /// (its receiver and activation depth), and a forward inside it that
+    /// repeats that pair, with no activation of its own between, is the
+    /// cycle come round. Nothing walks the chain, so a forward answered after
+    /// one hop costs one hop. The stack is checked as an expression level
+    /// checks it, for a chain that grows under the forwards.
     pub(crate) fn forwarded<T>(
         &mut self,
         anchor: *const T,
         receiver: ObjRef,
         forward: impl FnOnce(&mut Self) -> Result<Option<ObjRef>, Failure>,
     ) -> Result<Option<ObjRef>, Failure> {
-        if (self.stem_forwarding == 0 && self.chain_is_cyclic(receiver))
-            || self.stack_exhausted(anchor)
-        {
+        let depth = self.activity.forwards + 1;
+        let at = (receiver, self.activation_depth());
+        let saved = self.activity.forward_anchor;
+        if (!depth.is_power_of_two() && saved == Some(at)) || self.stack_exhausted(anchor) {
             return Err(crate::error::Raised::insufficient_stack().into());
         }
-        self.stem_forwarding += 1;
+        if depth.is_power_of_two() {
+            self.activity.forward_anchor = Some(at);
+        }
+        self.activity.forwards = depth;
         let result = forward(self);
-        self.stem_forwarding -= 1;
+        self.activity.forwards = depth - 1;
+        self.activity.forward_anchor = saved;
         result
     }
 

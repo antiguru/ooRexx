@@ -252,6 +252,14 @@ pub(crate) struct Activity {
     /// Current `eval` recursion depth, and the deepest it has reached.
     pub(crate) depth: usize,
     pub(crate) max_depth: usize,
+    /// How many messages stems are forwarding to their values, one inside
+    /// the other ([`crate::Interp::forwarded`]).
+    pub(crate) forwards: usize,
+    /// The receiver and activation depth of the forward at the last power of
+    /// two of [`Activity::forwards`]: a forward inside it from that receiver
+    /// at that depth, with no activation of its own between, repeats it
+    /// without end.
+    pub(crate) forward_anchor: Option<(ObjRef, usize)>,
     /// The depth-1 address of the chain currently being evaluated, kept aside
     /// until that chain turns out to be the deepest one.
     pub(crate) stack_entry: usize,
@@ -498,6 +506,8 @@ impl Activity {
             routing_trace: false,
             depth: 0,
             max_depth: 0,
+            forwards: 0,
+            forward_anchor: None,
             stack_entry: 0,
             stack_first: 0,
             stack_deepest: 0,
@@ -650,6 +660,11 @@ impl Activity {
             routing_trace: _,
             depth: _,
             max_depth: _,
+            forwards: _,
+            // The receiver of a forward still running, rooted by that send
+            // too; handed over so the handle it is compared with never names
+            // a slot the collector has freed.
+            forward_anchor,
             stack_entry: _,
             stack_first: _,
             stack_deepest: _,
@@ -710,6 +725,7 @@ impl Activity {
         out.extend(*failure_frame);
         out.extend(failure_frames.iter().copied());
         out.extend(failed_sends.iter().copied());
+        out.extend(forward_anchor.map(|(receiver, _)| receiver));
         match spawner {
             Some(Spawner::Frame {
                 frame: Some((frame, executable)),

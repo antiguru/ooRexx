@@ -1810,9 +1810,6 @@ struct Interp {
     /// Whether the required-string protocol can answer anything other than
     /// the value it was handed -- `Interp::required_string_value`'s gate.
     reqstr_armed: bool,
-    /// How many messages stems are forwarding to their values, one inside
-    /// the other ([`Interp::forwarded`]).
-    stem_forwarding: u32,
     /// Whether anything in this run could take `LOSTDIGITS`: a `SIGNAL ON
     /// LOSTDIGITS` or `SIGNAL ON ANY` trap, an installed `::OPTIONS ...
     /// LOSTDIGITS SYNTAX` or a `Package~options` write. It only ever sets.
@@ -2449,7 +2446,6 @@ impl Interp {
             command_words: Vec::new(),
             command_words_base: Some(1),
             reqstr_armed: false,
-            stem_forwarding: 0,
             lostdigits_armed: false,
             program_path: Vec::new(),
             required_paths: FxHashMap::default(),
@@ -3421,7 +3417,6 @@ impl Interp {
             queue: _,
             input: _,
             reqstr_armed: _,
-            stem_forwarding: _,
             lostdigits_armed: _,
             program_path: _,
             required_paths: _,
