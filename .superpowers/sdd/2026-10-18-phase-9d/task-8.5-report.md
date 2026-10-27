@@ -326,3 +326,109 @@ dispatch in `bind_exposed` (+2 instructions per exposed name, the second shape t
 in `classify_string_conversion` (the reference arm's lookup, inline). `074ada1da` matches the shape
 once with the simple name first and moves the reference arm out of line (`reference_conversion`);
 the one-round check of those programs is `r1/callgrind-r1try1.txt`, then the full run above.
+
+## Fix round 2
+
+Brief `task-8.5-fix-r2.md`, re-review `task-8.5-rereview-r1.md`. Code `b21493ec6`; records
+`t8.5/r2/`. Probes in `r2/probes/` (the re-review's `pos.rex`, `ns2.rex`, `untrapped.rex`,
+`meth.rex`, `instr.rex`, `tr.rex`, and `unit_positions.rex`, the unit test's program as a file),
+each with oracle (`.o.*`), base `6e0bf5e5b` (`.b.*`) and head (`.t.*`) outputs, the run directory
+normalised to `RUNDIR` in stderr.
+
+**1. Important 1: every required-string position a reference reaches.** The behaviour is kept
+(controller ruling 2026-10-27, inside "Rule everywhere"). Each position, its rexxref rule, and the
+head answer for a reference whose value's `makeString` answers the string named (`unit_positions.rex`
+and `variable_reference_forwarded_string.rex`; oracle and base in brackets where they differ):
+
+| position | rexxref | head | oracle / base |
+|---|---|---|---|
+| right operand of a comparison with a string receiver | provide.xml:751-752 "Rexx dyadic operators when the receiving object ... is a string", :798-800 for String's comparison methods | `'kmake' = (>k)` and `==` are `1` | `0` / `0` |
+| right operand of arithmetic | the same | `1 + (>m)` with `5` is `6` | `6` / 41.1 |
+| String method arguments | provide.xml:807-810 "For all other methods: ... request("STRING") ... If request returns .nil, the method raises an error" | `pos` `2`, `changestr` `x-x`, `append` `abkmake`, `compareTo` `0`, `startsWith` `1`, `match` `1`; with no string value 88.909 | 88.909 on `pos`/`changestr`/`compareTo`/`startsWith`/`match` / `0 xkmakex aba KMAKE 1 0 0`, and 97.1 with no string value |
+| DO count | provide.xml:727-729 "DO statements containing exprr or exprf" | `do (>m)` runs 5 times | 26.2 / 26.2 |
+| INTERPRET | :739 "Instruction strings on INTERPRET instructions" | runs `say 'interpreted'` | runs `a KCODE` |
+| ADDRESS command | :731 "Commands to external environments" | `exit 3`, rc 3 | rc 127 |
+| PUSH | :743 "Data queue strings on PUSH and QUEUE instructions" | `push KMAKE` | `push A KMAKE` |
+| compound tail | :730 "Substituted values in compound variable names" | `X.kmake` | `X.a KMAKE` |
+| NUMERIC DIGITS | :740 "DIGITS, FORM, and FUZZ values on NUMERIC instructions" | `digits 5` | `5` / 26.5 |
+| TRACE VALUE | :746 "Trace settings on TRACE VALUE instructions" | `trace R` | `trace A` |
+| SIGNAL VALUE | :745 "Label names on SIGNAL VALUE instructions" | reaches `KMAKE:` | label `a KLABEL` not found |
+| explicit concatenation message to the reference | fundclasses.xml:2683 "the receiver object's string value", the reference's being its value's | `(>e)~'||'('x')` is `x`, `(>k)~' '('y')` is `kmake y` | `an Arrayx`, `a KMAKE y` |
+
+No position's rexxref text gives it a rule other than `request('STRING')`. Compound tails and TRACE
+VALUE are in provide.xml's list (:730, :746); TRACE's own text reads only an option's first letter
+(instrc.xml:3511), `R` here, which is what head answers. A TRACE VALUE answer that is a number is 24.901 outside
+interactive debug, on head as on the oracle for a literal. The ruled positions of fix round 1 (either
+operand of `||`, abuttal and blank, SAY, builtin arguments, PARSE VALUE and VAR) are unchanged.
+
+Witnesses: the oracle agrees with head on arithmetic, NUMERIC DIGITS, and NOSTRING in arithmetic and
+in `=`'s right operand, so those are the new corpus program `lang/variable_reference_forwarded_string.rex`
+(in `phase-9.txt`, with its `sourceline_oracle` file). At base it differs on stdout and stderr (41.1,
+`r2/witnesses/variable_reference_forwarded_string.base.txt`); at head it matches on all descriptors.
+The others are `tests::a_references_string_value_reaches_every_required_string_position`, which fails
+at base (`r2/witnesses/unit-tests-base-6e0bf5e5b.txt`, with fix round 1's tests).
+
+**2. Important 2: block D's cause, and NOSTRING.** NOSTRING now names the referenced value
+(controller ruling): a reference whose value has no string value stands for that value once the
+conversion falls back (`conversion_subject`, `dispatch/reqstr.rs`), so the condition's object is the
+value and its description the value's `STRING` answer, and an untrapped conversion reads that answer.
+rexxref condtra.xml gives NOSTRING's ADDITIONAL as "The object that caused the NOSTRING condition"
+and DESCRIPTION as "The readable string representation of the object causing the NOSTRING condition";
+neither names the reference. Measured: `ns2.rex` head `n say:   NOSTRING nstr NSTR` and `d say:
+NOSTRING a Directory Directory` in every position, the oracle's answer for `addR` and `cmpR`.
+`a_reference_raises_nostring_only_where_its_value_has_no_string_value` now expects `NOSTRING a
+Directory Directory`, and `a_references_string_value_is_its_referenced_values_in_every_position` the
+value's `STRING` answer (`nstr`) for an object with no string value. Block D below replaces fix round
+1's.
+
+**Deviation candidate D (replaces fix round 1's). A variable reference's string value is its
+referenced value's.** Rule: a string value is what `request("STRING")` answers (rexxref provide.xml:758,
+"Required String Values", whose list :727-752 names each position below); a concatenation joins "the
+receiver object's string value" (fundclasses.xml:2683); a String method's string argument is
+`request("STRING")`, an error where that is `.nil` (provide.xml:807-810); a VariableReference's
+`request` "Forwards to the request method of the referenced variable" (utilityclasses.xml:12631-12632).
+So in every required-string position a reference's string value is the referenced value's
+`request('STRING')`, NOSTRING is raised only where that answers none, and then names the referenced
+value as its object and that value's `STRING` answer as its description (condtra.xml, NOSTRING).
+ORACLE BUG: `VariableReference::stringValue` answers the referenced value's C++ `stringValue()`
+(`VariableReference.cpp:258-261`), its default name, while `VariableReference::request` forwards to the
+value's `request` (`:364-370`). The oracle takes the first, with NOSTRING raised for every reference and
+naming the reference, in SAY, builtin arguments, either operand of concatenation, abuttal and blank,
+PARSE VALUE and VAR, a comparison's right operand where the value has a string value, String method
+arguments (where it raises 88.909), INTERPRET, a DO count, ADDRESS, PUSH, compound tails, SIGNAL VALUE,
+TRACE VALUE and an explicit concatenation message. It already forwards to the value, as this crate
+does, in an arithmetic operand, NUMERIC DIGITS, and a comparison's right operand where the value has
+no string value (NOSTRING naming the value, `ns2.rex` `addR` and `cmpR`); a strict comparison's right
+operand there names the reference (`"x" == (>d)`, `unit_positions.rex`). Measured:
+`t8.5/r1/probes/varref_string_positions.rex`, `t8.5/r1/probes/varref_nostring.rex`,
+`t8.5/r2/probes/pos.rex`, `ns2.rex`, `untrapped.rex`, `meth.rex`, `instr.rex`, `tr.rex`,
+`unit_positions.rex`, and `t8.5/probes/varref_concat_matrix.rex`. Witnesses (`rust/crates/rexx-exec/src/tests.rs`):
+`tests::a_references_string_value_is_its_referenced_values_in_every_position`,
+`tests::a_references_string_value_reaches_every_required_string_position`,
+`tests::a_reference_raises_nostring_only_where_its_value_has_no_string_value`; and
+`rust/corpus/lang/variable_reference_forwarded_string.rex` for the positions the oracle forwards.
+
+**3. Minor 1.** `local_novalue_hook.rex`'s header is re-wrapped (no line over 76 columns,
+`awk 'length > 76'` over it finds none); its line count is unchanged and its `sourceline_oracle` file is
+regenerated.
+
+**Checks** at `b21493ec6`, from `rust/`, `CARGO_INCREMENTAL=0`,
+`CARGO_TARGET_DIR=/tmp/claude-1000/t85-target`, records `r2/final/`:
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` (`checks-fmt.txt`) | 0 |
+| `memcap 16G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` (`checks-clippy.txt`) | 0 |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --lib --test signals --test dispatch_seam --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions` (`checks-touched.txt`) | 0: lib 1194, signals 42, dispatch_seam 6, every table binary passed |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test collect_stress` (`checks-collect-stress.txt`), after the perf run | 0, 74 passed |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`checks-corpus.txt`) | 101: 1201 of 1202, the known `rexxutil_file_date_time.rex` |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-parse --test sourceline_oracle --test errors` (`checks-parse.txt`) | 0 |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test coverage` (`checks-coverage.txt`) | 0 |
+| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../t8.5/r2/final/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`suite/`) | 0; the four tables identical to `t8.5/r1/final/suite/` |
+
+**Perf.** `r2/final/callgrind.txt`: `bench-programs/callgrind.sh -B 0.5 -j 4 -o
+/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.5/r2final base=.../t8.5/rexx-base-6e0bf5e5b
+head=.../t8.5/rexx-head-b21493ec6`, every program, 3 rounds, no SPREAD or OVER flag. Libc subtracted,
+the largest rises are fibfunc +0.0213% and fibcall +0.0209%, as at `074ada1da`; every other program is
+at most +0.0000% or falls (intcall -0.1258%). The new fallback runs only where a conversion found no
+string value.

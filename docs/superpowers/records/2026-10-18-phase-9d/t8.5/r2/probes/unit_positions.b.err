@@ -1,0 +1,10 @@
+/bin/sh: 1: A: not found
+    13 *-* a KCODE
+       >>>   "A KCODE"
+       +++   "RC(127)"
+/bin/sh: 1: a: not found
+    14 *-* address system (>x);
+       >>>   "a KEXIT"
+       +++   "RC(127)"
+    17 *-* say 'trace' trace();
+    17 *-* trace o

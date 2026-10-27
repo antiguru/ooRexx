@@ -1,0 +1,5 @@
+test tests::a_references_string_value_is_its_referenced_values_in_every_position ... FAILED
+test tests::a_references_string_value_reaches_every_required_string_position ... FAILED
+test tests::a_reference_raises_nostring_only_where_its_value_has_no_string_value ... FAILED
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 1190 filtered out; finished in 0.03s
+error: test failed, to rerun pass `-p rexx-exec --lib`

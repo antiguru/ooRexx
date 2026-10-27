@@ -1,0 +1,25 @@
+1 left || an Array<
+2 right || >an Array
+3 left abut an Array<
+4 right abut >an Array
+5 left blank an Array <
+6 right blank > an Array
+7 say:
+an Array
+8 len 8
+9 pos 0
+10 substr a
+11 kmake a KMAKE| |a KMAKE 7
+12 nstr a NSTR| |a NSTR 6
+13 dir a Directory| |a Directory 11
+14 str plain| |plain 5
+15 ~string an Array / a KMAKE / a NSTR
+16 ~makestring kmake
+17 req p
+q
+18 num right 42
+19 num left 42
+20 abs 41 41 29
+21 cmp 1 1 1 1
+22 cmp k 0 0
+rc 0

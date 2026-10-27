@@ -1,0 +1,24 @@
+     3 *-* say 'trace' trace()
+     4 *-* trace o
+     6 *-* y = r || 'z'
+       >V>   R => "a KMAKE"
+       >L>   "z"
+       >O>   "||" => "a KMAKEz"
+       >>>   "a KMAKEz"
+       >=>   Y <= "a KMAKEz"
+     7 *-* z = 'a' r
+       >L>   "a"
+       >V>   R => "a KMAKE"
+       >O>   " " => "a a KMAKE"
+       >>>   "a a KMAKE"
+       >=>   Z <= "a a KMAKE"
+     8 *-* w = 'b' || (>n)
+       >L>   "b"
+       >O>   ">" => "N"
+       >O>   "||" => "ba NSTR"
+       >>>   "ba NSTR"
+       >=>   W <= "ba NSTR"
+     9 *-* trace o
+    10 *-* say d2c(>m + 60) left(>k, 2) copies(>k, 2) reverse(>k) word(>q, 1) words(>q)
+Error 97 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/r2/probes/tr.rex line 10:  Object method not found.
+Error 97.1:  Object "a KNUM" does not understand message "+".

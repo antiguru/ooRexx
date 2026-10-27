@@ -1,0 +1,192 @@
+q say: p
+q
+q lcat: p
+q|
+q rcat: |p
+q
+q labut: p
+q|
+q rabut: |p
+q
+q lblank: p
+q |
+q rblank: | p
+q
+q len: 3
+q pos: 3
+q substr: p
+
+q d2x:   SYNTAX 93.928 D2X value must be a valid whole number; found "p
+q".
+q cmpR: 0 0
+q cmpL: 0 0
+q addR:   SYNTAX 41.1 Nonnumeric value ("an Array") used in arithmetic operation.
+q addL:   SYNTAX 97.1 Object "an Array" does not understand message "+".
+q ~string: an Array
+q ~makestring: p
+q
+q rr-say: p
+q
+q rr-lcat: p
+q|
+q rr-rcat: |p
+q
+q pval: p
+q
+q pvar: p
+q
+k say: kmake
+k lcat: kmake|
+k rcat: |kmake
+k labut: kmake|
+k rabut: |kmake
+k lblank: kmake |
+k rblank: | kmake
+k len: 5
+k pos: 0
+k substr: km
+k d2x:   SYNTAX 93.928 D2X value must be a valid whole number; found "kmake".
+k cmpR: 1 1
+k cmpL: 0 0
+k addR:   SYNTAX 41.1 Nonnumeric value ("a KMAKE") used in arithmetic operation.
+k addL:   SYNTAX 97.1 Object "a KMAKE" does not understand message "+".
+k ~string: a KMAKE
+k ~makestring: kmake
+k rr-say: kmake
+k rr-lcat: kmake|
+k rr-rcat: |kmake
+k pval: kmake
+k pvar: kmake
+m say: 5
+m lcat: 5|
+m rcat: |5
+m labut: 5|
+m rabut: |5
+m lblank: 5 |
+m rblank: | 5
+m len: 1
+m pos: 0
+m substr: 5 
+m d2x: 5
+m cmpR: 0 0
+m cmpL: 0 0
+m addR: 6
+m addL:   SYNTAX 97.1 Object "a KNUM" does not understand message "+".
+m ~string: a KNUM
+m ~makestring: 5
+m rr-say: 5
+m rr-lcat: 5|
+m rr-rcat: |5
+m pval: 5
+m pvar: 5
+n say:   NOSTRING nstr NSTR
+n lcat:   NOSTRING nstr NSTR
+n rcat:   NOSTRING nstr NSTR
+n labut:   NOSTRING nstr NSTR
+n rabut:   NOSTRING nstr NSTR
+n lblank:   NOSTRING nstr NSTR
+n rblank:   NOSTRING nstr NSTR
+n len:   NOSTRING nstr NSTR
+n pos:   NOSTRING nstr NSTR
+n substr:   NOSTRING nstr NSTR
+n d2x:   NOSTRING nstr NSTR
+n cmpR:   NOSTRING nstr NSTR
+n cmpL: 0 0
+n addR:   NOSTRING nstr NSTR
+n addL:   SYNTAX 97.1 Object "a NSTR" does not understand message "+".
+n ~string: a NSTR
+n ~makestring:   SYNTAX 97.1 Object "a NSTR" does not understand message "MAKESTRING".
+n rr-say:   NOSTRING nstr NSTR
+n rr-lcat:   NOSTRING nstr NSTR
+n rr-rcat:   NOSTRING nstr NSTR
+n pval:   NOSTRING nstr NSTR
+n pvar:   NOSTRING nstr NSTR
+d say:   NOSTRING a Directory Directory
+d lcat:   NOSTRING a Directory Directory
+d rcat:   NOSTRING a Directory Directory
+d labut:   NOSTRING a Directory Directory
+d rabut:   NOSTRING a Directory Directory
+d lblank:   NOSTRING a Directory Directory
+d rblank:   NOSTRING a Directory Directory
+d len:   NOSTRING a Directory Directory
+d pos:   NOSTRING a Directory Directory
+d substr:   NOSTRING a Directory Directory
+d d2x:   NOSTRING a Directory Directory
+d cmpR:   NOSTRING a Directory Directory
+d cmpL: 0 0
+d addR:   NOSTRING a Directory Directory
+d addL:   NOSTRING The NIL object Object
+d ~string: a Directory
+d ~makestring:   NOSTRING The NIL object Object
+d rr-say:   NOSTRING a Directory Directory
+d rr-lcat:   NOSTRING a Directory Directory
+d rr-rcat:   NOSTRING a Directory Directory
+d pval:   NOSTRING a Directory Directory
+d pvar:   NOSTRING a Directory Directory
+s say: plain
+s lcat: plain|
+s rcat: |plain
+s labut: plain|
+s rabut: |plain
+s lblank: plain |
+s rblank: | plain
+s len: 5
+s pos: 0
+s substr: pl
+s d2x:   SYNTAX 93.928 D2X value must be a valid whole number; found "plain".
+s cmpR: 0 0
+s cmpL: 0 0
+s addR:   SYNTAX 41.1 Nonnumeric value ("plain") used in arithmetic operation.
+s addL:   SYNTAX 41.1 Nonnumeric value ("plain") used in arithmetic operation.
+s ~string: plain
+s ~makestring: plain
+s rr-say: plain
+s rr-lcat: plain|
+s rr-rcat: |plain
+s pval: plain
+s pvar: plain
+s. say: dflt
+s. lcat: dflt|
+s. rcat: |dflt
+s. labut: dflt|
+s. rabut: |dflt
+s. lblank: dflt |
+s. rblank: | dflt
+s. len: 4
+s. pos: 0
+s. substr: df
+s. d2x:   SYNTAX 93.928 D2X value must be a valid whole number; found "dflt".
+s. cmpR: 0 0
+s. cmpL: 0 0
+s. addR:   SYNTAX 41.1 Nonnumeric value ("dflt") used in arithmetic operation.
+s. addL:   SYNTAX 41.1 Nonnumeric value ("dflt") used in arithmetic operation.
+s. ~string: dflt
+s. ~makestring: dflt
+s. rr-say: dflt
+s. rr-lcat: dflt|
+s. rr-rcat: |dflt
+s. pval: dflt
+s. pvar: dflt
+u say: U
+u lcat: U|
+u rcat: |U
+u labut: U|
+u rabut: |U
+u lblank: U |
+u rblank: | U
+u len: 1
+u pos: 0
+u substr: U 
+u d2x:   SYNTAX 93.928 D2X value must be a valid whole number; found "U".
+u cmpR: 0 0
+u cmpL: 0 0
+u addR:   SYNTAX 41.1 Nonnumeric value ("U") used in arithmetic operation.
+u addL:   SYNTAX 41.1 Nonnumeric value ("U") used in arithmetic operation.
+u ~string: U
+u ~makestring: U
+u rr-say: U
+u rr-lcat: U|
+u rr-rcat: |U
+u pval: U
+u pvar: U
+rc 0

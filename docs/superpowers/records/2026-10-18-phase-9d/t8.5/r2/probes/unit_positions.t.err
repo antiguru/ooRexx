@@ -1,0 +1,3 @@
+    17 *-* say 'trace' trace();
+       >>>   "trace R"
+    17 *-* trace o

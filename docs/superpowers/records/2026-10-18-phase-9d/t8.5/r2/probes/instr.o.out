@@ -1,0 +1,14 @@
+after do
+after interp
+push A KMAKE
+queue an Array
+digits 5
+tail X.a KMAKE
+rc 127
+after interp
+push A KMAKE
+queue an Array
+digits 5
+tail X.a KMAKE
+rc 127
+rc 240

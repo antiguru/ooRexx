@@ -1,0 +1,7 @@
+/bin/sh: 1: A: not found
+     3 *-* a KCODE
+       >>>   "A KCODE"
+       +++   "RC(127)"
+     6 *-* numeric digits (>m);
+Error 26 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/r2/probes/instr.rex line 6:  Invalid whole number.
+Error 26.5:  DIGITS value must be a positive whole number; found "a KNUM".

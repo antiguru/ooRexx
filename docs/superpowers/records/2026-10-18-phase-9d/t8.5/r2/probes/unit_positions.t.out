@@ -1,0 +1,13 @@
+cmp 1 1 1
+meth 2 x-x abkmake 0 1 1
+methn 88.909
+do ddddd
+interpreted
+address 3
+push KMAKE
+tail X.kmake
+trace R
+msg x kmake y
+nostring a Directory Directory
+signal kmake
+rc 0

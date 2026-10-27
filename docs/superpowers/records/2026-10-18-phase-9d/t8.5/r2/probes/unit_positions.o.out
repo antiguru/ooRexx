@@ -1,0 +1,9 @@
+cmp 0 0 1
+methn 88.909
+do address 127
+push A KMAKE
+tail X.a KMAKE
+trace A
+msg an Arrayx a KMAKE y
+nostring a Directory VariableReference
+rc 0

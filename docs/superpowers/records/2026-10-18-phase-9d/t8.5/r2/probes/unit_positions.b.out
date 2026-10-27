@@ -1,0 +1,12 @@
+cmp 0 0 1
+meth 0 xkmakex aba KMAKE 1 0 0
+0
+methn 97.1
+do address 127
+push A KMAKE
+tail X.a KMAKE
+trace A
+msg an Arrayx a KMAKE y
+0
+nostring  Array
+rc 0

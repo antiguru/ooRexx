@@ -1,0 +1,18 @@
+ddddd
+after do
+interp
+after interp
+push KMAKE
+queue p
+q
+digits 5
+tail X.kmake
+rc 127
+after interp
+push KMAKE
+queue p
+q
+digits 5
+tail X.kmake
+rc 127
+rc 240

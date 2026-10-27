@@ -1,0 +1,32 @@
+1 left || p
+q<
+2 right || >p
+q
+3 left abut p
+q<
+4 right abut >p
+q
+5 left blank p
+q <
+6 right blank > p
+q
+7 say:
+p
+q
+8 len 3
+9 pos 3
+10 substr p
+11 kmake kmake| |kmake 5
+12 nstr nstr| |nstr 4
+13 dir a Directory| |a Directory 11
+14 str plain| |plain 5
+15 ~string an Array / a KMAKE / a NSTR
+16 ~makestring kmake
+17 req p
+q
+18 num right 42
+19 num left 42
+20 abs 41 41 29
+21 cmp 1 1 1 1
+22 cmp k 1 1
+rc 0

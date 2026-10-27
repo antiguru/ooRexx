@@ -1,0 +1,20 @@
+'kmake'~equals(>k) -> 0
+'kmake'~equals(>s) -> 1
+'kmake'~equals(k) -> 0
+'KMAKE'~caselessEquals(>k) -> 0
+'KMAKE'~caselessEquals(k) -> 0
+'kmake'~compareTo(>k) -> 1
+'kmake'~compareTo(k) -> 0
+'xkmakex'~pos(>k) -> 0
+'xkmakex'~pos(k) -> 2
+'xkmakex'~changestr(>k, '-') -> xkmakex
+'xkmakex'~changestr(k, '-') -> x-x
+'ab'~append(>k) -> aba KMAKE
+'ab'~append(k) -> abkmake
+'kmake'~'=='(>k) -> 0
+'kmake'~'='(>k) -> 0
+'kmake'~'||'(>k) -> kmakea KMAKE
+'kmake'~startsWith(>k) -> 0
+'kmake'~match(1, >k) -> 0
+'kmake' == (>k) -> 0
+rc 0
