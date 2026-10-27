@@ -215,3 +215,5 @@ Task 8.4: complete (44f1cb56b f84e64ee4 e54ed5724 7fe50bedd bb9cda7b5 402a6c753 
 Task 8.5: dispatched t85-impl (opus), BASE 6e0bf5e5b, brief task-8.5-dispatch.md.
 Task 8.5: DONE_WITH_CONCERNS b69a1babc d7eb10cbc 2589e88b3 42df2784e. Callgrind every program: no rise libc-subtracted (first run at b69a1babc was +0.17% parse, fixed in 2589e88b3). STOPPED variable-reference-concatenation: Deviation proposed (request('STRING') in every position) -> Moritz. Candidates A-C in report. Reviewer t85-review (opus) dispatched.
 Moritz 2026-10-27: variable-reference-concatenation ruled "Rule everywhere, Deviation" (request('STRING') in every position; oracle bug). Goes to Task 8.5 fix round 1 after review.
+Task 8.5 review (t85-review): spec COMPLIANT, quality CHANGES REQUESTED 0C/1I/3M. Concern 2 consistent with candidate C (reviewer). Queue candidate 2 queued into 8.7 (2026-10-27-varref-operator-traceback-line.md); queue candidate 1 (EXPOSE creates the stem) taken into the fix round as Minor 1.
+Task 8.5 fix round 1 (task-8.5-fix-r1.md): I1, M1-M3, the ruled concatenation item (candidate D).
