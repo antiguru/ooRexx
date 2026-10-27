@@ -1751,11 +1751,12 @@ impl Interp {
             }
         }
         let (value, novalue) = if reachable {
-            self.stem_get(&compound.stem, &key)
+            self.stem_get_at(&compound.stem, None, &key)
         } else {
-            (self.text(&resolved), Novalue::Unset)
+            let derived = self.text(&resolved);
+            (self.novalue_answer(derived), Novalue::Unset)
         };
-        let value = self.novalue_check(novalue, value)?;
+        self.novalue_check(novalue, value)?;
         if self.tracing_intermediates() {
             let indent = self.activity.clause_state.current_value_indent;
             let text = self.string_value_text(value);

@@ -3,9 +3,9 @@
    (not its tail pieces), a PARSE VAR source, a DROP or PROCEDURE EXPOSE
    selector, an object variable, a loop control variable and a read inside
    INTERPRET. An answer other than .nil is the value and the variable stays
-   unset; .nil or no answer leaves the derived name and the NOVALUE
-   condition. VALUE, SYMBOL, a bare stem and a variable reference never
-   reach it, nor does .environment~novalue. */
+   unset, and no NOVALUE condition is raised; .nil or no answer leaves the
+   derived name and the NOVALUE condition. VALUE, SYMBOL, a bare stem and a
+   variable reference never reach it, nor does .environment~novalue. */
 .local~novalue = .nv~new
 say 's1' zzz
 say 's2' a.7
@@ -41,9 +41,11 @@ say 's18' yyy
 .local~remove('NOVALUE')
 .environment~novalue = .nv~new
 say 's19' yyy
-.local~novalue = .nilnv~new
+.local~novalue = .nv~new
 signal on novalue
 say 's20' yyy2
+.local~novalue = .nilnv~new
+say 's21' yyy3
 exit
 novalue: say 'NOVALUE cond' condition('d'); exit
 p1: procedure expose (yyy)

@@ -1372,6 +1372,9 @@ struct Interp {
     activity: Activity,
     /// A buffer lent out for building a compound's tail key, and handed back.
     key_buffer: Vec<u8>,
+    /// What a `.local~novalue` hook a read sent came to, answered or failed,
+    /// held from that read to the `novalue_check` after it.
+    novalue_hooked: std::cell::Cell<Option<Result<(), Failure>>>,
     /// Buffers lent out for a `PARSE` instruction's source strings, and
     /// handed back when the template walk is done with them.
     parse_buffers: Vec<Vec<u8>>,
@@ -2312,6 +2315,7 @@ impl Interp {
             roots: RootSet::new(),
             activity: Activity::new(),
             key_buffer: Vec::new(),
+            novalue_hooked: std::cell::Cell::new(None),
             parse_buffers: Vec::new(),
             text_scratch: [0; crate::value::TEXT_SCRATCH],
             nil_name: None,
@@ -3238,6 +3242,9 @@ impl Interp {
             roots: _,
             activity,
             key_buffer: _,
+            // Held only from a read to the check right after it, which
+            // allocates nothing in between.
+            novalue_hooked: _,
             parse_buffers: _,
             text_scratch: _,
             nil_name: _,

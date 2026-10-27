@@ -293,15 +293,30 @@ impl Interp {
     /// derived-name exits below -- no object at all, or an object with
     /// nothing at this key -- and measured against the oracle both count,
     /// since `signal on novalue` traps on `say zunset.1` whether or not the
-    /// stem itself has ever been assigned.
+    /// stem itself has ever been assigned. This read sends the
+    /// `.local~novalue` hook nothing: it is an inquiry's (`SYMBOL`, `VALUE`,
+    /// the native API's).
     pub(crate) fn stem_get(&mut self, stem_name: &[u8], key: &[u8]) -> (ObjRef, Novalue) {
-        self.stem_get_at(stem_name, None, key)
+        self.stem_lookup::<false>(stem_name, None, key)
     }
 
     /// [`Interp::stem_get`] with the stem's slot already in hand, which is
     /// what `CompoundName::stem_at` carries when the plan that recorded the
-    /// entry assigned one. [`Interp::stem_slot`] is what `at` means here.
+    /// entry assigned one. [`Interp::stem_slot`] is what `at` means here. An
+    /// unset tail's value is [`Interp::novalue_answer`]'s: this is an
+    /// expression's read.
     pub(crate) fn stem_get_at(
+        &mut self,
+        stem_name: &[u8],
+        at: Option<usize>,
+        key: &[u8],
+    ) -> (ObjRef, Novalue) {
+        self.stem_lookup::<true>(stem_name, at, key)
+    }
+
+    /// [`Interp::stem_get_at`], sending the hook only where `HOOK` holds.
+    #[inline(always)]
+    fn stem_lookup<const HOOK: bool>(
         &mut self,
         stem_name: &[u8],
         at: Option<usize>,
@@ -311,11 +326,11 @@ impl Interp {
         let frame = self.activation().frame;
         let stem_value = match self.variable(frame, slot) {
             Some(v) => v,
-            // No object at all: the read creates the stem variable, and the
-            // read site's own spelling is all there is to derive from.
             None => {
-                self.create_stem_variable(frame, slot, stem_name);
-                return (self.derived_tail_name(stem_name, key), Novalue::Unset);
+                return (
+                    self.tail_of_unused_stem::<HOOK>(stem_name, key),
+                    Novalue::Unset,
+                );
             }
         };
 
@@ -351,16 +366,45 @@ impl Interp {
             // An object exists but this key does not resolve: derive from
             // the OBJECT's own name, not the read site's -- see this
             // function's doc comment for why the two can differ.
-            None => {
-                let object_name = {
-                    let object = self.heap.get(stem_value).expect("a live value");
-                    let Body::Stem { name, .. } = &object.body else {
-                        unreachable!("the same object matched Body::Stem a moment ago");
-                    };
-                    name.clone()
-                };
-                (self.derived_tail_name(&object_name, key), Novalue::Unset)
-            }
+            None => (self.unset_tail::<HOOK>(stem_value, key), Novalue::Unset),
+        }
+    }
+
+    /// The value of an unset tail of `stem`, derived from the object's own
+    /// name, as [`Interp::novalue_answer`] answers it where `HOOK` holds.
+    #[cold]
+    #[inline(never)]
+    fn unset_tail<const HOOK: bool>(&mut self, stem: ObjRef, key: &[u8]) -> ObjRef {
+        let object_name = {
+            let object = self.heap.get(stem).expect("a live value");
+            let Body::Stem { name, .. } = &object.body else {
+                unreachable!("the stem a read found is a Body::Stem");
+            };
+            name.clone()
+        };
+        let derived = self.derived_tail_name(&object_name, key);
+        if HOOK {
+            self.novalue_answer(derived)
+        } else {
+            derived
+        }
+    }
+
+    /// [`Interp::stem_lookup`] where the stem's slot holds no stem: the read
+    /// creates the stem variable, and the read site's own spelling is all
+    /// there is to derive from. The slot is found again by name, which
+    /// [`Interp::stem_slot`]'s tripwire holds to the one the lookup used.
+    #[cold]
+    #[inline(never)]
+    fn tail_of_unused_stem<const HOOK: bool>(&mut self, stem_name: &[u8], key: &[u8]) -> ObjRef {
+        let slot = self.slot_of(stem_name);
+        let frame = self.activation().frame;
+        self.create_stem_variable(frame, slot, stem_name);
+        let derived = self.derived_tail_name(stem_name, key);
+        if HOOK {
+            self.novalue_answer(derived)
+        } else {
+            derived
         }
     }
 

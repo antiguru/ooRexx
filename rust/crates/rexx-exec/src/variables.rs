@@ -373,7 +373,7 @@ impl Interp {
         let frame = self.activation().frame;
         match self.variable(frame, slot) {
             Some(value) => (value, Novalue::Set),
-            None => (self.derived_name(code, id), Novalue::Unset),
+            None => (self.unset_read(code, id), Novalue::Unset),
         }
     }
 
@@ -389,17 +389,19 @@ impl Interp {
         let frame = self.activation().frame;
         match self.variable(frame, slot) {
             Some(value) => (value, Novalue::Set),
-            None => (self.derived_name(code, id), Novalue::Unset),
+            None => (self.unset_read(code, id), Novalue::Unset),
         }
     }
 
     /// What an uninitialised read yields: the derived name, which for a
-    /// simple variable is its own upcased spelling.
+    /// simple variable is its own upcased spelling, as
+    /// [`Interp::novalue_answer`] answers it.
     #[cold]
     #[inline(never)]
-    fn derived_name(&mut self, code: &Code<'_>, id: SymbolId) -> ObjRef {
+    fn unset_read(&mut self, code: &Code<'_>, id: SymbolId) -> ObjRef {
         let derived = code.symbols.name(id).as_bytes();
-        self.text(derived)
+        let derived = self.text(derived);
+        self.novalue_answer(derived)
     }
 }
 

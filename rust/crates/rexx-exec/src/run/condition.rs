@@ -175,39 +175,33 @@ impl Interp {
         }
     }
 
-    /// The value a variable read answers: `read` itself when the variable is
-    /// set, and otherwise what an uninitialised read comes to -- a `NOVALUE`
-    /// condition when this activation has a `NOVALUE` trap that could take
-    /// it.
+    /// Turns an uninitialised variable read into a `NOVALUE` condition --
+    /// but only when this activation has a `NOVALUE` trap that could take
+    /// it -- or into the failure of the `.local~novalue` hook the read sent.
     #[inline(always)]
-    pub(crate) fn novalue_check(
-        &mut self,
-        novalue: Novalue,
-        read: ObjRef,
-    ) -> Result<ObjRef, Failure> {
+    pub(crate) fn novalue_check(&self, novalue: Novalue, read: ObjRef) -> Result<(), Failure> {
         if novalue == Novalue::Set {
-            return Ok(read);
+            return Ok(());
         }
         self.novalue_raised(read)
     }
 
-    /// [`Interp::novalue_check`]'s uninitialised half, in
-    /// `RexxActivation::handleNovalueEvent`'s order
-    /// (`RexxActivation.cpp:2645-2674`): `::OPTIONS NOVALUE SYNTAX`'s 98.986,
-    /// then the `.local~novalue` hook, then a raised `NOVALUE`, or else the
+    /// [`Interp::novalue_check`]'s uninitialised half: what the read's
+    /// `.local~novalue` hook came to where the read sent it, and otherwise
+    /// whether the setting in force turns this read into a raised `NOVALUE`,
+    /// into `::OPTIONS NOVALUE SYNTAX`'s 98.986, or into neither -- the
     /// derived name `read_at` already produced.
     #[cold]
     #[inline(never)]
-    fn novalue_raised(&mut self, read: ObjRef) -> Result<ObjRef, Failure> {
-        let signalled = self.trap_for(b"NOVALUE").is_some_and(|trap| !trap.call);
-        if !signalled && self.condition_raises_syntax(b"NOVALUE") {
-            return Err(Raised::unassigned_variable(&self.derived_name_text(read)).into());
+    fn novalue_raised(&self, read: ObjRef) -> Result<(), Failure> {
+        if let Some(hooked) = self.novalue_hooked.take() {
+            return hooked;
         }
-        if let Some(value) = self.novalue_hook(read)? {
-            return Ok(value);
-        }
-        if !signalled {
-            return Ok(read);
+        if self.trap_for(b"NOVALUE").is_none_or(|trap| trap.call) {
+            if self.condition_raises_syntax(b"NOVALUE") {
+                return Err(Raised::unassigned_variable(&self.derived_name_text(read)).into());
+            }
+            return Ok(());
         }
         // The variable's own derived name, which `CONDITION('D')` and the
         // condition object's `DESCRIPTION` both report -- measured, the
@@ -218,6 +212,35 @@ impl Interp {
         let mut raised = Raised::condition(Cow::Borrowed("NOVALUE"));
         raised.description = Some(self.derived_name_text(read));
         Err(raised.into())
+    }
+
+    /// The value of an uninitialised read whose derived name is `derived`,
+    /// in `RexxActivation::handleNovalueEvent`'s order
+    /// (`RexxActivation.cpp:2645-2674`): where `::OPTIONS NOVALUE SYNTAX` is
+    /// about to raise 98.986, `derived`; otherwise the `.local~novalue`
+    /// hook's answer, or `derived` where it answers none. The read is still
+    /// [`Novalue::Unset`]: where the hook answered or failed, that outcome
+    /// waits in `Interp::novalue_hooked` for the `novalue_check` after the
+    /// read.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn novalue_answer(&mut self, derived: ObjRef) -> ObjRef {
+        let syntax = self.trap_for(b"NOVALUE").is_none_or(|trap| trap.call)
+            && self.condition_raises_syntax(b"NOVALUE");
+        if syntax {
+            return derived;
+        }
+        match self.novalue_hook(derived) {
+            Ok(Some(value)) => {
+                self.novalue_hooked.set(Some(Ok(())));
+                value
+            }
+            Ok(None) => derived,
+            Err(failure) => {
+                self.novalue_hooked.set(Some(Err(failure)));
+                derived
+            }
+        }
     }
 
     /// The object `.local` holds under `NOVALUE`, sent `NOVALUE` with the
