@@ -1,0 +1,9 @@
+in p1 VAR LIT
+p1 VAR LIT
+in p2 VAR LIT
+p2 VAR
+in p3 VAR LIT
+p3 VAR LIT LIT
+in p4 VAR
+p4 VAR LIT
+rc 0

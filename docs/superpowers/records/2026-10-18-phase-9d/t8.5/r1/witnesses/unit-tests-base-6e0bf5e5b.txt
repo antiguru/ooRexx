@@ -1,0 +1,8 @@
+test tests::a_reference_raises_nostring_only_where_its_value_has_no_string_value ... FAILED
+test tests::a_references_string_value_is_its_referenced_values_in_every_position ... FAILED
+  left: "p\nqx\n8\nd a Directory\n"
+ right: "p\nqx\n3\nNOSTRING a Directory VariableReference\n"
+  left: "q p\nq| p\nq| p\nq | |an Array |an Array | an Array 8\no kmake| kmake| kmake | |a K |a K | a K 3\nn nstr| nstr| nstr | |a N |a N | a N 3\ne | |  | |an Array |an Array | an Array 8\nan Array\n"
+ right: "q p\nq| p\nq| p\nq | |p\nq |p\nq | p\nq 3\no kmake| kmake| kmake | |kmake |kmake | kmake 5\nn a N| a N| a N | |a N |a N | a N 3\ne | |  | | | |  0\np\nq\n"
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 1190 filtered out; finished in 0.02s
+error: test failed, to rerun pass `-p rexx-exec --lib`

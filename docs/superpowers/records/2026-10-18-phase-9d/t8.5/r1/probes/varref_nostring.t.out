@@ -1,0 +1,6 @@
+p
+q
+o kmake 5
+qq p,qx
+NOSTRING 2 a Directory VariableReference
+rc 0

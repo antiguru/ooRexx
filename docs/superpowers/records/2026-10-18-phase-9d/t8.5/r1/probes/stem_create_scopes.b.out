@@ -1,0 +1,15 @@
+p1 LIT
+in p2 VAR LIT
+p2 VAR LIT
+p3 in LIT LIT
+p3 LIT
+d LIT
+n LIT 0
+e VAR LIT
+p4 VAR
+f VAR
+g LIT
+h LIT
+i LIT LIT
+v 0 0 0
+rc 0

@@ -1,0 +1,59 @@
+out: DIFF
+2c2
+< b VAR LIT LIT
+---
+> b LIT LIT LIT
+5,6c5,6
+< d VAR
+< e VAR
+---
+> d LIT
+> e LIT
+8,10c8,10
+< g VAR M.
+< h LIT VAR
+< i VAR
+---
+> g LIT M.
+> h LIT LIT
+> i LIT
+12c12
+< j VAR
+---
+> j LIT
+15,25c15,25
+< l VAR LIT
+< m 1 VAR
+< n 1 1 1 0
+< r A2.1 VAR
+< s VAR 0 1
+< u VAR 1
+< p3 in VAR
+err: same
+rc: same
+--- oracle out
+a LIT
+b VAR LIT LIT
+c VAR LIT
+Y.3
+d VAR
+e VAR
+f VAR
+g VAR M.
+h LIT VAR
+i VAR
+F.1
+j VAR
+k VAR q
+J.1
+l VAR LIT
+m 1 VAR
+n 1 1 1 0
+r A2.1 VAR
+s VAR 0 1
+u VAR 1
+p3 in VAR
+after p3 VAR
+after p4 VAR
+x VAR
+novalue Z9.1 VAR

@@ -1,0 +1,58 @@
+e L|| |
+e Lab |
+e Lbl  |
+e R|| |
+e Rab |
+e Rbl | 
+e len 0  
+
+q L|| p,q|
+q Lab p,q|
+q Lbl p,q |
+q R|| |p,q
+q Rab |p,q
+q Rbl | p,q
+q len 3 p
+p
+q
+o L|| kmake|
+o Lab kmake|
+o Lbl kmake |
+o R|| |kmake
+o Rab |kmake
+o Rbl | kmake
+o len 5 k
+kmake
+n L|| a NOSTR|
+n Lab a NOSTR|
+n Lbl a NOSTR |
+n R|| |a NOSTR
+n Rab |a NOSTR
+n Rbl | a NOSTR
+n len 7 a
+a NOSTR
+d L|| a Directory|
+d Lab a Directory|
+d Lbl a Directory |
+d R|| |a Directory
+d Rab |a Directory
+d Rbl | a Directory
+d len 11 a
+a Directory
+s L|| abc|
+s Lab abc|
+s Lbl abc |
+s R|| |abc
+s Rab |abc
+s Rbl | abc
+s len 3 a
+abc
+u L|| U|
+u Lab U|
+u Lbl U |
+u R|| |U
+u Rab |U
+u Rbl | U
+u len 1 U
+U
+rc 0

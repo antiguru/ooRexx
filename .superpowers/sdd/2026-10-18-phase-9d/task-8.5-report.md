@@ -38,7 +38,7 @@ pieces), `PARSE VAR`, `DROP (v)` and `PROCEDURE EXPOSE (v)` selectors, an object
 control variable and an `INTERPRET` read reach the hook; `VALUE`, `SYMBOL`, a bare stem, a variable
 reference and `.environment~novalue` do not.
 
-**2026-10-19-variable-reference-gaps.md (closed).** Both shapes now match the oracle.
+**2026-10-19-variable-reference-gaps.md (closed).** Each of the item's shapes now matches the oracle.
 * `>a.` on an unset caller stem: a reference uses the stem variable it names, so `variable_reference`
   (`run/call.rs`) creates it first (the same rexxref rule as above); a `USE LOCAL abc.` alias then
   reads `A.1` and the caller's `SYMBOL('a.')` is `VAR` (`t6.8/probes/p5`).
@@ -97,14 +97,16 @@ Unit tests (`src/tests.rs` unless named): `a_drop_list_runs_left_to_right`,
 `an_empty_stems_name_is_compared_by_its_characters`,
 `the_context_variables_list_an_alias_under_its_own_name`,
 `environment::tests::a_package_table_that_cannot_be_made_fails`. Copied into the base tree
-(`witnesses/unit-tests-base-6e0bf5e5b.txt`): the five pins pass at base (the crate already followed
-each rule), and the table test fails there (base answers `Ok(None)`).
+(`witnesses/unit-tests-base-6e0bf5e5b.txt`): the pins pass at base (the crate already followed each
+rule), and the table test fails there (base answers `Ok(None)`).
 
 ## Deviation candidates
 
-**A. A variable list runs left to right.** Rule: rexxref instrc.xml DROP, "Variables are dropped from
-left to right", and a `(name)` subsidiary list is used where it stands; EXPOSE and PROCEDURE EXPOSE
-take the same list. Oracle bug: `LanguageParser::processVariableList` pushes plain names on the front
+**A. A variable list runs left to right.** Rule: rexxref instrc.xml, DROP "Variables are dropped from
+left to right" (:1075), EXPOSE "Variables are exposed in sequence from left to right" (:1228), and
+PROCEDURE EXPOSE "Variables are exposed from left to right" (:2483) and "The variables in a
+subsidiary list are also exposed from left to right" (:2515); a `(name)` subsidiary list is used
+where it stands. Oracle bug: `LanguageParser::processVariableList` pushes plain names on the front
 of `subTerms` (`pushSubTerm`, `InstructionParser.cpp:4495`) and queues `(name)` selectors at the back
 (`subTerms->queue`, `:4523`), while the instruction constructors pop the queue back to front
 (`DropInstruction.cpp:68`; `initializeObjectArray`, `RexxInstruction.hpp:201-207`, for
@@ -226,3 +228,101 @@ run above).
 
 Candidates A, B and C above, and the stopped item's `VariableReference::stringValue`. The controller
 keeps `defects.json`.
+
+## Fix round 1
+
+Brief `task-8.5-fix-r1.md`, review `task-8.5-review.md`. Code `aeb913cff`, `074ada1da` (the second
+keeps the conversion and EXPOSE paths at base cost, see Perf). Records `t8.5/r1/`; probes in
+`r1/probes/` with oracle (`.o.*`), head at `074ada1da` (`.t.*`) and base `6e0bf5e5b` (`.b.*`)
+outputs.
+
+**1. Important 1: the hook's unwitnessed paths.** `corpus/lang/local_novalue_hook.rex` now reads an
+unset tail of an existing stem (`a8.1 = 1; say 's3a' a8.2`, the review's p24) and runs `p5: procedure
+expose c5. (c5.1)` (a reachable compound selector, p16); its `sourceline_oracle` file is regenerated.
+The oracle prints `hook A8.2` / `s3a NV_A8.2` and `hook C5.1` / `s9a VAR`, and head matches on all
+descriptors. Mutants from a `git archive` of `aeb913cff`: with `unset_tail`'s `if HOOK` made `if false
+&& HOOK`, the witness loses `hook A8.2` and prints `s3a A8.2` (`r1/mutants/mutA-unset-tail.txt`); with
+`run.rs`'s reachable selector read back to `stem_get`, it loses `hook C5.1`
+(`r1/mutants/mutB-procedure-selector.txt`).
+
+**2. Minor 1: EXPOSE and PROCEDURE EXPOSE of a stem create the stem variable** (rexxref intro.xml:2562).
+`PROCEDURE EXPOSE` creates the caller's stem where the name's slot holds none, before aliasing it;
+`EXPOSE` creates the object's (`bind_exposed`, through the cold `expose_object_stem`). The
+`create_stem_variable` doc's rule now holds for every use the crate implements. Witness: the same
+corpus program gains `p3: procedure expose c3.`, `p4: procedure expose (lst) d4.` and a method's
+`expose s3.`; the oracle and head print `p3 in VAR`, `after p3 VAR`, `after p4 VAR`, `x VAR`, base
+prints `LIT` on each (`r1/witnesses/compound_use_creates_stem.base.stdout`). The review's probes
+`r1/probes/expose_stem.rex` (p08) and `stem_create_scopes.rex` (p05) match the oracle at head and
+differ at base.
+
+**3. Minor 2.** The two sentences now name no set size ("Each of the item's shapes", "the pins pass at
+base").
+
+**4. Minor 3.** Candidate A cites instrc.xml:1075 (DROP), :1228 (EXPOSE), :2483 and :2515 (PROCEDURE
+EXPOSE and its subsidiary list).
+
+**5. 2026-10-10-variable-reference-concatenation.md (closed, `aeb913cff`).** Ruled by Moritz
+2026-10-27 ("Rule everywhere, Deviation"). The required-string protocol classifies a reference by its
+referenced value (`reference_conversion`, `dispatch/reqstr.rs`), an unset variable by its own name;
+so `SAY`, a builtin argument and a concatenation's right operand read the referenced value's
+`request('STRING')`, and NOSTRING follows that value. A concatenation whose left operand is a
+reference to an object joins the reference's string value (`concat_reference`, `eval.rs`) instead of
+sending the operator on. Creating a reference arms the required-string latch (`variable_reference`,
+and the native API's `surface.rs`), since a reference's rendering is no longer its string value.
+Every position follows the rule at no cost outside the reference path (Perf). Measured
+(`r1/probes/varref_string_positions.rex`, `varref_nostring.rex`, three ways): a reference to `.array~of('p','q')`
+is `p`/`q` in every position on head, `an Array` on the oracle and at base except base's left
+operand; a `makeString` answer `kmake` likewise; an object with only a `STRING` method is `a NOSTR`
+(the reference's `string`) in every position on head, where base's left operand sent the operator
+on and answered `nstr`; `.directory` is `a Directory`. Under `SIGNAL ON NOSTRING`, head raises nothing
+for `say (>q)`, `length(>q)` and `(>q) || 'x'` and raises for `say 'd' (>d)` with the reference as the
+condition's object; the oracle raises on `say (>q)`, and base raises nowhere. No corpus program and no
+suite row changed. Witnesses: `tests::a_references_string_value_is_its_referenced_values_in_every_position`
+and `tests::a_reference_raises_nostring_only_where_its_value_has_no_string_value`; both fail at base
+(`r1/witnesses/unit-tests-base-6e0bf5e5b.txt`).
+
+**Deviation candidate D. A variable reference's string value is its referenced value's.** Rule: a
+string value is what `request("STRING")` answers (rexxref provide.xml:758, "Required String Values",
+which lists SAY data and builtin arguments at :750 and :747, and NOSTRING at :769); a concatenation
+joins "the receiver object's string value" (fundclasses.xml:2683); a VariableReference's `request`
+"Forwards to the request method of the referenced variable" (utilityclasses.xml:12631-12632). So in
+every position, either operand of `||`, abuttal and blank, SAY and builtin arguments, a reference's
+string value is the referenced value's `request('STRING')`, and NOSTRING is raised only where that
+answers none. ORACLE BUG: `VariableReference::stringValue` answers the referenced value's C++
+`stringValue()` (`VariableReference.cpp:258-261`), its default name, while `VariableReference::request`
+forwards to the value's `request` (`:364-370`); the implicit conversion takes the first, so
+`(>q)~request('STRING')` is the array's items while `say (>q)` prints `an Array` and, under `SIGNAL ON
+NOSTRING`, raises NOSTRING. Measured: `r1/probes/varref_string_positions.rex` and
+`r1/probes/varref_nostring.rex` (with `t8.5/probes/varref_concat_matrix.rex` and
+`t8.5/probes/varref_nostring.rex`). Witnesses:
+`tests::a_references_string_value_is_its_referenced_values_in_every_position`,
+`tests::a_reference_raises_nostring_only_where_its_value_has_no_string_value`
+(`rust/crates/rexx-exec/src/tests.rs`).
+
+**Checks** at `074ada1da`, from `rust/`, `CARGO_INCREMENTAL=0`,
+`CARGO_TARGET_DIR=/tmp/claude-1000/t85-target`, records `r1/final/`:
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` (`checks-fmt.txt`) | 0 |
+| `memcap 16G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` (`checks-clippy.txt`) | 0 |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --lib --test signals --test dispatch_seam --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions` (`checks-touched.txt`) | 0: lib 1193, signals 42, dispatch_seam 6, every table binary passed |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test collect_stress` (`checks-collect-stress.txt`), after the perf run | 0, 74 passed |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`checks-corpus.txt`) | 101: 1200 of 1201, the known `rexxutil_file_date_time.rex` |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-parse --test sourceline_oracle --test errors` (`checks-parse.txt`) | 0 |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test coverage` (`checks-coverage.txt`) | 0 |
+| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../t8.5/r1/final/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`suite/`) | 0; the four tables identical to `t8.5/final/suite/` |
+
+**Perf.** `r1/final/callgrind.txt`: `bench-programs/callgrind.sh -B 0.5 -j 4 -o
+/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.5/r1final base=.../t8.5/rexx-base-6e0bf5e5b
+head=.../t8.5/rexx-head-074ada1da`, every program, 3 rounds, no SPREAD or OVER flag. Libc
+subtracted, the largest rises are fibfunc +0.0213% and fibcall +0.0209%; every other program is at
+most +0.0000% or falls (intcall -0.1258%, dirread -0.0304%, alloc -0.0299%). Whole process, the
+largest rise is fibcall +0.0196%.
+
+The first full run, at `aeb913cff` (`r1/callgrind-aeb913cff.txt`), was over budget, libc
+subtracted: dispatch +0.0967%, dirread +0.0758%, alloc +0.0746%, intcall +0.0502%. `cgdiff.py` put
+dispatch in `bind_exposed` (+2 instructions per exposed name, the second shape test) and the others
+in `classify_string_conversion` (the reference arm's lookup, inline). `074ada1da` matches the shape
+once with the simple name first and moves the reference arm out of line (`reference_conversion`);
+the one-round check of those programs is `r1/callgrind-r1try1.txt`, then the full run above.

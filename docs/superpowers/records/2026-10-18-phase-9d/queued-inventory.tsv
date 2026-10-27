@@ -108,7 +108,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-10-uninit-drain-signal-interpret-and-trace.md	divergence	-	closed:e909de2d4	not probed, its probes were in /tmp and are gone; UNINITs never drain and memory grows to 356 MB against 24 MB	closed:e909de2d4
 2026-10-10-upstream-do-to-identity.md	oracle bug	queued-probes/doto/doto.rex:1	not-a-divergence	upstream report; Deviation 25 is the crate's rule	not-a-divergence
 2026-10-10-upstream-zero-pass-do-reexecute.md	oracle bug	queued-probes/z26/z26.rex:1	not-a-divergence	upstream report; Deviation 26 is the crate's rule	not-a-divergence
-2026-10-10-variable-reference-concatenation.md	divergence	queued-probes/b1/b1.rex:1	9d	probe still differs: (>zz) || 'x' drops the reference's string value here	9d
+2026-10-10-variable-reference-concatenation.md	divergence	queued-probes/b1/b1.rex:1	closed:aeb913cff	probe still differs: (>zz) || 'x' drops the reference's string value here	closed:aeb913cff
 2026-10-10-whole-groups-differing-rows-that-agree.md	process	-	closed:rows removed	the TIME and CALL rows it names are gone from DIFFERING (tests/concurrency_tests.rs:2664) and REPLY's stay, as it suggested	closed:rows removed
 2026-10-11-output-lost-on-kill.md	divergence	-	closed:e4bbcbba4	CLOSED in its first line by Phase 9c Task 7, Deviation 40; not re-probed (needs a kill)	closed:e4bbcbba4
 2026-10-12-buffer-copy-uncharged.md	perf	-	phase:9.1	collector accounting under memory pressure; no probe	phase:9.1

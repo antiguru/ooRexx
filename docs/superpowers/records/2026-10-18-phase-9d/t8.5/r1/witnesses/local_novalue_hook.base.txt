@@ -1,0 +1,82 @@
+out: DIFF
+1,8c1,4
+<   hook ZZZ
+< s1 NV_ZZZ
+<   hook A.7
+< s2 NV_A.7
+<   hook B.I
+< s3 NV_B.I
+<   hook A8.2
+< s3a NV_A8.2
+---
+> s1 ZZZ
+> s2 A.7
+> s3 B.I
+> s3a A8.2
+10,15c6,7
+<   hook PPP
+< s5 NV_PPP
+<   hook ZZZ
+< s6 LIT NV_ZZZ
+<   hook ZZZ
+<   hook YYY
+---
+> s5 PPP
+> s6 LIT ZZZ
+18,20c10
+<   hook PZ
+< s9 NV_PZ
+<   hook C5.1
+---
+> s9 PZ
+err: DIFF
+2c2
+<        >>>   "s16 NV_TRC"
+---
+>        >>>   "s16 TRC"
+rc: same
+--- oracle out
+  hook ZZZ
+s1 NV_ZZZ
+  hook A.7
+s2 NV_A.7
+  hook B.I
+s3 NV_B.I
+  hook A8.2
+s3a NV_A8.2
+s4 QQQ
+  hook PPP
+s5 NV_PPP
+  hook ZZZ
+s6 LIT NV_ZZZ
+  hook ZZZ
+  hook YYY
+s7 C.
+s8 D.
+  hook PZ
+s9 NV_PZ
+  hook C5.1
+s9a VAR
+  hook KK
+s10 NV_KK1
+  hook S11
+  hook III
+NV_S11 NV_III
+s12 U1
+  hook OV
+s13 NV_OV
+s14 0
+  hook N
+  hook N
+s15 NV_N
+  hook TRC
+s16 NV_TRC
+  nilhook YYY
+s17 YYY
+  nothing YYY
+s18 YYY
+s19 YYY
+  hook YYY2
+s20 NV_YYY2
+  nilhook YYY3
+NOVALUE cond YYY3
