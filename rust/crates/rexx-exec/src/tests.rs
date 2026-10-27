@@ -1451,3 +1451,26 @@ fn a_condition_raised_again_in_a_constant_expression_keeps_its_position() {
          Error 42.3:  Arithmetic overflow; divisor must not be zero.\n"
     );
 }
+
+/// Under `TRACE`, a run of a `::CONSTANT` expression's method announces its
+/// `>I>` before it waits for a guard another activity holds, as an ordinary
+/// guarded method does.
+#[test]
+fn a_constant_expressions_method_traces_its_entry_before_the_guard_wait() {
+    let outcome = run_program(
+        "/w/t.rex",
+        b".c~define('ZZ', .c~e)\no = .c~new\nm = o~start('hold')\ncall syssleep 0.3\no~zz\n\
+          m~result\n::class c\n::constant e (.context~executable)\n::method hold\n\
+          \x20 call syssleep 0.6\n  say 'hold end'\n::options trace r\n"
+            .to_vec(),
+        crate::Invocation::none(),
+    );
+    let trace = String::from_utf8_lossy(&outcome.stderr);
+    let entry = trace
+        .find(">I> Method \"ZZ\"")
+        .expect("the run announces itself");
+    let held = trace
+        .find("*-* say 'hold end'")
+        .expect("the holder traces its clause");
+    assert!(entry < held, "{trace}");
+}

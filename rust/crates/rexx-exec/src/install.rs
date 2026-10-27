@@ -1082,15 +1082,6 @@ impl Interp {
             match self.eval_constant_expression(id, program, run, index, expr, level) {
                 Ok(value) => self.record_constant_value(id, index, value),
                 Err(failure) => {
-                    // A condition raised again below the expression, by a
-                    // `result` it waited on, keeps the position and echoes it
-                    // was raised with: no level it leaves records a site.
-                    if matches!(
-                        self.activity.failure_site,
-                        Some(FailureSite::Reraised { .. })
-                    ) {
-                        return Err(failure);
-                    }
                     // Two clause echoes, innermost first, matching the
                     // oracle's own report exactly (measured, `::class K` /
                     // `::constant c (1/0)`):
@@ -1103,10 +1094,10 @@ impl Interp {
                     //      6 *-* ::constant c (self~m)
                     //      3 *-* ::class K
                     // ```
-                    self.blame_directive(id, program, directive);
                     // `ConstantDirective`'s method runs as `::CONSTANT`.
-                    self.capture_site_frame(&failure, b"METHOD", b"::CONSTANT", &[], id);
-                    self.seal_site_level();
+                    if !self.seal_constant_level(&failure, id, program, index, b"::CONSTANT", &[]) {
+                        return Err(failure);
+                    }
                     self.blame_directive(
                         id,
                         program,
@@ -2743,6 +2734,7 @@ impl Interp {
         self.push_activation(activation);
         // Guarded, as the method object reports, and waited for here: the
         // level runs no clause where a queued wait would be served.
+        self.trace_package_invocation_entry();
         self.reserve_for_method(crate::guards::GuardKey {
             object: receiver,
             scope: class,
@@ -2758,7 +2750,6 @@ impl Interp {
         let super_scope = self.super_scope_of(receiver, class);
         self.set_variable(frame, super_slot, super_scope.unwrap_or(ObjRef::NIL));
         let result = reserved.and_then(|()| {
-            self.trace_package_invocation_entry();
             self.trace_clause(line, 0, &text);
             let code = Code {
                 body: &empty_body,
@@ -2826,7 +2817,42 @@ impl Interp {
             None,
         );
         self.install_call = outer;
-        evaluated.map(|_| None)
+        match evaluated {
+            Ok(_) => Ok(None),
+            Err(failure) => {
+                // The level's own echo and frame, as at install, without the
+                // `::CLASS` echo only installing adds.
+                let (id, directive) = (generated.program, generated.directive);
+                self.seal_constant_level(&failure, id, &program, directive, name, args);
+                Err(failure)
+            }
+        }
+    }
+
+    /// Records the `::CONSTANT` level `failure` leaves as a site of its own:
+    /// the directive's clause, blamed and echoed, and its `METHOD` frame named
+    /// `name`. Answers whether it recorded one: a condition raised again below
+    /// the expression, by a `result` it waited on, keeps the position and
+    /// echoes it was raised with, and no level it leaves records a site.
+    fn seal_constant_level(
+        &mut self,
+        failure: &Failure,
+        id: ProgramId,
+        program: &Rc<Program>,
+        directive: usize,
+        name: &[u8],
+        args: &[Option<ObjRef>],
+    ) -> bool {
+        if matches!(
+            self.activity.failure_site,
+            Some(FailureSite::Reraised { .. })
+        ) {
+            return false;
+        }
+        self.blame_directive(id, program, &program.directives[directive]);
+        self.capture_site_frame(failure, b"METHOD", name, args, id);
+        self.seal_site_level();
+        true
     }
 
     /// The `Method` a `::CONSTANT` expression's evaluation runs as: a fresh

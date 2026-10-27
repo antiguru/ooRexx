@@ -397,3 +397,5 @@ lang/constant_expression_method_runs.rex
 # 9d Task 8.4 fix round 2: a ::CONSTANT expression Method run under any scope and named by its message.
 lang/constant_expression_method_scopes.rex
 lang/constant_expression_method_trace.rex
+# 9d Task 8.4 fix round 3: a failing run of a ::CONSTANT expression Method is a level of its own.
+lang/constant_expression_method_fails.rex
