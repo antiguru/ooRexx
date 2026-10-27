@@ -1229,13 +1229,34 @@ impl Interp {
                 default: Some(default),
                 ..
             } => self.operator_message_receiver(*default),
-            // A cyclic reference answers itself, which `apply_binary` refuses.
-            Body::VarRef(reference) => match self.referent_from(self.referenced_value(reference)) {
-                Referent::Value(referenced) => self.operator_message_receiver(referenced),
-                Referent::Unset(_) => None,
-                Referent::Cycle => Some(value),
-            },
+            Body::VarRef(_) => self.reference_message_receiver(value),
             _ => None,
+        }
+    }
+
+    /// [`Interp::operator_operand_gap`] of the reference `value`: the gap of
+    /// the value its chain ends at. An unset variable reads as its own name, a
+    /// string, and a cyclic reference is refused where it is converted.
+    #[cold]
+    #[inline(never)]
+    fn reference_operand_gap(&self, value: ObjRef) -> Option<&'static str> {
+        match self.referent(value) {
+            Referent::Value(referenced) => self.operator_operand_gap(referenced),
+            Referent::Unset(_) | Referent::Cycle => None,
+        }
+    }
+
+    /// [`Interp::operator_message_receiver`] of the reference `value`: the
+    /// receiver of the value its chain ends at, none for an unset variable,
+    /// and for a cyclic reference the reference, which `apply_binary`
+    /// refuses.
+    #[cold]
+    #[inline(never)]
+    fn reference_message_receiver(&self, value: ObjRef) -> Option<ObjRef> {
+        match self.referent(value) {
+            Referent::Value(referenced) => self.operator_message_receiver(referenced),
+            Referent::Unset(_) => None,
+            Referent::Cycle => Some(value),
         }
     }
 
@@ -1305,11 +1326,7 @@ impl Interp {
             // `97.1 Object "an Array" does not understand message "+".` --
             // the array's own answer, substituting the array rather than the
             // reference.
-            Body::VarRef(reference) => match self.referent_from(self.referenced_value(reference)) {
-                Referent::Value(referenced) => self.operator_operand_gap(referenced),
-                // An unset variable reads as its own name, a string.
-                Referent::Unset(_) | Referent::Cycle => None,
-            },
+            Body::VarRef(_) => self.reference_operand_gap(value),
             _ => None,
         }
     }
@@ -1332,13 +1349,8 @@ impl Interp {
         // converted at all: measured, `.array + 1` is 97.1 where `1 + .array`
         // is 41.1, and `eval.rs`'s `object_operand_tests` is that half.
         if let Some(target) = self.operator_message_receiver(left) {
-            if self.as_variable_reference(left).is_some() {
-                if self.referent(left) == Referent::Cycle {
-                    return Err(Raised::insufficient_stack().into());
-                }
-                if is_concatenation(op) {
-                    return self.concat_reference(op, left, right);
-                }
+            if is_concatenation(op) && self.as_variable_reference(left).is_some() {
+                return self.concat_reference(op, left, right);
             }
             return self.send_operator(op.spelling(), target, &[Some(right)]);
         }

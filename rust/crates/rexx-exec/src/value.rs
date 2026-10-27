@@ -307,7 +307,7 @@ impl Interp {
                 return self.text_len_inner(default);
             }
             Redirect::VarRefValue(referenced) => return self.string_value_text(referenced).len(),
-            Redirect::VarRefUnset(last) => return self.unset_referent_name(value, last).len(),
+            Redirect::VarRefUnset => return self.unset_reference_name(value).len(),
             // Built rather than measured off the object, because an array's
             // string value exists nowhere until something asks for it -- the
             // same position a tagged integer's digits are in, reached one
@@ -566,8 +566,8 @@ impl Interp {
             // which for a simple or stem symbol is the reference's own
             // spelling -- measured, `o = >vr` over an unassigned `vr` prints
             // `VR`.
-            Redirect::VarRefUnset(last) => {
-                return Cow::Owned(self.unset_referent_name(value, last).to_vec());
+            Redirect::VarRefUnset => {
+                return Cow::Owned(self.unset_reference_name(value).to_vec());
             }
             // An array's string value is built here and stored nowhere, so it
             // is `Cow::Owned` and `try_text` answers `None` for one.
@@ -708,12 +708,7 @@ impl Interp {
             // The variable's own bytes, chased here for the stem default's
             // reason one arm up; an unset variable borrows the reference's
             // own name, which is what it renders as.
-            Body::VarRef(reference) => match self.referent_from(self.referenced_value(reference)) {
-                Referent::Value(referenced) if self.array_slots(referenced).is_some() => None,
-                Referent::Value(referenced) => self.try_text(referenced),
-                Referent::Unset(last) => Some(self.unset_referent_name(value, last)),
-                Referent::Cycle => Some(&reference.name),
-            },
+            Body::VarRef(_) => self.reference_try_text(value),
             other => unreachable!(
                 "the value model only creates Text, Num, Stem, Array, Native and Instance, \
                  got {other:?}"
@@ -861,14 +856,7 @@ impl Interp {
             // (`classes/VariableReference.cpp:262`), which is why `>vr + 1`
             // is `6` and not 41.1 -- measured, oracle rc 0. Read before the
             // borrow is taken again, the way the stem redirect is.
-            Body::VarRef(_) => match self.referent(value) {
-                Referent::Value(referenced) => self.number_of(referenced, receiver),
-                // An unset variable reads as its own name, which parses as a
-                // number only if the name spells one -- it cannot, since a
-                // symbol beginning with a digit is a literal. A cycle has no
-                // value to parse.
-                Referent::Unset(_) | Referent::Cycle => Err(NotNumeric),
-            },
+            Body::VarRef(_) => self.reference_number(value, receiver),
             // A `Body::Stem` with `default: None`, the arm the redirect
             // above leaves behind: parses the object's own name, the
             // same fallback `to_text` renders. No cache field
@@ -1042,10 +1030,9 @@ enum Redirect {
     /// `changed`.
     VarRefValue(ObjRef),
     /// The same for a reference whose chain ends at a variable holding
-    /// nothing, which reads as that variable's derived name (the reference
-    /// named, `None` for the one asked), and for a cyclic one, which reads as
-    /// its own.
-    VarRefUnset(Option<ObjRef>),
+    /// nothing, which reads as that variable's derived name, and for a cyclic
+    /// one, which reads as its own ([`Interp::unset_reference_name`]).
+    VarRefUnset,
     /// An array joins its items, which the arm reads back out of the object.
     Array,
     /// An instance nothing has named, which renders as its class's id with an
@@ -1123,8 +1110,7 @@ impl Interp {
     fn reference_redirect(&self, reference: &VarRef) -> Redirect {
         match self.referent_from(self.referenced_value(reference)) {
             Referent::Value(value) => Redirect::VarRefValue(value),
-            Referent::Unset(last) => Redirect::VarRefUnset(last),
-            Referent::Cycle => Redirect::VarRefUnset(None),
+            Referent::Unset(_) | Referent::Cycle => Redirect::VarRefUnset,
         }
     }
 
@@ -1147,6 +1133,8 @@ impl Interp {
     /// reference whose variable holds nothing (`None` standing for the
     /// reference `first` was read from), or a cycle, which a variable holding
     /// a reference to itself, directly or through others, makes.
+    #[cold]
+    #[inline(never)]
     pub(crate) fn referent_from(&self, first: Option<ObjRef>) -> Referent {
         let mut last = None;
         let mut slow = first;
@@ -1171,6 +1159,21 @@ impl Interp {
         }
     }
 
+    /// [`Interp::number_of`] of the reference `value`: the number of the
+    /// value its chain ends at.
+    #[cold]
+    #[inline(never)]
+    fn reference_number(&mut self, value: ObjRef, receiver: bool) -> Result<Number, NotNumeric> {
+        match self.referent(value) {
+            Referent::Value(referenced) => self.number_of(referenced, receiver),
+            // An unset variable reads as its own name, which parses as a
+            // number only if the name spells one -- it cannot, since a symbol
+            // beginning with a digit is a literal. A cycle has no value to
+            // parse.
+            Referent::Unset(_) | Referent::Cycle => Err(NotNumeric),
+        }
+    }
+
     /// [`Interp::referent_from`] for the reference `value`.
     pub(crate) fn referent(&self, value: ObjRef) -> Referent {
         match self.as_variable_reference(value) {
@@ -1179,12 +1182,30 @@ impl Interp {
         }
     }
 
-    /// The name a reference whose chain ends unset renders as: the last
-    /// reference's variable's, or `value`'s own for `None`.
-    fn unset_referent_name(&self, value: ObjRef, last: Option<ObjRef>) -> &[u8] {
-        let reference = last.unwrap_or(value);
+    /// The name the reference `value` renders as where its chain ends at no
+    /// value: the variable holding nothing at the chain's end, or for a cycle
+    /// `value`'s own.
+    #[cold]
+    #[inline(never)]
+    fn unset_reference_name(&self, value: ObjRef) -> &[u8] {
+        let reference = match self.referent(value) {
+            Referent::Unset(Some(last)) => last,
+            _ => value,
+        };
         self.as_variable_reference(reference)
             .map_or(&[][..], |reference| &reference.name)
+    }
+
+    /// [`Interp::try_text`] of the reference `value`: the bytes of the value
+    /// its chain ends at, where they are borrowable, or the name it renders as.
+    #[cold]
+    #[inline(never)]
+    fn reference_try_text(&self, value: ObjRef) -> Option<&[u8]> {
+        match self.referent(value) {
+            Referent::Value(referenced) if self.array_slots(referenced).is_some() => None,
+            Referent::Value(referenced) => self.try_text(referenced),
+            Referent::Unset(_) | Referent::Cycle => Some(self.unset_reference_name(value)),
+        }
     }
 
     /// [`Interp::referenced_value`] for a reference named by its handle, with
