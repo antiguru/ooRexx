@@ -261,7 +261,7 @@ base").
 **4. Minor 3.** Candidate A cites instrc.xml:1075 (DROP), :1228 (EXPOSE), :2483 and :2515 (PROCEDURE
 EXPOSE and its subsidiary list).
 
-**5. 2026-10-10-variable-reference-concatenation.md (closed, `aeb913cff`).** Ruled by Moritz
+**5. 2026-10-10-variable-reference-concatenation.md (closed, `074ada1da`).** Ruled by Moritz
 2026-10-27 ("Rule everywhere, Deviation"). The required-string protocol classifies a reference by its
 referenced value (`reference_conversion`, `dispatch/reqstr.rs`), an unset variable by its own name;
 so `SAY`, a builtin argument and a concatenation's right operand read the referenced value's

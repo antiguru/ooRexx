@@ -1,4 +1,4 @@
-**CLOSED 2026-10-27 by Phase 9d Task 8.5 (aeb913cff).**
+**CLOSED 2026-10-27 by Phase 9d Task 8.5 (074ada1da).**
 
 **RULED by Moritz 2026-10-27 ("Rule everywhere, Deviation"): a variable reference's string value is its referenced value's, by request('STRING'), in every position (left and right operand, SAY, builtin arguments, NOSTRING); a numbered Deviation, oracle bug (VariableReference::stringValue, VariableReference.cpp:258-261, skips makeString). Task 8.5 stopped it (task-8.5-report.md, "Stopped item").**
 
