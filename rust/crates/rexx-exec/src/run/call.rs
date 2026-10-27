@@ -1544,22 +1544,33 @@ impl Interp {
             None => self.slot_of(code.symbols.name(id).as_bytes()),
         };
         let frame = self.activation().frame;
+        let spelling = code.symbols.name(id).as_bytes();
+        // A reference uses the stem variable it names, which creates it.
+        if matches!(inner.kind, ExprKind::Stem(_)) && self.variable(frame, slot).is_none() {
+            self.create_stem_variable(frame, slot, spelling);
+        }
         // Resolved here, where the name's own home is: an alias this
         // activation holds is still addressable, which is what makes `>p`
         // work when its `p` came from *its* caller, and an `EXPOSE` binding
         // is on this activation, which is what makes it work on an object
         // variable. Chasing the slot for an exposed name would name the
-        // empty slot the exposure left behind.
-        let home = match self.exposure(frame, slot) {
-            Some(var) => VarRefHome::Instance {
-                owner: var.owner,
-                scope: var.scope,
-            },
+        // empty slot the exposure left behind. Either way the reference names
+        // the variable the name resolves to, under that variable's own name:
+        // an alias of the caller's `v` is a reference to `V`.
+        let (home, name) = match self.exposure(frame, slot) {
+            Some(var) => (
+                VarRefHome::Instance {
+                    owner: var.owner,
+                    scope: var.scope,
+                },
+                var.name.clone(),
+            ),
             None => {
-                VarRefHome::Cell(self.promote_slot(frame, slot, code.symbols.name(id).as_bytes()))
+                let cell = self.promote_slot(frame, slot, spelling);
+                let name = self.cell_owner_name(frame, slot).unwrap_or(spelling).into();
+                (VarRefHome::Cell(cell), name)
             }
         };
-        let name = code.symbols.name(id).as_bytes().into();
         Ok(self.alloc_with(
             BehaviourId::OBJECT,
             Body::VarRef(Box::new(rexx_core::VarRef { name, home })),

@@ -202,6 +202,8 @@ mod counter {
         Delegate,
         Operator,
         TrapHandler,
+        /// A `NOVALUE` message sent to the `.local~novalue` hook.
+        NovalueHook,
         NativeApiCallback,
         LibraryEntry,
         StreamWrapper,

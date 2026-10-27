@@ -175,29 +175,39 @@ impl Interp {
         }
     }
 
-    /// Turns an uninitialised variable read into a `NOVALUE` condition --
-    /// but only when this activation has a `NOVALUE` trap that could take
+    /// The value a variable read answers: `read` itself when the variable is
+    /// set, and otherwise what an uninitialised read comes to -- a `NOVALUE`
+    /// condition when this activation has a `NOVALUE` trap that could take
     /// it.
     #[inline(always)]
-    pub(crate) fn novalue_check(&self, novalue: Novalue, read: ObjRef) -> Result<(), Failure> {
+    pub(crate) fn novalue_check(
+        &mut self,
+        novalue: Novalue,
+        read: ObjRef,
+    ) -> Result<ObjRef, Failure> {
         if novalue == Novalue::Set {
-            return Ok(());
+            return Ok(read);
         }
         self.novalue_raised(read)
     }
 
-    /// [`Interp::novalue_check`]'s uninitialised half: whether the setting in
-    /// force turns this read into a raised `NOVALUE`, into
-    /// `::OPTIONS NOVALUE SYNTAX`'s 98.986, or into neither -- the derived
-    /// name `read_at` already produced.
+    /// [`Interp::novalue_check`]'s uninitialised half, in
+    /// `RexxActivation::handleNovalueEvent`'s order
+    /// (`RexxActivation.cpp:2645-2674`): `::OPTIONS NOVALUE SYNTAX`'s 98.986,
+    /// then the `.local~novalue` hook, then a raised `NOVALUE`, or else the
+    /// derived name `read_at` already produced.
     #[cold]
     #[inline(never)]
-    fn novalue_raised(&self, read: ObjRef) -> Result<(), Failure> {
-        if self.trap_for(b"NOVALUE").is_none_or(|trap| trap.call) {
-            if self.condition_raises_syntax(b"NOVALUE") {
-                return Err(Raised::unassigned_variable(&self.derived_name_text(read)).into());
-            }
-            return Ok(());
+    fn novalue_raised(&mut self, read: ObjRef) -> Result<ObjRef, Failure> {
+        let signalled = self.trap_for(b"NOVALUE").is_some_and(|trap| !trap.call);
+        if !signalled && self.condition_raises_syntax(b"NOVALUE") {
+            return Err(Raised::unassigned_variable(&self.derived_name_text(read)).into());
+        }
+        if let Some(value) = self.novalue_hook(read)? {
+            return Ok(value);
+        }
+        if !signalled {
+            return Ok(read);
         }
         // The variable's own derived name, which `CONDITION('D')` and the
         // condition object's `DESCRIPTION` both report -- measured, the
@@ -208,6 +218,24 @@ impl Interp {
         let mut raised = Raised::condition(Cow::Borrowed("NOVALUE"));
         raised.description = Some(self.derived_name_text(read));
         Err(raised.into())
+    }
+
+    /// The object `.local` holds under `NOVALUE`, sent `NOVALUE` with the
+    /// uninitialised variable's derived name: an answer other than `.nil` is
+    /// the read's value, and the variable stays unset
+    /// (`RexxActivation::novalueHandler`, `RexxActivation.cpp:4763-4773`).
+    fn novalue_hook(&mut self, read: ObjRef) -> Result<Option<ObjRef>, Failure> {
+        let Some(handler) = self.local_route(b"NOVALUE")? else {
+            return Ok(None);
+        };
+        self.roots.activity_mut().push_temp(read);
+        let caller = self.caller();
+        let answer = pinned!(
+            self,
+            crate::pinning::PinKind::NovalueHook,
+            self.send_message(handler, b"NOVALUE", None, &[Some(read)], caller)
+        )?;
+        Ok(answer.filter(|value| *value != ObjRef::NIL))
     }
 
     /// The bytes of the derived name an uninitialised read answered.

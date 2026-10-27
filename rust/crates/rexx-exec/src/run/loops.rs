@@ -2683,7 +2683,7 @@ impl Interp {
                 (value, novalue, Some(resolved))
             }
         };
-        self.novalue_check(novalue, previous)?;
+        let previous = self.novalue_check(novalue, previous)?;
         self.roots.activity_mut().push_temp(previous);
         // `>C>` before `>V>`, both self-gated on `intermediates`
         // like every other value-bearing prefix -- `stem_get`'s

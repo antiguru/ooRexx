@@ -776,12 +776,10 @@ macro_rules! region_ops {
                                 }
                                 None => $self.read_at($code, *symbol, None),
                             };
-                            if let Err(failure) =
-                                $self.novalue_check(novalue, value)
-                            {
-                                break $cold Err(failure);
+                            match $self.novalue_check(novalue, value) {
+                                Ok(value) => value,
+                                Err(failure) => break $cold Err(failure),
                             }
-                            value
                         }
                         SymbolRead::Stem | SymbolRead::Compound | SymbolRead::Environment => {
                             match $self.read_symbol($code, *read, *symbol, at) {

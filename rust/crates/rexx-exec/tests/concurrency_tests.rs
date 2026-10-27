@@ -1346,6 +1346,10 @@ mod measured {
             "call on error name h\naddress system 'false'\nexit\nh:\n  call SysSleep 0\n  return\n",
         ),
         (
+            "NovalueHook",
+            ".local~novalue = .c~new\nsay zz\n::class c\n::method novalue\n  call SysSleep 0\n  return 1\n",
+        ),
+        (
             "LoopHeader",
             "do i = 1 to 2 while f()\nend\nexit\nf:\n  call SysSleep 0\n  return 1\n",
         ),

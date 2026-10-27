@@ -1190,12 +1190,10 @@ impl Interp {
         // each value goes into it as soon as it exists: `alloc_with` collects
         // before it allocates.
         self.roots.activity_mut().push_temp(package);
-        let Ok(table) = crate::dispatch::hash::new_string_table(self) else {
-            return Ok(None);
-        };
-        let Some(data) = self.package_data_mut(package) else {
-            return Ok(None);
-        };
+        let table = crate::dispatch::hash::new_string_table(self)?;
+        let data = self
+            .package_data_mut(package)
+            .expect("the package read above is rooted and keeps its data");
         data.tables[kind.index()] = Some(table);
         self.routines_tables |= kind == PackageTable::Routines;
         let frame = self.roots.activity_mut().push_frame();
@@ -1259,9 +1257,9 @@ impl Interp {
                 TableValue::Lines(lines) => self.line_array(&lines),
             };
             self.roots.activity_mut().push_temp(value);
-            if crate::dispatch::hash::directory_put(self, table, &name, value).is_err() {
+            if let Err(failure) = crate::dispatch::hash::directory_put(self, table, &name, value) {
                 self.roots.activity_mut().pop_frame(frame);
-                return Ok(None);
+                return Err(failure);
             }
         }
         self.roots.activity_mut().pop_frame(frame);

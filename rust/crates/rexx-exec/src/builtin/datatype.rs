@@ -415,14 +415,9 @@ pub(crate) fn value(interp: &mut Interp, name: &[u8], args: Args<'_>) -> Result<
             let stem_name = upper[..=dot].to_vec();
             let key = resolve_compound_key(interp, &upper[dot + 1..]);
             let (old, _) = interp.stem_get(&stem_name, &key);
-            // Rooted before `stem_set` runs, not after: when the stem has
-            // never been touched, `stem_get` derives `old` as a fresh,
-            // slot-less allocation (`stem.rs`'s "no object at all" branch),
-            // and `stem_set` then allocates the stem's *first* object on
-            // the identical branch -- so without this, `old` is reachable
-            // from nowhere the collector walks for the one allocation that
-            // matters. The instruction loop's own temps frame (`run.rs`'s
-            // `step`) closes this out at the end of the clause.
+            // `old` can be a fresh derived name no variable holds. It stays
+            // rooted across the write below until the clause ends, when the
+            // instruction loop's temps frame (`run.rs`'s `step`) closes.
             interp.roots.activity_mut().push_temp(old);
             if let Some(new) = newvalue {
                 interp.stem_set(&stem_name, &key, new);

@@ -14,7 +14,7 @@
 
 use crate::plan::{CompoundName, TailPiece};
 use crate::{Code, Failure, Interp, Novalue};
-use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
+use rexx_core::{BehaviourId, Body, Decoded, ObjRef, SlotFrame};
 use rexx_parse::SymbolId;
 
 /// Names a `Body` variant without printing it.
@@ -229,15 +229,25 @@ impl Interp {
         if let Some(value) = self.variable(frame, slot) {
             return value;
         }
-        let stem = self.alloc_with(
-            BehaviourId::STEM,
-            Body::Stem {
-                name: name.into(),
-                default: None,
-                tails: rexx_core::NameMap::default(),
-                exposed: None,
-            },
-        );
+        self.create_stem_variable(frame, slot, name)
+    }
+
+    /// Binds a fresh stem named `stem_name`, with no default and no tails, to
+    /// `slot` of `frame`, which holds no value. Every use of a stem variable or
+    /// of a compound variable naming it creates the stem variable (rexxref,
+    /// "Stems": the Stem object "is automatically created the first time you
+    /// use the stem variable or a compound variable containing the stem
+    /// variable name"), so after `say a.1` or `drop a.1` the stem `A.` is a
+    /// variable.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn create_stem_variable(
+        &mut self,
+        frame: SlotFrame,
+        slot: usize,
+        stem_name: &[u8],
+    ) -> ObjRef {
+        let stem = self.empty_stem(stem_name);
         self.set_variable(frame, slot, stem);
         stem
     }
@@ -301,9 +311,12 @@ impl Interp {
         let frame = self.activation().frame;
         let stem_value = match self.variable(frame, slot) {
             Some(v) => v,
-            // No object at all: the read site's own spelling is all there
-            // is to derive from.
-            None => return (self.derived_tail_name(stem_name, key), Novalue::Unset),
+            // No object at all: the read creates the stem variable, and the
+            // read site's own spelling is all there is to derive from.
+            None => {
+                self.create_stem_variable(frame, slot, stem_name);
+                return (self.derived_tail_name(stem_name, key), Novalue::Unset);
+            }
         };
 
         // `resolved` is computed, fully, before any further `self` call, so
@@ -420,11 +433,8 @@ impl Interp {
     }
 
     /// Drops one tail: a tombstone (`Some(key) -> None`) in the stem's
-    /// existing object, which does not take the default. If the stem has
-    /// never been touched there is nothing to record: an absent key and a
-    /// tombstone with no default already render identically (both derive
-    /// the name), so this is a genuine no-op rather than an auto-vivified
-    /// object nobody would ever observe the difference from.
+    /// object, which does not take the default. A stem never used before is
+    /// created first, as any use of a compound creates it.
     pub(crate) fn stem_drop_tail(&mut self, stem_name: &[u8], key: &[u8]) {
         self.stem_drop_tail_at(stem_name, None, key);
     }
@@ -435,23 +445,25 @@ impl Interp {
     pub(crate) fn stem_drop_tail_at(&mut self, stem_name: &[u8], at: Option<usize>, key: &[u8]) {
         let slot = self.stem_slot(stem_name, at);
         let frame = self.activation().frame;
-        if let Some(stem_value) = self.variable(frame, slot) {
-            let object = self.heap.get_mut(stem_value).expect("a live value");
-            let Body::Stem { tails, exposed, .. } = &mut object.body else {
-                unreachable!(
-                    "a stem-named slot holds only Body::Stem, got {}",
-                    body_variant_name(&object.body)
-                );
-            };
-            if let Some(home) = exposed_home(exposed, key) {
-                self.set_tail(home, key, None);
-                return;
-            }
-            // A drop keeps the tail's place, so the ordinal survives it.
-            let next = tails.len();
-            let ordinal = tails.get(key).map_or(next, |(at, _)| *at);
-            tails.insert(key.to_vec(), (ordinal, None));
+        let stem_value = match self.variable(frame, slot) {
+            Some(stem_value) => stem_value,
+            None => self.create_stem_variable(frame, slot, stem_name),
+        };
+        let object = self.heap.get_mut(stem_value).expect("a live value");
+        let Body::Stem { tails, exposed, .. } = &mut object.body else {
+            unreachable!(
+                "a stem-named slot holds only Body::Stem, got {}",
+                body_variant_name(&object.body)
+            );
+        };
+        if let Some(home) = exposed_home(exposed, key) {
+            self.set_tail(home, key, None);
+            return;
         }
+        // A drop keeps the tail's place, so the ordinal survives it.
+        let next = tails.len();
+        let ordinal = tails.get(key).map_or(next, |(at, _)| *at);
+        tails.insert(key.to_vec(), (ordinal, None));
     }
 
     /// `stem. = expr`: replaces the whole object and rebinds the variable

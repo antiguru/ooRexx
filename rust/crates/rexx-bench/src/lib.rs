@@ -64,14 +64,12 @@ pub static PROGRAMS: &[&str] = &[
     "fibfunc",
     "sendloop",
     "extcall",
-    // Added in Phase 6.1: the store-backed read of a Directory entry and a
-    // `.local` entry, the path whose cost Task 7 measured.
+    // The store-backed read of a Directory entry and a `.local` entry.
     "dirread",
-    // Added in Phase 9a Task 8's fix round: hash-collection construction,
-    // whose INIT sizes the store.
+    // Hash-collection construction, whose INIT sizes the store.
     "hashnew",
-    // Added in the Phase 9a final review's fix: an environment symbol read
-    // once the running package has a local, which searches that local first.
+    // An environment symbol read once the running package has a local, which
+    // searches that local first.
     "pkglocal",
     // Internal package routine calls, which push a stack-frame level around
     // the routine's body.

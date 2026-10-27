@@ -1,0 +1,70 @@
+/* A reference made from a USE ARG alias names the variable the alias
+   resolves to, under that variable's own name: an alias of the caller's
+   LOC or of an object variable V, passed on, reads and writes that
+   variable, and its NAME, the kind-mismatch text and the >R> trace line
+   say LOC or V. A reference to an unset stem creates the stem, so a USE
+   LOCAL alias of it reads the caller's derived names. */
+call c1 >loc
+say 'loc' loc
+.k~new~go
+o = .k~new
+call t o, 'refLocalStem', >a.
+say 'a.1 =' a.1 symbol('a.') symbol('a.1')
+exit
+c1: procedure
+  use arg >q
+  say 'cell' (>q)~name
+  trace r
+  call c2 >q
+  trace o
+  call c3 >q
+  return
+c2: procedure
+  use arg >s
+  s = 'set'
+  return
+c3: procedure
+  signal on syntax name e3
+  use arg >s.
+  return
+e3: say 'e3' condition('o')~message; return
+t: procedure
+  use arg o, msg, x
+  say msg':' o~send(msg, x)
+  return
+::class k
+::method go
+  expose v w.
+  say self~twice(>v)
+  say 'v' v
+  self~m1(>v)
+  self~show
+::method twice
+  use arg >q
+  q = 'set through q'
+  return self~again(>q)
+::method again
+  use arg >r
+  return 'again' r
+::method m1
+  use arg >q
+  say 'inst' (>q)~name
+  self~m2(>q)
+  self~m3(>q)
+::method m2
+  signal on syntax name e2
+  use arg >s.
+  return
+e2: say 'e2' condition('o')~message; return
+::method m3
+  trace r
+  use arg >r
+  r = 'via r'
+  say 'r=' (>r)~name
+::method show
+  expose v
+  say 'v=' v
+::method refLocalStem
+  use local abc.
+  use arg >abc.
+  return abc.1

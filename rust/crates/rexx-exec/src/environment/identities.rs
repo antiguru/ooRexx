@@ -1225,11 +1225,9 @@ impl Interp {
             .collect();
         for (package, written) in chain.iter().copied() {
             if written {
-                let Some(table) =
-                    self.package_string_table(package, crate::environment::PackageTable::Routines)?
-                else {
-                    return Ok(None);
-                };
+                let table = self
+                    .package_string_table(package, crate::environment::PackageTable::Routines)?
+                    .expect("a package whose .ROUTINES table was written holds that table");
                 if let Some(object) = self.native_entry(table, upper) {
                     return Ok(Some(crate::FoundRoutine::Object(object)));
                 }

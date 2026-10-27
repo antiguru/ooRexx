@@ -1,0 +1,64 @@
+count 63
+/* The object .local holds under NOVALUE is sent NOVALUE with the derived
+   name of every uninitialised variable read: a simple variable, a compound
+   (not its tail pieces), a PARSE VAR source, a DROP or PROCEDURE EXPOSE
+   selector, an object variable, a loop control variable and a read inside
+   INTERPRET. An answer other than .nil is the value and the variable stays
+   unset; .nil or no answer leaves the derived name and the NOVALUE
+   condition. VALUE, SYMBOL, a bare stem and a variable reference never
+   reach it, nor does .environment~novalue. */
+.local~novalue = .nv~new
+say 's1' zzz
+say 's2' a.7
+i = 'I'; drop i
+say 's3' b.i
+say 's4' value('QQQ')
+parse var ppp x; say 's5' x
+say 's6' symbol('ZZZ') zzz
+drop (zzz)
+call p1
+say 's7' c.
+x = d.; say 's8' x
+call p2
+do j over .array~of(1)
+  say 's10' kk || j
+end
+interpret 'say s11 iii'
+w = (>u1); say 's12' w~value
+o = .k~new; o~m
+say 's14' .context~variables~hasIndex('ZZZ')
+do n = 1 to 2
+  drop n
+  if n > 1 then leave
+end
+say 's15' n
+trace r
+say 's16' trc
+trace o
+.local~novalue = .nilnv~new
+say 's17' yyy
+.local~novalue = .nothing~new
+say 's18' yyy
+.local~remove('NOVALUE')
+.environment~novalue = .nv~new
+say 's19' yyy
+.local~novalue = .nilnv~new
+signal on novalue
+say 's20' yyy2
+exit
+novalue: say 'NOVALUE cond' condition('d'); exit
+p1: procedure expose (yyy)
+  return
+p2: procedure
+  say 's9' pz
+  return
+::class nv
+::method novalue; use arg n; say '  hook' n; return 'NV_'n
+::class nilnv
+::method novalue; use arg n; say '  nilhook' n; return .nil
+::class nothing
+::method novalue; use arg n; say '  nothing' n; return
+::class k
+::method m
+  expose ov
+  say 's13' ov

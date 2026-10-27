@@ -381,3 +381,22 @@ fn a_refusal_delivering_an_empty_rests_entry_line_ends_its_activity() {
         3,
     );
 }
+
+/// A package table whose `StringTable` cannot be made is that failure, not an
+/// absent table.
+#[test]
+fn a_package_table_that_cannot_be_made_fails() {
+    let mut interp = Interp::new();
+    let program = rexx_parse::parse_program(b"nop".to_vec()).expect("a trivial program parses");
+    let program = interp.programs.insert(std::rc::Rc::new(program));
+    let package = interp.held_package_object(Package::Program(program));
+    let string_table = interp
+        .classes()
+        .lookup("StringTable")
+        .expect("StringTable is native");
+    interp.classes().make_abstract(string_table);
+    assert!(matches!(
+        interp.package_string_table_for_write(package, PackageTable::Routines),
+        Err(Failure::Raised(_))
+    ));
+}

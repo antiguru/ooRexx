@@ -1755,7 +1755,7 @@ impl Interp {
         } else {
             (self.text(&resolved), Novalue::Unset)
         };
-        self.novalue_check(novalue, value)?;
+        let value = self.novalue_check(novalue, value)?;
         if self.tracing_intermediates() {
             let indent = self.activity.clause_state.current_value_indent;
             let text = self.string_value_text(value);

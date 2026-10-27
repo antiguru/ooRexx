@@ -1474,3 +1474,106 @@ fn a_constant_expressions_method_traces_its_entry_before_the_guard_wait() {
         .expect("the holder traces its clause");
     assert!(entry < held, "{trace}");
 }
+
+/// Runs `source` and answers its stdout, having insisted the run ended with
+/// rc 0.
+fn clean_stdout(path: &str, source: &[u8]) -> String {
+    let outcome = run_program(path, source.to_vec(), crate::Invocation::none());
+    assert_eq!(
+        outcome.exit_code,
+        0,
+        "{}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+    String::from_utf8_lossy(&outcome.stdout).into_owned()
+}
+
+/// `DROP` runs its list left to right (rexxref instrc.xml, DROP: "Variables
+/// are dropped from left to right"), a `(name)` selector in its own place:
+/// `drop list (list)` drops `LIST`, and the selector, read after it, names
+/// `LIST` again, so `X` stays set.
+#[test]
+fn a_drop_list_runs_left_to_right() {
+    assert_eq!(
+        clean_stdout(
+            "/w/d.rex",
+            b"list = 'X'; x = 1\ndrop list (list)\nsay symbol('X') symbol('LIST')\n"
+        ),
+        "VAR LIT\n"
+    );
+}
+
+/// `EXPOSE`, `PROCEDURE EXPOSE` and `DROP` read their `(name)` selectors in
+/// source order, which `TRACE I` shows as each selector's `>V>` line.
+#[test]
+fn a_variable_lists_selectors_are_read_left_to_right() {
+    let outcome = run_program(
+        "/w/s.rex",
+        b"o = .k~new\no~setup\no~m\na = 'p'; b = 'q'\ncall pe\ndrop (a) (b)\nexit\n\
+          pe: procedure expose (a) (b)\n  return\n::class k\n::method setup\n  expose a b\n\
+          \x20 a = 'x'; b = 'y'\n::method m\n  expose (a) (b)\n::options trace i\n"
+            .to_vec(),
+        crate::Invocation::none(),
+    );
+    assert_eq!(outcome.exit_code, 0);
+    let trace = String::from_utf8_lossy(&outcome.stderr);
+    let selectors: String = trace
+        .lines()
+        .filter_map(|line| line.trim_start().strip_prefix(">V>"))
+        .filter_map(|rest| rest.trim_start().chars().next())
+        .filter(|name| matches!(name, 'A' | 'B'))
+        .collect();
+    assert_eq!(selectors, "ABABAB", "{trace}");
+}
+
+/// A `PROCEDURE EXPOSE` list whose selector raises `NOVALUE` under an
+/// inherited `SIGNAL ON NOVALUE` raises it before the procedure isolates, so
+/// the handler runs over the caller's variables, the plain names before the
+/// selector having been exposed and those after it not yet read.
+#[test]
+fn a_procedure_expose_selectors_novalue_is_handled_before_isolation() {
+    assert_eq!(
+        clean_stdout(
+            "/w/p.rex",
+            b"c = 3; d = 4\nsignal on novalue name n1\ncall pf\nsay 'after pf' c d\n\
+              call pg\nsay 'after pg' c d\nexit\n\
+              n1: say 'n1' condition('d') 'c='c 'd='d\nc = 'h'; d = 'h'\nreturn\n\
+              pf: procedure expose c (nolist2)\nsay 'pf body'\nreturn\n\
+              pg: procedure expose (nolist3) d\nsay 'pg body'\nreturn\n"
+        ),
+        "n1 NOLIST2 c=3 d=4\nafter pf h h\nn1 NOLIST3 c=h d=h\nafter pg h h\n"
+    );
+}
+
+/// `USE ARG abc., >abc.` with an empty stem named `ABC.` binds whether the
+/// name was written as a literal or computed: names are compared by their
+/// characters, and how a string was made is not observable (Deviation 4).
+#[test]
+fn an_empty_stems_name_is_compared_by_its_characters() {
+    assert_eq!(
+        clean_stdout(
+            "/w/i.rex",
+            b"o = .k~new\nsay o~pair(.stem~new('AB' || 'C.'), >b.)\n\
+              say o~pair(.stem~new('ABC.'), >c.)\n\
+              ::class k\n::method pair\n  use arg abc., >abc.\n  return 'bound'\n"
+        ),
+        "bound\nbound\n"
+    );
+}
+
+/// `.context~variables` lists a `USE ARG` alias under the name it is
+/// reachable by in that context, not under its owner's.
+#[test]
+fn the_context_variables_list_an_alias_under_its_own_name() {
+    assert_eq!(
+        clean_stdout(
+            "/w/v.rex",
+            b"say q.\ncall r >q.\na = 1\ncall s >a\nexit\n\
+              r: procedure\n  use arg >z.\n  v = .context~variables\n\
+              \x20 say 'stem' v~hasIndex('Z.') v~hasIndex('Q.') v~items\n  return\n\
+              s: procedure\n  use arg >z\n  v = .context~variables\n\
+              \x20 say 'simple' v~hasIndex('Z') v~hasIndex('A') v~items\n  return\n"
+        ),
+        "Q.\nstem 1 0 1\nsimple 1 0 1\n"
+    );
+}

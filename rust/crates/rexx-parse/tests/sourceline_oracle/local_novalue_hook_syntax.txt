@@ -1,0 +1,8 @@
+count 7
+/* ::OPTIONS NOVALUE SYNTAX raises 98.986 before the .local~novalue hook is
+   sent anything. */
+.local~novalue = .nv~new
+say 'a' zzz
+::class nv
+::method novalue; say 'hook'; return 1
+::options novalue syntax

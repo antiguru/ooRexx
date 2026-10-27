@@ -399,3 +399,8 @@ lang/constant_expression_method_scopes.rex
 lang/constant_expression_method_trace.rex
 # 9d Task 8.4 fix round 3: a failing run of a ::CONSTANT expression Method is a level of its own.
 lang/constant_expression_method_fails.rex
+# 9d Task 8.5: any use of a compound creates its stem; the .local~novalue hook; references made from an alias.
+lang/compound_use_creates_stem.rex
+lang/local_novalue_hook.rex
+lang/local_novalue_hook_syntax.rex
+lang/variable_reference_through_alias.rex
