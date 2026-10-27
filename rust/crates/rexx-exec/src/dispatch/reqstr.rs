@@ -13,6 +13,7 @@
 //! fallbacks behind them.
 
 use super::{Body, Decoded, Failure, Interp, Loud, ObjRef, Primitive, Raised};
+use crate::value::Referent;
 
 /// What the protocol's conversion limbs answered, before anything is built.
 enum RequiredString {
@@ -193,7 +194,7 @@ impl Interp {
         // that value from here on: it is the object causing NOSTRING, and the
         // object sent `STRING` (rexxref condtra.xml, NOSTRING's DESCRIPTION
         // and ADDITIONAL).
-        let value = self.conversion_subject(value);
+        let value = self.conversion_subject(value)?;
         // `sendMessage(STRING)`. An instance's or a class's `STRING` can be a
         // Rexx method, so it is sent; the shortcut below is what the send
         // answers wherever `STRING` resolves to `native_string`. Measured,
@@ -370,7 +371,10 @@ impl Interp {
         Ok(match self.required_string_answer(value)? {
             Some(RequiredString::Object(text)) => Some(text),
             Some(RequiredString::Bytes(bytes)) => Some(self.text_built(bytes)),
-            None => None,
+            None => {
+                self.conversion_subject(value)?;
+                None
+            }
         })
     }
 
@@ -470,29 +474,37 @@ impl Interp {
         }
     }
 
-    /// [`Interp::classify_string_conversion`] of a variable reference: its
-    /// referenced value's limb, or for an unset variable its own name.
+    /// [`Interp::classify_string_conversion`] of a variable reference: the
+    /// limb of the value its chain of references ends at, or for an unset
+    /// variable that variable's name. A cyclic reference has no string value
+    /// here; [`Interp::conversion_subject`] refuses it.
     #[cold]
     #[inline(never)]
     fn reference_conversion(&mut self, value: ObjRef) -> StringConversion {
-        let referenced = match self.as_variable_reference(value) {
-            Some(reference) => match self.referenced_value(reference) {
-                Some(referenced) => referenced,
-                None => return StringConversion::Bytes(reference.name.to_vec()),
-            },
-            None => unreachable!("the caller matched Body::VarRef on this handle"),
-        };
-        self.classify_string_conversion(referenced)
+        match self.referent(value) {
+            Referent::Value(referenced) => self.classify_string_conversion(referenced),
+            Referent::Unset(last) => {
+                let reference = last.unwrap_or(value);
+                let name = self
+                    .as_variable_reference(reference)
+                    .map(|reference| reference.name.to_vec())
+                    .unwrap_or_default();
+                StringConversion::Bytes(name)
+            }
+            Referent::Cycle => StringConversion::None,
+        }
     }
 
     /// The object a conversion of `value` falls back on: `value`, or for a
-    /// variable reference the value it refers to, through every reference.
-    #[inline]
-    fn conversion_subject(&mut self, mut value: ObjRef) -> ObjRef {
-        while let Some(referenced) = self.referenced_object(value) {
-            value = referenced;
+    /// variable reference the value its chain of references ends at. A
+    /// cyclic reference never ends at one, and is 11.1, the error unbounded
+    /// recursion answers.
+    fn conversion_subject(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
+        match self.referent(value) {
+            Referent::Value(referenced) => Ok(referenced),
+            Referent::Unset(_) => Ok(value),
+            Referent::Cycle => Err(Raised::insufficient_stack().into()),
         }
-        value
     }
 
     /// Sends `makeString` on the receiver's behalf.

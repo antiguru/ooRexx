@@ -1843,3 +1843,33 @@ the Task 6.13 re-review r2 as `rcun2`). rexxref (Condition traps, CALL ON) puts 
 delayed state from the first raise and ignores an ERROR raised again while it is delayed, so this
 crate runs the handler once, for the target's ERROR (`rc 9`), and ignores the command's
 (`src/scheduler/tests.rs`). No upstream ticket.
+
+## 59. A variable reference that refers to itself, converted to a string
+
+    r = >r
+    say 'made'
+    say length(r)
+
+Effect: a hang after `made`, and not an INDEFINITE BLOCK: the process spins on the CPU (6 s of CPU
+time in its first 6 s, `ps` state `R`), ignores SIGTERM, and is SIGKILLed at `timeout -k 5 20`'s
+25 s (rc 137, stderr empty). Measured 2026-10-27 by Phase 9d Task 8.5 fix round 3 under the
+standard wrapper from a fresh empty directory (found by the Task 8.5 re-review r2); the cause is not
+traced in the C++. This crate answers 11.1 at the conversion (`src/tests.rs`,
+`a_cyclic_reference_is_insufficient_stack_in_every_conversion`). No upstream ticket.
+
+## 60. Two variable references that refer to each other's variables, converted to a string
+
+    a = 1; b = 2
+    x = >a; y = >b
+    a = y; b = x
+    say 'made'
+    signal on nostring
+    say 'say' x
+    exit
+    nostring: say 'NS' condition('D'); exit
+
+Effect: entry 59's hang through a two-variable cycle: `made`, then still running at SIGTERM and
+SIGKILLed at 25 s (rc 137, stderr empty). Measured 2026-10-27 by Phase 9d Task 8.5 fix round 3 under
+the standard wrapper from a fresh empty directory (the Task 8.5 re-review r2's `cycle.rex`). This
+crate answers 11.1 (`a_cyclic_reference_is_insufficient_stack_in_every_conversion`). No upstream
+ticket.

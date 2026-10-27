@@ -4340,11 +4340,17 @@ fn native_reference_request(
 }
 
 /// The value a reference receiver names, materialised as an object so that a
-/// message can be sent to it.
+/// message can be sent to it: the value its chain of references ends at, or
+/// an unset variable's name. A cyclic reference is 11.1, the error unbounded
+/// recursion answers.
 fn referenced_receiver(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure> {
-    interp
-        .referenced_object(receiver)
-        .ok_or_else(|| Loud::receiver_class("a value that is not a variable reference").into())
+    match interp.referent(receiver) {
+        crate::value::Referent::Value(referenced) => Ok(referenced),
+        crate::value::Referent::Unset(last) => interp
+            .referenced_object(last.unwrap_or(receiver))
+            .ok_or_else(|| Loud::receiver_class("a value that is not a variable reference").into()),
+        crate::value::Referent::Cycle => Err(crate::error::Raised::insufficient_stack().into()),
+    }
 }
 
 #[cfg(test)]

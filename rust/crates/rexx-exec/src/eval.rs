@@ -16,7 +16,7 @@ use crate::activation::CallType;
 use crate::error::Raised;
 use crate::run::CallEntry;
 use crate::run::{CallResolution, Resolved, Started, function_started};
-use crate::value::{canonical_small_int, exact_small_int, within_digits};
+use crate::value::{Referent, canonical_small_int, exact_small_int, within_digits};
 use crate::{Code, Failure, Interp, Loud, StackSpan};
 use rexx_core::{Body, Decoded, INLINE_BYTES, NotNumeric, ObjRef};
 use rexx_num::{CompareOp, DivOp, Number};
@@ -1229,9 +1229,12 @@ impl Interp {
                 default: Some(default),
                 ..
             } => self.operator_message_receiver(*default),
-            Body::VarRef(reference) => self
-                .referenced_value(reference)
-                .and_then(|referenced| self.operator_message_receiver(referenced)),
+            // A cyclic reference answers itself, which `apply_binary` refuses.
+            Body::VarRef(reference) => match self.referent_from(self.referenced_value(reference)) {
+                Referent::Value(referenced) => self.operator_message_receiver(referenced),
+                Referent::Unset(_) => None,
+                Referent::Cycle => Some(value),
+            },
             _ => None,
         }
     }
@@ -1302,10 +1305,10 @@ impl Interp {
             // `97.1 Object "an Array" does not understand message "+".` --
             // the array's own answer, substituting the array rather than the
             // reference.
-            Body::VarRef(reference) => match self.referenced_value(reference) {
-                Some(referenced) => self.operator_operand_gap(referenced),
+            Body::VarRef(reference) => match self.referent_from(self.referenced_value(reference)) {
+                Referent::Value(referenced) => self.operator_operand_gap(referenced),
                 // An unset variable reads as its own name, a string.
-                None => None,
+                Referent::Unset(_) | Referent::Cycle => None,
             },
             _ => None,
         }
@@ -1329,8 +1332,13 @@ impl Interp {
         // converted at all: measured, `.array + 1` is 97.1 where `1 + .array`
         // is 41.1, and `eval.rs`'s `object_operand_tests` is that half.
         if let Some(target) = self.operator_message_receiver(left) {
-            if is_concatenation(op) && self.as_variable_reference(left).is_some() {
-                return self.concat_reference(op, left, right);
+            if self.as_variable_reference(left).is_some() {
+                if self.referent(left) == Referent::Cycle {
+                    return Err(Raised::insufficient_stack().into());
+                }
+                if is_concatenation(op) {
+                    return self.concat_reference(op, left, right);
+                }
             }
             return self.send_operator(op.spelling(), target, &[Some(right)]);
         }

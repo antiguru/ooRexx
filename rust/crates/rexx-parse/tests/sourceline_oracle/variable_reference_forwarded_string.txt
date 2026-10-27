@@ -1,8 +1,9 @@
-count 26
+count 29
 /* In an arithmetic operator's right operand, the right operand of = and
    NUMERIC DIGITS, a variable reference's string value is its referenced
    value's makeString answer, and where that value has none, NOSTRING names
-   the referenced value and its STRING answer. */
+   the referenced value and its STRING answer, through a reference to a
+   reference too. */
 m = .knum~new; n = .nstr~new; d = .directory~new
 say 'arith' (1 + (>m)) (2 * (>m)) (7 // (>m))
 numeric digits (>m)
@@ -11,10 +12,12 @@ numeric digits 9
 call try 'say 1 + r', n
 call try 'say 1 + r', d
 call try 'say "x" = r', n
+call try 'say 1 + rr', n
 exit
 try: procedure
   use arg code, value
   r = >value
+  rr = >r
   signal on nostring
   interpret code
   return

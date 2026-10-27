@@ -1604,7 +1604,8 @@ fn a_references_string_value_is_its_referenced_values_in_every_position() {
 }
 
 /// A reference whose referenced value has a string value raises no
-/// `NOSTRING`; one whose value has none does, naming that value as the
+/// `NOSTRING`; one whose value has none does, through a reference to a
+/// reference too, naming that value as the
 /// condition's object (rexxref condtra.xml, NOSTRING's ADDITIONAL: "The object
 /// that caused the NOSTRING condition") and its `STRING` answer as the
 /// description.
@@ -1613,11 +1614,13 @@ fn a_reference_raises_nostring_only_where_its_value_has_no_string_value() {
     assert_eq!(
         clean_stdout(
             "/w/n.rex",
-            b"q = .array~of('p','q'); d = .directory~new\nsignal on nostring\n\
-              say (>q) || 'x'\nsay length(>q)\nsay 'd' (>d)\nexit\n\
-              nostring: say 'NOSTRING' condition('d') condition('o')~additional~class~id\n"
+            b"q = .array~of('p','q'); d = .directory~new; n = .n~new\n\
+              r = >q; rr = >r; say rr\nr = >n; say rr\nsignal on nostring\n\
+              say (>q) || 'x'\nsay length(>q)\nr = >d\nsay 'd' rr\nexit\n\
+              nostring: say 'NOSTRING' condition('d') condition('o')~additional~class~id\n\
+              ::class n\n::method string\n  return 'nstr'\n"
         ),
-        "p\nqx\n3\nNOSTRING a Directory Directory\n"
+        "p\nq\nnstr\np\nqx\n3\nNOSTRING a Directory Directory\n"
     );
 }
 
@@ -1659,5 +1662,70 @@ fn a_references_string_value_reaches_every_required_string_position() {
         "cmp 1 1 1\nmeth 2 x-x abkmake 0 1 1\nmethn 88.909\ndo ddddd\ninterpreted\naddress 3\n\
          push KMAKE\ntail X.kmake\ntrace R\nmsg x kmake y\nnostring a Directory Directory\n\
          signal kmake\n"
+    );
+}
+
+/// A variable reference that refers to itself, directly or through another
+/// variable, never ends at a value: any conversion of it, and any message it
+/// forwards, is 11.1, the error unbounded recursion answers. The oracle hangs
+/// on both shapes (`corpus/oracle-crashes.txt`), so each run here is bounded
+/// by a thread's timeout rather than trusted to end.
+#[test]
+fn a_cyclic_reference_is_insufficient_stack_in_every_conversion() {
+    let shapes = [
+        "r = >r\n",
+        "a = 1; b = 2\nx = >a; y = >b\na = y; b = x\nr = x\n",
+    ];
+    let uses = [
+        "say r",
+        "say length(r)",
+        "say r || 'a'",
+        "say 'a' r",
+        "say 1 + r",
+        "say r = 'a'",
+        "say r~length",
+        "parse var r v",
+    ];
+    for shape in shapes {
+        for used in uses {
+            let source = format!("{shape}say 'made'\n{used}\nsay 'end'\n").into_bytes();
+            let (sender, receiver) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let outcome = run_program("/w/c.rex", source, crate::Invocation::none());
+                let _ = sender.send(outcome);
+            });
+            let outcome = receiver
+                .recv_timeout(std::time::Duration::from_secs(20))
+                .unwrap_or_else(|_| panic!("{shape:?} then {used:?} did not end"));
+            assert_eq!(outcome.exit_code, 245, "{shape:?} then {used:?}");
+            assert_eq!(String::from_utf8_lossy(&outcome.stdout), "made\n");
+            assert!(
+                String::from_utf8_lossy(&outcome.stderr)
+                    .contains("Error 11.1:  Insufficient control stack space"),
+                "{shape:?} then {used:?}: {}",
+                String::from_utf8_lossy(&outcome.stderr)
+            );
+        }
+    }
+}
+
+/// Under `::OPTIONS NOSTRING SYNTAX`, a reference whose value has only a
+/// `STRING` method is 98.973 naming that value's `STRING` answer, as NOSTRING's
+/// description does.
+#[test]
+fn a_references_nostring_syntax_names_its_values_string() {
+    let outcome = run_program(
+        "/w/o.rex",
+        b"n = .n~new\nr = >n\nsay r\n::class n\n::method string\n  return 'nstr'\n\
+          ::options nostring syntax\n"
+            .to_vec(),
+        crate::Invocation::none(),
+    );
+    assert_eq!(outcome.exit_code, 158);
+    assert!(
+        String::from_utf8_lossy(&outcome.stderr)
+            .contains("Error 98.973:  Object \"nstr\" does not have a string representation."),
+        "{}",
+        String::from_utf8_lossy(&outcome.stderr)
     );
 }
