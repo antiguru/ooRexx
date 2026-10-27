@@ -1,2 +1,6 @@
 # bench-programs/callgrind.sh -B 0.5 -r 1 -j 3 -p "pingguard pingmsg pingsem" -o .../cg-9d/t8.5/r6try2 base=.../rexx-base-6e0bf5e5b head=.../rexx-r6try2 (r6try2: r6try2 the two fields in ActivationCold, not committed; r6try3 the build before 5c71b2b24)
-usage: callgrind.sh [-r ROUNDS] [-j JOBS] [-o OUTDIR] [-p PROGRAMS] [-B PCT] [-T] NAME=BINARY...
+program	base	head	head d%	base -libc	head -libc	head -libc d%	base spread%	head spread%
+pingguard	1319158808	1318359032	-0.0606	1151747021	1151744719	-0.0002	0.0000	0.0000
+pingmsg	7527356571	7527616285	+0.0035	1644072238	1644076437	+0.0003	0.0000	0.0000
+pingsem	1303502452	1303502007	-0.0000	1175378124	1175376150	-0.0002	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.5/r6try2
