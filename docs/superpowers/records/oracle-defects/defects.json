@@ -1862,11 +1862,11 @@
  {
   "id": "cyclic-variable-reference-hangs",
   "added": "2026-10-27",
-  "title": "A cyclic variable reference hangs any string conversion and ignores SIGTERM",
+  "title": "A cyclic variable reference, or a stem whose default refers to it, hangs any string conversion and ignores SIGTERM",
   "category": "crash",
   "area": "variables",
   "severity": "hang",
-  "repro": "docs/superpowers/records/2026-10-18-phase-9d/t8.5/r3/probes/selfref.rex (r = >r; say length(r)); cycle.rex (a two-variable cycle)",
+  "repro": "docs/superpowers/records/2026-10-18-phase-9d/t8.5/r3/probes/selfref.rex (r = >r; say length(r)); cycle.rex (a two-variable cycle); t8.5/r4/probes/sd1.rex (s. = >s.; say s.: a stem whose default is a reference to it)",
   "oracle": "Prints 'made', then runs until SIGKILL; SIGTERM is ignored (rc 137 under timeout -k 5 20).",
   "expected": "A loud error that ends the program, or at least a run HALT and SIGTERM can stop.",
   "cause": "Not traced in the C++; presumably VariableReference::stringValue (VariableReference.cpp:258-261) asking the referenced value, which is the reference itself.",

@@ -223,3 +223,6 @@ Task 8.5 fix round 2 (task-8.5-fix-r2.md). Resumes t85-impl.
 Task 8.5 fix round 2: DONE b21493ec6 390f7509c. Re-review r2 dispatched (t85-rereview2).
 Task 8.5 re-review r2 (t85-rereview2): APPROVED 0C/0I/4M; perf r2final measured b21493ec6. Queue candidate 2 (cyclic reference hangs, ignores SIGTERM; 074ada1da made it, base overflowed) taken into fix round 3 with the minors. Ruling: the crate terminates loudly and stays interruptible; the oracle hangs (oracle defect, listed; programs to oracle-crashes.txt), so no Deviation — if Moritz wants one, a block from the round's report. Queue candidate 1 queued into 8.7 (stem-default-arithmetic-nostring).
 Task 8.5 fix round 3 (task-8.5-fix-r3.md). Resumes t85-impl (last resumed round).
+Task 8.5 fix round 3: DONE_WITH_CONCERNS 0136aeb82 ffadc7da7 4a6321376 b43c6c6e8. Cycle -> 11.1 (Error 11, the crate's recursion answer), oracle-crashes entries 59/60. Callgrind every program max decrender +0.0386%. Re-review r3 dispatched (t85-rereview3).
+Task 8.5 re-review r3 (t85-rereview3): CHANGES REQUESTED 0C/1I/1M. I1: a cycle through a stem's default still spins (SIGTERM ignored) or overflows; same ruling as round 3. Oracle defect cyclic-variable-reference-hangs extended with the stem shape.
+Task 8.5 fix round 4 (task-8.5-fix-r4.md): fresh implementer t85-fix4 on fable (rounds 4+ fresh, one tier up). t85-impl stopped.
