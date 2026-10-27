@@ -1858,5 +1858,20 @@
   "source": "Phase 9d Task 8.5 fix round 1 re-review, New oracle defects 1",
   "status": "open (crate follows the rule; no Deviation needed while no witness depends on it)",
   "crate": "Answers VAR VAR x 1 1 1 1."
+ },
+ {
+  "id": "cyclic-variable-reference-hangs",
+  "added": "2026-10-27",
+  "title": "A cyclic variable reference hangs any string conversion and ignores SIGTERM",
+  "category": "crash",
+  "area": "variables",
+  "severity": "hang",
+  "repro": "docs/superpowers/records/2026-10-18-phase-9d/t8.5/r3/probes/selfref.rex (r = >r; say length(r)); cycle.rex (a two-variable cycle)",
+  "oracle": "Prints 'made', then runs until SIGKILL; SIGTERM is ignored (rc 137 under timeout -k 5 20).",
+  "expected": "A loud error that ends the program, or at least a run HALT and SIGTERM can stop.",
+  "cause": "Not traced in the C++; presumably VariableReference::stringValue (VariableReference.cpp:258-261) asking the referenced value, which is the reference itself.",
+  "source": "Phase 9d Task 8.5 fix round 2 re-review, New oracle defects 1",
+  "status": "open (not copied; the crate's answer is set by Task 8.5 fix round 3)",
+  "crate": "Being fixed in Task 8.5 fix round 3: terminates with an error."
  }
 ]
