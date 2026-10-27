@@ -1,0 +1,2 @@
+1689689       00:06 00:00:00 S    timeout -k 5 20 /home/moritz/dev/repos/ooRexx/build/bin/rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/r3/probes/selfref.rex
+1689691       00:06 00:00:06 R    /home/moritz/dev/repos/ooRexx/build/bin/rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/r3/probes/selfref.rex

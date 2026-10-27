@@ -1,0 +1,14 @@
+out: DIFF
+6c6
+< NOSTRING nstr NSTR
+---
+> NOSTRING a NSTR VariableReference
+err: same
+rc: same
+--- oracle out
+arith 6 10 2
+digits 5
+NOSTRING nstr NSTR
+NOSTRING a Directory Directory
+NOSTRING nstr NSTR
+NOSTRING nstr NSTR

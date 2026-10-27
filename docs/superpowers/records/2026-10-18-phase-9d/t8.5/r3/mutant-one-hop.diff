@@ -1,0 +1,17 @@
+diff --git 1/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/src/value.rs 2/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85/mut3/rust/crates/rexx-exec/src/value.rs
+index dc7dd1d0b..7d1d29168 100644
+--- 1/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/src/value.rs
++++ 2/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85/mut3/rust/crates/rexx-exec/src/value.rs
+@@ -1148,6 +1148,12 @@ impl Interp {
+     /// reference `first` was read from), or a cycle, which a variable holding
+     /// a reference to itself, directly or through others, makes.
+     pub(crate) fn referent_from(&self, first: Option<ObjRef>) -> Referent {
++        if let Some(current) = first {
++            return Referent::Value(current);
++        }
++        if first.is_none() {
++            return Referent::Unset(None);
++        }
+         let mut last = None;
+         let mut slow = first;
+         let mut fast = first;

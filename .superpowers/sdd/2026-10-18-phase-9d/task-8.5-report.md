@@ -359,7 +359,9 @@ No position's rexxref text gives it a rule other than `request('STRING')`. Compo
 VALUE are in provide.xml's list (:730, :746); TRACE's own text reads only an option's first letter
 (instrc.xml:3511), `R` here, which is what head answers. A TRACE VALUE answer that is a number is 24.901 outside
 interactive debug, on head as on the oracle for a literal. The ruled positions of fix round 1 (either
-operand of `||`, abuttal and blank, SAY, builtin arguments, PARSE VALUE and VAR) are unchanged.
+operand of `||`, abuttal and blank, SAY, builtin arguments, PARSE VALUE and VAR) keep the referenced
+value's string value; where that value has none they read its `STRING` answer, no longer the
+reference's (`a N` became `nstr`), and NOSTRING names the value (item 2 below).
 
 Witnesses: the oracle agrees with head on arithmetic, NUMERIC DIGITS, and NOSTRING in arithmetic and
 in `=`'s right operand, so those are the new corpus program `lang/variable_reference_forwarded_string.rex`
@@ -394,9 +396,12 @@ ORACLE BUG: `VariableReference::stringValue` answers the referenced value's C++ 
 (`VariableReference.cpp:258-261`), its default name, while `VariableReference::request` forwards to the
 value's `request` (`:364-370`). The oracle takes the first, with NOSTRING raised for every reference and
 naming the reference, in SAY, builtin arguments, either operand of concatenation, abuttal and blank,
-PARSE VALUE and VAR, a comparison's right operand where the value has a string value, String method
-arguments (where it raises 88.909), INTERPRET, a DO count, ADDRESS, PUSH, compound tails, SIGNAL VALUE,
-TRACE VALUE and an explicit concatenation message. It already forwards to the value, as this crate
+PARSE VALUE and VAR, a comparison's right operand where the value has a string value, INTERPRET, a DO
+count, ADDRESS, PUSH, compound tails, SIGNAL VALUE, TRACE VALUE and an explicit concatenation message.
+Under `::OPTIONS NOSTRING SYNTAX` its 98.973 names the reference's rendering (`Object "a N"`) where
+this crate names the value's `STRING` answer (`Object "nstr"`, `t8.5/r3/probes/nostring_syntax.rex`).
+In a String method's argument it raises 88.909 for a reference whether or not the value has a string
+value, and no NOSTRING (`meth.rex`). It already forwards to the value, as this crate
 does, in an arithmetic operand, NUMERIC DIGITS, and a comparison's right operand where the value has
 no string value (NOSTRING naming the value, `ns2.rex` `addR` and `cmpR`); a strict comparison's right
 operand there names the reference (`"x" == (>d)`, `unit_positions.rex`). Measured:
@@ -405,12 +410,13 @@ operand there names the reference (`"x" == (>d)`, `unit_positions.rex`). Measure
 `unit_positions.rex`, and `t8.5/probes/varref_concat_matrix.rex`. Witnesses (`rust/crates/rexx-exec/src/tests.rs`):
 `tests::a_references_string_value_is_its_referenced_values_in_every_position`,
 `tests::a_references_string_value_reaches_every_required_string_position`,
-`tests::a_reference_raises_nostring_only_where_its_value_has_no_string_value`; and
+`tests::a_reference_raises_nostring_only_where_its_value_has_no_string_value`,
+`tests::a_references_nostring_syntax_names_its_values_string` (fix round 3); and
 `rust/corpus/lang/variable_reference_forwarded_string.rex` for the positions the oracle forwards.
 
 **3. Minor 1.** `local_novalue_hook.rex`'s header is re-wrapped (no line over 76 columns,
-`awk 'length > 76'` over it finds none); its line count is unchanged and its `sourceline_oracle` file is
-regenerated.
+`awk 'length > 76'` over it finds none); it is one line longer than at `aeb913cff` (72 lines, from 71),
+and its `sourceline_oracle` file is regenerated.
 
 **Checks** at `b21493ec6`, from `rust/`, `CARGO_INCREMENTAL=0`,
 `CARGO_TARGET_DIR=/tmp/claude-1000/t85-target`, records `r2/final/`:
@@ -432,3 +438,95 @@ head=.../t8.5/rexx-head-b21493ec6`, every program, 3 rounds, no SPREAD or OVER f
 the largest rises are fibfunc +0.0213% and fibcall +0.0209%, as at `074ada1da`; every other program is
 at most +0.0000% or falls (intcall -0.1258%). The new fallback runs only where a conversion found no
 string value.
+
+## Fix round 3
+
+Brief `task-8.5-fix-r3.md`, re-review `task-8.5-rereview-r2.md` (approved with minors). Code
+`0136aeb82`, `ffadc7da7` (clippy: `conversion_subject` takes `&self`) and `4a6321376` (the reference
+arms out of the hot renderings, see Perf); records `t8.5/r3/`.
+
+**1. A cyclic variable reference.** `r = >r`, and `x = >a; y = >b; a = y; b = x`, make a chain of
+references that never ends at a value: base overflowed the stack, `074ada1da` to `b21493ec6` looped in
+`reference_conversion`, and the oracle spins on the CPU and ignores SIGTERM (`r3/oracle-selfref-ps.txt`:
+6 s of CPU in 6 s, state `R`). Every site that chases a reference now follows the chain through
+`Interp::referent_from` (`value.rs`), which detects a cycle by stepping the chain twice as fast as a
+second walk over it (a cycle is a reference object reached again; variables hold fixed values during the
+walk, so a chain that does not end revisits one). The error is 11.1, "Insufficient control stack space":
+rexxref errnums.xml:289 gives Error 11 for exhausted stack space, "a recursive subroutine that does
+not end correctly" among its causes, and it is what this crate already
+answers for unbounded recursion (`call f` from `f`, a method sending itself, a function calling itself,
+each measured 11.1 rc 245 here), which is what an unending chain of conversions is. Sites:
+* the required-string protocol (`reference_conversion` answers no string value; `conversion_subject`
+  raises 11.1, also behind `string_conversion` for method arguments);
+* a message the reference forwards (`referenced_receiver`, for `UNKNOWN` and `REQUEST`), which is
+  where an operator other than concatenation reaches a cyclic left operand:
+  `operator_message_receiver` answers the reference itself for a cycle, and
+  `operator_operand_gap` no longer recurses;
+* the infallible renderings (`to_text`, `text_len`, `try_text`), which read a cyclic reference as its own
+  name, so a TRACE line or `r~string` (`R`) ends;
+* arithmetic's `number_of`, which treats a cycle as not numeric (the protocol refuses it first).
+
+Measured on head: `say r`, `length(r)`, `r || 'a'`, `'a' || r`, `1 + r`, `r + 1`, `'a' = r`, `r = 'a'`,
+`if r`, `parse var r v`, `datatype(r)`, `numeric digits (r)`, `interpret r`, `x.r = 1`, `r~foo`,
+`r~request('STRING')`, `-r`, `r~makestring` and `r~length` all end in 11.1 rc 245; `r~name`, `r~value`,
+`r~class`, `.array~of(r)` and `trace i; x = r` end normally. `r3/probes/selfref.rex` and `cycle.rex`: head
+11.1 rc 245, base rc 134 (stack overflow), oracle killed at 25 s (rc 137). Witness:
+`tests::a_cyclic_reference_is_insufficient_stack_in_every_conversion`, both shapes in eight positions,
+each run on its own thread with a 20 s receive timeout so a regression fails rather than hangs.
+`corpus/oracle-crashes.txt` entries 59 and 60 record both programs as a hang that spins and ignores
+SIGTERM, not an INDEFINITE BLOCK. The non-cyclic path is unchanged in cost (Perf): the chase runs only
+for a reference.
+
+**2. Minor 4: the chain chase witnessed.** `a_reference_raises_nostring_only_where_its_value_has_no_string_value`
+now reads `rr = >r` over an array, over an object with only a `STRING` method (`nstr`) and, under
+`SIGNAL ON NOSTRING`, over a Directory (`NOSTRING a Directory Directory`); the corpus witness
+`variable_reference_forwarded_string.rex` adds `1 + rr` (oracle and head `NOSTRING nstr NSTR`), its
+`sourceline_oracle` file regenerated. The loop now lives in `referent_from`; its one-hop mutant
+(`r3/mutant-one-hop.diff`: the chain's first value answered as the end) fails the unit test (`a N` and
+`NOSTRING a Directory VariableReference`, `r3/mutant-one-hop-unit.txt`) and the corpus program
+(`NOSTRING a NSTR VariableReference`, `r3/mutant-one-hop-corpus.txt`).
+
+**3. Minor 3.** Fix round 2's sentence on the ruled positions now says what changed in them for a
+value with no string value. `tests::a_references_nostring_syntax_names_its_values_string` witnesses
+`::OPTIONS NOSTRING SYNTAX`: head 98.973 `Object "nstr"`, oracle `Object "a N"`, base no error at all
+(`r3/probes/nostring_syntax.rex`); block D names the position.
+
+**4. Minors 1 and 2.** The line-count sentence is corrected (72 lines, from 71), and block D moves String
+method arguments out of its NOSTRING clause: the oracle raises 88.909 there, with no NOSTRING.
+
+**Checks** at `4a6321376` (`r3/final/`), from `rust/`, `CARGO_INCREMENTAL=0`,
+`CARGO_TARGET_DIR=/tmp/claude-1000/t85-target`:
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` (`checks-fmt.txt`) | 0 |
+| `memcap 16G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` (`checks-clippy.txt`) | 0 (101 at `0136aeb82`, `needless_pass_by_ref_mut` on `conversion_subject`, fixed by `ffadc7da7`) |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --lib --test signals --test dispatch_seam --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions` (`checks-touched.txt`) | 0: lib 1196, signals 42, dispatch_seam 6, every table binary passed |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test collect_stress` (`checks-collect-stress.txt`), after the perf run | 0, 74 passed |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`checks-corpus.txt`) | 101: 1201 of 1202, the known `rexxutil_file_date_time.rex` |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-parse --test sourceline_oracle --test errors` (`checks-parse.txt`) | 0 |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test coverage` (`checks-coverage.txt`) | 0 |
+| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../t8.5/r3/final/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`suite2/`, on an idle machine) | 0; the four tables identical to `t8.5/r2/final/suite/`. The first run, beside callgrind (`suite/`), was 101 on the known `SysFileTree TEST_TREE_DIRECTORY` flake, failed on both sides |
+
+**Perf.** `r3/final/callgrind.txt`: `bench-programs/callgrind.sh -B 0.5 -j 4 -o
+/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.5/r3final3 base=.../t8.5/rexx-base-6e0bf5e5b
+head=.../t8.5/rexx-head-4a6321376`, every program, 3 rounds, no SPREAD or OVER flag. Libc subtracted,
+the largest rises are decrender +0.0386%, fibfunc +0.0213% and fibcall +0.0209%; every other program is
+at most +0.0000% or falls (intcall -0.1008%).
+
+The full run at `ffadc7da7` (`r3/callgrind-ffadc7da7.txt`) was far over budget, libc subtracted:
+strings +0.8785%, heapshape +0.7015%, pkglocal +0.6228%, decrender +0.5797%, rexxcps +0.5259%,
+alloc4c +0.3531%, intcall +0.3275%. `cgdiff.py` put it in `try_text`, `text_len_inner`, `to_text` and
+`operator_message_receiver`: the chain walk, inlined into the reference arms of hot functions, and
+`Redirect::VarRefUnset` grown by a payload, changed what was inlined around them. One-round runs of
+the programs over budget (`r3/callgrind-r3try2.txt` to `-r3try6.txt`) brought it back: the reference
+arms of `try_text`, `number_of`, `operator_message_receiver` and `operator_operand_gap` call cold
+helpers, `VarRefUnset` keeps no payload (the name is found again, out of line), `referent_from` is
+cold, and `apply_binary` keeps fix round 2's shape (a cyclic left operand reaches 11.1 through the
+reference's forwarding). An intermediate shape that also moved `apply_binary`'s reference branch out of
+line put rexxcps at +0.0450% and moved `compare_values`' inlining (`r3/callgrind-r3try5.txt`), so it was
+not kept.
+
+**Oracle runs.** The oracle ran `selfref.rex` and `cycle.rex` under the standard wrapper twice each
+(the three-way record and the CPU sample) before they were listed in `oracle-crashes.txt`; neither
+is to be run again.

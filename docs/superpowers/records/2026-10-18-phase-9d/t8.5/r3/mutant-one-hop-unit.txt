@@ -1,0 +1,5 @@
+test tests::a_reference_raises_nostring_only_where_its_value_has_no_string_value ... FAILED
+assertion `left == right` failed
+  left: "p\nq\na N\np\nqx\n3\nNOSTRING a Directory VariableReference\n"
+ right: "p\nq\nnstr\np\nqx\n3\nNOSTRING a Directory Directory\n"
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1195 filtered out; finished in 0.02s

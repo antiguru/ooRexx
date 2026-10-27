@@ -1,0 +1,30 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `release` profile [optimized + debuginfo] target(s) in 17.84s
+     Running tests/coverage.rs (/tmp/claude-1000/t85-target/release/deps/coverage-6f75b9f4d2c43ede)
+
+running 21 tests
+test owners::out_of_scope_set_matches_the_committed_expectation ... ok
+test owners::only_backslash_is_unreachable ... ok
+test a_class_directive_is_admitted_without_panicking ... ok
+test read_subset_unions_two_files_first_seen_order_deduplicated ... ok
+test owners::every_excluded_builtin_names_a_phase_that_owes_it ... ok
+test the_union_reads_every_phase_subset_file ... ok
+test owners::assert_owner_strings_are_split_table_phases ... ok
+test an_unadmitted_directive_still_panics - should panic ... ok
+test every_directive_keyword_is_correctly_admitted_or_refused ... ok
+test owners::variant_counts_match_the_audited_split ... ok
+test phase_4c_subset_matches_the_committed_list ... ok
+test phase_4a_subset_matches_the_committed_list ... ok
+test phase_5a_subset_matches_the_committed_list ... ok
+test phase_5c_subset_matches_the_committed_list ... ok
+test phase_5b_subset_matches_the_committed_list ... ok
+test owners::the_two_harnesses_include_this_exact_file ... ok
+test the_builtin_exclusion_set_matches_the_committed_file ... ok
+test phase_5d_subset_matches_the_committed_list ... ok
+test the_walker_descends_into_a_method_body_and_an_attribute_body ... ok
+test phase_4b_subset_matches_the_committed_list ... ok
+test every_in_scope_variant_is_witnessed_by_the_phase_subsets ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+rc 0
