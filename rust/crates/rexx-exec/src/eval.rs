@@ -1240,7 +1240,7 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn reference_operand_gap(&self, value: ObjRef) -> Option<&'static str> {
-        match self.referent(value) {
+        match self.chain_end(value) {
             Referent::Value(referenced) => self.operator_operand_gap(referenced),
             Referent::Unset(_) | Referent::Cycle => None,
         }
@@ -1253,7 +1253,7 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn reference_message_receiver(&self, value: ObjRef) -> Option<ObjRef> {
-        match self.referent(value) {
+        match self.chain_end(value) {
             Referent::Value(referenced) => self.operator_message_receiver(referenced),
             Referent::Unset(_) => None,
             Referent::Cycle => Some(value),

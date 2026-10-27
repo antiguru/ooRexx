@@ -303,9 +303,8 @@ impl Interp {
             self.redirect_of(&object.body)
         };
         match redirect {
-            Redirect::StemDefault(default) | Redirect::StemSubclass(default) => {
-                return self.text_len_inner(default);
-            }
+            Redirect::StemDefault(default) => return self.text_len_inner(default),
+            Redirect::StemSubclass(store) => return self.stem_subclass_text_len(store),
             Redirect::VarRefValue(referenced) => return self.string_value_text(referenced).len(),
             Redirect::VarRefUnset => return self.unset_reference_name(value).len(),
             // Built rather than measured off the object, because an array's
@@ -546,9 +545,10 @@ impl Interp {
             // `Cow::Owned`: the borrow this recursive call returns is tied
             // to `self`, not to `value`'s own object, so the two Cows
             // cannot share one lifetime.
-            Redirect::StemDefault(default) | Redirect::StemSubclass(default) => {
+            Redirect::StemDefault(default) => {
                 return Cow::Owned(self.to_text(default).into_owned());
             }
+            Redirect::StemSubclass(store) => return Cow::Owned(self.stem_subclass_text(store)),
             // **`string_value_text` and not `to_text`**, which is the
             // difference between the referent's `stringValue()` and its
             // string *conversion*, and it is measured rather than reasoned:
@@ -700,7 +700,7 @@ impl Interp {
                 .text()
                 .or_else(|| state.buffer().map(|buffer| &buffer.bytes[..])),
             Body::Instance { pools, .. } if let Some(store) = self.stem_store_in(pools) => {
-                self.try_text(store)
+                self.stem_subclass_try_text(store)
             }
             // The same cause for an instance nothing has named: `to_text`
             // derives those bytes from the class id and stores them nowhere.
@@ -1006,9 +1006,8 @@ enum Carried {
     Scratch { buffer: [u8; TEXT_SCRATCH], at: u8 },
 }
 
-/// What a value's text has to be read from somewhere other than the object
-/// holding it.
-/// Where a chain of variable references ends ([`Interp::referent_from`]).
+/// Where a chain of links ends ([`Interp::referent`] and
+/// [`Interp::chain_end`]).
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Referent {
     /// A value that is not a reference.
@@ -1016,10 +1015,22 @@ pub(crate) enum Referent {
     /// A variable holding nothing, read through the reference named (`None`
     /// for the first).
     Unset(Option<ObjRef>),
-    /// A variable that refers to itself, directly or through others.
+    /// A chain that leads back to one of its own links: a variable that
+    /// refers to itself, directly or through other variables and stem
+    /// defaults.
     Cycle,
 }
 
+/// One link of a chain ([`Interp::chain_from`]).
+enum Link {
+    /// A `>name` reference, with the value its variable holds.
+    Reference(Option<ObjRef>),
+    /// A stem's default, or the stem a `Stem` subclass instance holds.
+    Default(ObjRef),
+}
+
+/// What a value's text has to be read from somewhere other than the object
+/// holding it.
 #[derive(Copy, Clone)]
 enum Redirect {
     /// A stem with a default answers *as* that default.
@@ -1105,10 +1116,11 @@ impl Interp {
         }
     }
 
-    /// [`Interp::redirect_of`] for a `>name` reference.
+    /// [`Interp::redirect_of`] for a `>name` reference: the value its whole
+    /// chain ends at.
     #[inline(never)]
     fn reference_redirect(&self, reference: &VarRef) -> Redirect {
-        match self.referent_from(self.referenced_value(reference)) {
+        match self.chain_from(self.referenced_value(reference)).1 {
             Referent::Value(value) => Redirect::VarRefValue(value),
             Referent::Unset(_) | Referent::Cycle => Redirect::VarRefUnset,
         }
@@ -1128,35 +1140,82 @@ impl Interp {
         }
     }
 
-    /// Where the chain of references starting at `first`, the value a
-    /// reference's variable holds, ends: a value that is not a reference, a
-    /// reference whose variable holds nothing (`None` standing for the
-    /// reference `first` was read from), or a cycle, which a variable holding
-    /// a reference to itself, directly or through others, makes.
+    /// The link `current` is, or `None` for a value that is none: a reference
+    /// leads to the value its variable holds, a stem with a default to that
+    /// default, and a `Stem` subclass instance to its stem.
+    fn chain_link(&self, current: ObjRef) -> Option<Link> {
+        let Decoded::Heap { .. } = current.decode() else {
+            return None;
+        };
+        match &self.heap.get(current)?.body {
+            Body::VarRef(reference) => Some(Link::Reference(self.referenced_value(reference))),
+            Body::Stem {
+                default: Some(default),
+                ..
+            } => Some(Link::Default(*default)),
+            Body::Instance { pools, .. } => self.stem_store_in(pools).map(Link::Default),
+            _ => None,
+        }
+    }
+
+    /// Both ends of the chain of links starting at `first`, the value a
+    /// reference's variable holds (`None` for one holding nothing): where its
+    /// references end (the first value that is not one, or the reference
+    /// whose variable holds nothing, `None` standing for the reference
+    /// `first` was read from), and where the whole chain ends. A chain that
+    /// leads back to one of its links is a cycle at both: it is stepped twice
+    /// as fast as a second walk over it, and a chain that does not end meets
+    /// itself.
     #[cold]
     #[inline(never)]
-    pub(crate) fn referent_from(&self, first: Option<ObjRef>) -> Referent {
+    fn chain_from(&self, first: Option<ObjRef>) -> (Referent, Referent) {
+        let mut referent = None;
         let mut last = None;
         let mut slow = first;
         let mut fast = first;
         loop {
             for _ in 0..2 {
                 let Some(current) = fast else {
-                    return Referent::Unset(last);
+                    let unset = Referent::Unset(last);
+                    return (referent.unwrap_or(unset), unset);
                 };
-                let Some(reference) = self.as_variable_reference(current) else {
-                    return Referent::Value(current);
-                };
-                last = Some(current);
-                fast = self.referenced_value(reference);
+                match self.chain_link(current) {
+                    Some(Link::Reference(next)) => {
+                        last = Some(current);
+                        fast = next;
+                    }
+                    Some(Link::Default(next)) => {
+                        referent.get_or_insert(Referent::Value(current));
+                        fast = Some(next);
+                    }
+                    None => {
+                        let value = Referent::Value(current);
+                        return (referent.unwrap_or(value), value);
+                    }
+                }
             }
-            slow = slow
-                .and_then(|current| self.as_variable_reference(current))
-                .and_then(|reference| self.referenced_value(reference));
+            slow = slow.and_then(|current| match self.chain_link(current) {
+                Some(Link::Reference(next)) => next,
+                Some(Link::Default(next)) => Some(next),
+                None => None,
+            });
             if slow.is_some() && slow == fast {
-                return Referent::Cycle;
+                return (Referent::Cycle, Referent::Cycle);
             }
         }
+    }
+
+    /// Where the chain of references starting at `value` ends: `value`
+    /// itself when it is not a reference. A cycle anywhere on the chain,
+    /// through references or stem defaults, is [`Referent::Cycle`].
+    pub(crate) fn referent(&self, value: ObjRef) -> Referent {
+        self.chain_from(Some(value)).0
+    }
+
+    /// Where the whole chain of links starting at `value` ends, references
+    /// and stem defaults alike.
+    pub(crate) fn chain_end(&self, value: ObjRef) -> Referent {
+        self.chain_from(Some(value)).1
     }
 
     /// [`Interp::number_of`] of the reference `value`: the number of the
@@ -1164,7 +1223,7 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn reference_number(&mut self, value: ObjRef, receiver: bool) -> Result<Number, NotNumeric> {
-        match self.referent(value) {
+        match self.chain_end(value) {
             Referent::Value(referenced) => self.number_of(referenced, receiver),
             // An unset variable reads as its own name, which parses as a
             // number only if the name spells one -- it cannot, since a symbol
@@ -1174,21 +1233,13 @@ impl Interp {
         }
     }
 
-    /// [`Interp::referent_from`] for the reference `value`.
-    pub(crate) fn referent(&self, value: ObjRef) -> Referent {
-        match self.as_variable_reference(value) {
-            Some(reference) => self.referent_from(self.referenced_value(reference)),
-            None => Referent::Value(value),
-        }
-    }
-
     /// The name the reference `value` renders as where its chain ends at no
     /// value: the variable holding nothing at the chain's end, or for a cycle
     /// `value`'s own.
     #[cold]
     #[inline(never)]
     fn unset_reference_name(&self, value: ObjRef) -> &[u8] {
-        let reference = match self.referent(value) {
+        let reference = match self.chain_end(value) {
             Referent::Unset(Some(last)) => last,
             _ => value,
         };
@@ -1201,10 +1252,51 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn reference_try_text(&self, value: ObjRef) -> Option<&[u8]> {
-        match self.referent(value) {
+        match self.chain_end(value) {
             Referent::Value(referenced) if self.array_slots(referenced).is_some() => None,
             Referent::Value(referenced) => self.try_text(referenced),
             Referent::Unset(_) | Referent::Cycle => Some(self.unset_reference_name(value)),
+        }
+    }
+
+    /// [`Interp::try_text`] of a `Stem` subclass instance's stem `store`: the
+    /// stem's bytes, or its name where its default leads back to the instance.
+    #[cold]
+    #[inline(never)]
+    fn stem_subclass_try_text(&self, store: ObjRef) -> Option<&[u8]> {
+        match self.chain_end(store) {
+            Referent::Cycle => self.stem_name(store),
+            _ => self.try_text(store),
+        }
+    }
+
+    /// [`Interp::to_text`] of a `Stem` subclass instance's stem `store`, on
+    /// the same terms.
+    #[cold]
+    #[inline(never)]
+    fn stem_subclass_text(&mut self, store: ObjRef) -> Vec<u8> {
+        match self.chain_end(store) {
+            Referent::Cycle => self.stem_name(store).unwrap_or_default().to_vec(),
+            _ => self.to_text(store).into_owned(),
+        }
+    }
+
+    /// [`Interp::text_len`] of a `Stem` subclass instance's stem `store`, on
+    /// the same terms.
+    #[cold]
+    #[inline(never)]
+    fn stem_subclass_text_len(&mut self, store: ObjRef) -> usize {
+        match self.chain_end(store) {
+            Referent::Cycle => self.stem_name(store).map_or(0, <[u8]>::len),
+            _ => self.text_len_inner(store),
+        }
+    }
+
+    /// A stem's own name, or `None` for a value that is not a stem.
+    fn stem_name(&self, value: ObjRef) -> Option<&[u8]> {
+        match &self.heap.get(value)?.body {
+            Body::Stem { name, .. } => Some(name),
+            _ => None,
         }
     }
 

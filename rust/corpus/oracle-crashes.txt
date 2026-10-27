@@ -1873,3 +1873,17 @@ SIGKILLed at 25 s (rc 137, stderr empty). Measured 2026-10-27 by Phase 9d Task 8
 the standard wrapper from a fresh empty directory (the Task 8.5 re-review r2's `cycle.rex`). This
 crate answers 11.1 (`a_cyclic_reference_is_insufficient_stack_in_every_conversion`). No upstream
 ticket.
+
+## 61. A stem whose default is a reference to that stem, converted to a string
+
+    s. = >s.
+    call lineout "made.txt", "made"
+    say s.
+    say "end"
+
+Effect: entry 59's hang through a stem's default: `made.txt` written, then still running at SIGTERM
+and SIGKILLed at 25 s (rc 137, stdout and stderr empty). `s. = >s.` alone, followed by `say
+s.~class~id`, prints `Stem` at rc 0, so the hang is in the conversion. Measured 2026-10-27 by the
+Phase 9d Task 8.5 re-review r3 under the standard wrapper from a fresh empty directory (its
+`sd1.rex`). This crate answers 11.1 (`a_cyclic_reference_is_insufficient_stack_in_every_conversion`,
+whose stem shapes it holds). No upstream ticket.

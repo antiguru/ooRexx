@@ -1665,16 +1665,22 @@ fn a_references_string_value_reaches_every_required_string_position() {
     );
 }
 
-/// A variable reference that refers to itself, directly or through another
-/// variable, never ends at a value: any conversion of it, and any message it
-/// forwards, is 11.1, the error unbounded recursion answers. The oracle hangs
-/// on both shapes (`corpus/oracle-crashes.txt`), so each run here is bounded
-/// by a thread's timeout rather than trusted to end.
+/// A variable reference that refers to itself, directly, through another
+/// variable or through a stem's default, never ends at a value: any
+/// conversion of it, and any message it forwards, is 11.1, the error
+/// unbounded recursion answers. So is a `Stem` subclass instance whose stem's
+/// default is the instance. The oracle hangs on the reference shapes
+/// (`corpus/oracle-crashes.txt`), so each run here is bounded by a thread's
+/// timeout rather than trusted to end.
 #[test]
 fn a_cyclic_reference_is_insufficient_stack_in_every_conversion() {
     let shapes = [
         "r = >r\n",
         "a = 1; b = 2\nx = >a; y = >b\na = y; b = x\nr = x\n",
+        "s. = >s.\nr = s.\n",
+        "r = >s.\ns. = r\n",
+        "u = 1\nt = >u\ns. = t\nu = s.\nr = u\n",
+        "r = .stem~subclass('m')~new\nr[] = r\n",
     ];
     let uses = [
         "say r",

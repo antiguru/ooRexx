@@ -457,11 +457,16 @@ impl Interp {
     /// that the arms a string takes stay as small as they were: a `Stem`
     /// subclass instance answers as its stem, which is where
     /// `StemClass::request` forwards, and any other instance as
-    /// [`Interp::make_string_or_none`] finds it.
+    /// [`Interp::make_string_or_none`] finds it. A stem whose default leads
+    /// back to the instance has no string value here;
+    /// [`Interp::conversion_subject`] refuses it.
     #[inline(never)]
     fn instance_conversion(&mut self, value: ObjRef) -> StringConversion {
         match self.stem_subclass_store(value) {
-            Some(store) => self.classify_string_conversion(store),
+            Some(store) => match self.chain_end(store) {
+                Referent::Cycle => StringConversion::None,
+                _ => self.classify_string_conversion(store),
+            },
             None => self.make_string_or_none(value),
         }
     }
@@ -475,13 +480,13 @@ impl Interp {
     }
 
     /// [`Interp::classify_string_conversion`] of a variable reference: the
-    /// limb of the value its chain of references ends at, or for an unset
-    /// variable that variable's name. A cyclic reference has no string value
-    /// here; [`Interp::conversion_subject`] refuses it.
+    /// limb of the value its chain of references and stem defaults ends at,
+    /// or for an unset variable that variable's name. A cyclic reference has
+    /// no string value here; [`Interp::conversion_subject`] refuses it.
     #[cold]
     #[inline(never)]
     fn reference_conversion(&mut self, value: ObjRef) -> StringConversion {
-        match self.referent(value) {
+        match self.chain_end(value) {
             Referent::Value(referenced) => self.classify_string_conversion(referenced),
             Referent::Unset(last) => {
                 let reference = last.unwrap_or(value);
@@ -496,9 +501,9 @@ impl Interp {
     }
 
     /// The object a conversion of `value` falls back on: `value`, or for a
-    /// variable reference the value its chain of references ends at. A
-    /// cyclic reference never ends at one, and is 11.1, the error unbounded
-    /// recursion answers.
+    /// variable reference the value its chain of references ends at. A chain
+    /// that leads back to itself, through references or stem defaults, never
+    /// ends at one, and is 11.1, the error unbounded recursion answers.
     fn conversion_subject(&self, value: ObjRef) -> Result<ObjRef, Failure> {
         match self.referent(value) {
             Referent::Value(referenced) => Ok(referenced),
