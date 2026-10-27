@@ -377,3 +377,56 @@ Brief `task-8.4-fix-r3.md`, re-review `task-8.4-rereview-r2.md`. Code `6c8644ad5
 against `rexx-base-f0164456d`, exit 0, no flag. Libc subtracted: startup +0.0261%, pingmsg +0.0245%,
 sayloop +0.0139%, churn +0.0043%, define +0.0040%; every other program at most +0.0025% or falls.
 
+
+## Fix round 4
+
+Brief `task-8.4-fix-r4.md`. Code `a2a4f78b7`; records `t8.4/r4/`. Each cause was bisected by building
+the commit and its parent from `git archive` trees, each in its own target directory (two first runs
+sharing one target directory reused the earlier tree's test binary and passed at both commits; they
+were discarded).
+
+* **Coverage, `every_in_scope_variant_is_witnessed_by_the_phase_subsets`.** Introduced by `f84e64ee4`
+  (fails there, passes at `44f1cb56b`): the declaration checks moved into the parser, so
+  `parse_program` refuses the subset programs that witness them. An enumeration of the whole union
+  (the loop temporarily collecting failures) found more than the brief's one (99.901, 99.902, 99.903, 99.906, 99.931, 99.932, 99.945, 33.1),
+  and the coverage property still held with all of them skipped. Before, the test proved every
+  in-scope variant appears in the parse tree of some subset program, these included, though translation
+  refuses them before any instruction runs; any other parse failure panicked. After, it proves every
+  in-scope variant appears in a subset program that translates, which is stronger: `TRANSLATION_REFUSED`
+  names each refused program with its error, the program must fail with exactly that error and
+  contributes nothing, a listed program that parses or is in no subset panics, and every other
+  program must parse. Calling `parse_known_program` was tried first and is wrong: 99.906 and 33.1 are
+  raised whether or not the declarations are checked. Mutant: a `say (` appended to
+  `directive_constant_expression_needs_class.rex` reddens the test (99.938 against 99.906); restored,
+  `git diff --stat` empty.
+* **Bench, `the_axis_list_covers_every_bench_program`.** Introduced by `8d409845b` (fails there, passes
+  at `68e7f15d5`), which added `define.rex` without an axis. `define` is now `Role::Loop`; a loop axis
+  needs an `n = <digits>` bound, so `define.rex` reads `n = 3000` and loops `to n` (same work, one
+  assignment more; a later callgrind of `define` measures that source on both sides). The oracle runs
+  it, rc 0, `3000 2999`. `every_declared_runnability_still_holds` passes with `rust/target/release/rexx`
+  built (`r4/checks-bench-suite.txt`, 10 passed).
+* **LOSTDIGITS, `do-repeat-count`.** Closed by `7a6eb8778` (Task 6.14, `count_lostdigits` in
+  `run/loops.rs`): `009fd1978` answers 26.2, rc 230; `7a6eb8778` and head answer 98.972, rc 158,
+  byte-identical to the oracle on all three descriptors. This follows the rules: Deviation 47 makes the
+  count a whole number at the DIGITS in force, so a wider count is truncated, and rexxref raises
+  LOSTDIGITS when a number is truncated (`numarit.xml:220`, `condtra.xml:231`), escalated to SYNTAX by
+  `::OPTIONS LOSTDIGITS SYNTAX` (`condtra.xml:235`-`:239`); without the directive both sides still
+  answer 26.2. The row moves to the `Raises` rows beside `do-to` and `do-by`; with no row left,
+  `Expect::Diverges` and its arm are removed.
+
+No interpreter code changed, so no callgrind run.
+
+**Checks**, from `rust/`, `CARGO_INCREMENTAL=0`, at `a2a4f78b7`:
+
+| command | result |
+|---|---|
+| `memcap 8G cargo build -j 4 --release -p rexx-exec --bin rexx` (`r4/build-rexx.txt`) | 0 |
+| `cargo fmt --all --check` (`r4/checks-fmt.txt`) | 0 |
+| `memcap 8G cargo clippy -j 4 -p rexx-exec -p rexx-bench --all-targets -- -D warnings` (`r4/checks-clippy.txt`) | 0 |
+| `memcap 8G cargo test -j 4 --release -p rexx-exec --test coverage --test directive_options` (`r4/checks-exec-tests.txt`) | 0: 21 and 24 passed |
+| `memcap 8G cargo test -j 4 --release -p rexx-bench --bin rexx-bench-suite` (`r4/checks-bench-suite.txt`) | 0: 10 passed |
+| `memcap 24G cargo test -j 4 --release --no-fail-fast --workspace`, `rust/target/release/rexx` built first (`r4/workspace-tests.txt`, sha on its first line) | 101: two failures. `datetime_zone` `the_file_date_time_witness_reads_the_zone_the_oracle_does` (the queued DST item). `collect_stress` `the_l0_subset_passes_again_under_collect_on_every_allocation` on `command_redirected_target_waits_elsewhere.rex` (`guard 0 3 waited 0` plain, `waited 1` under stress), the queued `2026-10-26-redirected-target-waits-timing-flake.md`; not one of the brief's three |
+| `memcap 8G cargo test -j 4 --release -p rexx-exec --test collect_stress`, rerun (`r4/collect-stress-rerun.txt`) | 0: 74 passed |
+
+`rexxutil_process` and the arity tests passed in this run. The three items are fixed; the remaining
+failures are the DST item and the known `waited` timing flake.

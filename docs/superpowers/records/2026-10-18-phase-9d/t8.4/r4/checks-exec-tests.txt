@@ -1,0 +1,59 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `release` profile [optimized + debuginfo] target(s) in 10.78s
+     Running tests/coverage.rs (target/release/deps/coverage-6f75b9f4d2c43ede)
+
+running 21 tests
+test owners::out_of_scope_set_matches_the_committed_expectation ... ok
+test every_directive_keyword_is_correctly_admitted_or_refused ... ok
+test owners::assert_owner_strings_are_split_table_phases ... ok
+test phase_4a_subset_matches_the_committed_list ... ok
+test owners::every_excluded_builtin_names_a_phase_that_owes_it ... ok
+test an_unadmitted_directive_still_panics - should panic ... ok
+test phase_5b_subset_matches_the_committed_list ... ok
+test a_class_directive_is_admitted_without_panicking ... ok
+test phase_5d_subset_matches_the_committed_list ... ok
+test owners::only_backslash_is_unreachable ... ok
+test phase_5c_subset_matches_the_committed_list ... ok
+test phase_4b_subset_matches_the_committed_list ... ok
+test phase_4c_subset_matches_the_committed_list ... ok
+test read_subset_unions_two_files_first_seen_order_deduplicated ... ok
+test the_builtin_exclusion_set_matches_the_committed_file ... ok
+test the_walker_descends_into_a_method_body_and_an_attribute_body ... ok
+test owners::variant_counts_match_the_audited_split ... ok
+test owners::the_two_harnesses_include_this_exact_file ... ok
+test the_union_reads_every_phase_subset_file ... ok
+test phase_5a_subset_matches_the_committed_list ... ok
+test every_in_scope_variant_is_witnessed_by_the_phase_subsets ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/directive_options.rs (target/release/deps/directive_options-125893385d28a3ef)
+
+running 24 tests
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test the_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test the_licensed_list_names_exactly_the_programs_that_can_trace_from_two_threads ... ok
+test every_directive_options_program_answers_the_oracle ... ok
+test lostdigits_raises_98_972_where_the_oracle_does_and_nowhere_else ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.96s
+

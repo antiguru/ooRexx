@@ -1,0 +1,18 @@
+   Compiling rexx-bench v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench)
+    Finished `release` profile [optimized + debuginfo] target(s) in 6.66s
+     Running unittests src/bin/rexx-bench-suite.rs (target/release/deps/rexx_bench_suite-57c8da239da3c4fc)
+
+running 10 tests
+test tests::a_program_without_a_loop_has_no_bound ... ok
+test tests::a_quoted_line_that_is_absent_says_so ... ok
+test tests::the_axis_list_covers_every_bench_program ... ok
+test tests::the_joint_coverage_bound_is_clamped ... ok
+test tests::the_performance_line_parses ... ok
+test tests::the_caveat_matches_the_committed_baseline ... ok
+test tests::every_loop_axis_has_a_loop_bound ... ok
+test tests::a_failing_side_aborts_the_axis ... ok
+test tests::the_two_sides_alternate_and_run_in_the_working_directory ... ok
+test tests::every_declared_runnability_still_holds ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
