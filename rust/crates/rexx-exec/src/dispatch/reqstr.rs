@@ -499,7 +499,7 @@ impl Interp {
     /// variable reference the value its chain of references ends at. A
     /// cyclic reference never ends at one, and is 11.1, the error unbounded
     /// recursion answers.
-    fn conversion_subject(&mut self, value: ObjRef) -> Result<ObjRef, Failure> {
+    fn conversion_subject(&self, value: ObjRef) -> Result<ObjRef, Failure> {
         match self.referent(value) {
             Referent::Value(referenced) => Ok(referenced),
             Referent::Unset(_) => Ok(value),
