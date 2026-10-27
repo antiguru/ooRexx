@@ -252,3 +252,4 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointe
 2026-10-27-varref-operator-traceback-line.md	divergence	-	9d	an operator on a variable reference omits the Compiled method traceback line	9d
 2026-10-27-string-equals-makestring-argument.md	divergence	-	9d	String~equals ignores a makeString argument here, converts it on the oracle	9d
 2026-10-27-stem-default-arithmetic-nostring.md	divergence	-	9d	a stem with a non-string default names the stem in arithmetic NOSTRING, the oracle the default	9d
+2026-10-27-stem-array-default-string-value.md	divergence	-	9d	a stem with an array default renders the items joined, the oracle an Array	9d
