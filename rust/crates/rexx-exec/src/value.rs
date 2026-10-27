@@ -12,7 +12,7 @@
 //! The value model (D15): four functions every later task manipulates a
 //! value through, and the two rules the oracle makes observable everywhere.
 
-use crate::Interp;
+use crate::{Failure, Interp};
 use rexx_core::{
     BehaviourId, Body, BufferState, Bytes, Decoded, INLINE_BYTES, InlineText, NotNumeric, ObjRef,
     SMALL_INT_MAX, SMALL_INT_MIN, VarRef, VarRefHome,
@@ -1029,6 +1029,14 @@ enum Link {
     Default(ObjRef),
 }
 
+/// A chain of links walked to its end ([`Interp::chain_from`]).
+struct Chain {
+    /// Where the whole chain ends.
+    end: Referent,
+    /// Whether a reference lies on the chain.
+    through_reference: bool,
+}
+
 /// What a value's text has to be read from somewhere other than the object
 /// holding it.
 #[derive(Copy, Clone)]
@@ -1120,7 +1128,7 @@ impl Interp {
     /// chain ends at.
     #[inline(never)]
     fn reference_redirect(&self, reference: &VarRef) -> Redirect {
-        match self.chain_from(self.referenced_value(reference)).1 {
+        match self.chain_from(self.referenced_value(reference)).end {
             Referent::Value(value) => Redirect::VarRefValue(value),
             Referent::Unset(_) | Referent::Cycle => Redirect::VarRefUnset,
         }
@@ -1158,39 +1166,38 @@ impl Interp {
         }
     }
 
-    /// Both ends of the chain of links starting at `first`, the value a
-    /// reference's variable holds (`None` for one holding nothing): where its
-    /// references end (the first value that is not one, or the reference
-    /// whose variable holds nothing, `None` standing for the reference
-    /// `first` was read from), and where the whole chain ends. A chain that
-    /// leads back to one of its links is a cycle at both: it is stepped twice
-    /// as fast as a second walk over it, and a chain that does not end meets
-    /// itself.
+    /// The chain of links starting at `first`, the value a reference's
+    /// variable holds (`None` for one holding nothing; an [`Referent::Unset`]
+    /// then names no reference), walked to its end. A chain that leads back
+    /// to one of its links ends in a cycle: it is stepped twice as fast as a
+    /// second walk over it, and a chain that does not end meets itself.
     #[cold]
     #[inline(never)]
-    fn chain_from(&self, first: Option<ObjRef>) -> (Referent, Referent) {
-        let mut referent = None;
+    fn chain_from(&self, first: Option<ObjRef>) -> Chain {
         let mut last = None;
+        let mut through_reference = false;
         let mut slow = first;
         let mut fast = first;
         loop {
             for _ in 0..2 {
                 let Some(current) = fast else {
-                    let unset = Referent::Unset(last);
-                    return (referent.unwrap_or(unset), unset);
+                    return Chain {
+                        end: Referent::Unset(last),
+                        through_reference,
+                    };
                 };
                 match self.chain_link(current) {
                     Some(Link::Reference(next)) => {
                         last = Some(current);
+                        through_reference = true;
                         fast = next;
                     }
-                    Some(Link::Default(next)) => {
-                        referent.get_or_insert(Referent::Value(current));
-                        fast = Some(next);
-                    }
+                    Some(Link::Default(next)) => fast = Some(next),
                     None => {
-                        let value = Referent::Value(current);
-                        return (referent.unwrap_or(value), value);
+                        return Chain {
+                            end: Referent::Value(current),
+                            through_reference,
+                        };
                     }
                 }
             }
@@ -1200,22 +1207,85 @@ impl Interp {
                 None => None,
             });
             if slow.is_some() && slow == fast {
-                return (Referent::Cycle, Referent::Cycle);
+                return Chain {
+                    end: Referent::Cycle,
+                    through_reference,
+                };
             }
         }
     }
 
     /// Where the chain of references starting at `value` ends: `value`
-    /// itself when it is not a reference. A cycle anywhere on the chain,
-    /// through references or stem defaults, is [`Referent::Cycle`].
+    /// itself when it is not a reference, the reference whose variable holds
+    /// nothing, or [`Referent::Cycle`] where the references lead back to one
+    /// of their own. What a reference forwards goes here; a stem reached this
+    /// way answers for its own default.
+    #[cold]
+    #[inline(never)]
     pub(crate) fn referent(&self, value: ObjRef) -> Referent {
-        self.chain_from(Some(value)).0
+        let mut last = None;
+        let mut slow = Some(value);
+        let mut fast = Some(value);
+        loop {
+            for _ in 0..2 {
+                let Some(current) = fast else {
+                    return Referent::Unset(last);
+                };
+                let Some(reference) = self.as_variable_reference(current) else {
+                    return Referent::Value(current);
+                };
+                last = Some(current);
+                fast = self.referenced_value(reference);
+            }
+            slow = slow
+                .and_then(|current| self.as_variable_reference(current))
+                .and_then(|reference| self.referenced_value(reference));
+            if slow.is_some() && slow == fast {
+                return Referent::Cycle;
+            }
+        }
     }
 
     /// Where the whole chain of links starting at `value` ends, references
     /// and stem defaults alike.
     pub(crate) fn chain_end(&self, value: ObjRef) -> Referent {
-        self.chain_from(Some(value)).1
+        self.chain_from(Some(value)).end
+    }
+
+    /// Whether the whole chain of links starting at `value` leads back to
+    /// one of its links.
+    pub(crate) fn chain_is_cyclic(&self, value: ObjRef) -> bool {
+        matches!(self.chain_end(value), Referent::Cycle)
+    }
+
+    /// Runs `forward`, a message the stem `receiver` forwards to its value.
+    /// The outermost forward walks the chain once: a value that leads back
+    /// to the stem would forward without end, and is 11.1, the error
+    /// unbounded recursion answers. Each forward inside it checks the stack
+    /// instead, which ends a chain made cyclic underneath that walk the way
+    /// an expression level does.
+    pub(crate) fn forwarded<T>(
+        &mut self,
+        anchor: *const T,
+        receiver: ObjRef,
+        forward: impl FnOnce(&mut Self) -> Result<Option<ObjRef>, Failure>,
+    ) -> Result<Option<ObjRef>, Failure> {
+        if (self.stem_forwarding == 0 && self.chain_is_cyclic(receiver))
+            || self.stack_exhausted(anchor)
+        {
+            return Err(crate::error::Raised::insufficient_stack().into());
+        }
+        self.stem_forwarding += 1;
+        let result = forward(self);
+        self.stem_forwarding -= 1;
+        result
+    }
+
+    /// The name an unset reference renders as: that of `last`, the reference
+    /// whose variable holds nothing, or of `value` for a chain with none.
+    fn unset_name(&self, last: Option<ObjRef>, value: ObjRef) -> &[u8] {
+        self.as_variable_reference(last.unwrap_or(value))
+            .map_or(&[][..], |reference| &reference.name)
     }
 
     /// [`Interp::number_of`] of the reference `value`: the number of the
@@ -1260,24 +1330,30 @@ impl Interp {
     }
 
     /// [`Interp::try_text`] of a `Stem` subclass instance's stem `store`: the
-    /// stem's bytes, or its name where its default leads back to the instance.
+    /// bytes of the value its chain ends at, the name of the unset reference
+    /// it ends at, or the stem's own name where the chain leads back.
     #[cold]
     #[inline(never)]
     fn stem_subclass_try_text(&self, store: ObjRef) -> Option<&[u8]> {
-        match self.chain_end(store) {
+        match self.chain_from(Some(store)).end {
+            Referent::Value(end) => self.try_text(end),
+            Referent::Unset(last) => Some(self.unset_name(last, store)),
             Referent::Cycle => self.stem_name(store),
-            _ => self.try_text(store),
         }
     }
 
     /// [`Interp::to_text`] of a `Stem` subclass instance's stem `store`, on
-    /// the same terms.
+    /// the same terms: the chain's end rendered as a reference on the chain
+    /// renders it, else as the stem renders its default.
     #[cold]
     #[inline(never)]
     fn stem_subclass_text(&mut self, store: ObjRef) -> Vec<u8> {
-        match self.chain_end(store) {
+        let chain = self.chain_from(Some(store));
+        match chain.end {
+            Referent::Value(end) if chain.through_reference => self.string_value_text(end),
+            Referent::Value(end) => self.to_text(end).into_owned(),
+            Referent::Unset(last) => self.unset_name(last, store).to_vec(),
             Referent::Cycle => self.stem_name(store).unwrap_or_default().to_vec(),
-            _ => self.to_text(store).into_owned(),
         }
     }
 
@@ -1286,9 +1362,12 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn stem_subclass_text_len(&mut self, store: ObjRef) -> usize {
-        match self.chain_end(store) {
+        let chain = self.chain_from(Some(store));
+        match chain.end {
+            Referent::Value(end) if chain.through_reference => self.string_value_text(end).len(),
+            Referent::Value(end) => self.text_len_inner(end),
+            Referent::Unset(last) => self.unset_name(last, store).len(),
             Referent::Cycle => self.stem_name(store).map_or(0, <[u8]>::len),
-            _ => self.text_len_inner(store),
         }
     }
 

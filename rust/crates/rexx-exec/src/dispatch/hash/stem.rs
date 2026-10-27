@@ -455,14 +455,21 @@ fn stem_value(interp: &mut Interp, receiver: ObjRef) -> ObjRef {
     default.unwrap_or_else(|| interp.text_built(name))
 }
 
-/// [`stem_value`] for a message the stem forwards: a value that leads back
-/// to the stem, through references or stem defaults, would forward without
-/// end, and is 11.1, the error unbounded recursion answers.
-fn forwarded_value(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure> {
-    if let crate::value::Referent::Cycle = interp.chain_end(receiver) {
-        return Err(Raised::insufficient_stack().into());
-    }
-    Ok(stem_value(interp, receiver))
+/// Sends `message` with `args` to the stem's value on its behalf, which is
+/// what `StemClass`'s forwarding methods do ([`Interp::forwarded`]).
+fn forward_to_value(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    message: &[u8],
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    let value = stem_value(interp, receiver);
+    interp.roots.activity_mut().push_temp(value);
+    let caller = interp.caller();
+    let probe = 0u8;
+    interp.forwarded(&raw const probe, receiver, |interp| {
+        interp.send_message(value, message, None, args, caller)
+    })
 }
 
 /// `StemClass::request(class)` (`classes/StemClass.cpp`): `'ARRAY'` answers
@@ -487,12 +494,9 @@ fn native_stem_request(
         let caller = interp.caller();
         return interp.send_message(receiver, b"MAKEARRAY", None, &[], caller);
     }
-    let value = forwarded_value(interp, store)?;
-    interp.roots.activity_mut().push_temp(value);
     let forwarded = interp.text_built(upper);
     interp.roots.activity_mut().push_temp(forwarded);
-    let caller = interp.caller();
-    interp.send_message(value, b"REQUEST", None, &[Some(forwarded)], caller)
+    forward_to_value(interp, store, b"REQUEST", &[Some(forwarded)])
 }
 
 /// `StemClass::toDirectory`: a fresh `Directory` holding one entry per tail
@@ -546,10 +550,7 @@ pub(in crate::dispatch) fn stem_unknown(
         return Err(Raised::missing_method_argument(2).into());
     };
     let forwarded = array_argument(interp, arguments, ArrayArgument::Positional)?;
-    let value = forwarded_value(interp, receiver)?;
-    interp.roots.activity_mut().push_temp(value);
-    let caller = interp.caller();
-    interp.send_message(value, &name, None, &forwarded, caller)
+    forward_to_value(interp, receiver, &name, &forwarded)
 }
 
 fn native_stem_make_array(

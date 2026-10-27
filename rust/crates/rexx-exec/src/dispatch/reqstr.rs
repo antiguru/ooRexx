@@ -456,18 +456,33 @@ impl Interp {
     /// [`Interp::classify_string_conversion`]'s instance arm, out of line so
     /// that the arms a string takes stay as small as they were: a `Stem`
     /// subclass instance answers as its stem, which is where
-    /// `StemClass::request` forwards, and any other instance as
-    /// [`Interp::make_string_or_none`] finds it. A stem whose default leads
-    /// back to the instance has no string value here;
+    /// `StemClass::request` forwards, so as the value its stem's chain ends
+    /// at; any other instance as [`Interp::make_string_or_none`] finds it. A
+    /// chain that leads back has no string value here;
     /// [`Interp::conversion_subject`] refuses it.
     #[inline(never)]
     fn instance_conversion(&mut self, value: ObjRef) -> StringConversion {
         match self.stem_subclass_store(value) {
-            Some(store) => match self.chain_end(store) {
-                Referent::Cycle => StringConversion::None,
-                _ => self.classify_string_conversion(store),
-            },
+            Some(store) => self.chain_conversion(store),
             None => self.make_string_or_none(value),
+        }
+    }
+
+    /// [`Interp::classify_string_conversion`] of the value the chain of links
+    /// starting at `value` ends at, or for a chain ending at an unset
+    /// variable that variable's name. A chain that leads back has no string
+    /// value here.
+    fn chain_conversion(&mut self, value: ObjRef) -> StringConversion {
+        match self.chain_end(value) {
+            Referent::Value(end) => self.classify_string_conversion(end),
+            Referent::Unset(last) => {
+                let name = self
+                    .as_variable_reference(last.unwrap_or(value))
+                    .map(|reference| reference.name.to_vec())
+                    .unwrap_or_default();
+                StringConversion::Bytes(name)
+            }
+            Referent::Cycle => StringConversion::None,
         }
     }
 
@@ -479,36 +494,28 @@ impl Interp {
         }
     }
 
-    /// [`Interp::classify_string_conversion`] of a variable reference: the
-    /// limb of the value its chain of references and stem defaults ends at,
-    /// or for an unset variable that variable's name. A cyclic reference has
-    /// no string value here; [`Interp::conversion_subject`] refuses it.
+    /// [`Interp::classify_string_conversion`] of a variable reference:
+    /// [`Interp::chain_conversion`], the limb of the value its chain of
+    /// references and stem defaults ends at. A cyclic reference has no string
+    /// value here; [`Interp::conversion_subject`] refuses it.
     #[cold]
     #[inline(never)]
     fn reference_conversion(&mut self, value: ObjRef) -> StringConversion {
-        match self.chain_end(value) {
-            Referent::Value(referenced) => self.classify_string_conversion(referenced),
-            Referent::Unset(last) => {
-                let reference = last.unwrap_or(value);
-                let name = self
-                    .as_variable_reference(reference)
-                    .map(|reference| reference.name.to_vec())
-                    .unwrap_or_default();
-                StringConversion::Bytes(name)
-            }
-            Referent::Cycle => StringConversion::None,
-        }
+        self.chain_conversion(value)
     }
 
     /// The object a conversion of `value` falls back on: `value`, or for a
     /// variable reference the value its chain of references ends at. A chain
-    /// that leads back to itself, through references or stem defaults, never
-    /// ends at one, and is 11.1, the error unbounded recursion answers.
+    /// that leads back to itself anywhere, through references or stem
+    /// defaults, never ends at a value the conversion could use, and is 11.1,
+    /// the error unbounded recursion answers.
     fn conversion_subject(&self, value: ObjRef) -> Result<ObjRef, Failure> {
+        if self.chain_is_cyclic(value) {
+            return Err(Raised::insufficient_stack().into());
+        }
         match self.referent(value) {
             Referent::Value(referenced) => Ok(referenced),
-            Referent::Unset(_) => Ok(value),
-            Referent::Cycle => Err(Raised::insufficient_stack().into()),
+            Referent::Unset(_) | Referent::Cycle => Ok(value),
         }
     }
 

@@ -1715,6 +1715,57 @@ fn a_cyclic_reference_is_insufficient_stack_in_every_conversion() {
     }
 }
 
+/// A chain of `Stem` subclass instances, each the next one's default, is
+/// converted and rendered in one walk, and a message it forwards walks it
+/// once: 50000 links end well inside the thread's timeout, where a walk per
+/// link would not.
+#[test]
+fn a_long_chain_of_stem_subclass_instances_is_walked_once() {
+    let source = b"first = .stem~subclass('m')~new\nt = first\ndo 49999\n  u = .stem~subclass('m')~new\n  t[] = u\n  t = u\nend\nt[] = 'leaf'\n\
+                   say length(first) first~string first\nsay (first || 'x') (first = 'leaf') first~length\n\
+                   trace r\nx = first\ntrace o\nsay 'end'\n"
+        .to_vec();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let outcome = run_program("/w/l.rex", source, crate::Invocation::none());
+        let _ = sender.send(outcome);
+    });
+    let outcome = receiver
+        .recv_timeout(std::time::Duration::from_secs(20))
+        .unwrap_or_else(|_| panic!("the chain did not end"));
+    assert_eq!(
+        outcome.exit_code,
+        0,
+        "{}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "4 leaf leaf\nleafx 1 4\nend\n"
+    );
+    assert!(
+        String::from_utf8_lossy(&outcome.stderr).contains(">>>   \"leaf\""),
+        "{}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+}
+
+/// A message forwarded through a reference goes to the value the reference
+/// names, a stem whose default is cyclic included: the stem answers what it
+/// answers without its default, and only a conversion of it is 11.1.
+#[test]
+fn a_reference_forwards_to_a_stem_whose_default_is_cyclic() {
+    assert_eq!(
+        clean_stdout(
+            "/w/f.rex",
+            b"signal on syntax\ns. = >s.\nq = >s.\nsay q~items q~hasIndex(1) q~allIndexes~items\n\
+              q~put('a', 1)\nsay q~items q~hasIndex(1) q~allIndexes~items s.1\nsay q~length\n\
+              say 'not reached'\nexit\nsyntax: say 'SYNTAX' condition('O')~code\n"
+        ),
+        "0 0 0\n1 1 1 a\nSYNTAX 11.1\n"
+    );
+}
+
 /// Under `::OPTIONS NOSTRING SYNTAX`, a reference whose value has only a
 /// `STRING` method is 98.973 naming that value's `STRING` answer, as NOSTRING's
 /// description does.
