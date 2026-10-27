@@ -1,0 +1,32 @@
+--- oracle rc=165
+[stdout]
+class yy
+note 0
+k ran ::CONSTANT
+k ran YY
+[stderr]
+     8 *-* ::constant e (.d~note(self~yy, .context~executable))
+     4 *-* o~zz
+Error 91 running SCRATCH/r3/q3.rex line 8:  No result object.
+Error 91.999:  Message "YY" did not return a result.
+--- base rc=163
+[stdout]
+class yy
+note 0
+k ran ::CONSTANT
+[stderr]
+       *-* Compiled method "DEFINE" with scope "Class".
+     1 *-* .c~define('ZZ', .d~e)
+Error 93 running SCRATCH/r3/q3.rex line 1:  Incorrect call to method.
+Error 93.974:  The method argument must be a string, array, or method object.
+--- head rc=165
+[stdout]
+class yy
+note 0
+k ran ::CONSTANT
+k ran YY
+[stderr]
+     8 *-* ::constant e (.d~note(self~yy, .context~executable))
+     4 *-* o~zz
+Error 91 running SCRATCH/r3/q3.rex line 8:  No result object.
+Error 91.999:  Message "YY" did not return a result.

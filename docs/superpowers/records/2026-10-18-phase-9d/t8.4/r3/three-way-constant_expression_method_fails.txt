@@ -1,0 +1,59 @@
+--- oracle rc=214
+[stdout]
+42.3 33
+METHOD ZZ 33
+PROGRAM SCRATCH/r3/constant_expression_method_fails.rex 10
+    33 *-* ::constant e (.a~keep(.context~executable, 1 / .a~d))
+    10 *-* .a~new~zz
+42.3 45
+METHOD BOOM 45
+METHOD ZZ 41
+PROGRAM SCRATCH/r3/constant_expression_method_fails.rex 13
+    45 *-* x = 1/d
+    41 *-* ::constant e (.b~boom(.context~executable))
+    13 *-* .b~new~zz
+42.3 49
+METHOD PROP 54
+METHOD ZZ 49
+PROGRAM SCRATCH/r3/constant_expression_method_fails.rex 16
+    54 *-* x = 1/d
+    49 *-* ::constant e (.p~prop(.context~executable))
+    16 *-* .p~new~zz
+[stderr]
+    33 *-* ::constant e (.a~keep(.context~executable, 1 / .a~d))
+    18 *-* .a~new~zz
+Error 42 running SCRATCH/r3/constant_expression_method_fails.rex line 33:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+--- base rc=163
+[stdout]
+[stderr]
+       *-* Compiled method "DEFINE" with scope "Class".
+     5 *-* .a~define('ZZ', .a~e)
+Error 93 running SCRATCH/r3/constant_expression_method_fails.rex line 5:  Incorrect call to method.
+Error 93.974:  The method argument must be a string, array, or method object.
+--- head rc=214
+[stdout]
+42.3 33
+METHOD ZZ 33
+PROGRAM SCRATCH/r3/constant_expression_method_fails.rex 10
+    33 *-* ::constant e (.a~keep(.context~executable, 1 / .a~d))
+    10 *-* .a~new~zz
+42.3 45
+METHOD BOOM 45
+METHOD ZZ 41
+PROGRAM SCRATCH/r3/constant_expression_method_fails.rex 13
+    45 *-* x = 1/d
+    41 *-* ::constant e (.b~boom(.context~executable))
+    13 *-* .b~new~zz
+42.3 49
+METHOD PROP 54
+METHOD ZZ 49
+PROGRAM SCRATCH/r3/constant_expression_method_fails.rex 16
+    54 *-* x = 1/d
+    49 *-* ::constant e (.p~prop(.context~executable))
+    16 *-* .p~new~zz
+[stderr]
+    33 *-* ::constant e (.a~keep(.context~executable, 1 / .a~d))
+    18 *-* .a~new~zz
+Error 42 running SCRATCH/r3/constant_expression_method_fails.rex line 33:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

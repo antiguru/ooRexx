@@ -1,0 +1,56 @@
+--- oracle rc=158
+[stdout]
+[stderr]
+       >I> Method "::CONSTANT" with scope "C" in package "SCRATCH/r3/t2.rex".
+     5 *-* ::constant e (.context~executable)
+       >>>   "a Method"
+       <I< Method "::CONSTANT" with scope "C" in package "SCRATCH/r3/t2.rex".
+     1 *-* .c~define('ZZ', .c~e)
+     2 *-* o = .c~new
+       >>>   "a C"
+     3 *-* o~go
+       >I> Method "GO" with scope "C" in package "SCRATCH/r3/t2.rex".
+     7 *-* m = self~start('zz')
+       >>>   "a Message"
+     8 *-* m~result
+       >I> Method "ZZ" with scope "C" in package "SCRATCH/r3/t2.rex".
+       <I< Method "ZZ" with scope "C" in package "SCRATCH/r3/t2.rex".
+     5 *-* ::constant e (.context~executable)
+       <I< Method "GO" with scope "C" in package "SCRATCH/r3/t2.rex".
+Error 98 running SCRATCH/r3/t2.rex line 8:  Execution error.
+     5 *-* ::constant e (.context~executable)
+Error 98.905:  Deadlock detected on a guarded method.
+Error 98 running SCRATCH/r3/t2.rex line 8:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+--- base rc=163
+[stdout]
+[stderr]
+     1 *-* .c~define('ZZ', .c~e)
+       *-* Compiled method "DEFINE" with scope "Class".
+     1 *-* .c~define('ZZ', .c~e)
+Error 93 running SCRATCH/r3/t2.rex line 1:  Incorrect call to method.
+Error 93.974:  The method argument must be a string, array, or method object.
+--- head rc=158
+[stdout]
+[stderr]
+       >I> Method "::CONSTANT" with scope "C" in package "SCRATCH/r3/t2.rex".
+     5 *-* ::constant e (.context~executable)
+       >>>   "a Method"
+       <I< Method "::CONSTANT" with scope "C" in package "SCRATCH/r3/t2.rex".
+     1 *-* .c~define('ZZ', .c~e)
+     2 *-* o = .c~new
+       >>>   "a C"
+     3 *-* o~go
+       >I> Method "GO" with scope "C" in package "SCRATCH/r3/t2.rex".
+     7 *-* m = self~start('zz')
+       >>>   "a Message"
+     8 *-* m~result
+       >I> Method "ZZ" with scope "C" in package "SCRATCH/r3/t2.rex".
+       <I< Method "ZZ" with scope "C" in package "SCRATCH/r3/t2.rex".
+     5 *-* ::constant e (.context~executable)
+Error 98 running SCRATCH/r3/t2.rex line 5:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+       <I< Method "GO" with scope "C" in package "SCRATCH/r3/t2.rex".
+     5 *-* ::constant e (.context~executable)
+Error 98 running SCRATCH/r3/t2.rex line 8:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.

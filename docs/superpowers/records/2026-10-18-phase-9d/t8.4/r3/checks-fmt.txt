@@ -1,0 +1,1 @@
+cargo fmt --all --check at 6c8644ad5: exit 0

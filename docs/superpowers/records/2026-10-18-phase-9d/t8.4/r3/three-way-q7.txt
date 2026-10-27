@@ -1,0 +1,23 @@
+--- oracle rc=214
+[stdout]
+[stderr]
+    10 *-* x = 1/d
+     6 *-* ::constant e (.c~boom(.context~executable))
+     4 *-* o~zz
+Error 42 running SCRATCH/r3/q7.rex line 10:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.
+--- base rc=163
+[stdout]
+[stderr]
+       *-* Compiled method "DEFINE" with scope "Class".
+     1 *-* .c~define('ZZ', .c~e)
+Error 93 running SCRATCH/r3/q7.rex line 1:  Incorrect call to method.
+Error 93.974:  The method argument must be a string, array, or method object.
+--- head rc=214
+[stdout]
+[stderr]
+    10 *-* x = 1/d
+     6 *-* ::constant e (.c~boom(.context~executable))
+     4 *-* o~zz
+Error 42 running SCRATCH/r3/q7.rex line 10:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

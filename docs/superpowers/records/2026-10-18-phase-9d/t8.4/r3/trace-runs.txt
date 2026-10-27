@@ -1,0 +1,9 @@
+# t1.rex oracle, 5 runs: md5 of stdout+stderr with the path masked, rc
+      5 rc=0 b2f1f29d
+# t1.rex head, 5 runs: md5 of stdout+stderr with the path masked, rc
+      5 rc=0 b2f1f29d
+# t2.rex oracle, 5 runs: md5 of stdout+stderr with the path masked, rc
+      4 rc=158 4fe11bda
+      1 rc=158 5ace219e
+# t2.rex head, 5 runs: md5 of stdout+stderr with the path masked, rc
+      5 rc=158 4fe11bda

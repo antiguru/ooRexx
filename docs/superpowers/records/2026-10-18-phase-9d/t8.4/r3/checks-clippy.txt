@@ -1,0 +1,92 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.47
+    Checking cfg-if v1.0.4
+   Compiling memchr v2.8.3
+   Compiling autocfg v1.5.1
+   Compiling libc v0.2.186
+   Compiling num-traits v0.2.19
+   Compiling shlex v2.0.1
+   Compiling quick-xml v0.37.5
+    Checking rustc-hash v2.1.2
+   Compiling find-msvc-tools v0.1.9
+   Compiling cc v1.3.0
+   Compiling syn v2.0.119
+   Compiling rexx-inventory v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory)
+    Checking rexx-num v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num)
+   Compiling crossbeam-utils v0.8.21
+    Checking regex-syntax v0.8.11
+   Compiling crossbeam-epoch v0.9.20
+    Checking rexx-parse v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse)
+    Checking either v1.16.0
+   Compiling rayon-core v1.13.0
+    Checking crossbeam-deque v0.8.6
+    Checking regex-automata v0.4.14
+    Checking rexx-core v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core)
+    Checking rayon v1.12.0
+   Compiling rustversion v1.0.22
+   Compiling rustix v1.1.4
+   Compiling rexx-lib v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-lib)
+   Compiling rexx-classes v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-classes)
+    Checking libloading v0.8.9
+    Checking iana-time-zone v0.1.65
+    Checking linux-raw-sys v0.12.1
+    Checking once_cell v1.21.4
+    Checking bitflags v2.13.1
+    Checking tracing-core v0.1.36
+    Checking chrono v0.4.45
+    Checking rexx-api v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api)
+    Checking log v0.4.34
+    Checking tz-rs v0.7.3
+   Compiling generator v0.8.10
+    Checking lazy_static v1.5.1
+    Checking pin-project-lite v0.2.17
+   Compiling thiserror v1.0.69
+    Checking tracing v0.1.44
+    Checking sharded-slab v0.1.7
+    Checking tracing-log v0.2.0
+    Checking matchers v0.2.0
+   Compiling thiserror-impl v1.0.69
+    Checking thread_local v1.1.10
+    Checking smallvec v1.16.2
+    Checking nu-ansi-term v0.50.3
+    Checking tracing-subscriber v0.3.23
+    Checking scoped-tls v1.0.1
+    Checking rexx-extract v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract)
+    Checking datadriven v0.9.0
+   Compiling serde_core v1.0.229
+   Compiling zerocopy v0.8.52
+    Checking loom v0.7.2
+   Compiling zerocopy-derive v0.8.52
+    Checking rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+   Compiling syn v3.0.2
+   Compiling zmij v1.0.23
+   Compiling serde v1.0.229
+   Compiling serde_json v1.0.151
+   Compiling alloca v0.4.0
+    Checking plotters-backend v0.3.7
+    Checking anstyle v1.0.14
+    Checking ciborium-io v0.2.2
+    Checking itoa v1.0.18
+    Checking clap_lex v1.1.0
+    Checking clap_builder v4.6.2
+   Compiling serde_derive v1.0.229
+    Checking plotters-svg v0.3.7
+    Checking itertools v0.13.0
+    Checking half v2.7.1
+    Checking ciborium-ll v0.2.2
+    Checking cast v0.3.0
+    Checking same-file v1.0.6
+    Checking walkdir v2.5.0
+    Checking plotters v0.3.7
+    Checking criterion-plot v0.8.2
+    Checking clap v4.6.2
+    Checking regex v1.12.4
+    Checking tinytemplate v1.1.0
+    Checking ciborium v0.2.2
+    Checking page_size v0.6.0
+    Checking oorandom v11.1.0
+    Checking anes v0.1.6
+    Checking criterion v0.8.2
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 14.84s
+memcap 16G cargo clippy -j 4 -p rexx-parse -p rexx-exec --all-targets -- -D warnings at 6c8644ad5: exit 0

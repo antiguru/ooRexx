@@ -1,0 +1,27 @@
+--- oracle rc=0
+[stdout]
+42.3 17
+METHOD BOOM 17
+METHOD ZZ 13
+PROGRAM SCRATCH/r3/q6.rex 5
+    17 *-* x = 1/d
+    13 *-* ::constant e (.c~boom(.context~executable))
+     5 *-* o~zz
+[stderr]
+--- base rc=163
+[stdout]
+[stderr]
+       *-* Compiled method "DEFINE" with scope "Class".
+     1 *-* .c~define('ZZ', .c~e)
+Error 93 running SCRATCH/r3/q6.rex line 1:  Incorrect call to method.
+Error 93.974:  The method argument must be a string, array, or method object.
+--- head rc=0
+[stdout]
+42.3 17
+METHOD BOOM 17
+METHOD ZZ 13
+PROGRAM SCRATCH/r3/q6.rex 5
+    17 *-* x = 1/d
+    13 *-* ::constant e (.c~boom(.context~executable))
+     5 *-* o~zz
+[stderr]

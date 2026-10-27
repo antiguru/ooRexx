@@ -209,8 +209,8 @@ Brief `task-8.4-fix-r1.md`, review `task-8.4-review.md`. Code `402a6c753`, `2ea7
   record" refusal; identical at head), `tests::a_constant_expression_holds_its_classs_guard` (`g2`'s
   shape; `f0164456d` prints `g ran` and `5`, rc 0, `r1/three-way-g2.txt`; 5 of 5 runs pass) and
   `tests::a_constant_expressions_method_runs_its_own_expression`. Two differences remain, both
-  chosen: the oracle evaluates another `::CONSTANT`'s expression when the method is run (`run2.rex`
-  prints `note ran` again; part of candidate B's oracle bug), and `g2`'s two deadlock reports name the
+  chosen: the oracle evaluates every `::CONSTANT` expression of the class, in order, when the
+  method is run (`run2.rex` prints `note ran` again; candidate B's oracle bug), and `g2`'s two deadlock reports name the
   started activity's line and the constant's clauses where the oracle's interleave on the waiter's line
   (Deviation 67's shape).
 * **Deviation 67, HALT.** `run::tests::conditions::a_started_messages_halt_report_names_the_line_that_raised`,
@@ -249,7 +249,10 @@ clause, oracle bug").
   (.context~executable)`, `define`d and sent, evaluates every `::CONSTANT` expression of the class in
   order on the oracle (`r2/probes/run3.rex`: constants `a`, `e`, `z`, `e` the one run, print `note a`,
   `keep`, `note z` at install and again for the run, `r2/three-way-run3.txt`) and its own expression
-  here (`keep` alone).
+  here (`keep` alone). The oracle's run also replaces the constant's value: `r3/probes/q5d.rex`
+  (`m = .c~e; .c~define('ZZ', m); .c~new~zz; say (m == .c~e) (.c~e == .c~method('ZZ'))`) answers
+  `0 1` on the oracle, the accessor now answering the run's executable, the `define`d copy, and `1 0`
+  here, where the constant keeps the value its directive gave it (`r3/three-way-q5d.txt`).
 * Witnessed by `tests::a_constant_expressions_method_answers_its_own_clause_as_source` and
   `tests::a_constant_expressions_method_runs_its_own_expression`.
 
@@ -330,4 +333,47 @@ sayloop +0.0143%, churn +0.0045%; every other program at most +0.0026% or falls.
    report echoes nothing. The same deadlock with an ordinary method (`d2.rex`) differs too, and more:
    the oracle reports once (`Compiled method "RESULT"`, `10 *-* m~result`, `2 *-* o~go`), this crate
    twice. Pre-existing in the deadlock report shape, not this task's; proposed owner: a queued item.
+
+## Fix round 3
+
+Brief `task-8.4-fix-r3.md`, re-review `task-8.4-rereview-r2.md`. Code `6c8644ad5`; records `t8.4/r3/`
+(the re-review's probes copied into `r3/probes/`, each run three ways in `r3/three-way-*.txt`).
+
+* **I1.** The install path's sealing of the `::CONSTANT` level is now one function,
+  `Interp::seal_constant_level` (the directive's clause blamed and echoed, the level's `METHOD` frame
+  captured under its name, the level sealed; nothing where a re-raised condition keeps its own site),
+  called by the install path with `::CONSTANT` and then the `::CLASS` echo, and by a failing run with
+  the message name and its arguments and no `::CLASS` echo. `q3`, `q6`, `q7`, `q8`, `c3` and `c5` are
+  identical to the oracle on stdout, stderr and rc; each differs at `d2e226538` and at `b3875ce42`
+  (`r3/red-at-earlier-heads.txt`). Witness `corpus/lang/constant_expression_method_fails.rex` (in
+  `phase-9.txt`, with its `sourceline_oracle` file): the expression's own failure (POSITION the
+  directive's line), a failure in a method it calls (POSITION that method's line, the directive
+  echoed), and a RAISE PROPAGATE into the level (POSITION the directive's line), trapped, then the first
+  untrapped; one `::CONSTANT` per class. Red at `d2e226538` and `b3875ce42`, identical at head.
+  `c4` and `k2r` are unchanged: `c4` identical, `k2r` differs only by the started activity's report
+  naming its own line (Deviation 67).
+* **M1.** A run traces its `>I>` before it reserves and waits for its guard. `t1`, 5 runs each side,
+  identical every run (`r3/trace-runs.txt`); `t2` (the wait deadlocks under `TRACE R`), the crate 5 of
+  5 one answer, the oracle 4 of 5 that answer and 1 of 5 another interleaving of its two reports. Witness
+  `tests::a_constant_expressions_method_traces_its_entry_before_the_guard_wait` (`t1`'s shape; 5 of 5
+  runs pass; `d2e226538` traced `>I> Method "ZZ"` after `say 'hold end'`).
+* **M2.** The round 1 sentence now reads every expression of the class, in order.
+* **Candidate B** now carries the re-review's oracle defect: a run replaces the constant's value on the
+  oracle (`r3/probes/q5d.rex`, oracle `0 1`, here `1 0`).
+
+**Checks**, from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t84-target`, at
+`6c8644ad5`:
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` (`r3/checks-fmt.txt`) | 0 |
+| `memcap 16G cargo clippy -j 4 -p rexx-parse -p rexx-exec --all-targets -- -D warnings` (`r3/checks-clippy.txt`) | 0 |
+| touched binaries as in round 1 (`r3/checks-touched.txt`) | 0: lib 1185, collect_stress 74, every other binary passed |
+| `memcap 16G cargo test -j 4 --release -p rexx-parse` (`r3/checks-parse.txt`) | 0 |
+| `REXX_CORPUS_GATE=1 ... --test corpus` (`r3/checks-corpus.txt`) | 101: 1196 of 1197, the one mismatch `rexxutil_file_date_time.rex` |
+| whole suite (`r3/suite/`) | 0; the four tables identical to `t8.4/r2/suite/` |
+
+**Perf** (`r3/callgrind.txt`): `callgrind.sh -B 0.5 -j 4`, every program, `rexx-head-6c8644ad5`
+against `rexx-base-f0164456d`, exit 0, no flag. Libc subtracted: startup +0.0261%, pingmsg +0.0245%,
+sayloop +0.0139%, churn +0.0043%, define +0.0040%; every other program at most +0.0025% or falls.
 

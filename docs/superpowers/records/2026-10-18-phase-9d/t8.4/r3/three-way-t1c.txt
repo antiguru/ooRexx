@@ -1,0 +1,63 @@
+--- oracle rc=0
+[stdout]
+hold end
+[stderr]
+     1 *-* o = .c~new
+       >>>   "a C"
+     2 *-* m = o~start('hold')
+       >>>   "a Message"
+     3 *-* call syssleep 0.3
+       >I> Method "HOLD" with scope "C" in package "SCRATCH/r3/t1c.rex".
+    10 *-* call syssleep 0.6
+       >>>   "0"
+     4 *-* o~zz
+       >I> Method "ZZ" with scope "C" in package "SCRATCH/r3/t1c.rex".
+       >>>   "0"
+    11 *-* say 'hold end'
+       >>>   "hold end"
+       <I< Method "HOLD" with scope "C" in package "SCRATCH/r3/t1c.rex".
+     8 *-* return
+       <I< Method "ZZ" with scope "C" in package "SCRATCH/r3/t1c.rex".
+     5 *-* m~result
+--- base rc=0
+[stdout]
+hold end
+[stderr]
+     1 *-* o = .c~new
+       >>>   "a C"
+     2 *-* m = o~start('hold')
+       >>>   "a Message"
+     3 *-* call syssleep 0.3
+       >I> Method "HOLD" with scope "C" in package "SCRATCH/r3/t1c.rex".
+    10 *-* call syssleep 0.6
+       >>>   "0"
+     4 *-* o~zz
+       >I> Method "ZZ" with scope "C" in package "SCRATCH/r3/t1c.rex".
+       >>>   "0"
+    11 *-* say 'hold end'
+       >>>   "hold end"
+       <I< Method "HOLD" with scope "C" in package "SCRATCH/r3/t1c.rex".
+     8 *-* return
+       <I< Method "ZZ" with scope "C" in package "SCRATCH/r3/t1c.rex".
+     5 *-* m~result
+--- head rc=0
+[stdout]
+hold end
+[stderr]
+     1 *-* o = .c~new
+       >>>   "a C"
+     2 *-* m = o~start('hold')
+       >>>   "a Message"
+     3 *-* call syssleep 0.3
+       >I> Method "HOLD" with scope "C" in package "SCRATCH/r3/t1c.rex".
+    10 *-* call syssleep 0.6
+       >>>   "0"
+     4 *-* o~zz
+       >I> Method "ZZ" with scope "C" in package "SCRATCH/r3/t1c.rex".
+       >>>   "0"
+    11 *-* say 'hold end'
+       >>>   "hold end"
+       <I< Method "HOLD" with scope "C" in package "SCRATCH/r3/t1c.rex".
+     8 *-* return
+       <I< Method "ZZ" with scope "C" in package "SCRATCH/r3/t1c.rex".
+     5 *-* m~result

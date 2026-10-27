@@ -1,0 +1,62 @@
+--- oracle rc=0
+[stdout]
+hold end
+[stderr]
+       >I> Method "::CONSTANT" with scope "C" in package "SCRATCH/r3/t1.rex".
+     8 *-* ::constant e (.context~executable)
+       >>>   "a Method"
+       <I< Method "::CONSTANT" with scope "C" in package "SCRATCH/r3/t1.rex".
+     1 *-* .c~define('ZZ', .c~e)
+     2 *-* o = .c~new
+       >>>   "a C"
+     3 *-* m = o~start('hold')
+       >>>   "a Message"
+     4 *-* call syssleep 0.3
+       >I> Method "HOLD" with scope "C" in package "SCRATCH/r3/t1.rex".
+    10 *-* call syssleep 0.6
+       >>>   "0"
+     5 *-* o~zz
+       >I> Method "ZZ" with scope "C" in package "SCRATCH/r3/t1.rex".
+       >>>   "0"
+    11 *-* say 'hold end'
+       >>>   "hold end"
+       <I< Method "HOLD" with scope "C" in package "SCRATCH/r3/t1.rex".
+     8 *-* ::constant e (.context~executable)
+       >>>   "a Method"
+       <I< Method "ZZ" with scope "C" in package "SCRATCH/r3/t1.rex".
+     6 *-* m~result
+--- base rc=163
+[stdout]
+[stderr]
+     1 *-* .c~define('ZZ', .c~e)
+       *-* Compiled method "DEFINE" with scope "Class".
+     1 *-* .c~define('ZZ', .c~e)
+Error 93 running SCRATCH/r3/t1.rex line 1:  Incorrect call to method.
+Error 93.974:  The method argument must be a string, array, or method object.
+--- head rc=0
+[stdout]
+hold end
+[stderr]
+       >I> Method "::CONSTANT" with scope "C" in package "SCRATCH/r3/t1.rex".
+     8 *-* ::constant e (.context~executable)
+       >>>   "a Method"
+       <I< Method "::CONSTANT" with scope "C" in package "SCRATCH/r3/t1.rex".
+     1 *-* .c~define('ZZ', .c~e)
+     2 *-* o = .c~new
+       >>>   "a C"
+     3 *-* m = o~start('hold')
+       >>>   "a Message"
+     4 *-* call syssleep 0.3
+       >I> Method "HOLD" with scope "C" in package "SCRATCH/r3/t1.rex".
+    10 *-* call syssleep 0.6
+       >>>   "0"
+     5 *-* o~zz
+       >I> Method "ZZ" with scope "C" in package "SCRATCH/r3/t1.rex".
+       >>>   "0"
+    11 *-* say 'hold end'
+       >>>   "hold end"
+       <I< Method "HOLD" with scope "C" in package "SCRATCH/r3/t1.rex".
+     8 *-* ::constant e (.context~executable)
+       >>>   "a Method"
+       <I< Method "ZZ" with scope "C" in package "SCRATCH/r3/t1.rex".
+     6 *-* m~result
