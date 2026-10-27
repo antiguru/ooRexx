@@ -1341,6 +1341,30 @@ fn phase_5d_subset_matches_the_committed_list() {
     );
 }
 
+/// The subset programs translation refuses, with the error each must fail
+/// with. They run none of their instructions, so they witness no variant.
+const TRANSLATION_REFUSED: &[(&str, u16, u16)] = &[
+    (
+        "lang/directive_constant_expression_needs_class.rex",
+        99,
+        906,
+    ),
+    ("lang/class_duplicate_method.rex", 99, 902),
+    ("lang/class_duplicate_constant_and_method.rex", 99, 902),
+    ("lang/class_duplicate_attribute.rex", 99, 931),
+    ("lang/class_duplicate_constant.rex", 99, 932),
+    ("lang/class_duplicate_class.rex", 99, 901),
+    ("lang/directive_annotate_missing_target.rex", 99, 945),
+    ("lang/directive_method_external_duplicate_wins.rex", 99, 902),
+    ("lang/directive_method_external_source_order.rex", 99, 903),
+    (
+        "lang/directive_method_external_before_duplicate.rex",
+        99,
+        902,
+    ),
+    ("lang/directive_options_digits_below_fuzz.rex", 33, 1),
+];
+
 /// Criterion 1's coverage property, read against the **union** of every
 /// phase's subset file rather than `phase-4a.txt` alone.
 #[test]
@@ -1368,8 +1392,26 @@ fn every_in_scope_variant_is_witnessed_by_the_phase_subsets() {
     for rel_path in &subset {
         let abs = corpus_dir.join(rel_path);
         let text = fs::read(&abs).unwrap_or_else(|e| panic!("cannot read {}: {e}", abs.display()));
-        let p = parse_program(text)
-            .unwrap_or_else(|e| panic!("{} failed to parse: {e:?}", abs.display()));
+        let refused = TRANSLATION_REFUSED
+            .iter()
+            .find(|(name, _, _)| name == rel_path);
+        let p = match (parse_program(text), refused) {
+            (Ok(p), None) => p,
+            (Err(e), Some(&(_, code, sub))) => {
+                assert_eq!(
+                    (e.code(), e.sub()),
+                    (code, sub),
+                    "{} is refused with a different error",
+                    abs.display()
+                );
+                continue;
+            }
+            (Ok(_), Some(_)) => panic!(
+                "{} is listed in TRANSLATION_REFUSED and parsed",
+                abs.display()
+            ),
+            (Err(e), None) => panic!("{} failed to parse: {e:?}", abs.display()),
+        };
         assert_program_has_only_admitted_directives(&abs, &p);
 
         each_instruction(&p, &mut |i| {
@@ -1402,6 +1444,13 @@ fn every_in_scope_variant_is_witnessed_by_the_phase_subsets() {
                 _ => {}
             }
         });
+    }
+
+    for (name, _, _) in TRANSLATION_REFUSED {
+        assert!(
+            subset.iter().any(|path| path == name),
+            "{name} is listed in TRANSLATION_REFUSED and in no phase subset"
+        );
     }
 
     let mut report = String::new();

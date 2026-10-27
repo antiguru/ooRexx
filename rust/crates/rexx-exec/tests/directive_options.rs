@@ -239,10 +239,8 @@ fn lostdigits_raises_98_972_where_the_oracle_does_and_nowhere_else() {
         Raises,
         /// rc 0 on both sides with the same stdout -- the over-fire control.
         Agrees,
-        /// Neither: a divergence this task did not close, named in the row.
-        Diverges,
     }
-    use Expect::{Agrees, Diverges, Raises};
+    use Expect::{Agrees, Raises};
     let armed = "::options lostdigits syntax\n";
     let cases: &[(&str, &str, Expect)] = &[
         // Every operator whose operand the oracle checks.
@@ -295,6 +293,13 @@ fn lostdigits_raises_98_972_where_the_oracle_does_and_nowhere_else() {
         (
             "do-by",
             "numeric digits 3\ndo k = 1 to 2 by 123456789\nleave\nend\n",
+            Raises,
+        ),
+        // A repetition count is a whole number at DIGITS, so a wider one is
+        // truncated, and LOSTDIGITS comes before 26.2.
+        (
+            "do-repeat-count",
+            "numeric digits 3\ndo 123456789\nleave\nend\n",
             Raises,
         ),
         (
@@ -366,16 +371,6 @@ fn lostdigits_raises_98_972_where_the_oracle_does_and_nowhere_else() {
             "numeric digits 3\nsay 1.23456789 + 0\n",
             Agrees,
         ),
-        // The one this task did not close, named so a change to it is visible
-        // here. `do-repeat-count`: a bare `DO n` converts rather than computes, so
-        // this crate answers 26.2 -- which is what BOTH sides answer without
-        // the directive. The oracle's LOSTDIGITS preempts its own 26.2 and
-        // ours does not: loud on both sides, different loud.
-        (
-            "do-repeat-count",
-            "numeric digits 3\ndo 123456789\nleave\nend\n",
-            Diverges,
-        ),
     ];
     let oracle = locate();
     for (name, body, expect) in cases {
@@ -429,25 +424,6 @@ fn lostdigits_raises_98_972_where_the_oracle_does_and_nowhere_else() {
                     outcome.exit_code,
                     cpp.expect_exit_code(),
                     "{name}: exit status differs from the oracle"
-                );
-            }
-            Diverges => {
-                assert_ne!(
-                    outcome.exit_code, 120,
-                    "{name}: this row records a divergence the refusal does \
-                     not cover, and the refusal now covers it"
-                );
-                assert_ne!(
-                    (
-                        String::from_utf8_lossy(&outcome.stdout).into_owned(),
-                        outcome.exit_code
-                    ),
-                    (
-                        String::from_utf8_lossy(&cpp.stdout).into_owned(),
-                        cpp.expect_exit_code()
-                    ),
-                    "{name}: the two sides now agree, so this row's \
-                     divergence closed and the row belongs deleted"
                 );
             }
         }

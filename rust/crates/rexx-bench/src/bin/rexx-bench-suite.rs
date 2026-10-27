@@ -112,6 +112,10 @@ const AXES: &[Axis] = &[
         role: Role::Loop,
     },
     Axis {
+        name: "define",
+        role: Role::Loop,
+    },
+    Axis {
         name: "dirread",
         role: Role::Loop,
     },
