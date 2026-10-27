@@ -1,0 +1,214 @@
+# Task 8.5 fix round 5 probe results. Columns: probe, side, rc, wall seconds (memcap and timeout included), stdout (lines joined by |), stderr (first 160 bytes, lines joined by |).
+# Sides: r3 = cg-9d/t8.5/rexx-head-4a6321376; r4 = rexx-head-6a8290bb6 (round 4, the quadratic one); r5 and r5b = this round's builds before the commit (r5 before the forwarding change, r5b after); pin = rexx-head-2cda11d12, the committed binary; oracle = the standard wrapper (acyclic programs only).
+# Crate runs: probes/run.sh (memcap 2G timeout -k 5 20, fresh empty dir). subchain2, subchain3, mixchain and fwd print their own elapsed seconds from TIME('E') around the position measured.
+# The re-review's t85-rereview4-scratch/ no longer existed when this round ran; subchain.rex, subchain2.rex and mixchain.rex are rebuilt from its description.
+fwd1000	oracle	0		length 4 0.000059|	
+fwd10000	oracle	0		length 4 0.000673|	
+fwd100000	oracle	0		length 4 0.004231|	
+fwd100000	pin	0	.182468879	length 4 0.069476|	
+fwd100000	r3	0	.184787412	length 4 0.056360|	
+fwd100000	r5b	0	.258634824	length 4 0.120702|	
+fwd15000	oracle	0		length 4 0.000590|	
+fwd19000	oracle	0		length 4 0.000749|	
+fwd20000	oracle	0		length 4 0.000805|	
+fwd20000	r3	0	.104556155	length 4 0.014380|	
+fwd200000	pin	0	.376474634	length 4 0.186709|	
+fwd200000	r3	0	.398589099	length 4 0.191756|	
+fwd200000	r5b	0	.442138353	length 4 0.242671|	
+fwd5000	oracle	0		length 4 0.000190|	
+fwd50000	oracle	0		length 4 0.001967|	
+fwd50000	r3	0	.149520947	length 4 0.044859|	
+mixchain100	oracle	0		len 4 in 0.000096|leaf|end|	
+mixchain1000	pin	0	.094358704	len 4 in 0.000141|leaf|end|	
+mixchain1000	r3	0	.100935589	len 4 in 0.000120|leaf|end|	
+mixchain1000	r4	0	.099597447	len 4 in 0.000257|leaf|end|	
+mixchain1000	r5	0	.090756185	len 4 in 0.000153|leaf|end|	
+mixchain1000	r5b	0	.103324186	len 4 in 0.000143|leaf|end|	
+mixchain10000	pin	0	.415816650	len 4 in 0.001323|leaf|end|	
+mixchain10000	r3	0	.424085522	len 4 in 0.001510|leaf|end|	
+mixchain10000	r5	0	.412743962	len 4 in 0.005576|leaf|end|	
+mixchain10000	r5b	0	.424294411	len 4 in 0.001764|leaf|end|	
+mixchain1000cyc	pin	0	.093402931	SYNTAX 11.1|	
+mixchain1000cyc	r4	0	.093900966	SYNTAX 11.1|	
+mixchain1000cyc	r5	0	.098362241	SYNTAX 11.1|	
+mixchain1000cyc	r5b	0	.096536644	SYNTAX 11.1|	
+moved	oracle	0		an Array|an Array|an Array|an Array|an Array|an Array|end|	    15 *-* x = r|       >>>   "an Array"|    16 *-* x = q|       >>>   "an Array"|    17 *-* trace o|
+moved	pin	0	.036265000	an Array|an Array|one|two|one|two|one|two|one|two|end|	    15 *-* x = r|       >>>   "an Array"|    16 *-* x = q|       >>>   "an Array"|    17 *-* trace o|
+moved	r3	0	.069207752	one|two|one|two|one|two|one|two|one|two|one|two|end|	    15 *-* x = r|       >>>   "one|two"|    16 *-* x = q|       >>>   "one|two"|    17 *-* trace o|
+moved	r4	0	.060444568	an Array|an Array|one|two|one|two|one|two|one|two|end|	    15 *-* x = r|       >>>   "an Array"|    16 *-* x = q|       >>>   "an Array"|    17 *-* trace o|
+moved	r5	0	.064937842	an Array|an Array|one|two|one|two|one|two|one|two|end|	    15 *-* x = r|       >>>   "an Array"|    16 *-* x = q|       >>>   "an Array"|    17 *-* trace o|
+moved	r5b	0	.036826513	an Array|an Array|one|two|one|two|one|two|one|two|end|	    15 *-* x = r|       >>>   "an Array"|    16 *-* x = q|       >>>   "an Array"|    17 *-* trace o|
+ref_items	pin	0	.056012121	0 0 0|1 1 1 a|SYNTAX 11.1|	
+ref_items	r3	134	.320960966		|thread 'rexx-interp' (1891496) has overflowed its stack|fatal runtime error: stack overflow, aborting|/home/moritz/.local/bin/memcap: line 67: 1891494 Aborted 
+ref_items	r4	0	.048375708	SYNTAX 11.1|	
+ref_items	r5	0	.078384184	0 0 0|1 1 1 a|SYNTAX 11.1|	
+ref_items	r5b	0	.056434367	0 0 0|1 1 1 a|SYNTAX 11.1|	
+subchain1000	oracle	0		len 4|leaf|end|	
+subchain1000	pin	0	.037680501	len 4|leaf|end|	
+subchain1000	r3	0	.035690625	len 4|leaf|end|	
+subchain1000	r4	0	.051510260	len 4|leaf|end|	
+subchain1000	r5	0	.035791513	len 4|leaf|end|	
+subchain1000	r5b	0	.036081813	len 4|leaf|end|	
+subchain100000	pin	0	.115586385	len 4|leaf|end|	
+subchain100000	r3	0	.130360810	len 4|leaf|end|	
+subchain100000	r4	137	25.044587687		/home/moritz/.local/bin/memcap: line 67: 1891315 Killed                     ( echo "$BASHPID" > "$cg/cgroup.procs"; exec "$@" )|
+subchain100000	r5	0	.109910476	len 4|leaf|end|	
+subchain100000	r5b	0	.137476988	len 4|leaf|end|	
+subchain100000cyc	pin	0	.122845268	SYNTAX 11.1|	
+subchain100000cyc	r5	0	.137317665	SYNTAX 11.1|	
+subchain100000cyc	r5b	0	.117575041	SYNTAX 11.1|	
+subchain1000cyc	pin	0	.037590414	SYNTAX 11.1|	
+subchain1000cyc	r5b	0	.039204931	SYNTAX 11.1|	
+subchain20000	oracle	0		SYNTAX 11.1|	
+subchain20000	pin	0	.052405079	len 4|leaf|end|	
+subchain20000	r3	0	.073448643	len 4|leaf|end|	
+subchain20000	r4	0	5.591977454	len 4|leaf|end|	
+subchain20000	r5	0	.048364329	len 4|leaf|end|	
+subchain20000	r5b	0	.046965746	len 4|leaf|end|	
+subchain20000cyc	pin	0	.074468788	SYNTAX 11.1|	
+subchain20000cyc	r4	0	.062211728	SYNTAX 11.1|	
+subchain20000cyc	r5	0	.097613313	SYNTAX 11.1|	
+subchain20000cyc	r5b	0	.087353165	SYNTAX 11.1|	
+subchain2-1000	pin	0	.035552740	len 4 in 0.000041|	
+subchain2-1000	r3	0	.034350623	len 4 in 0.000041|	
+subchain2-1000	r4	0	.043389738	len 4 in 0.006172|	
+subchain2-1000	r5	0	.035447193	len 4 in 0.000046|	
+subchain2-1000	r5b	0	.037241952	len 4 in 0.000047|	
+subchain2-100000	pin	0	.123937247	len 4 in 0.004262|	
+subchain2-100000	r5	0	.120420281	len 4 in 0.004421|	
+subchain2-100000	r5b	0	.124376642	len 4 in 0.004724|	
+subchain2-20000	oracle	0		SYNTAX 11.1|	
+subchain2-20000	pin	0	.048275112	len 4 in 0.000383|	
+subchain2-20000	r3	0	.070135186	len 4 in 0.000260|	
+subchain2-20000	r4	0	2.983289144	len 4 in 2.911335|	
+subchain2-20000	r5	0	.046949100	len 4 in 0.000445|	
+subchain2-20000	r5b	0	.088297301	len 4 in 0.000449|	
+subchain3-100000	pin	0	.331630448	string leaf 0.006893|request leaf 0.075456|length 4 0.057485|concat leafx 0.007712|compare 1 0.060076|end|	    19 *-* x = first|       >>>   "leaf"|    20 *-* trace o|
+subchain3-100000	r5	137	25.054390051		/home/moritz/.local/bin/memcap: line 67: 1893403 Killed                     ( echo "$BASHPID" > "$cg/cgroup.procs"; exec "$@" )|
+subchain3-100000	r5b	0	.486158548	string leaf 0.008108|request leaf 0.108081|length 4 0.107498|concat leafx 0.008025|compare 1 0.111029|end|	    19 *-* x = first|       >>>   "leaf"|    20 *-* trace o|
+subchain3-20000	pin	0	.122047509	string leaf 0.000365|request leaf 0.011879|length 4 0.008175|concat leafx 0.000632|compare 1 0.007695|end|	    19 *-* x = first|       >>>   "leaf"|    20 *-* trace o|
+subchain3-20000	r3	0	.117670328	string leaf 0.001192|request leaf 0.008211|length 4 0.007911|concat leafx 0.000269|compare 1 0.007703|end|	    19 *-* x = first|       >>>   "leaf"|    20 *-* trace o|
+subchain3-20000	r4	0	17.022737582	string leaf 2.854863|request leaf 2.845995|length 4 2.805948|concat leafx 2.843308|compare 1 2.760009|end|	    19 *-* x = first|       >>>   "leaf"|    20 *-* trace o|
+subchain3-20000	r5	0	8.474392910	string leaf 0.000354|request leaf 2.787466|length 4 2.774145|concat leafx 0.000977|compare 1 2.821048|end|	    19 *-* x = first|       >>>   "leaf"|    20 *-* trace o|
+subchain3-20000	r5b	0	.119381273	string leaf 0.000478|request leaf 0.014620|length 4 0.011069|concat leafx 0.000620|compare 1 0.010919|end|	    19 *-* x = first|       >>>   "leaf"|    20 *-* trace o|
+subchain3-20000cyc	pin	0	.081090646	string  0.000743|SYNTAX 11.1|	
+subchain3-20000cyc	r5b	0	.073425570	string  0.000766|SYNTAX 11.1|	
+# Round 4's probe sets (t8.5/r4/probes/) on the committed binary, side pin5, beside round 4's own committed binary, side pin:
+ac1	pin	0		5|1|5x|6|p 5|1|one|two|p one|two|7|nmake|p nmake|a K|p a K|3|E.|p E.|7|p 7|8|7|p 7|8|sub|p sub|3|sub|p sub|sub|p sub|3|	
+ac1	pin5	0		5|1|5x|6|p 5|1|one|two|p one|two|7|nmake|p nmake|a K|p a K|3|E.|p E.|7|p 7|8|7|p 7|8|sub|p sub|3|sub|p sub|sub|p sub|3|	
+ac10-1	pin	0		1 1 1|end 1|	
+ac10-1	pin5	0		1 1 1|end 1|	
+ac10-2	pin	0		1 1 1 1|end 2|	
+ac10-2	pin5	0		1 1 1 1|end 2|	
+ac10-3	pin	0		6|end 3|	
+ac10-3	pin5	0		6|end 3|	
+ac10-4	pin	0		6|end 4|	
+ac10-4	pin5	0		6|end 4|	
+ac10-5	pin	0		6|end 5|	
+ac10-5	pin5	0		6|end 5|	
+ac10-6	pin	0		1|end 6|	
+ac10-6	pin5	0		1|end 6|	
+ac10-7	pin	0		1|end 7|	
+ac10-7	pin5	0		1|end 7|	
+ac10-8	pin	0		-5|end 8|	
+ac10-8	pin5	0		-5|end 8|	
+ac2	pin	0		end|	    17 *-* x = r|       >>>   "5"|    18 *-* x = q|       >>>   "an Array"|    19 *-* x = i|       >>>   "7"|    20 *-* x = h.|       >>>   "7"|    21 *-* x = o
+ac2	pin5	0		end|	    17 *-* x = r|       >>>   "5"|    18 *-* x = q|       >>>   "an Array"|    19 *-* x = i|       >>>   "7"|    20 *-* x = h.|       >>>   "7"|    21 *-* x = o
+ac3	pin	0		NS a Directory Directory Stem|	
+ac3	pin5	0		NS a Directory Directory Stem|	
+ac4	pin	159		5|5|5|5|	     8 *-* say s.~foo|Error 97 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/prob
+ac4	pin5	159		5|5|5|5|	     8 *-* say s.~foo|Error 97 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/prob
+ac5	pin	0		one|two|p one|two|7|one|two|one|two|p one|two|7|one|two|one|two|p one|two|7|one|two|end|	    19 *-* x = r|       >>>   "an Array"|    20 *-* x = zz|       >>>   "an Array"|    21 *-* x = t.|       >>>   "one|two"|    22 *-* x = q|       >>>   "an Ar
+ac5	pin5	0		one|two|p one|two|7|one|two|one|two|p one|two|7|one|two|one|two|p one|two|7|one|two|end|	    19 *-* x = r|       >>>   "an Array"|    20 *-* x = zz|       >>>   "an Array"|    21 *-* x = t.|       >>>   "one|two"|    22 *-* x = q|       >>>   "an Ar
+ac6	pin	0		NS a Directory Directory Directory|	
+ac6	pin5	0		NS a Directory Directory Directory|	
+ac7-1	pin	0		NS 1 a Directory Directory Directory|	
+ac7-1	pin5	0		NS 1 a Directory Directory Directory|	
+ac7-2	pin	0		NS 2 a Directory Directory Stem|	
+ac7-2	pin5	0		NS 2 a Directory Directory Stem|	
+ac7-3	pin	0		NS 3 a Directory Directory Stem|	
+ac7-3	pin5	0		NS 3 a Directory Directory Stem|	
+ac7-4	pin	0		NS 4 a Directory Directory Stem|	
+ac7-4	pin5	0		NS 4 a Directory Directory Stem|	
+ac7-5	pin	0		NS 5 a Directory Directory MYSTEM|	
+ac7-5	pin5	0		NS 5 a Directory Directory MYSTEM|	
+ac7-6	pin	0		NS 6 a Directory Directory Stem|	
+ac7-6	pin5	0		NS 6 a Directory Directory Stem|	
+ac7-7	pin	0		NS 7 a Directory Directory Stem|	
+ac7-7	pin5	0		NS 7 a Directory Directory Stem|	
+ac7-8	pin	0		NS 8 a Directory Directory Stem|	
+ac7-8	pin5	0		NS 8 a Directory Directory Stem|	
+ac7-9	pin	0		NS 9 a Directory Directory Stem|	
+ac7-9	pin5	0		NS 9 a Directory Directory Stem|	
+ac8	pin	0		5|p 5|1|2|end|	
+ac8	pin5	0		5|p 5|1|2|end|	
+ac9	pin	0		[]|0||[]|uu|V.|end|	
+ac9	pin5	0		[]|0||[]|uu|V.|end|	
+chain1000	pin	0		len 4 leaf leaf|arith leafx|ok|	    10 *-* x = r1|       >>>   "leaf"|    11 *-* trace o|
+chain1000	pin5	0		len 4 leaf leaf|arith leafx|ok|	    10 *-* x = r1|       >>>   "leaf"|    11 *-* trace o|
+chain20000	pin	0		len 4 leaf leaf|arith leafx|ok|	    10 *-* x = r1|       >>>   "leaf"|    11 *-* trace o|
+chain20000	pin5	0		len 4 leaf leaf|arith leafx|ok|	    10 *-* x = r1|       >>>   "leaf"|    11 *-* trace o|
+mixed1000	pin	0		len 1 leaf 7|ref 1 7 8|stem 8|ok|	    12 *-* x = s1.|       >>>   "7"|    13 *-* x = r|       >>>   "7"|    14 *-* trace o|
+mixed1000	pin5	0		len 1 leaf 7|ref 1 7 8|stem 8|ok|	    12 *-* x = s1.|       >>>   "7"|    13 *-* x = r|       >>>   "7"|    14 *-* trace o|
+mixed20000	pin	0		len 1 leaf 7|ref 1 7 8|stem 8|ok|	    12 *-* x = s1.|       >>>   "7"|    13 *-* x = r|       >>>   "7"|    14 *-* trace o|
+mixed20000	pin5	0		len 1 leaf 7|ref 1 7 8|stem 8|ok|	    12 *-* x = s1.|       >>>   "7"|    13 *-* x = r|       >>>   "7"|    14 *-* trace o|
+n	pin	0		p|q|nstr|p|qx|3|NOSTRING a Directory Directory|	
+n	pin5	0		p|q|nstr|p|qx|3|NOSTRING a Directory Directory|	
+sd0	pin	0		made|Stem|	
+sd0	pin5	0		made|Stem|	
+sd1	pin	245			     3 *-* say s.|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probes/s
+sd1	pin5	245			     3 *-* say s.|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probes/s
+sd_msg	pin	245		made|	     3 *-* say s.~foo|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/prob
+sd_msg	pin5	245		made|	     3 *-* say s.~foo|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/prob
+sd_ops1	pin	0		made|SYNTAX 1 11 11.1|	
+sd_ops1	pin5	0		made|SYNTAX 1 11 11.1|	
+sd_ops10	pin	0		made|SYNTAX 10 11 11.1|	
+sd_ops10	pin5	0		made|SYNTAX 10 11 11.1|	
+sd_ops11	pin	0		made|SYNTAX 11 11 11.1|	
+sd_ops11	pin5	0		made|SYNTAX 11 11 11.1|	
+sd_ops12	pin	0		made|SYNTAX 12 11 11.1|	
+sd_ops12	pin5	0		made|SYNTAX 12 11 11.1|	
+sd_ops2	pin	0		made|SYNTAX 2 11 11.1|	
+sd_ops2	pin5	0		made|SYNTAX 2 11 11.1|	
+sd_ops3	pin	0		made|SYNTAX 3 11 11.1|	
+sd_ops3	pin5	0		made|SYNTAX 3 11 11.1|	
+sd_ops4	pin	0		made|S.|end 4|	
+sd_ops4	pin5	0		made|S.|end 4|	
+sd_ops5	pin	0		made|traced|end 5|	     9 *-*       x = s.;|       >>>         "S."|     9 *-*       trace o;|
+sd_ops5	pin5	0		made|traced|end 5|	     9 *-*       x = s.;|       >>>         "S."|     9 *-*       trace o;|
+sd_ops6	pin	0		made|SYNTAX 6 11 11.1|	
+sd_ops6	pin5	0		made|SYNTAX 6 11 11.1|	
+sd_ops7	pin	0		made|SYNTAX 7 11 11.1|	
+sd_ops7	pin5	0		made|SYNTAX 7 11 11.1|	
+sd_ops8	pin	0		made|SYNTAX 8 11 11.1|	
+sd_ops8	pin5	0		made|SYNTAX 8 11 11.1|	
+sd_ops9	pin	0		made|SYNTAX 9 11 11.1|	
+sd_ops9	pin5	0		made|SYNTAX 9 11 11.1|	
+sd_tr	pin	0		made|end|	     4 *-* x = s.|       >>>   "S."|     5 *-* say "end"|       >>>   "end"|
+sd_tr	pin5	0		made|end|	     4 *-* x = s.|       >>>   "S."|     5 *-* say "end"|       >>>   "end"|
+sd_via	pin	245		made Stem|	     6 *-* say length(u)|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/p
+sd_via	pin5	245		made Stem|	     6 *-* say length(u)|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/p
+stemdef1	pin	0		made|SYNTAX 1 11 11.1|	
+stemdef1	pin5	0		made|SYNTAX 1 11 11.1|	
+stemdef2	pin	0		made|SYNTAX 2 11 11.1|	
+stemdef2	pin5	0		made|SYNTAX 2 11 11.1|	
+stemdef3	pin	0		made|an Array|8|end 3|	
+stemdef3	pin5	0		made|an Array|8|end 3|	
+stemdef4	pin	0		made|SYNTAX 4 11 11.1|	
+stemdef4	pin5	0		made|SYNTAX 4 11 11.1|	
+stemdef5	pin	0		made|8|end 5|	
+stemdef5	pin5	0		made|8|end 5|	
+sub1	pin	245		made|	     4 *-* say t|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probes/su
+sub1	pin5	245		made|	     4 *-* say t|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probes/su
+sub2	pin	245		made|	     6 *-* say length(t)|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/p
+sub2	pin5	245		made|	     6 *-* say length(t)|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/p
+sub3	pin	245		made|	     4 *-* say t~foo|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probe
+sub3	pin5	245		made|	     4 *-* say t~foo|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probe
+sub4	pin	0		made|end|	     5 *-* x = t|       >>>   ""|     6 *-* trace o|
+sub4	pin5	0		made|end|	     5 *-* x = t|       >>>   ""|     6 *-* trace o|
+sub5	pin	245		made|	     4 *-* say t|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probes/su
+sub5	pin5	245		made|	     4 *-* say t|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probes/su
+sub6	pin	245		made|	     4 *-* say 1 + t|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probe
+sub6	pin5	245		made|	     4 *-* say 1 + t|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probe
+sub7	pin	158			       *-* Compiled method "[]=" with scope "Stem".|     3 *-* t[] = s.|Error 98 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff
+sub7	pin5	158			       *-* Compiled method "[]=" with scope "Stem".|     3 *-* t[] = s.|Error 98 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff

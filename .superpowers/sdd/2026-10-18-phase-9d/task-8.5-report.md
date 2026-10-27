@@ -625,3 +625,103 @@ through a stem (`q = >s.` over `s. = .directory~new`, `ac7.rex` 3, 4, 7 and 9): 
 additional object is the VariableReference in a concatenation and the Directory in arithmetic,
 here the Stem in both, as the ruled rule has it (NOSTRING names the referenced value, and for the
 bare `s.` the oracle itself names the Stem, `ac7.rex` 2); base raised no NOSTRING there.
+
+## Fix round 5
+
+Brief `task-8.5-fix-r5.md`, re-review `task-8.5-rereview-r4.md` (changes requested: Important 1,
+Minor 2). Code `2cda11d12`; records `t8.5/r5/`, probes under `r5/probes/` with every run's rc, wall
+time, stdout and stderr in `r5/probes.tsv` (sides: `r3` is `rexx-head-4a6321376`, `r4`
+`rexx-head-6a8290bb6`, `r5` and `r5b` this round's builds before the commit, `pin` the committed
+binary `rexx-head-2cda11d12`, `oracle` the standard wrapper; `pin5` and `pin` under the second
+header are round 4's probe sets on the two committed binaries). The re-review's
+`t85-rereview4-scratch/` no longer existed when this round ran, so `subchain.rex`, `subchain2.rex`
+and `mixchain.rex` are rebuilt from its description, each with a `leaf` and a `cyc` mode;
+`subchain3.rex` and `fwd.rex` time the forwarded positions.
+
+**1. Important 1: a chain of `Stem` subclass instances is walked once.** `instance_conversion`
+answers `chain_conversion(store)` (`reqstr.rs`): the limb of the value the chain ends at, the
+unset reference's name, or none for a cycle, from one walk; `reference_conversion` is the same
+function. `stem_subclass_text`, `stem_subclass_text_len` and `stem_subclass_try_text`
+(`value.rs`) render the chain's end from one walk, as a reference on the chain renders it
+(`string_value_text`) where the chain passes one (`Chain::through_reference`), else as the stem
+renders its default (`to_text`). A message a stem forwards (`forward_to_value`, `stem.rs`, behind
+`UNKNOWN` and `REQUEST`) goes through `Interp::forwarded`: the outermost forward walks the chain
+once (`stem_forwarding` counts the forwards inside one another), and each forward inside it checks
+the stack (`stack_exhausted`), as an expression level does, so a chain made cyclic underneath the
+walk still ends in 11.1 and a long acyclic chain forwards hop by hop with no walk per hop. The hop
+guard is the stack check and not D19's evaluation-depth count because the oracle forwards
+`first~length` through 100000 instances (`fwd.rex 100000`, 0.004 s) while its conversion
+`length(first)` is `SYNTAX 11.1` at 20000 (`subchain.rex 20000 leaf`, `subchain2.rex`: its C-stack
+check in the `makeString` recursion), so a count that refused at 100000 would refuse what the
+oracle answers.
+
+Measured on the committed binary (`probes.tsv` side `pin`; `r4` is `6a8290bb6`, `r3`
+`4a6321376`). `subchain2.rex N leaf`, `length(first)` alone: 20000 links 0.00045 s (`r4` 2.91 s,
+`r3` 0.00026 s); 100000 links 0.0043 s (`r4`'s `subchain.rex 100000` was killed at 25 s with
+nothing printed; `r3` 0.13 s for the whole run). `subchain.rex 100000 leaf`, the whole run: 0.12 s.
+`subchain3.rex 100000 leaf`, each position timed alone: `first~string` 0.0069 s, `request('STRING')`
+0.075 s, `first~length` 0.057 s, concatenation 0.0077 s, `first = 'leaf'` 0.060 s; at 20000 on
+`r4`, `request`, `length` and the comparison were 2.8 s each, and so were they on this round's
+first build (`r5`), whose forwarding still walked at every hop: the long-chain witness caught it,
+its `first = 'leaf'` not ending within the timeout. `fwd.rex 200000`, `first~length` through 200000
+instances: 0.19 s (`r3` 0.19 s). `mixchain.rex 10000 leaf`: 0.0013 s (`r3` 0.0015 s). Cyclic:
+`subchain.rex 100000 cyc` is `SYNTAX 11.1` in 0.12 s, `mixchain.rex 1000 cyc` 11.1,
+`subchain3.rex 20000 cyc` prints the stem's empty name for `first~string` and 11.1 at `request`.
+Round 4's probe sets on this binary are byte-identical to `6a8290bb6`'s (`probes.tsv` sides `pin5`
+and `pin`), and `halt.rex` under `timeout -s TERM -k 5 3` is `HALT HALT after 1`, rc 124.
+
+Witness: `tests::a_long_chain_of_stem_subclass_instances_is_walked_once`, 50000 instances on its
+own thread with the 20 s timeout, through `length(first)`, `first~string`, `say first`, a
+concatenation, `first = 'leaf'`, `first~length` and a TRACE line: by the re-review's 11.54 s a
+position at 40000, a walk per link puts each of the seven past the timeout; 50000 forwarded hops
+are a quarter of what `fwd.rex 200000` runs in 0.19 s.
+
+**2. Minor 1: forwarding takes the reference end.** `referent` is the references-only walk again
+(fix round 3's loop, started at the value itself), so `referenced_receiver` and the NOSTRING
+subject take the reference end even where a stem's default beyond it is cyclic, and
+`conversion_subject` asks `chain_is_cyclic` first, so a conversion still raises 11.1 for a cycle
+anywhere on the chain. `ref_items.rex` (`s. = >s.; q = >s.`) on the committed binary: `q~items`,
+`q~hasIndex(1)` and `q~allIndexes~items` answer `0 0 0`, after `q~put('a', 1)` they answer `1 1 1`
+with `s.1` `a`, and `q~length` is `SYNTAX 11.1`; `6a8290bb6` raised 11.1 at the first line.
+Witness: `tests::a_reference_forwards_to_a_stem_whose_default_is_cyclic`.
+
+**3. Minor 2: the acyclic answers that moved in fix round 4.** All on `moved.rex` (`zz =
+.array~of('one', 'two')`, `t. = zz`, `q = >t.`, `u` a `Stem` subclass instance with `u[] = zz`,
+`r = >u`), sides `r3`, `r4`, `pin` and `oracle`: `q~string` and `r~string` print `an Array` here
+since round 4 (`4a6321376` and base: `one` and `two`), and `trace r; x = r` and `x = q` trace
+`>>> "an Array"` (before: `"one` and `two"`). The oracle answers `an Array` on all four. The rule:
+`Object`'s `string` "Returns a human-readable string representation of the object", obtained from
+its `objectName` (rexxref fundclasses.xml:3474-3486); the VariableReference class defines no
+`string` of its own (utilityclasses.xml:12548, its methods `name`, `request`, `unknown` and
+`value`), and its representation is its referenced value's, which the oracle's
+`VariableReference::stringValue` (`VariableReference.cpp:258`) answers as the value's
+`stringValue()`, `an Array` for an array; a traced result "other than strings appear[s] in the
+string representation obtained by sending [it] a STRING message" (instrc.xml:3697-3699). `say q`,
+`say r`, `t.~string` and `u~string` did not move (the items joined; the stem's own string value is
+the item the controller queued).
+
+**Oracle runs**, acyclic only: `moved.rex`, `subchain.rex 1000` and `20000 leaf`, `subchain2.rex
+20000 leaf`, `mixchain.rex 100 leaf`, `fwd.rex` at 1000 to 100000.
+
+**Checks** at `2cda11d12` (`r5/`), from `rust/`, `CARGO_INCREMENTAL=0`,
+`CARGO_TARGET_DIR=/tmp/claude-1000/t85-fix5-target`:
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` (`checks-fmt.txt`) | 0 |
+| `memcap 16G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` (`checks-clippy.txt`, after `touch crates/rexx-exec/src/value.rs`; `Checking rexx-exec` is in the output) | 0 |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --lib --test signals --test dispatch_seam --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions` (`checks-touched.txt`) | 0: lib 1198, signals 42, dispatch_seam 6, closed_phases 8, owners 6, phase_ten_reasons 5, refusal_dispositions 3, refusal_sites 5, representation_refusals 3 |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test collect_stress` (`checks-collect-stress.txt`) | 0, 74 passed |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`checks-corpus.txt`) | 101: 1201 of 1202, the known `rexxutil_file_date_time.rex` |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-parse --test sourceline_oracle --test errors` (`checks-parse.txt`) | 0: errors 34, sourceline_oracle 1 |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test coverage` (`checks-coverage.txt`) | 0, 21 passed |
+| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../t8.5/r5/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`suite/`, after the callgrind run, 270 s) | 0; the four tables identical to `t8.5/r4/suite/` |
+
+**Perf.** `r5/callgrind.txt`: `bench-programs/callgrind.sh -B 0.5 -j 4 -o
+/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.5/r5final base=.../t8.5/rexx-base-6e0bf5e5b
+head=.../t8.5/rexx-head-2cda11d12`, every program, 3 rounds, exit 0, no SPREAD or OVER flag; 99
+`.vg` files name each binary. Libc subtracted, the largest rises are fibfunc +0.0213% and fibcall
++0.0209% (fix round 3's figures, unchanged), pingmsg +0.0006% and define +0.0001%; every other
+program is at most +0.0000% or falls, as in round 4 (decrender -0.2705%, intcall -0.2012%, parse
+-0.1938%, rexxcps -0.0596%): this round's change is in the cold chain helpers, the forwarding
+and the `Stem` subclass arms, none of which a benchmark program reaches.
