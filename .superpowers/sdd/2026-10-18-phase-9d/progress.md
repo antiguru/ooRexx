@@ -205,3 +205,4 @@ Task 8.4 fix round 2 (task-8.4-fix-r2.md): C1, I1, I2, concern 1, concern-2 text
 Task 8.4 fix round 2: DONE_WITH_CONCERNS d2e226538 10fe190cb. Callgrind every program no flag (max startup +0.0269%). Concern (deadlock report count/echoes, d2/g15, predates) queued into 8.7 as 2026-10-27-deadlock-report-shape.md.
 Task 8.4 re-review r2 (t84-rereview2): CHANGES REQUESTED 0C/1I/2M. Items 1-3, 5 ADDRESSED; 4 ADDRESSED at install (residuals are 67's race). I1 a failing run records no site (predates the round, in the task's subject); M1 >I> after the guard wait; M2 stale report sentence. New oracle defect q5d (a run replaces the constant's value) folds into Deviation 69.
 Task 8.4 fix round 3 (task-8.4-fix-r3.md): I1, M1, M2, q5d text. Resumes t84-impl (last resumed round).
+Task 8.4 fix round 3: DONE 6c8644ad5 75066653a. Callgrind every program no flag (max startup +0.0261%). Re-review r3 dispatched (t84-rereview3).
