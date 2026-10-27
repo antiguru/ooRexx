@@ -1,3 +1,5 @@
+**CLOSED 2026-10-27 by Phase 9d Task 8.4: the file-naming instances at e54ed5724; the hs9/qpull report-line paragraph under Deviation 67 as extended (e8d9200e5).**
+
 **RULED by Moritz 2026-10-26 ("Extend 67"): the hs9/qpull report-line paragraph extends Deviation 67 (every condition re-raised through Message~result, HALT included); the crate stays.**
 
 **OPEN after Phase 9d Task 8.4:** every `Error N running <file>` instance below names the installing package at e54ed5724; the HALT-through-`~result` paragraph (`hs9`, `qpull`) is not fixed and is a Deviation candidate in `task-8.4-report.md`.

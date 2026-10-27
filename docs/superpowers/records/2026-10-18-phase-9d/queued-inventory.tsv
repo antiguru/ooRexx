@@ -208,7 +208,7 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointe
 2026-10-19-variable-reference-deviation-candidates.md	divergence	-	9d	derive the semantics; follow the model; Deviation where the oracle departs	9d
 2026-10-19-condition-deviation-candidates.md	divergence	-	closed:9f8be0ec2	derive the semantics; follow the model; Deviation where the oracle departs	closed:9f8be0ec2
 2026-10-18-duplicate-member-checked-at-install.md	divergence	-	closed:f84e64ee4	gap	closed:f84e64ee4
-2026-10-18-install-error-names-caller-file.md	divergence	-	9d	gap	9d
+2026-10-18-install-error-names-caller-file.md	divergence	-	closed:e8d9200e5	gap	closed:e8d9200e5
 2026-10-19-context-name-during-install.md	divergence	-	closed:68e7f15d5	gap	closed:68e7f15d5
 2026-10-18-options-trace-constant-expression.md	divergence	-	closed:7fe50bedd	gap	closed:7fe50bedd
 2026-10-19-index-argument-string-conversion.md	divergence	-	9d	gap	9d
@@ -248,3 +248,4 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointe
 2026-10-26-compile-failure-condition-names-caller.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/naming/probes/compile-condition/m.rex	9d	a compile failure condition names the caller package, the oracle the translated file	9d
 2026-10-26-library-rxmath-error-number.md	divergence	-	9d	LIBRARY rxmath raises 98.903, the oracle 90.998/90.999	9d
 2026-10-27-deadlock-report-shape.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/r2/probes/d2.rex	9d	a guard deadlock prints two reports here, one on the oracle; echoes differ	9d
+2026-10-27-reaped-child-test-load-flake.md	process	-	9d	a SysWait witness fails under workspace load, passes alone	9d
