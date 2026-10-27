@@ -1843,5 +1843,20 @@
   "source": "Phase 9d Task 8.4 report, New oracle defects 1; re-reviews r1 and r2",
   "status": "deviation 69 (Moritz 2026-10-26: \"Own clause, oracle bug\")",
   "crate": "Answers each constant's own clause, runs its own expression, and keeps the constant's value."
+ },
+ {
+  "id": "procedure-expose-alias-hidden-from-symbol",
+  "added": "2026-10-27",
+  "title": "PROCEDURE EXPOSE of a variable alias hides it from SYMBOL, VALUE and .context~variables while the expression still reads it",
+  "category": "inconsistency",
+  "area": "variables",
+  "severity": "cosmetic",
+  "repro": "docs/superpowers/records/2026-10-18-phase-9d/t8.5/r2/probes/symalias.rex: use arg >w., >u; then procedure expose w. u; symbol('W.') symbol('U') w.1 u value('U') and .context~variables~hasIndex",
+  "oracle": "r3 LIT LIT x 1 U 0 0: u reads 1 while symbol('U') is LIT and value('U') is U.",
+  "expected": "r3 VAR VAR x 1 1 1 1: an exposed variable is set, by every way of asking.",
+  "cause": "Not traced in the C++.",
+  "source": "Phase 9d Task 8.5 fix round 1 re-review, New oracle defects 1",
+  "status": "open (crate follows the rule; no Deviation needed while no witness depends on it)",
+  "crate": "Answers VAR VAR x 1 1 1 1."
  }
 ]
