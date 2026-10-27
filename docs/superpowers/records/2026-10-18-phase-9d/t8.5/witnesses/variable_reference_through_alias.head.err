@@ -1,0 +1,17 @@
+    18 *-*   call c2 >q
+    22 *-*     c2:
+    22 *-*     procedure
+    23 *-*     use arg >s
+       >R>       "LOC" => "S"
+    24 *-*     s = 'set'
+       >>>       "set"
+    25 *-*     return
+    19 *-*   trace o
+       >I> Method "M3" with scope "K" in package "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/variable_reference_through_alias.rex".
+    61 *-* use arg >r
+       >R>   "V" => "R"
+    62 *-* r = 'via r'
+       >>>   "via r"
+    63 *-* say 'r=' (>r)~name
+       >>>   "r= V"
+       <I< Method "M3" with scope "K" in package "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/variable_reference_through_alias.rex".

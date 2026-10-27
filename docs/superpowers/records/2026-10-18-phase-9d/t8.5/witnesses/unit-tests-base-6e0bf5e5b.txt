@@ -1,0 +1,8 @@
+test environment::tests::a_package_table_that_cannot_be_made_fails ... FAILED
+test tests::a_procedure_expose_selectors_novalue_is_handled_before_isolation ... ok
+test tests::an_empty_stems_name_is_compared_by_its_characters ... ok
+test tests::a_drop_list_runs_left_to_right ... ok
+test tests::the_context_variables_list_an_alias_under_its_own_name ... ok
+test tests::a_variable_lists_selectors_are_read_left_to_right ... ok
+test result: FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 1185 filtered out; finished in 0.04s
+error: test failed, to rerun pass `-p rexx-exec --lib`

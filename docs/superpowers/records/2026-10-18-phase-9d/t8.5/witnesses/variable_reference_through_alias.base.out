@@ -1,0 +1,11 @@
+cell Q
+e3 The 1 argument must be a VariableReference for a Stem variable; found "Q".
+loc set
+again R
+v set through q
+inst Q
+e2 The 1 argument must be a VariableReference for a Stem variable; found "Q".
+r= R
+v= set through q
+refLocalStem: ABC.1
+a.1 = A.1 LIT LIT

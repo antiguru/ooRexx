@@ -1,0 +1,5 @@
+program	base stdout	base stderr	base rc	head stdout	head stderr	head rc
+compound_use_creates_stem	DIFF	same	same	same	same	same
+local_novalue_hook	DIFF	DIFF	same	same	same	same
+local_novalue_hook_syntax	same	same	same	same	same	same
+variable_reference_through_alias	DIFF	DIFF	same	same	same	same

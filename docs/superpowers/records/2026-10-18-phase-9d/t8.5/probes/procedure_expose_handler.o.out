@@ -1,0 +1,7 @@
+n1 NOLIST2 c=C d=D
+after pf 3 4
+n1 NOLIST3 c=C d=D
+after pg 3 4
+n1 UNDEFINEDVAR c=ph d=D
+after ph h 4
+rc 0

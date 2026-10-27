@@ -1,3 +1,5 @@
+**CLOSED 2026-10-27 by Phase 9d Task 8.5 (b69a1babc).**
+
 **RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** derive the semantics; follow the model; Deviation where the oracle departs.
 
 **RULED by Moritz 2026-10-21, all three:**

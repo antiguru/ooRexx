@@ -1,0 +1,88 @@
+   Compiling serde_core v1.0.229
+   Compiling syn v2.0.119
+   Compiling zerocopy v0.8.52
+   Compiling syn v3.0.2
+   Compiling serde v1.0.229
+   Compiling zmij v1.0.23
+   Compiling num-traits v0.2.19
+   Compiling serde_json v1.0.151
+   Compiling either v1.16.0
+   Compiling alloca v0.4.0
+   Compiling clap_lex v1.1.0
+   Compiling anstyle v1.0.14
+   Compiling itoa v1.0.18
+   Compiling plotters-backend v0.3.7
+   Compiling ciborium-io v0.2.2
+   Compiling memchr v2.8.3
+   Compiling serde_derive v1.0.229
+   Compiling plotters-svg v0.3.7
+   Compiling clap_builder v4.6.2
+   Compiling zerocopy-derive v0.8.52
+   Compiling regex-automata v0.4.14
+   Compiling itertools v0.13.0
+   Compiling same-file v1.0.6
+   Compiling cast v0.3.0
+   Compiling criterion-plot v0.8.2
+   Compiling half v2.7.1
+   Compiling ciborium-ll v0.2.2
+   Compiling ciborium v0.2.2
+   Compiling walkdir v2.5.0
+   Compiling regex v1.12.4
+   Compiling page_size v0.6.0
+   Compiling rayon v1.12.0
+   Compiling plotters v0.3.7
+   Compiling clap v4.6.2
+   Compiling tinytemplate v1.1.0
+   Compiling oorandom v11.1.0
+   Compiling anes v0.1.6
+   Compiling rexx-parse v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse)
+   Compiling criterion v0.8.2
+    Finished `release` profile [optimized + debuginfo] target(s) in 32.00s
+     Running tests/errors.rs (/tmp/claude-1000/t85-target/release/deps/errors-49b84d875c5fde38)
+
+running 34 tests
+test a_doubled_backslash_does_not_swallow_the_byte_after_it ... ok
+test a_scan_error_waits_for_the_parse_to_reach_its_clause ... ok
+test a_scan_error_alone_is_reported_against_its_own_clause ... ok
+test an_interpret_fragment_that_is_legal_is_still_accepted ... ok
+test the_corpus_escaping_decodes_an_empty_field_to_no_bytes ... ok
+test an_interpret_error_with_no_substitution_renders_the_condition_objects_message ... ok
+test an_interpret_label_error_names_the_label ... ok
+test the_corpus_escaping_decodes_every_escape_the_format_defines ... ok
+test a_when_label_is_a_missing_then_here_and_a_bad_expression_there ... ok
+test the_corpus_escaping_leaves_an_unescaped_program_alone ... ok
+test a_then_label_is_a_missing_then_here_and_a_bad_expression_there ... ok
+test the_hex_escape_reaches_both_ends_of_the_byte_range ... ok
+test the_do_subkey_rule_does_not_fire_for_a_near_miss ... ok
+test the_do_subkey_rule_fires_for_the_pair_it_was_written_for ... ok
+test the_interpret_only_errors_match_the_condition_objects_own_code ... ok
+test the_label_colon_rule_fires_for_the_pair_it_was_written_for ... ok
+test the_label_colon_rule_does_not_fire_for_a_near_miss ... ok
+test no_corpus_program_appears_twice ... ok
+test every_recorded_line_is_a_line_its_program_has ... ok
+test a_rejection_that_is_not_a_translation_error_is_accepted_or_bound_first ... ok
+test the_corpus_holds_at_least_the_rows_it_was_measured_with ... ok
+test the_line_check_sees_more_than_one_line_convention ... ok
+test the_scan_finds_the_messages_it_was_written_against ... ok
+test every_unreached_reason_still_holds ... ok
+test both_bootstrap_files_parse ... ok
+test every_sample_program_parses ... ok
+test every_program_the_oracle_translates_this_parser_accepts ... ok
+test the_do_subkey_rows_differ_from_the_oracle_as_deviation_38_says ... ok
+test the_label_colon_rule_covers_exactly_the_two_corpus_rows_it_was_written_for ... ok
+test every_program_the_oracle_refuses_to_translate_this_parser_rejects_the_same_way ... ok
+test every_secondary_message_matches_the_oracle ... ok
+test the_reported_line_matches_the_oracles_main_message ... ok
+test every_message_the_parser_names_is_raised_by_a_corpus_row_or_recorded_as_unreached ... ok
+test every_error_the_corpus_raises_renders_a_non_empty_message ... ok
+
+test result: ok. 34 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running tests/sourceline_oracle.rs (/tmp/claude-1000/t85-target/release/deps/sourceline_oracle-ad800564eb52dc61)
+
+running 1 test
+test sourceline_matches_the_interpreter_for_every_corpus_program ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+rc 0

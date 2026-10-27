@@ -1,0 +1,43 @@
+     1 *-* o = .k~new
+       >E>   .K => "The K class"
+       >M>   "NEW" => "a K"
+       >>>   "a K"
+       >=>   O <= "a K"
+     2 *-* o~setup
+       >V>   O => "a K"
+       >I> Method "SETUP" with scope "K" in package "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/probes/selector_order_trace.rex".
+    12 *-* expose a b
+    13 *-* a = 'x';
+       >L>   "x"
+       >>>   "x"
+       >=>   A <= "x"
+    13 *-* b = 'y'
+       >L>   "y"
+       >>>   "y"
+       >=>   B <= "y"
+       <I< Method "SETUP" with scope "K" in package "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/probes/selector_order_trace.rex".
+     3 *-* o~m
+       >V>   O => "a K"
+       >I> Method "M" with scope "K" in package "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/probes/selector_order_trace.rex".
+    15 *-* expose (a) (b)
+       >V>   B => "y"
+       >V>   A => "x"
+       <I< Method "M" with scope "K" in package "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/probes/selector_order_trace.rex".
+     4 *-* a = 'p';
+       >L>   "p"
+       >>>   "p"
+       >=>   A <= "p"
+     4 *-* b = 'q'
+       >L>   "q"
+       >>>   "q"
+       >=>   B <= "q"
+     5 *-* call pe
+     8 *-*   pe:
+     8 *-*   procedure expose (a) (b)
+       >V>     B => "q"
+       >V>     A => "p"
+     9 *-*   return
+     6 *-* drop (a) (b)
+       >V>   B => "q"
+       >V>   A => "p"
+     7 *-* exit

@@ -1,3 +1,5 @@
+**CLOSED 2026-10-27 by Phase 9d Task 8.5 (b69a1babc).**
+
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: SYMBOL('W.') is VAR on the oracle and LIT here.
 
 # `drop w.1` on an unset stem: SYMBOL('W.') diverges
