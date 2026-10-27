@@ -25,7 +25,7 @@ item	kind	probe	proposed	reason	ruled
 2026-09-28-use-arg-message-term.md	divergence	queued-probes/uam/uam.rex:1	closed:probe agrees	stdout x, rc 0 on both	closed:probe agrees
 2026-09-29-closed-phases-owner-gaps.md	process	-	closed:Phase 6.1 Task 7	its own "Closed 2026-10-09" section; the_row_check_reads_only_a_resolution_that_opens_a_clause is in tests/closed_phases.rs	closed:Phase 6.1 Task 7
 2026-09-29-release-local-reference-memory.md	divergence	-	phase:10	not probed, it needs the forged native library; native-API memory, ruled "do not fix, queue" at the Phase 8 close	phase:10
-2026-09-30-drop-unset-stem-symbol.md	divergence	queued-probes/dropstem/dropstem.rex:1	closed:b69a1babc	probe still differs: SYMBOL('W.') is VAR on the oracle and LIT here	closed:b69a1babc
+2026-09-30-drop-unset-stem-symbol.md	divergence	queued-probes/dropstem/dropstem.rex:1	closed:2589e88b3	probe still differs: SYMBOL('W.') is VAR on the oracle and LIT here	closed:2589e88b3
 2026-09-30-hash-subclass-init-capacity.md	divergence	queued-probes/hash_subclass_init_capacity/hash_subclass_init_capacity.rex:1	closed:1c0e1d769	closed by Phase 9a Task 8; its witness corpus/lang/hash_subclass_init_capacity.rex agrees	closed:1c0e1d769
 2026-09-30-min-with-function-arg.md	divergence	queued-probes/builtin_argument_call/builtin_argument_call.rex:1	closed:Phase 6 Task 9 fix round 1	its witness corpus/lang/builtin_argument_call.rex agrees	closed:Phase 6 Task 9 fix round 1
 2026-09-30-stringtable-subclass-new-arg.md	divergence	queued-probes/hash_subclass_init_capacity/hash_subclass_init_capacity.rex:1	closed:1c0e1d769	closed by Phase 9a Task 8; its witness agrees	closed:1c0e1d769
@@ -135,7 +135,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-15-9b1-task-8b-review-minors.md	divergence	queued-probes/m1var/m1var.rex:1,queued-probes/m4def/m4def.rex:1	9d	own probes: m1 lists Z here and A on the oracle, m4 answers the new source here and the old one on the oracle	9d
 2026-10-15-executable-flags-and-result.md	divergence	-	9d	no probe recorded; the oracle is still to be measured	9d
 2026-10-15-isguarded-copy-and-additional.md	divergence	queued-probes/isg/isg.rex:1,queued-probes/addl/addl.rex:1	closed:68e7f15d5	the review's probes still differ: isGuarded 1 against 0, additional[1] a against the whole string	closed:68e7f15d5
-2026-10-15-routines-table-silent-none.md	process	-	closed:b69a1babc	no probe; environment.rs build_package_string_table and identities.rs find_written_routine still answer Ok(None)	closed:b69a1babc
+2026-10-15-routines-table-silent-none.md	process	-	closed:2589e88b3	no probe; environment.rs build_package_string_table and identities.rs find_written_routine still answer Ok(None)	closed:2589e88b3
 2026-10-16-bignum-remainder-speed.md	perf	queued-probes/bignum/bignum.rex:1	phase:9.1	probe: output 78 on both, 2000 iterations under 1 s on the oracle and over it here	phase:9.1
 2026-10-16-stream-command-open-missing-file.md	divergence	queued-probes/scopen/scopen.rex:1	9d-cluster:stream-notready-names	probe still differs (91.999 against ERROR:2); the cluster holds the same no-result open command	9d-cluster:stream-notready-names
 2026-10-17-library-bind-before-options.md	divergence	queued-probes/libbind/libbind.rex:1	closed:f84e64ee4	probe still differs: 26.5 on line 2 here, 98.903 on line 1 on the oracle	closed:f84e64ee4
@@ -190,7 +190,7 @@ gate:phase-9b1-gate.md:115	divergence	queued-probes/rstart/rstart.rex:1	closed:f
 gate:phase-9b1-gate.md:117	process	-	closed:pointer	a list of queued files, each with its own row here	closed:pointer
 gate:phase-9b1-gate.md:121	design	-	9d	Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal	9d
 gate:phase-9b1-gate.md:123	oracle bug	-	not-a-divergence	upstream reports, not copied (WeakReference to a held .true; oracle-crashes entry 49)	not-a-divergence
-gate:phase-9c-gate.md:138	process	-	closed:b69a1babc	a pointer to 2026-10-15-routines-table-silent-none.md	closed:b69a1babc
+gate:phase-9c-gate.md:138	process	-	closed:2589e88b3	a pointer to 2026-10-15-routines-table-silent-none.md	closed:2589e88b3
 gate:phase-9c-gate.md:139	divergence	queued-probes/scopen/scopen.rex:1	9d-cluster:stream-notready-names	a pointer to 2026-10-16-stream-command-open-missing-file.md	9d-cluster:stream-notready-names
 gate:phase-9c-gate.md:140	perf	queued-probes/bignum/bignum.rex:1	phase:9.1	a pointer to 2026-10-16-bignum-remainder-speed.md	phase:9.1
 gate:phase-9c-gate.md:141	oracle bug	queued-probes/notop/notop.rex:1	not-a-divergence	a pointer to 2026-10-17-oracle-not-op-forwarding-bug-2117.md	not-a-divergence
@@ -205,15 +205,15 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointe
 2026-10-18-do-count-wider-than-digits.md	divergence	-	closed:Deviation 47	Deviation 47 licenses it	closed:Deviation 47
 2026-10-19-trace-chunk-swap.md	design	-	later	closes Deviation 50 at no per-clause cost	later
 2026-10-19-drive-rs-macros.md	design	-	later	after the 9d close	later
-2026-10-19-variable-reference-deviation-candidates.md	divergence	-	closed:b69a1babc	derive the semantics; follow the model; Deviation where the oracle departs	closed:b69a1babc
+2026-10-19-variable-reference-deviation-candidates.md	divergence	-	closed:2589e88b3	derive the semantics; follow the model; Deviation where the oracle departs	closed:2589e88b3
 2026-10-19-condition-deviation-candidates.md	divergence	-	closed:9f8be0ec2	derive the semantics; follow the model; Deviation where the oracle departs	closed:9f8be0ec2
 2026-10-18-duplicate-member-checked-at-install.md	divergence	-	closed:f84e64ee4	gap	closed:f84e64ee4
 2026-10-18-install-error-names-caller-file.md	divergence	-	closed:e8d9200e5	gap	closed:e8d9200e5
 2026-10-19-context-name-during-install.md	divergence	-	closed:68e7f15d5	gap	closed:68e7f15d5
 2026-10-18-options-trace-constant-expression.md	divergence	-	closed:7fe50bedd	gap	closed:7fe50bedd
 2026-10-19-index-argument-string-conversion.md	divergence	-	9d	gap	9d
-2026-10-19-variable-reference-gaps.md	divergence	-	closed:b69a1babc	gap	closed:b69a1babc
-2026-10-19-local-novalue-hook.md	divergence	-	closed:b69a1babc	gap	closed:b69a1babc
+2026-10-19-variable-reference-gaps.md	divergence	-	closed:2589e88b3	gap	closed:2589e88b3
+2026-10-19-local-novalue-hook.md	divergence	-	closed:2589e88b3	gap	closed:2589e88b3
 2026-10-19-sortwith-on-foreign-class.md	divergence	-	9d	gap	9d
 2026-10-18-class-methods-no-argument.md	divergence	-	9d	gap	9d
 2026-10-19-sigterm-in-trace-delivery.md	divergence	-	closed:fb86ce94f	gap	closed:fb86ce94f

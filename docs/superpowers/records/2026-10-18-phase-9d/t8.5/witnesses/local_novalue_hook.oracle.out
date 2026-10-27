@@ -34,5 +34,7 @@ s17 YYY
   nothing YYY
 s18 YYY
 s19 YYY
-  nilhook YYY2
-NOVALUE cond YYY2
+  hook YYY2
+s20 NV_YYY2
+  nilhook YYY3
+NOVALUE cond YYY3

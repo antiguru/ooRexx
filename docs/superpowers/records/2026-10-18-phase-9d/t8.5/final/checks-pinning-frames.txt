@@ -1,0 +1,10 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1m 55s
+     Running tests/concurrency_tests.rs (/tmp/claude-1000/t85-target/release/deps/concurrency_tests-875ab00be394f585)
+
+running 1 test
+test measured::a_park_under_each_frame_kind_records_it ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 72 filtered out; finished in 0.38s
+
+rc 0

@@ -1,4 +1,4 @@
-**CLOSED 2026-10-27 by Phase 9d Task 8.5 (b69a1babc).**
+**CLOSED 2026-10-27 by Phase 9d Task 8.5 (2589e88b3).**
 
 **RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** gap.
 

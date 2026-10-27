@@ -1,4 +1,4 @@
-**CLOSED 2026-10-27 by Phase 9d Task 8.5 (b69a1babc).**
+**CLOSED 2026-10-27 by Phase 9d Task 8.5 (2589e88b3).**
 
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe; environment.rs build_package_string_table and identities.rs find_written_routine still answer Ok(None).
 
