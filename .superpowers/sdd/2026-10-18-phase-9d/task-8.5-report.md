@@ -725,3 +725,94 @@ head=.../t8.5/rexx-head-2cda11d12`, every program, 3 rounds, exit 0, no SPREAD o
 program is at most +0.0000% or falls, as in round 4 (decrender -0.2705%, intcall -0.2012%, parse
 -0.1938%, rexxcps -0.0596%): this round's change is in the cold chain helpers, the forwarding
 and the `Stem` subclass arms, none of which a benchmark program reaches.
+
+## Controller fix
+
+Brief `task-8.5-fix-r6.md`, re-review `task-8.5-rereview-r5.md` (changes requested: Important 1,
+Minor 1; the controller ruled one more fix, scoped to them). Code `44bf4419d` then `5c71b2b24`,
+which supersedes it (below); records `t8.5/r6/`, the re-review's probes under `r6/probes/` and
+every run's rc, wall time, peak RSS, stdout and stderr in `r6/probes.tsv` (sides: `r3` is
+`rexx-head-4a6321376`, `r5` `rexx-head-2cda11d12`, `new`, `new2` and `new3` this fix's builds
+before each commit, `pin` `rexx-head-44bf4419d`, `pin2` the committed binary `rexx-head-5c71b2b24`;
+the second and third headers hold round 4's and round 5's probe sets on round 5's committed binary
+and on both of this fix's, sides `pin5`, `pin6` and `pin7`). The oracle ran nothing this round.
+
+**1. Important 1: a forward costs its hops.** `Interp::forwarded` (`value.rs`) no longer walks the
+chain at the outermost forward. The forwards nested in one another on the running activity are
+counted (`Interp::forwardings`, one `Forwarding` entry per activity inside a forward and none
+otherwise, keyed by the scheduler's `ActivityId`); the forward at each power of two of that count
+is remembered by its receiver and the activation depth it runs at, and a forward inside it that
+repeats that pair, with no activation of its own between, is the cycle come round: 11.1. Nothing
+walks the chain, so a forward answered after one hop costs one hop, and a cycle of `n` forwards is
+found within a few multiples of `n` hops: a subclass instance's own default (`t[] = t`) at the
+third forward, `s. = >s.` through the reference's forwarding at the third too. The activation depth
+is in the pair so that a value's own method sending further messages back to the stem it was
+reached from (an activation of its own between the forwards) is never read as the cycle; a native
+forward pushes no activation (`Interp::activation_depth`). The anchors are roots while held. The
+stack check stays for a chain that grows under the forwards. `stem_forwarding` leaves `Interp`.
+
+Where the two fields live was found by measurement. `44bf4419d` put them on `Activity`, which
+`swap_idle` (`scheduler.rs`) swaps whole at every activity switch, and the full callgrind run
+(`r6/callgrind-44bf4419d.txt`, `cg-9d/t8.5/r6final`) flagged the three switching programs OVER:
+pingguard +0.5158% (+0.5903% libc subtracted), pingmsg +0.5246% (+0.3395%), pingsem +0.5219%
+(+0.5784%), every other program at round 5's figure. In the boxed `ActivationCold` of the running
+activation instead (`cg-9d/t8.5/r6try2`, the three programs alone: -0.0002%, +0.0003%, -0.0002%
+libc subtracted) the pings were back, but a started message's first forward runs on an activity
+with no running activation, so `g7` fell to the stack again (`probes.tsv` side `new2`: 580836 KB).
+The table on `Interp` covers both (`r6try3`: -0.0001%, -0.0006%, -0.0002%; `g7` 19736 KB) and is
+`5c71b2b24`.
+
+Measured on the committed binary (`probes.tsv` side `pin2`, round 5's binary side `r5`,
+`4a6321376` side `r3`). `h1.rex N` (`Ai~foo` forwarded one hop to `Bi`, one send per node,
+TIME('E') over the sends): 2000 nodes 0.0014 s (`r5` 0.0716 s, `r3` 0.0014 s); 10000 0.0065 s
+(`r5` 1.87 s, `r3` 0.0066 s); 20000 0.0134 s (`r5` 7.08 s, `r3` 0.0134 s), `sum 200010000` on every
+side. Minor 1's shapes, each `SYNTAX 11.1` at both, peak RSS in KB and wall time: `f1` 20284 and
+0.05 s (`r5` 580708 and 0.48 s), `f2` 20052 (`r5` 582960), `g1` 20024 and 0.06 s (`r5` 1153804 and
+1.67 s), and `g1` under `memcap 1G` 19896, 11.1 (`r5`: OOM-killed per the re-review); `g2` to `g7`
+19832 to 20568 (`r5` 580860 to 583304); `g8` and `g9` as on `r5` (19880, 20708). `f5.rex 20`
+(twenty traps of a cycle built inside a forward) 0.04 s at 20228 KB (`r5` 6.43 s at 587736). The
+re-review's `chains.rex` at 100000 links of each kind, every position within a factor of 3 of `r3`
+as the re-review found for round 5 (`ref` `length()` 0.0125 s against `r3` 0.0064 s is round 4's,
+the re-review's out-of-scope note; `sub` arithmetic 0.085 s against 0.108 s; `mix` comparison
+0.156 s against 0.118 s; `stemref` `~length` 0.198 s against 0.225 s). Round 4's and round 5's probe
+sets on this binary are byte-identical in stdout, stderr and rc to `2cda11d12`'s (sides `pin7`
+against `pin5` and `pin`), `halt.rex` under `timeout -s TERM -k 5 3` is `HALT HALT after 1`, rc
+124, and round 5's `subchain3.rex 100000 leaf` and `fwd.rex 200000` stay at their round 5 figures
+(every forwarded position at 100000 under 0.07 s, 200000 forwarded hops 0.14 s). A forwarded cycle
+of 20000 instances (`subchain3.rex 20000 cyc`) is still 11.1, in 0.30 s against round 5's 0.07 s:
+Brent's bound finds it after about 52000 hops where round 5's outermost walk found it before the
+first.
+
+Witnesses: `tests::a_forward_answered_after_one_hop_costs_one_hop` (h1's shape, 20000 nodes, each
+sent `foo` three times, on its own thread with the 20 s timeout: at round 5's 7.1 s per 20000
+sends the three loops take 21 s) and `tests::a_cycle_made_inside_a_forward_is_insufficient_stack`
+(f1, f2, g1 to g6 and g8 as the `UNKNOWN` method's body, each `made` then `SYNTAX 11.1`, on its own
+thread). No peak-memory or forward-depth assertion is practical in a unit test: `run_program`'s
+outcome carries the evaluation depth, which a forward does not count in, and not the forward depth
+or the process's memory; `f1` and `g1`'s peak RSS are recorded above instead.
+
+**Oracle runs**: none.
+
+**Checks** at `5c71b2b24` (`r6/`), from `rust/`, `CARGO_INCREMENTAL=0`,
+`CARGO_TARGET_DIR=/tmp/claude-1000/t85-fix6-target`:
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` (`checks-fmt.txt`) | 0 |
+| `memcap 16G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` (`checks-clippy.txt`, after `touch crates/rexx-exec/src/value.rs`; `Checking rexx-exec` is in the output) | 0 |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --lib --test signals --test dispatch_seam --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions` (`checks-touched.txt`) | 0: lib 1200, signals 42, dispatch_seam 6, closed_phases 8, owners 6, phase_ten_reasons 5, refusal_dispositions 3, refusal_sites 5, representation_refusals 3 |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test collect_stress` (`checks-collect-stress.txt`) | 0, 74 passed |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`checks-corpus.txt`) | 101: 1201 of 1202, the known `rexxutil_file_date_time.rex` |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-parse --test sourceline_oracle --test errors` (`checks-parse.txt`) | 0: errors 34, sourceline_oracle 1 |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test coverage` (`checks-coverage.txt`) | 0, 21 passed |
+| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../t8.5/r6/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`suite/`, after the callgrind run, 275 s) | 0; the four tables identical to `t8.5/r5/suite/` |
+
+**Perf.** `r6/callgrind.txt`: `bench-programs/callgrind.sh -B 0.5 -j 4 -o
+/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.5/r6final2 base=.../t8.5/rexx-base-6e0bf5e5b
+head=.../t8.5/rexx-head-5c71b2b24`, every program, 3 rounds, exit 0, no SPREAD or OVER flag; 99
+`.vg` files name each binary. Libc subtracted, the largest rises are fibfunc +0.0213% and fibcall
++0.0209% (fix round 3's figures, unchanged) and pingmsg +0.0002%; every other program is at most
++0.0000% or falls, as in round 5 (decrender -0.2705%, intcall -0.2012%, parse -0.1938%, rexxcps
+-0.0596%); pingguard and pingsem are -0.0001% and -0.0002%. The superseded `44bf4419d`'s run is
+`r6/callgrind-44bf4419d.txt` (the three ping programs OVER, above), and the ping-only checks of the
+two shapes tried after it `r6/callgrind-r6try2.txt` and `r6/callgrind-r6try3.txt`.

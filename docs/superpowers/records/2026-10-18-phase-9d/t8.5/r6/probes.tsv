@@ -1,0 +1,348 @@
+# Task 8.5 controller fix probe results. Columns: probe, side, rc, wall seconds (memcap, timeout and /usr/bin/time included), peak RSS KB (/usr/bin/time -f %M), stdout (lines joined by |), stderr (first 160 bytes, lines joined by |).
+# Sides: r3 = cg-9d/t8.5/rexx-head-4a6321376; r5 = rexx-head-2cda11d12 (round 5); new = the build before 44bf4419d (the fields on Activity); new2 = the fields in ActivationCold (not committed); new3 = the build before 5c71b2b24; pin = rexx-head-44bf4419d; pin2 = rexx-head-5c71b2b24, the committed binary. g1-1G ran under memcap 1G, everything else under probes/run.sh (memcap 2G timeout -k 5 20, fresh empty dir). h1, chains and f5 print their own TIME('E') seconds. The oracle ran nothing this round.
+chains-mix-100000	new	0	2.954204054	354652	length() 1 0.024829|concat 7x 0.021691|arith 8 0.164220|compare 1 0.147643|~string 7 0.026969|~length 1 0.115008|~request 7 0.132258|~makestring 7 0.154768|tail Z.7 0.030258|datatype NUM 0.021831|array~tostring 7 0.026379|compound 1 0.022380|ctxvars 0.032821|parsevar 7 0.028900|value() 1 0.020336|if 0.120649|trace 0.030424|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-mix-100000	new3	0	2.936124146	360756	length() 1 0.025166|concat 7x 0.022672|arith 8 0.161395|compare 1 0.154899|~string 7 0.029836|~length 1 0.112558|~request 7 0.115169|~makestring 7 0.158531|tail Z.7 0.030084|datatype NUM 0.025738|array~tostring 7 0.022744|compound 1 0.020367|ctxvars 0.031271|parsevar 7 0.029685|value() 1 0.024048|if 0.132878|trace 0.031036|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-mix-100000	pin	0	2.858877522	357136	length() 1 0.026838|concat 7x 0.027179|arith 8 0.113913|compare 1 0.147868|~string 7 0.030920|~length 1 0.116059|~request 7 0.131102|~makestring 7 0.121148|tail Z.7 0.029694|datatype NUM 0.023021|array~tostring 7 0.024688|compound 1 0.021434|ctxvars 0.030212|parsevar 7 0.030078|value() 1 0.024168|if 0.118641|trace 0.031976|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-mix-100000	pin2	0	2.927641364	363572	length() 1 0.025594|concat 7x 0.023061|arith 8 0.162738|compare 1 0.156218|~string 7 0.029956|~length 1 0.124271|~request 7 0.140370|~makestring 7 0.169739|tail Z.7 0.031170|datatype NUM 0.025022|array~tostring 7 0.022491|compound 1 0.019066|ctxvars 0.032152|parsevar 7 0.030435|value() 1 0.024039|if 0.091495|trace 0.030713|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-mix-100000	r3	0	2.708042833	332956	length() 1 0.017671|concat 7x 0.017619|arith 8 0.191981|compare 1 0.118389|~string 7 0.022694|~length 1 0.079406|~request 7 0.091662|~makestring 7 0.121009|tail Z.7 0.022636|datatype NUM 0.020177|array~tostring 7 0.020213|compound 1 0.018688|ctxvars 0.032122|parsevar 7 0.020432|value() 1 0.018722|if 0.091175|trace 0.023408|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-mix-20000	new	0	.535046891	88396	length() 1 0.001001|concat 7x 0.000885|arith 8 0.019018|compare 1 0.019081|~string 7 0.004238|~length 1 0.015748|~request 7 0.014062|~makestring 7 0.023763|tail Z.7 0.004439|datatype NUM 0.002357|array~tostring 7 0.001327|compound 1 0.001127|ctxvars 0.006059|parsevar 7 0.001096|value() 1 0.000981|if 0.013453|trace 0.001877|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-plain-100000	new	0	.061172736	19780	SYNTAX 98.976 14|	
+chains-plain-100000	r3	0	.051642331	20232	SYNTAX 98.976 14|	
+chains-plain-20000	new	0	.068883081	19868	SYNTAX 98.976 14|	
+chains-ref-100000	new	0	1.820238901	90904	length() 1 0.016524|concat 7x 0.019800|arith 8 0.005206|compare 1 0.009384|~string 7 0.004463|~length 1 0.002531|~request 7 0.001926|~makestring 7 0.002290|tail Z.7 0.003985|datatype NUM 0.004238|array~tostring 7 0.004352|compound 1 0.004502|ctxvars 0.052309|parsevar 7 0.016533|value() 1 0.011355|if 0.011794|trace 0.005971|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-ref-100000	new3	0	1.892956573	89636	length() 1 0.017568|concat 7x 0.042958|arith 8 0.012213|compare 1 0.031567|~string 7 0.009632|~length 1 0.002656|~request 7 0.001866|~makestring 7 0.002140|tail Z.7 0.004885|datatype NUM 0.005600|array~tostring 7 0.004549|compound 1 0.005839|ctxvars 0.050903|parsevar 7 0.017136|value() 1 0.011057|if 0.027667|trace 0.015025|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-ref-100000	pin	0	1.752979889	90576	length() 1 0.011632|concat 7x 0.014297|arith 8 0.004447|compare 1 0.008815|~string 7 0.004393|~length 1 0.002423|~request 7 0.001792|~makestring 7 0.002064|tail Z.7 0.003748|datatype NUM 0.004022|array~tostring 7 0.004052|compound 1 0.004174|ctxvars 0.050236|parsevar 7 0.016082|value() 1 0.009237|if 0.009870|trace 0.005276|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-ref-100000	pin2	0	1.760484797	90264	length() 1 0.012510|concat 7x 0.018378|arith 8 0.004916|compare 1 0.009644|~string 7 0.004689|~length 1 0.002958|~request 7 0.002640|~makestring 7 0.002073|tail Z.7 0.003759|datatype NUM 0.004136|array~tostring 7 0.004142|compound 1 0.004193|ctxvars 0.050956|parsevar 7 0.016017|value() 1 0.008059|if 0.009489|trace 0.005325|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-ref-100000	r3	0	1.765486777	89244	length() 1 0.006419|concat 7x 0.006923|arith 8 0.001896|compare 1 0.004302|~string 7 0.002086|~length 1 0.001863|~request 7 0.001751|~makestring 7 0.001863|tail Z.7 0.002000|datatype NUM 0.001834|array~tostring 7 0.001972|compound 1 0.001799|ctxvars 0.052736|parsevar 7 0.006070|value() 1 0.003650|if 0.004981|trace 0.002684|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-ref-20000	new	0	.380793450	35336	length() 1 0.001080|concat 7x 0.001834|arith 8 0.000624|compare 1 0.001234|~string 7 0.000616|~length 1 0.000508|~request 7 0.000377|~makestring 7 0.000499|tail Z.7 0.000622|datatype NUM 0.000607|array~tostring 7 0.000615|compound 1 0.000615|ctxvars 0.009363|parsevar 7 0.000742|value() 1 0.000614|if 0.001209|trace 0.000893|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-stemref-100000	new	0	2.676711457	427848	length() 1 0.029955|concat 7x 0.066273|arith 8 0.017549|compare 1 0.033508|~string 7 0.015766|~length 1 0.181742|~request 7 0.148604|~makestring 7 0.136552|tail Z.7 0.030488|datatype NUM 0.023366|array~tostring 7 0.018895|compound 1 0.018795|ctxvars 0.054067|parsevar 7 0.030043|value() 1 0.022941|if 0.033416|trace 0.017559|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-stemref-100000	new3	0	2.713290606	433960	length() 1 0.030761|concat 7x 0.061011|arith 8 0.019262|compare 1 0.030222|~string 7 0.014411|~length 1 0.220798|~request 7 0.178229|~makestring 7 0.109466|tail Z.7 0.029846|datatype NUM 0.019103|array~tostring 7 0.023220|compound 1 0.017440|ctxvars 0.053789|parsevar 7 0.031421|value() 1 0.019530|if 0.030771|trace 0.013845|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-stemref-100000	pin	0	2.472717900	429880	length() 1 0.028569|concat 7x 0.049328|arith 8 0.012392|compare 1 0.025279|~string 7 0.014959|~length 1 0.168313|~request 7 0.104590|~makestring 7 0.093395|tail Z.7 0.031036|datatype NUM 0.019483|array~tostring 7 0.014662|compound 1 0.013922|ctxvars 0.050816|parsevar 7 0.029148|value() 1 0.016786|if 0.026278|trace 0.013612|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-stemref-100000	pin2	0	2.524728018	433712	length() 1 0.025759|concat 7x 0.051760|arith 8 0.013937|compare 1 0.027052|~string 7 0.013272|~length 1 0.197511|~request 7 0.111323|~makestring 7 0.112798|tail Z.7 0.029377|datatype NUM 0.015905|array~tostring 7 0.014896|compound 1 0.013077|ctxvars 0.050669|parsevar 7 0.029073|value() 1 0.018600|if 0.028842|trace 0.013851|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-stemref-100000	r3	0	2.637242917	405724	length() 1 0.018819|concat 7x 0.065695|arith 8 0.017601|compare 1 0.034234|~string 7 0.020107|~length 1 0.225348|~request 7 0.115927|~makestring 7 0.150906|tail Z.7 0.019615|datatype NUM 0.013147|array~tostring 7 0.015580|compound 1 0.010677|ctxvars 0.055474|parsevar 7 0.018770|value() 1 0.016780|if 0.035289|trace 0.018780|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-stemref-20000	new	0	.499175391	99472	length() 1 0.001072|concat 7x 0.002948|arith 8 0.000977|compare 1 0.001955|~string 7 0.000979|~length 1 0.025831|~request 7 0.019241|~makestring 7 0.020476|tail Z.7 0.005403|datatype NUM 0.001016|array~tostring 7 0.000994|compound 1 0.000983|ctxvars 0.009890|parsevar 7 0.000989|value() 1 0.000980|if 0.001951|trace 0.001297|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-sub-100000	new	0	.754975244	266980	length() 1 0.009321|concat 7x 0.007152|arith 8 0.118932|compare 1 0.084134|~string 7 0.009281|~length 1 0.071755|~request 7 0.092327|~makestring 7 0.095734|tail Z.7 0.009605|datatype NUM 0.008072|array~tostring 7 0.006297|compound 1 0.005841|ctxvars 0.000040|parsevar 7 0.005229|value() 1 0.004425|if 0.080116|trace 0.010161|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-sub-100000	new3	0	.691100993	272736	length() 1 0.008576|concat 7x 0.007411|arith 8 0.103921|compare 1 0.054923|~string 7 0.009364|~length 1 0.044582|~request 7 0.091866|~makestring 7 0.105611|tail Z.7 0.009810|datatype NUM 0.007678|array~tostring 7 0.007065|compound 1 0.005738|ctxvars 0.000037|parsevar 7 0.005220|value() 1 0.004881|if 0.078622|trace 0.009966|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-sub-100000	pin	0	.578119545	267248	length() 1 0.007861|concat 7x 0.005511|arith 8 0.078099|compare 1 0.062047|~string 7 0.009312|~length 1 0.080705|~request 7 0.056587|~makestring 7 0.053177|tail Z.7 0.009435|datatype NUM 0.007215|array~tostring 7 0.005362|compound 1 0.005019|ctxvars 0.000033|parsevar 7 0.004862|value() 1 0.005078|if 0.043785|trace 0.009438|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-sub-100000	pin2	0	.595803352	273680	length() 1 0.007735|concat 7x 0.005162|arith 8 0.085438|compare 1 0.055613|~string 7 0.009168|~length 1 0.054559|~request 7 0.059520|~makestring 7 0.081433|tail Z.7 0.009320|datatype NUM 0.007651|array~tostring 7 0.006348|compound 1 0.005815|ctxvars 0.000036|parsevar 7 0.005100|value() 1 0.004910|if 0.055780|trace 0.009923|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-sub-100000	r3	0	.620666676	242972	length() 1 0.005614|concat 7x 0.004391|arith 8 0.108048|compare 1 0.067281|~string 7 0.006375|~length 1 0.068241|~request 7 0.053162|~makestring 7 0.071751|tail Z.7 0.004681|datatype NUM 0.004100|array~tostring 7 0.006027|compound 1 0.005600|ctxvars 0.000046|parsevar 7 0.004179|value() 1 0.003167|if 0.060434|trace 0.006744|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+chains-sub-20000	new	0	.137794871	69708	length() 1 0.000519|concat 7x 0.000362|arith 8 0.011618|compare 1 0.008918|~string 7 0.000595|~length 1 0.006286|~request 7 0.007070|~makestring 7 0.009462|tail Z.7 0.001036|datatype NUM 0.000588|array~tostring 7 0.000459|compound 1 0.000380|ctxvars 0.000031|parsevar 7 0.000332|value() 1 0.000327|if 0.008605|trace 0.000830|end|	    56 *-* x = first;|       >>>   "7"|    56 *-* trace o;|
+f1	new	0	.067547132	20132	SYNTAX 11.1|	
+f1	new2	0	.069376121	20112	SYNTAX 11.1|	
+f1	new3	0	.078910305	20120	SYNTAX 11.1|	
+f1	pin	0	.063101142	20228	SYNTAX 11.1|	
+f1	pin2	0	.053216567	20284	SYNTAX 11.1|	
+f1	r5	0	.479669221	580708	SYNTAX 11.1|	
+f2	new	0	.055833369	20032	SYNTAX 11.1|	
+f2	new2	0	.051349551	20284	SYNTAX 11.1|	
+f2	new3	0	.035754385	19640	SYNTAX 11.1|	
+f2	pin	0	.036649279	20216	SYNTAX 11.1|	
+f2	pin2	0	.066266364	20052	SYNTAX 11.1|	
+f2	r5	0	.570396185	582960	SYNTAX 11.1|	
+f5-20	new	0	.037704627	20120	done caught 11.1|	
+f5-20	new2	0	.059273752	20224	done caught 11.1|	
+f5-20	new3	0	.037901455	19716	done caught 11.1|	
+f5-20	pin	0	.041302649	20052	done caught 11.1|	
+f5-20	pin2	0	.038072029	20228	done caught 11.1|	
+f5-20	r5	0	6.426126597	587736	done caught 11.1|	
+g1	new	0	.060053902	19548	SYNTAX 11.1|	
+g1	new2	0	.065667213	19788	SYNTAX 11.1|	
+g1	new3	0	.034758243	20340	SYNTAX 11.1|	
+g1	pin	0	.039125550	19808	SYNTAX 11.1|	
+g1	pin2	0	.061015130	20024	SYNTAX 11.1|	
+g1	r5	0	1.667192630	1153804	SYNTAX 11.1|	
+g1-1G	new	0	0	19784	SYNTAX 11.1|	
+g1-1G	new2	0	0	19600	SYNTAX 11.1|	
+g1-1G	new3	0	0	19964	SYNTAX 11.1|	
+g1-1G	pin	0	0	19972	SYNTAX 11.1|	
+g1-1G	pin2	0	0	19896	SYNTAX 11.1|	
+g2	new	0	.074564136	19848	SYNTAX 11.1|	
+g2	new2	0	.075762692	19604	SYNTAX 11.1|	
+g2	new3	0	.040382206	19456	SYNTAX 11.1|	
+g2	pin	0	.040030095	19760	SYNTAX 11.1|	
+g2	pin2	0	.069824175	20444	SYNTAX 11.1|	
+g2	r5	0	.516856812	582384	SYNTAX 11.1|	
+g3	new	0	.080752123	19808	SYNTAX 11.1|	
+g3	new2	0	.050059847	20028	SYNTAX 11.1|	
+g3	new3	0	.035604759	19216	SYNTAX 11.1|	
+g3	pin	0	.041714877	20140	SYNTAX 11.1|	
+g3	pin2	0	.063256048	19832	SYNTAX 11.1|	
+g3	r5	0	.589118853	581680	SYNTAX 11.1|	
+g4	new	0	.078319420	20096	SYNTAX 11.1|	       >I> Method "UNKNOWN" with scope "O" in package "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/r6/probes/g4
+g4	new2	0	.037983804	20060	SYNTAX 11.1|	       >I> Method "UNKNOWN" with scope "O" in package "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/r6/probes/g4
+g4	new3	0	.033941537	20652	SYNTAX 11.1|	       >I> Method "UNKNOWN" with scope "O" in package "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/r6/probes/g4
+g4	pin	0	.038289253	20212	SYNTAX 11.1|	       >I> Method "UNKNOWN" with scope "O" in package "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/r6/probes/g4
+g4	pin2	0	.036990689	20568	SYNTAX 11.1|	       >I> Method "UNKNOWN" with scope "O" in package "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/r6/probes/g4
+g4	r5	0	.555409596	583304	SYNTAX 11.1|	       >I> Method "UNKNOWN" with scope "O" in package "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/r6/probes/g4
+g5	new	0	.051063453	19776	SYNTAX 11.1|	
+g5	new2	0	.037235774	20328	SYNTAX 11.1|	
+g5	new3	0	.038400252	19124	SYNTAX 11.1|	
+g5	pin	0	.039940677	19860	SYNTAX 11.1|	
+g5	pin2	0	.053377743	20504	SYNTAX 11.1|	
+g5	r5	0	.526623041	580860	SYNTAX 11.1|	
+g6	new	0	.053541663	19504	SYNTAX 11.1|	
+g6	new2	0	.039138221	19148	SYNTAX 11.1|	
+g6	new3	0	.034946957	19940	SYNTAX 11.1|	
+g6	pin	0	.039696704	20140	SYNTAX 11.1|	
+g6	pin2	0	.058983166	19972	SYNTAX 11.1|	
+g6	r5	0	.537196725	583120	SYNTAX 11.1|	
+g7	new	0	.075713224	19784	SYNTAX 11.1|	Error 11:  Control stack full.|Error 11.1:  Insufficient control stack space; cannot continue execution.|
+g7	new2	0	.545310251	580836	SYNTAX 11.1|	Error 11:  Control stack full.|Error 11.1:  Insufficient control stack space; cannot continue execution.|
+g7	new3	0	.035843273	19736	SYNTAX 11.1|	Error 11:  Control stack full.|Error 11.1:  Insufficient control stack space; cannot continue execution.|
+g7	pin	0	.067144939	20424	SYNTAX 11.1|	Error 11:  Control stack full.|Error 11.1:  Insufficient control stack space; cannot continue execution.|
+g7	pin2	0	.055428936	20088	SYNTAX 11.1|	Error 11:  Control stack full.|Error 11.1:  Insufficient control stack space; cannot continue execution.|
+g7	r5	0	.521543213	581564	SYNTAX 11.1|	Error 11:  Control stack full.|Error 11.1:  Insufficient control stack space; cannot continue execution.|
+g8	new	0	.063597182	19560	SYNTAX 11.1|	
+g8	new2	0	.063958321	20164	SYNTAX 11.1|	
+g8	new3	0	.034940438	19604	SYNTAX 11.1|	
+g8	pin	0	.038308733	20152	SYNTAX 11.1|	
+g8	pin2	0	.071494219	19880	SYNTAX 11.1|	
+g8	r5	0	.037436704	20016	SYNTAX 11.1|	
+g9	new	0	.037969708	20104	replied|end|	    10 *-* say 'after' x.~bar|Error 11 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/r6/probes/g9.rex lin
+g9	new2	0	.068612701	20320	replied|end|	    10 *-* say 'after' x.~bar|Error 11 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/r6/probes/g9.rex lin
+g9	new3	0	.038719033	20280	replied|end|	    10 *-* say 'after' x.~bar|Error 11 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/r6/probes/g9.rex lin
+g9	pin	0	.037725009	20124	replied|end|	    10 *-* say 'after' x.~bar|Error 11 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/r6/probes/g9.rex lin
+g9	pin2	0	.056884195	20708	replied|end|	    10 *-* say 'after' x.~bar|Error 11 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/r6/probes/g9.rex lin
+g9	r5	0	.036167909	19928	replied|end|	    10 *-* say 'after' x.~bar|Error 11 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.5/r6/probes/g9.rex lin
+h1-10000	new	0	.092168034	31548	sum 50005000 in 0.006769|	
+h1-10000	new2	0	.064485826	31096	sum 50005000 in 0.006933|	
+h1-10000	new3	0	.065625844	31124	sum 50005000 in 0.007128|	
+h1-10000	pin	0	.063028964	31656	sum 50005000 in 0.007164|	
+h1-10000	pin2	0	.061050379	33388	sum 50005000 in 0.006479|	
+h1-10000	r3	0	.094451670	33476	sum 50005000 in 0.006637|	
+h1-10000	r5	0	1.957223286	33304	sum 50005000 in 1.865100|	
+h1-2000	new	0	.046969877	23188	sum 2001000 in 0.001396|	
+h1-2000	new2	0	.045532634	21956	sum 2001000 in 0.001396|	
+h1-2000	new3	0	.045194612	21808	sum 2001000 in 0.001508|	
+h1-2000	pin	0	.043269845	23340	sum 2001000 in 0.001434|	
+h1-2000	pin2	0	.043977095	23048	sum 2001000 in 0.001425|	
+h1-2000	r3	0	.067289529	22852	sum 2001000 in 0.001384|	
+h1-2000	r5	0	.110415714	23248	sum 2001000 in 0.071558|	
+h1-20000	new	0	.120043975	44736	sum 200010000 in 0.013006|	
+h1-20000	new2	0	.118003558	44652	sum 200010000 in 0.013099|	
+h1-20000	new3	0	.091792246	43392	sum 200010000 in 0.014044|	
+h1-20000	pin	0	.094260374	44856	sum 200010000 in 0.013990|	
+h1-20000	pin2	0	.120426575	45632	sum 200010000 in 0.013368|	
+h1-20000	r3	0	.129831731	46152	sum 200010000 in 0.013352|	
+h1-20000	r5	0	7.183514875	43724	sum 200010000 in 7.084548|	
+# Round 4's probe sets (t8.5/r4/probes/) on round 5's committed binary (side pin5), 44bf4419d (pin6) and 5c71b2b24 (pin7), no RSS column:
+ac1	pin5	0			5|1|5x|6|p 5|1|one|two|p one|two|7|nmake|p nmake|a K|p a K|3|E.|p E.|7|p 7|8|7|p 7|8|sub|p sub|3|sub|p sub|sub|p sub|3|	
+ac1	pin6	0			5|1|5x|6|p 5|1|one|two|p one|two|7|nmake|p nmake|a K|p a K|3|E.|p E.|7|p 7|8|7|p 7|8|sub|p sub|3|sub|p sub|sub|p sub|3|	
+ac1	pin7	0			5|1|5x|6|p 5|1|one|two|p one|two|7|nmake|p nmake|a K|p a K|3|E.|p E.|7|p 7|8|7|p 7|8|sub|p sub|3|sub|p sub|sub|p sub|3|	
+ac10-1	pin5	0			1 1 1|end 1|	
+ac10-1	pin6	0			1 1 1|end 1|	
+ac10-1	pin7	0			1 1 1|end 1|	
+ac10-2	pin5	0			1 1 1 1|end 2|	
+ac10-2	pin6	0			1 1 1 1|end 2|	
+ac10-2	pin7	0			1 1 1 1|end 2|	
+ac10-3	pin5	0			6|end 3|	
+ac10-3	pin6	0			6|end 3|	
+ac10-3	pin7	0			6|end 3|	
+ac10-4	pin5	0			6|end 4|	
+ac10-4	pin6	0			6|end 4|	
+ac10-4	pin7	0			6|end 4|	
+ac10-5	pin5	0			6|end 5|	
+ac10-5	pin6	0			6|end 5|	
+ac10-5	pin7	0			6|end 5|	
+ac10-6	pin5	0			1|end 6|	
+ac10-6	pin6	0			1|end 6|	
+ac10-6	pin7	0			1|end 6|	
+ac10-7	pin5	0			1|end 7|	
+ac10-7	pin6	0			1|end 7|	
+ac10-7	pin7	0			1|end 7|	
+ac10-8	pin5	0			-5|end 8|	
+ac10-8	pin6	0			-5|end 8|	
+ac10-8	pin7	0			-5|end 8|	
+ac2	pin5	0			end|	    17 *-* x = r|       >>>   "5"|    18 *-* x = q|       >>>   "an Array"|    19 *-* x = i|       >>>   "7"|    20 *-* x = h.|       >>>   "7"|    21 *-* x = o
+ac2	pin6	0			end|	    17 *-* x = r|       >>>   "5"|    18 *-* x = q|       >>>   "an Array"|    19 *-* x = i|       >>>   "7"|    20 *-* x = h.|       >>>   "7"|    21 *-* x = o
+ac2	pin7	0			end|	    17 *-* x = r|       >>>   "5"|    18 *-* x = q|       >>>   "an Array"|    19 *-* x = i|       >>>   "7"|    20 *-* x = h.|       >>>   "7"|    21 *-* x = o
+ac3	pin5	0			NS a Directory Directory Stem|	
+ac3	pin6	0			NS a Directory Directory Stem|	
+ac3	pin7	0			NS a Directory Directory Stem|	
+ac4	pin5	159			5|5|5|5|	     8 *-* say s.~foo|Error 97 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/prob
+ac4	pin6	159			5|5|5|5|	     8 *-* say s.~foo|Error 97 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/prob
+ac4	pin7	159			5|5|5|5|	     8 *-* say s.~foo|Error 97 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/prob
+ac5	pin5	0			one|two|p one|two|7|one|two|one|two|p one|two|7|one|two|one|two|p one|two|7|one|two|end|	    19 *-* x = r|       >>>   "an Array"|    20 *-* x = zz|       >>>   "an Array"|    21 *-* x = t.|       >>>   "one|two"|    22 *-* x = q|       >>>   "an Ar
+ac5	pin6	0			one|two|p one|two|7|one|two|one|two|p one|two|7|one|two|one|two|p one|two|7|one|two|end|	    19 *-* x = r|       >>>   "an Array"|    20 *-* x = zz|       >>>   "an Array"|    21 *-* x = t.|       >>>   "one|two"|    22 *-* x = q|       >>>   "an Ar
+ac5	pin7	0			one|two|p one|two|7|one|two|one|two|p one|two|7|one|two|one|two|p one|two|7|one|two|end|	    19 *-* x = r|       >>>   "an Array"|    20 *-* x = zz|       >>>   "an Array"|    21 *-* x = t.|       >>>   "one|two"|    22 *-* x = q|       >>>   "an Ar
+ac6	pin5	0			NS a Directory Directory Directory|	
+ac6	pin6	0			NS a Directory Directory Directory|	
+ac6	pin7	0			NS a Directory Directory Directory|	
+ac7-1	pin5	0			NS 1 a Directory Directory Directory|	
+ac7-1	pin6	0			NS 1 a Directory Directory Directory|	
+ac7-1	pin7	0			NS 1 a Directory Directory Directory|	
+ac7-2	pin5	0			NS 2 a Directory Directory Stem|	
+ac7-2	pin6	0			NS 2 a Directory Directory Stem|	
+ac7-2	pin7	0			NS 2 a Directory Directory Stem|	
+ac7-3	pin5	0			NS 3 a Directory Directory Stem|	
+ac7-3	pin6	0			NS 3 a Directory Directory Stem|	
+ac7-3	pin7	0			NS 3 a Directory Directory Stem|	
+ac7-4	pin5	0			NS 4 a Directory Directory Stem|	
+ac7-4	pin6	0			NS 4 a Directory Directory Stem|	
+ac7-4	pin7	0			NS 4 a Directory Directory Stem|	
+ac7-5	pin5	0			NS 5 a Directory Directory MYSTEM|	
+ac7-5	pin6	0			NS 5 a Directory Directory MYSTEM|	
+ac7-5	pin7	0			NS 5 a Directory Directory MYSTEM|	
+ac7-6	pin5	0			NS 6 a Directory Directory Stem|	
+ac7-6	pin6	0			NS 6 a Directory Directory Stem|	
+ac7-6	pin7	0			NS 6 a Directory Directory Stem|	
+ac7-7	pin5	0			NS 7 a Directory Directory Stem|	
+ac7-7	pin6	0			NS 7 a Directory Directory Stem|	
+ac7-7	pin7	0			NS 7 a Directory Directory Stem|	
+ac7-8	pin5	0			NS 8 a Directory Directory Stem|	
+ac7-8	pin6	0			NS 8 a Directory Directory Stem|	
+ac7-8	pin7	0			NS 8 a Directory Directory Stem|	
+ac7-9	pin5	0			NS 9 a Directory Directory Stem|	
+ac7-9	pin6	0			NS 9 a Directory Directory Stem|	
+ac7-9	pin7	0			NS 9 a Directory Directory Stem|	
+ac8	pin5	0			5|p 5|1|2|end|	
+ac8	pin6	0			5|p 5|1|2|end|	
+ac8	pin7	0			5|p 5|1|2|end|	
+ac9	pin5	0			[]|0||[]|uu|V.|end|	
+ac9	pin6	0			[]|0||[]|uu|V.|end|	
+ac9	pin7	0			[]|0||[]|uu|V.|end|	
+chain1000	pin5	0			len 4 leaf leaf|arith leafx|ok|	    10 *-* x = r1|       >>>   "leaf"|    11 *-* trace o|
+chain1000	pin6	0			len 4 leaf leaf|arith leafx|ok|	    10 *-* x = r1|       >>>   "leaf"|    11 *-* trace o|
+chain1000	pin7	0			len 4 leaf leaf|arith leafx|ok|	    10 *-* x = r1|       >>>   "leaf"|    11 *-* trace o|
+chain20000	pin5	0			len 4 leaf leaf|arith leafx|ok|	    10 *-* x = r1|       >>>   "leaf"|    11 *-* trace o|
+chain20000	pin6	0			len 4 leaf leaf|arith leafx|ok|	    10 *-* x = r1|       >>>   "leaf"|    11 *-* trace o|
+chain20000	pin7	0			len 4 leaf leaf|arith leafx|ok|	    10 *-* x = r1|       >>>   "leaf"|    11 *-* trace o|
+mixed1000	pin5	0			len 1 leaf 7|ref 1 7 8|stem 8|ok|	    12 *-* x = s1.|       >>>   "7"|    13 *-* x = r|       >>>   "7"|    14 *-* trace o|
+mixed1000	pin6	0			len 1 leaf 7|ref 1 7 8|stem 8|ok|	    12 *-* x = s1.|       >>>   "7"|    13 *-* x = r|       >>>   "7"|    14 *-* trace o|
+mixed1000	pin7	0			len 1 leaf 7|ref 1 7 8|stem 8|ok|	    12 *-* x = s1.|       >>>   "7"|    13 *-* x = r|       >>>   "7"|    14 *-* trace o|
+mixed20000	pin5	0			len 1 leaf 7|ref 1 7 8|stem 8|ok|	    12 *-* x = s1.|       >>>   "7"|    13 *-* x = r|       >>>   "7"|    14 *-* trace o|
+mixed20000	pin6	0			len 1 leaf 7|ref 1 7 8|stem 8|ok|	    12 *-* x = s1.|       >>>   "7"|    13 *-* x = r|       >>>   "7"|    14 *-* trace o|
+mixed20000	pin7	0			len 1 leaf 7|ref 1 7 8|stem 8|ok|	    12 *-* x = s1.|       >>>   "7"|    13 *-* x = r|       >>>   "7"|    14 *-* trace o|
+n	pin5	0			p|q|nstr|p|qx|3|NOSTRING a Directory Directory|	
+n	pin6	0			p|q|nstr|p|qx|3|NOSTRING a Directory Directory|	
+n	pin7	0			p|q|nstr|p|qx|3|NOSTRING a Directory Directory|	
+sd0	pin5	0			made|Stem|	
+sd0	pin6	0			made|Stem|	
+sd0	pin7	0			made|Stem|	
+sd1	pin5	245				     3 *-* say s.|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probes/s
+sd1	pin6	245				     3 *-* say s.|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probes/s
+sd1	pin7	245				     3 *-* say s.|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probes/s
+sd_msg	pin5	245			made|	     3 *-* say s.~foo|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/prob
+sd_msg	pin6	245			made|	     3 *-* say s.~foo|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/prob
+sd_msg	pin7	245			made|	     3 *-* say s.~foo|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/prob
+sd_ops1	pin5	0			made|SYNTAX 1 11 11.1|	
+sd_ops1	pin6	0			made|SYNTAX 1 11 11.1|	
+sd_ops1	pin7	0			made|SYNTAX 1 11 11.1|	
+sd_ops10	pin5	0			made|SYNTAX 10 11 11.1|	
+sd_ops10	pin6	0			made|SYNTAX 10 11 11.1|	
+sd_ops10	pin7	0			made|SYNTAX 10 11 11.1|	
+sd_ops11	pin5	0			made|SYNTAX 11 11 11.1|	
+sd_ops11	pin6	0			made|SYNTAX 11 11 11.1|	
+sd_ops11	pin7	0			made|SYNTAX 11 11 11.1|	
+sd_ops12	pin5	0			made|SYNTAX 12 11 11.1|	
+sd_ops12	pin6	0			made|SYNTAX 12 11 11.1|	
+sd_ops12	pin7	0			made|SYNTAX 12 11 11.1|	
+sd_ops2	pin5	0			made|SYNTAX 2 11 11.1|	
+sd_ops2	pin6	0			made|SYNTAX 2 11 11.1|	
+sd_ops2	pin7	0			made|SYNTAX 2 11 11.1|	
+sd_ops3	pin5	0			made|SYNTAX 3 11 11.1|	
+sd_ops3	pin6	0			made|SYNTAX 3 11 11.1|	
+sd_ops3	pin7	0			made|SYNTAX 3 11 11.1|	
+sd_ops4	pin5	0			made|S.|end 4|	
+sd_ops4	pin6	0			made|S.|end 4|	
+sd_ops4	pin7	0			made|S.|end 4|	
+sd_ops5	pin5	0			made|traced|end 5|	     9 *-*       x = s.;|       >>>         "S."|     9 *-*       trace o;|
+sd_ops5	pin6	0			made|traced|end 5|	     9 *-*       x = s.;|       >>>         "S."|     9 *-*       trace o;|
+sd_ops5	pin7	0			made|traced|end 5|	     9 *-*       x = s.;|       >>>         "S."|     9 *-*       trace o;|
+sd_ops6	pin5	0			made|SYNTAX 6 11 11.1|	
+sd_ops6	pin6	0			made|SYNTAX 6 11 11.1|	
+sd_ops6	pin7	0			made|SYNTAX 6 11 11.1|	
+sd_ops7	pin5	0			made|SYNTAX 7 11 11.1|	
+sd_ops7	pin6	0			made|SYNTAX 7 11 11.1|	
+sd_ops7	pin7	0			made|SYNTAX 7 11 11.1|	
+sd_ops8	pin5	0			made|SYNTAX 8 11 11.1|	
+sd_ops8	pin6	0			made|SYNTAX 8 11 11.1|	
+sd_ops8	pin7	0			made|SYNTAX 8 11 11.1|	
+sd_ops9	pin5	0			made|SYNTAX 9 11 11.1|	
+sd_ops9	pin6	0			made|SYNTAX 9 11 11.1|	
+sd_ops9	pin7	0			made|SYNTAX 9 11 11.1|	
+sd_tr	pin5	0			made|end|	     4 *-* x = s.|       >>>   "S."|     5 *-* say "end"|       >>>   "end"|
+sd_tr	pin6	0			made|end|	     4 *-* x = s.|       >>>   "S."|     5 *-* say "end"|       >>>   "end"|
+sd_tr	pin7	0			made|end|	     4 *-* x = s.|       >>>   "S."|     5 *-* say "end"|       >>>   "end"|
+sd_via	pin5	245			made Stem|	     6 *-* say length(u)|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/p
+sd_via	pin6	245			made Stem|	     6 *-* say length(u)|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/p
+sd_via	pin7	245			made Stem|	     6 *-* say length(u)|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/p
+stemdef1	pin5	0			made|SYNTAX 1 11 11.1|	
+stemdef1	pin6	0			made|SYNTAX 1 11 11.1|	
+stemdef1	pin7	0			made|SYNTAX 1 11 11.1|	
+stemdef2	pin5	0			made|SYNTAX 2 11 11.1|	
+stemdef2	pin6	0			made|SYNTAX 2 11 11.1|	
+stemdef2	pin7	0			made|SYNTAX 2 11 11.1|	
+stemdef3	pin5	0			made|an Array|8|end 3|	
+stemdef3	pin6	0			made|an Array|8|end 3|	
+stemdef3	pin7	0			made|an Array|8|end 3|	
+stemdef4	pin5	0			made|SYNTAX 4 11 11.1|	
+stemdef4	pin6	0			made|SYNTAX 4 11 11.1|	
+stemdef4	pin7	0			made|SYNTAX 4 11 11.1|	
+stemdef5	pin5	0			made|8|end 5|	
+stemdef5	pin6	0			made|8|end 5|	
+stemdef5	pin7	0			made|8|end 5|	
+sub1	pin5	245			made|	     4 *-* say t|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probes/su
+sub1	pin6	245			made|	     4 *-* say t|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probes/su
+sub1	pin7	245			made|	     4 *-* say t|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probes/su
+sub2	pin5	245			made|	     6 *-* say length(t)|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/p
+sub2	pin6	245			made|	     6 *-* say length(t)|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/p
+sub2	pin7	245			made|	     6 *-* say length(t)|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/p
+sub3	pin5	245			made|	     4 *-* say t~foo|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probe
+sub3	pin6	245			made|	     4 *-* say t~foo|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probe
+sub3	pin7	245			made|	     4 *-* say t~foo|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probe
+sub4	pin5	0			made|end|	     5 *-* x = t|       >>>   ""|     6 *-* trace o|
+sub4	pin6	0			made|end|	     5 *-* x = t|       >>>   ""|     6 *-* trace o|
+sub4	pin7	0			made|end|	     5 *-* x = t|       >>>   ""|     6 *-* trace o|
+sub5	pin5	245			made|	     4 *-* say t|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probes/su
+sub5	pin6	245			made|	     4 *-* say t|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probes/su
+sub5	pin7	245			made|	     4 *-* say t|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probes/su
+sub6	pin5	245			made|	     4 *-* say 1 + t|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probe
+sub6	pin6	245			made|	     4 *-* say 1 + t|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probe
+sub6	pin7	245			made|	     4 *-* say 1 + t|Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t85-fix4/probe
+sub7	pin5	158				       *-* Compiled method "[]=" with scope "Stem".|     3 *-* t[] = s.|Error 98 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff
+sub7	pin6	158				       *-* Compiled method "[]=" with scope "Stem".|     3 *-* t[] = s.|Error 98 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff
+sub7	pin7	158				       *-* Compiled method "[]=" with scope "Stem".|     3 *-* t[] = s.|Error 98 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff
+# Round 5's probe sets (t8.5/r5/probes/) on the same three binaries (sides pin, pin6 and pin7):
+fwd100000	pin	0	.182468879		length 4 0.069476|	
+fwd200000	pin	0	.376474634		length 4 0.186709|	
+fwd200000	pin6	0	.358071735		length 4 0.164766|	
+fwd200000	pin7	0	.334500911		length 4 0.137216|	
+mixchain1000	pin	0	.094358704		len 4 in 0.000141|leaf|end|	
+mixchain10000	pin	0	.415816650		len 4 in 0.001323|leaf|end|	
+mixchain1000cyc	pin	0	.093402931		SYNTAX 11.1|	
+mixchain1000cyc	pin6	0	.072946078		SYNTAX 11.1|	
+mixchain1000cyc	pin7	0	.075943495		SYNTAX 11.1|	
+moved	pin	0	.036265000		an Array|an Array|one|two|one|two|one|two|one|two|end|	    15 *-* x = r|       >>>   "an Array"|    16 *-* x = q|       >>>   "an Array"|    17 *-* trace o|
+moved	pin6	0	.034926767		an Array|an Array|one|two|one|two|one|two|one|two|end|	    15 *-* x = r|       >>>   "an Array"|    16 *-* x = q|       >>>   "an Array"|    17 *-* trace o|
+moved	pin7	0	.034067302		an Array|an Array|one|two|one|two|one|two|one|two|end|	    15 *-* x = r|       >>>   "an Array"|    16 *-* x = q|       >>>   "an Array"|    17 *-* trace o|
+ref_items	pin	0	.056012121		0 0 0|1 1 1 a|SYNTAX 11.1|	
+ref_items	pin6	0	.054837943		0 0 0|1 1 1 a|SYNTAX 11.1|	
+ref_items	pin7	0	.060986521		0 0 0|1 1 1 a|SYNTAX 11.1|	
+subchain1000	pin	0	.037680501		len 4|leaf|end|	
+subchain1000	pin6	0	.073078054		len 4|leaf|end|	
+subchain1000	pin7	0	.059087865		len 4|leaf|end|	
+subchain100000	pin	0	.115586385		len 4|leaf|end|	
+subchain100000	pin6	0	.100793572		len 4|leaf|end|	
+subchain100000	pin7	0	.126095238		len 4|leaf|end|	
+subchain100000cyc	pin	0	.122845268		SYNTAX 11.1|	
+subchain100000cyc	pin6	0	.135208224		SYNTAX 11.1|	
+subchain100000cyc	pin7	0	.118190137		SYNTAX 11.1|	
+subchain1000cyc	pin	0	.037590414		SYNTAX 11.1|	
+subchain1000cyc	pin6	0	.036015687		SYNTAX 11.1|	
+subchain1000cyc	pin7	0	.068614579		SYNTAX 11.1|	
+subchain20000	pin	0	.052405079		len 4|leaf|end|	
+subchain20000	pin6	0	.081058652		len 4|leaf|end|	
+subchain20000	pin7	0	.075983984		len 4|leaf|end|	
+subchain20000cyc	pin	0	.074468788		SYNTAX 11.1|	
+subchain20000cyc	pin6	0	.048063931		SYNTAX 11.1|	
+subchain20000cyc	pin7	0	.052123598		SYNTAX 11.1|	
+subchain2-1000	pin	0	.035552740		len 4 in 0.000041|	
+subchain2-100000	pin	0	.123937247		len 4 in 0.004262|	
+subchain2-20000	pin	0	.048275112		len 4 in 0.000383|	
+subchain3-100000	pin	0	.331630448		string leaf 0.006893|request leaf 0.075456|length 4 0.057485|concat leafx 0.007712|compare 1 0.060076|end|	    19 *-* x = first|       >>>   "leaf"|    20 *-* trace o|
+subchain3-100000	pin6	0	.337104939		string leaf 0.007459|request leaf 0.068729|length 4 0.052394|concat leafx 0.007604|compare 1 0.053704|end|	    19 *-* x = first|       >>>   "leaf"|    20 *-* trace o|
+subchain3-100000	pin7	0	.351491098		string leaf 0.007619|request leaf 0.066349|length 4 0.062061|concat leafx 0.007868|compare 1 0.058593|end|	    19 *-* x = first|       >>>   "leaf"|    20 *-* trace o|
+subchain3-20000	pin	0	.122047509		string leaf 0.000365|request leaf 0.011879|length 4 0.008175|concat leafx 0.000632|compare 1 0.007695|end|	    19 *-* x = first|       >>>   "leaf"|    20 *-* trace o|
+subchain3-20000cyc	pin	0	.081090646		string  0.000743|SYNTAX 11.1|	
+subchain3-20000cyc	pin7	0	.298755427		string  0.000978|SYNTAX 11.1|	
