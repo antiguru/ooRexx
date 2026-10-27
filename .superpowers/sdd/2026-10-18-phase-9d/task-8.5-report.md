@@ -530,3 +530,98 @@ not kept.
 **Oracle runs.** The oracle ran `selfref.rex` and `cycle.rex` under the standard wrapper twice each
 (the three-way record and the CPU sample) before they were listed in `oracle-crashes.txt`; neither
 is to be run again.
+
+## Fix round 4
+
+Brief `task-8.5-fix-r4.md`, re-review `task-8.5-rereview-r3.md` (changes requested: Important 1,
+Minor 1). Code `6a8290bb6`; records `t8.5/r4/`, probes under `r4/probes/` with every run's stdout,
+stderr and rc in `r4/probes.tsv` (sides: `head` is `rexx-head-4a6321376`, `base` the pin, `new` the
+round's first build, `pin` the committed binary `rexx-head-6a8290bb6`, `oracle` the standard
+wrapper, `headshape` the unit test's new shape programs on head).
+
+**1. Important 1: a cycle through a stem's default.** The chain walk (`Interp::chain_from`,
+`value.rs`) now steps through every kind of link (`chain_link`): a reference to the value its
+variable holds, a stem with a default to that default, and a `Stem` subclass instance to its stem.
+One pass answers both ends of the chain. `referent` is where its references end, the first value
+that is not one: what a forwarded message is sent to (`referenced_receiver`) and the NOSTRING
+subject (`conversion_subject`), so `q~items` over `q = >s.` still reaches the stem and NOSTRING
+still names it. `chain_end` is where the whole chain ends: the conversion (`reference_conversion`),
+the renderings (`reference_redirect`, `reference_try_text`, `unset_reference_name`), the number
+(`reference_number`), the operator receiver and the operand gap. A chain that leads back to one of
+its links is `Referent::Cycle` at both ends. Because the end is answered directly rather than by
+recursing through each stem, a chain mixing stems and references costs one walk per conversion:
+`probes/mixed.rex 20000` (`s1. = >s2.`, ..., `s20001. = 7`) runs in 0.42 s on the committed binary
+and 0.40 s on head, `chain.rex 20000` (references only) in 0.36 s and 0.39 s, each the oracle's
+answer at 1000 links.
+
+A cycle with no reference in it is a `Stem` subclass instance whose stem's default is the instance
+(`t[] = t`, or two instances each the other's default); a plain stem cannot be in one, since
+`t[] = s.` is 98.976 and `s. = <stem>` aliases. It is caught at the instance hop
+(`instance_conversion` answers no string value and `conversion_subject` then raises 11.1;
+`stem_subclass_text`, `stem_subclass_text_len` and `stem_subclass_try_text` render the stem's name)
+and at the stem's own forwarding (`forwarded_value`, behind `UNKNOWN` and `REQUEST`: 11.1).
+
+Measured on the committed binary (`probes.tsv`, side `pin`). Every shape the re-review listed ends:
+`sd1.rex` 11.1 rc 245; `sd_via.rex` 11.1 at `length(u)`; `stemdef.rex` 1, 2 and 4 `SYNTAX n 11
+11.1`; `sd_msg.rex` 11.1; `sd_tr.rex` traces `>>> "S."` and prints `end`, rc 0. `sd_ops.rex`
+(`s. = >s.` under SIGNAL ON SYNTAX): `s. = 'a'`, `'a' = s.`, `s.~request('STRING')`, `-s.`, `\s.`,
+`r = >s.; say r`, `r~foo`, `s.~makestring`, `s.[]` and `s.~length` are each `SYNTAX 11.1`;
+`s.~string` prints `S.`; `trace r; x = s.` traces `>>> "S."`. The reference-free shapes `sub1.rex`
+(`t[] = t; say t`), `sub2.rex` (two instances, `length(t)`), `sub3.rex` (`t~foo`), `sub5.rex`
+(`t[] = >t`) and `sub6.rex` (`1 + t`) are 11.1 rc 245, and `sub4.rex` (`trace r; x = t`) traces
+`>>> ""`, the stem's own (empty) name, and ends. On head every one of these spun (rc 137 under
+`timeout -k 5 20`) or overflowed the stack (rc 134), and so do the unit test's new shape programs,
+all 32 (`probes.tsv` side `headshape`). HALT: `probes/halt.rex`, a loop that traps the stem cycle's
+11.1 under SIGNAL ON SYNTAX, under `timeout -s TERM -k 5 3` prints `HALT HALT after 1`, rc 124.
+
+Acyclic paths (`ac1.rex` to `ac10.rex`, `n.rex`, `chain.rex`, `mixed.rex`): the committed binary's
+stdout, stderr and rc are identical to head's on every run but one TRACE line. A reference to a stem
+whose default is an array (`q = >t.`, `t. = .array~of('one', 'two')`, `ac2.rex` line 18 and
+`ac5.rex` line 22) now traces `>>> "an Array"`, the oracle's line, where head traced the items
+joined: the rendering reads the chain's end through `string_value_text`. Its conversions (`say q`,
+`'p' q`, `length(q)`) are unchanged, the items joined, by the ruled rule for a reference's string
+value. The oracle ran only the acyclic probes.
+
+Witness: `tests::a_cyclic_reference_is_insufficient_stack_in_every_conversion` adds the shapes
+`s. = >s.; r = s.`, `r = >s.; s. = r`, the via-variable `u = 1; t = >u; s. = t; u = s.; r = u` and
+`r = .stem~subclass('m')~new; r[] = r`, each in the eight uses, on its own thread with the 20 s
+timeout. `corpus/oracle-crashes.txt` entry 61 records the re-review's `sd1.rex` and its one oracle
+run; neither it nor entries 59 and 60 were run again.
+
+**2. Minor 1.** The doc block "What a value's text has to be read from somewhere other than the
+object holding it." sits above `enum Redirect` again, and `Referent` carries its own.
+
+**Checks** at `6a8290bb6` (`r4/`), from `rust/`, `CARGO_INCREMENTAL=0`,
+`CARGO_TARGET_DIR=/tmp/claude-1000/t85-fix4-target`:
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` (`checks-fmt.txt`) | 0 |
+| `memcap 16G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` (`checks-clippy.txt`, after `touch crates/rexx-exec/src/value.rs`, so `Checking rexx-exec` is in the output; the first run's cached repeat was not kept) | 0 |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --lib --test signals --test dispatch_seam --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions` (`checks-touched.txt`) | 0: lib 1196, signals 42, dispatch_seam 6, closed_phases 8, owners 6, phase_ten_reasons 5, refusal_dispositions 3, refusal_sites 5, representation_refusals 3 |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test collect_stress` (`checks-collect-stress.txt`) | 0, 74 passed |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`checks-corpus.txt`) | 101: 1201 of 1202, the known `rexxutil_file_date_time.rex` |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-parse --test sourceline_oracle --test errors` (`checks-parse.txt`) | 0: errors 34, sourceline_oracle 1 |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test coverage` (`checks-coverage.txt`) | 0, 21 passed |
+| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../t8.5/r4/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`suite/`, after the callgrind run, 275 s) | 0; the four tables identical to `t8.5/r3/final/suite2/`; against `r3/final/suite/` the one difference is its `SysFileTree TEST_TREE_DIRECTORY` flake, passed here on both sides |
+
+**Perf.** `r4/callgrind.txt`: `bench-programs/callgrind.sh -B 0.5 -j 4 -o
+/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.5/r4final base=.../t8.5/rexx-base-6e0bf5e5b
+head=.../t8.5/rexx-head-6a8290bb6`, every program, 3 rounds, exit 0, no SPREAD or OVER flag; 99
+`.vg` files name each binary. Libc subtracted, the largest rises are fibfunc +0.0213% and fibcall
++0.0209% (fix round 3's figures, unchanged) and define +0.0004%; every other program is at most
++0.0000% or falls: decrender -0.2705%, intcall -0.2012%, parse -0.1938%, alloc4c -0.0965%, alloc
+-0.0896%, rexxcps -0.0596%, strings -0.0517%. Whole process, hashnew is +0.0160% with libc in and
+-0.0001% without.
+
+**Found beside the fix, not changed.** A bare stem whose default is an array traces as the items
+joined here (`trace r; x = t.`, `ac5.rex` line 21: `>>> "one` and `two"`) where the oracle's
+`StemClass::stringValue` answers `an Array`; base traces the same as head. Its conversions (`say
+t.`, `'p' t.`, `length(t.)`) are the items joined here and `an Array` on the oracle, the same
+departure the ruled rule for a reference's string value covers (`StemClass::request` forwards to
+the default, and the oracle's `StemClass` has no `primitiveMakeString`), but the TRACE line is
+`stringValue()` on both sides. A queue candidate for the stem's `string_value_text`. NOSTRING
+through a stem (`q = >s.` over `s. = .directory~new`, `ac7.rex` 3, 4, 7 and 9): the oracle's
+additional object is the VariableReference in a concatenation and the Directory in arithmetic,
+here the Stem in both, as the ruled rule has it (NOSTRING names the referenced value, and for the
+bare `s.` the oracle itself names the Stem, `ac7.rex` 2); base raised no NOSTRING there.
