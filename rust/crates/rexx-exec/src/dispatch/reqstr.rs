@@ -425,10 +425,7 @@ impl Interp {
                     // reference's `request` forwards to the referenced
                     // variable (utilityclasses.xml, VariableReference
                     // `request`). An unset variable is its own name.
-                    Body::VarRef(reference) => match self.referenced_value(reference) {
-                        Some(referenced) => Some(referenced),
-                        None => return StringConversion::Bytes(reference.name.to_vec()),
-                    },
+                    Body::VarRef(_) => return self.reference_conversion(value),
                     Body::Instance { .. } => return self.instance_conversion(value),
                     _ => return self.make_string_or_none(value),
                 },
@@ -466,6 +463,21 @@ impl Interp {
             Some(_) => StringConversion::MakeString,
             None => StringConversion::None,
         }
+    }
+
+    /// [`Interp::classify_string_conversion`] of a variable reference: its
+    /// referenced value's limb, or for an unset variable its own name.
+    #[cold]
+    #[inline(never)]
+    fn reference_conversion(&mut self, value: ObjRef) -> StringConversion {
+        let referenced = match self.as_variable_reference(value) {
+            Some(reference) => match self.referenced_value(reference) {
+                Some(referenced) => referenced,
+                None => return StringConversion::Bytes(reference.name.to_vec()),
+            },
+            None => unreachable!("the caller matched Body::VarRef on this handle"),
+        };
+        self.classify_string_conversion(referenced)
     }
 
     /// Sends `makeString` on the receiver's behalf.

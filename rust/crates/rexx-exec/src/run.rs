@@ -1577,23 +1577,23 @@ impl Interp {
         // `a.1` and `a.2` and the same in another reading them back:
         // `[tail-one][A.2]`, so tail 1 is shared and tail 2 is the method's
         // own local.
-        let shape = shape_of(&name);
-        if shape == NameShape::Compound {
-            return self.expose_object_tail(owner, scope, &name);
+        match shape_of(&name) {
+            NameShape::Simple => {
+                let slot = self.slot_of(&name);
+                self.expose_slot(slot, InstanceVar { owner, scope, name });
+                Ok(())
+            }
+            NameShape::Compound => self.expose_object_tail(owner, scope, &name),
+            NameShape::Stem => self.expose_object_stem(InstanceVar { owner, scope, name }),
         }
-        let slot = self.slot_of(&name);
-        if shape == NameShape::Stem {
-            return self.expose_object_stem(slot, InstanceVar { owner, scope, name });
-        }
-        self.expose_slot(slot, InstanceVar { owner, scope, name });
-        Ok(())
     }
 
     /// [`Interp::bind_exposed`] for a whole stem: exposing it uses the
     /// object's stem variable, which creates it.
     #[cold]
     #[inline(never)]
-    fn expose_object_stem(&mut self, slot: usize, var: InstanceVar) -> Result<(), Failure> {
+    fn expose_object_stem(&mut self, var: InstanceVar) -> Result<(), Failure> {
+        let slot = self.slot_of(&var.name);
         let name = var.name.clone();
         self.expose_slot(slot, var);
         let frame = self.activation().frame;
