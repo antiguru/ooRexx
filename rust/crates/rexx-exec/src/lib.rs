@@ -1810,6 +1810,8 @@ struct Interp {
     /// Whether the required-string protocol can answer anything other than
     /// the value it was handed -- `Interp::required_string_value`'s gate.
     reqstr_armed: bool,
+    /// One entry per activity inside a stem's forward ([`Interp::forwarded`]).
+    forwardings: Vec<crate::value::Forwarding>,
     /// Whether anything in this run could take `LOSTDIGITS`: a `SIGNAL ON
     /// LOSTDIGITS` or `SIGNAL ON ANY` trap, an installed `::OPTIONS ...
     /// LOSTDIGITS SYNTAX` or a `Package~options` write. It only ever sets.
@@ -2446,6 +2448,7 @@ impl Interp {
             command_words: Vec::new(),
             command_words_base: Some(1),
             reqstr_armed: false,
+            forwardings: Vec::new(),
             lostdigits_armed: false,
             program_path: Vec::new(),
             required_paths: FxHashMap::default(),
@@ -3417,6 +3420,10 @@ impl Interp {
             queue: _,
             input: _,
             reqstr_armed: _,
+            // Each receiver is a forward's, rooted by that send too; handed
+            // over so the handle it is compared with never names a slot the
+            // collector has freed.
+            forwardings,
             lostdigits_armed: _,
             program_path: _,
             required_paths: _,
@@ -3447,6 +3454,11 @@ impl Interp {
         out.extend(stem_exposers.values().flatten().copied());
         out.extend(traced_variable.as_ref().and_then(|traced| traced.value));
         out.extend(global_references.roots());
+        out.extend(
+            forwardings
+                .iter()
+                .filter_map(|forwarding| forwarding.anchor.map(|(receiver, _)| receiver)),
+        );
     }
 
     /// The package of each program an activation on any activity runs, of

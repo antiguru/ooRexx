@@ -1029,6 +1029,17 @@ enum Link {
     Default(ObjRef),
 }
 
+/// The messages the stems of one activity are forwarding to their values,
+/// one inside the other ([`Interp::forwarded`]).
+pub(crate) struct Forwarding {
+    pub(crate) activity: crate::scheduler::ActivityId,
+    /// How many are nested.
+    pub(crate) depth: usize,
+    /// The receiver and activation depth of the forward at the last power
+    /// of two of `depth`.
+    pub(crate) anchor: Option<(ObjRef, usize)>,
+}
+
 /// A chain of links walked to its end ([`Interp::chain_from`]).
 struct Chain {
     /// Where the whole chain ends.
@@ -1261,8 +1272,9 @@ impl Interp {
     /// Runs `forward`, a message the stem `receiver` forwards to its value.
     /// A value that leads back to the stem forwards without end, which is
     /// 11.1, the error unbounded recursion answers: the forwards nested in
-    /// one another are counted, the one at each power of two is remembered
-    /// (its receiver and activation depth), and a forward inside it that
+    /// one another on the running activity are counted
+    /// ([`Interp::forwardings`]), the one at each power of two is remembered
+    /// by its receiver and activation depth, and a forward inside it that
     /// repeats that pair, with no activation of its own between, is the
     /// cycle come round. Nothing walks the chain, so a forward answered after
     /// one hop costs one hop. The stack is checked as an expression level
@@ -1273,19 +1285,48 @@ impl Interp {
         receiver: ObjRef,
         forward: impl FnOnce(&mut Self) -> Result<Option<ObjRef>, Failure>,
     ) -> Result<Option<ObjRef>, Failure> {
-        let depth = self.activity.forwards + 1;
+        if self.stack_exhausted(anchor) {
+            return Err(crate::error::Raised::insufficient_stack().into());
+        }
+        let activity = self.running_activity();
+        let index = self
+            .forwardings
+            .iter()
+            .position(|forwarding| forwarding.activity == activity)
+            .unwrap_or_else(|| {
+                self.forwardings.push(Forwarding {
+                    activity,
+                    depth: 0,
+                    anchor: None,
+                });
+                self.forwardings.len() - 1
+            });
+        let depth = self.forwardings[index].depth + 1;
         let at = (receiver, self.activation_depth());
-        let saved = self.activity.forward_anchor;
-        if (!depth.is_power_of_two() && saved == Some(at)) || self.stack_exhausted(anchor) {
+        let saved = self.forwardings[index].anchor;
+        if !depth.is_power_of_two() && saved == Some(at) {
+            if depth == 1 {
+                self.forwardings.swap_remove(index);
+            }
             return Err(crate::error::Raised::insufficient_stack().into());
         }
         if depth.is_power_of_two() {
-            self.activity.forward_anchor = Some(at);
+            self.forwardings[index].anchor = Some(at);
         }
-        self.activity.forwards = depth;
+        self.forwardings[index].depth = depth;
         let result = forward(self);
-        self.activity.forwards = depth - 1;
-        self.activity.forward_anchor = saved;
+        let index = self
+            .forwardings
+            .iter()
+            .position(|forwarding| forwarding.activity == activity)
+            .expect("a forwarding activity keeps its entry until its outermost forward ends");
+        if depth == 1 {
+            self.forwardings.swap_remove(index);
+        } else {
+            let forwarding = &mut self.forwardings[index];
+            forwarding.depth = depth - 1;
+            forwarding.anchor = saved;
+        }
         result
     }
 
