@@ -1580,7 +1580,7 @@ fn the_context_variables_list_an_alias_under_its_own_name() {
 
 /// A variable reference's string value is its referenced value's, by
 /// `request('STRING')`: an array's items, a `makeString` answer, or for an
-/// object with no string value the reference's `string`. The same in each
+/// object with no string value that object's `STRING` answer. The same in each
 /// position: either operand of `||`, abuttal and blank, `SAY` and a builtin
 /// argument.
 #[test]
@@ -1597,15 +1597,17 @@ fn a_references_string_value_is_its_referenced_values_in_every_position() {
         stdout,
         "q p\nq| p\nq| p\nq | |p\nq |p\nq | p\nq 3\n\
          o kmake| kmake| kmake | |kmake |kmake | kmake 5\n\
-         n a N| a N| a N | |a N |a N | a N 3\n\
+         n nstr| nstr| nstr | |nstr |nstr | nstr 4\n\
          e | |  | | | |  0\n\
          p\nq\n"
     );
 }
 
 /// A reference whose referenced value has a string value raises no
-/// `NOSTRING`; one whose value has none does, with the reference as the
-/// condition's object.
+/// `NOSTRING`; one whose value has none does, naming that value as the
+/// condition's object (rexxref condtra.xml, NOSTRING's ADDITIONAL: "The object
+/// that caused the NOSTRING condition") and its `STRING` answer as the
+/// description.
 #[test]
 fn a_reference_raises_nostring_only_where_its_value_has_no_string_value() {
     assert_eq!(
@@ -1615,6 +1617,47 @@ fn a_reference_raises_nostring_only_where_its_value_has_no_string_value() {
               say (>q) || 'x'\nsay length(>q)\nsay 'd' (>d)\nexit\n\
               nostring: say 'NOSTRING' condition('d') condition('o')~additional~class~id\n"
         ),
-        "p\nqx\n3\nNOSTRING a Directory VariableReference\n"
+        "p\nqx\n3\nNOSTRING a Directory Directory\n"
+    );
+}
+
+/// Every other required-string position takes a reference's string value from
+/// its referenced value's `request('STRING')` too (rexxref provide.xml,
+/// "Required String Values", and "For all other methods"): a string
+/// receiver's comparison, a String method's argument (one with no string
+/// value is 88.909), a DO count, INTERPRET, an ADDRESS command, PUSH, a
+/// compound tail, TRACE VALUE, SIGNAL VALUE, an explicit concatenation message
+/// to the reference, and a strict comparison whose value has no string value.
+#[test]
+fn a_references_string_value_reaches_every_required_string_position() {
+    assert_eq!(
+        clean_stdout(
+            "/w/p.rex",
+            b"k = .kmake~new; m = .knum~new; c = .kcode~new; x = .kexit~new\n\
+              n = .nstr~new; e = .array~new(2); t = .ktrace~new; d = .directory~new\n\
+              l = .klabel~new\n\
+              say 'cmp' ('kmake' = (>k)) ('kmake' == (>k)) ('kmakf' > (>k))\n\
+              say 'meth' 'xkmakex'~pos(>k) 'xkmakex'~changestr(>k, '-') 'ab'~append(>k) \
+              'kmake'~compareTo(>k) 'kmakeq'~startsWith(>k) 'kmake'~match(1, >k)\n\
+              signal on syntax name m1\nsay 'x'~pos(>n)\nm1: say 'methn' condition('o')~code\n\
+              signal off syntax\ncall charout , 'do '; do (>m); call charout , 'd'; end; say\n\
+              interpret (>c)\naddress system (>x); say 'address' rc\n\
+              push (>k); pull v; say 'push' v\ntl = >k; say 'tail' x.tl\n\
+              trace value (>t); say 'trace' trace(); trace o\n\
+              say 'msg' (>e)~'||'('x') (>k)~' '('y')\n\
+              signal on nostring name ns\nsay \"x\" == (>d)\n\
+              ns: say 'nostring' condition('d') condition('o')~additional~class~id\n\
+              signal value (>l)\nsay 'not reached'\nkmake: say 'signal kmake'\nexit\n\
+              ::class kmake\n::method makestring; return 'kmake'\n\
+              ::class knum\n::method makestring; return '5'\n\
+              ::class kcode\n::method makestring; return \"say 'interpreted'\"\n\
+              ::class kexit\n::method makestring; return 'exit 3'\n\
+              ::class ktrace\n::method makestring; return 'R'\n\
+              ::class klabel\n::method makestring; return 'KMAKE'\n\
+              ::class nstr\n::method string; return 'nstr'\n"
+        ),
+        "cmp 1 1 1\nmeth 2 x-x abkmake 0 1 1\nmethn 88.909\ndo ddddd\ninterpreted\naddress 3\n\
+         push KMAKE\ntail X.kmake\ntrace R\nmsg x kmake y\nnostring a Directory Directory\n\
+         signal kmake\n"
     );
 }

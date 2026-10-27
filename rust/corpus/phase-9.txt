@@ -404,3 +404,5 @@ lang/compound_use_creates_stem.rex
 lang/local_novalue_hook.rex
 lang/local_novalue_hook_syntax.rex
 lang/variable_reference_through_alias.rex
+# 9d Task 8.5 fix round 2: a reference's string value where the oracle already forwards to the referenced value.
+lang/variable_reference_forwarded_string.rex

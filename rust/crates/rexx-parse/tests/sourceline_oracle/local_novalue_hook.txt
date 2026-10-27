@@ -1,12 +1,13 @@
-count 71
+count 72
 /* The object .local holds under NOVALUE is sent NOVALUE with the derived
    name of every uninitialised variable read: a simple variable, a compound
    of a stem never used or of an existing one (not its tail pieces), a PARSE
    VAR source, a DROP or PROCEDURE EXPOSE selector (a compound one too), an
-   object variable, a loop control variable and a read inside INTERPRET. An answer other than .nil is the value and the variable stays
-   unset, and no NOVALUE condition is raised; .nil or no answer leaves the
-   derived name and the NOVALUE condition. VALUE, SYMBOL, a bare stem and a
-   variable reference never reach it, nor does .environment~novalue. */
+   object variable, a loop control variable and a read inside INTERPRET. An
+   answer other than .nil is the value and the variable stays unset, and no
+   NOVALUE condition is raised; .nil or no answer leaves the derived name
+   and the NOVALUE condition. VALUE, SYMBOL, a bare stem and a variable
+   reference never reach it, nor does .environment~novalue. */
 .local~novalue = .nv~new
 say 's1' zzz
 say 's2' a.7

@@ -189,6 +189,11 @@ impl Interp {
                 return Err(failure);
             }
         }
+        // A reference whose referenced value has no string value stands for
+        // that value from here on: it is the object causing NOSTRING, and the
+        // object sent `STRING` (rexxref condtra.xml, NOSTRING's DESCRIPTION
+        // and ADDITIONAL).
+        let value = self.conversion_subject(value);
         // `sendMessage(STRING)`. An instance's or a class's `STRING` can be a
         // Rexx method, so it is sent; the shortcut below is what the send
         // answers wherever `STRING` resolves to `native_string`. Measured,
@@ -478,6 +483,16 @@ impl Interp {
             None => unreachable!("the caller matched Body::VarRef on this handle"),
         };
         self.classify_string_conversion(referenced)
+    }
+
+    /// The object a conversion of `value` falls back on: `value`, or for a
+    /// variable reference the value it refers to, through every reference.
+    #[inline]
+    fn conversion_subject(&mut self, mut value: ObjRef) -> ObjRef {
+        while let Some(referenced) = self.referenced_object(value) {
+            value = referenced;
+        }
+        value
     }
 
     /// Sends `makeString` on the receiver's behalf.
