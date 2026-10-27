@@ -2756,7 +2756,13 @@ DEVIATIONS -- permanent, chosen
      names line 3 in most runs, line 6 (this crate's answer) in the others.
      Measured by Phase 9d Task 8.2 and its review
      (t8.2/probes/message-start/msgstart.rex, t8.2/r1/message-start/).
+     Extended by Moritz 2026-10-26 ("Extend 67") to every condition a
+     started message raises and `result` raises again, HALT included: for a
+     HALT in a started method (t8.4/naming/probes/r2.rex), the oracle names
+     the waiter's line 2 in both reports, this crate line 9 then line 2
+     (t8.4/naming/result-reraise-r1.txt, -r2.txt).
      Witnessed by run::tests::conditions::a_started_messages_report_names_the_line_that_raised
+     and run::tests::conditions::a_started_messages_halt_report_names_the_line_that_raised
      (rust/crates/rexx-exec/src/run/tests/conditions.rs).
 
  68. A STEM SUBCLASS'S UNKNOWN METHOD RUNS (Phase 9d). OWNER: none.
@@ -2773,6 +2779,33 @@ DEVIATIONS -- permanent, chosen
      (t8.2/addon/stem_subclass_unknown.rex).
      Witnessed by run::tests::conditions::a_stem_subclasss_unknown_method_answers
      (rust/crates/rexx-exec/src/run/tests/conditions.rs).
+
+ 69. A ::CONSTANT EXPRESSION'S METHOD IS ITS OWN DIRECTIVE'S (Phase 9d).
+     OWNER: none.
+
+     Ruled by Moritz 2026-10-26 ("Own clause, oracle bug"). A ::CONSTANT
+     directive "defines a method that returns a constant value" (rexxref
+     dire.xml:535-536); the method a parenthesised value is evaluated by is
+     that directive's, so its `~source` is the directive's own clause, and
+     running it again evaluates that directive's expression and leaves the
+     constant's value as the directive set it. ORACLE BUG:
+     `ClassDirective::addConstantMethod` (ClassDirective.cpp:536-556) appends
+     every expression ::CONSTANT of a class to one `constantInitializer`
+     code object, so `.context~executable` inside any of them is that one
+     method. For three expressions in one class answering
+     `.context~executable`, the oracle answers the third's clause as each
+     one's `~source`, this crate each its own. The method of `::constant e
+     (.context~executable)`, defined and sent, evaluates every expression of
+     the class in order on the oracle and its own here, and on the oracle
+     the run replaces the constant's value: `say (m == .c~e) (.c~e ==
+     .c~method('ZZ'))` answers `0 1` there, `1 0` here. Measured by Phase 9d
+     Task 8.4 and its fix rounds (t8.4/constant/probes/f8.rex;
+     t8.4/r1/probes/src.rex, t8.4/r1/three-way-src.txt;
+     t8.4/r2/probes/run3.rex; t8.4/r3/probes/q5d.rex,
+     t8.4/r3/three-way-q5d.txt).
+     Witnessed by tests::a_constant_expressions_method_answers_its_own_clause_as_source
+     and tests::a_constant_expressions_method_runs_its_own_expression
+     (rust/crates/rexx-exec/src/tests.rs).
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------

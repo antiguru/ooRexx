@@ -1832,16 +1832,16 @@
  {
   "id": "constant-expression-method-source-shared",
   "added": "2026-10-26",
-  "title": "A ::CONSTANT expression method's ~source answers the last constant's clause",
+  "title": "A class's ::CONSTANT expressions share one method: ~source, re-runs and values",
   "category": "wrong result",
   "area": "directives",
   "severity": "cosmetic",
-  "repro": "docs/superpowers/records/2026-10-18-phase-9d/t8.4/constant/probes/f8.rex: three ::CONSTANT expressions in one class, each answering .context~executable; ~source of each",
-  "oracle": "Each answers [::constant g (.context~executable)], the third constant's clause.",
-  "expected": "Each its own directive clause.",
-  "cause": "Not read in the C++; the constant's code location looks shared.",
-  "source": "Phase 9d Task 8.4 report, New oracle defects 1",
-  "status": "deviation (number pending; Moritz 2026-10-26: \"Own clause, oracle bug\")",
-  "crate": "Answers each constant's own clause."
+  "repro": "docs/superpowers/records/2026-10-18-phase-9d/t8.4/constant/probes/f8.rex (three ::CONSTANT expressions in one class, each answering .context~executable; ~source of each); t8.4/r2/probes/run3.rex (define the method and send it); t8.4/r3/probes/q5d.rex (the constant's value after a run)",
+  "oracle": "Each ~source answers the third constant's clause; a run of one constant's method evaluates every expression of the class in order; after the run the constant answers the run's executable (0 1).",
+  "expected": "Each its own directive clause; a run evaluates only its own expression; the constant keeps the value its directive gave it (1 0).",
+  "cause": "ClassDirective::addConstantMethod (ClassDirective.cpp:536-556) appends every expression ::CONSTANT of a class to one constantInitializer RexxCode, so all of them run as, and answer, one method.",
+  "source": "Phase 9d Task 8.4 report, New oracle defects 1; re-reviews r1 and r2",
+  "status": "deviation 69 (Moritz 2026-10-26: \"Own clause, oracle bug\")",
+  "crate": "Answers each constant's own clause, runs its own expression, and keeps the constant's value."
  }
 ]
