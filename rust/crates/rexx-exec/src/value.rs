@@ -774,9 +774,6 @@ impl Interp {
         self.number_of(value, false)
     }
 
-    /// [`Interp::to_number`] for the receiver of an operator: a `String`
-    /// subclass instance is `NotNumeric` here, because the oracle sends the
-    /// operator to it rather than computing.
     /// `RexxInternalObject::numberValue` for an argument
     /// (`classes/ObjectClass.cpp:1047`): a value that is not a string or a
     /// number is read through the required-string protocol first, so an
@@ -803,6 +800,9 @@ impl Interp {
         Ok(self.to_number(text).ok())
     }
 
+    /// [`Interp::to_number`] for the receiver of an operator: a `String`
+    /// subclass instance is `NotNumeric` here, because the oracle sends the
+    /// operator to it rather than computing.
     #[inline]
     pub(crate) fn operand_number(&mut self, value: ObjRef) -> Result<Number, NotNumeric> {
         self.number_of(value, true)

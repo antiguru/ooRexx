@@ -1624,6 +1624,24 @@ fn a_reference_raises_nostring_only_where_its_value_has_no_string_value() {
     );
 }
 
+/// Deviation 72 for `equals` and `caselessEquals`: a reference argument
+/// compares as its referenced value's string value, never the reference's
+/// default name, and raises no NOSTRING where that value has one.
+#[test]
+fn a_references_equals_argument_is_its_referenced_values_string() {
+    assert_eq!(
+        clean_stdout(
+            "/w/e.rex",
+            b"k = .k~new\n\
+              say 'kmake'~equals(>k) 'a K'~equals(>k) 'KMAKE'~caselessEquals(>k)\n\
+              signal on nostring\nsay 'kmake'~equals(>k)\nexit\n\
+              nostring: say 'NOSTRING'\nexit\n\
+              ::class k\n::method makestring\n  return 'kmake'\n"
+        ),
+        "1 0 1\n1\n"
+    );
+}
+
 /// Every other required-string position takes a reference's string value from
 /// its referenced value's `request('STRING')` too (rexxref provide.xml,
 /// "Required String Values", and "For all other methods"): a string

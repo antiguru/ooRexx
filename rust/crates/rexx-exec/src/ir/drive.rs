@@ -2453,7 +2453,7 @@ impl Interp {
     /// The `>M>` line a send of `name` that answered `value` owes.
     #[cold]
     #[inline(never)]
-    fn trace_sent(&mut self, name: &[u8], value: ObjRef) {
+    pub(crate) fn trace_sent(&mut self, name: &[u8], value: ObjRef) {
         // Rooted across the rendering, which can run a `STRING` method.
         self.roots.activity_mut().push_temp(value);
         if let Some(rendered) = self.intermediate_text(value) {

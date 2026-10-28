@@ -3985,7 +3985,7 @@ impl Interp {
         // where the send itself had none, measured: `.K~~m` on a method
         // ending in a bare `return` yields the target at rc 0.
         let value = if cascade { Some(receiver) } else { sent };
-        // **The only `>M>` site.** Emitted here rather than from `eval`'s own
+        // **The tree path's `>M>` site.** Emitted here rather than from `eval`'s own
         // post-order `trace_intermediate` hook, where every other value
         // prefix lives, because the message-assignment form
         // (`Interp::exec_message`) never evaluates its term as an expression
@@ -3994,13 +3994,9 @@ impl Interp {
         // The position is the same either way: this is the last thing the
         // term does before returning its value.
         if let Some(value) = value
-            && let Some(rendered) = self.intermediate_text(value)
+            && self.trace_mode().intermediates
         {
-            self.trace_message(
-                self.activity.clause_state.current_value_indent,
-                name,
-                &rendered,
-            );
+            self.trace_sent(name, value);
         }
         Ok(value)
     }

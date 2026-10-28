@@ -1901,3 +1901,16 @@ the Task 6.11 re-review had recorded `98.975 Missing array element at position 2
 shape. `ArrayClass::stableSortWithRexx` runs with a receiver that is not an `ArrayClass`. This crate
 refuses loudly (`a message send to a value that is not an array is not implemented`, rc 120). Not
 re-run by Task 8.7a. No upstream ticket.
+
+## 63. TRACE I over a `~value=` assignment to a variable reference
+
+    q = >y
+    trace i
+    q~value = 3
+    say y
+
+Effect: SIGSEGV, rc 139, after `>A>   "3"` on stderr, stdout empty. Measured 2026-10-28 by Phase 9d
+Task 8.7a fix round 1 under the standard wrapper from a fresh empty directory, 3 of 3 runs; the Task
+8.7a review had it 4 of 4 (`.superpowers/sdd/2026-10-18-phase-9d/t87a-review-scratch/tr2/n5.rex`,
+`tr/a17.rex`). Without TRACE the oracle prints `3` at rc 0. This crate prints `3` at rc 0 with the
+`>V>`/`>>>` lines for `say y`. No upstream ticket.
