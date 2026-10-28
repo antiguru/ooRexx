@@ -2,7 +2,7 @@
    condition object's PROGRAM names it and its PACKAGE is a package for it,
    holding its source and nothing it declares. */
 signal on syntax name c1
-call perr.rex
+call perr.cls
 c1: call show
 signal on syntax name c2
 call duprt.rex

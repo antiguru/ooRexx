@@ -1,8 +1,8 @@
 # Phase 9d Task 8.7b report: security, native API, frames and install
 
 Status: DONE_WITH_CONCERNS. Base `504ff0743` (dispatch commit `5de63cee6` on top). Code `ffba1e60f`,
-`127a59431`, `67e9a22e9`, `5053fbd9b`; records, closings and inventory rows in the commit after, with
-this report. The closing lines and inventory rows name `5053fbd9b`, the last code commit. Records:
+`127a59431`, `67e9a22e9`, `5053fbd9b`; records, closings and inventory rows `6d5a8dc11`, with this
+report; the witness fixture rename and the workspace result in the commit after. The closing lines and inventory rows name `5053fbd9b`, the last code commit. Records:
 `docs/superpowers/records/2026-10-18-phase-9d/t8.7b/` (`probes/<item>/` with each probe's oracle
 `.o.*`, base `.b.*` and head `.h.*` outputs under `out/`, `probes/summary-1.txt` and `summary-2.txt`
 the three-way verdicts, `suite/`, `checks-*.txt`, `callgrind-final.txt`).
@@ -101,7 +101,7 @@ answered a package named after the running program with the library's 1010 lines
 PROGRAM and PACKAGE name the program where the condition was raised, which is the source being
 translated. `Interp::untranslated_origin` (`run.rs`, cold) makes a package for a named source that
 failed (its lines, nothing it declares, named as the source) the failure's origin. Witness
-`compile_failure_condition_origin.rex` (a called file's 35.1 and 99.903, `.Routine~new`'s 35.1). An
+`compile_failure_condition_origin.rex` (a called file's 35.1, its fixture named `.cls` so the parse tests skip it, and 99.903, `.Routine~new`'s 35.1). An
 INTERPRET's failure is not this item: Concerns 2.
 
 **2026-10-26-main-program-level-during-requires-install.md (closed).** Rule: a package installs in an
@@ -204,7 +204,7 @@ All from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t87b
 | `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`checks-corpus.txt`) | 101 at `5053fbd9b`: the one mismatch the known `rexxutil_file_date_time.rex`. At `ffba1e60f` also `live_stack_frames.rex` (a fragment whose owner was suspended in a call took the callee's indent), fixed by `127a59431` |
 | `memcap 16G cargo test -j 4 --release -p rexx-core --test unsafe_sites` (`checks-unsafe.txt`) | 0 (at `67e9a22e9`) |
 | `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../t8.7b/suite-final/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`suite-final/`, at `5053fbd9b`) | 0; `tests.tsv`, `table.tsv`, `verdicts.tsv`, `oracle-differences.tsv` identical to `t8.7a/r1/suite/`. The earlier run at `67e9a22e9` (`suite/`) differed in two rows, neither this task's: SysFileTree `TEST_TREE_DIRECTORY` crate-side (the known flake) and RexxContext `TEST_INTERPRETER_THREAD_INVOCATION` failing on the oracle side; that group rerun alone three times (`suite-rexxcontext/`) was 15 of 15 on both sides each time |
-| `memcap 16G cargo test -j 4 --release --no-fail-fast --workspace`, `rust/target/release/rexx` built first, default target dir (`close-workspace-tests.txt`) | started after the records commit; its result is the commit after |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast --workspace`, `rust/target/release/rexx` built first, default target dir (`close-workspace-tests.txt`) | 101 at `6d5a8dc11`: three failures. `datetime_zone`'s `the_file_date_time_witness_reads_the_zone_the_oracle_does`, the known DST flake; `rexx-parse`'s `tiling` `every_corpus_program_tiles` and `variants` `every_variant_is_constructed_by_the_corpus_and_samples`, both on the fixture `compile_failure_condition_origin.d/perr.rex`, which those tests parse as a corpus program and which does not translate by design. The commit after renames it `perr.cls` (the witness calls `perr.cls`; its `sourceline_oracle` file regenerated); then `cargo test --release --no-fail-fast -p rexx-parse` (`checks-parse-all.txt`) exits 0 and the corpus gate is 101 on the known `rexxutil_file_date_time.rex` only |
 
 ## Concerns
 
