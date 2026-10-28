@@ -260,20 +260,28 @@ fn multi_dimension_position(
 /// the activation's own `NUMERIC DIGITS`, or `None` for one that is not a
 /// whole number of at least 1.
 pub(super) fn whole_index(interp: &mut Interp, value: ObjRef) -> Result<Option<usize>, Failure> {
-    // A tagged integer already is the answer when it is narrow enough that
-    // the rounding rule would change nothing, the same shortcut
-    // `builtin::whole_number` takes against the same width.
-    if let Decoded::SmallInt(small) = value.decode()
-        && let Some(whole) = rexx_num::whole_i64(small, rexx_num::ARGUMENT_DIGITS)
-        && let Ok(index) = usize::try_from(whole)
-        && index > 0
-    {
+    if let Some(index) = small_index(value) {
         return Ok(Some(index));
     }
     Ok(index_number(interp, value)?
         .and_then(|number| number.whole_value(rexx_num::ARGUMENT_DIGITS))
         .and_then(|whole| usize::try_from(whole).ok())
         .filter(|index| *index > 0))
+}
+
+/// A tagged integer that already is the answer, being narrow enough that the
+/// rounding rule would change nothing: the shortcut `builtin::whole_number`
+/// takes against the same width.
+#[inline(always)]
+fn small_index(value: ObjRef) -> Option<usize> {
+    if let Decoded::SmallInt(small) = value.decode()
+        && let Some(whole) = rexx_num::whole_i64(small, rexx_num::ARGUMENT_DIGITS)
+        && let Ok(index) = usize::try_from(whole)
+        && index > 0
+    {
+        return Some(index);
+    }
+    None
 }
 
 /// An index's number: the value itself where it is one, else its requested
@@ -321,6 +329,9 @@ pub(super) fn positive_index(
     value: ObjRef,
     position: usize,
 ) -> Result<usize, Failure> {
+    if let Some(index) = small_index(value) {
+        return Ok(index);
+    }
     match whole_index(interp, value)? {
         Some(index) => Ok(index),
         None => {

@@ -1,4 +1,4 @@
-count 39
+count 43
 /* BEEP, FILESPEC and DIRECTORY convert their arguments as the native routines they are. */
 o = .object~new
 call try "beep(.object~new)"
@@ -17,6 +17,10 @@ call try "filespec('name', o)"
 call try "filespec(o, 'x')"
 call try "filespec('name', .k~new)"
 call try "filespec('n')"
+call try "filespec(.object~new)"
+call try "filespec('Z', .object~new)"
+call try "filespec('zz', 'a')"
+call try "filespec('', 'a')"
 call try "filespec('n', 'a/b'||'00'x||'c/d')"
 call try "filespec('e'||'00'x, 'a.b')"
 call try "directory(o)"

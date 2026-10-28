@@ -214,20 +214,21 @@ pub(crate) fn filespec(
     if args.len() > 2 {
         return Err(Raised::too_many_internal_arguments(2).into());
     }
-    rexxutil::required(args, 1)?;
-    rexxutil::required(args, 2)?;
-    let option = rexxutil::required_c_string(interp, args, 1)?;
+    // Both are C strings, ending at a NUL, and the option is read for its
+    // first character only.
+    let option = rexxutil::required_text(interp, args, 1)?;
+    let spec = rexxutil::required_c_string(interp, args, 2)?;
+    let option = &option[..option.first().map_or(0, |first| usize::from(*first != 0))];
     let letter = option.first().map(u8::to_ascii_uppercase);
     let Some(letter) = letter.filter(|byte| FILESPEC_OPTIONS.contains(byte)) else {
         return Err(Raised::argument_not_in_list(
             b"FILESPEC",
             1,
             &String::from_utf8_lossy(FILESPEC_OPTIONS),
-            &option,
+            option,
         )
         .into());
     };
-    let spec = rexxutil::required_c_string(interp, args, 2)?;
     let cut = spec.iter().rposition(|byte| *byte == b'/');
     let answer: Vec<u8> = match letter {
         // Unix has no drive letter, and the oracle answers the null string.

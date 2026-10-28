@@ -19,7 +19,7 @@ pub(crate) mod process;
 pub(crate) mod stems;
 pub(crate) mod tree;
 
-use rexx_core::{Decoded, ObjRef};
+use rexx_core::{Body, Decoded, ObjRef};
 use rexx_num::{DIGITS64, Number};
 
 use crate::error::Raised;
@@ -62,6 +62,12 @@ pub(crate) fn optional_text(
     let Some(value) = args.get(position - 1).copied().flatten() else {
         return Ok(None);
     };
+    if let Some(Body::Text { bytes, .. }) = interp.heap.get(value).map(|object| &object.body) {
+        return Ok(Some(bytes.to_vec()));
+    }
+    if matches!(value.decode(), Decoded::Text(_) | Decoded::SmallInt(_)) {
+        return Ok(Some(interp.to_text(value).into_owned()));
+    }
     let Some(text) = interp.string_conversion(value)? else {
         return Err(marshalled(Raised::argument_needs_a_string_value(position)));
     };
@@ -77,16 +83,30 @@ fn c_string(text: &[u8]) -> &[u8] {
     }
 }
 
-/// [`optional_text`] for a `CSTRING` argument that is required, cut at its
-/// first NUL by [`c_string`].
-pub(crate) fn required_c_string(
+/// [`optional_text`] for an argument that is required, not yet cut at a NUL.
+pub(crate) fn required_text(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
     position: usize,
 ) -> Result<Vec<u8>, Failure> {
     required(args, position)?;
-    let text = optional_text(interp, args, position)?.expect("the argument is present");
-    Ok(c_string(&text).to_vec())
+    Ok(optional_text(interp, args, position)?.expect("the argument is present"))
+}
+
+/// [`required_text`] for a `CSTRING` argument, cut at its first NUL by
+/// [`c_string`].
+pub(crate) fn required_c_string(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    position: usize,
+) -> Result<Vec<u8>, Failure> {
+    let mut text = required_text(interp, args, position)?;
+    // `contains` is `memchr`; a NUL inside a string is rare.
+    if text.contains(&0) {
+        let end = c_string(&text).len();
+        text.truncate(end);
+    }
+    Ok(text)
 }
 
 /// A path argument, `RoutineQualifiedName`: the `CSTRING` at `position`
