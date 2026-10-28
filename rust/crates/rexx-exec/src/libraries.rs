@@ -136,11 +136,13 @@ struct PackageTable {
 impl PackageTable {
     /// The table `PackageManager::initialize` builds
     /// (`interpreter/package/PackageManager.cpp:81-88`): the default size,
-    /// holding the two internal packages.
+    /// holding the two internal packages under `GlobalNames::REXX` and
+    /// `GlobalNames::REXXUTIL`, which is spelled `rexxutil`
+    /// (`memory/GlobalNames.h:201`).
     fn new() -> PackageTable {
         let mut table = PackageTable::with_buckets(bucket_size(DEFAULT_TABLE_SIZE));
         table.put(b"REXX");
-        table.put(b"REXXUTIL");
+        table.put(b"rexxutil");
         table
     }
 
@@ -299,5 +301,23 @@ mod tests {
                 .get(b"lib")
                 .is_some_and(|got| Rc::ptr_eq(got, &first))
         );
+    }
+
+    /// The internal packages' keys, in the order the table iterates them; a
+    /// miss on `REXXUTIL` leaves them as they were.
+    #[test]
+    fn the_table_starts_with_the_internal_packages_keys() {
+        let mut libraries = Libraries::new();
+        let names = |libraries: &Libraries| {
+            libraries
+                .order
+                .names()
+                .map(<[u8]>::to_vec)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(names(&libraries), [b"rexxutil".to_vec(), b"REXX".to_vec()]);
+        libraries.missed(b"REXXUTIL");
+        assert_eq!(names(&libraries), [b"rexxutil".to_vec(), b"REXX".to_vec()]);
+        assert!(!libraries.order.contains(b"REXXUTIL"));
     }
 }

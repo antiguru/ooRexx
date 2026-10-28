@@ -319,9 +319,23 @@ fn native_array_sort(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
-    _args: &[Option<ObjRef>],
+    args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    sort_by(interp, receiver, &Order::CompareTo, 0)
+    interp.primitive_level(receiver, b"SORT", args, |interp| {
+        sort_by(interp, receiver, &Order::CompareTo, 0)
+    })
+}
+
+/// `Array~stableSort`, [`native_array_sort`] under its own name.
+fn native_array_stable_sort(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    interp.primitive_level(receiver, b"STABLESORT", args, |interp| {
+        sort_by(interp, receiver, &Order::CompareTo, 0)
+    })
 }
 
 /// `Array~sortWith(comparator)` and `Array~stableSortWith(comparator)`, both
@@ -340,7 +354,12 @@ fn native_array_sort_with(
 /// rest of `Array`'s collection surface.
 pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     ("Array", "SORT", Arity::Fixed(0), native_array_sort),
-    ("Array", "STABLESORT", Arity::Fixed(0), native_array_sort),
+    (
+        "Array",
+        "STABLESORT",
+        Arity::Fixed(0),
+        native_array_stable_sort,
+    ),
 ];
 
 /// The sort methods whose comparator's `compare` runs under the method's own

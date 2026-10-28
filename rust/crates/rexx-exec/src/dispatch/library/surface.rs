@@ -610,15 +610,14 @@ impl Surface for Interp {
         lines: &[Vec<u8>],
     ) -> Option<Option<ObjRef>> {
         let source = match kind {
+            // `LanguageParser::createMethod(name, buffer)` parses even lines
+            // `.Method~new` would restore.
             BufferKind::Method => {
                 let borrowed: Vec<&[u8]> = lines.iter().map(Vec::as_slice).collect();
-                // Lines `.Method~new` would restore are parsed as source here.
-                if !crate::compiled::encoded_lines(&borrowed) {
-                    return None;
-                }
                 Ok(rexx_parse::ProgramSource::from_lines(&borrowed))
             }
-            BufferKind::Routine | BufferKind::Package => match crate::compiled::restore(data) {
+            BufferKind::Routine => crate::compiled::program_source(data.to_vec(), name),
+            BufferKind::Package => match crate::compiled::restore(data) {
                 crate::compiled::Restore::Source => return None,
                 _ => crate::compiled::program_source(data.to_vec(), name),
             },
@@ -824,12 +823,15 @@ impl Interp {
                 .map_err(|rejected| self.raise_parse_failure(&rejected, Some(name))),
             Err(raised) => Err(raised.into()),
         };
+        // `NewMethod` and `NewRoutine` translate with no source context
+        // (`api/ThreadContextStubs.cpp:529`, `:547`), so the executable's
+        // package has no parent.
         let built = parsed.and_then(|parsed| match kind {
             BufferKind::Method => {
-                super::super::class_protocol::method_from_program(self, name, parsed, None)
+                super::super::class_protocol::method_in_package(self, name, parsed, None)
             }
             BufferKind::Routine => {
-                super::super::class_protocol::routine_from_program(self, name, parsed, None)
+                super::super::class_protocol::routine_in_package(self, name, parsed, None)
             }
             BufferKind::Package => self
                 .package_from_program(name, std::rc::Rc::new(parsed), None)
@@ -853,12 +855,14 @@ impl Interp {
 
 impl Interp {
     /// The class `.name` resolves to from the calling activation, or `None`
-    /// where it resolves to something that is not a class.
+    /// where it resolves to something that is not a class or the lookup
+    /// raised, whose condition is then held for the native call.
     fn class_named(&mut self, name: &[u8]) -> Option<ObjRef> {
         let mut dotted = Vec::with_capacity(name.len() + 1);
         dotted.push(b'.');
         dotted.extend_from_slice(name);
-        let found = self.dot_variable(&dotted).ok()?;
+        let lookup = self.dot_variable(&dotted);
+        let found = self.held(lookup)?;
         self.is_class_object(found).then_some(found)
     }
 

@@ -398,6 +398,14 @@ fn package(
 ) -> Result<Option<ObjRef>, Failure> {
     let source = source_of(interp, receiver)?;
     Ok(Some(match interp.source_package(source) {
+        // The interpreter's own library programs are the `REXX` package:
+        // measured, oracle rc 0, `.Stream~method('INIT')~package~name` is
+        // `REXX` and its `source` has no lines.
+        Some(crate::plan::Package::Program(program))
+            if interp.library_programs.contains(&program) =>
+        {
+            interp.package_object(crate::plan::Package::Rexx)?
+        }
         Some(package) => interp.package_object(package)?,
         None => ObjRef::NIL,
     }))

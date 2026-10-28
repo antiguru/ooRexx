@@ -401,7 +401,19 @@ pub(super) fn compile_method_source_in(
 }
 
 /// The `Method` a parsed or restored program becomes, carrying no scope.
-pub(crate) fn method_from_program(
+fn method_from_program(
+    interp: &mut Interp,
+    name: &[u8],
+    parsed: rexx_parse::Program,
+    parent: Option<ObjRef>,
+) -> Result<ObjRef, Failure> {
+    let parent = executable_parent(interp, &parsed, parent)?;
+    method_in_package(interp, name, parsed, parent)
+}
+
+/// The `Method` a parsed program becomes, its package's parent `parent`
+/// and none where it is `None`.
+pub(crate) fn method_in_package(
     interp: &mut Interp,
     name: &[u8],
     parsed: rexx_parse::Program,
@@ -409,7 +421,6 @@ pub(crate) fn method_from_program(
 ) -> Result<ObjRef, Failure> {
     // `generateMethod` installs them as `generateRoutine` does; see
     // [`compile_routine_source`].
-    let parent = executable_parent(interp, &parsed, parent)?;
     if !parsed.directives.is_empty() {
         return interp.install_executable(parsed, name, false, parent, |interp, id| {
             interp.compiled_method_names.insert(id, name.into());
@@ -447,7 +458,7 @@ pub(super) fn compile_routine_source(
 
 /// The `Routine` a parsed or restored program becomes, its directives
 /// installed in a package of its own.
-pub(crate) fn routine_from_program(
+fn routine_from_program(
     interp: &mut Interp,
     name: &[u8],
     parsed: rexx_parse::Program,
@@ -458,6 +469,16 @@ pub(crate) fn routine_from_program(
     // `.Routine~new('T', .array~of('::class a1'))~package~classes~hasIndex('A1')`
     // is `1`.
     let parent = executable_parent(interp, &parsed, parent)?;
+    routine_in_package(interp, name, parsed, parent)
+}
+
+/// [`method_in_package`] answering a `Routine`.
+pub(crate) fn routine_in_package(
+    interp: &mut Interp,
+    name: &[u8],
+    parsed: rexx_parse::Program,
+    parent: Option<ObjRef>,
+) -> Result<ObjRef, Failure> {
     if !parsed.directives.is_empty() {
         return interp.install_executable(parsed, name, true, parent, |interp, id| {
             interp.compiled_method_names.insert(id, name.into());

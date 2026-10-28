@@ -218,13 +218,13 @@ pub trait Surface {
     /// `loadRequires` over source text, one line per line end.
     fn load_package_source(&mut self, name: &[u8], lines: &[Vec<u8>]) -> Option<ObjRef>;
 
-    /// What a native caller's buffer becomes where it is not handed to the
-    /// parser as source lines: `None` for source, else the `Routine` or the
-    /// package a compiled image restores to, or `Some(None)` where that
-    /// raised a condition, which the host holds. A `Method` is never
-    /// restored (`LanguageParser::createMethod(name, buffer)`): for lines whose
-    /// second line is the encoded tag this answers the method those lines parse
-    /// to as source, and for any other `Method` input `None`.
+    /// What a native caller's buffer becomes: the `Method` or `Routine` it
+    /// compiles or restores to, whose package has no parent, or the package a
+    /// compiled image restores to; `None` for package source, which is handed
+    /// to the parser as source lines; `Some(None)` where that raised a
+    /// condition, which the host holds. A `Method` is never restored
+    /// (`LanguageParser::createMethod(name, buffer)`): lines whose second line
+    /// is the encoded tag parse as source.
     fn compile_buffer(
         &mut self,
         kind: BufferKind,

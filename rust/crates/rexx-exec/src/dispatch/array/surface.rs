@@ -100,12 +100,20 @@ fn native_array_has_item(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let wanted = item_argument(args)?;
-    for (_, item) in ordered_pairs(interp, receiver)? {
-        if same_item(interp, wanted, item)? {
-            return Ok(Some(crate::eval::logical(true)));
+    let search = |interp: &mut Interp| {
+        for (_, item) in ordered_pairs(interp, receiver)? {
+            if same_item(interp, wanted, item)? {
+                return Ok(Some(crate::eval::logical(true)));
+            }
         }
+        Ok(Some(crate::eval::logical(false)))
+    };
+    // An item not of a base class may compare through a Rexx `==`.
+    if interp.is_base_class(wanted) {
+        search(interp)
+    } else {
+        interp.primitive_level(receiver, b"HASITEM", args, search)
     }
-    Ok(Some(crate::eval::logical(false)))
 }
 
 /// `Array~index(item)`: the index of the first slot holding it, or `.nil` --

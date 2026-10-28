@@ -430,6 +430,17 @@ impl Activities {
         }
     }
 
+    /// [`crate::activity::Activity::for_each_activation_mut`] for every
+    /// activity that is not running.
+    pub(crate) fn for_each_activation_mut(
+        &mut self,
+        visit: &mut impl FnMut(&mut crate::activation::Activation),
+    ) {
+        for idle in self.idle.iter_mut().flatten() {
+            idle.activity.for_each_activation_mut(visit);
+        }
+    }
+
     /// [`Activity::running_bodies`] for every activity that is not running.
     pub(crate) fn running_bodies(&self, out: &mut Vec<(crate::plan::ProgramId, Option<usize>)>) {
         for idle in self.idle.iter().flatten() {

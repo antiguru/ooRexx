@@ -1,0 +1,22 @@
+/* A source that fails to translate is where its condition was raised: the
+   condition object's PROGRAM names it and its PACKAGE is a package for it,
+   holding its source and nothing it declares. */
+signal on syntax name c1
+call perr.rex
+c1: call show
+signal on syntax name c2
+call duprt.rex
+c2: call show
+signal on syntax name c3
+r = .routine~new('xyz', .array~of('nop', 'say (', 'nop'))
+c3: call show
+signal on syntax name c4
+interpret 'say ('
+c4: o = condition('o'); say o~code filespec('name', o~program) o~position
+exit
+show:
+  o = condition('o')
+  p = o~package
+  say o~code filespec('name', o~program) (p == .nil) o~hasIndex('PACKAGE') o~position
+  say '  ' filespec('name', p~name) p~source~items p~classes~items p~routines~items p~sourceline(2) '|' (p == .context~package) p~class
+  return

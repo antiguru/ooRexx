@@ -459,6 +459,7 @@ impl Interp {
             line,
             indent,
             outer_clause: self.activity.fragment_clause,
+            invocation: None,
         });
     }
 

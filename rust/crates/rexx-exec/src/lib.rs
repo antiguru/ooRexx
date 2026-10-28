@@ -2143,6 +2143,8 @@ pub(crate) struct FragmentLevel {
     pub(crate) indent: usize,
     /// [`Activity::fragment_clause`] as the enclosing fragment left it.
     pub(crate) outer_clause: usize,
+    /// Its frame's `~invocation`, minted on the first ask.
+    pub(crate) invocation: Option<u32>,
 }
 
 /// One native activation: what an extension writes its object variables

@@ -1071,12 +1071,13 @@ fn package_new(
         (Some(_), Some(context)) => Some(package_context(interp, context)?),
         _ => None,
     };
-    let program = match source {
+    // Loaded and installed under the method's own level.
+    let program = interp.primitive_level(receiver, b"NEW", args, |interp| match source {
         // **The global context, not the caller's directory.** Measured: with
         // the current directory elsewhere, `.Package~new('pk.rex')` is 43.901
         // even though `pk.rex` sits beside the program that asks -- where a
         // `::REQUIRES` of the same name finds it.
-        None => interp.load_package_global(&name)?,
+        None => interp.load_package_global(&name),
         Some(source) => {
             let lines = super::method_source_lines(
                 interp,
@@ -1084,9 +1085,9 @@ fn package_new(
                 "source",
                 super::SourceTaker::Executable,
             )?;
-            interp.package_from_source(&name, &lines, context)?
+            interp.package_from_source(&name, &lines, context)
         }
-    };
+    })?;
     let object = interp.package_object(Package::Program(program))?;
     let package_class = interp.package_class();
     if class != package_class {

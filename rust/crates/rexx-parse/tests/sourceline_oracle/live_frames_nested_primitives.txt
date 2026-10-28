@@ -1,0 +1,83 @@
+count 82
+/* .context~stackFrames inside Rexx code a primitive method runs lists that
+   method's own frame: RUN, SORT, STABLESORT, HASITEM, REQUEST, PUT and []=
+   with an index that hashes through HASHCODE, UNKNOWN of a Directory
+   subclass and an explicit Directory UNKNOWN; a plain Directory's entry
+   method and a condition's frames are unchanged. */
+o = .k~new
+say 'run' o~viarun
+.array~of(.k~new, .k~new)~sort
+.array~of(.k~new, .k~new)~stableSort
+say 'hasitem' .array~of(1)~hasItem(.k~new)
+say 'hasitem plain' .array~of(1)~hasItem(1)
+say 'request' .k~new~request('ARRAY')~class
+s = .set~new
+s~put(.k~new)
+s[.k~new] = .k~new
+s~put('plain')
+t = .table~new
+t~put('v', .k~new)
+t[.k~new] = 'w'
+d = .directory~new
+d~setMethod('go', 'call show "entry"; return 1')
+say 'plain dir' d~go
+say 'explicit' d~unknown('GO', .array~new)
+d2 = .dd~new
+d2~setMethod('go', 'call show "subclass entry"; return 2')
+say 'subclass dir' d2~go
+say 'send' .message~new(.k~new, 'two')~send
+.k~new~setup
+signal on syntax
+.array~of(.k~new, .k~new, .k~new)~sort
+exit
+syntax:
+  c = condition('o')
+  say 'syntax' c~code
+  do f over c~stackframes
+    say '  cond' f~type '|' name(f) '|' f~line
+  end
+  call deep
+  exit
+deep:
+  .k~new~deeprun
+  exit
+::routine name
+  use arg f
+  if f~type == 'PROGRAM' then return filespec('name', f~name)
+  return f~name
+::routine show public
+  use arg label
+  do f over .context~stackframes
+    if f~type == 'ROUTINE' & f~name == 'SHOW' then iterate
+    say '  ' label f~type '|' name(f) '|' f~line '|' f~target~class~id '|' f~arguments~items
+  end
+::class dd subclass directory
+::class k
+::method viarun
+  return self~run(.method~new('r', 'call show "run"; return 1'))
+::method deeprun
+  self~run('call show "deeprun"; raise syntax 98.900 array("deep")')
+::method setup
+  .k~setFlag
+::method setFlag class
+  expose fl
+  fl = 1
+::method flag class
+  expose fl
+  return fl == 1
+::method compareTo
+  call show 'sort'
+  if .k~flag then raise syntax 93.900 array('cmp')
+  return 0
+::method '=='
+  call show 'eq'
+  return 1
+::method makearray
+  call show 'makearray'
+  return .array~new
+::method hashCode
+  call show 'hash'
+  return 'a'
+::method two
+  call show 'two'
+  return 2

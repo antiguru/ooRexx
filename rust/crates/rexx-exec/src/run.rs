@@ -924,6 +924,8 @@ impl Interp {
                 self.activity.fragment_depth -= 1;
                 self.leave_fragment_level();
                 self.leave_fragment(saved_entry);
+                // The `INTERPRET` clause is the one stopped on again.
+                self.activity.clause_state.current_value_indent = base_indent;
                 self.activity.activation_indent = saved_base;
                 self.activity.indent_offset = saved_offset;
                 self.activity.clause_line_override = saved_line;
@@ -3508,6 +3510,7 @@ impl Interp {
                 .join_span(directive.clause_span.clone())
                 .map(std::borrow::Cow::into_owned)
                 .unwrap_or_default();
+            self.untranslated_origin(source, line, name);
             return self.raise_translation_failure(*raised, line, text, name);
         }
         let line = match source.kind() {
@@ -3517,7 +3520,40 @@ impl Interp {
             }
         };
         let (raised, text) = Raised::parse_failure(&rejected.error, source, line);
+        self.untranslated_origin(source, line, name);
         self.raise_translation_failure(raised, line, text, name)
+    }
+
+    /// Makes the source named `name` that failed to translate at `line` the
+    /// failure's origin: the condition object's `PROGRAM` names it and its
+    /// `PACKAGE` is a package of its own holding the source and nothing it
+    /// declares, as the oracle's parser builds one before it translates
+    /// (`LanguageParser::createStackFrame` reports from it).
+    #[cold]
+    fn untranslated_origin(
+        &mut self,
+        source: &rexx_parse::ProgramSource,
+        line: usize,
+        name: Option<&[u8]>,
+    ) {
+        let Some(name) = name else {
+            return;
+        };
+        if self.activity.failure_origin.is_some() {
+            return;
+        }
+        let lines: Vec<&[u8]> = (1..=source.line_count())
+            .map(|n| source.line(n).unwrap_or_default())
+            .collect();
+        let Ok(mut untranslated) =
+            rexx_parse::program_from(rexx_parse::ProgramSource::from_lines(&[]))
+        else {
+            return;
+        };
+        untranslated.source = rexx_parse::ProgramSource::from_lines(&lines);
+        let program = self.load_program(Rc::new(untranslated));
+        self.compiled_method_names.insert(program, name.into());
+        self.activity.failure_origin = Some((Package::Program(program), Some(line)));
     }
 
     /// [`Interp::raise_parse_failure`]'s condition, `raised` echoing `text`
@@ -3575,6 +3611,7 @@ impl Interp {
             &[],
             &trace_line,
             Some(ObjRef::NIL),
+            None,
         ) {
             self.activity.failure_frame = Some(frame);
         }
@@ -3671,7 +3708,7 @@ impl Interp {
             return;
         };
         let Ok(frame) = crate::dispatch::context::build_ended_frame(
-            self, kind, name, line, arguments, &text, None,
+            self, kind, name, line, arguments, &text, None, None,
         ) else {
             return;
         };

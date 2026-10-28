@@ -922,14 +922,16 @@ pub(super) fn native_run(
     check_restricted_method(interp, receiver, b"RUN")?;
     // Measured, oracle rc 0: `.context~executable` in a method `run` ran is
     // the object `run` was given the first time and a copy after.
-    invoke_executable(
-        interp,
-        method,
-        executable,
-        receiver,
-        UNNAMED_METHOD,
-        &values,
-    )
+    interp.primitive_level(receiver, b"RUN", args, |interp| {
+        invoke_executable(
+            interp,
+            method,
+            executable,
+            receiver,
+            UNNAMED_METHOD,
+            &values,
+        )
+    })
 }
 
 /// Runs `method` on `receiver` under the `.nil` scope as the send of `name`,
@@ -1995,10 +1997,12 @@ pub(super) fn native_request(
     let mut make = b"MAKE".to_vec();
     make.extend_from_slice(&wanted);
     if interp.lookup(receiver, &make, None).is_some() {
-        let caller = interp.caller();
         // `resultOrNil`: a `MAKE` method that returns nothing answers `.nil`
         // rather than leaving the send with no value.
-        let sent = interp.send_message(receiver, &make, None, &[], caller)?;
+        let sent = interp.primitive_level(receiver, b"REQUEST", args, |interp| {
+            let caller = interp.caller();
+            interp.send_message(receiver, &make, None, &[], caller)
+        })?;
         return Ok(Some(sent.unwrap_or(ObjRef::NIL)));
     }
     Ok(Some(match interp.receiver_class_id(receiver) {

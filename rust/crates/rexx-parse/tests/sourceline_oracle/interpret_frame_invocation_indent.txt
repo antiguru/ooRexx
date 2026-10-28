@@ -1,0 +1,36 @@
+count 35
+/* An INTERPRET fragment's frame keeps one invocation for the fragment's
+   life, and lists the fragment's own clause at its own indent; the
+   activation running the INTERPRET lists the INTERPRET clause at that
+   clause's indent, live and in a trapped condition's traceback. */
+interpret 'do i = 1 to 2; say .context~stackframes[1]~invocation .context~invocation; end'
+signal on syntax name s1
+interpret 'a = .context~stackframes[1]~invocation; say "a" a; interpret "say .context~stackframes[1]~invocation .context~stackframes[2]~invocation"; raise syntax 98.900 array("x")'
+s1:
+  c = condition('o')
+  do f over c~stackframes
+    say 'cond' f~type f~line (f~invocation == .nil)
+  end
+  say 'again' .context~stackframes[1]~invocation .context~invocation
+do 1
+  interpret 'do 1; do 1; do f over .context~stackframes; say f~traceline; end; end; end'
+end
+interpret 'do 1; interpret "do 1; do f over .context~stackframes; say f~traceline; end; end"; end'
+call try 'x = f()'
+call try 'do 1; x = f(); end'
+do 1
+  call try 'do 1; do 1; x = f(); end; end'
+end
+exit
+try:
+  signal on syntax
+  interpret arg(1)
+  return
+syntax:
+  do line over condition('O')~traceback
+    say '  ['line']'
+  end
+  return
+f: procedure
+  signal off syntax
+  return 1 / 0

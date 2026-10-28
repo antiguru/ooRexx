@@ -423,3 +423,13 @@ lang/array_sort_leading_items.rex
 lang/method_source_rexx_package.rex
 lang/index_argument_string_value.rex
 lang/string_equals_string_value.rex
+# 9d Task 8.7b: a native class search keeps a raised condition; NewMethod and NewRoutine have no parent package; the security manager an activation began under; the manager a ::REQUIRES asks; a primitive's frame under the Rexx code it runs; an INTERPRET fragment's frame; the REXX package's methods; an untranslated source's condition origin; the installing package's level.
+lang/native_find_class_raised_condition.rex
+lang/native_new_executable_no_parent.rex
+lang/security_manager_activation_boundary.rex
+lang/security_manager_requires_installing.rex
+lang/live_frames_nested_primitives.rex
+lang/interpret_frame_invocation_indent.rex
+lang/method_package_rexx_library.rex
+lang/compile_failure_condition_origin.rex
+lang/requires_install_levels.rex

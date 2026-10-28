@@ -559,6 +559,13 @@ impl Activity {
         );
     }
 
+    /// Calls `visit` on every activation on the activity's stack.
+    pub(crate) fn for_each_activation_mut(&mut self, visit: &mut impl FnMut(&mut Activation)) {
+        for activation in self.running.iter_mut().chain(self.suspended.iter_mut()) {
+            visit(activation);
+        }
+    }
+
     /// Appends the program and directive of every activation on the
     /// activity's stack, the ones [`Activity::running_programs`] names.
     pub(crate) fn running_bodies(&self, out: &mut Vec<(crate::plan::ProgramId, Option<usize>)>) {

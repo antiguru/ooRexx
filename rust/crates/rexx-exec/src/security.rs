@@ -17,7 +17,7 @@ use rexx_parse::Access;
 
 use crate::dispatch::AccessScope;
 use crate::error::Raised;
-use crate::plan::Package;
+use crate::plan::{Package, ProgramId};
 use crate::{Failure, Interp};
 
 /// The message one checkpoint sends, and the entries its info directory
@@ -56,17 +56,49 @@ impl Interp {
     /// both reach `RexxCode::setSecurityManager` (`execution/RexxCode.cpp:245`),
     /// which sets it on the package rather than on the executable, so all
     /// three setters write the same place.
+    ///
+    /// Every activation already running `package`'s code keeps the manager it
+    /// started under, as the oracle's copies it into its settings when it
+    /// begins.
     pub(crate) fn install_security_manager(&mut self, package: ObjRef, manager: Option<ObjRef>) {
+        if let Some(previous) = self.package_data(package).map(|data| data.security_manager) {
+            self.keep_security_manager(package, previous);
+        }
         self.security_armed |= manager.is_some();
         if let Some(data) = self.package_data_mut(package) {
             data.security_manager = manager;
         }
     }
 
+    /// Gives every live activation of `package`'s code that does not yet
+    /// keep a manager of its own `previous` to keep.
+    #[cold]
+    fn keep_security_manager(&mut self, package: ObjRef, previous: Option<ObjRef>) {
+        let mut programs = Vec::new();
+        self.activity.running_programs(&mut programs);
+        self.activities.running_programs(&mut programs);
+        programs.retain(|&program| self.program_package(program) == Some(package));
+        if programs.is_empty() {
+            return;
+        }
+        let mut keep = |activation: &mut crate::activation::Activation| {
+            if programs.contains(&activation.program_id)
+                && activation
+                    .cold
+                    .as_deref()
+                    .is_none_or(|cold| cold.security_manager.is_none())
+            {
+                activation.cold_mut().security_manager = Some(previous);
+            }
+        };
+        self.activity.for_each_activation_mut(&mut keep);
+        self.activities.for_each_activation_mut(&mut keep);
+    }
+
     /// `RexxActivation::getEffectiveSecurityManager`
-    /// (`execution/RexxActivation.cpp:4977`): the running code's own package's
-    /// manager. There is no instance-level manager here, so that arm's
-    /// fallback is `None`, as it is with no running activation.
+    /// (`execution/RexxActivation.cpp:4977`): the manager the running
+    /// activation started under. There is no instance-level manager here, so
+    /// that arm's fallback is `None`, as it is with no running activation.
     #[inline]
     pub(crate) fn effective_security_manager(&self) -> Option<ObjRef> {
         if !self.security_armed {
@@ -80,7 +112,24 @@ impl Interp {
     /// oracle finds no manager for it.
     #[inline(never)]
     fn armed_security_manager(&self) -> Option<ObjRef> {
-        let program = self.activity.running.as_deref()?.program_id;
+        let activation = self.activity.running.as_deref()?;
+        if let Some(kept) = activation
+            .cold
+            .as_deref()
+            .and_then(|cold| cold.security_manager)
+        {
+            return kept;
+        }
+        self.program_data(activation.program_id)?.security_manager
+    }
+
+    /// The manager `program`'s own installing activation runs under, which is
+    /// the one its `::REQUIRES` directives consult
+    /// (`RexxActivation::run` installs the package, `RexxActivation.cpp:508`).
+    pub(crate) fn installing_security_manager(&self, program: ProgramId) -> Option<ObjRef> {
+        if !self.security_armed {
+            return None;
+        }
         self.program_data(program)?.security_manager
     }
 
@@ -97,7 +146,19 @@ impl Interp {
         message: &[u8],
         entries: &[(&[u8], ObjRef)],
     ) -> Result<Option<ObjRef>, Failure> {
-        let Some(manager) = self.effective_security_manager() else {
+        let manager = self.effective_security_manager();
+        self.security_check_by(manager, message, entries)
+    }
+
+    /// [`Interp::security_check`] against `manager` rather than the running
+    /// activation's.
+    pub(crate) fn security_check_by(
+        &mut self,
+        manager: Option<ObjRef>,
+        message: &[u8],
+        entries: &[(&[u8], ObjRef)],
+    ) -> Result<Option<ObjRef>, Failure> {
+        let Some(manager) = manager else {
             return Ok(None);
         };
         let frame = self.roots.activity_mut().push_frame();

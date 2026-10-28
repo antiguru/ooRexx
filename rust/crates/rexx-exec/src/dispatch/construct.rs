@@ -164,18 +164,21 @@ pub(super) fn native_executable_new(
         None => None,
     };
     let name = interp.to_text(name).to_vec();
-    let object = if routine {
-        compile_routine_source(interp, &name, source, "source", parent)?
-    } else {
-        compile_method_source_in(
-            interp,
-            &name,
-            source,
-            "source",
-            SourceTaker::Executable,
-            parent,
-        )?
-    };
+    // Its directives install under the method's own level.
+    let object = interp.primitive_level(receiver, b"NEW", args, |interp| {
+        if routine {
+            compile_routine_source(interp, &name, source, "source", parent)
+        } else {
+            compile_method_source_in(
+                interp,
+                &name,
+                source,
+                "source",
+                SourceTaker::Executable,
+                parent,
+            )
+        }
+    })?;
     if class != base {
         native_as_instance(interp, object, class, base)?;
     }

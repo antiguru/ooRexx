@@ -1,0 +1,23 @@
+count 22
+/* A ::REQUIRES directive asks the manager of the package that is installing,
+   and a run-time load the manager of the running activation; a package a
+   REQUIRES answer gives a manager asks that manager for its own. */
+.context~package~setSecurityManager(.sm~new)
+call ext1
+call rt
+exit
+::routine rt
+  call ext2
+  p = .package~new('pk', "say 'pk prolog'; ::requires 'req3.cls'")
+  .context~package~loadPackage('a8.cls')
+  say 'loaded'
+::class sm
+::method requires
+  use arg info
+  say 'sm requires' filespec('name', info~name)
+  info~securityManager = self
+  return 1
+::method unknown
+  use arg name, args
+  say 'sm' name
+  return 0

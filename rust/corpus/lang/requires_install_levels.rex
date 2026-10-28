@@ -1,0 +1,26 @@
+/* While a package's ::REQUIRES install, the package is a level of its own
+   stopped on the directive, below the required file's levels: in a required
+   prologue, a ::CONSTANT expression, a trapped condition's frames and
+   traceback, and under the NEW of .Package and .Routine. */
+say 'main' .c~s~makestring('l', ',')
+signal on syntax name s1
+call caller.rex
+s1: call show
+signal on syntax name s2
+p = .package~new('pk', .array~of('say 1/0'))
+s2: call show
+signal on syntax name s3
+r = .routine~new('rt', .array~of('::class c', '::constant k (1/0)'))
+s3: call show
+signal on syntax name s4
+r = .routine~new('bad', .array~of('say ('))
+s4: call show
+p = .package~new('pk2', .array~of('say .c2~s~makestring("l", ",")', '::class c2', '::constant s (.c2~frames)', '::method frames class', '  a = .array~new', '  do f over .context~stackframes; a~append(f~type filespec("name", f~name) f~line); end', '  return a'))
+exit
+show:
+  c = condition('o')
+  say c~code c~traceback~makearray~makestring('l', '|')
+  do f over c~stackframes; say '  ' f~type filespec('name', f~name) f~line; end
+  return
+::requires 'pro.cls'
+::requires 'cfr.cls'

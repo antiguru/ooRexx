@@ -596,6 +596,11 @@ pub(crate) struct ActivationCold {
     /// runs no body: a `::CONSTANT` expression's, and the package level
     /// installing it.
     pub(crate) directive_clause: Option<usize>,
+    /// The security manager this activation runs under, kept once its
+    /// package's was replaced after the activation began: an activation keeps
+    /// the manager its package had when it started
+    /// (`RexxActivation.cpp:176`, `:315`), and an internal call its caller's.
+    pub(crate) security_manager: Option<Option<ObjRef>>,
 }
 
 /// A `USE LOCAL` method's object pool and the names it keeps local
@@ -610,10 +615,14 @@ pub(crate) struct AutoExpose {
 
 impl ActivationCold {
     /// What an internal call or `CALL ON` handler starts from: the caller's
-    /// two conditions and its `USE LOCAL` pool, and neither its seed nor its
-    /// `SETLOCAL` list, which stay on the top-level activation.
+    /// two conditions, its `USE LOCAL` pool and its kept security manager,
+    /// and neither its seed nor its `SETLOCAL` list, which stay on the
+    /// top-level activation.
     pub(crate) fn inherited(&self) -> Option<Box<ActivationCold>> {
-        if self.condition.is_none() && self.active_condition.is_none() && self.auto_expose.is_none()
+        if self.condition.is_none()
+            && self.active_condition.is_none()
+            && self.auto_expose.is_none()
+            && self.security_manager.is_none()
         {
             return None;
         }
@@ -621,6 +630,7 @@ impl ActivationCold {
             condition: self.condition.clone(),
             active_condition: self.active_condition.clone(),
             auto_expose: self.auto_expose.clone(),
+            security_manager: self.security_manager,
             ..ActivationCold::default()
         }))
     }
@@ -1020,6 +1030,7 @@ impl Activation {
             executable,
             // A directive index.
             directive_clause: _,
+            security_manager,
         }) = cold.as_deref()
         {
             if let Some(TrappedCondition {
@@ -1041,6 +1052,7 @@ impl Activation {
                 out.extend([*owner, *scope]);
             }
             out.extend(*executable);
+            out.extend(security_manager.flatten());
         }
         // The table's streams. An activation is a root, and a stream only
         // the table holds is reachable through nothing else.
@@ -1196,7 +1208,13 @@ impl Interp {
     /// The activation at `depth`, counted as [`Activity::frames`] counts: `0`
     /// is the running one.
     pub(crate) fn frame_at(&self, depth: usize) -> Option<&Activation> {
-        self.frames().nth(depth)
+        match depth.checked_sub(usize::from(self.activity.running.is_some())) {
+            None => self.activity.running.as_deref(),
+            Some(below) => {
+                let index = self.activity.suspended.len().checked_sub(below + 1)?;
+                self.activity.suspended.get(index).map(Box::as_ref)
+            }
+        }
     }
 
     /// The depth of the innermost activation that is not an internal call.
@@ -1220,10 +1238,24 @@ impl Interp {
 
     /// The clause the activation at `depth` is stopped on.
     pub(crate) fn clause_of(&self, depth: usize) -> ClauseSnapshot {
-        if depth == 0 && self.activity.running.is_some() {
+        if depth == 0
+            && let Some(running) = self.activity.running.as_deref()
+        {
+            // Inside its fragments, the activation is stopped on the
+            // outermost one's `INTERPRET` clause, at that clause's indent.
+            let indent = self
+                .activity
+                .fragments
+                .iter()
+                .rev()
+                .take_while(|level| level.owner == running.id)
+                .last()
+                .map_or(self.activity.clause_state.current_value_indent, |level| {
+                    level.indent
+                });
             return ClauseSnapshot {
                 line: self.activity.clause_state.line(),
-                indent: self.activity.clause_state.current_value_indent,
+                indent,
                 index: self.activity.clause_state.clause_index(),
             };
         }
@@ -1240,7 +1272,7 @@ impl Interp {
         // off-by-one here would write one activation's `~invocation` id onto
         // its caller -- a wrong answer with nothing to notice it, since both
         // are plausible numbers.
-        let expected = self.frame_at(depth).map(|activation| activation.id);
+        let expected = self.frames().nth(depth).map(|activation| activation.id);
         let found = match depth.checked_sub(usize::from(self.activity.running.is_some())) {
             None => self.activity.running.as_deref_mut(),
             Some(below) => match self.activity.suspended.len().checked_sub(below + 1) {

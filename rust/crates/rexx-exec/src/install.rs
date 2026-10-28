@@ -13,6 +13,7 @@
 //! attributes and constants, libraries, and the executable records.
 
 use crate::activation::{Activation, CallType, MethodIdentity};
+use crate::clause::SavedClauseState;
 use crate::directives::{
     AnnotatedSite, FileClasses, annotation_target, attribute_dictionary_keys, class_install_order,
     class_members, directive_clause, directive_gap, member_dictionary_keys, method_dictionary_keys,
@@ -490,6 +491,47 @@ impl Interp {
         outcome
     }
 
+    /// Pushes the level installing `id`, stopped on its directive
+    /// `directive`, where `id` has no running activation: the oracle installs
+    /// a package in an activation of its own (`RexxActivation::run`,
+    /// `RexxActivation.cpp:508`), which the files it requires run above.
+    /// `None` outside an install.
+    fn push_installing_level(
+        &mut self,
+        id: ProgramId,
+        program: &Rc<Program>,
+        directive: usize,
+    ) -> Option<(SlotFrame, SavedClauseState)> {
+        let call_type = self.install_call?;
+        if self.frames().any(|activation| activation.program_id == id) {
+            return None;
+        }
+        let saved_clause = self.save_clause_state();
+        let frame = self.roots.push_slots(0);
+        let level_id = self.next_activation_id();
+        let mut installing = Activation::new(
+            level_id,
+            Rc::clone(program),
+            id,
+            Rc::new(Plan::default()),
+            frame,
+        );
+        installing.call_type = call_type;
+        installing.body = None;
+        installing.cold_mut().directive_clause = Some(directive);
+        self.push_activation(installing);
+        self.record_call_convention();
+        self.enter_directive_clause(directive_clause(program, &program.directives[directive]).0);
+        Some((frame, saved_clause))
+    }
+
+    /// Pops what [`Interp::push_installing_level`] pushed.
+    fn pop_installing_level(&mut self, (frame, saved_clause): (SlotFrame, SavedClauseState)) {
+        self.pop_activation();
+        self.roots.activity_mut().pop_slots(frame);
+        self.restore_clause_state(saved_clause);
+    }
+
     /// [`Interp::load_required_packages`]' walk: every `::REQUIRES ... LIBRARY`
     /// in source order, then every other `::REQUIRES` in source order, as
     /// `PackageClass::processInstall` installs them
@@ -497,7 +539,7 @@ impl Interp {
     /// fails.
     fn install_requires(&mut self, id: ProgramId, program: &Rc<Program>) -> Result<(), Failure> {
         for library in [true, false] {
-            for directive in &program.directives {
+            for (index, directive) in program.directives.iter().enumerate() {
                 let DirectiveKind::Requires(requires) = &directive.kind else {
                     continue;
                 };
@@ -519,7 +561,12 @@ impl Interp {
                     }
                     continue;
                 }
-                match self.load_requires(Some(id), &requires.name) {
+                let level = self.push_installing_level(id, program, index);
+                let loaded = self.load_requires(Some(id), &requires.name, true);
+                if let Some(level) = level {
+                    self.pop_installing_level(level);
+                }
+                match loaded {
                     Ok(required) => {
                         let into = self.package_object(Package::Program(id))?;
                         let from = self.package_object(Package::Program(required))?;
@@ -562,12 +609,16 @@ impl Interp {
     ///
     /// The package is rooted as a temp of the caller's frame: on a cache hit
     /// the weak cache may be all that reaches it.
+    ///
+    /// `directive` is a `::REQUIRES` of `from` being installed, which asks
+    /// `from`'s own manager rather than the running activation's.
     fn load_requires(
         &mut self,
         from: Option<ProgramId>,
         name: &[u8],
+        directive: bool,
     ) -> Result<ProgramId, Failure> {
-        let loaded = self.find_requires(from, name)?;
+        let loaded = self.find_requires(from, name, directive)?;
         if let Some(package) = self.program_package(loaded) {
             self.roots.activity_mut().push_temp(package);
         }
@@ -579,6 +630,7 @@ impl Interp {
         &mut self,
         from: Option<ProgramId>,
         name: &[u8],
+        directive: bool,
     ) -> Result<ProgramId, Failure> {
         // The name as written, and the file it resolves to, are looked up
         // before the manager is asked, and a hit asks it nothing:
@@ -605,8 +657,12 @@ impl Interp {
             self.required_packages.insert(original.into(), loaded);
             return Ok(loaded);
         }
+        let manager = match from {
+            Some(id) if directive => self.installing_security_manager(id),
+            _ => self.effective_security_manager(),
+        };
         let mut inherited = None;
-        let Some(name) = self.check_requires_access(name, &mut inherited)? else {
+        let Some(name) = self.check_requires_access(manager, name, &mut inherited)? else {
             return Err(Raised::requires_file_not_found(original).into());
         };
         let name = &name[..];
@@ -616,7 +672,9 @@ impl Interp {
         }
         let resolved = match found.clone() {
             Some(resolved) => {
-                let Some(checked) = self.check_requires_access(&resolved, &mut inherited)? else {
+                let Some(checked) =
+                    self.check_requires_access(manager, &resolved, &mut inherited)?
+                else {
                     return Err(Raised::requires_file_not_found(original).into());
                 };
                 Some(checked.to_vec())
@@ -699,22 +757,25 @@ impl Interp {
     /// The security manager's `REQUIRES` checkpoint
     /// (`execution/SecurityManager.cpp:318`-`:346`).
     ///
-    /// Answers the name to load under -- the manager's own replacement where
+    /// Answers the name to load under -- `manager`'s own replacement where
     /// it made one -- or `None` where it removed the entry, which forbids the
     /// load. `inherited` collects the `SECURITYMANAGER` the new package is to
     /// carry, across both of a load's two checks.
     fn check_requires_access(
         &mut self,
+        manager: Option<ObjRef>,
         name: &[u8],
         inherited: &mut Option<ObjRef>,
     ) -> Result<Option<Vec<u8>>, Failure> {
-        if self.effective_security_manager().is_none() {
+        if manager.is_none() {
             return Ok(Some(name.to_vec()));
         }
         let requested = self.text(name);
         self.roots.activity_mut().push_temp(requested);
         let entries = [(crate::security::key::NAME, requested)];
-        let Some(info) = self.security_check(crate::security::message::REQUIRES, &entries)? else {
+        let Some(info) =
+            self.security_check_by(manager, crate::security::message::REQUIRES, &entries)?
+        else {
             return Ok(Some(name.to_vec()));
         };
         // `secObject != TheNilObject` (`SecurityManager.cpp:339`).
@@ -923,13 +984,13 @@ impl Interp {
         program: Option<ProgramId>,
         name: &[u8],
     ) -> Result<ProgramId, Failure> {
-        self.load_requires(program, name)
+        self.load_requires(program, name, false)
     }
 
     /// `PackageClass::newRexx`'s load: the same file load, searched from the
     /// **global** context rather than from any package's directory.
     pub(crate) fn load_package_global(&mut self, name: &[u8]) -> Result<ProgramId, Failure> {
-        self.load_requires(None, name)
+        self.load_requires(None, name, false)
     }
 
     /// `PackageClass::newRexx`'s in-memory form: a package compiled from

@@ -116,7 +116,7 @@ use files::{native_file_path_separator, native_file_separator};
 // The collection classes' primitive methods, chained the same way.
 mod collection;
 pub(crate) mod hash;
-use hash::{native_hash_at, native_hash_put, native_hash_unknown};
+use hash::{native_hash_at, native_hash_bracket_put, native_hash_put, native_hash_unknown};
 
 // `RexxInfo`'s readers, chained the same way.
 mod rexx_info;
@@ -389,6 +389,38 @@ impl Interp {
         );
         self.activity.method_levels.pop();
         self.serve_posted_halt();
+        ran
+    }
+
+    /// Runs `body`, which a primitive method `name` of `receiver` runs and
+    /// which may reach Rexx code, as that method's own level, which
+    /// `.context~stackFrames` lists: the `InternalActivationFrame` every
+    /// primitive runs under (`execution/CPPCode.cpp:140`).
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn primitive_level<T>(
+        &mut self,
+        receiver: ObjRef,
+        name: &[u8],
+        args: &[Option<ObjRef>],
+        body: impl FnOnce(&mut Interp) -> Result<T, Failure>,
+    ) -> Result<T, Failure> {
+        let Some(resolution) = self.lookup(receiver, name, None) else {
+            return body(self);
+        };
+        let caller = self.running_activation().map(|activation| activation.id);
+        self.activity
+            .method_levels
+            .push(crate::activity::MethodLevel {
+                caller,
+                name: name.into(),
+                scope: resolution.scope,
+                method: resolution.method,
+                receiver,
+                arguments: args.into(),
+            });
+        let ran = body(self);
+        self.activity.method_levels.pop();
         ran
     }
 
@@ -726,7 +758,7 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `HashCollection::putRexx` under its second name, donated from
     // `IdentityTable` (`memory/Setup.cpp:826`) and so the same function with
     // the same argument order: `t[i] = v` sends `t~"[]="(v, i)`.
-    ("Directory", "[]=", Arity::Fixed(2), native_hash_put),
+    ("Directory", "[]=", Arity::Fixed(2), native_hash_bracket_put),
     ("Directory", "AT", Arity::Fixed(1), native_hash_at),
     ("Directory", "PUT", Arity::Fixed(2), native_hash_put),
     // `StringHashCollection::unknownRexx`, `StringTable`'s own row
@@ -951,7 +983,12 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // `IdentityTable` (`memory/Setup.cpp:881`) and declares `Unknown` itself
     // (`:883`), and `Directory` then takes that whole set from `StringTable`.
     ("StringTable", "[]", Arity::Fixed(1), native_hash_at),
-    ("StringTable", "[]=", Arity::Fixed(2), native_hash_put),
+    (
+        "StringTable",
+        "[]=",
+        Arity::Fixed(2),
+        native_hash_bracket_put,
+    ),
     ("StringTable", "AT", Arity::Fixed(1), native_hash_at),
     // `HashCollection::initRexx`, which `~new` sends and which validates the
     // initial-size argument, in `StringTable`'s own dictionary by

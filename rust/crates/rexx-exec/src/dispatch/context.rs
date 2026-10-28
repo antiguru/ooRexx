@@ -441,6 +441,37 @@ fn context_executable(
 
 /// [`context_executable`]'s answer for the activation at `depth`.
 pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef, Failure> {
+    // An internal call runs its caller's code, and answers its caller's
+    // executable: measured, oracle rc 0, an internal routine called from a
+    // `::METHOD` answers that `Method`. Each internal call keeps the answer,
+    // so a stack's frames, built level by level, walk a chain of internal
+    // calls once.
+    let mut found = depth;
+    while let Some(activation) = interp.frame_at(found)
+        && activation.entry == Entry::InternalCall
+    {
+        if let Some(kept) = activation.cold.as_deref().and_then(|cold| cold.executable) {
+            return Ok(kept);
+        }
+        found += 1;
+    }
+    let executable = caller_executable_at(interp, found)?;
+    let activity = &mut interp.activity;
+    for activation in activity
+        .running
+        .iter_mut()
+        .chain(activity.suspended.iter_mut().rev())
+        .skip(depth)
+        .take(found - depth)
+    {
+        activation.cold_mut().executable = Some(executable);
+    }
+    Ok(executable)
+}
+
+/// [`executable_at`] for the activation at `depth`, which is not an
+/// internal call where there is one.
+fn caller_executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef, Failure> {
     let activation = interp
         .frame_at(depth)
         .ok_or_else(|| Failure::from(Raised::context_not_active()))?;
@@ -496,10 +527,6 @@ pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef,
                 .native_entry(table, &name)
                 .ok_or_else(|| Loud::unknown_receiver("a routine with no package entry").into())
         }
-        // An internal call runs its caller's code, and answers its caller's
-        // executable: measured, oracle rc 0, an internal routine called from
-        // a `::METHOD` answers that `Method`.
-        (Entry::InternalCall, ..) => executable_at(interp, depth + 1),
         _ => interp.program_routine_object(program),
     }
 }
@@ -654,12 +681,15 @@ fn build_method_level_frame(interp: &mut Interp, row: usize) -> Result<ObjRef, F
 /// The `StackFrame` of the running fragment in row `row`, stopped on its
 /// clause being stepped, or the one that entered the fragment above it.
 fn build_fragment_frame(interp: &mut Interp, row: usize) -> Result<ObjRef, Failure> {
-    let clause = match interp.activity.fragments.get(row + 1) {
-        Some(inner) => inner.outer_clause,
-        None => interp.activity.fragment_clause,
+    let (clause, indent) = match interp.activity.fragments.get(row + 1) {
+        Some(inner) => (inner.outer_clause, inner.indent),
+        None => (
+            interp.activity.fragment_clause,
+            interp.activity.clause_state.current_value_indent,
+        ),
     };
     let level = &interp.activity.fragments[row];
-    let (line, indent) = (level.line, level.indent);
+    let line = level.line;
     let text = level
         .fragment
         .as_ref()
@@ -679,6 +709,7 @@ fn build_fragment_frame(interp: &mut Interp, row: usize) -> Result<ObjRef, Failu
         .frames()
         .position(|activation| activation.id == owner);
     let executable = depth.and_then(|depth| executable_at(interp, depth).ok());
+    let invocation = fragment_invocation(interp, row);
     build_ended_frame(
         interp,
         b"INTERPRET",
@@ -687,7 +718,21 @@ fn build_fragment_frame(interp: &mut Interp, row: usize) -> Result<ObjRef, Failu
         &[],
         &trace_text,
         executable,
+        Some(invocation),
     )
+}
+
+/// The `~invocation` of the fragment in row `row` of
+/// [`Activity::fragments`], minted on the first ask and kept for the
+/// fragment's life, as an interpret activation keeps its own.
+fn fragment_invocation(interp: &mut Interp, row: usize) -> u32 {
+    if let Some(minted) = interp.activity.fragments[row].invocation {
+        return minted;
+    }
+    interp.next_invocation += 1;
+    let minted = interp.next_invocation;
+    interp.activity.fragments[row].invocation = Some(minted);
+    minted
 }
 
 /// One `StackFrame` for the activation at `depth` --
@@ -806,13 +851,34 @@ pub(crate) fn build_interpret_frame(
     trace_text: &[u8],
 ) -> Result<ObjRef, Failure> {
     let executable = executable_at(interp, 0).ok();
-    build_ended_frame(interp, b"INTERPRET", b"", line, &[], trace_text, executable)
+    let running = interp.running_activation().map(|activation| activation.id);
+    let invocation = interp
+        .activity
+        .fragments
+        .len()
+        .checked_sub(1)
+        .filter(|&row| Some(interp.activity.fragments[row].owner) == running)
+        .map(|row| fragment_invocation(interp, row));
+    build_ended_frame(
+        interp,
+        b"INTERPRET",
+        b"",
+        line,
+        &[],
+        trace_text,
+        executable,
+        invocation,
+    )
 }
 
 /// A `StackFrame` of type `kind` for a level that has ended, built from its
-/// parts: its own invocation, no target, and a context whose activation has
-/// ended. `executable` is what `~executable` answers, `None` where this crate
-/// does not know it.
+/// parts: `invocation`, or one of its own where that is `None`, no target,
+/// and a context whose activation has ended. `executable` is what
+/// `~executable` answers, `None` where this crate does not know it.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "each is one entry of the frame it builds"
+)]
 pub(crate) fn build_ended_frame(
     interp: &mut Interp,
     kind: &[u8],
@@ -821,6 +887,7 @@ pub(crate) fn build_ended_frame(
     arguments: &[Option<ObjRef>],
     trace_text: &[u8],
     executable: Option<ObjRef>,
+    invocation: Option<u32>,
 ) -> Result<ObjRef, Failure> {
     let frame = interp.roots.activity_mut().push_frame();
     if let Some(executable) = executable {
@@ -831,8 +898,11 @@ pub(crate) fn build_ended_frame(
     let name = interp.text(name);
     interp.roots.activity_mut().push_temp(name);
     let line = interp.counted(line);
-    interp.next_invocation += 1;
-    let invocation = interp.counted(interp.next_invocation as usize);
+    let invocation = invocation.unwrap_or_else(|| {
+        interp.next_invocation += 1;
+        interp.next_invocation
+    });
+    let invocation = interp.counted(invocation as usize);
     interp.roots.activity_mut().push_temp(invocation);
     let context = interp.ended_context_object();
     let trace_line = interp.text(trace_text);

@@ -1923,13 +1923,40 @@ pub(super) fn native_hash_put(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    hash_put(interp, receiver, args, b"PUT")
+}
+
+/// `~[]=(item, index)`, [`native_hash_put`] under its own name.
+pub(super) fn native_hash_bracket_put(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    hash_put(interp, receiver, args, b"[]=")
+}
+
+/// [`native_hash_put`] sent as `name`.
+fn hash_put(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    name: &[u8],
+) -> Result<Option<ObjRef>, Failure> {
     // [`native_hash_at`]'s split, for the same reason.
     if !matches!(
         interp.heap.get(receiver).map(|object| &object.body),
         Some(Body::Native(_))
     ) && owns(interp, receiver)
     {
-        return store_put(interp, receiver, args);
+        // An argument not of a base class may hash and compare through
+        // Rexx methods of its own.
+        if args.iter().flatten().all(|&arg| interp.is_base_class(arg)) {
+            return store_put(interp, receiver, args);
+        }
+        return interp.primitive_level(receiver, name, args, |interp| {
+            store_put(interp, receiver, args)
+        });
     }
     let Some(Some(item)) = args.first().copied() else {
         return Err(Raised::missing_named_argument("item").into());
@@ -1948,7 +1975,9 @@ pub(super) fn native_hash_unknown(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    hash_unknown(interp, receiver, args)
+    interp.primitive_level(receiver, b"UNKNOWN", args, |interp| {
+        hash_unknown(interp, receiver, args)
+    })
 }
 
 /// [`native_hash_unknown`]'s work, which `processUnknown` also runs without a send.
