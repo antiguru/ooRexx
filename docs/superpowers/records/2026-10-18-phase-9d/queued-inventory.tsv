@@ -125,7 +125,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-13-phase-9b1-uniform-object-model.md	design	-	closed:Phase 9b1	phase-9b1-gate.md: every leak fixed or licensed, SysStemSort as Deviation 37, the addRoutine copy as L10	closed:Phase 9b1
 2026-10-13-security-manager-and-library-key.md	divergence	-	9d	no probe recorded; two oracle measurements to make first	9d
 2026-10-13-stdin-stream-object-queries.md	divergence	queued-probes/stdinq/stdinq.rex:1	closed:b53b1de0c	own probe: streamtype, query handle, lines, query exists and qualify on STDIN still differ	closed:b53b1de0c
-2026-10-13-stdout-write-errors-swallowed.md	divergence	queued-probes/stdoutclosed/stdoutclosed.rex:1	9d	probe with stdout closed: lineout 0 READY: here, 1 ERROR:9 on the oracle	9d
+2026-10-13-stdout-write-errors-swallowed.md	divergence	queued-probes/stdoutclosed/stdoutclosed.rex:1	closed:4f079c0d2	probe with stdout closed: lineout 0 READY: here, 1 ERROR:9 on the oracle	closed:4f079c0d2
 2026-10-13-sysfork-design.md	design	-	9d	Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal	9d
 2026-10-13-yaml-pass-boundary-guard.md	divergence	-	9d	no probe of its own; Task 4 consumes it (ruling 2), yaml TEST35_DIRECTIVES was blocked on this refusal at the 9c close	9d
 2026-10-14-class-side-defaultname.md	divergence	queued-probes/clsdn/clsdn.rex:1	9d	own probe: DN on the oracle, The WITHNAME class here	9d
@@ -256,3 +256,4 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b
 2026-10-28-trace-reference-assignment-unrooted.md	defect	docs/superpowers/records/2026-10-18-phase-9d/queued-probes/trace-ref-rooting/tr4.rex	9d	trace i over q = >y panics a live value: the traced reference is unrooted	9d
 2026-10-28-stream-query-residuals.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.6/r1/probes/q_stdinq.rex	9d	STDIN queries, LINES on a write-only stream, /dev/null treated as transient	9d
 2026-10-28-bump-oracle-version.md	process	-	after 9d	build current upstream trunk as the oracle; re-check fixed defects and oracle-derived records	after 9d
+2026-10-28-append-stream-positioned-writes.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.6/r2/probes/a1.rex	9d	positioned CHAROUT/LINEOUT on an APPEND stream disagree with each other and the oracle	9d

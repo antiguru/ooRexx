@@ -1948,5 +1948,20 @@
   "source": "Phase 9d Task 8.6 report and review (task-8.6-report.md, task-8.6-review.md)",
   "status": "open (not copied; Task 8.6 fix round 1 makes the crate keep them in order)",
   "crate": "Being fixed in Task 8.6 fix round 1."
+ },
+ {
+  "id": "append-write-only-retry-drops-o-append",
+  "added": "2026-10-28",
+  "title": "An APPEND stream on a write-only file loses O_APPEND and overwrites another writer's appends",
+  "category": "wrong result",
+  "area": "streams",
+  "severity": "data loss",
+  "repro": "docs/superpowers/records/2026-10-18-phase-9d/t8.6/r2/probes/a3.rex (mode 222 file, open('write append'), lineout w1, a command appends wcmd, lineout w2, close)",
+  "oracle": "y|w1|w2|: the command's line is overwritten.",
+  "expected": "y|wcmd|w1|w2|: APPEND positions the write pointer at the end (funct.xml:4308-4309).",
+  "cause": "StreamNative.cpp:2466 retries a failed read-write open with WR_CREAT alone, dropping RX_O_APPEND.",
+  "source": "Phase 9d Task 8.6 fix round 1 re-review",
+  "status": "deviation 74 (Moritz 2026-10-28: \"New Deviation, oracle bug\")",
+  "crate": "Opens O_APPEND on the retry too."
  }
 ]

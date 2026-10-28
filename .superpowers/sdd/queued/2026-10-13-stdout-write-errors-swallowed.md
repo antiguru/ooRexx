@@ -1,3 +1,5 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.6 (b53b1de0c, 4f079c0d2): sink errors reach stream writes; the residuals are Deviation 40's write-error sentence and Deviation 73.**
+
 **RULED by Moritz 2026-10-28: candidate A ("Sentence in Dev 40") and candidate B ("Deviation, /dev/null"), task-8.6-report.md, Deviation candidates.**
 
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe with stdout closed: lineout 0 READY: here, 1 ERROR:9 on the oracle.

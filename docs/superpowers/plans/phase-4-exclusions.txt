@@ -2275,6 +2275,18 @@ DEVIATIONS -- permanent, chosen
 
      rust/crates/rexx-exec/tests/program_end.rs `buffering` pins each.
 
+     A WRITE ERROR ON A BUFFERED STANDARD OUTPUT. Ruled by Moritz 2026-10-28
+     ("Sentence in Dev 40"). A write error on a buffered standard output is
+     answered by the stream writes after the hand-over that met it; the
+     writes before it answer as written. A `.STDOUT~flush` whose hand-over
+     is refused answers `READY:`, as the oracle's does, and the stream stays
+     READY until the next write. The oracle's `.STDOUT` is NOBUFFER, so its
+     first LINEOUT to a closed pipe or /dev/full answers `1 ERROR:32` or
+     `ERROR:28`; here `0 READY:`, then the error. Measured by Phase 9d Task
+     8.6 (t8.6/probes/stdouterr.rex). Witnessed by
+     stdout_write_errors::a_closed_pipe_is_error_32 and
+     a_full_device_is_error_28 (rust/crates/rexx-exec/tests/).
+
  41. AN ENCODED IMAGE WHOSE DECODED BYTES LACK THE TAG ANSWERS 3.903
      (Phase 9c). OWNER: none.
 
@@ -2911,6 +2923,39 @@ DEVIATIONS -- permanent, chosen
      tests::a_references_nostring_syntax_names_its_values_string
      (rust/crates/rexx-exec/src/tests.rs) and
      corpus/lang/variable_reference_forwarded_string.rex.
+
+ 73. A STANDARD DESCRIPTOR CLOSED WHEN REXX STARTS IS OPEN ON /dev/null
+     (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-28 ("Deviation, /dev/null"). Rust's runtime
+     reopens a closed descriptor 0, 1 or 2 on /dev/null before `main`, so
+     with standard output closed (`>&-`) every write here succeeds:
+     `lineout('STDOUT', 'a')` answers `0` and the stream `READY:`. The oracle
+     writes to the closed descriptor and answers `1 ERROR:9 Bad file
+     descriptor`. Telling the two apart would mean reading descriptor 1 as
+     "/dev/null opened read-write", which a shell's `1<>/dev/null` also
+     gives. Measured by Phase 9d Task 8.6 (t8.6/probes/stdoutclosed.rex).
+     Witnessed by stdout_write_errors::a_standard_output_closed_at_start_is_dev_null
+     (rust/crates/rexx-exec/tests/stdout_write_errors.rs).
+
+ 74. AN APPEND STREAM ON A WRITE-ONLY FILE WRITES AT THE END (Phase 9d).
+     OWNER: none.
+
+     Ruled by Moritz 2026-10-28 ("New Deviation, oracle bug"). APPEND
+     "positions the write pointer at the end of the stream" (rexxref
+     funct.xml:4308-4309, STREAM OPEN), and this crate opens it
+     O_APPEND, so every write lands at the file's end when it reaches the
+     descriptor. ORACLE BUG: when the read-write open fails, the oracle
+     retries `open(WR_CREAT, RX_S_IWRITE, shared)` (StreamNative.cpp:2466),
+     dropping RX_O_APPEND, so its buffered writes land at the end the file
+     had at open and overwrite what another writer appended meanwhile. A
+     file of mode 222 holding `y`, `open('write append')`, LINEOUT `w1`, a
+     command appending `wcmd`, LINEOUT `w2`, CLOSE: the oracle leaves
+     `y|w1|w2|`, this crate `y|wcmd|w1|w2|`. The read-write case agrees on
+     both. Measured by the Phase 9d Task 8.6 fix round 1 re-review
+     (t8.6/r2/probes/a3.rex).
+     Witnessed by stream_handle::an_append_stream_on_a_write_only_file_writes_at_the_end
+     (rust/crates/rexx-exec/tests/stream_handle.rs).
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------

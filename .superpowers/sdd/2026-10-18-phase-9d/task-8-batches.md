@@ -59,24 +59,47 @@ sentence for Deviation 4).
 2026-10-13-stdout-write-errors-swallowed.md, 2026-10-13-lossy-path-sites.md, gate:phase-9c-gate.md:146,
 2026-10-18-command-waits-for-background-child.md.
 
-## 8.7 Builtins, collections, dispatch, security, native API
+## 8.7 Builtins, collections, dispatch, security, native API (split, controller 2026-10-28)
+Ruling: 8.7 is run as three instances, 8.7a, 8.7b and 8.7c, one implementer each, because one context over
+every item below is the token cost Moritz flagged on 2026-10-27. Cost if wrong: three reviews instead of one.
+
+### 8.7a Crash, builtins, collections
 2026-10-28-trace-reference-assignment-unrooted.md (rc 101 panic; first),
 2026-10-10-beep-wrong-type-message.md, 2026-10-10-native-routine-arguments-not-strings.md,
 2026-10-14-filespec-string-arg.md, 2026-10-14-class-side-defaultname.md, 2026-10-10-string-translate-empty-tables.md,
 2026-10-10-array-sort-after-remove.md, 2026-10-19-sortwith-on-foreign-class.md (the shape now segfaults
 the oracle: add it to rust/corpus/oracle-crashes.txt), 2026-10-19-index-argument-string-conversion.md,
+2026-10-27-string-equals-makestring-argument.md, 2026-10-13-error-position-ampersand.md,
+gate:phase-9a-gate.md:480.
+
+### 8.7b Security, native API, frames and install
 2026-10-13-class-named-drops-raised-condition.md, 2026-10-10-security-manager-command-rc-requires.md,
-2026-10-13-security-manager-and-library-key.md, 2026-10-17-newmethod-parent-package.md and
-gate:phase-9c-gate.md:144 (unclear: native NewMethod; witness through the C API test harness or report), 2026-10-22-live-frames-omit-nested-primitives.md,
-2026-10-22-executable-at-quadratic-depth.md,
+2026-10-13-security-manager-and-library-key.md, 2026-10-22-security-manager-set-mid-activation.md,
+2026-10-17-newmethod-parent-package.md and
+gate:phase-9c-gate.md:144 (unclear: native NewMethod; witness through the C API test harness or report),
+2026-10-22-live-frames-omit-nested-primitives.md, 2026-10-22-executable-at-quadratic-depth.md,
 2026-10-26-main-program-level-during-requires-install.md, 2026-10-26-compile-failure-condition-names-caller.md,
 2026-10-26-library-rxmath-error-number.md, 2026-10-27-deadlock-report-shape.md,
-2026-10-27-varref-operator-traceback-line.md, 2026-10-27-string-equals-makestring-argument.md,
-2026-10-27-stem-default-arithmetic-nostring.md, 2026-10-27-stem-array-default-string-value.md,
-2026-10-28-stream-query-residuals.md.
+2026-10-02-frame-executable-invocation-and-native-levels.md, 2026-10-14-native-method-frames.md,
+2026-10-22-directory-subclass-unknown-frame.md, 2026-10-22-interpret-clause-traceback-indent.md,
+2026-10-22-user-raised-in-own-handler.md, 2026-10-10-compiled-method-package-in-trace.md,
+gate:phase-9a-gate.md:469.
+
+### 8.7c Variables and streams residuals
+2026-10-27-varref-operator-traceback-line.md, 2026-10-27-stem-default-arithmetic-nostring.md,
+2026-10-27-stem-array-default-string-value.md, 2026-10-28-stream-query-residuals.md,
+2026-10-28-append-stream-positioned-writes.md, 2026-10-22-lineout-four-args-error.md,
+gate:phase-9c-gate.md:139 (2026-10-16-stream-command-open-missing-file.md), gate:phase-9a-gate.md:485.
+
+Pre-dispatch check (controller 2026-10-28): every inventory row ruled 9d and still open that no batch
+named is placed above by area; an item a Task 6 cluster already fixed closes as `closed:probe agrees`
+with its probe path, as the 8.8 rule says.
 
 ## 8.8 Process items, unclear items, and items triage found fixed
 Every `process` and `unclear` row of task-8-triage.tsv not named above, the gate lines
 phase-9a-gate.md:456-459, and the `fixed` rows (re-check each, then close with `closed:probe agrees`
 and the probe path), 2026-10-22-collect-stress-zero-collection-drift.md,
 2026-10-26-file-date-time-dst-dependent.md, 2026-10-26-redirected-target-waits-timing-flake.md and 2026-10-27-reaped-child-test-load-flake.md.
+
+Also in 8.8: reconcile queued-inventory.tsv, every row whose queued file's first line is CLOSED but whose
+columns 4 and 6 still read 9d gets `closed:<sha>` from that line (controller pre-dispatch check, 2026-10-28).
