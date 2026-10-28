@@ -671,9 +671,13 @@ impl OpenFile {
     }
 }
 
+/// Writes what is held, except while a panic unwinds: a crash loses held
+/// writes, as the oracle's does.
 impl Drop for OpenFile {
     fn drop(&mut self) {
-        let _ = self.flush();
+        if !std::thread::panicking() {
+            let _ = self.flush();
+        }
     }
 }
 
