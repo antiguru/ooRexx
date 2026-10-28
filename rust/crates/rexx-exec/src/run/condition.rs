@@ -26,12 +26,11 @@ impl Interp {
         trap: &ConditionTrap,
         call: bool,
     ) -> Result<Flow, Failure> {
-        let delayed = !self.activity.delayed_traps.is_empty()
-            && self
-                .activation()
-                .traps
-                .get(&trap.condition)
-                .is_some_and(|entry| entry.delayed);
+        let delayed = self
+            .activation()
+            .traps
+            .get(&trap.condition)
+            .is_some_and(|entry| entry.delayed);
         match &trap.label {
             Some(label) => {
                 // An arming route of the required-string protocol: a
@@ -96,15 +95,10 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn release_delayed(&mut self, key: &[u8], on: bool, call: bool) -> Result<Flow, Failure> {
-        let Some(row) = self
-            .activity
-            .delayed_traps
-            .iter()
-            .rposition(|delayed| *delayed.key == *key)
-        else {
+        let Some(delayed) = self.delayed_trap_mut(key) else {
             return Ok(Flow::Next);
         };
-        let held = std::mem::take(&mut self.activity.delayed_traps[row].held);
+        let held = std::mem::take(&mut delayed.held);
         match (on, call) {
             (true, true) => {
                 let here = self.activation().id;
@@ -202,15 +196,22 @@ impl Interp {
             true => &pending.condition,
             false => b"ANY",
         };
-        if let Some(delayed) = self
-            .activity
-            .delayed_traps
-            .iter_mut()
-            .rev()
-            .find(|delayed| *delayed.key == *key)
-        {
+        let key: Box<[u8]> = key.into();
+        if let Some(delayed) = self.delayed_trap_mut(&key) {
             delayed.held.push(pending);
         }
+    }
+
+    /// The innermost activation's trap `key` delayed while its handler runs.
+    fn delayed_trap_mut(&mut self, key: &[u8]) -> Option<&mut crate::DelayedTrap> {
+        let activity = &mut self.activity;
+        activity
+            .running
+            .as_deref_mut()
+            .into_iter()
+            .chain(activity.suspended.iter_mut().rev().map(Box::as_mut))
+            .filter_map(|activation| activation.cold.as_deref_mut()?.delayed.as_mut())
+            .find(|delayed| *delayed.key == *key)
     }
 
     /// The trap the running activation has enabled for `condition`, if any.
@@ -937,7 +938,7 @@ impl Interp {
             None => false,
         };
         if recorded {
-            self.activity.delayed_traps.push(crate::DelayedTrap {
+            self.activation_mut().cold_mut().delayed = Some(crate::DelayedTrap {
                 key: delayed.clone(),
                 held: Vec::new(),
             });
@@ -1012,9 +1013,10 @@ impl Interp {
         }
         let held = match recorded {
             true => self
-                .activity
-                .delayed_traps
-                .pop()
+                .activation_mut()
+                .cold
+                .as_deref_mut()
+                .and_then(|cold| cold.delayed.take())
                 .map(|delayed| delayed.held)
                 .unwrap_or_default(),
             false => Vec::new(),

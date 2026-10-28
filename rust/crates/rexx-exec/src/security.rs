@@ -76,10 +76,10 @@ impl Interp {
     /// that activation and the rest of the install.
     #[cold]
     fn keep_security_manager(&mut self, package: ObjRef, previous: Option<ObjRef>) {
-        for row in 0..self.activity.installing_managers.len() {
-            let (program, kept) = self.activity.installing_managers[row];
+        for row in 0..self.installing_managers.len() {
+            let (program, kept) = self.installing_managers[row];
             if kept.is_none() && self.program_package(program) == Some(package) {
-                self.activity.installing_managers[row].1 = Some(previous);
+                self.installing_managers[row].1 = Some(previous);
             }
         }
         let mut programs = Vec::new();
@@ -167,8 +167,7 @@ impl Interp {
     /// The manager `program` had when its install, still running, began,
     /// where one has been set on it since.
     pub(crate) fn kept_installing_manager(&self, program: ProgramId) -> Option<Option<ObjRef>> {
-        self.activity
-            .installing_managers
+        self.installing_managers
             .iter()
             .rev()
             .find(|(installing, _)| *installing == program)

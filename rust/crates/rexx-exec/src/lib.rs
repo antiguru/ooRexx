@@ -1370,8 +1370,7 @@ struct PendingTrap {
 struct DelayedTrap {
     /// The trap table entry delayed: the condition's own, or `ANY`.
     key: Box<[u8]>,
-    /// In the order raised. Each object is rooted by
-    /// [`Activity::object_roots`].
+    /// In the order raised.
     held: Vec<PendingTrap>,
 }
 
@@ -1399,6 +1398,10 @@ struct Interp {
     /// How many call sites keep each `Routine` copy alive ([`Interp::repin`]),
     /// each copy rooted once while any does.
     pinned_copies: FxHashMap<ObjRef, u32>,
+    /// The packages installing before an activation of their own runs, each
+    /// with the security manager it had when its install began once one is
+    /// set on it during the install.
+    installing_managers: Vec<(ProgramId, Option<Option<ObjRef>>)>,
     /// How many call-site holds are taken and not dropped
     /// ([`Interp::hold_site_program`]); a dead program's chunks take theirs
     /// with them ([`Interp::prune_program_rows`]).
@@ -2340,6 +2343,7 @@ impl Interp {
             text_scratch: [0; crate::value::TEXT_SCRATCH],
             nil_name: None,
             pinned_copies: FxHashMap::default(),
+            installing_managers: Vec::new(),
             site_hold_count: 0,
             text_numbers: crate::value::TextNumbers::new(),
             result_buffer: std::cell::Cell::new(Vec::new()),
@@ -2750,13 +2754,13 @@ impl Interp {
         let outer_call = self.install_call.replace(call_type);
         // The activation this installs ahead of keeps the manager its package
         // had before the install (`RexxActivation.cpp:176`, `:508`).
-        self.activity.installing_managers.push((program_id, None));
+        self.installing_managers.push((program_id, None));
         let installed = self.install_directives(program_id, &program);
         let kept = self
-            .activity
             .installing_managers
-            .pop()
-            .and_then(|(_, kept)| kept);
+            .iter()
+            .rposition(|(installing, _)| *installing == program_id)
+            .and_then(|row| self.installing_managers.remove(row).1);
         if let Some(Some(manager)) = kept {
             self.roots.activity_mut().push_temp(manager);
         }
@@ -3295,6 +3299,7 @@ impl Interp {
             nil_name: _,
             // Held through the global roots they name.
             pinned_copies: _,
+            installing_managers,
             // A count; the holds are traced through the holding packages.
             site_hold_count: _,
             // Handle-inline strings, which are their own bytes and have no
@@ -3497,6 +3502,11 @@ impl Interp {
         out.extend(stem_exposers.values().flatten().copied());
         out.extend(traced_variable.as_ref().and_then(|traced| traced.value));
         out.extend(global_references.roots());
+        out.extend(
+            installing_managers
+                .iter()
+                .filter_map(|(_, kept)| kept.flatten()),
+        );
         out.extend(
             forwardings
                 .iter()

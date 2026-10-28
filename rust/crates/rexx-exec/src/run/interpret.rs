@@ -388,7 +388,7 @@ impl Interp {
             crate::pinning::PinKind::TraceWrapper,
             self.send_message(route, crate::dispatch::LINEIN, None, &[], caller)
         );
-        if !self.activity.delayed_traps.is_empty() {
+        if self.activity.pending_traps.len() > queued {
             self.drop_queued_for_delayed(queued);
         }
         let answer = answer?;

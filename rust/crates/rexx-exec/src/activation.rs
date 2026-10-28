@@ -602,6 +602,9 @@ pub(crate) struct ActivationCold {
     /// the manager its package had when it started
     /// (`RexxActivation.cpp:176`, `:315`), and an internal call its caller's.
     pub(crate) security_manager: Option<Option<ObjRef>>,
+    /// This activation's `CALL ON` trap delayed while the handler it called
+    /// runs.
+    pub(crate) delayed: Option<crate::DelayedTrap>,
 }
 
 /// A `USE LOCAL` method's object pool and the names it keeps local
@@ -1032,6 +1035,7 @@ impl Activation {
             // A directive index.
             directive_clause: _,
             security_manager,
+            delayed,
         }) = cold.as_deref()
         {
             if let Some(TrappedCondition {
@@ -1054,6 +1058,9 @@ impl Activation {
             }
             out.extend(*executable);
             out.extend(security_manager.flatten());
+            if let Some(delayed) = delayed {
+                out.extend(delayed.held.iter().filter_map(|pending| pending.object));
+            }
         }
         // The table's streams. An activation is a root, and a stream only
         // the table holds is reachable through nothing else.
