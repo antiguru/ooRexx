@@ -1,0 +1,10 @@
+directory: 0 BD
+pwd: 0
+exists: 0 size: 12
+open: READY: 2 decoy READY:
+implicit: 1 decoy 6
+file: 1 1 12 1
+list: 1
+search: 0
+rename: 1 1 0
+newFile: from decoy

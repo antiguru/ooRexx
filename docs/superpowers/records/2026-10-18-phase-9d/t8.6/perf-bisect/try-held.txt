@@ -1,0 +1,4 @@
+program	base	held	held d%	base -libc	held -libc	held -libc d%	base spread%	held spread%
+interpret	4112675976	4143576562	+0.7513	1703595917	1703595740	-0.0000	0.0000	0.0000
+fibfunc	8585199151	8585137858	-0.0007	8065663348	8065663465	+0.0000	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.6/try-held

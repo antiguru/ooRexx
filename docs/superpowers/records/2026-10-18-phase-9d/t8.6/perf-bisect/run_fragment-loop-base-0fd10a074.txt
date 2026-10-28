@@ -1,0 +1,18 @@
+00000000002ebd90 <<rexx_exec::Interp>::run_fragment+0x6a0>:
+  2ebd90:	xor    %esi,%esi
+  2ebd92:	mov    %rsi,-0x8(%r14,%rax,1)
+  2ebd97:	mov    %rdx,(%r14,%rax,1)
+  2ebd9b:	add    $0x10,%rax
+  2ebd9f:	dec    %rcx
+  2ebda2:	je     2ebdcf <<rexx_exec::Interp>::run_fragment+0x6df>
+  2ebda4:	cmpl   $0x1,-0x8(%rbx,%rax,1)
+  2ebda9:	jne    2ebd90 <<rexx_exec::Interp>::run_fragment+0x6a0>
+  2ebdab:	mov    (%rbx,%rax,1),%rdi
+  2ebdaf:	cmp    (%rsp),%rdi
+  2ebdb3:	jae    2ed011 <<rexx_exec::Interp>::run_fragment+0x1921>
+  2ebdb9:	mov    0x8(%rsp),%rdx
+  2ebdbe:	mov    (%rdx,%rdi,8),%rdx
+  2ebdc2:	mov    $0x1,%esi
+  2ebdc7:	jmp    2ebd92 <<rexx_exec::Interp>::run_fragment+0x6a2>
+  2ebdc9:	mov    $0x8,%r14d
+  2ebdcf:	rex.W

@@ -1,0 +1,4 @@
+program	base	paths	paths d%	base -libc	paths -libc	paths -libc d%	base spread%	paths spread%
+interpret	4112677385	4112405040	-0.0066	1703595779	1703595839	+0.0000	0.0000	0.0000
+fibfunc	8585199151	8585201315	+0.0000	8065663348	8065663639	+0.0000	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.6/try-paths

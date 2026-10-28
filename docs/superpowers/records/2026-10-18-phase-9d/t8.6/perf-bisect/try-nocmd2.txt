@@ -1,0 +1,4 @@
+program	base	nocmd	nocmd d%	base -libc	nocmd -libc	nocmd -libc d%	base spread%	nocmd spread%
+interpret	4112677385	4135667112	+0.5590	1703595779	1706255926	+0.1561	0.0000	0.0000
+fibfunc	8585199151	8586889380	+0.0197	8065663348	8067383236	+0.0213	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.6/try-nocmd2

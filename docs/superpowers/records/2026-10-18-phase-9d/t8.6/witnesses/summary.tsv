@@ -1,0 +1,5 @@
+program	base-0fd10a074	head-b6cf1c525
+path_names_not_utf8	 out	identical
+stream_writes_held	 out err	identical
+stream_standard_open	 out	identical
+command_background_child	 out err rc	identical

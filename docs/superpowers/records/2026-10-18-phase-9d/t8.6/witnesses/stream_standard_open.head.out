@@ -1,0 +1,12 @@
+STDIN type=UNKNOWN handle=[] exists=[] qualified=1 state=UNKNOWN
+stdin: type=UNKNOWN handle=[] exists=[] qualified=1 state=UNKNOWN
+STDOUT type=UNKNOWN handle=[] exists=[] qualified=1 state=UNKNOWN
+STDERR: type=UNKNOWN handle=[] exists=[] qualified=1 state=UNKNOWN
+linein: [] NOTREADY
+STDIN type=TRANSIENT handle=[0] exists=[STDIN] qualify=[STDIN] state=NOTREADY
+close: READY:
+closed type=UNKNOWN handle=[] exists=[] qualify=[STDIN] state=UNKNOWN
+open: READY:
+Stdin: type=TRANSIENT handle=[0] exists=[Stdin:] qualify=[Stdin:] state=READY
+.stdin type=TRANSIENT handle=[0] exists=[STDIN] qualify=[STDIN] state=READY
+.stdout type=TRANSIENT handle=[1] exists=[STDOUT] qualify=[STDOUT] state=READY

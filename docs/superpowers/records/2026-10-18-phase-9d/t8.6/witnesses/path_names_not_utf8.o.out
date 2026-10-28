@@ -1,0 +1,10 @@
+directory: 1 FF
+pwd: 1
+exists: 1 size: 5
+open: READY: 1 real READY:
+implicit: 1 real 0
+file: 1 1 5 1
+list: 0
+search: 1
+rename: 1 1 1
+newFile: from ff

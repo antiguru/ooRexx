@@ -1,0 +1,12 @@
+STDIN type=TRANSIENT handle=[0] exists=[] qualified=1 state=UNKNOWN
+stdin: type=TRANSIENT handle=[0] exists=[] qualified=1 state=UNKNOWN
+STDOUT type=TRANSIENT handle=[1] exists=[] qualified=1 state=UNKNOWN
+STDERR: type=PERSISTENT handle=[2] exists=[] qualified=1 state=UNKNOWN
+linein: [] NOTREADY
+STDIN type=TRANSIENT handle=[0] exists=[] qualify=[/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t86/wit.ZGGv/STDIN] state=NOTREADY
+close: READY:
+closed type=TRANSIENT handle=[0] exists=[] qualify=[/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t86/wit.ZGGv/STDIN] state=UNKNOWN
+open: READY:
+Stdin: type=TRANSIENT handle=[0] exists=[] qualify=[/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/t86/wit.ZGGv/Stdin:] state=READY
+.stdin type=TRANSIENT handle=[0] exists=[] qualify=[STDIN] state=READY
+.stdout type=TRANSIENT handle=[1] exists=[] qualify=[STDOUT] state=READY

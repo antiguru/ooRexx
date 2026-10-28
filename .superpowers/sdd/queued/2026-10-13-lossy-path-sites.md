@@ -1,3 +1,5 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.6 (7596ced8d).**
+
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: directory(d) answers empty for a directory named d'ff'x here and enters it on the oracle.
 
 # Remaining lossy UTF-8 conversions on paths

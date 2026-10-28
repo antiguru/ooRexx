@@ -1,0 +1,5 @@
+v=[abc] READY
+now
+not waited 0 1
+redirected: 2 out late 1
+redirected error: 1 late 1

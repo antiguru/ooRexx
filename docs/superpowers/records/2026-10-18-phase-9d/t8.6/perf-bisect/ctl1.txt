@@ -1,0 +1,4 @@
+program	base	ctl	head	ctl d%	head d%	base -libc	ctl -libc	head -libc	ctl -libc d%	head -libc d%	base spread%	ctl spread%	head spread%
+interpret	4112677385	4112676148	4135888189	-0.0000	+0.5644	1703595779	1703595961	1706255860	+0.0000	+0.1561	0.0000	0.0000	0.0000
+fibfunc	8585198825	8585199271	8586892158	+0.0000	+0.0197	8065663366	8065663540	8067382939	+0.0000	+0.0213	0.0000	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.6/ctl1

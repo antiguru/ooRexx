@@ -1,0 +1,5 @@
+program	base	noinline	noinline d%	base -libc	noinline -libc	noinline -libc d%	base spread%	noinline spread%
+interpret	4112676241	4133463722	+0.5054	1703595917	1703876144	+0.0164	0.0000	0.0000
+fibfunc	8585198747	8597208581	+0.1399	8065663486	8067383131	+0.0213	0.0000	0.0000
+rexxcps	19305960142	19306416568	+0.0024	17822751311	17822171275	-0.0033	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.6/try-noinline

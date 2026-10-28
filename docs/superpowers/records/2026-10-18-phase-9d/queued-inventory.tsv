@@ -17,7 +17,7 @@ item	kind	probe	proposed	reason	ruled
 2026-09-25-pos-window-doc-pointers.md	process	-	9d	no probe; builtin/string.rs:123 and rexx-parse block/references.rs:190,:197 still point at text that is gone	9d
 2026-09-25-table-c-derivation-literals.md	process	-	9d	no probe; corpus/gate-tables/classes/*.rex line 6 still names tests/gate_table_c.rs	9d
 2026-09-26-flatloop-spike-comment.md	process	-	closed:4b694fe7c	its own "Closed 2026-09-29" section; no "SPIKE, not for commit" remains under rust/crates	closed:4b694fe7c
-2026-09-27-stream-write-visibility.md	divergence	queued-probes/streamflush/streamflush.rex:1	9d	probe still differs: LINES by name sees the open Stream object's write here (0 1, 1) and not on the oracle (0 0, 0)	9d
+2026-09-27-stream-write-visibility.md	divergence	queued-probes/streamflush/streamflush.rex:1	closed:7596ced8d	probe still differs: LINES by name sees the open Stream object's write here (0 1, 1) and not on the oracle (0 0, 0)	closed:7596ced8d
 2026-09-28-compiled-source-parse-errors.md	divergence	queued-probes/csp/csp.rex:1	closed:probe agrees	the traceback now prints the source line and the Compiled method "NEW" line on both sides	closed:probe agrees
 2026-09-28-condition-object-divergences-found-in-fix-round-a.md	divergence	queued-probes/callarg/callarg.rex:1,queued-probes/coorder/coorder.rex:1	9d-cluster:call-on-trap-argument	callarg still 1 1 against 0 0 (the cluster); coorder still lacks RESULT and ADDITIONAL, which stream-notready-names touches	9d-cluster:call-on-trap-argument
 2026-09-28-phase-5-refusal-labels.md	process	-	closed:Phase 6.1 Task 7	its own "Closed 2026-10-09" section; closed_phases.rs:37 lists "Phase 5" in CLOSED	closed:Phase 6.1 Task 7
@@ -118,13 +118,13 @@ item	kind	probe	proposed	reason	ruled
 2026-10-13-class-named-drops-raised-condition.md	divergence	-	9d	no probe recorded; dispatch/library/surface.rs:859 still drops the lookup's Err through .ok()?	9d
 2026-10-13-class-side-string-method-not-sent.md	divergence	queued-probes/clsstr/clsstr.rex:1	closed:0a055271c	CLOSED in its first line; KS on both	closed:0a055271c
 2026-10-13-error-position-ampersand.md	divergence	queued-probes/imeth/imeth.rex:1	9d-cluster:setmethod-instancemethod-kind	inserts closed in 9c; instanceMethod after setMethod still answers an Object here and a Method on the oracle	9d-cluster:setmethod-instancemethod-kind
-2026-10-13-lossy-path-sites.md	divergence	queued-probes/lossy/lossy.rex:1	9d	probe still differs: directory(d) answers empty for a directory named d'ff'x here and enters it on the oracle	9d
+2026-10-13-lossy-path-sites.md	divergence	queued-probes/lossy/lossy.rex:1	closed:7596ced8d	probe still differs: directory(d) answers empty for a directory named d'ff'x here and enters it on the oracle	closed:7596ced8d
 2026-10-13-named-semaphores-design.md	design	-	9d	Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal	9d
 2026-10-13-passwd-home-ignores-nss.md	divergence	-	phase:11	not probed, no NSS-only account here; a host assumption, which row 11 puts behind the platform seam	phase:11
 2026-10-13-phase-9b-carry-in.md	process	-	9d	N1 native-frame memcpy cost is phase:9.1; the unchecked minors m1, m3, m4 are 9d	9d
 2026-10-13-phase-9b1-uniform-object-model.md	design	-	closed:Phase 9b1	phase-9b1-gate.md: every leak fixed or licensed, SysStemSort as Deviation 37, the addRoutine copy as L10	closed:Phase 9b1
 2026-10-13-security-manager-and-library-key.md	divergence	-	9d	no probe recorded; two oracle measurements to make first	9d
-2026-10-13-stdin-stream-object-queries.md	divergence	queued-probes/stdinq/stdinq.rex:1	9d	own probe: streamtype, query handle, lines, query exists and qualify on STDIN still differ	9d
+2026-10-13-stdin-stream-object-queries.md	divergence	queued-probes/stdinq/stdinq.rex:1	closed:7596ced8d	own probe: streamtype, query handle, lines, query exists and qualify on STDIN still differ	closed:7596ced8d
 2026-10-13-stdout-write-errors-swallowed.md	divergence	queued-probes/stdoutclosed/stdoutclosed.rex:1	9d	probe with stdout closed: lineout 0 READY: here, 1 ERROR:9 on the oracle	9d
 2026-10-13-sysfork-design.md	design	-	9d	Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal	9d
 2026-10-13-yaml-pass-boundary-guard.md	divergence	-	9d	no probe of its own; Task 4 consumes it (ruling 2), yaml TEST35_DIRECTIVES was blocked on this refusal at the 9c close	9d
@@ -198,8 +198,8 @@ gate:phase-9c-gate.md:142	divergence	queued-probes/libbind/libbind.rex:1	closed:
 gate:phase-9c-gate.md:143	divergence	queued-probes/rcfn/rcfn.rex:1	closed:68e7f15d5	a pointer to 2026-10-17-routine-call-frame-name.md	closed:68e7f15d5
 gate:phase-9c-gate.md:144	divergence	-	9d	a pointer to 2026-10-17-newmethod-parent-package.md	9d
 gate:phase-9c-gate.md:145	divergence	queued-probes/scanlater/scanlater.rex:1	closed:44f1cb56b	a pointer to 2026-10-17-scanner-reports-later-clause-error.md	closed:44f1cb56b
-gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointer to 2026-10-13-lossy-path-sites.md	9d
-2026-10-18-command-waits-for-background-child.md	divergence	queued-probes/bgcmd/bgcmd.rex:1	9d	a command whose background child keeps stdout open: crate waits to timeout rc 124, oracle returns at once	9d
+gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:7596ced8d	a pointer to 2026-10-13-lossy-path-sites.md	closed:7596ced8d
+2026-10-18-command-waits-for-background-child.md	divergence	queued-probes/bgcmd/bgcmd.rex:1	closed:7596ced8d	a command whose background child keeps stdout open: crate waits to timeout rc 124, oracle returns at once	closed:7596ced8d
 2026-10-18-max-integer-unrounded.md	divergence	-	9d	Task 6.14 owns it	9d
 2026-10-18-fuzz-comparison-lostdigits.md	divergence	-	9d	Task 6.14 owns it	9d
 2026-10-18-do-count-wider-than-digits.md	divergence	-	closed:Deviation 47	Deviation 47 licenses it	closed:Deviation 47
