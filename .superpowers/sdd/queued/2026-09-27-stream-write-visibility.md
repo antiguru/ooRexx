@@ -1,4 +1,4 @@
-**CLOSED 2026-10-28 by Phase 9d Task 8.6 (7596ced8d).**
+**CLOSED 2026-10-28 by Phase 9d Task 8.6 (b53b1de0c).**
 
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: LINES by name sees the open Stream object's write here (0 1, 1) and not on the oracle (0 0, 0).
 

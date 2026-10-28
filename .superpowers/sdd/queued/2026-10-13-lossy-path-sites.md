@@ -1,4 +1,4 @@
-**CLOSED 2026-10-28 by Phase 9d Task 8.6 (7596ced8d).**
+**CLOSED 2026-10-28 by Phase 9d Task 8.6 (b53b1de0c).**
 
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: directory(d) answers empty for a directory named d'ff'x here and enters it on the oracle.
 

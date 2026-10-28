@@ -1,8 +1,8 @@
 # Phase 9d Task 8.6 report: streams, paths, commands
 
 Status: DONE_WITH_CONCERNS. Base `0fd10a074`. Code `36866b601`, `b74e6a848`, `6fdcb7d7a`,
-`19e478b98`, `b6cf1c525`, `7596ced8d`; records and this report in the commit after. The closing lines
-and inventory rows name `7596ced8d`. Records: `docs/superpowers/records/2026-10-18-phase-9d/t8.6/`
+`19e478b98`, `b6cf1c525`, `7596ced8d`, `efde12e6e`, `b53b1de0c`; records and this report in
+`92ea0e252` and the commit after. The closing lines and inventory rows name `b53b1de0c`. Records: `docs/superpowers/records/2026-10-18-phase-9d/t8.6/`
 (`probes/` holds the probes, `witnesses/` each witness's oracle `.o.*`, base and head outputs).
 
 ## What changed, per item
@@ -54,8 +54,9 @@ not the process's. `HANDLE:n` streams are unchanged (Deviation 35). Witness
 External Environments": "The environment then processes the command and returns control to the
 language processor after setting a return code"; the command completes when its process ends. The
 crate read the child's output pipes to end-of-file, which a background process the command started
-keeps open. Now `collect` waits for the child on the calling thread; a pipe carrying output to this
-interpreter's own standard output or error stops being read when the child ends: what it holds then
+keeps open. Now a pipe carrying output to this interpreter's own standard output or error stops
+being read when the child ends, which its reader learns from the child's pidfd (it reaps nothing; the
+reap follows the readers): what the pipe holds then
 (by `FIONREAD`) is taken, and the rest is read and dropped on a detached thread, so the background
 process's writes do not fail. A redirected output or error is still read to its end, as the oracle
 reads it (measured: `'(sleep 1; echo late) &' with output stem s.` waits and captures `late` on both).
@@ -64,7 +65,12 @@ after the hand-over, as the oracle's child inherits it, so a background process'
 the terminal as on the oracle (`probes/bgred.rex`: `late3` between the two lines on both). Witness
 `command_background_child.rex` (the item's FIFO probe, an unwaited background process, both
 redirected forms); at base the crate times out. `tests/signals.rs`'s thread census during a command
-now expects one waiting pool thread (no pipe readers in `rexx`).
+now expects one waiting pool thread (no pipe readers in `rexx`). `tests/program_end.rs`'s
+unredirected endless command became a bounded one: it now outlives a killed `rexx`, as the oracle's
+child does, and kept the test's pipe open. `tests/rexxutil_process.rs`'s reaped-child test repeats the
+race between the `SysWait` and the command's own wait (now immediate in `rexx`, no reader in front of
+it) until the `SysWait` wins; measured with its program run directly 20 times, base 20 of 20 and head
+17 of 20 had the `SysWait` win (Concern 7).
 
 **2026-10-13-stdout-write-errors-swallowed.md: STOPPED, partly changed, not closed.** Derived rule:
 a stream write the system refuses answers the residual count and `NOTREADY` with `ERROR:errno`
@@ -82,7 +88,7 @@ test's driver from a copy outside the repository: `path_names_not_utf8`, `stream
 directories: at base (`rexx-base-0fd10a074`, built from a `git archive`) they differ on stdout
 (`path_names_not_utf8`, `stream_standard_open`), stdout and stderr (`stream_writes_held`), and all three
 descriptors (`command_background_child`, timeout); at head (`rexx-head-b6cf1c525`) each is identical to
-the oracle on all three. The corpus gate runs them in process, which exercises the pipe path of the
+the oracle on all three, and `command_background_child` and `probes/bgred.rex` again at `b53b1de0c`. The corpus gate runs them in process, which exercises the pipe path of the
 command change. I read each oracle stdout for its claimed paths: every lossy-site line answers the
 real file (`directory: 1 FF`, `pwd: 1`, `newFile: from ff`); `redirected: 0 0`, `by name: 1 other
 object: 0`, `size by name: 0 size of the object: 4`, `nobuffer: 1`, `flush: READY: 1`, `past the
@@ -114,11 +120,12 @@ descriptor that is closed when `rexx` starts is open on `/dev/null`."
 ## Perf
 
 `callgrind-final.txt` (`t8.6/`): `bench-programs/callgrind.sh -B 0.5 -j 4 -o
-/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.6/final2 base=.../rexx-base-0fd10a074
-head=.../rexx-head-7596ced8d`, every program, 3 rounds, exit 1 on one OVER flag. Libc subtracted, every program is at most
+/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.6/final3 base=.../rexx-base-0fd10a074
+head=.../rexx-head-b53b1de0c`, every program, 3 rounds, exit 1 on one OVER flag (at `7596ced8d` the same
+figures to the fourth decimal, `callgrind-7596ced8d.txt`). Libc subtracted, every program is at most
 +0.0341% (pingsem) except pingguard +0.0521%, a schedule-dependent program reported per the batches
 header; interpret +0.0164%, fibfunc +0.0213%, rexxcps -0.0033%. Whole process, interpret is OVER at
-+0.5054% and fibfunc +0.1399%, dispatchclass +0.1465%: malloc, since the `StreamState::held` field
++0.5055% and fibfunc +0.1399%, dispatchclass +0.1465%: malloc, since the `StreamState::held` field
 alone moves interpret +0.75% whole process and 0.0000% libc subtracted (`perf-bisect/try-held.txt`).
 
 The first full run, at `b6cf1c525` (`callgrind-b6cf1c525.txt`), was over on `interpret`: +0.1562% libc
@@ -144,11 +151,12 @@ All from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t86-
 | `memcap 16G cargo clippy -j 4 -p rexx-core -p rexx-exec --all-targets -- -D warnings` (`checks-clippy.txt`) | 0 |
 | `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --lib --test signals --test dispatch_seam --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions --test stream_model --test stream_handle --test rexx_command --test prompt_before_read --test input_oracle --test stdin_contention --test no_process_state --test stdout_write_errors --test rexxutil_process` (`checks-touched.txt`, at `6fdcb7d7a`) | 101: `refusal_sites` (a line moved in `command.rs`, re-derived in `19e478b98`) and `signals`' thread census (updated in `19e478b98`); both 0 after (`refusal_sites` 5, `signals` 42). Lib 1200 passed. `checks-touched-1.txt`, at `36866b601`, has the lend-panic test failing, fixed by `b74e6a848` |
 | `memcap 16G cargo test -j 4 --release -p rexx-exec --test collect_stress` (`checks-collect-stress.txt`) | 0, 74 passed |
-| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`checks-corpus-1.txt`, at `36866b601`) | 101: the one mismatch the known `rexxutil_file_date_time.rex` |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`checks-corpus.txt`, at `b53b1de0c`; `checks-corpus-1.txt` at `36866b601` the same) | 101: the one mismatch the known `rexxutil_file_date_time.rex` |
 | `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-parse --test sourceline_oracle --test errors` (`checks-parse.txt`) | 0 |
 | `memcap 16G cargo test -j 4 --release -p rexx-exec --test coverage` (`checks-coverage.txt`) | 0 |
 | `memcap 16G cargo test -j 4 --release -p rexx-core --test unsafe_sites` (`checks-unsafe.txt`) | 0 |
-| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../t8.6/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`suite/`, at `b74e6a848`) | 0; `tests.tsv`, `table.tsv`, `verdicts.tsv`, `oracle-differences.tsv` identical to `t8.5/r6/suite/` |
+| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../t8.6/final/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`final/suite/`, at `b53b1de0c`; `suite/` at `b74e6a848` the same) | 0; `tests.tsv`, `table.tsv`, `verdicts.tsv`, `oracle-differences.tsv` identical to `t8.5/r6/suite/` |
+| after the first workspace run: `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --test rexxutil_process --test program_end --test signals --test rexx_command --test stdout_write_errors --test refusal_sites` at `b53b1de0c` | 0: 3, 8, 42, 1, 2, 5 passed |
 | WORKSPACE-PLACEHOLDER | |
 
 ## Concerns
@@ -169,6 +177,12 @@ All from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t86-
    is read and dropped; the oracle's child writes it to the inherited descriptor.
 6. **Held writes and a crash.** Held stream data is lost if the process dies (as on the oracle) and
    is not written during a panic's unwinding.
+7. **The reaped-child race.** A `SysWait` on another activity and a command's own wait race for the
+   command's child (the oracle crashes here, entry 45). Inheriting the descriptors in `rexx` removed
+   the pipe reads that made the `SysWait` win every run; the test now retries the race. A program
+   that depends on which wait wins answers differently from run to run, as it could before.
+8. **Commands outlive a killed `rexx`.** An unredirected command keeps running after `rexx` is
+   killed, writing the inherited descriptor, as on the oracle; before, it died of `SIGPIPE`.
 
 ## New oracle defects
 
