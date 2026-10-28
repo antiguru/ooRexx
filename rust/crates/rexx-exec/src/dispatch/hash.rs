@@ -1949,9 +1949,18 @@ fn hash_put(
         Some(Body::Native(_))
     ) && owns(interp, receiver)
     {
-        // An argument not of a base class may hash and compare through
-        // Rexx methods of its own.
-        if args.iter().flatten().all(|&arg| interp.is_base_class(arg)) {
+        // An index not of a base class may hash and compare through Rexx
+        // methods of its own, and so may a `Set`'s or `Bag`'s item.
+        let item = args.first().copied().flatten();
+        let plain = match args.get(1).copied().flatten() {
+            None => item.is_none_or(|item| interp.is_base_class(item)),
+            Some(index) => {
+                interp.is_base_class(index)
+                    && (!index_only(interp, receiver)
+                        || item.is_none_or(|item| interp.is_base_class(item)))
+            }
+        };
+        if plain {
             return store_put(interp, receiver, args);
         }
         return interp.primitive_level(receiver, name, args, |interp| {

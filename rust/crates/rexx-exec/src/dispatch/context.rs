@@ -441,6 +441,18 @@ fn context_executable(
 
 /// [`context_executable`]'s answer for the activation at `depth`.
 pub(crate) fn executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef, Failure> {
+    match interp.frame_at(depth) {
+        Some(activation) if activation.entry == Entry::InternalCall => {
+            internal_executable_at(interp, depth)
+        }
+        _ => caller_executable_at(interp, depth),
+    }
+}
+
+/// [`executable_at`] for an internal call at `depth`.
+#[cold]
+#[inline(never)]
+fn internal_executable_at(interp: &mut Interp, depth: usize) -> Result<ObjRef, Failure> {
     // An internal call runs its caller's code, and answers its caller's
     // executable: measured, oracle rc 0, an internal routine called from a
     // `::METHOD` answers that `Method`. Each internal call keeps the answer,

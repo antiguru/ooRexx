@@ -126,10 +126,18 @@ impl Interp {
     /// The manager the running code's package has now, which its `LOCAL` and
     /// `ENVIRONMENT` checkpoints ask: `PackageClass::findClass` reads the
     /// package's own (`classes/PackageClass.cpp:1135`), not the activation's.
+    #[inline]
     pub(crate) fn package_security_manager(&self) -> Option<ObjRef> {
         if !self.security_armed {
             return None;
         }
+        self.armed_package_security_manager()
+    }
+
+    /// [`Interp::package_security_manager`] once any manager has been
+    /// installed.
+    #[inline(never)]
+    fn armed_package_security_manager(&self) -> Option<ObjRef> {
         let program = self.activity.running.as_deref()?.program_id;
         self.program_data(program)?.security_manager
     }
