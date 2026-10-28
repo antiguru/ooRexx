@@ -166,6 +166,26 @@ impl Interp {
         }
     }
 
+    /// Drops each condition queued since `queued` whose trap is delayed.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn drop_queued_for_delayed(&mut self, queued: usize) {
+        let mut row = queued;
+        while row < self.activity.pending_traps.len() {
+            let pending = &self.activity.pending_traps[row];
+            let delayed = !pending.request
+                && pending.trace_failure.is_none()
+                && self
+                    .trap_for(&pending.condition)
+                    .is_some_and(|trap| trap.delayed);
+            if delayed {
+                self.activity.pending_traps.remove(row);
+            } else {
+                row += 1;
+            }
+        }
+    }
+
     /// Holds `pending`, whose trap is delayed, for the innermost delayed trap
     /// it matches; an `ERROR` or `FAILURE` is ignored instead (rexxref,
     /// `condtra.xml`, CALL ON).
