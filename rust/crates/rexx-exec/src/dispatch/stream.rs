@@ -114,13 +114,14 @@ pub(crate) fn standard_stream(
     // `LocalServer~init`), where a program's own `.Stream~new('STDOUT')` is
     // buffered.
     state.mode.nobuffer = true;
+    state.local = true;
     let Some(held) = interp.heap.get_mut(object) else {
         unreachable!("new_instance just allocated and rooted it")
     };
     let Body::Instance { native, .. } = &mut held.body else {
         unreachable!("new_instance allocates Body::Instance")
     };
-    *native = Some(Box::new(NativeState::Stream(state)));
+    *native = Some(Box::new(NativeState::Stream(Box::new(state))));
     Ok(object)
 }
 
@@ -148,7 +149,7 @@ pub(super) fn init(
     let Body::Instance { native, .. } = &mut object.body else {
         unreachable!("Stream is allocated as Body::Instance")
     };
-    *native = Some(Box::new(NativeState::Stream(state)));
+    *native = Some(Box::new(NativeState::Stream(Box::new(state))));
     interp.heap.release_body_bytes(before);
     Ok(None)
 }
@@ -695,12 +696,14 @@ pub(super) fn open(
     }
     // The three standard streams take only NOBUFFER, found anywhere in the
     // options, and are ready without touching the file system
-    // (`StreamNative.cpp`'s `openStd` and `hasNoBufferOption`).
+    // (`StreamNative.cpp`'s `openStd` and `hasNoBufferOption`). `.local`'s
+    // stay unbuffered: they write where `SAY` and trace output go.
     if state.standard.is_some() {
-        state.mode.nobuffer = options
-            .to_ascii_uppercase()
-            .windows(8)
-            .any(|word| word == b"NOBUFFER");
+        state.mode.nobuffer = state.local
+            || options
+                .to_ascii_uppercase()
+                .windows(8)
+                .any(|word| word == b"NOBUFFER");
         state.qualified = state.name.clone();
         state.status = StreamStatus::Ready;
         return Ok(Some(interp.text(b"READY:")));
@@ -727,11 +730,18 @@ pub(super) fn open(
         return notready(interp, receiver, StreamStatus::Error(ENOENT), answer);
     }
 
+    // APPEND is `O_APPEND` (`SysFile::open`), so a held write lands at the
+    // end the file has when it is written, after what a command or another
+    // stream appended meanwhile.
     let mut opening = std::fs::OpenOptions::new();
     if parsed.read_only {
         opening.read(true);
     } else {
-        opening.read(true).write(true).create(true);
+        opening
+            .read(true)
+            .write(true)
+            .create(true)
+            .append(parsed.append);
         if parsed.truncate {
             opening.truncate(true);
         }
@@ -746,6 +756,7 @@ pub(super) fn open(
                 .write(true)
                 .create(true)
                 .truncate(false)
+                .append(parsed.append)
                 .open(&path)
             {
                 Ok(file) => file,
@@ -2332,13 +2343,38 @@ pub(super) fn close(
 /// including for a stream nothing has opened -- measured, and it leaves the
 /// state alone. A write that fails is `NOTREADY` answering `ERROR:n`
 /// (`StreamInfo::streamFlush`).
+///
+/// A standard output or error stream hands the interpreter's buffer for its
+/// descriptor over. A buffered one whose held writes that hand-over refused
+/// answers the descriptor's error, and so does every flush after it until
+/// the stream writes again: the oracle keeps the refused bytes and fails on
+/// each retry.
 pub(super) fn flush(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    let state = require(interp, receiver)?;
+    let buffered = state.handle.is_none() && !state.mode.nobuffer;
+    let releasing =
+        buffered && (!state.held.is_empty() || matches!(state.status, StreamStatus::Error(_)));
+    let sink = match state.standard {
+        Some(StandardStream::Out) => Some(0),
+        Some(StandardStream::Err) => Some(1),
+        Some(StandardStream::In) | None => None,
+    };
     release_held(interp, receiver)?;
+    if let Some(sink) = sink {
+        match sink {
+            0 => interp.hand_over_stdout(),
+            _ => interp.hand_over_stderr(),
+        }
+        if releasing && let Some(errno) = interp.sink_errors[sink] {
+            let answer = format!("ERROR:{errno}").into_bytes();
+            return notready(interp, receiver, StreamStatus::Error(errno), answer);
+        }
+    }
     let state = require_mut(interp, receiver)?;
     if let Some(Err(error)) = state.open.as_mut().map(rexx_core::OpenFile::flush) {
         let errno = error.raw_os_error().unwrap_or(0);

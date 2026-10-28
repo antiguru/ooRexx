@@ -411,3 +411,5 @@ lang/path_names_not_utf8.rex
 lang/stream_writes_held.rex
 lang/stream_standard_open.rex
 lang/command_background_child.rex
+# 9d Task 8.6 fix round 1: a held write on an APPEND stream lands at the file's end as it then stands.
+lang/stream_append_held.rex

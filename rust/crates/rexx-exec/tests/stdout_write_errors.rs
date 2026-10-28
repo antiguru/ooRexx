@@ -17,7 +17,8 @@
 //! standard output that refuses writes reaches the error. The buffered
 //! standard output (Deviation 40) learns the error when it is handed over, so
 //! the write before the first hand-over still answers `0`; the command here
-//! is a hand-over.
+//! is a hand-over. A program's own `STDOUT` stream holds its writes, and its
+//! `FLUSH` is a hand-over that answers the error, as the oracle's does.
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -30,20 +31,29 @@ r3 = .stdout~charout('c'); s3 = .stdout~description\n\
 o = .stream~new('STDOUT'); r4 = o~lineout('d'); s4 = o~description\n\
 call lineout 'STDERR', r1 s1 '|' r2 s2 '|' r3 s3 '|' r4 s4\n";
 
-/// A private directory holding the program, for the case `name`.
-fn program(name: &str) -> (PathBuf, PathBuf) {
+const FLUSH_PROGRAM: &str = "o = .stream~new('STDOUT')\n\
+f0 = o~flush; d0 = o~description\n\
+r1 = o~lineout('f'); f1 = o~flush; d1 = o~description\n\
+f2 = o~flush; d2 = o~description\n\
+r3 = o~lineout('g'); d3 = o~description\n\
+f4 = .stdout~flush; d4 = .stdout~description\n\
+e = .stream~new('STDERR'); r5 = e~lineout('h'); f5 = e~flush\n\
+call lineout 'STDERR', f0 d0 '|' r1 f1 d1 '|' f2 d2 '|' r3 d3 '|' f4 d4 '|' r5 f5\n";
+
+/// A private directory holding `text`, for the case `name`.
+fn program(name: &str, text: &str) -> (PathBuf, PathBuf) {
     let dir =
         std::env::temp_dir().join(format!("rexx-stdout-errors-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("a private probe directory");
     let path = dir.join("errors.rex");
-    std::fs::write(&path, PROGRAM).expect("the probe program is writable");
+    std::fs::write(&path, text).expect("the probe program is writable");
     (dir, path)
 }
 
-/// `rexx` on case `name`'s program with `stdout`, answering its standard error and
-/// status.
-fn run_with_stdout(name: &str, stdout: Stdio) -> (String, Option<i32>) {
-    let (dir, path) = program(name);
+/// `rexx` on `text` with `stdout`, for the case `name`, answering its standard
+/// error and status.
+fn run_with_stdout(name: &str, text: &str, stdout: Stdio) -> (String, Option<i32>) {
+    let (dir, path) = program(name, text);
     let mut child = Command::new(env!("CARGO_BIN_EXE_rexx"))
         .arg(&path)
         .current_dir(&dir)
@@ -70,7 +80,7 @@ fn run_with_stdout(name: &str, stdout: Stdio) -> (String, Option<i32>) {
 fn a_closed_pipe_is_error_32() {
     let (reader, writer) = std::io::pipe().expect("a pipe");
     drop(reader);
-    let (stderr, status) = run_with_stdout("pipe", Stdio::from(writer));
+    let (stderr, status) = run_with_stdout("pipe", PROGRAM, Stdio::from(writer));
     assert_eq!(status, Some(0), "{stderr}");
     assert_eq!(
         stderr,
@@ -78,17 +88,50 @@ fn a_closed_pipe_is_error_32() {
     );
 }
 
-/// `/dev/full`: `ENOSPC`, `ERROR:28`.
-#[test]
-fn a_full_device_is_error_28() {
+/// A full device: `ENOSPC`, `ERROR:28`.
+fn full_device() -> Stdio {
     let full = std::fs::OpenOptions::new()
         .write(true)
         .open("/dev/full")
         .expect("/dev/full opens");
-    let (stderr, status) = run_with_stdout("full", Stdio::from(full));
+    Stdio::from(full)
+}
+
+/// `/dev/full`: `ENOSPC`, `ERROR:28`.
+#[test]
+fn a_full_device_is_error_28() {
+    let (stderr, status) = run_with_stdout("full", PROGRAM, full_device());
     assert_eq!(status, Some(0), "{stderr}");
     assert_eq!(
         stderr,
         "0 READY: | 1 ERROR:28 No space left on device | 1 ERROR:28 No space left on device | 0 READY:\n"
+    );
+}
+
+/// A program's own `STDOUT` stream answers its `FLUSH` with the closed pipe's
+/// error, and so does the flush after it, until it writes again; an unopened
+/// one and `.STDOUT`, which holds nothing, answer `READY:`.
+#[test]
+fn a_flush_into_a_closed_pipe_is_error_32() {
+    let (reader, writer) = std::io::pipe().expect("a pipe");
+    drop(reader);
+    let (stderr, status) = run_with_stdout("flush-pipe", FLUSH_PROGRAM, Stdio::from(writer));
+    assert_eq!(status, Some(0), "{stderr}");
+    assert_eq!(
+        stderr,
+        "h\nREADY: UNKNOWN: | 0 ERROR:32 ERROR:32 Broken pipe | ERROR:32 ERROR:32 Broken pipe | \
+         0 READY: | READY: READY: | 0 READY:\n"
+    );
+}
+
+/// [`a_flush_into_a_closed_pipe_is_error_32`] on `/dev/full`.
+#[test]
+fn a_flush_into_a_full_device_is_error_28() {
+    let (stderr, status) = run_with_stdout("flush-full", FLUSH_PROGRAM, full_device());
+    assert_eq!(status, Some(0), "{stderr}");
+    assert_eq!(
+        stderr,
+        "h\nREADY: UNKNOWN: | 0 ERROR:28 ERROR:28 No space left on device | \
+         ERROR:28 ERROR:28 No space left on device | 0 READY: | READY: READY: | 0 READY:\n"
     );
 }

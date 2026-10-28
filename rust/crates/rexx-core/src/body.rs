@@ -176,8 +176,9 @@ pub enum NativeState {
     /// A `Stream`'s open file, positions and state. **Not the object's string
     /// value**: `Stream~string` answers the name a Rexx `expose`d variable
     /// holds, so the readers that render a buffer as its contents must answer
-    /// for [`NativeState::Buffer`] alone.
-    Stream(StreamState),
+    /// for [`NativeState::Buffer`] alone. Boxed so that every other native
+    /// state stays its size.
+    Stream(Box<StreamState>),
     /// A `.Pointer`'s address, the `pointerData` of `PointerClass`
     /// (`interpreter/classes/PointerClass.hpp:77`). Its string value is the
     /// address rendered, so it answers for the reader
@@ -304,6 +305,10 @@ impl AlignedBytes {
     }
 }
 
+/// A `Box<NativeState>` is the size of the largest variant, so a variant that
+/// grows grows every native object's box, a `MutableBuffer`'s among them.
+const _: () = assert!(size_of::<NativeState>() <= 72);
+
 impl NativeState {
     /// A `Buffer`'s `length` zero bytes, at an address no other buffer
     /// shares, which an empty `Vec` would not give: the oracle's empty buffer
@@ -341,7 +346,7 @@ impl NativeState {
     /// The stream this state holds, or `None` for state of another kind.
     pub fn stream(&self) -> Option<&StreamState> {
         match self {
-            NativeState::Stream(state) => Some(state),
+            NativeState::Stream(state) => Some(&**state),
             NativeState::Buffer(_)
             | NativeState::Pointer(_)
             | NativeState::Data(_)
@@ -355,7 +360,7 @@ impl NativeState {
     /// positions it.
     pub fn stream_mut(&mut self) -> Option<&mut StreamState> {
         match self {
-            NativeState::Stream(state) => Some(state),
+            NativeState::Stream(state) => Some(&mut **state),
             NativeState::Buffer(_)
             | NativeState::Pointer(_)
             | NativeState::Data(_)
@@ -707,6 +712,10 @@ pub struct StreamState {
     /// written and not yet handed to its descriptor, as [`OpenFile`] holds a
     /// file's writes.
     pub held: Vec<u8>,
+    /// Set for `.local`'s `.STDIN`, `.STDOUT` and `.STDERR`, which write
+    /// where `SAY` and trace output go and so never hold a write, whatever
+    /// a reopen's options say.
+    pub local: bool,
 }
 
 /// A copy is an **unopened** stream carrying the same name: a descriptor
@@ -725,6 +734,7 @@ impl Clone for StreamState {
             open: None,
             mode: OpenMode::default(),
             held: Vec::new(),
+            local: false,
         }
     }
 }
@@ -741,6 +751,7 @@ impl StreamState {
             open: None,
             mode: OpenMode::default(),
             held: Vec::new(),
+            local: false,
         }
     }
 

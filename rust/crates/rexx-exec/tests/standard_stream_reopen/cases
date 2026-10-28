@@ -1,0 +1,60 @@
+# .STDOUT opened WRITE, without NOBUFFER: its writes and SAY's stay in order
+run
+.stdout~open('write')
+.stdout~lineout('x')
+say 'y'
+.stdout~lineout('z')
+----
+rc> 0
+out> x
+out> y
+out> z
+
+# .STDOUT closed, then written: the write opens it again
+run
+.stdout~close
+.stdout~lineout('x')
+say 'y'
+.stdout~lineout('z')
+----
+rc> 0
+out> x
+out> y
+out> z
+
+# the same stream opened by name
+run
+call stream 'STDOUT', 'c', 'open write'
+call lineout 'STDOUT', 'x'
+say 'y'
+call lineout 'STDOUT', 'z'
+----
+rc> 0
+out> x
+out> y
+out> z
+
+# .STDERR opened WRITE, written by object and by name
+run
+.stderr~open('write')
+.stderr~lineout('x')
+call lineout 'STDERR', 'y'
+.stderr~lineout('z')
+----
+rc> 0
+err> x
+err> y
+err> z
+
+# a FLUSH between them
+run
+.stdout~open('write')
+.stdout~lineout('x')
+say 'y'
+.stdout~flush
+say 'z'
+----
+rc> 0
+out> x
+out> y
+out> z
