@@ -1963,5 +1963,20 @@
   "source": "Phase 9d Task 8.6 fix round 1 re-review",
   "status": "deviation 74 (Moritz 2026-10-28: \"New Deviation, oracle bug\")",
   "crate": "Opens O_APPEND on the retry too."
+ },
+ {
+  "id": "sortwith-on-foreign-class-segfaults",
+  "added": "2026-10-28",
+  "title": "Array's native SORTWITH defined on a class that is not an Array segfaults when sent",
+  "category": "crash",
+  "area": "collections",
+  "severity": "crash",
+  "repro": "rust/corpus/oracle-crashes.txt entry 62 (.k~define('SORTWITH', .array~method('SORTWITH')); .ksub~new~sortWith(.numericComparator~new))",
+  "oracle": "SIGSEGV, rc 139.",
+  "expected": "A raised condition; no rule gives an answer.",
+  "cause": "ArrayClass::stableSortWithRexx runs with a receiver that is not an ArrayClass.",
+  "source": "Phase 9d Task 8 triage; Task 8.7a",
+  "status": "open",
+  "crate": "Refuses loudly, rc 120."
  }
 ]
