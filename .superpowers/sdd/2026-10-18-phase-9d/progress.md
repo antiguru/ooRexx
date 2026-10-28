@@ -256,3 +256,4 @@ Task 8.7a fix round 1 (t87a-fix1, opus): DONE cc1e48c0c 98f716863 4977083c6. I1 
 Task 8.7a re-review r1 (t87a-rr1): APPROVED, all four items ADDRESSED, 0C/0I/1M (report sentence called message_term the path of every traced send; corrected by the controller). Callgrind max own +0.0022% define.
 Task 8.7a close: Deviation 72 witness tests::a_references_equals_argument_is_its_referenced_values_string added; exclusions tests, rexx-parse errors and rexx-inventory pass. Workspace test from fix round 1 (4977083c6, t8.7a/r1): datetime_zone (DST) only; later commits docs only. defects.json: sortwith-on-foreign-class-segfaults, trace-i-varref-value-assign-segfaults (artifact v18). Queued: internal-rendering-defaultname (8.7c), rexx-package-source (8.7b), trace-object-renderings (8.7c).
 Task 8.7a: complete (eb3bea770 e1e4803c0 030af45a1 560352131 a82f917f5 cc1e48c0c 98f716863 4977083c6).
+Task 8.7b: dispatched t87b-impl (opus), BASE 504ff0743, brief task-8.7b-dispatch.md.
