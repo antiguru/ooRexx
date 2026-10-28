@@ -15,6 +15,7 @@
 
 use std::ffi::OsStr;
 use std::io::Read;
+use std::os::fd::AsFd;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::process::ExitStatusExt;
 use std::process::Stdio;
@@ -522,7 +523,14 @@ impl Block {
             false => Some(Piece::Err),
         };
         let input = self.input;
-        collect(self.running, input, self.merged, Some((written, out, err)))
+        let ends = [!self.captures_output, !self.captures_error];
+        collect(
+            self.running,
+            input,
+            self.merged,
+            ends,
+            Some((written, out, err)),
+        )
     }
 }
 
@@ -532,20 +540,59 @@ type Routes<'a> = (&'a (dyn Fn(Piece, Vec<u8>) + Sync), Piece, Option<Piece>);
 
 /// Reads `reader` to its end, into `kept`, or piece by piece into `written`
 /// as `piece` where there is one.
-fn read_all(
-    mut reader: impl Read,
+///
+/// With `ended`, reading stops once the child has ended as well, which
+/// `ended` reports by becoming readable: what the pipe holds then is read,
+/// and the rest, which only a process the command left running can write, is
+/// read and dropped by a thread of its own, so that process's writes do not
+/// fail. A command completes when its process does (rexxref intro.xml,
+/// "Commands to External Environments": the environment "returns control to
+/// the language processor after setting a return code").
+fn read_all<R: Read + AsFd + Send + 'static>(
+    mut reader: R,
+    ended: Option<&std::io::PipeReader>,
     kept: &mut Vec<u8>,
     written: Option<(&(dyn Fn(Piece, Vec<u8>) + Sync), Piece)>,
 ) {
-    let Some((written, as_piece)) = written else {
-        let _ = reader.read_to_end(kept);
-        return;
-    };
     let mut piece = [0u8; 4096];
+    let mut take = |bytes: &[u8]| match written {
+        Some((written, as_piece)) => written(as_piece, bytes.to_vec()),
+        None => kept.extend_from_slice(bytes),
+    };
     loop {
+        if let Some(ended) = ended {
+            use rustix::event::{PollFd, PollFlags, poll};
+            let mut polled = [
+                PollFd::new(&reader, PollFlags::IN),
+                PollFd::new(ended, PollFlags::IN),
+            ];
+            match poll(&mut polled, None) {
+                Ok(_) => {}
+                Err(rustix::io::Errno::INTR) => continue,
+                Err(_) => return,
+            }
+            if !polled[1].revents().is_empty() {
+                let mut left = rustix::io::ioctl_fionread(&reader).unwrap_or(0) as usize;
+                while left > 0 {
+                    match reader.read(&mut piece[..left.min(4096)]) {
+                        Ok(0) => return,
+                        Ok(count) => {
+                            take(&piece[..count]);
+                            left -= count;
+                        }
+                        Err(failed) if failed.kind() == std::io::ErrorKind::Interrupted => {}
+                        Err(_) => return,
+                    }
+                }
+                std::thread::spawn(move || {
+                    let _ = std::io::copy(&mut reader, &mut std::io::sink());
+                });
+                return;
+            }
+        }
         match reader.read(&mut piece) {
             Ok(0) => return,
-            Ok(count) => written(as_piece, piece[..count].to_vec()),
+            Ok(count) => take(&piece[..count]),
             Err(failed) if failed.kind() == std::io::ErrorKind::Interrupted => {}
             Err(_) => return,
         }
@@ -727,7 +774,7 @@ fn start(
         // A group of its own, which a refused wait kills whole.
         std::os::unix::process::CommandExt::process_group(&mut builder, 0);
     }
-    builder.current_dir(interp.cwd_text());
+    builder.current_dir(crate::paths::os_path(interp.cwd_bytes()));
     let input = io.and_then(IoContext::input_bytes);
     if input.is_some() {
         builder.stdin(Stdio::piped());
@@ -748,8 +795,16 @@ fn start(
             builder.stderr(Stdio::from(err));
         }
         None => {
-            builder.stdout(Stdio::piped());
-            builder.stderr(Stdio::piped());
+            let own = interp
+                .sinks
+                .as_ref()
+                .is_some_and(|sinks| sinks.own_descriptors);
+            let piped = |redirected: bool| match redirected || !own {
+                true => Stdio::piped(),
+                false => Stdio::inherit(),
+            };
+            builder.stdout(piped(io.is_some_and(IoContext::redirects_output)));
+            builder.stderr(piped(io.is_some_and(IoContext::redirects_error)));
         }
     }
     let Ok(running) = builder.spawn() else {
@@ -772,19 +827,29 @@ fn start(
 ///
 /// **Both pipes are drained concurrently**: a child filling one while this
 /// thread reads only the other deadlocks once a pipe buffer fills.
+///
+/// `ends` says, for standard output and standard error, whether its pipe is
+/// read only until the child ends ([`read_all`]): one going to this
+/// interpreter's own output. A redirected one is read to its end, as the
+/// oracle reads it.
 fn collect(
     mut running: std::process::Child,
     input: Option<Vec<u8>>,
     merged: Option<std::io::PipeReader>,
+    ends: [bool; 2],
     routes: Option<Routes<'_>>,
 ) -> Waited {
     let stdin = running.stdin.take();
     let stdout = running.stdout.take();
     let stderr = running.stderr.take();
-    let mut out = Vec::new();
     let out_route = routes.map(|(written, out, _)| (written, out));
     let err_route = routes.and_then(|(written, _, err)| Some((written, err?)));
-    let err = std::thread::scope(|scope| {
+    let (ended, ended_writer) = match std::io::pipe() {
+        Ok((reader, writer)) => (Some(reader), Some(writer)),
+        Err(_) => (None, None),
+    };
+    let ended_reader = ended.as_ref();
+    let (out, err, rc) = std::thread::scope(|scope| {
         if let (Some(mut stdin), Some(bytes)) = (stdin, input.as_deref()) {
             // A write error is dropped: a child exiting before it reads its
             // input gives `EPIPE`, which the oracle's own writer ignores.
@@ -793,27 +858,48 @@ fn collect(
                 let _ = stdin.write_all(bytes);
             });
         }
-        let collector = scope.spawn(|| {
+        let errors = scope.spawn(|| {
             let mut bytes = Vec::new();
             if let Some(stderr) = stderr {
-                read_all(stderr, &mut bytes, err_route);
+                read_all(
+                    stderr,
+                    ended_reader.filter(|_| ends[1]),
+                    &mut bytes,
+                    err_route,
+                );
             }
             bytes
         });
-        match merged {
-            Some(merged) => read_all(merged, &mut out, out_route),
-            None => {
-                if let Some(stdout) = stdout {
-                    read_all(stdout, &mut out, out_route);
+        let output = scope.spawn(|| {
+            let mut bytes = Vec::new();
+            match merged {
+                Some(merged) => read_all(merged, None, &mut bytes, out_route),
+                None => {
+                    if let Some(stdout) = stdout {
+                        read_all(
+                            stdout,
+                            ended_reader.filter(|_| ends[0]),
+                            &mut bytes,
+                            out_route,
+                        );
+                    }
                 }
             }
-        }
-        collector.join().unwrap_or_default()
+            bytes
+        });
+        let rc = match running.wait() {
+            Ok(status) => exit_code(status),
+            Err(_) => UNKNOWN_COMMAND,
+        };
+        // The child has ended: the readers that stop then see the writing
+        // half close.
+        drop(ended_writer);
+        (
+            output.join().unwrap_or_default(),
+            errors.join().unwrap_or_default(),
+            rc,
+        )
     });
-    let rc = match running.wait() {
-        Ok(status) => exit_code(status),
-        Err(_) => UNKNOWN_COMMAND,
-    };
     Waited { rc, out, err }
 }
 
@@ -887,6 +973,10 @@ impl Interp {
         }
         self.hand_over_output();
         let switch_mode = self.child_switch_mode();
+        let ends = [
+            !io.is_some_and(IoContext::redirects_output),
+            !io.is_some_and(IoContext::redirects_error),
+        ];
         let spawned = match start(self, &handler, command, io, switch_mode)? {
             Child::Ran(spawned) => spawned,
             Child::Running {
@@ -906,7 +996,7 @@ impl Interp {
                 match self.exit_for_block(block) {
                     Ok(token) => return Ok(Commanded::Left(token)),
                     Err(block) => {
-                        self.collect_on_baton(block.running, block.input, block.merged)?
+                        self.collect_on_baton(block.running, block.input, block.merged, ends)?
                     }
                 }
             }
@@ -914,7 +1004,7 @@ impl Interp {
                 running,
                 input,
                 merged,
-            } => self.collect_on_baton(running, input, merged)?,
+            } => self.collect_on_baton(running, input, merged, ends)?,
         };
         self.command_ended(io, &spawned, None).map(Commanded::Done)
     }
@@ -927,15 +1017,16 @@ impl Interp {
         running: std::process::Child,
         input: Option<Vec<u8>>,
         merged: Option<std::io::PipeReader>,
+        ends: [bool; 2],
     ) -> Result<Waited, Failure> {
         let Some(bound) = self.sim_block_bound() else {
-            return Ok(collect(running, input, merged, None));
+            return Ok(collect(running, input, merged, ends, None));
         };
         let pid = running.id();
         let (sender, receiver) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             crate::signal::block();
-            let waited = crate::signal::unblocked(|| collect(running, input, merged, None));
+            let waited = crate::signal::unblocked(|| collect(running, input, merged, ends, None));
             let _ = sender.send(waited);
         });
         match receiver.recv_timeout(bound) {

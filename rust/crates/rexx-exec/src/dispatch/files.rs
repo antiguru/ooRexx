@@ -16,11 +16,14 @@
 //! `self~someImpl(self~qualifiedPath)`. So each one is a function of that path
 //! alone, and none of them touches the receiver.
 
+use std::path::{Path, PathBuf};
+
 use rexx_core::{BehaviourId, Body, ObjRef};
 
 use super::Cleared;
 use crate::builtin::datetime::{UNIX_BASE_TIME, local_offset_micros};
 use crate::error::Raised;
+use crate::paths::os_path;
 use crate::{Failure, Interp};
 
 /// What a timestamp getter answers for a file it cannot stat. The Rexx half
@@ -29,11 +32,11 @@ use crate::{Failure, Interp};
 const MISSING_TIMESTAMP: i64 = -999_999_999_999_999_999;
 
 /// The qualified path an entry point was handed.
-fn path_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<String, Failure> {
+fn path_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<PathBuf, Failure> {
     let Some(value) = args.first().copied().flatten() else {
         return Err(Raised::missing_method_argument(1).into());
     };
-    Ok(String::from_utf8_lossy(&interp.to_text(value)).into_owned())
+    Ok(os_path(&interp.to_text(value)).to_path_buf())
 }
 
 /// `1` or `0`, which is how every `.File` predicate answers.
@@ -49,7 +52,7 @@ fn flag(interp: &mut Interp, yes: bool) -> Result<Option<ObjRef>, Failure> {
 /// both where its owner's bits alone would say nothing useful. As root every
 /// one of these answers 1 instead, which is a property of the run and not of
 /// the code.
-fn reachable(path: &str, mode: rustix::fs::Access) -> bool {
+fn reachable(path: &Path, mode: rustix::fs::Access) -> bool {
     rustix::fs::access(path, mode).is_ok()
 }
 
@@ -105,7 +108,12 @@ pub(super) fn is_hidden(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let path = path_argument(interp, args)?;
-    let yes = std::fs::metadata(&path).is_ok() && path.contains("/.");
+    let yes = std::fs::metadata(&path).is_ok()
+        && path
+            .as_os_str()
+            .as_encoded_bytes()
+            .windows(2)
+            .any(|pair| pair == b"/.");
     flag(interp, yes)
 }
 
@@ -184,7 +192,7 @@ pub(super) fn list(
 
 /// One file timestamp as the Rexx half wants it: microseconds of **local**
 /// civil time since year 1, or [`MISSING_TIMESTAMP`].
-fn stamp(interp: &mut Interp, path: &str, accessed: bool) -> Result<Option<ObjRef>, Failure> {
+fn stamp(interp: &mut Interp, path: &Path, accessed: bool) -> Result<Option<ObjRef>, Failure> {
     let read = std::fs::metadata(path).and_then(|meta| {
         if accessed {
             meta.accessed()
@@ -278,7 +286,7 @@ enum Stamp {
 /// **The file is not opened.** A read-only file's stamp is still the owner's
 /// to set -- measured, the oracle answers `1` for one -- which an
 /// implementation going through an open writable handle could not do.
-fn set_one_stamp(path: &str, when: i64, which: Stamp) -> bool {
+fn set_one_stamp(path: &Path, when: i64, which: Stamp) -> bool {
     let target = system_time_of(when);
     let spec = match target.duration_since(std::time::UNIX_EPOCH) {
         Ok(since) => rustix::fs::Timespec {
@@ -408,7 +416,7 @@ pub(super) fn rename(
     let Some(value) = args.get(1).copied().flatten() else {
         return Err(Raised::missing_method_argument(2).into());
     };
-    let to = String::from_utf8_lossy(&interp.to_text(value)).into_owned();
+    let to = os_path(&interp.to_text(value)).to_path_buf();
     if from == to || std::fs::symlink_metadata(&to).is_ok() {
         return flag(interp, false);
     }
@@ -549,15 +557,29 @@ pub(super) fn search_path_impl(
     _receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let wanted = path_argument(interp, args)?;
+    let Some(wanted) = args.first().copied().flatten() else {
+        return Err(Raised::missing_method_argument(1).into());
+    };
+    let wanted = interp.to_text(wanted).into_owned();
     let Some(value) = args.get(1).copied().flatten() else {
         return Err(Raised::missing_method_argument(2).into());
     };
-    let list = String::from_utf8_lossy(&interp.to_text(value)).into_owned();
-    for directory in list.split(':').filter(|part| !part.is_empty()) {
-        let candidate = format!("{}/{wanted}", directory.trim_end_matches('/'));
-        if std::fs::metadata(&candidate).is_ok_and(|meta| meta.is_file()) {
-            return Ok(Some(interp.text_built(candidate.into_bytes())));
+    let list = interp.to_text(value).into_owned();
+    for directory in list
+        .split(|byte| *byte == b':')
+        .filter(|part| !part.is_empty())
+    {
+        let trimmed = directory.len()
+            - directory
+                .iter()
+                .rev()
+                .take_while(|byte| **byte == b'/')
+                .count();
+        let mut candidate = directory[..trimmed].to_vec();
+        candidate.push(b'/');
+        candidate.extend_from_slice(&wanted);
+        if std::fs::metadata(os_path(&candidate)).is_ok_and(|meta| meta.is_file()) {
+            return Ok(Some(interp.text_built(candidate)));
         }
     }
     Ok(Some(ObjRef::NIL))

@@ -178,25 +178,24 @@ pub(crate) fn directory(
         return Err(Raised::too_many_internal_arguments(1).into());
     }
     let Some(Some(target)) = args.first().copied() else {
-        let here = interp.cwd_text();
-        return Ok(interp.text_built(here.into_bytes()));
+        let here = interp.cwd_bytes().to_vec();
+        return Ok(interp.text_built(here));
     };
     let text = interp.to_text(target).into_owned();
     if text.is_empty() {
         return Ok(interp.text(b""));
     }
     let qualified = qualify_name(interp, &text);
-    let candidate = String::from_utf8_lossy(&qualified).into_owned();
-    if !std::fs::metadata(&candidate).is_ok_and(|meta| meta.is_dir()) {
+    let candidate = crate::paths::os_path(&qualified);
+    if !std::fs::metadata(candidate).is_ok_and(|meta| meta.is_dir()) {
         return Ok(interp.text(b""));
     }
     // `getcwd` answers the symlink-resolved path, so the answer is what the
     // filesystem calls the directory rather than the way it was named.
-    let resolved = std::fs::canonicalize(&candidate)
-        .map(|path| path.to_string_lossy().into_owned())
-        .unwrap_or(candidate);
-    interp.set_cwd(std::path::PathBuf::from(&resolved));
-    Ok(interp.text_built(resolved.into_bytes()))
+    let resolved = std::fs::canonicalize(candidate).unwrap_or_else(|_| candidate.to_path_buf());
+    let answer = resolved.as_os_str().as_encoded_bytes().to_vec();
+    interp.set_cwd(resolved);
+    Ok(interp.text_built(answer))
 }
 
 /// The `FILESPEC` options, in the order the oracle's own message lists them:

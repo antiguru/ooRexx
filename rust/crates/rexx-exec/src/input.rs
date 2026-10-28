@@ -127,18 +127,10 @@ impl FileConsole {
             return None;
         }
         let offset = file.stream_position().unwrap_or(0);
+        let mut open = rexx_core::OpenFile::new(file, 1, false, false);
+        open.read_position = as_position(offset + 1);
         Some(FileConsole {
-            open: rexx_core::OpenFile {
-                file,
-                read_position: as_position(offset + 1),
-                write_position: 1,
-                pending: None,
-                transient: false,
-                line_mark: None,
-                line_total: None,
-                line_mark_digest: None,
-                line_total_digest: None,
-            },
+            open,
             buffered: Vec::new(),
             buffered_at: 0,
             counted_size: None,
@@ -149,7 +141,7 @@ impl FileConsole {
     /// Records where the console's own use of the descriptor left its offset.
     fn note_offset(&self) {
         use std::io::Seek;
-        self.left_at.set((&self.open.file).stream_position().ok());
+        self.left_at.set(self.open.file().stream_position().ok());
     }
 
     /// The read position, as `read_from` takes it.
@@ -165,7 +157,7 @@ impl FileConsole {
         if at >= self.buffered_at && at < end {
             return true;
         }
-        self.buffered = read_from(&mut self.open.file, at, STDIN_CHUNK).unwrap_or_default();
+        self.buffered = read_from(self.open.flushed(), at, STDIN_CHUNK).unwrap_or_default();
         self.buffered_at = at;
         self.note_offset();
         !self.buffered.is_empty()
@@ -224,7 +216,7 @@ impl FileConsole {
 
     /// CHARS: the characters from the read position to the end of the file.
     fn chars_left(&self) -> u64 {
-        let left = size_of(&self.open.file) as i64 - (self.open.read_position - 1);
+        let left = size_of(self.open.file()) as i64 - (self.open.read_position - 1);
         u64::try_from(left).unwrap_or(0)
     }
 
@@ -237,7 +229,7 @@ impl FileConsole {
     /// line end included, from the line cache. Nothing here writes the file,
     /// so the count is dropped when the file's size changes instead.
     fn lines_left(&mut self) -> u64 {
-        let size = size_of(&self.open.file);
+        let size = size_of(self.open.file());
         if self.open.read_position > size as i64 {
             return 0;
         }
@@ -259,7 +251,7 @@ impl FileConsole {
     /// counted from 1, answering `false` past the end of the file, where
     /// nothing moves (`StreamInfo::setCharReadPosition`).
     fn seek_char(&mut self, position: u64) -> bool {
-        if position == 0 || position > size_of(&self.open.file) {
+        if position == 0 || position > size_of(self.open.file()) {
             return false;
         }
         self.open.read_position = as_position(position);
@@ -281,11 +273,13 @@ impl FileConsole {
     fn sync_offset(&self) {
         use std::io::{Seek, SeekFrom};
         let want = self.position().saturating_sub(1);
-        if (&self.open.file)
+        if self
+            .open
+            .file()
             .stream_position()
             .is_ok_and(|at| at != want)
         {
-            let _ = (&self.open.file).seek(SeekFrom::Start(want));
+            let _ = self.open.file().seek(SeekFrom::Start(want));
         }
         self.note_offset();
     }
@@ -296,7 +290,7 @@ impl FileConsole {
     /// nothing moves.
     fn adopt_offset(&mut self) {
         use std::io::Seek;
-        let Ok(offset) = (&self.open.file).stream_position() else {
+        let Ok(offset) = self.open.file().stream_position() else {
             return;
         };
         if self.left_at.get() == Some(offset) {
@@ -714,12 +708,15 @@ impl Interp {
         self.hand_over_stderr();
     }
 
-    /// [`Interp::hand_over_output`] for standard output alone.
+    /// [`Interp::hand_over_output`] for standard output alone. A refusal is
+    /// kept in [`Interp::sink_errors`].
     pub(crate) fn hand_over_stdout(&mut self) {
         if let Some(sinks) = &mut self.sinks
             && !self.out.is_empty()
         {
-            (sinks.stdout)(&self.out);
+            if let Err(error) = (sinks.stdout)(&self.out) {
+                self.sink_errors[0] = Some(error.raw_os_error().unwrap_or(0));
+            }
             self.out.clear();
         }
     }
@@ -729,7 +726,9 @@ impl Interp {
         if let Some(sinks) = &mut self.sinks
             && !self.trace.is_empty()
         {
-            (sinks.stderr)(&self.trace);
+            if let Err(error) = (sinks.stderr)(&self.trace) {
+                self.sink_errors[1] = Some(error.raw_os_error().unwrap_or(0));
+            }
             self.trace.clear();
         }
     }
@@ -1121,7 +1120,11 @@ mod tests {
         use std::io::Seek;
         let (mut c, path) = console("sync", b"hello\nworld\nthird\n");
         assert_eq!(c.read_line(), b"hello\n");
-        let shared = c.open.file.try_clone().expect("the descriptor duplicates");
+        let shared = c
+            .open
+            .file()
+            .try_clone()
+            .expect("the descriptor duplicates");
         assert_ne!(
             (&shared).stream_position().ok(),
             Some(6),
@@ -1146,7 +1149,11 @@ mod tests {
     fn a_command_that_consumed_moves_the_read_position() {
         use std::io::{Seek, SeekFrom};
         let (mut c, path) = console("adopt", b"one\ntwo\nthree\nfour\n");
-        let mut shared = c.open.file.try_clone().expect("the descriptor duplicates");
+        let mut shared = c
+            .open
+            .file()
+            .try_clone()
+            .expect("the descriptor duplicates");
         c.sync_offset();
         shared
             .seek(SeekFrom::Start(4))

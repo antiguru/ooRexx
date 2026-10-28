@@ -47,14 +47,12 @@ fn main() -> ExitCode {
         }))
         .with_sinks(rexx_exec::Sinks {
             stdout: Box::new(|bytes| {
-                let _ = std::io::stdout().write_all(bytes);
-                let _ = std::io::stdout().flush();
+                let mut stdout = std::io::stdout();
+                stdout.write_all(bytes).and_then(|()| stdout.flush())
             }),
-            stderr: Box::new(|bytes| {
-                let _ = std::io::stderr().write_all(bytes);
-                let _ = std::io::stderr().flush();
-            }),
+            stderr: Box::new(|bytes| std::io::stderr().write_all(bytes)),
             stdout_terminal: std::io::stdout().is_terminal(),
+            own_descriptors: true,
         });
 
     // `REXX_SWITCH_MODE` is the deterministic switch mode, for tests:

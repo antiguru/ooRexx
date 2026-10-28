@@ -16,7 +16,9 @@
 //! state block itself.
 
 use chrono::TimeZone;
-use rexx_core::{Body, Decoded, NativeState, ObjRef, StandardStream, StreamState, StreamStatus};
+use rexx_core::{
+    Body, Decoded, NativeState, ObjRef, STREAM_BUFFER, StandardStream, StreamState, StreamStatus,
+};
 use rexx_num::{DIGITS64, Number};
 
 use super::{Cleared, new_instance};
@@ -64,10 +66,16 @@ fn write_text(interp: &mut Interp, value: ObjRef) -> Result<Vec<u8>, Failure> {
     Ok(interp.to_text(text).into_owned())
 }
 
-/// The qualified path as a `String`, for the file-system calls below.
-fn qualified_path(interp: &Interp, receiver: ObjRef) -> Result<String, Failure> {
+/// The qualified path, for the file-system calls below. A standard stream
+/// opened once keeps its bare name as the qualified name, which is resolved
+/// against the interpreter's directory.
+fn qualified_path(interp: &Interp, receiver: ObjRef) -> Result<std::path::PathBuf, Failure> {
     let state = require(interp, receiver)?;
-    Ok(String::from_utf8_lossy(&state.qualified).into_owned())
+    let path = match state.qualified.first() {
+        Some(b'/') => state.qualified.clone(),
+        _ => crate::builtin::platform::qualify_name(interp, &state.qualified),
+    };
+    Ok(crate::paths::os_path(&path).to_path_buf())
 }
 
 /// One of the three standard streams, built for `.local` rather than by a
@@ -102,6 +110,10 @@ pub(crate) fn standard_stream(
     let mut state = StreamState::new(name.to_vec(), name.to_vec());
     state.standard = Some(which);
     state.status = StreamStatus::Ready;
+    // `.STDOUT` and `.STDERR` are opened `NOBUFFER` (`CoreClasses.orx`'s
+    // `LocalServer~init`), where a program's own `.Stream~new('STDOUT')` is
+    // buffered.
+    state.mode.nobuffer = true;
     let Some(held) = interp.heap.get_mut(object) else {
         unreachable!("new_instance just allocated and rooted it")
     };
@@ -207,11 +219,11 @@ pub(super) fn handle_set(
     Ok(None)
 }
 
-/// Whether `receiver` is a `HANDLE:n` stream nothing has opened, which the
-/// queries answer as the oracle answers an unopened stream.
-fn unopened_handle(interp: &Interp, receiver: ObjRef) -> Result<bool, Failure> {
+/// Whether `receiver` is a standard or `HANDLE:n` stream nothing has opened,
+/// or one closed since, which the queries answer as an unopened stream.
+fn unopened_standard(interp: &Interp, receiver: ObjRef) -> Result<bool, Failure> {
     let state = require(interp, receiver)?;
-    Ok(state.handle.is_some() && state.status == StreamStatus::Unknown)
+    Ok(state.standard.is_some() && state.status == StreamStatus::Unknown)
 }
 
 /// `stream_state`: `UNKNOWN`, `READY`, `NOTREADY` or `ERROR`.
@@ -289,10 +301,16 @@ pub(super) fn query_exists(
         };
         return Ok(Some(interp.text_built(answer)));
     }
+    // An open standard stream's qualified name is its name as written
+    // (`StreamInfo::openStd`), which it answers without a lookup.
+    if state.standard.is_some() && state.status != StreamStatus::Unknown {
+        let answer = state.name.clone();
+        return Ok(Some(interp.text_built(answer)));
+    }
     // `StreamInfo::streamExists`: an open stream answers without a lookup, a
     // device by the name as written and anything else by its qualified name.
     if let Some(open) = state.open.as_ref() {
-        let answer = if is_device(&open.file) {
+        let answer = if is_device(open.file()) {
             state.name.clone()
         } else {
             state.qualified.clone()
@@ -302,7 +320,7 @@ pub(super) fn query_exists(
     let path = qualified_path(interp, receiver)?;
     let exists = std::fs::metadata(&path).is_ok_and(|meta| meta.is_file());
     let answer = if exists {
-        path.into_bytes()
+        path.into_os_string().into_encoded_bytes()
     } else {
         Vec::new()
     };
@@ -311,13 +329,25 @@ pub(super) fn query_exists(
 
 /// `query_size`: the byte count for a regular file, `0` for anything else
 /// that stats, and the null string when nothing does. Measured: a directory
-/// answers `0` here where `query_exists` answers nothing.
+/// answers `0` here where `query_exists` answers nothing. An open stream
+/// answers from its descriptor, once its held writes are in it
+/// (`StreamInfo::getStreamSize`).
 pub(super) fn query_size(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    let state = require_mut(interp, receiver)?;
+    if let Some(open) = state.open.as_mut() {
+        let size = open
+            .flushed()
+            .metadata()
+            .ok()
+            .filter(std::fs::Metadata::is_file)
+            .map_or(0, |meta| meta.len());
+        return Ok(Some(interp.text_built(size.to_string().into_bytes())));
+    }
     let path = qualified_path(interp, receiver)?;
     match std::fs::metadata(&path) {
         Ok(meta) => {
@@ -365,7 +395,7 @@ pub(super) fn query_streamtype(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if unopened_handle(interp, receiver)? {
+    if unopened_standard(interp, receiver)? {
         return Ok(Some(interp.text(b"UNKNOWN")));
     }
     if let Some(which) = standard_of(interp, receiver)? {
@@ -395,7 +425,7 @@ pub(super) fn query_handle(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     use std::os::fd::AsRawFd;
-    if unopened_handle(interp, receiver)? {
+    if unopened_standard(interp, receiver)? {
         return Ok(Some(interp.text(b"")));
     }
     let answer: &[u8] = match standard_of(interp, receiver)? {
@@ -406,7 +436,7 @@ pub(super) fn query_handle(
             let handle = require(interp, receiver)?
                 .open
                 .as_ref()
-                .map(|open| open.file.as_raw_fd().to_string().into_bytes());
+                .map(|open| open.file().as_raw_fd().to_string().into_bytes());
             return Ok(Some(interp.text_built(handle.unwrap_or_default())));
         }
     };
@@ -647,6 +677,7 @@ pub(super) fn open(
         Some(value) => interp.to_text(value).into_owned(),
         None => Vec::new(),
     };
+    release_held(interp, receiver)?;
     let state = require_mut(interp, receiver)?;
     // A second open closes and reopens.
     state.open = None;
@@ -662,13 +693,19 @@ pub(super) fn open(
         state.status = StreamStatus::Ready;
         return Ok(Some(interp.text(b"READY:")));
     }
-    // The three standard streams take only NOBUFFER, and are ready without
-    // touching the file system (`StreamNative.cpp`'s `openStd`).
+    // The three standard streams take only NOBUFFER, found anywhere in the
+    // options, and are ready without touching the file system
+    // (`StreamNative.cpp`'s `openStd` and `hasNoBufferOption`).
     if state.standard.is_some() {
+        state.mode.nobuffer = options
+            .to_ascii_uppercase()
+            .windows(8)
+            .any(|word| word == b"NOBUFFER");
+        state.qualified = state.name.clone();
         state.status = StreamStatus::Ready;
         return Ok(Some(interp.text(b"READY:")));
     }
-    let path = String::from_utf8_lossy(&state.qualified).into_owned();
+    let path = crate::paths::os_path(&state.qualified).to_path_buf();
 
     let Ok(mut parsed) = parse_open_options(&options) else {
         return Err(Raised::syntax(93, 0, Vec::new()).into());
@@ -753,17 +790,13 @@ pub(super) fn open(
         record_based: parsed.record_based,
         record_length: parsed.record_length,
     };
-    state.open = Some(rexx_core::OpenFile {
-        file: opened,
-        read_position: 1,
+    let buffered = !parsed.nobuffer && !std::io::IsTerminal::is_terminal(&opened);
+    state.open = Some(rexx_core::OpenFile::new(
+        opened,
         write_position,
-        pending: None,
         transient,
-        line_mark: None,
-        line_total: None,
-        line_mark_digest: None,
-        line_total_digest: None,
-    });
+        buffered,
+    ));
     state.status = StreamStatus::Ready;
     Ok(Some(interp.text(b"READY:")))
 }
@@ -786,7 +819,7 @@ fn open_failed(
 fn read_at(open: &mut rexx_core::OpenFile, position: u64, len: usize) -> std::io::Result<Vec<u8>> {
     use std::io::Read;
     if !open.transient {
-        return read_from(&mut open.file, position, len);
+        return read_from(open.flushed(), position, len);
     }
     let mut out = Vec::new();
     let mut len = len;
@@ -796,7 +829,7 @@ fn read_at(open: &mut rexx_core::OpenFile, position: u64, len: usize) -> std::io
         out.push(byte);
         len -= 1;
     }
-    (&mut open.file)
+    open.flushed()
         .take(u64::try_from(len).unwrap_or(u64::MAX))
         .read_to_end(&mut out)?;
     Ok(out)
@@ -815,21 +848,21 @@ fn transient_has_data(open: &mut rexx_core::OpenFile) -> bool {
     if open.pending.is_some() {
         return true;
     }
-    if let Ok(waiting) = rustix::io::ioctl_fionread(&open.file) {
+    if let Ok(waiting) = rustix::io::ioctl_fionread(open.file()) {
         return waiting > 0;
     }
     let zero = Timespec {
         tv_sec: 0,
         tv_nsec: 0,
     };
-    let mut polled = [PollFd::new(&open.file, PollFlags::IN)];
+    let mut polled = [PollFd::new(open.file(), PollFlags::IN)];
     match poll(&mut polled, Some(&zero)) {
         Ok(_) if !polled[0].revents().contains(PollFlags::IN) => return false,
         Ok(_) => {}
         Err(_) => return true,
     }
     let mut byte = [0u8];
-    match open.file.read(&mut byte) {
+    match open.flushed().read(&mut byte) {
         Ok(0) => false,
         Ok(_) => {
             open.pending = Some(byte[0]);
@@ -906,7 +939,7 @@ fn ensure_open(
     if require(interp, receiver)?.open.is_some() {
         return Ok(true);
     }
-    let path = String::from_utf8_lossy(&require(interp, receiver)?.qualified).into_owned();
+    let path = qualified_path(interp, receiver)?;
     let mut opening = std::fs::OpenOptions::new();
     // **Never truncates.** An implicit open creates a missing file but keeps
     // what an existing one holds -- `implicitOpen` uses `RDWR_CREAT` with no
@@ -966,17 +999,13 @@ fn ensure_open(
     let state = require_mut(interp, receiver)?;
     state.mode = mode;
     state.status = StreamStatus::Ready;
-    state.open = Some(rexx_core::OpenFile {
-        file: opened,
-        read_position: 1,
+    let buffered = !std::io::IsTerminal::is_terminal(&opened);
+    state.open = Some(rexx_core::OpenFile::new(
+        opened,
         write_position,
-        pending: None,
         transient,
-        line_mark: None,
-        line_total: None,
-        line_mark_digest: None,
-        line_total_digest: None,
-    });
+        buffered,
+    ));
     Ok(true)
 }
 
@@ -1037,6 +1066,22 @@ fn standard_of(interp: &Interp, receiver: ObjRef) -> Result<Option<StandardStrea
     Ok(require(interp, receiver)?.standard)
 }
 
+/// [`standard_of`] for an entry point that opens a stream nothing has opened
+/// (`StreamInfo::implicitOpen`): a standard stream then reads and writes its
+/// descriptor, is `READY`, and takes its name as written for its qualified
+/// name (`StreamInfo::openStd`). A `HANDLE:n` stream stays as it is.
+fn standard_opened(
+    interp: &mut Interp,
+    receiver: ObjRef,
+) -> Result<Option<StandardStream>, Failure> {
+    let state = require_mut(interp, receiver)?;
+    if state.standard.is_some() && state.handle.is_none() && state.status == StreamStatus::Unknown {
+        state.status = StreamStatus::Ready;
+        state.qualified = state.name.clone();
+    }
+    Ok(state.standard)
+}
+
 /// A write to a standard stream: to the sink for the two output ones, and a
 /// refusal for `.STDIN`. Answers what the entry point answers -- `0` written,
 /// or the residual count. Measured: `.stdin~lineout('x')` raises `NOTREADY`
@@ -1048,21 +1093,77 @@ fn standard_write(
     bytes: &[u8],
     residual: &[u8],
 ) -> Result<Option<ObjRef>, Failure> {
-    match which {
-        StandardStream::Out => interp.write_out(bytes),
-        StandardStream::Err => interp.write_err(bytes),
-        StandardStream::In => {
-            return notready(
-                interp,
-                receiver,
-                StreamStatus::Error(EACCES),
-                residual.to_vec(),
-            );
-        }
+    if which == StandardStream::In {
+        return notready(
+            interp,
+            receiver,
+            StreamStatus::Error(EACCES),
+            residual.to_vec(),
+        );
     }
     let state = require_mut(interp, receiver)?;
     state.status = StreamStatus::Ready;
+    if state.handle.is_some() || state.mode.nobuffer {
+        // A descriptor the sinks could not write is the stream's error from
+        // then on, and so is one the hand-over this write makes finds.
+        let sink = usize::from(which == StandardStream::Err);
+        if interp.sink_errors[sink].is_none() {
+            emit(interp, which, bytes);
+        }
+        if let Some(errno) = interp.sink_errors[sink] {
+            return notready(
+                interp,
+                receiver,
+                StreamStatus::Error(errno),
+                residual.to_vec(),
+            );
+        }
+        return Ok(Some(interp.text(b"0")));
+    }
+    // Held as `SysFile::write` holds a file's writes.
+    if bytes.len() > STREAM_BUFFER {
+        let held = std::mem::take(&mut state.held);
+        emit(interp, which, &held);
+        emit(interp, which, bytes);
+        return Ok(Some(interp.text(b"0")));
+    }
+    let mut rest = bytes;
+    while !rest.is_empty() {
+        let state = require_mut(interp, receiver)?;
+        if state.held.len() == STREAM_BUFFER {
+            let held = std::mem::take(&mut state.held);
+            emit(interp, which, &held);
+            continue;
+        }
+        let take = rest.len().min(STREAM_BUFFER - state.held.len());
+        state.held.extend_from_slice(&rest[..take]);
+        rest = &rest[take..];
+    }
     Ok(Some(interp.text(b"0")))
+}
+
+/// Writes `bytes` to the descriptor standard stream `which` stands for.
+fn emit(interp: &mut Interp, which: StandardStream, bytes: &[u8]) {
+    match which {
+        StandardStream::Out => interp.write_out(bytes),
+        StandardStream::Err => interp.write_err(bytes),
+        StandardStream::In => {}
+    }
+}
+
+/// Hands what a buffered standard stream holds to its descriptor, as a
+/// flush, a close, a reopen and an `UNINIT` do.
+fn release_held(interp: &mut Interp, receiver: ObjRef) -> Result<(), Failure> {
+    let state = require_mut(interp, receiver)?;
+    let Some(which) = state.standard else {
+        return Ok(());
+    };
+    if state.held.is_empty() {
+        return Ok(());
+    }
+    let held = std::mem::take(&mut state.held);
+    emit(interp, which, &held);
+    Ok(())
 }
 
 /// Whether the descriptor behind a standard stream is transient, as the
@@ -1109,7 +1210,7 @@ pub(super) fn charin(
         Some(value) => whole_number(interp, value, 2)?,
         None => 1,
     };
-    if let Some(which) = standard_of(interp, receiver)? {
+    if let Some(which) = standard_opened(interp, receiver)? {
         refuse_transient_position(interp, which, start.is_some())?;
         let start = start.map(positive).transpose()?;
         let StandardStream::In = which else {
@@ -1161,7 +1262,7 @@ pub(super) fn charin(
             return Err(Raised::transient_positioning().into());
         }
         let start = as_position(positive(start)?);
-        if start > size_of(&open.file) as i64 {
+        if start > size_of(open.flushed()) as i64 {
             return notready(interp, receiver, StreamStatus::NotReady, Vec::new());
         }
         open.read_position = start;
@@ -1224,7 +1325,7 @@ pub(super) fn linein(
     if !matches!(count, 0 | 1) {
         return Err(Raised::syntax(93, 0, Vec::new()).into());
     }
-    if let Some(which) = standard_of(interp, receiver)? {
+    if let Some(which) = standard_opened(interp, receiver)? {
         refuse_transient_position(interp, which, line.is_some())?;
         let line = line.map(positive).transpose()?;
         let StandardStream::In = which else {
@@ -1344,7 +1445,7 @@ fn read_record(
 /// it one -- which is how the orx `arrayIn` ends its fill and answers the
 /// array it passed in.
 fn next_line(interp: &mut Interp, receiver: ObjRef) -> Result<Option<Vec<u8>>, Failure> {
-    if let Some(which) = standard_of(interp, receiver)? {
+    if let Some(which) = standard_opened(interp, receiver)? {
         let StandardStream::In = which else {
             return Ok(None);
         };
@@ -1398,7 +1499,7 @@ pub(super) fn arrayin(
     let Some(array) = args.first().copied().flatten() else {
         return Err(Raised::missing_method_argument(1).into());
     };
-    if standard_of(interp, receiver)?.is_none() && !read_setup(interp, receiver, b"")? {
+    if standard_opened(interp, receiver)?.is_none() && !read_setup(interp, receiver, b"")? {
         return Ok(None);
     }
     if write_only(interp, receiver)? {
@@ -1469,7 +1570,7 @@ pub(super) fn charout(
     if data.is_none() && start.is_none() {
         return close_for_write(interp, _cleared, receiver, b"0");
     }
-    if let Some(which) = standard_of(interp, receiver)? {
+    if let Some(which) = standard_opened(interp, receiver)? {
         refuse_transient_position(interp, which, start.is_some())?;
         start.map(positive).transpose()?;
         let data = data.unwrap_or_default();
@@ -1524,7 +1625,7 @@ pub(super) fn lineout(
     if data.is_none() && line.is_none() {
         return close_for_write(interp, _cleared, receiver, b"1");
     }
-    if let Some(which) = standard_of(interp, receiver)? {
+    if let Some(which) = standard_opened(interp, receiver)? {
         refuse_transient_position(interp, which, line.is_some())?;
         line.map(positive).transpose()?;
         let mut bytes = data.unwrap_or_default();
@@ -1652,7 +1753,7 @@ fn write_record(
 /// (rexxref funct.xml:4309-4312), and at `position` otherwise.
 fn landing(open: &rexx_core::OpenFile, append: bool, position: i64) -> i64 {
     if append && !open.transient {
-        size_of(&open.file) as i64 + 1
+        open.size() as i64 + 1
     } else {
         position
     }
@@ -1669,22 +1770,7 @@ fn write_open(open: &mut rexx_core::OpenFile, at: i64, bytes: &[u8]) -> std::io:
         open.line_mark = None;
         open.line_mark_digest = None;
     }
-    write_at(&mut open.file, offset_of(at), bytes, open.transient)
-}
-
-/// Writes `bytes` at `position` (1-based). A transient stream has no
-/// position, so it is written where it stands.
-fn write_at(
-    file: &mut std::fs::File,
-    position: u64,
-    bytes: &[u8],
-    transient: bool,
-) -> std::io::Result<()> {
-    use std::io::{Seek, SeekFrom, Write};
-    if !transient {
-        file.seek(SeekFrom::Start(position.saturating_sub(1)))?;
-    }
-    file.write_all(bytes)
+    open.write(offset_of(at).saturating_sub(1), bytes)
 }
 
 /// `stream_chars`: the characters left from the read position, which is the
@@ -1697,7 +1783,7 @@ pub(super) fn chars(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if let Some(which) = standard_of(interp, receiver)? {
+    if let Some(which) = standard_opened(interp, receiver)? {
         let StandardStream::In = which else {
             return Ok(Some(interp.text(b"0")));
         };
@@ -1722,7 +1808,7 @@ pub(super) fn chars(
         let waiting = transient_has_data(open);
         return Ok(Some(interp.text(if waiting { b"1" } else { b"0" })));
     }
-    let left = (size_of(&open.file) as i64 - (open.read_position - 1)).max(0);
+    let left = (size_of(open.flushed()) as i64 - (open.read_position - 1)).max(0);
     Ok(Some(interp.text_built(left.to_string().into_bytes())))
 }
 
@@ -1747,7 +1833,7 @@ pub(super) fn lines(
         }
         None => false,
     };
-    if let Some(which) = standard_of(interp, receiver)? {
+    if let Some(which) = standard_opened(interp, receiver)? {
         let StandardStream::In = which else {
             return Ok(Some(interp.text(b"0")));
         };
@@ -1773,7 +1859,7 @@ pub(super) fn lines(
         let waiting = transient_has_data(open);
         return Ok(Some(interp.text(if waiting { b"1" } else { b"0" })));
     }
-    let size = size_of(&open.file) as i64;
+    let size = size_of(open.flushed()) as i64;
     if open.read_position > size {
         return Ok(Some(interp.text(b"0")));
     }
@@ -1996,7 +2082,7 @@ pub(super) fn position(
     };
     // Both checks come **after** parsing: a transient stream with a bad option
     // answers the bare 93, not 93.958.
-    if let Some(which) = standard_of(interp, receiver)? {
+    if let Some(which) = standard_opened(interp, receiver)? {
         refuse_transient_position(interp, which, true)?;
     }
     if require(interp, receiver)?
@@ -2061,7 +2147,7 @@ pub(super) fn position(
     } else {
         open.write_position
     };
-    let size = size_of(&open.file) as i64;
+    let size = size_of(open.flushed()) as i64;
     if parsed.by_char {
         // `+` and `-` move from the position the command names
         // (Deviation 49).
@@ -2183,8 +2269,7 @@ pub(super) fn query_position(
         return Ok(Some(interp.text(b"1")));
     }
     if sys {
-        use std::io::Seek;
-        let at = open.file.stream_position().unwrap_or(0);
+        let at = open.offset();
         return Ok(Some(interp.text_built(at.to_string().into_bytes())));
     }
     // Neither given: the write position only for a write-only stream.
@@ -2231,6 +2316,7 @@ pub(super) fn close(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    release_held(interp, receiver)?;
     let state = require_mut(interp, receiver)?;
     let was_open = if state.standard.is_some() {
         state.status != StreamStatus::Unknown
@@ -2242,15 +2328,23 @@ pub(super) fn close(
     Ok(Some(interp.text(answer)))
 }
 
-/// `stream_flush`: `READY:`, including for a stream nothing has opened --
-/// measured, and it leaves the state alone.
+/// `stream_flush`: writes what the stream holds and answers `READY:`,
+/// including for a stream nothing has opened -- measured, and it leaves the
+/// state alone. A write that fails is `NOTREADY` answering `ERROR:n`
+/// (`StreamInfo::streamFlush`).
 pub(super) fn flush(
     interp: &mut Interp,
     _cleared: Cleared,
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    require(interp, receiver)?;
+    release_held(interp, receiver)?;
+    let state = require_mut(interp, receiver)?;
+    if let Some(Err(error)) = state.open.as_mut().map(rexx_core::OpenFile::flush) {
+        let errno = error.raw_os_error().unwrap_or(0);
+        let answer = format!("ERROR:{errno}").into_bytes();
+        return notready(interp, receiver, StreamStatus::Error(errno), answer);
+    }
     Ok(Some(interp.text(b"READY:")))
 }
 
@@ -2263,6 +2357,9 @@ pub(super) fn uninit(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    if require(interp, receiver).is_ok() {
+        release_held(interp, receiver)?;
+    }
     if let Some(object) = interp.heap.get_mut(receiver) {
         let before = object.body.held_bytes();
         if let Body::Instance { native, .. } = &mut object.body {

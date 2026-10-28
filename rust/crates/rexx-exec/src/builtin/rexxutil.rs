@@ -23,6 +23,7 @@ use rexx_core::{Decoded, ObjRef};
 use rexx_num::{DIGITS64, Number};
 
 use crate::error::Raised;
+use crate::paths::os_path;
 use crate::scheduler::ParkReason;
 use crate::semaphores::{SEM_POLL, SemaphoreKey, SemaphoreWait, WaitKind};
 use crate::{Failure, Interp, Loud};
@@ -98,12 +99,6 @@ fn path_argument(
 ) -> Result<Vec<u8>, Failure> {
     let text = required_c_string(interp, args, position)?;
     Ok(crate::builtin::platform::qualify_name(interp, &text))
-}
-
-/// A path's bytes as the `Path` the standard library opens, unchanged.
-fn os_path(path: &[u8]) -> &std::path::Path {
-    use std::os::unix::ffi::OsStrExt as _;
-    std::path::Path::new(std::ffi::OsStr::from_bytes(path))
 }
 
 /// The answer these routines give: a whole number, as text.

@@ -517,13 +517,29 @@ pub struct OpenMode {
     pub record_length: u64,
 }
 
+/// How many written bytes a buffered stream holds before it writes them: the
+/// oracle's `DEFAULT_BUFFER_SIZE` (`common/platform/unix/SysFile.hpp`).
+pub const STREAM_BUFFER: usize = 4096;
+
 /// The descriptor an open stream holds, with the logical positions one
 /// descriptor serves. The character positions are 1-based "next byte", as the
 /// oracle's are. A SEEK that would move one below 1 fails, so a write
 /// position is 0 only on a stream opened READ, which has none.
+///
+/// A stream is buffered unless it was opened `NOBUFFER` or is a terminal
+/// (rexxref streamclasses.xml, `NOBUFFER`): its writes reach the file when
+/// [`STREAM_BUFFER`] bytes have gathered, when the next write does not follow
+/// on, and before anything reads, measures or positions the descriptor
+/// through [`OpenFile::flushed`], so another stream or process sees them only
+/// from then on. A drop writes what is left.
 #[derive(Debug)]
 pub struct OpenFile {
-    pub file: std::fs::File,
+    file: std::fs::File,
+    /// Written bytes the file does not hold yet, which land at byte offset
+    /// `held_at` (where the file stands, on a transient stream).
+    held: Vec<u8>,
+    held_at: u64,
+    buffered: bool,
     pub read_position: i64,
     pub write_position: i64,
     /// A byte taken from a transient stream to learn whether data waits, which
@@ -544,6 +560,121 @@ pub struct OpenFile {
     /// iostrms.xml:495-500); the checks then stand aside.
     pub line_mark_digest: Option<u64>,
     pub line_total_digest: Option<u64>,
+}
+
+impl OpenFile {
+    /// `file` opened, read from position 1 and written at `write_position`.
+    pub fn new(
+        file: std::fs::File,
+        write_position: i64,
+        transient: bool,
+        buffered: bool,
+    ) -> OpenFile {
+        OpenFile {
+            file,
+            held: Vec::new(),
+            held_at: 0,
+            buffered,
+            read_position: 1,
+            write_position,
+            pending: None,
+            transient,
+            line_mark: None,
+            line_total: None,
+            line_mark_digest: None,
+            line_total_digest: None,
+        }
+    }
+
+    /// The descriptor as it stands, without the writes still held: for its
+    /// type, its number and its size where held writes cannot matter.
+    pub fn file(&self) -> &std::fs::File {
+        &self.file
+    }
+
+    /// The descriptor once the held writes are in it, for anything that
+    /// reads, measures or positions it. A failed write is dropped here, as
+    /// the oracle's `SysFile::flush` from a read drops it.
+    pub fn flushed(&mut self) -> &mut std::fs::File {
+        let _ = self.flush();
+        &mut self.file
+    }
+
+    /// The size the file has once the held writes are in it, without
+    /// writing them.
+    pub fn size(&self) -> u64 {
+        let size = self.file.metadata().map_or(0, |meta| meta.len());
+        match self.held.is_empty() || self.transient {
+            true => size,
+            false => size.max(self.held_at + self.held.len() as u64),
+        }
+    }
+
+    /// The descriptor's byte offset as the stream sees it: past the held
+    /// writes, which have not moved the descriptor yet.
+    pub fn offset(&mut self) -> u64 {
+        use std::io::Seek;
+        match self.held.is_empty() || self.transient {
+            true => self.file.stream_position().unwrap_or(0),
+            false => self.held_at + self.held.len() as u64,
+        }
+    }
+
+    /// Writes the held bytes.
+    pub fn flush(&mut self) -> std::io::Result<()> {
+        if self.held.is_empty() {
+            return Ok(());
+        }
+        let held = std::mem::take(&mut self.held);
+        self.write_through(self.held_at, &held)
+    }
+
+    /// Writes `bytes` at byte offset `offset` (where the file stands, on a
+    /// transient stream), as `SysFile::write` does: held while they follow
+    /// on from the held bytes and fit, written in buffer-sized pieces as the
+    /// buffer fills, and written at once, after the held bytes, when they
+    /// are more than a buffer holds.
+    pub fn write(&mut self, offset: u64, bytes: &[u8]) -> std::io::Result<()> {
+        if !self.buffered {
+            return self.write_through(offset, bytes);
+        }
+        let follows = self.transient || self.held_at + self.held.len() as u64 == offset;
+        if !follows || bytes.len() > STREAM_BUFFER {
+            self.flush()?;
+        }
+        if bytes.len() > STREAM_BUFFER {
+            return self.write_through(offset, bytes);
+        }
+        if self.held.is_empty() {
+            self.held_at = offset;
+        }
+        let mut rest = bytes;
+        while !rest.is_empty() {
+            if self.held.len() == STREAM_BUFFER {
+                let at = self.held_at + STREAM_BUFFER as u64;
+                self.flush()?;
+                self.held_at = at;
+            }
+            let take = rest.len().min(STREAM_BUFFER - self.held.len());
+            self.held.extend_from_slice(&rest[..take]);
+            rest = &rest[take..];
+        }
+        Ok(())
+    }
+
+    fn write_through(&mut self, offset: u64, bytes: &[u8]) -> std::io::Result<()> {
+        use std::io::{Seek, SeekFrom, Write};
+        if !self.transient {
+            self.file.seek(SeekFrom::Start(offset))?;
+        }
+        self.file.write_all(bytes)
+    }
+}
+
+impl Drop for OpenFile {
+    fn drop(&mut self) {
+        let _ = self.flush();
+    }
 }
 
 /// A `Stream`'s own state (`streamLibrary/StreamNative.hpp:158`). The name is
@@ -568,6 +699,10 @@ pub struct StreamState {
     /// `None` until something opens the stream, and again after a close.
     pub open: Option<OpenFile>,
     pub mode: OpenMode,
+    /// What a standard output or error stream opened without `NOBUFFER` has
+    /// written and not yet handed to its descriptor, as [`OpenFile`] holds a
+    /// file's writes.
+    pub held: Vec<u8>,
 }
 
 /// A copy is an **unopened** stream carrying the same name: a descriptor
@@ -585,6 +720,7 @@ impl Clone for StreamState {
             status: StreamStatus::Unknown,
             open: None,
             mode: OpenMode::default(),
+            held: Vec::new(),
         }
     }
 }
@@ -600,6 +736,7 @@ impl StreamState {
             status: StreamStatus::Unknown,
             open: None,
             mode: OpenMode::default(),
+            held: Vec::new(),
         }
     }
 

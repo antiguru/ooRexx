@@ -15,19 +15,20 @@
 //! here, so all of them answer the same question the same way and none reads
 //! the process's own directory.
 
+/// A path's bytes as the `Path` the standard library opens, unchanged: a name
+/// that is not UTF-8 names the file it spells.
+pub(crate) fn os_path(path: &[u8]) -> &std::path::Path {
+    use std::os::unix::ffi::OsStrExt as _;
+    std::path::Path::new(std::ffi::OsStr::from_bytes(path))
+}
+
 /// `path` made absolute against `cwd` and reduced to one spelling:
 /// `SysFileSystem::canonicalizeName` followed by `normalizePathName`
 /// (`platform/unix/SysFileSystem.cpp:628`, `:687`). Purely lexical -- the
 /// oracle avoids `realpath` here precisely so that a path that does not exist
 /// still normalises. Each `..` removes the component before it, which the
 /// oracle's loop does not do after a doubled slash or after a component
-/// starting with `.` (Deviation 34).
-pub(crate) fn normalize(path: &str, cwd: &str) -> String {
-    String::from_utf8(normalize_bytes(path.as_bytes(), cwd.as_bytes()))
-        .expect("removing whole components keeps UTF-8 valid")
-}
-
-/// [`normalize`] over bytes, for a name that need not be UTF-8.
+/// starting with `.` (Deviation 34). A name that is not UTF-8 keeps its bytes.
 pub(crate) fn normalize_bytes(path: &[u8], cwd: &[u8]) -> Vec<u8> {
     let mut absolute = Vec::with_capacity(cwd.len() + path.len() + 1);
     if path.first() != Some(&b'/') {
@@ -59,6 +60,11 @@ pub(crate) fn normalize_bytes(path: &[u8], cwd: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn normalize(path: &str, cwd: &str) -> String {
+        String::from_utf8(normalize_bytes(path.as_bytes(), cwd.as_bytes()))
+            .expect("UTF-8 in, UTF-8 out")
+    }
 
     /// `normalizePathName`'s reductions, each against the C++ loop's own
     /// answer.

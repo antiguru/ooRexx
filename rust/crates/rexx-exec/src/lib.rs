@@ -1796,6 +1796,10 @@ struct Interp {
     /// positioning a standard stream is 93.958. Taken from the `Invocation`,
     /// never from this process: see `Invocation::standard_transient`.
     standard_transient: [bool; 3],
+    /// The errno with which the [`Sinks`] last refused standard output's and
+    /// standard error's bytes, which every stream write to that descriptor
+    /// answers from then on.
+    pub(crate) sink_errors: [Option<i32>; 2],
     /// Where the two output buffers go before a read that would wait on a
     /// live standard input, or `None` for an embedding that reads them out of
     /// the `Outcome` at the end. See [`crate::Sinks`].
@@ -2444,6 +2448,7 @@ impl Interp {
             // `execute` replaces this, and only from an `Invocation` whose
             // caller owns real descriptors.
             standard_transient: [true; 3],
+            sink_errors: [None; 2],
             sinks: None,
             command_words: Vec::new(),
             command_words_base: Some(1),
@@ -3019,12 +3024,8 @@ impl Interp {
         }
     }
 
-    /// The directory this interpreter resolves relative paths against.
-    pub(crate) fn cwd_text(&self) -> String {
-        self.cwd.to_string_lossy().into_owned()
-    }
-
-    /// [`Interp::cwd_text`] as the bytes the file system holds.
+    /// The directory this interpreter resolves relative paths against, as
+    /// the bytes the file system holds.
     pub(crate) fn cwd_bytes(&self) -> &[u8] {
         use std::os::unix::ffi::OsStrExt as _;
         self.cwd.as_os_str().as_bytes()
@@ -3446,6 +3447,7 @@ impl Interp {
             // command-line words as bytes: no `ObjRef` in either, so nothing
             // here is reachable from the collector.
             standard_transient: _,
+            sink_errors: _,
             command_words: _,
             command_words_base: _,
         } = self;

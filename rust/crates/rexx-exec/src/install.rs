@@ -1876,15 +1876,14 @@ impl Interp {
         routine: bool,
         parent: Option<ObjRef>,
     ) -> Result<ObjRef, Failure> {
-        let path = String::from_utf8_lossy(name).into_owned();
         // **Read through the interpreter's own directory, recorded under the
         // name as given.** `Invocation::with_directory` is what a caller
         // running several interpreters on threads sets, so a relative name
         // must resolve there rather than against the process; but the package
         // keeps the spelling it was asked for -- measured, `~package~name`
         // for `newFile('rel.rex')` answers `rel.rex`.
-        let resolved = crate::paths::normalize(&path, &self.cwd_text());
-        let Ok(text) = std::fs::read(&resolved) else {
+        let resolved = crate::paths::normalize_bytes(name, self.cwd_bytes());
+        let Ok(text) = std::fs::read(crate::paths::os_path(&resolved)) else {
             return Err(Raised::executable_file_unreadable(name).into());
         };
         let parsed = self.parse_file(text, name)?;

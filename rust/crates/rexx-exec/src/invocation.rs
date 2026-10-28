@@ -114,18 +114,26 @@ pub enum SwitchMode {
 /// [`Sinks::stdout_terminal`] says between those, which is the buffering of C
 /// stdio and Python 3 (Deviation 40). The rest stays for the `Outcome`.
 pub struct Sinks {
-    /// Takes what `SAY` and `.STDOUT` have written since the last handover.
+    /// Takes what `SAY` and `.STDOUT` have written since the last handover,
+    /// answering the error that kept it from the descriptor, which the
+    /// stream writes to standard output then answer.
     ///
     /// **`Send`, because the interpreter runs on a thread of its own**
     /// (`on_interpreter_thread`), which is where the sized stack it needs
     /// comes from.
-    pub stdout: Box<dyn FnMut(&[u8]) + Send>,
+    pub stdout: Box<dyn FnMut(&[u8]) -> std::io::Result<()> + Send>,
     /// The same for the trace sink, which is `.STDERR`'s descriptor too.
-    pub stderr: Box<dyn FnMut(&[u8]) + Send>,
+    pub stderr: Box<dyn FnMut(&[u8]) -> std::io::Result<()> + Send>,
     /// Whether `stdout` writes to a terminal, which is handed each line as it
     /// ends. Any other `stdout` is handed its buffer once it passes 64 KiB,
     /// and `stderr` is handed each line whatever it writes to.
     pub stdout_terminal: bool,
+    /// Whether `stdout` and `stderr` write this process's own standard
+    /// output and error. A command whose output or error is not redirected
+    /// then writes that descriptor itself, as the oracle's child does, once
+    /// the buffers have been handed over; otherwise its writes are read back
+    /// and handed over with the interpreter's own.
+    pub own_descriptors: bool,
 }
 
 /// Where `.input` -- the position `PULL`, `PARSE PULL` and `PARSE LINEIN` all
