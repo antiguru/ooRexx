@@ -1,0 +1,13 @@
+The Method class M 0 0
+method 43.1 Could not find routine "HELPER".
+The Routine class R 0 0
+routine 43.1 Could not find routine "HELPER".
+class method: .T
+class routine: .T
+method directives: inner ran 1 2 M4 1
+x = 1|return inner() x
+r4 line 1
+routine directives: R4 INNER2 2 R4
+say "r4 line 1"|return inner2()
+rexx method: helper ran
+rexx routine: helper ran

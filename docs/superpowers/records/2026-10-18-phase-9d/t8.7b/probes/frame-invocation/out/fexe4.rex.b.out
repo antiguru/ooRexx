@@ -1,0 +1,7 @@
+1 2
+3 2
+a 4
+5 8
+cond INTERPRET 3 0
+cond PROGRAM 3 0
+again 2 2

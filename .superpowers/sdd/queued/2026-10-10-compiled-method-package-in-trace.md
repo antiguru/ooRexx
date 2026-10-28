@@ -1,3 +1,4 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.7b (probe agrees: docs/superpowers/records/2026-10-18-phase-9d/t8.7b/probes/compiled-method-package/t4c.rex).**
 **OPEN: ruled 9d, cluster dynamic-package-name (Phase 9d inventory).** probe still differs: the package is "M" on the oracle and the caller's file here, the cluster's mechanism.
 
 # A method compiled from source text names the caller's file as its package in `>I>` lines

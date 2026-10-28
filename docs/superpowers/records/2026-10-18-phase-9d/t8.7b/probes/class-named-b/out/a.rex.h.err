@@ -1,0 +1,4 @@
+       *-* Compiled routine "FCC".
+     2 *-* say 'local:' fcc('PLFIND')
+Error 88 running a.rex line 2:  Invalid argument.
+Error 88.900:  Conversion error.

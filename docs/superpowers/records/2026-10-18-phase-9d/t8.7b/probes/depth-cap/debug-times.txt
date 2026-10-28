@@ -1,0 +1,3 @@
+debug base 504ff0743: 2269.43 s elapsed, rc 137
+(the base run outlived its timeout 590 SIGTERM and was ended by SIGKILL at 2269 s)
+debug head (dev profile, final tree): 1.60 s elapsed, rc 0

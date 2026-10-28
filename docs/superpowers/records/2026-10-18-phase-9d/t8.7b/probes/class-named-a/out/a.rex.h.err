@@ -1,0 +1,4 @@
+       *-* Compiled routine "FCC".
+     1 *-* say 'stdque:' fcc('STDQUE')
+Error 88 running a.rex line 1:  Invalid argument.
+Error 88.900:  Conversion error.

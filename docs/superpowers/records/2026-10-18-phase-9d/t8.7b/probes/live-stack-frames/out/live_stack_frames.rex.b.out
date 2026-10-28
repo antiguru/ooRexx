@@ -1,0 +1,25 @@
+INTERPRET 22     22 *-* do f over .context~stackframes;
+ROUTINE 22     22 *-* interpret 'nop; do f over .context~stackframes; say f~type f~line f~traceline; end'
+PROGRAM 4      4 *-* call r
+4
+    23 *-* say .context~stackframes~firstItem~traceline
+trapped INTERNALCALL 29     29 *-*   x = 1 / 0
+trapped INTERPRET 25     25 *-* call inner 1
+trapped ROUTINE 25     25 *-* interpret 'call inner 1'
+trapped PROGRAM 5      5 *-* call viaInterpret
+METHOD M 39
+METHOD SEND0 The NIL object
+PROGRAM live_stack_frames.rex 7
+m
+ROUTINE [] 1 2
+METHOD [CALLR] The NIL object 2
+PROGRAM [live_stack_frames.rex] 8 0
+1
+0 3
+42.3 11 1
+       1 *-* return 1 / 0
+         *-* Compiled method "CALLR" with scope "K".
+      11 *-* x = k~callr(.routine~new('rr', 'return 1 / 0'), .array~new)
+  ROUTINE [] 1
+  METHOD [CALLR] The NIL object
+  PROGRAM [live_stack_frames.rex] 11

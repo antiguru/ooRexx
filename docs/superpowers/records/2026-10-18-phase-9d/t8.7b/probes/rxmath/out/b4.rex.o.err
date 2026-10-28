@@ -1,0 +1,3 @@
+     3 *-* ::method m external 'LIBRARY rxmath nosuch'
+Error 90 running b4.rex line 3:  External name not found.
+Error 90.998:  Unable to find external method "nosuch".

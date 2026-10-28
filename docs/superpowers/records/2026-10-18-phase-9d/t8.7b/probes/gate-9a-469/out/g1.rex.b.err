@@ -1,0 +1,9 @@
+     1 *-* call ext1 'x'
+     2 *-* r = .routine~new('RR', 'say "rr ran"')
+       >>>   "a Routine"
+     3 *-* r~call
+     4 *-* signal on syntax
+     5 *-* r2 = .routine~new('BAD', 'say (')
+     7 *-* syntax:
+     7 *-* say condition('o')~code condition('o')~message
+       >>>   "35.1 Incorrect expression detected at "("."

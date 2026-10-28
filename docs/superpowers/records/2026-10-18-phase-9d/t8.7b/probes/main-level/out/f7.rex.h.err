@@ -1,0 +1,3 @@
+     4 *-* say .c~f~source~items
+Error 97 running f7.rex line 4:  Object method not found.
+Error 97.1:  Object "The Method class" does not understand message "SOURCE".

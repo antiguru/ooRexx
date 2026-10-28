@@ -1,0 +1,8 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.04s
+     Running tests/suite.rs (/tmp/claude-1000/t87b-target/release/deps/suite-edb8ccd5504785e7)
+
+running 1 test
+test l3_core_suite ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 51 filtered out; finished in 0.16s
+

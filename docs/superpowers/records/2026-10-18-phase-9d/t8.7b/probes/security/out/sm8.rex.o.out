@@ -1,0 +1,14 @@
+r runs
+sm CALL
+c8 loaded
+ext3
+sm LOCAL
+sm ENVIRONMENT
+sm requires a8.cls
+sm requires a8.cls
+sm requires b8.cls
+sm requires b8.cls
+b8 loaded
+a8 loaded
+sm COMMAND
+loaded

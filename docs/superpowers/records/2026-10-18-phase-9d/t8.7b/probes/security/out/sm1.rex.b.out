@@ -1,0 +1,9 @@
+len 3
+sm METHOD UNKNOWN
+direct 3
+sm METHOD PM
+prot pm-ran
+sm METHOD PM
+main prot pm-ran
+sm METHOD PM
+rt prot pm-ran

@@ -1,0 +1,3 @@
+     2 *-* ::requires rxmath library
+Error 98 running b2.rex line 2:  Execution error.
+Error 98.903:  Unable to load library "RXMATH".

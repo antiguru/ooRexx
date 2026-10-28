@@ -1,0 +1,5 @@
+     2 *-* ::constant k (1/0)
+     1 *-* ::class c
+     2 *-* ::requires 'e3.cls'
+Error 42 running e3.cls line 2:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

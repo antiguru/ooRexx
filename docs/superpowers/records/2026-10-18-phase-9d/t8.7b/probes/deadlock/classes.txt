@@ -1,0 +1,11 @@
+# outcome classes after removing the run directory from each stderr (md5 first 8): side program class count
+     13 crate d2 422af4c1
+      5 crate d2 6bcca8af
+      5 crate g15 8e899fc4
+     13 crate g15 d1891161
+      1 oracle d2 0ef0f411
+      4 oracle d2 422af4c1
+      3 oracle d2 6bcca8af
+     26 oracle g15 80b40812
+      3 oracle g15 8e899fc4
+     11 oracle g15 d1891161

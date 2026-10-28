@@ -1,0 +1,86 @@
+# oracle runs: md5 of stderr (first 8), rc
+oracle d2 run 1 a130e8a1 rc 158
+oracle d2 run 2 a130e8a1 rc 158
+oracle d2 run 3 59f17d8c rc 158
+oracle d2 run 4 a130e8a1 rc 158
+oracle d2 run 5 2dc41e34 rc 158
+oracle d2 run 6 a130e8a1 rc 158
+oracle d2 run 7 59f17d8c rc 158
+oracle d2 run 8 59f17d8c rc 158
+oracle g15 run 1 ee5fb3fd rc 158
+oracle g15 run 2 ee5fb3fd rc 158
+oracle g15 run 3 70915faf rc 158
+oracle g15 run 4 ee5fb3fd rc 158
+oracle g15 run 5 ee5fb3fd rc 158
+oracle g15 run 6 ee5fb3fd rc 158
+oracle g15 run 7 ee5fb3fd rc 158
+oracle g15 run 8 ee5fb3fd rc 158
+oracle g15 run 9 ee5fb3fd rc 158
+oracle g15 run 10 ee5fb3fd rc 158
+# crate (rexx-head-67e9a22e9) under REXX_SWITCH_MODE: md5 of stderr less the rexx-sim line, rc
+crate d2 sim:1,fifo a130e8a1 rc 158
+crate d2 sim:2,fifo a130e8a1 rc 158
+crate d2 sim:3,fifo a130e8a1 rc 158
+crate d2 sim:4,fifo a130e8a1 rc 158
+crate d2 sim:5,fifo a130e8a1 rc 158
+crate d2 sim:6,fifo a130e8a1 rc 158
+crate d2 sim:1,uniform:0.2 a130e8a1 rc 158
+crate d2 sim:2,uniform:0.2 59f17d8c rc 158
+crate d2 sim:3,uniform:0.2 a130e8a1 rc 158
+crate d2 sim:4,uniform:0.2 a130e8a1 rc 158
+crate d2 sim:5,uniform:0.2 a130e8a1 rc 158
+crate d2 sim:6,uniform:0.2 a130e8a1 rc 158
+crate d2 sim:1,pct:3,k=40 a130e8a1 rc 158
+crate d2 sim:2,pct:3,k=40 59f17d8c rc 158
+crate d2 sim:3,pct:3,k=40 59f17d8c rc 158
+crate d2 sim:4,pct:3,k=40 59f17d8c rc 158
+crate d2 sim:5,pct:3,k=40 59f17d8c rc 158
+crate d2 sim:6,pct:3,k=40 a130e8a1 rc 158
+crate g15 sim:1,fifo 70915faf rc 158
+crate g15 sim:2,fifo 70915faf rc 158
+crate g15 sim:3,fifo 70915faf rc 158
+crate g15 sim:4,fifo 70915faf rc 158
+crate g15 sim:5,fifo 70915faf rc 158
+crate g15 sim:6,fifo 70915faf rc 158
+crate g15 sim:1,uniform:0.2 70915faf rc 158
+crate g15 sim:2,uniform:0.2 43660f17 rc 158
+crate g15 sim:3,uniform:0.2 70915faf rc 158
+crate g15 sim:4,uniform:0.2 70915faf rc 158
+crate g15 sim:5,uniform:0.2 70915faf rc 158
+crate g15 sim:6,uniform:0.2 70915faf rc 158
+crate g15 sim:1,pct:3,k=40 70915faf rc 158
+crate g15 sim:2,pct:3,k=40 43660f17 rc 158
+crate g15 sim:3,pct:3,k=40 43660f17 rc 158
+crate g15 sim:4,pct:3,k=40 43660f17 rc 158
+crate g15 sim:5,pct:3,k=40 43660f17 rc 158
+crate g15 sim:6,pct:3,k=40 70915faf rc 158
+oracle g15 run 11 ac59e62f rc 158
+oracle g15 run 12 0a9c883b rc 158
+oracle g15 run 13 0a9c883b rc 158
+oracle g15 run 14 ac59e62f rc 158
+oracle g15 run 15 ac59e62f rc 158
+oracle g15 run 16 0a9c883b rc 158
+oracle g15 run 17 0a9c883b rc 158
+oracle g15 run 18 0a9c883b rc 158
+oracle g15 run 19 0a9c883b rc 158
+oracle g15 run 20 0a9c883b rc 158
+oracle g15 run 21 0a9c883b rc 158
+oracle g15 run 22 ac59e62f rc 158
+oracle g15 run 23 ac59e62f rc 158
+oracle g15 run 24 6054dcca rc 158
+oracle g15 run 25 0a9c883b rc 158
+oracle g15 run 26 6054dcca rc 158
+oracle g15 run 27 0a9c883b rc 158
+oracle g15 run 28 ac59e62f rc 158
+oracle g15 run 29 0a9c883b rc 158
+oracle g15 run 30 ac59e62f rc 158
+oracle g15 run 31 0a9c883b rc 158
+oracle g15 run 32 0a9c883b rc 158
+oracle g15 run 33 0a9c883b rc 158
+oracle g15 run 34 6054dcca rc 158
+oracle g15 run 35 0a9c883b rc 158
+oracle g15 run 36 ac59e62f rc 158
+oracle g15 run 37 ac59e62f rc 158
+oracle g15 run 38 0a9c883b rc 158
+oracle g15 run 39 0a9c883b rc 158
+oracle g15 run 40 ac59e62f rc 158

@@ -1,3 +1,4 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.7b (5053fbd9b).**
 **OPEN, queued 2026-10-22 by the controller; proposed 9d.**
 
 # `.context~stackframes` lacks a Directory subclass's METHOD UNKNOWN frame

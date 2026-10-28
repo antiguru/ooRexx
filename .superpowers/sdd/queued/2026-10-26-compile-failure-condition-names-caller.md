@@ -1,3 +1,4 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.7b (5053fbd9b).**
 **OPEN, queued 2026-10-26 by the controller; proposed 9d (Task 8.7).**
 
 # A compile failure's condition object names the caller's package

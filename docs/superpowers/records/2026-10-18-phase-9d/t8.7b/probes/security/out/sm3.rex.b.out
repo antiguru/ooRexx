@@ -1,0 +1,10 @@
+sm command exit 5
+main rc 42
+sm command exit 6
+internal rc 42
+sm command exit 3
+routine rc 42
+sm command exit 7
+interp rc 42
+sm command exit 4
+method rc 42

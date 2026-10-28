@@ -1,0 +1,3 @@
+     5 *-* say condition('o')~traceback~makestring('l','|')
+Error 97 running h4.rex line 5:  Object method not found.
+Error 97.1:  Object "a List" does not understand message "MAKESTRING".

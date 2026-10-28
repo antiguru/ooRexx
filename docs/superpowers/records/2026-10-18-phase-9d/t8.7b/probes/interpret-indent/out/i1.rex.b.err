@@ -1,0 +1,5 @@
+    17 *-*   return 1 / 0
+     4 *-* x = f()
+     4 *-* interpret 'do 2; nop; end; x = f()'
+Error 42 running i1.rex line 17:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

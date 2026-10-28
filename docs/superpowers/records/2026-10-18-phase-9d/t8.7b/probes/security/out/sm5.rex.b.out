@@ -1,0 +1,9 @@
+req2 loaded
+calling
+agent
+sm call EXT1
+sm requires req1.cls
+sm requires req1.cls
+req1 loaded
+in ext1
+back

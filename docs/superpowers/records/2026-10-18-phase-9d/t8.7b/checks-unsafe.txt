@@ -1,0 +1,10 @@
+   Compiling rexx-core v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core)
+    Finished `release` profile [optimized + debuginfo] target(s) in 7.68s
+     Running tests/unsafe_sites.rs (/tmp/claude-1000/t87b-target/release/deps/unsafe_sites-0d319af3dd2a83c2)
+
+running 2 tests
+test the_scan_reaches_the_whole_workspace ... ok
+test only_the_granted_module_may_say_unsafe ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+

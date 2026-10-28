@@ -1,0 +1,5 @@
+       *-* Compiled method "RESULT" with scope "Message".
+    10 *-* m~result
+     2 *-* o~go
+Error 98 running d2.rex line 10:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.

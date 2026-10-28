@@ -1,0 +1,34 @@
+   run METHOD | *UNNAMED* | 1
+   run METHOD | VIARUN | 24
+   run PROGRAM | f1.rex | 2
+run 1
+   sort METHOD | COMPARETO | 26
+   sort PROGRAM | f1.rex | 4
+   eq METHOD | == | 29
+   eq PROGRAM | f1.rex | 5
+hasitem 0
+   makearray METHOD | MAKEARRAY | 32
+   makearray PROGRAM | f1.rex | 6
+request The Array class
+   hash METHOD | HASHCODE | 35
+   hash PROGRAM | f1.rex | 8
+   two METHOD | TWO | 38
+   two METHOD | SEND | The NIL object
+   two PROGRAM | f1.rex | 9
+send 2
+   two METHOD | TWO | 38
+   two METHOD | SENDWITH | The NIL object
+   two PROGRAM | f1.rex | 10
+sendwith 2
+   two METHOD | TWO | 38
+   two METHOD | SEND | The NIL object
+   two PROGRAM | f1.rex | 11
+osend 2
+   routine ROUTINE | rr | 1
+   routine METHOD | CALL | The NIL object
+   routine PROGRAM | f1.rex | 13
+call 0
+   routine ROUTINE | rr | 1
+   routine METHOD | CALLWITH | The NIL object
+   routine PROGRAM | f1.rex | 14
+callwith 0

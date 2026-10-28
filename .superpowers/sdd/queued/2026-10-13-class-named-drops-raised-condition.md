@@ -1,3 +1,4 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.7b (5053fbd9b).**
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe recorded; dispatch/library/surface.rs:859 still drops the lookup's Err through .ok()?.
 
 # find_class's class_named branch drops a raised condition

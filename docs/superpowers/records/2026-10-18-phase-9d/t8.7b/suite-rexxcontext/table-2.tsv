@@ -1,0 +1,4 @@
+# ootest revision 13178
+group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
+base/class/RexxContext	oracle	15	15	15			-	-	1	yes	ulimit -v 1048576	15
+base/class/RexxContext	crate	15	15	15			-	-	1	yes	memcap 2G	15

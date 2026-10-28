@@ -1,3 +1,4 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.7b (5053fbd9b).**
 **OPEN: ruled 9d, cluster native-stack-frames (Phase 9d inventory).** fexe1 agrees; fexe2 (1 2 against 3 2) and fexe3 (no METHOD SEND frame) differ; clusters.md names this item as that cluster's parent.
 
 # Frame values: an internal call's executable, an INTERPRET frame's invocation, native levels

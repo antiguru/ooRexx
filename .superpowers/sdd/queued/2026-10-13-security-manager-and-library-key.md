@@ -1,3 +1,4 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.7b (5053fbd9b).**
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe recorded; two oracle measurements to make first.
 
 # Two findings from 9b Task 9 (not RexxUtil)

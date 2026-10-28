@@ -1,0 +1,6 @@
+     6 *-* ::constant e (.context~executable)
+     6 *-* ::constant e (.context~executable)
+Error 98 running g15.rex line 10:  Execution error.
+Error 98 running g15.rex line 10:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+Error 98.905:  Deadlock detected on a guarded method.

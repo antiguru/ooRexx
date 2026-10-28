@@ -1,0 +1,3 @@
+     3 *-* o~setMethod('f', .method~new('f', 'say "in f"; use arg n; return n'))
+Error 97 running b.rex line 3:  Object method not found.
+Error 97.2:  Object "an Object" cannot accept private message "SETMETHOD" from this context.

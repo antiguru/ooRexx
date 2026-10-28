@@ -1,0 +1,8 @@
+     2 *-*       do f over .context~stackframes;
+     2 *-*   interpret 'do 1; do 1; do f over .context~stackframes; say f~traceline; end; end; end'
+     4 *-*     do f over .context~stackframes;
+     4 *-*   interpret "do 1; do f over .context~stackframes; say f~traceline; end; end";
+     4 *-* interpret 'do 1; interpret "do 1; do f over .context~stackframes; say f~traceline; end; end"; end'
+t2      9 *-*   do f over .context~stackframes;
+t2      9 *-*     interpret 'do 1; nop; end; do f over .context~stackframes; say "t2" f~traceline; end'
+t2      5 *-* call t2

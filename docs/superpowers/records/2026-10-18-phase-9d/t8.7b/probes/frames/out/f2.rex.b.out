@@ -1,0 +1,25 @@
+   sort METHOD | COMPARETO | 45 | K | 1 | 0
+   sort PROGRAM | f2.rex | 2 | Object | 0 | 0
+   hash METHOD | HASHCODE | 49 | K | 0 | 0
+   hash PROGRAM | f2.rex | 4 | Object | 0 | 0
+   hash METHOD | HASHCODE | 49 | K | 0 | 0
+   hash PROGRAM | f2.rex | 5 | Object | 0 | 0
+   eq METHOD | == | 52 | K | 1 | 0
+   eq PROGRAM | f2.rex | 5 | Object | 0 | 0
+   eq METHOD | == | 52 | K | 1 | 0
+   eq PROGRAM | f2.rex | 7 | Object | 0 | 0
+   hash METHOD | HASHCODE | 49 | K | 0 | 0
+   hash PROGRAM | f2.rex | 7 | Object | 0 | 0
+   go METHOD | GO | 1 | Directory | 0 | 0
+   go PROGRAM | f2.rex | 11 | Object | 0 | 0
+explicit 3
+   sort METHOD | COMPARETO | 45 | K | 1 | 0
+   sort PROGRAM | f2.rex | 14 | Object | 0 | 0
+syntax 93.900
+  cond METHOD | COMPARETO | 46
+  cond METHOD | SORT | The NIL object
+  cond PROGRAM | f2.rex | 14
+   deeprun METHOD | *UNNAMED* | 1 | K | 0 | 0
+   deeprun METHOD | DEEPRUN | 35 | K | 0 | 0
+   deeprun INTERNALCALL | DEEP | 25 | Object | 0 | 0
+   deeprun PROGRAM | f2.rex | 22 | Object | 0 | 0

@@ -1,0 +1,5 @@
+     1 *-* return 1 / 0
+       *-* Compiled method "CALLR" with scope "K".
+    19 *-* x = k~callr(.routine~new('rr', 'return 1 / 0'), .array~new)
+Error 42 running live_stack_frames.rex line 19:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

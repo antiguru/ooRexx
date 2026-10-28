@@ -1,0 +1,3 @@
+     2 *-* p~call
+Error 97 running f3.rex line 2:  Object method not found.
+Error 97.1:  Object "a Package" does not understand message "CALL".

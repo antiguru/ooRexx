@@ -1,0 +1,10 @@
+sm CALL
+sm requires req1.cls
+sm requires req1.cls
+req1 loaded
+in ext1
+sm CALL
+sm requires req2.cls
+sm requires req2.cls
+req2 loaded
+in ext2

@@ -1,3 +1,4 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.7b (probe agrees: docs/superpowers/records/2026-10-18-phase-9d/t8.7b/probes/frames/f1.rex).**
 **OPEN: ruled 9d, cluster native-stack-frames (Phase 9d inventory).** names StackFrame TESTNATIVECODEFRAME, that cluster's test.
 
 # Native method frames missing from a live .context~stackFrames

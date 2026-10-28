@@ -1,0 +1,3 @@
+    10 *-* say .context~package~findRoutine('SYSVERSION')~package~name
+Error 97 running ps.rex line 10:  Object method not found.
+Error 97.1:  Object "The NIL object" does not understand message "PACKAGE".

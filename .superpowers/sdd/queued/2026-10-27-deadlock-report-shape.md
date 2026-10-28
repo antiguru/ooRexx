@@ -1,3 +1,4 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.7b (probe agrees: docs/superpowers/records/2026-10-18-phase-9d/t8.7b/probes/deadlock/classes.txt; this crate's outcomes are a subset of the oracle's, the rest Deviation 67's race).**
 **OPEN, queued 2026-10-27 by the controller; proposed 9d (Task 8.7).**
 
 # A guard deadlock's reports differ from the oracle's in count and echoes

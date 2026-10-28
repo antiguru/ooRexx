@@ -1,0 +1,40 @@
+== class 0ef0f411 (d2.o5.err)
+     6 *-* return 1
+     6 *-* return 1
+Error 98 running d2.rex line 10:  Execution error.
+Error 98 running d2.rex line 10:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+Error 98.905:  Deadlock detected on a guarded method.
+== class 422af4c1 (d2.o1.err)
+     6 *-* return 1
+Error 98 running d2.rex line 6:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+     6 *-* return 1
+Error 98 running d2.rex line 10:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+== class 6bcca8af (d2.o3.err)
+       *-* Compiled method "RESULT" with scope "Message".
+    10 *-* m~result
+     2 *-* o~go
+Error 98 running d2.rex line 10:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+== class 80b40812 (g15.o10.err)
+     6 *-* ::constant e (.context~executable)
+     6 *-* ::constant e (.context~executable)
+Error 98 running g15.rex line 10:  Execution error.
+Error 98 running g15.rex line 10:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+Error 98.905:  Deadlock detected on a guarded method.
+== class 8e899fc4 (g15.o24.err)
+       *-* Compiled method "RESULT" with scope "Message".
+    10 *-* m~result
+     3 *-* o~go
+Error 98 running g15.rex line 10:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+== class d1891161 (g15.o11.err)
+     6 *-* ::constant e (.context~executable)
+Error 98 running g15.rex line 6:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.
+     6 *-* ::constant e (.context~executable)
+Error 98 running g15.rex line 10:  Execution error.
+Error 98.905:  Deadlock detected on a guarded method.

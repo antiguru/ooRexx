@@ -1,0 +1,7 @@
+     1 *-* raise syntax 98.900 array("deep")
+       *-* Compiled method "RUN" with scope "Object".
+    35 *-* self~run('call show "deeprun"; raise syntax 98.900 array("deep")')
+    25 *-*   .k~new~deeprun
+    22 *-* call deep
+Error 98 running RUN line 1:  Execution error.
+Error 98.900:  deep.

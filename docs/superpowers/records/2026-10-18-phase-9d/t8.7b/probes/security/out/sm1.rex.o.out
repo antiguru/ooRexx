@@ -1,0 +1,6 @@
+len 3
+direct 3
+prot pm-ran
+main prot pm-ran
+sm METHOD PM
+rt prot pm-ran

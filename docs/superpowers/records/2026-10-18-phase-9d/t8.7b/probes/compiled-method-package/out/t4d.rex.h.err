@@ -1,0 +1,9 @@
+       >I> Method "*UNNAMED*" with scope ".NIL" in package "MM".
+     1 *-* nop
+       <I< Method "*UNNAMED*" with scope ".NIL" in package "MM".
+       >I> Routine "RR" in package "RR".
+     1 *-* nop
+       <I< Routine "RR" in package "RR".
+       >I> Method "DD" with scope "K" in package "DD".
+     1 *-* nop
+       <I< Method "DD" with scope "K" in package "DD".

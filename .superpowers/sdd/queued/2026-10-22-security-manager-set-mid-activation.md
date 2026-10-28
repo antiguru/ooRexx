@@ -1,3 +1,4 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.7b (5053fbd9b).**
 # A security manager set mid-activation is seen by an internal call
 
 Found by the Phase 9d Task 8.2 re-review (task-8.2-rereview-r1.md, Minor 3); predates the task.

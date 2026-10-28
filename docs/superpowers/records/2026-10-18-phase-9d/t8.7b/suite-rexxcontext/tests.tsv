@@ -1,0 +1,18 @@
+# ootest revision 13178
+# groups base/class/RexxContext
+group	test	row	oracle	crate
+base/class/RexxContext	TESTARGS01	-	passed	passed
+base/class/RexxContext	TESTCONDITION01	-	passed	passed
+base/class/RexxContext	TESTCOPY01	-	passed	passed
+base/class/RexxContext	TESTEXECUTION01	-	passed	passed
+base/class/RexxContext	TESTLINE01	-	passed	passed
+base/class/RexxContext	TESTNAME01	-	passed	passed
+base/class/RexxContext	TESTNEW01	-	passed	passed
+base/class/RexxContext	TESTNUMERIC01	-	passed	passed
+base/class/RexxContext	TESTRS01	-	passed	passed
+base/class/RexxContext	TESTVARIABLES01	-	passed	passed
+base/class/RexxContext	TEST_INTERPRETER_THREAD_INVOCATION	-	passed	passed
+base/class/RexxContext	TEST_SOURCELINE_FIRST_LINE	-	passed	passed
+base/class/RexxContext	TEST_SOURCELINE_FULL_FILE	-	passed	passed
+base/class/RexxContext	TEST_SOURCELINE_HASHBANG	-	passed	passed
+base/class/RexxContext	TEST_SOURCELINE_LAST_LINE	-	passed	passed

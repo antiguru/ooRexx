@@ -1,0 +1,17 @@
+42.3      1 *-* say 1/0|       *-* Compiled method "NEW" with scope "Package".|     2 *-* p = .package~new('pk', .array~of('say 1/0'))
+   ROUTINE pk 1
+   METHOD NEW The NIL object
+   PROGRAM n2.rex 2
+42.3      2 *-* ::constant k (1/0)|     1 *-* ::class c|       *-* Compiled method "NEW" with scope "Routine".|     5 *-* r = .routine~new('rt', .array~of('::class c', '::constant k (1/0)'))
+   METHOD ::CONSTANT 2
+   ROUTINE rt 1
+   METHOD NEW The NIL object
+   PROGRAM n2.rex 5
+35.1      1 *-* say (|       *-* Compiled method "NEW" with scope "Routine".|     8 *-* r = .routine~new('bad', .array~of('say ('))
+   COMPILE bad 1
+   METHOD NEW The NIL object
+   PROGRAM n2.rex 8
+99.903      3 *-* ::routine x|       *-* Compiled method "NEW" with scope "Method".|    11 *-* m = .method~new('mm', .array~of('nop', '::routine x', '::routine x'))
+   COMPILE mm 3
+   METHOD NEW The NIL object
+   PROGRAM n2.rex 11

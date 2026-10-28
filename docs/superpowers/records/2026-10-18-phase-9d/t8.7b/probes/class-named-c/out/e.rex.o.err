@@ -1,0 +1,4 @@
+     1 *-* raise syntax 93.900 array("from unknown" arg(1))
+     2 *-* t~setMethod('findc', .methods['FINDC'])
+Error 93 running UNKNOWN line 1:  Incorrect call to method.
+Error 93.900:  from unknown METHODS.

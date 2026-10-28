@@ -1,0 +1,3 @@
+     6 *-* ::requires 'REXXUTIL' library
+Error 98 running r2.rex line 6:  Execution error.
+Error 98.903:  Unable to load library "REXXUTIL".

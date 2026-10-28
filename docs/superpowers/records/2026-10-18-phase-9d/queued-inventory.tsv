@@ -40,7 +40,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-02-context-executable-setmethod.md	divergence	queued-probes/ctxexe/ctxexe.rex:1	closed:probe agrees	The NIL object, rc 0 on both	closed:probe agrees
 2026-10-02-do-with-over-refusal.md	divergence	queued-probes/dowith/dowith.rex:1	closed:probe agrees	DO WITH ... OVER and DO COUNTER ... OVER agree; Method TESTDIRECTIVES and MethodArgs TEST_REQUEST_STRING_* passed at the 9c close	closed:probe agrees
 2026-10-02-exit-in-handler-at-reply.md	divergence	queued-probes/hexit/hexit.rex:1	closed:04c46cb3b	RESOLVED in its first line; rc 165 and the 91.999 report on both	closed:04c46cb3b
-2026-10-02-frame-executable-invocation-and-native-levels.md	divergence	queued-probes/fexe1/fexe1.rex:1,queued-probes/fexe2/fexe2.rex:1,queued-probes/fexe3/fexe3.rex:1	9d-cluster:native-stack-frames	fexe1 agrees; fexe2 (1 2 against 3 2) and fexe3 (no METHOD SEND frame) differ; clusters.md names this item as that cluster's parent	9d-cluster:native-stack-frames
+2026-10-02-frame-executable-invocation-and-native-levels.md	divergence	queued-probes/fexe1/fexe1.rex:1,queued-probes/fexe2/fexe2.rex:1,queued-probes/fexe3/fexe3.rex:1	closed:5053fbd9b	fexe1 agrees; fexe2 (1 2 against 3 2) and fexe3 (no METHOD SEND frame) differ; clusters.md names this item as that cluster's parent	closed:5053fbd9b
 2026-10-02-halt-after-replied-send.md	divergence	queued-probes/pend4/pend4.rex:1	closed:23716a5ec	RESOLVED in its first line; one run a side agrees, rc 252 and the 4.1 report	closed:23716a5ec
 2026-10-02-halt-site-oracle-yield-cadence.md	divergence	-	closed:Deviation 22	a licensed scheduling observable (rulings P32, P44); not probed, the site varies run to run	closed:Deviation 22
 2026-10-02-kept-context-held-98983-overwritable.md	divergence	-	phase:10	not probed, it needs a forged extension; a native-API path beside Deviation 24	phase:10
@@ -70,7 +70,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-10-beep-wrong-type-message.md	divergence	queued-probes/beep/beep.rex:1	closed:030af45a1	probe still differs: the range message and the running REXX line	closed:030af45a1
 2026-10-10-call-on-nostring-insert.md	divergence	queued-probes/nostr/nostr.rex:1	closed:probe agrees	own probe: 25.1 found "NOSTRING" on both	closed:probe agrees
 2026-10-10-class-enhanced-skips-new.md	divergence	queued-probes/b7a/b7a.rex:1	closed:70d314bac	closed by Phase 9a Task 8b; both probes agree	closed:70d314bac
-2026-10-10-compiled-method-package-in-trace.md	divergence	queued-probes/t4c/t4c.rex:1	9d-cluster:dynamic-package-name	probe still differs: the package is "M" on the oracle and the caller's file here, the cluster's mechanism	9d-cluster:dynamic-package-name
+2026-10-10-compiled-method-package-in-trace.md	divergence	queued-probes/t4c/t4c.rex:1	closed:probe agrees	probe still differs: the package is "M" on the oracle and the caller's file here, the cluster's mechanism	closed:probe agrees
 2026-10-10-debug-do-header-notready-order.md	divergence	queued-probes/dh1/dh1.rex:1	9d	probe still differs: the handler runs before the header's pause here	phase:11.1
 2026-10-10-debug-equals-after-iterate-indent.md	divergence	queued-probes/e2/e2.rex:1	9d	probe still differs: the re-executed ITERATE echoes at its static indent here; a KNOWN GAP row in phase-4-exclusions.txt	phase:11.1
 2026-10-10-debug-labelled-block-header-pause.md	divergence	queued-probes/g1/g1.rex:1	9d	probe still differs: no pause after a labelled block DO header; a KNOWN GAP row	phase:11.1
@@ -95,7 +95,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-10-rexxcps-task-6-round-2-delta.md	perf	-	closed:6.1 close within budget	a +0.09% delta the 6.1 close absorbed (rexxcps +0.2694% against base61, task-12-evidence/cg-close2/table.txt); no probe	closed:6.1 close within budget
 2026-10-10-rooting-harness-blind-to-dropped-pushes.md	process	-	9d	no probe; removing either root push left every rooting test green, a test gap in tests/collect_stress.rs	9d
 2026-10-10-routine-new-no-package-parent.md	divergence	queued-probes/ctx3/ctx3.rex:1	closed:8b95afe79	RESOLVED in its first line; helper found on both	closed:8b95afe79
-2026-10-10-security-manager-command-rc-requires.md	divergence	-	9d	no probe recorded, only a classification table; the manager is consulted where the oracle does not	9d
+2026-10-10-security-manager-command-rc-requires.md	divergence	-	closed:5053fbd9b	no probe recorded, only a classification table; the manager is consulted where the oracle does not	closed:5053fbd9b
 2026-10-10-select-case-value-outlives-construct.md	design	-	not-a-divergence	no program reads the stale value; an unasserted invariant, no probe	not-a-divergence
 2026-10-10-sim-pool-seeded-delivery.md	design	-	phase:research	a testing-design proposal for the simulation mode; no probe	phase:research
 2026-10-10-sim-shrinker.md	design	-	phase:research	a testing-design proposal for the simulation mode; no probe	phase:research
@@ -115,7 +115,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-12-method-source-compile-retention.md	divergence	queued-probes/memcompile/memcompile.rex:1	closed:Phase 9b1 L8	queued-probes/memcompile/rss.txt: 44992 kB at 50000 and 45160 kB at 100000 here, was 921808 kB; flat	closed:Phase 9b1 L8
 2026-10-12-package-as-real-object.md	design	-	closed:Phase 9b1	phase-9b1-gate.md: L5 to L7 fixed, TESTRECLAIM01 passed; side-maps.tsv keeps package state on the package object's body	closed:Phase 9b1
 2026-10-12-randomised-hash-iteration.md	design	-	phase:research	Moritz's aim beyond the oracle; Deviation 33 already licenses the order; no probe	phase:research
-2026-10-13-class-named-drops-raised-condition.md	divergence	-	9d	no probe recorded; dispatch/library/surface.rs:859 still drops the lookup's Err through .ok()?	9d
+2026-10-13-class-named-drops-raised-condition.md	divergence	-	closed:5053fbd9b	no probe recorded; dispatch/library/surface.rs:859 still drops the lookup's Err through .ok()?	closed:5053fbd9b
 2026-10-13-class-side-string-method-not-sent.md	divergence	queued-probes/clsstr/clsstr.rex:1	closed:0a055271c	CLOSED in its first line; KS on both	closed:0a055271c
 2026-10-13-error-position-ampersand.md	divergence	queued-probes/imeth/imeth.rex:1	closed:probe agrees	inserts closed in 9c; instanceMethod after setMethod still answers an Object here and a Method on the oracle	closed:probe agrees
 2026-10-13-lossy-path-sites.md	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b1de0c	probe still differs: directory(d) answers empty for a directory named d'ff'x here and enters it on the oracle	closed:b53b1de0c
@@ -123,14 +123,14 @@ item	kind	probe	proposed	reason	ruled
 2026-10-13-passwd-home-ignores-nss.md	divergence	-	phase:11	not probed, no NSS-only account here; a host assumption, which row 11 puts behind the platform seam	phase:11
 2026-10-13-phase-9b-carry-in.md	process	-	9d	N1 native-frame memcpy cost is phase:9.1; the unchecked minors m1, m3, m4 are 9d	9d
 2026-10-13-phase-9b1-uniform-object-model.md	design	-	closed:Phase 9b1	phase-9b1-gate.md: every leak fixed or licensed, SysStemSort as Deviation 37, the addRoutine copy as L10	closed:Phase 9b1
-2026-10-13-security-manager-and-library-key.md	divergence	-	9d	no probe recorded; two oracle measurements to make first	9d
+2026-10-13-security-manager-and-library-key.md	divergence	-	closed:5053fbd9b	no probe recorded; two oracle measurements to make first	closed:5053fbd9b
 2026-10-13-stdin-stream-object-queries.md	divergence	queued-probes/stdinq/stdinq.rex:1	closed:b53b1de0c	own probe: streamtype, query handle, lines, query exists and qualify on STDIN still differ	closed:b53b1de0c
 2026-10-13-stdout-write-errors-swallowed.md	divergence	queued-probes/stdoutclosed/stdoutclosed.rex:1	closed:4f079c0d2	probe with stdout closed: lineout 0 READY: here, 1 ERROR:9 on the oracle	closed:4f079c0d2
 2026-10-13-sysfork-design.md	design	-	9d	Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal	9d
 2026-10-13-yaml-pass-boundary-guard.md	divergence	-	9d	no probe of its own; Task 4 consumes it (ruling 2), yaml TEST35_DIRECTIVES was blocked on this refusal at the 9c close	9d
 2026-10-14-class-side-defaultname.md	divergence	queued-probes/clsdn/clsdn.rex:1	closed:030af45a1	own probe: DN on the oracle, The WITHNAME class here	closed:030af45a1
 2026-10-14-filespec-string-arg.md	divergence	queued-probes/fspec/fspec.rex:1	closed:030af45a1	own probe: 88.909 on the oracle, a K rc 0 here; the same fix as native-routine-arguments-not-strings	closed:030af45a1
-2026-10-14-native-method-frames.md	divergence	-	9d-cluster:native-stack-frames	names StackFrame TESTNATIVECODEFRAME, that cluster's test	9d-cluster:native-stack-frames
+2026-10-14-native-method-frames.md	divergence	-	closed:probe agrees	names StackFrame TESTNATIVECODEFRAME, that cluster's test	closed:probe agrees
 2026-10-14-routine-start-call-panic.md	divergence	queued-probes/rstart/rstart.rex:1	closed:fb86ce94f	own probe: a panic "a live activation", rc 101, where the oracle prints 1; its file marks it PRIORITY	closed:fb86ce94f
 2026-10-15-9b1-task-8b-review-minors.md	divergence	queued-probes/m1var/m1var.rex:1,queued-probes/m4def/m4def.rex:1	9d	own probes: m1 lists Z here and A on the oracle, m4 answers the new source here and the old one on the oracle	9d
 2026-10-15-executable-flags-and-result.md	divergence	-	9d	no probe recorded; the oracle is still to be measured	9d
@@ -139,7 +139,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-16-bignum-remainder-speed.md	perf	queued-probes/bignum/bignum.rex:1	phase:9.1	probe: output 78 on both, 2000 iterations under 1 s on the oracle and over it here	phase:9.1
 2026-10-16-stream-command-open-missing-file.md	divergence	queued-probes/scopen/scopen.rex:1	9d-cluster:stream-notready-names	probe still differs (91.999 against ERROR:2); the cluster holds the same no-result open command	9d-cluster:stream-notready-names
 2026-10-17-library-bind-before-options.md	divergence	queued-probes/libbind/libbind.rex:1	closed:f84e64ee4	probe still differs: 26.5 on line 2 here, 98.903 on line 1 on the oracle	closed:f84e64ee4
-2026-10-17-newmethod-parent-package.md	divergence	-	9d	no witness exists, the difference is read from the code; METHOD is a Phase 9 native-API group	9d
+2026-10-17-newmethod-parent-package.md	divergence	-	closed:5053fbd9b	no witness exists, the difference is read from the code; METHOD is a Phase 9 native-API group	closed:5053fbd9b
 2026-10-17-oracle-not-op-forwarding-bug-2117.md	oracle bug	queued-probes/notop/notop.rex:1	not-a-divergence	upstream report SF #2117; probe: the oracle answers 1 0 and the crate the right 0 1	not-a-divergence
 2026-10-17-phase-10-corpus-and-rxfunc.md	design	-	phase:10	ruled by Moritz 2026-10-17 (9d plan ruling 3)	phase:10
 2026-10-17-routine-call-frame-name.md	divergence	queued-probes/rcfn/rcfn.rex:1	closed:68e7f15d5	probe still differs: ROUTINE MYNAME on the oracle, ROUTINE CALL here	closed:68e7f15d5
@@ -169,7 +169,7 @@ gate:phase-9a-gate.md:464	divergence	queued-probes/startw/startw.rex:1	closed:Ph
 gate:phase-9a-gate.md:465	design	-	closed:Deviation 35	HANDLE:0, 1 and 2 reach the standard streams and any other descriptor is refused	closed:Deviation 35
 gate:phase-9a-gate.md:466	perf	-	9d	no probe; each is for the Phase 9 close callgrind, which is 9d Task 10's	9d
 gate:phase-9a-gate.md:468	process	-	closed:pin rebuilt	/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run exists and the 9d constraints measure against it	closed:pin rebuilt
-gate:phase-9a-gate.md:469	divergence	queued-probes/exttr/exttr.rex:1,queued-probes/t4c/t4c.rex:1	9d-cluster:dynamic-package-name	the external CALL half agrees (exttr); Routine~new's >I> package is that cluster's mechanism	9d-cluster:dynamic-package-name
+gate:phase-9a-gate.md:469	divergence	queued-probes/exttr/exttr.rex:1,queued-probes/t4c/t4c.rex:1	closed:probe agrees	the external CALL half agrees (exttr); Routine~new's >I> package is that cluster's mechanism	closed:probe agrees
 gate:phase-9a-gate.md:470	divergence	queued-probes/memcompile/memcompile.rex:1	closed:Phase 9b1	method-source retention is flat (its own row); the gc-trigger file was closed and removed in d81bacfad	closed:Phase 9b1
 gate:phase-9a-gate.md:471	divergence	queued-probes/stemunk/stemunk.rex:1	9d	the Stem half of directory-setmethod-unknown-traceback-line; probe still differs	9d
 gate:phase-9a-gate.md:472	process	-	9d	no probe; the sibling of arity-harness-ignores-target-dir, rexx-bench-suite.rs:591 still joins ../../target	9d
@@ -196,7 +196,7 @@ gate:phase-9c-gate.md:140	perf	queued-probes/bignum/bignum.rex:1	phase:9.1	a poi
 gate:phase-9c-gate.md:141	oracle bug	queued-probes/notop/notop.rex:1	not-a-divergence	a pointer to 2026-10-17-oracle-not-op-forwarding-bug-2117.md	not-a-divergence
 gate:phase-9c-gate.md:142	divergence	queued-probes/libbind/libbind.rex:1	closed:f84e64ee4	a pointer to 2026-10-17-library-bind-before-options.md	closed:f84e64ee4
 gate:phase-9c-gate.md:143	divergence	queued-probes/rcfn/rcfn.rex:1	closed:68e7f15d5	a pointer to 2026-10-17-routine-call-frame-name.md	closed:68e7f15d5
-gate:phase-9c-gate.md:144	divergence	-	9d	a pointer to 2026-10-17-newmethod-parent-package.md	9d
+gate:phase-9c-gate.md:144	divergence	-	closed:5053fbd9b	a pointer to 2026-10-17-newmethod-parent-package.md	closed:5053fbd9b
 gate:phase-9c-gate.md:145	divergence	queued-probes/scanlater/scanlater.rex:1	closed:44f1cb56b	a pointer to 2026-10-17-scanner-reports-later-clause-error.md	closed:44f1cb56b
 gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b1de0c	a pointer to 2026-10-13-lossy-path-sites.md	closed:b53b1de0c
 2026-10-18-command-waits-for-background-child.md	divergence	queued-probes/bgcmd/bgcmd.rex:1	closed:b53b1de0c	a command whose background child keeps stdout open: crate waits to timeout rc 124, oracle returns at once	closed:b53b1de0c
@@ -233,21 +233,21 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b
 2026-10-21-copied-package-routine-executable.md	divergence	-	closed:68e7f15d5	a copied REXX-package routine frame answers the canonical Routine	closed:68e7f15d5
 2026-10-21-raise-in-routine-keeps-call-site.md	divergence	-	closed:68e7f15d5	a raise inside a ::routine leaves its call site resolution kept	closed:68e7f15d5
 2026-10-21-call-site-reads-kept-before-arguments.md	divergence	-	closed:68e7f15d5	CallExpr and Call read the kept routine before the arguments	closed:68e7f15d5
-2026-10-22-interpret-clause-traceback-indent.md	divergence	-	9d	traceback indents the INTERPRET clause by the fragment nesting	9d
-2026-10-22-directory-subclass-unknown-frame.md	divergence	-	9d	stackframes lacks a Directory subclass METHOD UNKNOWN frame	9d
+2026-10-22-interpret-clause-traceback-indent.md	divergence	-	closed:5053fbd9b	traceback indents the INTERPRET clause by the fragment nesting	closed:5053fbd9b
+2026-10-22-directory-subclass-unknown-frame.md	divergence	-	closed:5053fbd9b	stackframes lacks a Directory subclass METHOD UNKNOWN frame	closed:5053fbd9b
 2026-10-22-lineout-four-args-error.md	divergence	-	9d	lineout with four args raises 88.922 where the oracle raises 88.907	9d
 2026-10-22-user-raised-in-own-handler.md	divergence	-	9d	a USER raised in its own CALL ON handler is never redelivered	9d
-2026-10-22-security-manager-set-mid-activation.md	divergence	-	9d	an internal call sees a security manager its caller set mid-activation; the oracle keeps the caller's captured settings	9d
+2026-10-22-security-manager-set-mid-activation.md	divergence	-	closed:5053fbd9b	an internal call sees a security manager its caller set mid-activation; the oracle keeps the caller's captured settings	closed:5053fbd9b
 2026-10-22-constant-frame-and-executable.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.3/probes/constant_frames.rex	closed:7fe50bedd	a ::CONSTANT frame is PROGRAM and its executable a Routine where the oracle has METHOD plus PROGRAM and a Method	closed:7fe50bedd
-2026-10-22-live-frames-omit-nested-primitives.md	divergence	-	9d	live stackFrames omit RUN, SORT, HASITEM, REQUEST and PUT frames the oracle lists	9d
-2026-10-22-executable-at-quadratic-depth.md	defect	-	9d	executable_at walks the frame chain once per level, quadratic at the depth cap	9d
+2026-10-22-live-frames-omit-nested-primitives.md	divergence	-	closed:5053fbd9b	live stackFrames omit RUN, SORT, HASITEM, REQUEST and PUT frames the oracle lists	closed:5053fbd9b
+2026-10-22-executable-at-quadratic-depth.md	defect	-	closed:5053fbd9b	executable_at walks the frame chain once per level, quadratic at the depth cap	closed:5053fbd9b
 2026-10-22-collect-stress-zero-collection-drift.md	process	-	9d	collect_stress zero-collection list drifted before Task 8.3; pruned, cause open	9d
 2026-10-26-file-date-time-dst-dependent.md	process	-	9d	rexxutil_file_date_time line 9 differs across the DST change, at base too	9d
 2026-10-26-redirected-target-waits-timing-flake.md	process	-	9d	collect_stress l0 subset flakes on a time(e) > 0.9 check	9d
-2026-10-26-main-program-level-during-requires-install.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/constant/probes/f1.rex	9d	the main PROGRAM level is missing from frames while its own ::REQUIRES install	9d
-2026-10-26-compile-failure-condition-names-caller.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/naming/probes/compile-condition/m.rex	9d	a compile failure condition names the caller package, the oracle the translated file	9d
-2026-10-26-library-rxmath-error-number.md	divergence	-	9d	LIBRARY rxmath raises 98.903, the oracle 90.998/90.999	9d
-2026-10-27-deadlock-report-shape.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/r2/probes/d2.rex	9d	a guard deadlock prints two reports here, one on the oracle; echoes differ	9d
+2026-10-26-main-program-level-during-requires-install.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/constant/probes/f1.rex	closed:5053fbd9b	the main PROGRAM level is missing from frames while its own ::REQUIRES install	closed:5053fbd9b
+2026-10-26-compile-failure-condition-names-caller.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/naming/probes/compile-condition/m.rex	closed:5053fbd9b	a compile failure condition names the caller package, the oracle the translated file	closed:5053fbd9b
+2026-10-26-library-rxmath-error-number.md	divergence	-	closed:probe agrees	LIBRARY rxmath raises 98.903, the oracle 90.998/90.999	closed:probe agrees
+2026-10-27-deadlock-report-shape.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/r2/probes/d2.rex	closed:probe agrees	a guard deadlock prints two reports here, one on the oracle; echoes differ	closed:probe agrees
 2026-10-27-reaped-child-test-load-flake.md	process	-	9d	a SysWait witness fails under workspace load, passes alone	9d
 2026-10-27-varref-operator-traceback-line.md	divergence	-	9d	an operator on a variable reference omits the Compiled method traceback line	9d
 2026-10-27-string-equals-makestring-argument.md	divergence	-	closed:030af45a1	String~equals ignores a makeString argument here, converts it on the oracle	closed:030af45a1
@@ -258,5 +258,5 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b
 2026-10-28-bump-oracle-version.md	process	-	after 9d	build current upstream trunk as the oracle; re-check fixed defects and oracle-derived records	after 9d
 2026-10-28-append-stream-positioned-writes.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.6/r2/probes/a1.rex	9d	positioned CHAROUT/LINEOUT on an APPEND stream disagree with each other and the oracle	9d
 2026-10-28-internal-rendering-defaultname.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7a/probes/dn/dn5.rex	9d	trace lines, error inserts and Array joins print the default name, oracle sends DEFAULTNAME	9d
-2026-10-28-rexx-package-source.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7a/review-probes/package-source-m1.rex	9d	Package~source of the REXX package answers its source, oracle 0 lines	9d
+2026-10-28-rexx-package-source.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7a/review-probes/package-source-m1.rex	closed:5053fbd9b	Package~source of the REXX package answers its source, oracle 0 lines	closed:5053fbd9b
 2026-10-28-trace-object-renderings.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7a/r1/probes/s25.rex	9d	TRACE I >K> of an Array PARSE VALUE and >O> of a returned reference render differently	9d

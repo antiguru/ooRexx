@@ -1,3 +1,4 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.7b (5053fbd9b).**
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no witness exists, the difference is read from the code; METHOD is a Phase 9 native-API group.
 
 # Native `NewMethod` on source gives the method the caller's package

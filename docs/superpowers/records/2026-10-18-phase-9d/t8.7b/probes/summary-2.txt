@@ -1,0 +1,12 @@
+main-level/f1.rex b=differs h=same
+main-level/f2.rex b=same h=same
+main-level/f3.rex b=differs h=same
+main-level/f4.rex b=differs h=same
+main-level/f7.rex b=differs h=differs
+main-level/f8.rex b=differs h=differs
+main-level/g1.rex b=differs h=same
+main-level/h1.rex b=same h=same
+main-level/h2.rex b=same h=same
+main-level/h3.rex b=same h=same
+main-level/h4.rex b=same h=same
+main-level/n2.rex b=same h=same
