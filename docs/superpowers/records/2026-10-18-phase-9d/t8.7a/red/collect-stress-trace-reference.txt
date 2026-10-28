@@ -1,0 +1,19 @@
+
+running 1 test
+test the_l0_subset_passes_again_under_collect_on_every_allocation has been running for over 60 seconds
+test the_l0_subset_passes_again_under_collect_on_every_allocation ... FAILED
+
+failures:
+
+---- the_l0_subset_passes_again_under_collect_on_every_allocation stdout ----
+
+thread 'rexx-interp' (3245708) panicked at crates/rexx-exec/src/dispatch.rs:1831:9:
+a live value
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    the_l0_subset_passes_again_under_collect_on_every_allocation
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 73 filtered out; finished in 214.71s
+

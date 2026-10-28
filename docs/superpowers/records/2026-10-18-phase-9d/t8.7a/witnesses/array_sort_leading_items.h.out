@@ -1,0 +1,45 @@
+2 a c 3
+.array~of('c','a','b')~~remove(2) sort -> 98.975 Missing array element at position 2.
+.array~of('c','a','b')~~remove(2) stableSort -> 98.975 Missing array element at position 2.
+.array~of('c','a','b')~~remove(2) sortWith -> 98.975 Missing array element at position 2.
+.array~of('c','a','b')~~remove(2) stableSortWith -> 98.975 Missing array element at position 2.
+.array~of('c','a','b')~~remove(1) sort -> 98.975 Missing array element at position 1.
+.array~of('c','a','b')~~remove(1) stableSort -> 98.975 Missing array element at position 1.
+.array~of('c','a','b')~~remove(1) sortWith -> 98.975 Missing array element at position 1.
+.array~of('c','a','b')~~remove(1) stableSortWith -> 98.975 Missing array element at position 1.
+.array~new(5)~~put('z',1)~~put('y',2)~~put('x',5) sort -> 98.975 Missing array element at position 3.
+.array~new(5)~~put('z',1)~~put('y',2)~~put('x',5) stableSort -> 98.975 Missing array element at position 3.
+.array~new(5)~~put('z',1)~~put('y',2)~~put('x',5) sortWith -> 98.975 Missing array element at position 3.
+.array~new(5)~~put('z',1)~~put('y',2)~~put('x',5) stableSortWith -> 98.975 Missing array element at position 3.
+.array~new(5)~~put('z',1)~~put('y',2)~~put('x',4) sort -> 98.975 Missing array element at position 3.
+.array~new(5)~~put('z',1)~~put('y',2)~~put('x',4) stableSort -> 98.975 Missing array element at position 3.
+.array~new(5)~~put('z',1)~~put('y',2)~~put('x',4) sortWith -> 98.975 Missing array element at position 3.
+.array~new(5)~~put('z',1)~~put('y',2)~~put('x',4) stableSortWith -> 98.975 Missing array element at position 3.
+.array~new(5)~~put('z',2) sort -> 98.975 Missing array element at position 1.
+.array~new(5)~~put('z',2) stableSort -> 98.975 Missing array element at position 1.
+.array~new(5)~~put('z',2) sortWith -> 1 5 2 z
+.array~new(5)~~put('z',2) stableSortWith -> 1 5 2 z
+.array~new(5)~~put('z',1) sort -> 1 5 1 z
+.array~new(5)~~put('z',1) stableSort -> 1 5 1 z
+.array~new(5)~~put('z',1) sortWith -> 1 5 1 z
+.array~new(5)~~put('z',1) stableSortWith -> 1 5 1 z
+.array~new(3) sort -> 0 3 The NIL object 
+.array~new(3) stableSort -> 0 3 The NIL object 
+.array~new(3) sortWith -> 0 3 The NIL object 
+.array~new(3) stableSortWith -> 0 3 The NIL object 
+.array~new sort -> 0 0 The NIL object 
+.array~new stableSort -> 0 0 The NIL object 
+.array~new sortWith -> 0 0 The NIL object 
+.array~new stableSortWith -> 0 0 The NIL object 
+.array~of('b','a')~~put('z', 10) sort -> 98.975 Missing array element at position 3.
+.array~of('b','a')~~put('z', 10) stableSort -> 98.975 Missing array element at position 3.
+.array~of('b','a')~~put('z', 10) sortWith -> 98.975 Missing array element at position 3.
+.array~of('b','a')~~put('z', 10) stableSortWith -> 98.975 Missing array element at position 3.
+.array~of('d','c','b','a')~~remove(4)~~remove(3) sort -> 2 4 2 c,d
+.array~of('d','c','b','a')~~remove(4)~~remove(3) stableSort -> 2 4 2 c,d
+.array~of('d','c','b','a')~~remove(4)~~remove(3) sortWith -> 2 4 2 c,d
+.array~of('d','c','b','a')~~remove(4)~~remove(3) stableSortWith -> 2 4 2 c,d
+.array~of('q','p')~~put('r',4)~~remove(2) sort -> 98.975 Missing array element at position 2.
+.array~of('q','p')~~put('r',4)~~remove(2) stableSort -> 98.975 Missing array element at position 2.
+.array~of('q','p')~~put('r',4)~~remove(2) sortWith -> 98.975 Missing array element at position 2.
+.array~of('q','p')~~put('r',4)~~remove(2) stableSortWith -> 98.975 Missing array element at position 2.

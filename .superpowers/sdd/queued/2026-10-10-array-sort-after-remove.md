@@ -1,3 +1,5 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.7a (030af45a1).**
+
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still differs: 98.975 rc 158 here, 2 a c rc 0 on the oracle.
 
 # Array~sort raises 98.975 after a trailing remove

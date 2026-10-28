@@ -1,3 +1,5 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.7a (030af45a1).**
+
 **RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** gap.
 
 **OPEN: found by the Phase 9d Task 6.7 review, not yet ruled.** Collection index arguments that are not plain strings are refused here where the oracle reads them.

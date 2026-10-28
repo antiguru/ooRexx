@@ -1,0 +1,12 @@
+--- oracle rc 216
+[err]
+       *-* Compiled routine "FILESPEC".
+     1 *-* say filespec('', 'a.b')
+Error 40 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/p/nat/n12.rex line 1:  Incorrect call to routine.
+Error 40.904:  FILESPEC argument 1 must be one of DELNP; found "".
+--- crate rc 216
+[err]
+       *-* Compiled routine "FILESPEC".
+     1 *-* say filespec('', 'a.b')
+Error 40 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/p/nat/n12.rex line 1:  Incorrect call to routine.
+Error 40.904:  FILESPEC argument 1 must be one of DELNP; found "".

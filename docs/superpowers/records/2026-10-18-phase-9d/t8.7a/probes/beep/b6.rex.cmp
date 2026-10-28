@@ -1,0 +1,12 @@
+--- oracle rc 168
+[err]
+       *-* Compiled routine "BEEP".
+     1 *-* say beep(40, 70000)
+Error 88 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/p/beep/b6.rex line 1:  Invalid argument.
+Error 88.907:  Argument duration must be in the range 0 to 60000; found "70000".
+--- crate rc 168
+[err]
+       *-* Compiled routine "BEEP".
+     1 *-* say beep(40, 70000)
+Error 88 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/p/beep/b6.rex line 1:  Invalid argument.
+Error 88.907:  Argument duration must be in the range 0 to 60000; found "70000".

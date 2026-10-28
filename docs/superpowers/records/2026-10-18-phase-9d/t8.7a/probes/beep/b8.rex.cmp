@@ -1,0 +1,12 @@
+--- oracle rc 168
+[err]
+       *-* Compiled routine "BEEP".
+     1 *-* say beep()
+Error 88 running REXX:  Invalid argument.
+Error 88.901:  Missing argument; argument 1 is required.
+--- crate rc 168
+[err]
+       *-* Compiled routine "BEEP".
+     1 *-* say beep()
+Error 88 running REXX:  Invalid argument.
+Error 88.901:  Missing argument; argument 1 is required.

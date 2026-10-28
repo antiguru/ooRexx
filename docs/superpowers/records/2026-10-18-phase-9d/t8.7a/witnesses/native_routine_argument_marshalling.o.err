@@ -1,0 +1,4 @@
+       *-* Compiled routine "FILESPEC".
+    28 *-* say filespec('name', o)
+Error 88 running REXX:  Invalid argument.
+Error 88.909:  Argument 2 must have a string value.

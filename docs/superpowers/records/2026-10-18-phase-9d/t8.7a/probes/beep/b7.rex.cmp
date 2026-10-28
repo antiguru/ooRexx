@@ -1,0 +1,12 @@
+--- oracle rc 168
+[err]
+       *-* Compiled routine "BEEP".
+     1 *-* say beep(1,1)
+Error 88 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/p/beep/b7.rex line 1:  Invalid argument.
+Error 88.907:  Argument frequency must be in the range 37 to 32767; found "1".
+--- crate rc 168
+[err]
+       *-* Compiled routine "BEEP".
+     1 *-* say beep(1,1)
+Error 88 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/p/beep/b7.rex line 1:  Invalid argument.
+Error 88.907:  Argument frequency must be in the range 37 to 32767; found "1".

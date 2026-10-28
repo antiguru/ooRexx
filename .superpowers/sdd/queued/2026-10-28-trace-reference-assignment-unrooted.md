@@ -1,3 +1,5 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.7a (030af45a1).**
+
 **OPEN, queued 2026-10-28 by the controller; proposed 9d (Task 8.7, first).**
 
 # TRACE I over a reference assignment panics: the traced value is not rooted

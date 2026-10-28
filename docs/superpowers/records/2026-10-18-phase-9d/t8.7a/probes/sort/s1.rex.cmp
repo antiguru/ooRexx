@@ -1,0 +1,36 @@
+--- oracle rc 0
+3 2 2 3
+2 a c 3
+.array~of('c','a','b')~~remove(2) sort -> 98.975 Missing array element at position 2.
+.array~of('c','a','b')~~remove(1) sort -> 98.975 Missing array element at position 1.
+.array~new(5)~~put('z',1)~~put('y',2)~~put('x',5) sort -> 98.975 Missing array element at position 3.
+.array~new(5)~~put('z',1)~~put('y',2)~~put('x',4) sort -> 98.975 Missing array element at position 3.
+.array~new(5)~~put('z',2) sort -> 98.975 Missing array element at position 1.
+.array~new(3) sort -> 0 3 
+.array~new(3) stableSort -> 0 3 
+.array~new(3) sortWith -> 0 3 
+.array~new(3) stableSortWith -> 0 3 
+.array~new sort -> 0 0 
+.array~new stableSort -> 0 0 
+.array~new sortWith -> 0 0 
+.array~new stableSortWith -> 0 0 
+.array~of('b','a')~~put('z', 10) sort -> 98.975 Missing array element at position 3.
+[err]
+--- crate rc 0
+3 2 2 3
+2 a c 3
+.array~of('c','a','b')~~remove(2) sort -> 98.975 Missing array element at position 2.
+.array~of('c','a','b')~~remove(1) sort -> 98.975 Missing array element at position 1.
+.array~new(5)~~put('z',1)~~put('y',2)~~put('x',5) sort -> 98.975 Missing array element at position 3.
+.array~new(5)~~put('z',1)~~put('y',2)~~put('x',4) sort -> 98.975 Missing array element at position 3.
+.array~new(5)~~put('z',2) sort -> 98.975 Missing array element at position 1.
+.array~new(3) sort -> 0 3 
+.array~new(3) stableSort -> 0 3 
+.array~new(3) sortWith -> 0 3 
+.array~new(3) stableSortWith -> 0 3 
+.array~new sort -> 0 0 
+.array~new stableSort -> 0 0 
+.array~new sortWith -> 0 0 
+.array~new stableSortWith -> 0 0 
+.array~of('b','a')~~put('z', 10) sort -> 98.975 Missing array element at position 3.
+[err]

@@ -1,0 +1,12 @@
+--- oracle rc 168
+[err]
+       *-* Compiled routine "SYSFILETREE".
+     1 *-* say sysfiletree(.object~new, 'f.')
+Error 88 running REXX:  Invalid argument.
+Error 88.909:  Argument 1 must have a string value.
+--- crate rc 168
+[err]
+       *-* Compiled routine "SYSFILETREE".
+     1 *-* say sysfiletree(.object~new, 'f.')
+Error 88 running REXX:  Invalid argument.
+Error 88.909:  Argument 1 must have a string value.

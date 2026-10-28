@@ -1,0 +1,56 @@
+--- oracle rc 0
+q~at(.S2~new) -> x
+a~at(.S2~new) -> b
+a[.S2~new] -> b
+a~at(.array~of(.array~of(2))) -> b
+a~at(.array~of(2)) -> b
+l~at(.array~of(2)) -> r
+l~at(.S2~new) -> r
+l~section(1, .array~of(2))~items -> 2
+l~section(1, 'x') -> 93.923 Invalid length argument specified; found "x".
+q~at(.array~of(2)) -> x
+'abcdef'~substr(.array~of(2),2) -> bc
+'abcdef'~left(.array~of(3)) -> abc
+'abcdef'~copies(.array~of(2)) -> abcdefabcdef
+'abcdef'~substr(2, .array~of(2)) -> bc
+.mutablebuffer~new('abcdef')~substr(.array~of(2), 2) -> bc
+.mutablebuffer~new('ab', .array~of(20))~string -> ab
+'abcdef'~substr(.S2~new) -> bcdef
+'abcdef'~left(.array~of(3, 4)) -> 93.923 Invalid length argument specified; found "an Array".
+'abcdef'~left(.array~new) -> 93.923 Invalid length argument specified; found "an Array".
+a~section(.array~of(2))~items -> 2
+a~at(.array~of('2')) -> b
+'abc'~pos('b', .array~of(1)) -> 2
+a~at(.S2~new, 1) -> 93.926 Too many subscripts for array; 1 expected.
+'abcdef'~right(.S2~new) -> ef
+q~remove(.S2~new) -> x
+a~remove(.S2~new)~string -> b
+[err]
+--- crate rc 0
+q~at(.S2~new) -> x
+a~at(.S2~new) -> b
+a[.S2~new] -> b
+a~at(.array~of(.array~of(2))) -> b
+a~at(.array~of(2)) -> b
+l~at(.array~of(2)) -> r
+l~at(.S2~new) -> r
+l~section(1, .array~of(2))~items -> 2
+l~section(1, 'x') -> 93.923 Invalid length argument specified; found "x".
+q~at(.array~of(2)) -> x
+'abcdef'~substr(.array~of(2),2) -> bc
+'abcdef'~left(.array~of(3)) -> abc
+'abcdef'~copies(.array~of(2)) -> abcdefabcdef
+'abcdef'~substr(2, .array~of(2)) -> bc
+.mutablebuffer~new('abcdef')~substr(.array~of(2), 2) -> bc
+.mutablebuffer~new('ab', .array~of(20))~string -> ab
+'abcdef'~substr(.S2~new) -> bcdef
+'abcdef'~left(.array~of(3, 4)) -> 93.923 Invalid length argument specified; found "an Array".
+'abcdef'~left(.array~new) -> 93.923 Invalid length argument specified; found "an Array".
+a~section(.array~of(2))~items -> 2
+a~at(.array~of('2')) -> b
+'abc'~pos('b', .array~of(1)) -> 2
+a~at(.S2~new, 1) -> 93.926 Too many subscripts for array; 1 expected.
+'abcdef'~right(.S2~new) -> ef
+q~remove(.S2~new) -> x
+a~remove(.S2~new)~string -> b
+[err]

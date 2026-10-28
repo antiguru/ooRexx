@@ -1,0 +1,12 @@
+--- oracle rc 168
+[err]
+       *-* Compiled routine "FILESPEC".
+     1 *-* say filespec('n')
+Error 88 running REXX:  Invalid argument.
+Error 88.901:  Missing argument; argument 2 is required.
+--- crate rc 168
+[err]
+       *-* Compiled routine "FILESPEC".
+     1 *-* say filespec('n')
+Error 88 running REXX:  Invalid argument.
+Error 88.901:  Missing argument; argument 2 is required.

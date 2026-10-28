@@ -1,0 +1,12 @@
+--- oracle rc 168
+[err]
+       *-* Compiled routine "BEEP".
+     1 *-* say beep(.object~new)
+Error 88 running REXX:  Invalid argument.
+Error 88.907:  Argument 1 must be in the range -999999999999999999 to 999999999999999999; found "an Object".
+--- crate rc 168
+[err]
+       *-* Compiled routine "BEEP".
+     1 *-* say beep(.object~new)
+Error 88 running REXX:  Invalid argument.
+Error 88.907:  Argument 1 must be in the range -999999999999999999 to 999999999999999999; found "an Object".

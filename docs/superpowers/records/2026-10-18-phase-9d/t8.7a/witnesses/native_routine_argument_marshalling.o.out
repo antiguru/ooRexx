@@ -1,0 +1,25 @@
+beep(.object~new) -> 88.907 Argument 1 must be in the range -999999999999999999 to 999999999999999999; found "an Object".
+beep('abc') -> 88.907 Argument 1 must be in the range -999999999999999999 to 999999999999999999; found "abc".
+beep(1.5) -> 88.907 Argument 1 must be in the range -999999999999999999 to 999999999999999999; found "1.5".
+beep(40, 'x') -> 88.907 Argument 2 must be in the range -999999999999999999 to 999999999999999999; found "x".
+beep(1e20) -> 88.907 Argument 1 must be in the range -999999999999999999 to 999999999999999999; found "1E20".
+beep() -> 88.901 Missing argument; argument 1 is required.
+beep(40) -> 88.901 Missing argument; argument 2 is required.
+beep(1, 'x') -> 88.907 Argument 2 must be in the range -999999999999999999 to 999999999999999999; found "x".
+beep(1, 1) -> 88.907 Argument frequency must be in the range 37 to 32767; found "1".
+beep(40, 70000) -> 88.907 Argument duration must be in the range 0 to 60000; found "70000".
+beep('4E1', 0) -> 
+beep(' 40.0 ', 0) -> 
+filespec('name', o) -> 88.909 Argument 2 must have a string value.
+filespec(o, 'x') -> 88.909 Argument 1 must have a string value.
+filespec('name', .k~new) -> 88.909 Argument 2 must have a string value.
+filespec('n') -> 88.901 Missing argument; argument 2 is required.
+filespec(.object~new) -> 88.909 Argument 1 must have a string value.
+filespec('Z', .object~new) -> 88.909 Argument 2 must have a string value.
+filespec('zz', 'a') -> 40.904 FILESPEC argument 1 must be one of DELNP; found "z".
+filespec('', 'a') -> 40.904 FILESPEC argument 1 must be one of DELNP; found "".
+filespec('n', 'a/b'||'00'x||'c/d') -> 62
+filespec('e'||'00'x, 'a.b') -> 62
+directory(o) -> 88.909 Argument 1 must have a string value.
+directory(.k~new) -> 88.909 Argument 1 must have a string value.
+unwrapped

@@ -1,0 +1,56 @@
+--- oracle rc 0
+0
+0
+0
+0
+0
+1
+0
+OrderedCollection 20 0
+Collection 19 0
+MapCollection 2 0
+SetCollection 0 0
+Orderable 19 0
+Comparable 1 0
+TraceObject 2 0
+File 57 0
+Monitor 4 0
+Alarm 9 0
+TICKER 9 0
+DateTime 61 0
+TimeSpan 29 0
+StreamSupplier 5 0
+InputStream 10 0
+Stream 34 0
+RexxQueue 13 0
+CaselessComparator 1 0
+Properties 10 0
+[err]
+--- crate rc 0
+0
+0
+0
+0
+0
+1
+0
+OrderedCollection 20 0
+Collection 19 0
+MapCollection 2 0
+SetCollection 0 0
+Orderable 19 0
+Comparable 1 0
+TraceObject 2 0
+File 57 0
+Monitor 4 0
+Alarm 9 0
+TICKER 9 0
+DateTime 61 0
+TimeSpan 29 0
+StreamSupplier 5 0
+InputStream 10 0
+Stream 34 0
+RexxQueue 13 0
+CaselessComparator 1 0
+Properties 10 0
+[err]

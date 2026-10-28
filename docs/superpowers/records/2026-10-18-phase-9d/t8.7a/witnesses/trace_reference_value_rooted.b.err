@@ -1,0 +1,29 @@
+     4 *-* q = >y
+       >O>   ">" => "Y"
+       >>>   "why"
+       >=>   Q <= "why"
+     5 *-* r = <y
+       >O>   ">" => "Y"
+       >>>   "why"
+       >=>   R <= "why"
+     6 *-* call show >y
+       >O>   ">" => "Y"
+       >A>   "why"
+    17 *-*   show:
+    18 *-*   use arg >z
+       >R>     "Y" => "Z"
+    19 *-*   say z
+       >V>     Z => "why"
+       >>>     "why"
+    20 *-*   return
+     7 *-* trace off
+    11 *-*   s = >y
+       >O>     ">" => "Y"
+       >>>     "why"
+       >=>     S <= "why"
+    12 *-*   trace off
+    11 *-*   s = >y
+       >O>     ">" => "Y"
+       >>>     "why"
+       >=>     S <= "why"
+    12 *-*   trace off

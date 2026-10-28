@@ -1,0 +1,24 @@
+--- oracle rc 159
+The PLAIN class
+The PLAIN class
+The Array class
+The WITHOTHER class
+The META class
+METADN
+The dyn class
+[err]
+     9 *-* c2 = .withname~subclass('dynsub')
+Error 97 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/p/dn/dn2.rex line 9:  Object method not found.
+Error 97.1:  Object ".WITHNAME" does not understand message "SUBCLASS".
+--- crate rc 159
+The PLAIN class
+The PLAIN class
+The Array class
+The WITHOTHER class
+The META class
+METADN
+The dyn class
+[err]
+     9 *-* c2 = .withname~subclass('dynsub')
+Error 97 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/p/dn/dn2.rex line 9:  Object method not found.
+Error 97.1:  Object ".WITHNAME" does not understand message "SUBCLASS".

@@ -1,3 +1,5 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.7a (030af45a1).**
+
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** own probe: DN on the oracle, The WITHNAME class here.
 
 # A class-side DEFAULTNAME is not consulted when a class renders

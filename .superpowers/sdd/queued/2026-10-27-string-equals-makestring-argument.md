@@ -1,3 +1,5 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.7a (030af45a1).**
+
 **OPEN, queued 2026-10-27 by the controller; proposed 9d (Task 8.7).**
 
 # String~equals and ~caselessEquals ignore a makeString argument

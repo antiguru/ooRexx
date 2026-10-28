@@ -1,3 +1,5 @@
+**CLOSED 2026-10-28 by Phase 9d Task 8.7a (030af45a1).**
+
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** FILESPEC and DIRECTORY still render an object where the oracle raises 88.909; SysFileExists now agrees.
 
 # Native routine arguments that are not strings are rendered, not refused
