@@ -541,8 +541,8 @@ type Routes<'a> = (&'a (dyn Fn(Piece, Vec<u8>) + Sync), Piece, Option<Piece>);
 /// Reads `reader` to its end, into `kept`, or piece by piece into `written`
 /// as `piece` where there is one.
 ///
-/// With `ended`, reading stops once the child has ended as well, which
-/// `ended` reports by becoming readable: what the pipe holds then is read,
+/// With `ended`, the child's pidfd, reading stops once the child has ended,
+/// which `ended` reports by becoming readable: what the pipe holds then is read,
 /// and the rest, which only a process the command left running can write, is
 /// read and dropped by a thread of its own, so that process's writes do not
 /// fail. A command completes when its process does (rexxref intro.xml,
@@ -550,7 +550,7 @@ type Routes<'a> = (&'a (dyn Fn(Piece, Vec<u8>) + Sync), Piece, Option<Piece>);
 /// the language processor after setting a return code").
 fn read_all<R: Read + AsFd + Send + 'static>(
     mut reader: R,
-    ended: Option<&std::io::PipeReader>,
+    ended: Option<&std::os::fd::OwnedFd>,
     kept: &mut Vec<u8>,
     written: Option<(&(dyn Fn(Piece, Vec<u8>) + Sync), Piece)>,
 ) {
@@ -844,12 +844,16 @@ fn collect(
     let stderr = running.stderr.take();
     let out_route = routes.map(|(written, out, _)| (written, out));
     let err_route = routes.and_then(|(written, _, err)| Some((written, err?)));
-    let (ended, ended_writer) = match std::io::pipe() {
-        Ok((reader, writer)) => (Some(reader), Some(writer)),
-        Err(_) => (None, None),
-    };
+    // The readers poll it for the child's end, which reaps nothing; the reap
+    // comes after them. Without one, every pipe is read to its end.
+    let ended = i32::try_from(running.id())
+        .ok()
+        .and_then(rustix::process::Pid::from_raw)
+        .and_then(|pid| {
+            rustix::process::pidfd_open(pid, rustix::process::PidfdFlags::empty()).ok()
+        });
     let ended_reader = ended.as_ref();
-    let (out, err, rc) = std::thread::scope(|scope| {
+    let (out, err) = std::thread::scope(|scope| {
         if let (Some(mut stdin), Some(bytes)) = (stdin, input.as_deref()) {
             // A write error is dropped: a child exiting before it reads its
             // input gives `EPIPE`, which the oracle's own writer ignores.
@@ -887,19 +891,15 @@ fn collect(
             }
             bytes
         });
-        let rc = match running.wait() {
-            Ok(status) => exit_code(status),
-            Err(_) => UNKNOWN_COMMAND,
-        };
-        // The child has ended: the readers that stop then see the writing
-        // half close.
-        drop(ended_writer);
         (
             output.join().unwrap_or_default(),
             errors.join().unwrap_or_default(),
-            rc,
         )
     });
+    let rc = match running.wait() {
+        Ok(status) => exit_code(status),
+        Err(_) => UNKNOWN_COMMAND,
+    };
     Waited { rc, out, err }
 }
 

@@ -92,7 +92,9 @@ fn pgid_is_the_parents_group() {
 /// the child's status, `exit 5` as `1280`. The command marks that it has
 /// started, and the main activity waits for the mark before it calls
 /// `SysWait`, a bounded number of times. `timeout` kills a run that outlives
-/// its deadline.
+/// its deadline. Which of the two waits takes the child is a race: a run the
+/// command's own wait won answers `rc 5` and `-1`, and the run repeats until
+/// the `SysWait` wins.
 #[test]
 fn a_command_whose_child_was_reaped_elsewhere_fails_with_127() {
     let program = "a = .w~new~start('RUN')\n\
@@ -107,28 +109,30 @@ fn a_command_whose_child_was_reaped_elsewhere_fails_with_127() {
         failed:\n\
         say 'failure' rc\n\
         return\n";
-    let (_, dir) = rexx("sys-wait-reaped", program);
-    let output = Command::new("timeout")
-        .args(["-k", "5", "60"])
-        .arg(env!("CARGO_BIN_EXE_rexx"))
-        .arg(dir.join("p.rex"))
-        .current_dir(&dir)
-        .stdin(std::process::Stdio::null())
-        .output()
-        .expect("timeout runs rexx");
-    let _ = std::fs::remove_dir_all(&dir);
-    assert!(
-        output.status.success(),
-        "{:?}: {}",
-        output.status,
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let mut lines: Vec<&str> = stdout.lines().collect();
-    lines.sort_unstable();
-    assert_eq!(
-        lines,
-        ["cmd rc 127", "failure 127", "wait 1280"],
-        "{stdout}"
-    );
+    for attempt in 0..20 {
+        let (_, dir) = rexx(&format!("sys-wait-reaped-{attempt}"), program);
+        let output = Command::new("timeout")
+            .args(["-k", "5", "60"])
+            .arg(env!("CARGO_BIN_EXE_rexx"))
+            .arg(dir.join("p.rex"))
+            .current_dir(&dir)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .expect("timeout runs rexx");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            output.status.success(),
+            "{:?}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut lines: Vec<&str> = stdout.lines().collect();
+        lines.sort_unstable();
+        if lines == ["cmd rc 127", "failure 127", "wait 1280"] {
+            return;
+        }
+        assert_eq!(lines, ["cmd rc 5", "wait -1"], "{stdout}");
+    }
+    panic!("the SysWait never took the command's child");
 }
