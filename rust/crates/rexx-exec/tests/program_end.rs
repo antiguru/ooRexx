@@ -347,13 +347,14 @@ mod buffering {
         }
     }
 
-    /// The command writes until its reader is gone, so it dies of `SIGPIPE`
-    /// with `rexx`.
+    /// The redirected command writes until its reader is gone, so it dies of
+    /// `SIGPIPE` with `rexx`. The other writes the inherited descriptor and
+    /// outlives `rexx`, as the oracle's child does, so it ends on its own.
     #[test]
     fn a_command_starts_after_what_came_before() {
         for target in TARGETS {
             for source in [
-                "say 'started X'; 'while :; do echo; sleep 0.1; done'\n",
+                "say 'started X'; 'i=0; while [ $i -lt 30 ]; do echo; sleep 0.1; i=$((i+1)); done'\n",
                 "say 'started X'; address system 'while :; do echo; sleep 0.1; done' \
                  with output stem lines.\n",
             ] {
