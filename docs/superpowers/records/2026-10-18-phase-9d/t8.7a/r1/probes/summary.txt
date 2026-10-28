@@ -1,0 +1,69 @@
+# head = cc1e48c0c tree, base = 030af45a1, both under run_program_collect_every_alloc; 'stderr' alone where only the oracle's absolute path in an error line differs, except s25
+head c4f oracle=0 stress=0  same collections 454
+head c4n2 oracle=0 stress=0  same collections 447
+head c4o oracle=0 stress=0  same collections 558
+head s01 oracle=0 stress=0  same collections 407
+head s02 oracle=0 stress=0  same collections 303
+head s03 oracle=0 stress=0  same collections 355
+head s04 oracle=0 stress=0  same collections 642
+head s05 oracle=0 stress=0  same collections 538
+head s06 oracle=0 stress=0  same collections 506
+head s07 oracle=0 stress=0  same collections 558
+head s08 oracle=0 stress=0  same collections 534
+head s09 oracle=0 stress=0  same collections 558
+head s10 oracle=0 stress=0  same collections 558
+head s11 oracle=0 stress=0  same collections 407
+head s12 oracle=0 stress=0  same collections 303
+head s13f oracle=159 stress=159  stderr collections 433
+head s13n oracle=159 stress=159  stderr collections 51
+head s13q oracle=159 stress=159  stderr collections 591
+head s13 oracle=159 stress=159  stderr collections 466
+head s13r oracle=159 stress=159  stderr collections 177
+head s14 oracle=0 stress=0  same collections 605
+head s15 oracle=0 stress=0  same collections 572
+head s16 oracle=0 stress=0  same collections 722
+head s17 oracle=0 stress=0  same collections 588
+head s18 oracle=0 stress=0  same collections 1257
+head s19 oracle=0 stress=0  same collections 582
+head s20 oracle=0 stress=0  same collections 581
+head s21 oracle=0 stress=0  same collections 605
+head s22 oracle=0 stress=0  same collections 501
+head s23 oracle=0 stress=0  same collections 279
+head s24 oracle=0 stress=0  same collections 404
+head s25 oracle=0 stress=0  stderr collections 552
+head s26 oracle=0 stress=0  same collections 737
+head wit oracle=0 stress=0  same collections 1639
+base c4f oracle=0 stress=120  stdout stderr rc collections 381
+base c4n2 oracle=0 stress=120  stdout stderr rc collections 371
+base c4o oracle=0 stress=101  stdout stderr rc 
+base s01 oracle=0 stress=0  same collections 407
+base s02 oracle=0 stress=0  same collections 303
+base s03 oracle=0 stress=0  same collections 355
+base s04 oracle=0 stress=101  stdout stderr rc 
+base s05 oracle=0 stress=120  stdout stderr rc collections 461
+base s06 oracle=0 stress=101  stdout stderr rc 
+base s07 oracle=0 stress=101  stdout stderr rc 
+base s08 oracle=0 stress=0  same collections 534
+base s09 oracle=0 stress=120  stdout stderr rc collections 381
+base s10 oracle=0 stress=0  same collections 558
+base s11 oracle=0 stress=0  same collections 407
+base s12 oracle=0 stress=0  same collections 303
+base s13f oracle=159 stress=120  stderr rc collections 396
+base s13n oracle=159 stress=159  stderr collections 51
+base s13q oracle=159 stress=101  stderr rc 
+base s13 oracle=159 stress=120  stderr rc collections 429
+base s13r oracle=159 stress=159  stderr collections 177
+base s14 oracle=0 stress=120  stdout stderr rc collections 381
+base s15 oracle=0 stress=101  stdout stderr rc 
+base s16 oracle=0 stress=0  same collections 722
+base s17 oracle=0 stress=120  stdout stderr rc collections 381
+base s18 oracle=0 stress=101  stdout stderr rc 
+base s19 oracle=0 stress=120  stdout stderr rc collections 381
+base s20 oracle=0 stress=101  stdout stderr rc 
+base s21 oracle=0 stress=101  stdout stderr rc 
+base s22 oracle=0 stress=101  stdout stderr rc 
+base s23 oracle=0 stress=0  same collections 279
+base s24 oracle=0 stress=101  stderr rc 
+base s25 oracle=0 stress=0  stderr collections 552
+base s26 oracle=0 stress=101  stdout stderr rc 
+base wit oracle=0 stress=101  stdout stderr rc 
