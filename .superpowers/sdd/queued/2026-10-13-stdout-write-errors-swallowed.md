@@ -1,3 +1,5 @@
+**RULED by Moritz 2026-10-28: candidate A ("Sentence in Dev 40") and candidate B ("Deviation, /dev/null"), task-8.6-report.md, Deviation candidates.**
+
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe with stdout closed: lineout 0 READY: here, 1 ERROR:9 on the oracle.
 
 # LINEOUT to a closed stdout answers 0 READY:
