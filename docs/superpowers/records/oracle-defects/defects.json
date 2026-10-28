@@ -1451,7 +1451,7 @@
   "expected": "",
   "cause": "",
   "source": ".superpowers/sdd/queued/2026-10-19-variable-reference-deviation-candidates.md",
-  "status": "queued; ruled by Moritz 2026-10-21 ('List Z., Deviation'; number not given)",
+  "status": "deviation 71 (Moritz 2026-10-21: \"List Z., Deviation\")",
   "crate": "Lists it as Z."
  },
  {
@@ -1466,7 +1466,7 @@
   "expected": "",
   "cause": "isAliasable compares stem->getValue() == variableName as pointers.",
   "source": ".superpowers/sdd/queued/2026-10-19-variable-reference-deviation-candidates.md",
-  "status": "queued; covered by Deviation 4 per Moritz 2026-10-21 (sentence, no new number)",
+  "status": "under Deviation 4 (sentence added Phase 9d Task 8.5; Moritz 2026-10-21 \"Under Deviation 4\")",
   "crate": "Compares the names' bytes and binds both."
  },
  {
@@ -1781,7 +1781,7 @@
   "expected": "Left to right, as rexxref describes: `drop list (list)` drops LIST first, so the selector then names LIST and X stays set.",
   "cause": "processVariableList pushes plain names to the front of subTerms (pushSubTerm) but queues (name) selectors at the back (subTerms->queue, parser/InstructionParser.cpp:4523); the constructors pop expecting every item pushed (instructions/DropInstruction.cpp:63-69).",
   "source": ".superpowers/sdd/queued/2026-10-19-variable-reference-deviation-candidates.md (ruled 2026-10-21)",
-  "status": "deviation (number pending)",
+  "status": "deviation 70 (Moritz 2026-10-21: \"Source order, oracle bug\")",
   "crate": "Source order."
  },
  {
@@ -1871,7 +1871,22 @@
   "expected": "A loud error that ends the program, or at least a run HALT and SIGTERM can stop.",
   "cause": "Not traced in the C++; presumably VariableReference::stringValue (VariableReference.cpp:258-261) asking the referenced value, which is the reference itself.",
   "source": "Phase 9d Task 8.5 fix round 2 re-review, New oracle defects 1",
-  "status": "open (not copied; the crate's answer is set by Task 8.5 fix round 3)",
-  "crate": "Being fixed in Task 8.5 fix round 3: terminates with an error."
+  "status": "open (not copied; oracle-crashes.txt entries 59-61)",
+  "crate": "Raises 11.1 in a conversion; HALT-interruptible (Phase 9d Task 8.5)."
+ },
+ {
+  "id": "variable-reference-string-value-default-name",
+  "added": "2026-10-28",
+  "title": "A variable reference's string value is its referenced value's default name, not its request('STRING')",
+  "category": "inconsistency",
+  "area": "variables",
+  "severity": "wrong result",
+  "repro": "docs/superpowers/records/2026-10-18-phase-9d/t8.5/probes/varref_concat_matrix.rex; t8.5/r1/probes/varref_string_positions.rex, varref_nostring.rex",
+  "oracle": "zz = .array~new(2); say (>zz) || 'x' prints 'an Arrayx'; NOSTRING is raised for a reference to an array that has a string value, naming the reference.",
+  "expected": "'x': the referenced value's request('STRING'), which VariableReference~request forwards to (utilityclasses.xml:12631-12632).",
+  "cause": "VariableReference::stringValue (VariableReference.cpp:258-261) answers the value's C++ stringValue(), while VariableReference::request forwards to the value's request (:364-370).",
+  "source": "queued 2026-10-10-variable-reference-concatenation.md; Phase 9d Task 8.5",
+  "status": "deviation 72 (Moritz 2026-10-27: \"Rule everywhere, Deviation\")",
+  "crate": "The referenced value's request('STRING') in every required-string position."
  }
 ]

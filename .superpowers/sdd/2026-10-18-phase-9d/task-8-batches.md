@@ -60,6 +60,7 @@ sentence for Deviation 4).
 2026-10-18-command-waits-for-background-child.md.
 
 ## 8.7 Builtins, collections, dispatch, security, native API
+2026-10-28-trace-reference-assignment-unrooted.md (rc 101 panic; first),
 2026-10-10-beep-wrong-type-message.md, 2026-10-10-native-routine-arguments-not-strings.md,
 2026-10-14-filespec-string-arg.md, 2026-10-14-class-side-defaultname.md, 2026-10-10-string-translate-empty-tables.md,
 2026-10-10-array-sort-after-remove.md, 2026-10-19-sortwith-on-foreign-class.md (the shape now segfaults

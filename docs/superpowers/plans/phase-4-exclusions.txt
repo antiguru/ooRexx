@@ -947,6 +947,17 @@ DEVIATIONS -- permanent, chosen
      Licensed by Moritz 2026-08-15, and rescoped to value-based values by
      the 9b1 spec, section 1 (Moritz 2026-10-14).
 
+     AN EMPTY STEM'S NAME IS COMPARED BY ITS CHARACTERS. Ruled by Moritz
+     2026-10-21 ("Under Deviation 4"). `USE ARG abc., >abc.` binds where the
+     first argument is an empty stem named `ABC.`, whether that name was
+     written as a literal or computed. The oracle compares
+     `stem->getValue() == variableName` as pointers (RexxVariable.cpp:270),
+     so `.stem~new('AB' || 'C.')` raises 98.995 there and binds here, while
+     the literal `'ABC.'`, the interned string, binds on both. Measured by
+     Phase 9d Task 8.5 (t8.5/probes/stem_name_identity.rex). Witnessed by
+     tests::an_empty_stems_name_is_compared_by_its_characters
+     (rust/crates/rexx-exec/src/tests.rs).
+
      MEASURED, oracle, standard wrapper, fresh empty directory, three
      descriptors, `numeric digits 18`. `.IdentityTable` item counts:
 
@@ -2806,6 +2817,100 @@ DEVIATIONS -- permanent, chosen
      Witnessed by tests::a_constant_expressions_method_answers_its_own_clause_as_source
      and tests::a_constant_expressions_method_runs_its_own_expression
      (rust/crates/rexx-exec/src/tests.rs).
+
+ 70. A VARIABLE LIST RUNS LEFT TO RIGHT (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-21 ("Source order, oracle bug"). DROP drops
+     "from left to right" (rexxref instrc.xml:1075), EXPOSE exposes "in
+     sequence from left to right" (:1228), PROCEDURE EXPOSE "from left to
+     right" (:2483), and "The variables in a subsidiary list are also exposed
+     from left to right" (:2515); a `(name)` subsidiary list is used where it
+     stands. ORACLE BUG: `LanguageParser::processVariableList` pushes plain
+     names on the front of `subTerms` (InstructionParser.cpp:4495) and queues
+     `(name)` selectors at the back (:4523), while the instruction
+     constructors pop it back to front (DropInstruction.cpp:68;
+     `initializeObjectArray`, RexxInstruction.hpp:201-207, for
+     ExposeInstruction.cpp:62 and ProcedureInstruction.cpp:63), so a list
+     runs its selectors first, in reverse order, then its plain names.
+     `drop list (list)` with `list = 'X'` answers `LIT LIT` for
+     `symbol('X') symbol('LIST')` on the oracle and `VAR LIT` here; under
+     `::OPTIONS TRACE I`, `expose (a) (b)`, `procedure expose (a) (b)` and
+     `drop (a) (b)` trace `B` before `A` on the oracle and `A` before `B`
+     here. The PROCEDURE EXPOSE handler split follows: with `procedure expose
+     c (nolist2)` under an inherited `SIGNAL ON NOVALUE`, the oracle's handler
+     reads `c=C d=D` (the selector ran before `c` was exposed, in the isolated
+     frame) and leaves the caller's `c d` at `3 4`; this crate's reads
+     `c=3 d=4` and sets the caller's to `h h`. Measured by Phase 9d Task 8.5
+     (t8.5/probes/drop_list_order.rex, selector_order_trace.rex,
+     procedure_expose_handler.rex).
+     Witnessed by tests::a_drop_list_runs_left_to_right,
+     tests::a_variable_lists_selectors_are_read_left_to_right and
+     tests::a_procedure_expose_selectors_novalue_is_handled_before_isolation
+     (rust/crates/rexx-exec/src/tests.rs).
+
+ 71. .CONTEXT~VARIABLES LISTS A USE ARG ALIAS UNDER THE NAME IT IS
+     REACHABLE BY (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-21 ("List Z., Deviation"). The listing is of
+     the running context's variables, and an alias made by `USE ARG >z.` is
+     reachable there only as `Z.` (or `Z`). The oracle's
+     `VariableDictionary::getAllVariables` files each value under
+     `variable->getName()` (VariableDictionary.cpp:656), the shared variable
+     object's own name, not the key the alias is filed under
+     (`RexxLocalVariables::aliasVariable`, RexxLocalVariables.cpp:544). After
+     `say q.` and `call r >q.`, `r`'s `hasIndex('Z.') hasIndex('Q.') items`
+     answers `0 1 1` on the oracle and `1 0 1` here, and the same for the
+     simple form. A reference made from an alias is still named by the
+     variable it resolves to, as on the oracle. Measured by Phase 9d Task 8.5
+     (t8.5/probes/context_variables_alias.rex).
+     Witnessed by tests::the_context_variables_list_an_alias_under_its_own_name
+     (rust/crates/rexx-exec/src/tests.rs).
+
+ 72. A VARIABLE REFERENCE'S STRING VALUE IS ITS REFERENCED VALUE'S
+     (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-27 ("Rule everywhere, Deviation"). A string
+     value is what `request("STRING")` answers (rexxref provide.xml:758,
+     "Required String Values", whose list at :727-752 names each position
+     below); a concatenation joins "the receiver object's string value"
+     (fundclasses.xml:2683); a String method's string argument is
+     `request("STRING")`, an error where that is `.nil` (provide.xml:807-810);
+     and a VariableReference's `request` "Forwards to the request method of
+     the referenced variable" (utilityclasses.xml:12631-12632). So in every
+     required-string position a reference's string value is the referenced
+     value's `request('STRING')`; NOSTRING is raised only where that answers
+     none, and then names the referenced value as its object and that
+     value's `STRING` answer as its description (condtra.xml, NOSTRING).
+     ORACLE BUG: `VariableReference::stringValue` answers the referenced
+     value's C++ `stringValue()`, its default name (VariableReference.cpp:
+     258-261), while `VariableReference::request` forwards to the value's
+     `request` (:364-370). The oracle takes the first, raising NOSTRING for
+     every reference and naming the reference, in SAY, builtin arguments,
+     either operand of concatenation, abuttal and blank, PARSE VALUE and VAR,
+     a comparison's right operand where the value has a string value,
+     INTERPRET, a DO count, ADDRESS, PUSH, compound tails, SIGNAL VALUE,
+     TRACE VALUE and an explicit concatenation message: for `zz =
+     .array~new(2)`, `say (>zz) || 'x'` prints `an Arrayx` there and `x`
+     here. Under `::OPTIONS NOSTRING SYNTAX` its 98.973 names the
+     reference's rendering (`Object "a N"`) where this crate names the
+     value's `STRING` answer (`Object "nstr"`). In a String method's
+     argument it raises 88.909 for a reference whether or not the value has
+     a string value, and no NOSTRING. It already forwards to the value, as
+     this crate does, in an arithmetic operand, NUMERIC DIGITS, and a
+     comparison's right operand where the value has no string value. A
+     reference to a stem names the stem in NOSTRING, by the same rule. A
+     cycle of references and stem defaults raises 11.1 in a conversion here;
+     the oracle spins (rust/corpus/oracle-crashes.txt). Measured by Phase 9d
+     Task 8.5 and its fix rounds (t8.5/probes/varref_concat_matrix.rex;
+     t8.5/r1/probes/varref_string_positions.rex, varref_nostring.rex;
+     t8.5/r2/probes/ns2.rex, meth.rex, instr.rex;
+     t8.5/r3/probes/nostring_syntax.rex).
+     Witnessed by tests::a_references_string_value_is_its_referenced_values_in_every_position,
+     tests::a_references_string_value_reaches_every_required_string_position,
+     tests::a_reference_raises_nostring_only_where_its_value_has_no_string_value,
+     tests::a_references_nostring_syntax_names_its_values_string
+     (rust/crates/rexx-exec/src/tests.rs) and
+     corpus/lang/variable_reference_forwarded_string.rex.
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------

@@ -253,3 +253,4 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	9d	a pointe
 2026-10-27-string-equals-makestring-argument.md	divergence	-	9d	String~equals ignores a makeString argument here, converts it on the oracle	9d
 2026-10-27-stem-default-arithmetic-nostring.md	divergence	-	9d	a stem with a non-string default names the stem in arithmetic NOSTRING, the oracle the default	9d
 2026-10-27-stem-array-default-string-value.md	divergence	-	9d	a stem with an array default renders the items joined, the oracle an Array	9d
+2026-10-28-trace-reference-assignment-unrooted.md	defect	docs/superpowers/records/2026-10-18-phase-9d/queued-probes/trace-ref-rooting/tr4.rex	9d	trace i over q = >y panics a live value: the traced reference is unrooted	9d
