@@ -1978,5 +1978,20 @@
   "source": "Phase 9d Task 8 triage; Task 8.7a",
   "status": "open",
   "crate": "Refuses loudly, rc 120."
+ },
+ {
+  "id": "trace-i-varref-value-assign-segfaults",
+  "added": "2026-10-28",
+  "title": "TRACE I over a ~value= assignment to a variable reference segfaults",
+  "category": "crash",
+  "area": "trace",
+  "severity": "crash",
+  "repro": "rust/corpus/oracle-crashes.txt entry 63 (q = >y; trace i; q~value = 3; say y)",
+  "oracle": "SIGSEGV, rc 139, after >A>   \"3\".",
+  "expected": "3 at rc 0 with the trace lines, as without TRACE.",
+  "cause": "",
+  "source": "Phase 9d Task 8.7a review",
+  "status": "open",
+  "crate": "Prints 3 at rc 0 with its trace lines."
  }
 ]

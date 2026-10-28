@@ -83,13 +83,14 @@ gate:phase-9c-gate.md:144 (unclear: native NewMethod; witness through the C API 
 2026-10-02-frame-executable-invocation-and-native-levels.md, 2026-10-14-native-method-frames.md,
 2026-10-22-directory-subclass-unknown-frame.md, 2026-10-22-interpret-clause-traceback-indent.md,
 2026-10-22-user-raised-in-own-handler.md, 2026-10-10-compiled-method-package-in-trace.md,
-gate:phase-9a-gate.md:469.
+gate:phase-9a-gate.md:469, 2026-10-28-rexx-package-source.md.
 
 ### 8.7c Variables and streams residuals
 2026-10-27-varref-operator-traceback-line.md, 2026-10-27-stem-default-arithmetic-nostring.md,
 2026-10-27-stem-array-default-string-value.md, 2026-10-28-stream-query-residuals.md,
 2026-10-28-append-stream-positioned-writes.md, 2026-10-22-lineout-four-args-error.md,
-gate:phase-9c-gate.md:139 (2026-10-16-stream-command-open-missing-file.md), gate:phase-9a-gate.md:485.
+gate:phase-9c-gate.md:139 (2026-10-16-stream-command-open-missing-file.md), gate:phase-9a-gate.md:485,
+2026-10-28-internal-rendering-defaultname.md, 2026-10-28-trace-object-renderings.md.
 
 Pre-dispatch check (controller 2026-10-28): every inventory row ruled 9d and still open that no batch
 named is placed above by area; an item a Task 6 cluster already fixed closes as `closed:probe agrees`
