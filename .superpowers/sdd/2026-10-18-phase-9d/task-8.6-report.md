@@ -157,7 +157,7 @@ All from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t86-
 | `memcap 16G cargo test -j 4 --release -p rexx-core --test unsafe_sites` (`checks-unsafe.txt`) | 0 |
 | `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../t8.6/final/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`final/suite/`, at `b53b1de0c`; `suite/` at `b74e6a848` the same) | 0; `tests.tsv`, `table.tsv`, `verdicts.tsv`, `oracle-differences.tsv` identical to `t8.5/r6/suite/` |
 | after the first workspace run: `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --test rexxutil_process --test program_end --test signals --test rexx_command --test stdout_write_errors --test refusal_sites` at `b53b1de0c` | 0: 3, 8, 42, 1, 2, 5 passed |
-| WORKSPACE-PLACEHOLDER | |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast --workspace`, `rust/target/release/rexx` built first, default target dir (`close-workspace-tests.txt`, status in `close-workspace-status.txt`, at `fd663373a`) | 101: one failure, `datetime_zone`'s `the_file_date_time_witness_reads_the_zone_the_oracle_does`, the known DST flake. The first run, at `92ea0e252` (its log overwritten by this one), also failed the known redirected-target `collect_stress` row and `rexxutil_process`'s reaped-child test (Concern 7), and hung in `program_end` until I killed the orphaned command shells by PID (fixed by `efde12e6e`) |
 
 ## Concerns
 
