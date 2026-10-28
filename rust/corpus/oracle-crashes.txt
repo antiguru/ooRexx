@@ -1915,7 +1915,7 @@ Task 8.7a fix round 1 under the standard wrapper from a fresh empty directory, 3
 `tr/a17.rex`). Without TRACE the oracle prints `3` at rc 0. This crate prints `3` at rc 0 with the
 `>V>`/`>>>` lines for `say y`. No upstream ticket.
 
-## 64. A CALL ON condition raised again from its handler, then a SIGNAL ON for one re-issued in its handler
+## 64. A direct RAISE ... RETURN of a CALL ON condition in its own handler, then a SIGNAL ON re-issued in a handler over its condition raised again
 
     -- direct RAISE ... RETURN inside the handler
     call on user ping name h
@@ -1986,3 +1986,34 @@ command trace lines on stderr. Measured 2026-10-28 by Phase 9d Task 8.7b fix rou
 wrapper from a fresh directory holding only that round's delayed-trap probes, once
 (`docs/superpowers/records/2026-10-18-phase-9d/t8.7b/fix-r1/delayed/w4.rex`). This crate prints the same
 stdout and stderr at rc 0: `crates/rexx-exec/tests/delayed_trap_cases/crate`. No upstream ticket.
+
+## 66. A NOTREADY under a delayed CALL ON ANY trap, then two NOTREADY conditions raised in one clause under CALL ON NOTREADY
+
+    call on any name ha
+    m = 0
+    x = linein('no_such_file_zz.txt')
+    say 'after any, m =' m
+    call on notready name hn
+    n = 0
+    x = linein('no_such_file_zz3.txt') || linein('no_such_file_zz4.txt')
+    say 'after two, n =' n
+    exit
+    ha:
+      m = m + 1
+      say 'ha' m condition('c') condition('d')
+      x = linein('no_such_file_zz2.txt')
+      say 'ha' m 'returns'
+      return
+    hn:
+      n = n + 1
+      say 'hn' n condition('c') condition('d')
+      return
+
+Effect: SIGSEGV, rc 139, stdout `ha 1 NOTREADY no_such_file_zz.txt` to `hn 1 NOTREADY
+no_such_file_zz4.txt`, stderr empty. Measured 2026-10-28 by Phase 9d Task 8.7b fix round 2 under the
+standard wrapper from a fresh directory, once
+(`docs/superpowers/records/2026-10-18-phase-9d/t8.7b/fix-r2/nr/nr.rex`); not narrowed to one half. The
+second half is the shape of the probes rule against queueing one `CALL ON` condition twice at one
+boundary. This crate ignores both NOTREADY conditions raised again while the trap is delayed (rexxref,
+`condtra.xml`, NOTREADY; `iostrms.xml`, the DELAY state): `crates/rexx-exec/tests/delayed_trap_cases/crate`.
+No upstream ticket.

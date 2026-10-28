@@ -623,8 +623,25 @@ pub(crate) enum LiveLevel {
 /// Every level of the running stack, innermost first: before each
 /// activation, the native calls it made and then the fragments running in
 /// it, each innermost first, and after it the sent primitive methods that
-/// entered it.
-pub(crate) fn live_levels(interp: &Interp) -> Vec<LiveLevel> {
+/// entered it. A primitive's level is listed only where its method is found
+/// ([`Interp::running_primitive`]).
+pub(crate) fn live_levels(interp: &mut Interp) -> Vec<LiveLevel> {
+    let mut levels = listed_levels(interp);
+    levels.retain(|level| match *level {
+        LiveLevel::Method(row) => {
+            let level = &interp.activity.method_levels[row];
+            level.resolution.is_some() || {
+                let (receiver, name) = (level.receiver, level.name.clone());
+                interp.running_primitive(receiver, &name).is_some()
+            }
+        }
+        _ => true,
+    });
+    levels
+}
+
+/// [`live_levels`] before primitive levels are checked.
+fn listed_levels(interp: &Interp) -> Vec<LiveLevel> {
     let mut levels = Vec::new();
     for (depth, activation) in interp.frames().enumerate() {
         let id = activation.id;

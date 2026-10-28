@@ -2297,3 +2297,19 @@ fn a_scope_override_copy_of_an_uncopyable_object_raises() {
                     93.970 COPY method is not supported for object a RexxInfo.\n";
     assert_eq!(run_source(source), (0, expected.to_string(), String::new()));
 }
+
+/// A primitive running under a name of its own that the receiver's search
+/// order hides lists no frame, so no frame is built without its method. The
+/// oracle lists `METHOD HAS ... Compiled method "HAS" with scope "MYARR"`.
+#[test]
+fn a_hidden_primitive_lists_no_frame() {
+    let program = ".myarr~define('HAS', .array~method('HASITEM'))\n\
+                   .myarr~define('HASITEM')\n\
+                   a = .myarr~of(.k~new)\nsay a~has(.k~new)\nexit\n\
+                   ::class k\n::method '=='\n  \
+                   do f over .context~stackFrames\n    \
+                   if f~line == .nil then say f~name (f~executable == .nil)\n  \
+                   end\n  return 0\n\
+                   ::class myarr subclass array\n";
+    assert_eq!(run_source(program), (0, "0\n".to_string(), String::new()));
+}

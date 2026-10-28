@@ -90,8 +90,9 @@ impl Interp {
     /// What rexxref (`condtra.xml`, CALL ON) does with the conditions held
     /// for the delayed trap `key` once a trap instruction for it has been
     /// processed: after `CALL ON` each handler is called, after `SIGNAL ON`
-    /// the first is signalled, and after `CALL OFF` or `SIGNAL OFF` each
-    /// takes its default action, which only `HALT`'s reports.
+    /// the first is signalled with its `ADDITIONAL` and `RESULT`, and after
+    /// `CALL OFF` or `SIGNAL OFF` each takes its default action, which only
+    /// `HALT`'s reports.
     #[cold]
     #[inline(never)]
     fn release_delayed(&mut self, key: &[u8], on: bool, call: bool) -> Result<Flow, Failure> {
@@ -114,6 +115,12 @@ impl Interp {
                 let Some(pending) = held.into_iter().next() else {
                     return Ok(Flow::Next);
                 };
+                if let Some(object) = pending.object {
+                    self.roots.activity_mut().push_temp(object);
+                    self.activity.pending_additional =
+                        self.condition_entry_held(object, b"ADDITIONAL");
+                    self.activity.pending_result = self.condition_entry_held(object, b"RESULT");
+                }
                 let mut raised = Raised::condition(condition_name(&pending.condition));
                 raised.rc = pending.rc;
                 raised.description = pending.description;
@@ -129,8 +136,8 @@ impl Interp {
 
     /// Moves into `held` each condition queued for the running activation's
     /// trap `key` since `queued_before`, while that trap was delayed: a `RAISE
-    /// ... RETURN` in the handler offers its condition to this activation. An
-    /// `ERROR` or `FAILURE` is ignored instead.
+    /// ... RETURN` in the handler offers its condition to this activation. A
+    /// condition [`ignored_while_delayed`] is dropped instead.
     #[cold]
     #[inline(never)]
     fn take_queued_for_delayed(
@@ -151,7 +158,7 @@ impl Interp {
                     || (key == b"ANY"
                         && self.activation().traps.get(&pending.condition).is_none()));
             if matches && let Some(pending) = self.activity.pending_traps.remove(row) {
-                if !matches!(&*pending.condition, b"ERROR" | b"FAILURE") {
+                if !ignored_while_delayed(&pending.condition) {
                     held.push(pending);
                 }
             } else {
@@ -160,33 +167,12 @@ impl Interp {
         }
     }
 
-    /// Drops each condition queued since `queued` whose trap is delayed.
-    #[cold]
-    #[inline(never)]
-    pub(crate) fn drop_queued_for_delayed(&mut self, queued: usize) {
-        let mut row = queued;
-        while row < self.activity.pending_traps.len() {
-            let pending = &self.activity.pending_traps[row];
-            let delayed = !pending.request
-                && pending.trace_failure.is_none()
-                && self
-                    .trap_for(&pending.condition)
-                    .is_some_and(|trap| trap.delayed);
-            if delayed {
-                self.activity.pending_traps.remove(row);
-            } else {
-                row += 1;
-            }
-        }
-    }
-
     /// Holds `pending`, whose trap is delayed, for the innermost delayed trap
-    /// it matches; an `ERROR` or `FAILURE` is ignored instead (rexxref,
-    /// `condtra.xml`, CALL ON).
+    /// it matches; a condition [`ignored_while_delayed`] is dropped instead.
     #[cold]
     #[inline(never)]
     fn hold_delayed(&mut self, pending: PendingTrap) {
-        if matches!(&*pending.condition, b"ERROR" | b"FAILURE") {
+        if ignored_while_delayed(&pending.condition) {
             return;
         }
         let key: &[u8] = match self
@@ -262,7 +248,18 @@ impl Interp {
             description: Some(name.to_vec()),
             ..Raised::condition(Cow::Borrowed("NOTREADY"))
         };
+        let trapping = self
+            .trap_frame()
+            .map_or(self.activation().id, |activation| activation.id);
         match self.trap_for(b"NOTREADY") {
+            // Raised again while the trap is delayed, by a handler running or
+            // by a raise this clause queued.
+            Some(trap)
+                if trap.call
+                    && (trap.delayed || self.call_trap_delayed_at(trapping, b"NOTREADY")) =>
+            {
+                Ok(())
+            }
             Some(trap) if trap.call => {
                 self.activity.pending_additional = Some(stream);
                 self.activity.pending_result = Some(result);
@@ -280,9 +277,7 @@ impl Interp {
                     // phantoms. The routine-return path queues against the
                     // caller because its own activation is being popped;
                     // nothing is popped here.
-                    activation: self
-                        .trap_frame()
-                        .map_or(self.activation().id, |activation| activation.id),
+                    activation: trapping,
                     queued_during_delivery: false,
                     request: false,
                     fragment_depth: self.activity.fragment_depth,
@@ -841,17 +836,32 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn redeliver_held(&mut self, held: Vec<PendingTrap>) -> Result<Option<HandlerExit>, Failure> {
+        let frame = self.roots.activity_mut().push_frame();
         let mut queue = std::collections::VecDeque::from(held);
+        let mut delivered = Ok(None);
         while let Some(pending) = queue.pop_front() {
-            let (exit, held) = self.run_pending_handler(pending)?;
-            if exit.is_some() {
-                return Ok(exit);
+            // The conditions waiting are reachable from this queue alone.
+            self.roots.activity_mut().pop_frame(frame);
+            for object in std::iter::once(&pending)
+                .chain(&queue)
+                .filter_map(|pending| pending.object)
+            {
+                self.roots.activity_mut().push_temp(object);
             }
-            for pending in held.into_iter().rev() {
-                queue.push_front(pending);
+            match self.run_pending_handler(pending) {
+                Ok((None, held)) => {
+                    for pending in held.into_iter().rev() {
+                        queue.push_front(pending);
+                    }
+                }
+                ended => {
+                    delivered = ended.map(|(exit, _)| exit);
+                    break;
+                }
             }
         }
-        Ok(None)
+        self.roots.activity_mut().pop_frame(frame);
+        delivered
     }
 
     /// [`Interp::deliver_one_pending_trap`]'s one handler run, answering with
@@ -1325,11 +1335,10 @@ impl Interp {
             Some(trap) if trap.call && sender.reply_issued && result.is_some() => {
                 Err(Raised::return_after_reply().into())
             }
-            // rexxref (Condition traps, CALL ON): an ERROR or FAILURE raised
-            // again while the trap is delayed is ignored.
+            // Raised again while the trap is delayed by its first raise.
             Some(trap)
                 if trap.call
-                    && matches!(raise.condition.as_ref(), b"ERROR" | b"FAILURE")
+                    && ignored_while_delayed(&raise.condition)
                     && caller.is_some_and(|caller| self.call_trap_delayed_at(caller, &name)) =>
             {
                 Ok(finish(result))
@@ -1786,6 +1795,13 @@ impl Sender {
             (false, _) => Search::AboveTop,
         }
     }
+}
+
+/// Whether `condition`, raised while its `CALL ON` trap is delayed, is
+/// ignored rather than held (rexxref `condtra.xml`, CALL ON and NOTREADY;
+/// `iostrms.xml`, the DELAY state).
+fn ignored_while_delayed(condition: &[u8]) -> bool {
+    matches!(condition, b"ERROR" | b"FAILURE" | b"NOTREADY")
 }
 
 /// A `RAISE`'s condition name as `Raised::condition` carries it.

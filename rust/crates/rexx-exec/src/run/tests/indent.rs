@@ -355,3 +355,36 @@ fn a_select_nested_inside_a_do_composes_the_two_constructs_own_contributions() {
     };
     assert_eq!(indent, 8);
 }
+
+/// A traceback and a `traceLine` read inside `INTERPRET` after a completed
+/// `DO` indent by the block structure around the clause. The oracle's are two
+/// columns short: `[    14 *-*   return 1 / 0]`, `[     5 *-* x = f()]` and
+/// `t2      5 *-*   do f over ...`.
+#[test]
+fn interpret_frames_after_a_completed_do_indent_by_block_structure() {
+    for (source, expected) in [
+        (
+            &b"call try 'do 2; nop; end; x = f()'\nexit\ntry:\n  signal on syntax\n  \
+               interpret arg(1)\n  return\nsyntax:\n  do line over condition('O')~traceback\n    \
+               say '['line']'\n  end\n  return\nf: procedure\n  signal off syntax\n  \
+               return 1 / 0\n"[..],
+            "[    14 *-*     return 1 / 0]\n[     5 *-*   x = f()]\n\
+             [     5 *-*   interpret arg(1)]\n[     1 *-* call try 'do 2; nop; end; x = f()']\n",
+        ),
+        (
+            &b"call t2\nexit\nt2:\n  do 1\n    interpret 'do 2; nop; end; do f over \
+               .context~stackframes; say \"t2\" f~traceline; end'\n  end\n  return\n"[..],
+            "t2      5 *-*     do f over .context~stackframes;\n\
+             t2      5 *-*     interpret 'do 2; nop; end; do f over .context~stackframes; \
+             say \"t2\" f~traceline; end'\nt2      1 *-* call t2\n",
+        ),
+    ] {
+        let outcome = crate::run_program(
+            "/tmp/interpret_indent.rex",
+            source.to_vec(),
+            crate::Invocation::none(),
+        );
+        assert_eq!(String::from_utf8_lossy(&outcome.stdout), expected);
+        assert_eq!(outcome.exit_code, 0);
+    }
+}

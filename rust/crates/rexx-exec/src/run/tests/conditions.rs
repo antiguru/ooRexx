@@ -1066,16 +1066,16 @@ fn a_handler_that_fails_at_a_clause_boundary_blames_that_clause() {
 }
 
 /// rexxref (Condition traps, CALL ON): the same condition raised again in
-/// the clause that raised it, while its trap is delayed, is ignored for ERROR
-/// and FAILURE, and for any other condition delivered once the first handler
-/// returns. The oracle segfaults on this shape (`corpus/oracle-crashes.txt`).
+/// the clause that raised it, while its trap is delayed, is ignored for
+/// ERROR, FAILURE and NOTREADY, and for any other condition delivered once
+/// the first handler returns. The oracle segfaults on this shape (`corpus/oracle-crashes.txt`).
 #[test]
 fn a_condition_raised_again_while_its_call_trap_is_delayed() {
     for (condition, raise, handled) in [
         ("error", "error 5", "h ERROR\n"),
         ("failure", "failure 6", "h FAILURE\n"),
         ("user c1", "user c1", "h USER C1\nh USER C1\n"),
-        ("notready", "notready", "h NOTREADY\nh NOTREADY\n"),
+        ("notready", "notready", "h NOTREADY\n"),
     ] {
         let mut interp = Interp::new();
         let program = format!(
@@ -1118,6 +1118,47 @@ fn a_condition_raised_while_its_handler_runs_is_held() {
         });
     });
     assert!(cases > 0, "tests/delayed_trap_cases ran no case");
+}
+
+/// The conditions held while a handler runs stay rooted while the handlers
+/// called again before them run.
+#[test]
+fn conditions_waiting_for_their_handler_survive_a_collection() {
+    let text = b"call on user ping name h\nn = 0\ncall rp 'first'\nsay 'after' n\nexit\n\
+                 rp: parse arg dd; raise user ping description (dd) additional (dd'-add') return\n\
+                 h:\n  n = n + 1\n  say 'h' n arg(1)~description arg(1)~additional\n\
+                 \x20 if n = 1 then do\n    call rp 'second'\n    call rp 'third'\n\
+                 \x20   call rp 'fourth'\n  end\n  return\n"
+        .to_vec();
+    let name = "/tmp/held_conditions_rooted.rex";
+    let swept = crate::run_program_collect_every_alloc(name, text, crate::Invocation::none());
+    assert_eq!(
+        String::from_utf8_lossy(&swept.stdout),
+        "h 1 first first-add\nh 2 second second-add\nh 3 third third-add\n\
+         h 4 fourth fourth-add\nafter 4\n"
+    );
+    assert_eq!(
+        swept.exit_code,
+        0,
+        "{}",
+        String::from_utf8_lossy(&swept.stderr)
+    );
+    assert!(swept.collections > 0, "the stress mode did not collect");
+}
+
+/// An `INTERPRET` translation failure's condition object names the package
+/// running the `INTERPRET`. The oracle answers 0.
+#[test]
+fn an_interpret_translation_failure_names_the_running_package() {
+    let outcome = crate::run_program(
+        "/tmp/interpret_failure_package.rex",
+        b"signal on syntax name c\ninterpret 'say ('\n\
+          c: say (condition('o')~package == .context~package) condition('o')~code\n"
+            .to_vec(),
+        crate::Invocation::none(),
+    );
+    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "1 35.1\n");
+    assert_eq!(outcome.exit_code, 0);
 }
 
 /// A `CALL ON` handler call that fails is taken by `SIGNAL ON SYNTAX` at
