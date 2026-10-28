@@ -978,14 +978,16 @@ fn sigint_halts_after_a_long_method() {
     );
 }
 
-/// A second signal while the `CALL ON HALT` handler runs is dropped, as the
+/// A second signal while the `CALL ON HALT` handler runs is held and runs the
+/// handler again once it returns (rexxref, `condtra.xml`, CALL ON), where the
 /// oracle's delayed trap drops it.
 #[test]
-fn a_second_signal_in_a_call_on_halt_handler_is_dropped() {
+fn a_second_signal_in_a_call_on_halt_handler_runs_it_again() {
     halts_after(
         "secondbusy",
         "call on halt name h\nsay 'ready'\ncall SysSleep 1\nsay 'main after'\nexit\n\
-         h:\n  say 'h in' sigl\n  call time 'R'\n  do forever\n    if time('E') >= 1.5 then leave\n\
+         h:\n  if symbol('n') == 'VAR' then do; say 'h again' sigl; return; end\n  n = 1\n\
+         \x20 say 'h in' sigl\n  call time 'R'\n  do forever\n    if time('E') >= 1.5 then leave\n\
          \x20 end\n  say 'h out'\n  return\n",
         "ready\n",
         &[
@@ -997,20 +999,21 @@ fn a_second_signal_in_a_call_on_halt_handler_is_dropped() {
         Launch::Plain,
         &Ended {
             code: Some(0),
-            stdout: "ready\nmain after\nh in 4\nh out\n".to_string(),
+            stdout: "ready\nmain after\nh in 4\nh out\nh again 4\n".to_string(),
             stderr: String::new(),
         },
     );
 }
 
 /// A `CALL ON ANY` handler holds its `ANY` trap while it runs, so a second
-/// signal is dropped there too.
+/// signal is held there too.
 #[test]
-fn a_second_signal_in_a_call_on_any_handler_is_dropped() {
+fn a_second_signal_in_a_call_on_any_handler_runs_it_again() {
     halts_after(
         "secondany",
         "call on any name h\nsay 'ready'\ncall SysSleep 1\nsay 'main after'\nexit\n\
-         h:\n  say 'h in' sigl\n  call time 'R'\n  do forever\n    if time('E') >= 1.5 then leave\n\
+         h:\n  if symbol('n') == 'VAR' then do; say 'h again' sigl; return; end\n  n = 1\n\
+         \x20 say 'h in' sigl\n  call time 'R'\n  do forever\n    if time('E') >= 1.5 then leave\n\
          \x20 end\n  say 'h out'\n  return\n",
         "ready\n",
         &[
@@ -1022,7 +1025,7 @@ fn a_second_signal_in_a_call_on_any_handler_is_dropped() {
         Launch::Plain,
         &Ended {
             code: Some(0),
-            stdout: "ready\nmain after\nh in 4\nh out\n".to_string(),
+            stdout: "ready\nmain after\nh in 4\nh out\nh again 4\n".to_string(),
             stderr: String::new(),
         },
     );
@@ -1056,7 +1059,7 @@ fn a_halt_during_a_read_misses_an_activity_that_has_not_run() {
 }
 
 /// The second signal ends the handler's own sleep, which answers EINTR, and
-/// raises nothing.
+/// its HALT, held, runs the handler again once it returns.
 #[test]
 fn a_second_signal_ends_a_handlers_sleep() {
     halts_after(
@@ -1073,7 +1076,7 @@ fn a_second_signal_ends_a_handlers_sleep() {
         Launch::Plain,
         &Ended {
             code: Some(0),
-            stdout: "ready\nmain after\nh in 4\nh out 4\n".to_string(),
+            stdout: "ready\nmain after\nh in 4\nh out 4\nh in 4\nh out 0\n".to_string(),
             stderr: String::new(),
         },
     );
