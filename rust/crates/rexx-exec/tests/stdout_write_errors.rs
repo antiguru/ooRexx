@@ -135,3 +135,28 @@ fn a_flush_into_a_full_device_is_error_28() {
          ERROR:28 ERROR:28 No space left on device | 0 READY: | READY: READY: | 0 READY:\n"
     );
 }
+
+/// A standard output closed when `rexx` starts is `/dev/null` here, so a write
+/// answers `0` and the stream `READY:`, where the oracle answers
+/// `1 ERROR:9 Bad file descriptor`.
+#[test]
+fn a_standard_output_closed_at_start_is_dev_null() {
+    let (dir, path) = program(
+        "closed-at-start",
+        "r = lineout('STDOUT', 'a'); s = stream('STDOUT', 'd')\n\
+         call lineout 'STDERR', r s\n",
+    );
+    let output = Command::new("/bin/sh")
+        .arg("-c")
+        .arg("exec \"$REXX\" \"$PROG\" >&-")
+        .env("REXX", env!("CARGO_BIN_EXE_rexx"))
+        .env("PROG", &path)
+        .current_dir(&dir)
+        .stdin(Stdio::null())
+        .output()
+        .expect("sh runs");
+    let _ = std::fs::remove_dir_all(&dir);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "{stderr}");
+    assert_eq!(stderr, "0 READY:\n");
+}

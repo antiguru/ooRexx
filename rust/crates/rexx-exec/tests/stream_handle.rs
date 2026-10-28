@@ -149,3 +149,29 @@ fn another_descriptor_is_refused_loudly() {
         "rexx-exec: a HANDLE: stream on descriptor 7 is not implemented\n"
     );
 }
+
+/// An `APPEND` stream opened on a write-only file still writes at the end of
+/// it, past what a command appended meanwhile, where the oracle drops the
+/// append flag and overwrites that text.
+#[test]
+fn an_append_stream_on_a_write_only_file_writes_at_the_end() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = std::env::temp_dir().join(format!("rexx-append-wo-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a private directory");
+    let file = dir.join("wo.txt");
+    std::fs::write(&file, "y\n").expect("the file is writable");
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o222)).expect("chmod 222");
+    let path = file.display();
+    let program = format!(
+        "w = .stream~new('{path}'); say w~open('write append')\n\
+         say w~lineout('w1')\n\
+         address system \"echo wcmd >> '{path}'\"\n\
+         say w~lineout('w2'); say w~close\n"
+    );
+    let outcome = run(&program, Invocation::none());
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o644)).expect("chmod 644");
+    let held = std::fs::read(&file).expect("the file reads back");
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(stdout(&outcome), "READY:\n0\n0\nREADY:\n");
+    assert_eq!(String::from_utf8_lossy(&held), "y\nwcmd\nw1\nw2\n");
+}
