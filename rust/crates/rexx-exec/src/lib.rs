@@ -1363,6 +1363,18 @@ struct PendingTrap {
     trace_failure: Option<Failure>,
 }
 
+/// A `CALL ON` trap held in the delayed state while its handler runs, and the
+/// conditions raised for it meanwhile, which rexxref (`condtra.xml`, CALL ON)
+/// delays until the handler returns or a `CALL ON`, `SIGNAL ON`, `CALL OFF`
+/// or `SIGNAL OFF` for the trap's condition is processed.
+struct DelayedTrap {
+    /// The trap table entry delayed: the condition's own, or `ANY`.
+    key: Box<[u8]>,
+    /// In the order raised. Each object is rooted by
+    /// [`Activity::object_roots`].
+    held: Vec<PendingTrap>,
+}
+
 /// The interpreter. Owns the heap, the root set, the activity, the
 /// plan cache and the two sinks, and **does not own the AST**.
 struct Interp {
@@ -2736,7 +2748,18 @@ impl Interp {
         }
         let outer = self.install_caller.replace(caller_settings.clone());
         let outer_call = self.install_call.replace(call_type);
+        // The activation this installs ahead of keeps the manager its package
+        // had before the install (`RexxActivation.cpp:176`, `:508`).
+        self.activity.installing_managers.push((program_id, None));
         let installed = self.install_directives(program_id, &program);
+        let kept = self
+            .activity
+            .installing_managers
+            .pop()
+            .and_then(|(_, kept)| kept);
+        if let Some(Some(manager)) = kept {
+            self.roots.activity_mut().push_temp(manager);
+        }
         self.install_caller = outer;
         self.install_call = outer_call;
         if let Err(failure) = installed {
@@ -2767,9 +2790,16 @@ impl Interp {
             return Ok(None);
         }
         if call_type == CallType::Requires {
-            return self.run_prologue(program, program_id, caller_settings);
+            return self.run_prologue(program, program_id, caller_settings, kept);
         }
-        self.run_main(program, program_id, call_type, address, caller_settings)
+        self.run_main(
+            program,
+            program_id,
+            call_type,
+            address,
+            caller_settings,
+            kept,
+        )
     }
 
     /// A package's prologue, run under the package's own name and no
@@ -2781,6 +2811,7 @@ impl Interp {
         program: Rc<Program>,
         program_id: ProgramId,
         caller_settings: Option<Settings>,
+        kept: Option<Option<ObjRef>>,
     ) -> Result<Option<ObjRef>, Failure> {
         let name = Rc::from(self.program_display_name(program_id));
         let saved = std::mem::replace(
@@ -2797,6 +2828,7 @@ impl Interp {
             CallType::Requires,
             None,
             caller_settings,
+            kept,
         );
         self.activity.call_context = saved;
         ran
@@ -2837,6 +2869,7 @@ impl Interp {
             CallType::Subroutine,
             Some(address),
             Some(settings),
+            None,
         );
         self.activity.call_context = saved;
         outcome
@@ -2857,12 +2890,14 @@ impl Interp {
             CallType::Requires,
             None,
             caller_settings,
+            None,
         )?;
         Ok(())
     }
 
     /// [`Interp::run_loaded`] past the install: one activation over the main
-    /// body, run to its end.
+    /// body, run to its end. `kept_manager` is the security manager the
+    /// activation keeps where one was set on its package during the install.
     fn run_main(
         &mut self,
         program: Rc<Program>,
@@ -2870,6 +2905,7 @@ impl Interp {
         call_type: CallType,
         address: Option<crate::activation::AddressState>,
         caller_settings: Option<Settings>,
+        kept_manager: Option<Option<ObjRef>>,
     ) -> Result<Option<ObjRef>, Failure> {
         let called = matches!(call_type, CallType::Subroutine | CallType::Function);
         let nested = self.running_activation().is_some();
@@ -2902,6 +2938,9 @@ impl Interp {
         }
         if let Some(start) = start {
             start.apply(&mut main);
+        }
+        if let Some(kept) = kept_manager {
+            main.cold_mut().security_manager = Some(kept);
         }
         // `SysInterpreterInstance::setupProgram`
         // (`platform/unix/SysInterpreterInstance.cpp:105`-`:112`), which runs

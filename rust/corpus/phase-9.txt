@@ -433,3 +433,5 @@ lang/interpret_frame_invocation_indent.rex
 lang/method_package_rexx_library.rex
 lang/compile_failure_condition_origin.rex
 lang/requires_install_levels.rex
+lang/primitive_frame_past_override.rex
+lang/security_manager_set_during_install.rex

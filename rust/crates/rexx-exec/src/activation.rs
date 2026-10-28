@@ -44,7 +44,8 @@ pub(crate) struct Trap {
     /// the table and its keys, not this.
     pub(crate) label: std::rc::Rc<[u8]>,
     /// The trap is armed but held while its own `CALL ON` handler runs
-    /// (`TrapHandler::disable`/`enable`, `execution/TrapHandler.cpp`).
+    /// (`TrapHandler::disable`/`enable`, `execution/TrapHandler.cpp`), and
+    /// its conditions with it (`crate::DelayedTrap`).
     pub(crate) delayed: bool,
 }
 

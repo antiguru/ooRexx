@@ -147,6 +147,8 @@ pub(crate) struct Activity {
     pub(crate) flat_spares: Vec<Box<crate::run::FlatLoop>>,
     /// A condition raised by `RAISE` whose `CALL ON` handler has not run yet.
     pub(crate) pending_traps: VecDeque<PendingTrap>,
+    /// Every `CALL ON` trap delayed while its handler runs, innermost last.
+    pub(crate) delayed_traps: Vec<crate::DelayedTrap>,
     /// The object a `RAISE ... ADDITIONAL` named, held from the raise until
     /// the condition object is built. **The raise's own value and not a
     /// rebuild of it**: measured, `additional 'JUSTONE'` puts a `String` in
@@ -277,6 +279,10 @@ pub(crate) struct Activity {
     /// The resolved paths whose `::REQUIRES` directives are still installing
     /// -- `Activity`'s own `requiresTable` (`concurrency/Activity.hpp:308`).
     pub(crate) requires_installing: Vec<Box<[u8]>>,
+    /// The packages installing before an activation of their own runs,
+    /// innermost last, each with the manager it had when its install began
+    /// once a manager is set on it during the install.
+    pub(crate) installing_managers: Vec<(crate::plan::ProgramId, Option<Option<ObjRef>>)>,
     /// How many Rust frames pin this activity between the scheduler and its
     /// running driver (spec 2026-09-29 section 2.6).
     pub(crate) pin_depth: u32,
@@ -360,9 +366,10 @@ pub(crate) struct MethodLevel {
     pub(crate) caller: Option<crate::activation::ActivationId>,
     /// The message the method runs under.
     pub(crate) name: Box<[u8]>,
-    /// The scope and identity of the method the dispatch ran.
-    pub(crate) scope: ObjRef,
-    pub(crate) method: rexx_classes::MethodId,
+    /// The scope and identity of the method the dispatch ran, or `None` for
+    /// the primitive `name` runs for the receiver
+    /// ([`Interp::running_primitive`](crate::Interp::running_primitive)).
+    pub(crate) resolution: Option<crate::dispatch::Resolution>,
     pub(crate) receiver: ObjRef,
     pub(crate) arguments: Box<[Option<ObjRef>]>,
 }
@@ -471,6 +478,7 @@ impl Activity {
             replied_level: None,
             native_tails: Vec::new(),
             pending_traps: VecDeque::new(),
+            delayed_traps: Vec::new(),
             pending_additional: None,
             native_frames_owed: Vec::new(),
             reraised_object: None,
@@ -507,6 +515,7 @@ impl Activity {
             last_name: None,
             random_source: None,
             requires_installing: Vec::new(),
+            installing_managers: Vec::new(),
             pin_depth: 0,
             driver_pins: 0,
             native_park: None,
@@ -627,6 +636,7 @@ impl Activity {
             // Overwritten at reuse, as `spare_activations` is.
             flat_spares: _,
             pending_traps,
+            delayed_traps,
             pending_additional,
             native_frames_owed,
             reraised_object,
@@ -668,6 +678,7 @@ impl Activity {
             last_name: _,
             random_source: _,
             requires_installing: _,
+            installing_managers,
             pin_depth: _,
             driver_pins: _,
             native_park,
@@ -709,6 +720,14 @@ impl Activity {
         // The raise's own `ADDITIONAL`, alive between the raise and the
         // condition object that will hold it.
         out.extend(*pending_additional);
+        out.extend(
+            installing_managers
+                .iter()
+                .filter_map(|(_, kept)| kept.flatten()),
+        );
+        for delayed in delayed_traps {
+            out.extend(delayed.held.iter().filter_map(|pending| pending.object));
+        }
         blocked.object_roots(out);
         out.extend(native_frames_owed.iter().copied());
         out.extend(*pending_result);

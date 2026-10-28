@@ -72,8 +72,16 @@ impl Interp {
 
     /// Gives every live activation of `package`'s code that does not yet
     /// keep a manager of its own `previous` to keep.
+    /// A package installing before its own activation runs keeps it too, for
+    /// that activation and the rest of the install.
     #[cold]
     fn keep_security_manager(&mut self, package: ObjRef, previous: Option<ObjRef>) {
+        for row in 0..self.activity.installing_managers.len() {
+            let (program, kept) = self.activity.installing_managers[row];
+            if kept.is_none() && self.program_package(program) == Some(package) {
+                self.activity.installing_managers[row].1 = Some(previous);
+            }
+        }
         let mut programs = Vec::new();
         self.activity.running_programs(&mut programs);
         self.activities.running_programs(&mut programs);
@@ -144,12 +152,27 @@ impl Interp {
 
     /// The manager `program`'s own installing activation runs under, which is
     /// the one its `::REQUIRES` directives consult
-    /// (`RexxActivation::run` installs the package, `RexxActivation.cpp:508`).
+    /// (`RexxActivation::run` installs the package, `RexxActivation.cpp:508`):
+    /// the package's when its install began.
     pub(crate) fn installing_security_manager(&self, program: ProgramId) -> Option<ObjRef> {
         if !self.security_armed {
             return None;
         }
+        if let Some(kept) = self.kept_installing_manager(program) {
+            return kept;
+        }
         self.program_data(program)?.security_manager
+    }
+
+    /// The manager `program` had when its install, still running, began,
+    /// where one has been set on it since.
+    pub(crate) fn kept_installing_manager(&self, program: ProgramId) -> Option<Option<ObjRef>> {
+        self.activity
+            .installing_managers
+            .iter()
+            .rev()
+            .find(|(installing, _)| *installing == program)
+            .and_then(|(_, kept)| *kept)
     }
 
     /// One checkpoint: `SecurityManager::callSecurityManager`

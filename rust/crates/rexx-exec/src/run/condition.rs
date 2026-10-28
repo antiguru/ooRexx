@@ -26,6 +26,12 @@ impl Interp {
         trap: &ConditionTrap,
         call: bool,
     ) -> Result<Flow, Failure> {
+        let delayed = !self.activity.delayed_traps.is_empty()
+            && self
+                .activation()
+                .traps
+                .get(&trap.condition)
+                .is_some_and(|entry| entry.delayed);
         match &trap.label {
             Some(label) => {
                 // An arming route of the required-string protocol: a
@@ -76,7 +82,115 @@ impl Interp {
                 );
             }
         }
+        if delayed {
+            return self.release_delayed(&trap.condition, trap.label.is_some(), call);
+        }
         Ok(Flow::Next)
+    }
+
+    /// What rexxref (`condtra.xml`, CALL ON) does with the conditions held
+    /// for the delayed trap `key` once a trap instruction for it has been
+    /// processed: after `CALL ON` each handler is called, after `SIGNAL ON`
+    /// the first is signalled, and after `CALL OFF` or `SIGNAL OFF` each
+    /// takes its default action, which only `HALT`'s reports.
+    #[cold]
+    #[inline(never)]
+    fn release_delayed(&mut self, key: &[u8], on: bool, call: bool) -> Result<Flow, Failure> {
+        let Some(row) = self
+            .activity
+            .delayed_traps
+            .iter()
+            .rposition(|delayed| *delayed.key == *key)
+        else {
+            return Ok(Flow::Next);
+        };
+        let held = std::mem::take(&mut self.activity.delayed_traps[row].held);
+        match (on, call) {
+            (true, true) => {
+                let here = self.activation().id;
+                for mut pending in held {
+                    pending.activation = here;
+                    pending.fragment_depth = self.activity.fragment_depth;
+                    pending.queued_during_delivery = false;
+                    self.activity.pending_traps.push_back(pending);
+                }
+                Ok(Flow::Next)
+            }
+            (true, false) => {
+                let Some(pending) = held.into_iter().next() else {
+                    return Ok(Flow::Next);
+                };
+                let mut raised = Raised::condition(condition_name(&pending.condition));
+                raised.rc = pending.rc;
+                raised.description = pending.description;
+                raised.position = u32::try_from(self.activity.clause_state.line()).unwrap_or(0);
+                Err(raised.into())
+            }
+            (false, _) if held.iter().any(|pending| *pending.condition == *b"HALT") => {
+                Err(Raised::halt().into())
+            }
+            (false, _) => Ok(Flow::Next),
+        }
+    }
+
+    /// Moves into `held` each condition queued for the running activation's
+    /// trap `key` since `queued_before`, while that trap was delayed: a `RAISE
+    /// ... RETURN` in the handler offers its condition to this activation. An
+    /// `ERROR` or `FAILURE` is ignored instead.
+    #[cold]
+    #[inline(never)]
+    fn take_queued_for_delayed(
+        &mut self,
+        queued_before: usize,
+        key: &[u8],
+        held: &mut Vec<PendingTrap>,
+    ) {
+        let here = self.activation().id;
+        let depth = self.activity.fragment_depth;
+        let mut row = queued_before;
+        while row < self.activity.pending_traps.len() {
+            let pending = &self.activity.pending_traps[row];
+            let matches = !pending.request
+                && pending.activation == here
+                && pending.fragment_depth == depth
+                && (*pending.condition == *key
+                    || (key == b"ANY"
+                        && self.activation().traps.get(&pending.condition).is_none()));
+            if matches && let Some(pending) = self.activity.pending_traps.remove(row) {
+                if !matches!(&*pending.condition, b"ERROR" | b"FAILURE") {
+                    held.push(pending);
+                }
+            } else {
+                row += 1;
+            }
+        }
+    }
+
+    /// Holds `pending`, whose trap is delayed, for the innermost delayed trap
+    /// it matches; an `ERROR` or `FAILURE` is ignored instead (rexxref,
+    /// `condtra.xml`, CALL ON).
+    #[cold]
+    #[inline(never)]
+    fn hold_delayed(&mut self, pending: PendingTrap) {
+        if matches!(&*pending.condition, b"ERROR" | b"FAILURE") {
+            return;
+        }
+        let key: &[u8] = match self
+            .trap_frame()
+            .is_some_and(|frame| frame.traps.get(&pending.condition).is_some())
+        {
+            true => &pending.condition,
+            false => b"ANY",
+        };
+        if let Some(delayed) = self
+            .activity
+            .delayed_traps
+            .iter_mut()
+            .rev()
+            .find(|delayed| *delayed.key == *key)
+        {
+            delayed.held.push(pending);
+        }
     }
 
     /// The trap the running activation has enabled for `condition`, if any.
@@ -86,13 +200,11 @@ impl Interp {
             return None;
         }
         let traps = &frame.traps;
+        // A delayed trap is answered too: its condition queues as for any
+        // `CALL ON` trap, and its delivery holds it (`Interp::hold_delayed`).
         traps
             .get(condition)
             .or_else(|| traps.get(b"ANY".as_slice()))
-            // A trap held while its own `CALL ON` handler runs does not fire
-            // -- see `Trap::delayed`, which is what a handler that calls
-            // something raising the same condition depends on.
-            .filter(|trap| !trap.delayed)
             .cloned()
     }
 
@@ -689,21 +801,58 @@ impl Interp {
         Ok(None)
     }
 
-    /// One queued condition's handler, run at the boundary that owes it.
+    /// One queued condition's handler, run at the boundary that owes it, and
+    /// run again for each condition held while it ran.
     fn deliver_one_pending_trap(
         &mut self,
         pending: PendingTrap,
     ) -> Result<Option<HandlerExit>, Failure> {
+        let (exit, held) = self.run_pending_handler(pending)?;
+        if exit.is_some() || held.is_empty() {
+            return Ok(exit);
+        }
+        self.redeliver_held(held)
+    }
+
+    /// rexxref (`condtra.xml`, CALL ON): on the handler's `RETURN` the trap
+    /// is no longer delayed and the handler is called again at once for
+    /// each condition `held` for it, in the order raised.
+    #[cold]
+    #[inline(never)]
+    fn redeliver_held(&mut self, held: Vec<PendingTrap>) -> Result<Option<HandlerExit>, Failure> {
+        let mut queue = std::collections::VecDeque::from(held);
+        while let Some(pending) = queue.pop_front() {
+            let (exit, held) = self.run_pending_handler(pending)?;
+            if exit.is_some() {
+                return Ok(exit);
+            }
+            for pending in held.into_iter().rev() {
+                queue.push_front(pending);
+            }
+        }
+        Ok(None)
+    }
+
+    /// [`Interp::deliver_one_pending_trap`]'s one handler run, answering with
+    /// the conditions held for its trap while it ran.
+    fn run_pending_handler(
+        &mut self,
+        pending: PendingTrap,
+    ) -> Result<(Option<HandlerExit>, Vec<PendingTrap>), Failure> {
         let Some(trap) = self.trap_for(&pending.condition) else {
-            return Ok(None);
+            return Ok((None, Vec::new()));
         };
+        if trap.delayed {
+            self.hold_delayed(pending);
+            return Ok((None, Vec::new()));
+        }
         if !trap.call {
             // A `SIGNAL ON` trap never gets here: `exec_raise` throws for
             // that half instead, so the transfer happens where the raise is
             // rather than one clause later. Declining rather than asserting
             // keeps a future raiser that forgets the distinction from
             // silently running a `SIGNAL` handler as a call.
-            return Ok(None);
+            return Ok((None, Vec::new()));
         }
         self.set_sigl(self.activity.clause_state.line());
         if let Some(rc) = &pending.rc {
@@ -760,8 +909,18 @@ impl Interp {
         // this comment claimed the flag also protects a handler's own `CALL
         // OFF`, and that is false -- the handler's table is a copy, so its
         // `CALL OFF` never reached this one to be undone.
-        if let Some(trap) = self.activation_mut().traps.get_mut(&delayed) {
-            trap.delayed = true;
+        let recorded = match self.activation_mut().traps.get_mut(&delayed) {
+            Some(trap) => {
+                trap.delayed = true;
+                true
+            }
+            None => false,
+        };
+        if recorded {
+            self.activity.delayed_traps.push(crate::DelayedTrap {
+                key: delayed.clone(),
+                held: Vec::new(),
+            });
         }
         // What `CONDITION()` answers inside the handler. Set on *this*
         // activation and restored afterwards, because the handler inherits
@@ -831,12 +990,25 @@ impl Interp {
         if let Some(trap) = self.activation_mut().traps.get_mut(&delayed) {
             trap.delayed = false;
         }
+        let held = match recorded {
+            true => self
+                .activity
+                .delayed_traps
+                .pop()
+                .map(|delayed| delayed.held)
+                .unwrap_or_default(),
+            false => Vec::new(),
+        };
         match ended {
             // The handler returned; execution resumes at the clause after
             // the one that finished.
             Ok(Ended::Returned(_)) => {
                 self.activation_mut().cold_mut().active_condition = enclosing;
-                Ok(None)
+                let mut held = held;
+                if recorded {
+                    self.take_queued_for_delayed(queued_before, &delayed, &mut held);
+                }
+                Ok((None, held))
             }
             // The handler failed rather than returned.
             Err(failure) => {
@@ -846,7 +1018,7 @@ impl Interp {
             // `EXIT` inside the handler ends the program, exactly as it does
             // inside any other called routine. Nothing will read
             // `active_condition` again, so it is left as it is.
-            Ok(exited @ Ended::Exited(_)) => Ok(HandlerExit::from_ended(exited)),
+            Ok(exited @ Ended::Exited(_)) => Ok((HandlerExit::from_ended(exited), Vec::new())),
         }
     }
 

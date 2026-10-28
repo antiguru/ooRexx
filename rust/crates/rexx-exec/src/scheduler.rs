@@ -2472,24 +2472,12 @@ impl Interp {
     /// `RexxActivation::processClauseBoundary`'s halt
     /// (`execution/RexxActivation.cpp:4085`-`:4093`), at the end of the
     /// clause the request found running, in that clause's activation: a
-    /// `CALL ON` trap queues it, a `SIGNAL ON` trap takes it, and untrapped it
-    /// is 4.1. A trap held while its handler runs drops it: the oracle queues
-    /// it on the handler's activation, which keeps it delayed until that
-    /// activation ends.
+    /// `CALL ON` trap queues it, a delayed one included, a `SIGNAL ON` trap
+    /// takes it, and untrapped it is 4.1.
     pub(crate) fn raise_requested_halt(
         &mut self,
         description: Option<Vec<u8>>,
     ) -> Result<(), Failure> {
-        let held = self.trap_frame().is_some_and(|frame| {
-            let traps = &frame.traps;
-            traps
-                .get(b"HALT".as_slice())
-                .or_else(|| traps.get(b"ANY".as_slice()))
-                .is_some_and(|trap| trap.delayed)
-        });
-        if held {
-            return Ok(());
-        }
         let raised = Raised {
             description: description.clone(),
             ..Raised::condition(std::borrow::Cow::Borrowed("HALT"))

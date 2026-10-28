@@ -713,8 +713,7 @@ fn begin_routine(
                 .push(crate::activity::MethodLevel {
                     caller,
                     name: message.into(),
-                    scope: resolution.scope,
-                    method: resolution.method,
+                    resolution: Some(resolution),
                     receiver,
                     arguments: arguments.into(),
                 });

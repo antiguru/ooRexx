@@ -1,0 +1,235 @@
+# A condition raised again while its CALL ON trap is delayed, which rexxref
+# (condtra.xml, CALL ON) holds until the handler returns or a trap
+# instruction for the condition is processed. The oracle drops it, so the
+# expected blocks are this crate's own output.
+
+# a RETURN from the handler calls it again for a USER condition
+program
+call on user ping name h
+n = 0
+call rp 'first'
+say 'after first, n =' n
+exit
+rp: parse arg dd; raise user ping description (dd) return
+h:
+  n = n + 1
+  say 'handler' n condition('d')
+  if n = 1 then call rp 'again'
+  say 'handler' n 'returns'
+  return
+----
+rc> 0
+out> handler 1 first
+out> handler 1 returns
+out> handler 2 again
+out> handler 2 returns
+out> after first, n = 2
+
+# and for HALT
+program
+call on halt name hh
+call rh 'one'
+say 'after halt'
+exit
+rh: parse arg dd; raise halt description (dd) return
+hh:
+  say 'hh' condition('d')
+  if condition('d') == 'one' then call rh 'two'
+  say 'hh returns' condition('d')
+  return
+----
+rc> 0
+out> hh one
+out> hh returns one
+out> hh two
+out> hh returns two
+out> after halt
+
+# a RAISE ... RETURN in the handler itself
+program
+call on user ping name h
+n = 0
+call rp 'first'
+say 'after first, n =' n
+exit
+rp: parse arg dd; raise user ping description (dd) return
+h:
+  n = n + 1
+  say 'h' n condition('d')
+  if n = 1 then raise user ping description 'again' return
+  say 'h' n 'returns'
+  return
+----
+rc> 0
+out> h 1 first
+out> h 2 again
+out> h 2 returns
+out> after first, n = 2
+
+# a CALL ON re-issued in the handler calls it at once
+program
+call on user ping name h
+n = 0
+call rp 'first'
+say 'after first, n =' n
+exit
+rp: parse arg dd; raise user ping description (dd) return
+h:
+  n = n + 1
+  say 'handler' n condition('d')
+  if n = 1 then do
+    call rp 'again'
+    say 'raised again'
+    call on user ping name h
+    say 'after call on'
+  end
+  say 'handler' n 'returns'
+  return
+----
+rc> 0
+out> handler 1 first
+out> raised again
+out> handler 2 again
+out> handler 2 returns
+out> after call on
+out> handler 2 returns
+out> after first, n = 2
+
+# a SIGNAL ON re-issued in the handler signals at once
+program
+call on user sig name hs
+call rs 'one'
+say 'not reached'
+exit
+rs: parse arg dd; raise user sig description (dd) return
+hs:
+  say 'hs' condition('d') condition('i')
+  call rs 'two'
+  say 'hs raised again'
+  signal on user sig name sg
+  say 'hs not reached'
+  return
+sg:
+  say 'sg' condition('d') condition('i') sigl
+  exit
+----
+rc> 0
+out> hs one CALL
+out> hs raised again
+out> sg two SIGNAL 10
+
+# a CALL OFF in the handler: a USER condition is ignored
+program
+call on user off name h
+call rp 'one'
+say 'after user'
+exit
+rp: parse arg dd; raise user off description (dd) return
+h:
+  say 'h' condition('d')
+  call rp 'two'
+  call off user off
+  say 'h after off'
+  return
+----
+rc> 0
+out> h one
+out> h after off
+out> after user
+
+# and a HALT takes its default action at the end of the CALL OFF
+program
+call on halt name hh
+call rh 'one'
+say 'not reached'
+exit
+rh: parse arg dd; raise halt description (dd) return
+hh:
+  say 'hh' condition('d')
+  call rh 'two'
+  say 'hh before off'
+  call off halt
+  say 'hh not reached'
+  return
+----
+rc> 252
+out> hh one
+out> hh before off
+err>     10 *-*   call off halt
+err>      2 *-* call rh 'one'
+err> Error 4 running /t.rex line 10:  Program interrupted.
+err> Error 4.1:  Program interrupted with HALT condition.
+
+# NOTREADY, and a CALL ON ANY trap
+program
+call on notready name hn
+n = 0
+x = linein('no_such_file_zz.txt')
+say 'after notready, n =' n
+call on any name ha
+m = 0
+call rp 'first'
+say 'after any, m =' m
+exit
+rp: parse arg dd; raise user anyc description (dd) return
+hn:
+  n = n + 1
+  say 'hn' n condition('c') condition('d')
+  if n = 1 then x = linein('no_such_file_zz2.txt')
+  say 'hn' n 'returns'
+  return
+ha:
+  m = m + 1
+  say 'ha' m condition('c') condition('d')
+  if m = 1 then call rp 'again'
+  return
+----
+rc> 0
+out> hn 1 NOTREADY no_such_file_zz.txt
+out> hn 1 returns
+out> hn 2 NOTREADY no_such_file_zz2.txt
+out> hn 2 returns
+out> after notready, n = 2
+out> ha 1 USER ANYC first
+out> ha 2 USER ANYC again
+out> after any, m = 2
+
+# ERROR and FAILURE raised again are ignored, and a FAILURE does not
+# become an ERROR
+program
+call on failure name hf
+call on error name he
+address system 'no_such_command_zz 2>/dev/null'
+say 'after failure'
+call on error name he2
+k = 0
+call re 5
+say 'after error, k =' k
+exit
+re: raise error (arg(1)) return
+hf:
+  say 'hf' condition('c')
+  address system 'no_such_command_zz 2>/dev/null'
+  say 'hf returns'
+  return
+he:
+  say 'he' condition('c') rc
+  return
+he2:
+  k = k + 1
+  say 'he2' k rc
+  if k = 1 then raise error 6 return
+  return
+----
+rc> 0
+out> hf FAILURE
+out> hf returns
+out> after failure
+out> he2 1 5
+out> after error, k = 1
+err>      3 *-* address system 'no_such_command_zz 2>/dev/null'
+err>        >>>   "no_such_command_zz 2>/dev/null"
+err>        +++   "RC(127)"
+err>     13 *-*   address system 'no_such_command_zz 2>/dev/null'
+err>        >>>     "no_such_command_zz 2>/dev/null"
+err>        +++     "RC(127)"

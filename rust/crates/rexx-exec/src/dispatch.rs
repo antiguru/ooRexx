@@ -377,8 +377,7 @@ impl Interp {
             .push(crate::activity::MethodLevel {
                 caller,
                 name: name.into(),
-                scope: resolution.scope,
-                method: resolution.method,
+                resolution: Some(resolution),
                 receiver,
                 arguments: args.into(),
             });
@@ -395,7 +394,8 @@ impl Interp {
     /// Runs `body`, which a primitive method `name` of `receiver` runs and
     /// which may reach Rexx code, as that method's own level, which
     /// `.context~stackFrames` lists: the `InternalActivationFrame` every
-    /// primitive runs under (`execution/CPPCode.cpp:140`).
+    /// primitive runs under (`execution/CPPCode.cpp:140`). The level's method
+    /// is found when a frame is built ([`Interp::running_primitive`]).
     #[cold]
     #[inline(never)]
     pub(crate) fn primitive_level<T>(
@@ -405,23 +405,35 @@ impl Interp {
         args: &[Option<ObjRef>],
         body: impl FnOnce(&mut Interp) -> Result<T, Failure>,
     ) -> Result<T, Failure> {
-        let Some(resolution) = self.lookup(receiver, name, None) else {
-            return body(self);
-        };
         let caller = self.running_activation().map(|activation| activation.id);
         self.activity
             .method_levels
             .push(crate::activity::MethodLevel {
                 caller,
                 name: name.into(),
-                scope: resolution.scope,
-                method: resolution.method,
+                resolution: None,
                 receiver,
                 arguments: args.into(),
             });
         let ran = body(self);
         self.activity.method_levels.pop();
         ran
+    }
+
+    /// The primitive method `name` that runs for `receiver`: the first method
+    /// of that name in `receiver`'s search order that is a primitive, past
+    /// any Rexx override that forwarded to it, or `None` where none is.
+    pub(crate) fn running_primitive(
+        &mut self,
+        receiver: ObjRef,
+        name: &[u8],
+    ) -> Option<Resolution> {
+        let mut found = self.lookup(receiver, name, None)?;
+        while self.object_model().natives.get(found.method).is_none() {
+            let above = self.super_scope_of(receiver, found.scope)?;
+            found = self.lookup(receiver, name, Some(above))?;
+        }
+        Some(found)
     }
 
     /// The `StackFrame` of the primitive method that entered the running

@@ -494,8 +494,9 @@ impl Interp {
     /// Pushes the level installing `id`, stopped on its directive
     /// `directive`, where `id` has no running activation: the oracle installs
     /// a package in an activation of its own (`RexxActivation::run`,
-    /// `RexxActivation.cpp:508`), which the files it requires run above.
-    /// `None` outside an install.
+    /// `RexxActivation.cpp:508`), which the files it requires run above, and
+    /// keeps the security manager that activation began under. `None` outside
+    /// an install, and where `id` already has a running activation.
     fn push_installing_level(
         &mut self,
         id: ProgramId,
@@ -519,6 +520,9 @@ impl Interp {
         installing.call_type = call_type;
         installing.body = None;
         installing.cold_mut().directive_clause = Some(directive);
+        if let Some(kept) = self.kept_installing_manager(id) {
+            installing.cold_mut().security_manager = Some(kept);
+        }
         self.push_activation(installing);
         self.record_call_convention();
         self.enter_directive_clause(directive_clause(program, &program.directives[directive]).0);

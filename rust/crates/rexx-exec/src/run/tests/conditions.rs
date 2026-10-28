@@ -1090,6 +1090,36 @@ fn a_condition_raised_again_while_its_call_trap_is_delayed() {
     }
 }
 
+/// rexxref (`condtra.xml`, CALL ON): a condition raised again while its
+/// handler runs is held until the handler returns, which calls it again, or
+/// until a trap instruction for the condition runs. The oracle drops it and
+/// segfaults on some of these shapes (`corpus/oracle-crashes.txt`), so the
+/// case file is this crate's own answer, in `rc>`/`out>`/`err>` lines.
+#[test]
+fn a_condition_raised_while_its_handler_runs_is_held() {
+    let mut cases = 0;
+    datadriven::walk("tests/delayed_trap_cases", |file| {
+        file.run(|case| {
+            cases += 1;
+            assert_eq!(case.directive, "program", "{}", case.directive);
+            let outcome = crate::run_program(
+                "/t.rex",
+                case.input.clone().into_bytes(),
+                crate::Invocation::none(),
+            );
+            let mut rendered = format!("rc> {}\n", outcome.exit_code);
+            for line in String::from_utf8_lossy(&outcome.stdout).lines() {
+                rendered.push_str(&format!("out> {line}\n"));
+            }
+            for line in String::from_utf8_lossy(&outcome.stderr).lines() {
+                rendered.push_str(&format!("err> {line}\n"));
+            }
+            rendered
+        });
+    });
+    assert!(cases > 0, "tests/delayed_trap_cases ran no case");
+}
+
 /// A `CALL ON` handler call that fails is taken by `SIGNAL ON SYNTAX` at
 /// once: no clause runs after it, and `SIGL` names the clause that raised.
 /// The oracle runs the next clause first and names it.

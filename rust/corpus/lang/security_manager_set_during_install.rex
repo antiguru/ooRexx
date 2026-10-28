@@ -1,0 +1,12 @@
+/* A security manager set on the main program's package while its ::REQUIRES
+   install is not asked by the main program's later ::REQUIRES or its
+   commands: its activation began before the set. A routine begun after it is
+   asked. */
+say 'main start'
+address system 'exit 5'; say 'main rc' rc
+call rt
+exit
+::routine rt
+address system 'exit 6'; say 'rt rc' rc
+::requires 'a.cls'
+::requires 'b.cls'

@@ -493,22 +493,26 @@ fn message_halt_in_the_shape_of_test_halt_start() {
 }
 
 /// A second `Message~halt` while the started activity's `CALL ON HALT`
-/// handler runs is dropped, as the oracle's delayed trap drops it (10 of 10
+/// handler runs is held and runs the handler again once it returns
+/// (rexxref, `condtra.xml`, CALL ON), where the oracle drops it (10 of 10
 /// runs).
 #[test]
-fn a_message_halt_inside_its_handler_is_dropped() {
+fn a_message_halt_inside_its_handler_runs_it_again_on_return() {
     let outcome = run_with(
         "d = .directory~new\nd~phase = 0\no = .w~new\nm = o~start('w', d)\n\
          do while d~phase == 0; end\nsay m~halt\ndo while d~phase == 1; end\nsay m~halt\n\
          d~phase = 3\nm~result\nsay 'main end'\nexit\n\
          ::class w\n::method w\n  use arg d\n  call on halt name h\n  d~phase = 1\n\
          \x20 do while d~phase < 4; end\n  say 'w end'\n  return\n\
-         h:\n  say 'h in'\n  d~phase = 2\n  do while d~phase == 2; end\n  do i = 1 to 3; end\n\
-         \x20 say 'h out'\n  d~phase = 4\n  return\n",
+         h:\n  if d~phase >= 3 then do; say 'h again'; return; end\n  say 'h in'\n  d~phase = 2\n\
+         \x20 do while d~phase == 2; end\n  do i = 1 to 3; end\n  say 'h out'\n  d~phase = 4\n  return\n",
         Invocation::none().with_deadline(RUN_DEADLINE),
     );
     assert_eq!(outcome.exit_code, 0, "{}", stderr(&outcome));
-    assert_eq!(stdout(&outcome), "1\nh in\n1\nh out\nw end\nmain end\n");
+    assert_eq!(
+        stdout(&outcome),
+        "1\nh in\n1\nh out\nh again\nw end\nmain end\n"
+    );
 }
 
 /// A `Message~halt` of an activity buried below another's pinned region is
