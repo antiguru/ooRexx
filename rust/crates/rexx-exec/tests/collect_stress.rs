@@ -114,7 +114,6 @@ const NO_ALLOCATION_PROGRAMS: &[&str] = &[
     "lang/select_when.rex",
     "lang/select_when_absorption.rex",
     "lang/select_when_bodies.rex",
-    "lang/string_caseless.rex",
     "lang/string_compare.rex",
     "num/comparison.rex",
 ];
