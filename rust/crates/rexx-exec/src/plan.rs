@@ -1002,7 +1002,9 @@ impl Interp {
     }
 
     /// Resolves a fragment's own `SymbolId`s to slots in the **enclosing**
-    /// frame.
+    /// frame. Out of line: inlined into `Interp::run_fragment`, the register
+    /// allocation of its loops moves with unrelated changes to the interpreter.
+    #[inline(never)]
     pub(crate) fn fragment_plan(&mut self, fragment: &Fragment) -> (Vec<Option<usize>>, Plan) {
         // The same upfront pass, run against the fragment's own body, which
         // numbers its names 0..n in walk order. Those numbers are local to the
