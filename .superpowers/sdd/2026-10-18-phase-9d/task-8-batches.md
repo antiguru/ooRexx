@@ -72,7 +72,8 @@ gate:phase-9c-gate.md:144 (unclear: native NewMethod; witness through the C API 
 2026-10-26-main-program-level-during-requires-install.md, 2026-10-26-compile-failure-condition-names-caller.md,
 2026-10-26-library-rxmath-error-number.md, 2026-10-27-deadlock-report-shape.md,
 2026-10-27-varref-operator-traceback-line.md, 2026-10-27-string-equals-makestring-argument.md,
-2026-10-27-stem-default-arithmetic-nostring.md, 2026-10-27-stem-array-default-string-value.md.
+2026-10-27-stem-default-arithmetic-nostring.md, 2026-10-27-stem-array-default-string-value.md,
+2026-10-28-stream-query-residuals.md.
 
 ## 8.8 Process items, unclear items, and items triage found fixed
 Every `process` and `unclear` row of task-8-triage.tsv not named above, the gate lines
