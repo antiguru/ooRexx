@@ -1307,12 +1307,7 @@ fn only_the_interpreter_and_its_waits_take_the_halting_signals() {
     assert_eq!(
         seen,
         [
-            vec![
-                run.clone(),
-                interp.clone(),
-                waiting.clone(),
-                timer.clone()
-            ],
+            vec![run.clone(), interp.clone(), waiting.clone(), timer.clone()],
             vec![run.clone(), interp.clone(), idle, timer.clone()],
             vec![run, interp, waiting, timer],
         ]
