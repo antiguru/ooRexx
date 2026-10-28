@@ -197,7 +197,7 @@ All from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t87a
 
 Code `cc1e48c0c`. Records: `docs/superpowers/records/2026-10-18-phase-9d/t8.7a/r1/`.
 
-**Important 1.** `Interp::message_term` (`dispatch.rs`), the tree path every traced send takes,
+**Important 1.** `Interp::message_term` (`dispatch.rs`), the path a traced send with a reference argument or a scope override takes,
 rendered the result for its `>M>` line while nothing held it, so a fresh reference a method returned
 was collected by that rendering's own allocation. It now calls `trace_sent` (`ir/drive.rs`, made
 `pub(crate)`), which roots the value before rendering, as the IR's `deliver_sent` already did; the

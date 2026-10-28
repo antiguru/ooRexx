@@ -2925,7 +2925,8 @@ DEVIATIONS -- permanent, chosen
      Witnessed by tests::a_references_string_value_is_its_referenced_values_in_every_position,
      tests::a_references_string_value_reaches_every_required_string_position,
      tests::a_reference_raises_nostring_only_where_its_value_has_no_string_value,
-     tests::a_references_nostring_syntax_names_its_values_string
+     tests::a_references_nostring_syntax_names_its_values_string,
+     tests::a_references_equals_argument_is_its_referenced_values_string
      (rust/crates/rexx-exec/src/tests.rs) and
      corpus/lang/variable_reference_forwarded_string.rex.
 
