@@ -1238,30 +1238,31 @@ impl Interp {
 
     /// The clause the activation at `depth` is stopped on.
     pub(crate) fn clause_of(&self, depth: usize) -> ClauseSnapshot {
-        if depth == 0
-            && let Some(running) = self.activity.running.as_deref()
+        let (mut snapshot, id) = match self.activity.running.as_deref() {
+            Some(running) if depth == 0 => (
+                ClauseSnapshot {
+                    line: self.activity.clause_state.line(),
+                    indent: self.activity.clause_state.current_value_indent,
+                    index: self.activity.clause_state.clause_index(),
+                },
+                running.id,
+            ),
+            _ => match self.frame_at(depth) {
+                Some(activation) => (activation.clause, activation.id),
+                None => return ClauseSnapshot::default(),
+            },
+        };
+        // Inside its fragments, the activation is stopped on the outermost
+        // one's `INTERPRET` clause, at that clause's indent.
+        if let Some(level) = self
+            .activity
+            .fragments
+            .iter()
+            .find(|level| level.owner == id)
         {
-            // Inside its fragments, the activation is stopped on the
-            // outermost one's `INTERPRET` clause, at that clause's indent.
-            let indent = self
-                .activity
-                .fragments
-                .iter()
-                .rev()
-                .take_while(|level| level.owner == running.id)
-                .last()
-                .map_or(self.activity.clause_state.current_value_indent, |level| {
-                    level.indent
-                });
-            return ClauseSnapshot {
-                line: self.activity.clause_state.line(),
-                indent,
-                index: self.activity.clause_state.clause_index(),
-            };
+            snapshot.indent = level.indent;
         }
-        self.frame_at(depth)
-            .map(|activation| activation.clause)
-            .unwrap_or_default()
+        snapshot
     }
 
     /// [`Interp::frame_at`] for a caller that has to write.

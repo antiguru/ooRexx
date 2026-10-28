@@ -681,15 +681,26 @@ fn build_method_level_frame(interp: &mut Interp, row: usize) -> Result<ObjRef, F
 /// The `StackFrame` of the running fragment in row `row`, stopped on its
 /// clause being stepped, or the one that entered the fragment above it.
 fn build_fragment_frame(interp: &mut Interp, row: usize) -> Result<ObjRef, Failure> {
-    let (clause, indent) = match interp.activity.fragments.get(row + 1) {
-        Some(inner) => (inner.outer_clause, inner.indent),
-        None => (
-            interp.activity.fragment_clause,
-            interp.activity.clause_state.current_value_indent,
-        ),
+    let level = &interp.activity.fragments[row];
+    let (line, owner) = (level.line, level.owner);
+    let inner = interp.activity.fragments.get(row + 1);
+    let clause = inner.map_or(interp.activity.fragment_clause, |inner| inner.outer_clause);
+    // The fragment's own clause's indent: the `INTERPRET` clause of the
+    // owner's next fragment, else the owner's clause, live or as it was left
+    // for a call.
+    let indent = match inner {
+        Some(inner) if inner.owner == owner => inner.indent,
+        _ => match interp.running_activation() {
+            Some(running) if running.id == owner => {
+                interp.activity.clause_state.current_value_indent
+            }
+            _ => interp
+                .frames()
+                .find(|activation| activation.id == owner)
+                .map_or(0, |activation| activation.clause.indent),
+        },
     };
     let level = &interp.activity.fragments[row];
-    let line = level.line;
     let text = level
         .fragment
         .as_ref()
