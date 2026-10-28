@@ -1,0 +1,40 @@
+count 39
+/* BEEP, FILESPEC and DIRECTORY convert their arguments as the native routines they are. */
+o = .object~new
+call try "beep(.object~new)"
+call try "beep('abc')"
+call try "beep(1.5)"
+call try "beep(40, 'x')"
+call try "beep(1e20)"
+call try "beep()"
+call try "beep(40)"
+call try "beep(1, 'x')"
+call try "beep(1, 1)"
+call try "beep(40, 70000)"
+call try "beep('4E1', 0)"
+call try "beep(' 40.0 ', 0)"
+call try "filespec('name', o)"
+call try "filespec(o, 'x')"
+call try "filespec('name', .k~new)"
+call try "filespec('n')"
+call try "filespec('n', 'a/b'||'00'x||'c/d')"
+call try "filespec('e'||'00'x, 'a.b')"
+call try "directory(o)"
+call try "directory(.k~new)"
+say 'unwrapped'
+say filespec('name', o)
+exit
+
+try:
+  signal on syntax
+  interpret 'r = ' arg(1)
+  say arg(1) '->' c2x(r)
+  return
+syntax:
+  c = condition('o')
+  say arg(1) '->' c~code c~message
+  return
+
+::class k
+::method string
+  return 'a K'

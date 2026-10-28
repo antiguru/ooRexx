@@ -306,12 +306,13 @@ pub(super) fn whole_method_argument(
     let Some(Some(value)) = args.get(index).copied() else {
         return Ok(None);
     };
-    match interp.to_number(value) {
-        Ok(number) => match number.whole_value(METHOD_ARGUMENT_DIGITS) {
-            Some(whole) => Ok(Some(whole)),
-            None => Err(refuse_method_argument(interp, args, index, raise)),
-        },
-        Err(_) => Err(refuse_method_argument(interp, args, index, raise)),
+    let number = match interp.to_number(value) {
+        Ok(number) => Some(number),
+        Err(_) => interp.requested_number(value)?,
+    };
+    match number.and_then(|number| number.whole_value(METHOD_ARGUMENT_DIGITS)) {
+        Some(whole) => Ok(Some(whole)),
+        None => Err(refuse_method_argument(interp, args, index, raise)),
     }
 }
 

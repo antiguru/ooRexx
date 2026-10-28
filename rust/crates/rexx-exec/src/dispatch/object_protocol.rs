@@ -329,10 +329,12 @@ pub(super) fn native_string(
     // **Sent rather than shortcut for an instance**, whose `OBJECTNAME` a
     // program can replace: measured, oracle rc 0, `::METHOD defaultName`
     // returning `overridden` makes `o~string` answer `overridden`.
-    if matches!(
-        interp.receiver_kind(receiver),
-        Ok(Primitive::Instance { .. })
-    ) {
+    let sent = match interp.receiver_kind(receiver) {
+        Ok(Primitive::Instance { .. }) => true,
+        Ok(Primitive::Class(class)) => declared_class(interp, class),
+        _ => false,
+    };
+    if sent {
         let caller = interp.caller();
         let answered = interp.send_message(receiver, OBJECTNAME, None, &[], caller)?;
         if let Some(answered) = answered {
@@ -342,6 +344,16 @@ pub(super) fn native_string(
     }
     let text = interp.string_value_text(receiver);
     Ok(Some(interp.text_built(text)))
+}
+
+/// Whether `class` is one a program made rather than one of the language's
+/// own. Only such a class can carry its own `DEFAULTNAME` on its class side
+/// (98.985 refuses additions to the language's classes), so only its
+/// rendering sends one, as `RexxObject::objectName` does for a class whose
+/// behaviour is not primitive (`classes/ObjectClass.cpp:1706`).
+fn declared_class(interp: &mut Interp, class: ObjRef) -> bool {
+    let id = interp.classes().id_string(class).to_string();
+    interp.classes().system_lookup(&id) != Some(class)
 }
 
 /// `Object~objectName`: the name something gave this object, or
@@ -409,6 +421,18 @@ pub(super) fn native_object_name(
             Some(name) => name.to_vec(),
             None => crate::environment::default_object_name("Stem").into_bytes(),
         },
+        Primitive::Class(class) if declared_class(interp, class) => {
+            match interp.classes().set_name(class) {
+                Some(held) => held.as_bytes().to_vec(),
+                None => {
+                    let caller = interp.caller();
+                    match interp.send_message(receiver, DEFAULTNAME, None, &[], caller)? {
+                        Some(answered) => interp.string_value_text(answered),
+                        None => interp.string_value_text(receiver),
+                    }
+                }
+            }
+        }
         Primitive::Object
         | Primitive::Array
         | Primitive::Class(_)

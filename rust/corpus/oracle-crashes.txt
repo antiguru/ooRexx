@@ -1887,3 +1887,17 @@ s.~class~id`, prints `Stem` at rc 0, so the hang is in the conversion. Measured 
 Phase 9d Task 8.5 re-review r3 under the standard wrapper from a fresh empty directory (its
 `sd1.rex`). This crate answers 11.1 (`a_cyclic_reference_is_insufficient_stack_in_every_conversion`,
 whose stem shapes it holds). No upstream ticket.
+
+## 62. Array's native SORTWITH defined on a class that is not an Array, sent to an instance
+
+    .k~define('SORTWITH', .array~method('SORTWITH'))
+    .ksub~new~sortWith(.numericComparator~new)
+    ::class k
+    ::class ksub subclass k
+
+Effect: SIGSEGV, rc 139. Measured 2026-10-21 by the Phase 9d Task 8 triage under the standard
+wrapper from a fresh empty directory (`.superpowers/sdd/2026-10-18-phase-9d/t8-triage-2/q09/e.rex`);
+the Task 6.11 re-review had recorded `98.975 Missing array element at position 2.` for the same
+shape. `ArrayClass::stableSortWithRexx` runs with a receiver that is not an `ArrayClass`. This crate
+refuses loudly (`a message send to a value that is not an array is not implemented`, rc 120). Not
+re-run by Task 8.7a. No upstream ticket.

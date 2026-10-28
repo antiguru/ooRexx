@@ -30,7 +30,7 @@ use crate::{Failure, Interp, Loud};
 
 /// A raise the argument marshalling makes, which the oracle reports against
 /// the package with no line.
-fn marshalled(mut raised: Raised) -> Failure {
+pub(crate) fn marshalled(mut raised: Raised) -> Failure {
     raised.delivery.lineless = true;
     raised.delivery.internal_package = true;
     raised.into()
@@ -45,7 +45,7 @@ fn check_arity(args: &[Option<ObjRef>], arity: usize) -> Result<(), Failure> {
 }
 
 /// The argument at `position`, 88.901 where it is omitted.
-fn required(args: &[Option<ObjRef>], position: usize) -> Result<ObjRef, Failure> {
+pub(crate) fn required(args: &[Option<ObjRef>], position: usize) -> Result<ObjRef, Failure> {
     args.get(position - 1)
         .copied()
         .flatten()
@@ -54,7 +54,7 @@ fn required(args: &[Option<ObjRef>], position: usize) -> Result<ObjRef, Failure>
 
 /// An `OPTIONAL_CSTRING` argument's bytes, 88.909 where it has no string
 /// value: `requiredString`, with no `STRING` fallback.
-fn optional_text(
+pub(crate) fn optional_text(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
     position: usize,
@@ -79,7 +79,7 @@ fn c_string(text: &[u8]) -> &[u8] {
 
 /// [`optional_text`] for a `CSTRING` argument that is required, cut at its
 /// first NUL by [`c_string`].
-fn required_c_string(
+pub(crate) fn required_c_string(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
     position: usize,

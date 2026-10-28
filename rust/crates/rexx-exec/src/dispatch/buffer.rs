@@ -657,15 +657,21 @@ pub(super) fn strip_arguments(
     Ok((option, set))
 }
 
-/// `EQUALS`'s and `CASELESSEQUALS`'s one operand, as its **string value**.
+/// `EQUALS`'s and `CASELESSEQUALS`'s one operand through the required-string
+/// protocol, or `None` for `.nil`, which no string equals
+/// (`RexxString::primitiveIsEqual`, `classes/StringClass.cpp:677`).
 pub(super) fn equals_argument(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
-) -> Result<Vec<u8>, Failure> {
+) -> Result<Option<Vec<u8>>, Failure> {
     let Some(value) = args.first().copied().flatten() else {
         return Err(Raised::missing_method_argument(1).into());
     };
-    Ok(interp.string_value_text(value))
+    if value == ObjRef::NIL {
+        return Ok(None);
+    }
+    let text = interp.required_string_value(value)?;
+    Ok(Some(interp.to_text(text).into_owned()))
 }
 
 /// `COMPARETO`'s and `CASELESSCOMPARETO`'s three arguments.

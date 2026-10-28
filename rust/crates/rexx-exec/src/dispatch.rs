@@ -141,8 +141,8 @@ pub(crate) mod library;
 // Array slot and subscript arithmetic, and `Array`'s primitive methods.
 mod array;
 use array::{
-    IndexUse, MAX_FIXED_ARRAY_SIZE, array_dimensions, array_position, array_size_argument,
-    array_slots, array_slots_owned, native_array_at, native_array_at_for, native_array_dimension,
+    IndexUse, MAX_FIXED_ARRAY_SIZE, array_dimensions, array_position, array_slots,
+    array_slots_owned, native_array_at, native_array_at_for, native_array_dimension,
     native_array_items, native_array_make_string, native_array_new, native_array_of,
     native_array_put, native_array_size, positive_index, unsigned_index,
 };
@@ -158,7 +158,7 @@ use buffer::{
     forward_search_arguments, insert_arguments, match_region_arguments, match_region_over,
     native_mutable_buffer_new, overlay_arguments, pad_arguments, replace_at_bytes, replace_at_plan,
     space_arguments, starts_with, strip_arguments, substr_arguments, translate_arguments,
-    translate_in_table, verify_arguments, wordpos_arguments,
+    verify_arguments, wordpos_arguments,
 };
 
 // The method-argument parsers the primitive methods share.
@@ -212,8 +212,8 @@ use object_protocol::{
 
 // The required-string protocol and the string conversion behind it.
 mod reqstr;
-pub(crate) use reqstr::MAKESTRING;
-use reqstr::{DEFAULTNAME, OBJECTNAME, required_string_argument, required_string_named_argument};
+pub(crate) use reqstr::{DEFAULTNAME, MAKESTRING};
+use reqstr::{OBJECTNAME, required_string_argument, required_string_named_argument};
 
 /// One primitive method's implementation.
 type NativeMethod =

@@ -16,7 +16,7 @@ use super::{
     NativeMethod, ObjRef, Raised, array_argument_object, array_dimensions, array_position,
     array_slots, array_slots_owned, new_instance,
 };
-use super::{INIT, array_size_argument, optional_length_argument, unsigned_index};
+use super::{INIT, optional_length_argument, unsigned_index};
 use super::{native_array_at_for, positive_index};
 use rexx_parse::Operator;
 
@@ -99,7 +99,7 @@ pub(super) fn queue_index(
         return Ok(index);
     }
     let lines = interp.required_string_value(index)?;
-    match super::array::whole_index(interp, lines) {
+    match super::array::whole_index(interp, lines)? {
         Some(whole) => Ok(interp.counted(whole)),
         None => {
             let found = interp.string_value_text(index);

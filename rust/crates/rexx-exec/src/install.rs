@@ -1598,7 +1598,7 @@ impl Interp {
     /// protocol would send, called from every directive install that adds a
     /// name to a class's dictionary.
     fn arm_reqstr_for(&mut self, installed: &[u8]) {
-        if installed == dispatch::MAKESTRING {
+        if installed == dispatch::MAKESTRING || installed == dispatch::DEFAULTNAME {
             self.reqstr_armed = true;
         }
     }

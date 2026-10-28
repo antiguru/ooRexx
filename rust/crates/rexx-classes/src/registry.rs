@@ -239,6 +239,11 @@ impl ClassRegistry {
         }
     }
 
+    /// The name `~objectName=` last stored for a class object, if any.
+    pub fn set_name(&self, class: ObjRef) -> Option<&str> {
+        self.object_names.get(&class).map(String::as_str)
+    }
+
     /// `~objectName=` for a class object.
     pub fn set_object_name(&mut self, class: ObjRef, name: &str) {
         self.object_names.insert(class, name.to_string());

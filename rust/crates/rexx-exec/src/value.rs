@@ -777,6 +777,32 @@ impl Interp {
     /// [`Interp::to_number`] for the receiver of an operator: a `String`
     /// subclass instance is `NotNumeric` here, because the oracle sends the
     /// operator to it rather than computing.
+    /// `RexxInternalObject::numberValue` for an argument
+    /// (`classes/ObjectClass.cpp:1047`): a value that is not a string or a
+    /// number is read through the required-string protocol first, so an
+    /// object whose `STRING` answers a number, or an `Array` of one such
+    /// line, converts. `None` where the text is not a number.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn requested_number(&mut self, value: ObjRef) -> Result<Option<Number>, Failure> {
+        if let Ok(number) = self.to_number(value) {
+            return Ok(Some(number));
+        }
+        let plain = match value.decode() {
+            Decoded::Heap { .. } if !self.heap.is_class(value) => matches!(
+                self.heap.get(value).map(|object| &object.body),
+                None | Some(Body::Text { .. } | Body::Num { .. })
+            ),
+            Decoded::Heap { .. } => false,
+            _ => true,
+        };
+        if plain {
+            return Ok(None);
+        }
+        let text = self.required_string_value(value)?;
+        Ok(self.to_number(text).ok())
+    }
+
     #[inline]
     pub(crate) fn operand_number(&mut self, value: ObjRef) -> Result<Number, NotNumeric> {
         self.number_of(value, true)

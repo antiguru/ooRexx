@@ -19,7 +19,7 @@ use super::{
     ends_with, equals_argument, forward_search, forward_search_arguments, insert_arguments,
     match_region_arguments, match_region_over, overlay_arguments, pad_arguments, replace_at_bytes,
     replace_at_plan, space_arguments, starts_with, strip_arguments, substr_arguments,
-    translate_arguments, translate_in_table, verify_arguments, wordpos_arguments,
+    translate_arguments, verify_arguments, wordpos_arguments,
 };
 use super::{
     BehaviourId, Body, INIT, refuse_method_argument, usize_or_refuse, whole_method_argument,
@@ -769,10 +769,15 @@ fn native_string_translate(
         let bytes = interp.to_text(receiver);
         out.extend_from_slice(&bytes);
     }
+    // A supplied input table is one even when it is empty, which matches no
+    // byte: `RexxString::translate` reads the table only where it was
+    // omitted (`classes/StringClassMisc.cpp:730`), where `MutableBuffer`'s
+    // reads its length.
+    let supplied = args.get(1).copied().flatten().is_some();
     crate::builtin::string::translate_bytes(
         &mut out,
         &out_table,
-        translate_in_table(&in_table),
+        supplied.then_some(in_table.as_slice()),
         pad,
         start,
         range,
@@ -1816,11 +1821,13 @@ fn string_equals(
 ) -> Result<Option<ObjRef>, Failure> {
     let other = equals_argument(interp, args)?;
     let bytes = interp.to_text(receiver).to_vec();
-    let holds = if caseless {
-        crate::builtin::string::caseless_eq(&bytes, &other)
-    } else {
-        bytes == other
-    };
+    let holds = other.is_some_and(|other| {
+        if caseless {
+            crate::builtin::string::caseless_eq(&bytes, &other)
+        } else {
+            bytes == other
+        }
+    });
     Ok(Some(interp.text(if holds { b"1" } else { b"0" })))
 }
 

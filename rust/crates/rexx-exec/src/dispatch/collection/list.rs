@@ -15,7 +15,7 @@
 use super::{
     Arity, BehaviourId, Body, Cleared, Failure, Interp, Loud, NativeMethod, ObjRef, Raised,
     array_of, array_of_slots, array_slots, array_slots_owned, array_splice, array_splice_slot,
-    item_argument, new_instance, new_supplier, pool_variable, same_item,
+    item_argument, new_instance, new_supplier, optional_length_argument, pool_variable, same_item,
 };
 
 // ---- List ----
@@ -96,7 +96,7 @@ fn list_position(
     receiver: ObjRef,
     handle: ObjRef,
 ) -> Result<Option<usize>, Failure> {
-    let Some(wanted) = super::unsigned_index(interp, handle) else {
+    let Some(wanted) = super::unsigned_index(interp, handle)? else {
         let written = interp.to_text(handle);
         return Err(Raised::incorrect_list_index(&written).into());
     };
@@ -105,7 +105,7 @@ fn list_position(
     let stored = array_slots_owned(interp, items)?;
     for (offset, slot) in held.iter().enumerate() {
         if let Some(slot) = *slot
-            && super::unsigned_index(interp, slot) == Some(wanted)
+            && super::unsigned_index(interp, slot)? == Some(wanted)
         {
             // `isIndexValid` is `isInUse`
             // (`classes/support/ListContents.hpp:235`), so `validateIndex`
@@ -581,10 +581,8 @@ fn native_list_section(
     };
     let pairs = list_pairs(interp, receiver)?;
     let available = pairs.len() - at;
-    let count = match args.get(1).copied().flatten() {
-        Some(count) => super::array_size_argument(interp, Some(count), 2)?.min(available),
-        None => available,
-    };
+    let count =
+        optional_length_argument(interp, args, 1)?.map_or(available, |count| count.min(available));
     // **Always a `List`, and never the receiver's class.**
     // `ListClass::section` is an unconditional `new ListClass`
     // (`classes/ListClass.cpp:429`), where `Array` and `Queue` both build

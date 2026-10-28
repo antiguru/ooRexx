@@ -1,0 +1,37 @@
+count 36
+/* A class's string value and object name send DEFAULTNAME when its class side has one. */
+say .withname
+say .withname~string
+say .withname~objectName
+say .withname~defaultName
+say 'x' .withname length(.withname)
+say .withname~new
+say .sub
+say .mk
+say .mk~objectName
+say .meta
+say .plain
+say .plain~objectName
+say .plain~new~class
+say .withname~class
+say .array
+.withname~objectName = 'named'
+say .withname
+say .withname~defaultName
+say .dyn
+exit
+
+::class withname
+::method defaultname class
+  return 'DN'
+::method defaultname
+  return 'idn'
+::class sub subclass withname
+::class meta subclass class
+::method defaultname
+  return 'METADN'
+::class mk metaclass meta
+::class plain
+::class dyn
+::method other class
+  return 1

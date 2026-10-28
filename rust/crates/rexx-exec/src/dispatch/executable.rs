@@ -411,6 +411,14 @@ fn source(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let lines = match source_of(interp, receiver)? {
+        // The REXX package's methods are restored from the image with no
+        // source: measured, oracle rc 0, every method of `.OrderedCollection`,
+        // `.DateTime` and `.Stream` answers no lines.
+        ExecutableSource::Directive { program, .. } | ExecutableSource::Main { program }
+            if interp.library_programs.contains(&program) =>
+        {
+            Vec::new()
+        }
         ExecutableSource::Directive { program, directive } => {
             block_source_lines(interp, program, Some(directive))?
         }

@@ -413,3 +413,13 @@ lang/stream_standard_open.rex
 lang/command_background_child.rex
 # 9d Task 8.6 fix round 1: a held write on an APPEND stream lands at the file's end as it then stands.
 lang/stream_append_held.rex
+# 9d Task 8.7a: a traced value is held while its trace lines are written.
+lang/trace_reference_value_rooted.rex
+# 9d Task 8.7a: native routine argument marshalling; a class's DEFAULTNAME; translate's empty input table; the sort family's leading items; REXX package methods have no source; whole-number and index arguments read as string values; equals reads its argument's string value.
+lang/native_routine_argument_marshalling.rex
+lang/class_side_defaultname.rex
+lang/string_translate_empty_input_table.rex
+lang/array_sort_leading_items.rex
+lang/method_source_rexx_package.rex
+lang/index_argument_string_value.rex
+lang/string_equals_string_value.rex

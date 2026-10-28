@@ -130,8 +130,17 @@ impl Interp {
     }
 
     /// [`Interp::trace_intermediate`]'s body, entered only under `TRACE I`.
+    /// `value` is rooted while its line is written, because a delivery to
+    /// `.TraceOutput` runs Rexx clauses that can collect.
     #[inline(never)]
     fn trace_intermediate_event(&mut self, code: &Code<'_>, expr: &Expr, value: ObjRef) {
+        let frame = self.roots.activity_mut().push_frame();
+        self.roots.activity_mut().push_temp(value);
+        self.trace_intermediate_line(code, expr, value);
+        self.roots.activity_mut().pop_frame(frame);
+    }
+
+    fn trace_intermediate_line(&mut self, code: &Code<'_>, expr: &Expr, value: ObjRef) {
         let indent = self.activity.clause_state.current_value_indent;
         match &expr.kind {
             // `Constant`'s own shape is reasoned from `Literal`'s measured

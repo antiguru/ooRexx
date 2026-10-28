@@ -22,7 +22,7 @@ use crate::error::Raised;
 use crate::{Failure, Interp};
 
 /// `Numerics::MAX_WHOLENUMBER`, the top of a native whole-number argument.
-const MAX_WHOLENUMBER: i64 = 999_999_999_999_999_999;
+pub(crate) const MAX_WHOLENUMBER: i64 = 999_999_999_999_999_999;
 
 /// `Numerics::ARGUMENT_DIGITS`, the precision `WholeNumber` converts under.
 const ARGUMENT_DIGITS: usize = 18;
@@ -58,7 +58,11 @@ fn stem_argument(
 
 /// A whole number from `minimum` to [`MAX_WHOLENUMBER`], as
 /// `objectToSignedInteger` converts a native argument.
-fn whole_value(interp: &mut Interp, value: ObjRef, minimum: i64) -> Result<Option<i64>, Failure> {
+pub(crate) fn whole_value(
+    interp: &mut Interp,
+    value: ObjRef,
+    minimum: i64,
+) -> Result<Option<i64>, Failure> {
     let number = match value.decode() {
         Decoded::SmallInt(number) => Some(number),
         _ => {

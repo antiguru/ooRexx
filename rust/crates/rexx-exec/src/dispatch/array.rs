@@ -259,7 +259,7 @@ fn multi_dimension_position(
 /// A subscript converted under `Numerics::ARGUMENT_DIGITS` rather than under
 /// the activation's own `NUMERIC DIGITS`, or `None` for one that is not a
 /// whole number of at least 1.
-pub(super) fn whole_index(interp: &mut Interp, value: ObjRef) -> Option<usize> {
+pub(super) fn whole_index(interp: &mut Interp, value: ObjRef) -> Result<Option<usize>, Failure> {
     // A tagged integer already is the answer when it is narrow enough that
     // the rounding rule would change nothing, the same shortcut
     // `builtin::whole_number` takes against the same width.
@@ -268,11 +268,21 @@ pub(super) fn whole_index(interp: &mut Interp, value: ObjRef) -> Option<usize> {
         && let Ok(index) = usize::try_from(whole)
         && index > 0
     {
-        return Some(index);
+        return Ok(Some(index));
     }
-    let number = interp.to_number(value).ok()?;
-    let index = usize::try_from(number.whole_value(rexx_num::ARGUMENT_DIGITS)?).ok()?;
-    (index > 0).then_some(index)
+    Ok(index_number(interp, value)?
+        .and_then(|number| number.whole_value(rexx_num::ARGUMENT_DIGITS))
+        .and_then(|whole| usize::try_from(whole).ok())
+        .filter(|index| *index > 0))
+}
+
+/// An index's number: the value itself where it is one, else its requested
+/// string's.
+fn index_number(interp: &mut Interp, value: ObjRef) -> Result<Option<rexx_num::Number>, Failure> {
+    match interp.to_number(value) {
+        Ok(number) => Ok(Some(number)),
+        Err(_) => interp.requested_number(value),
+    }
 }
 
 /// [`whole_index`]'s conversion admitting zero, for the one index in the
@@ -280,14 +290,15 @@ pub(super) fn whole_index(interp: &mut Interp, value: ObjRef) -> Option<usize> {
 /// (`classes/ListClass.cpp:195`) reads a list handle with
 /// `unsignedNumberValue` under the same `Numerics::ARGUMENT_DIGITS`, and a
 /// list's first handle is `0`.
-pub(super) fn unsigned_index(interp: &mut Interp, value: ObjRef) -> Option<usize> {
+pub(super) fn unsigned_index(interp: &mut Interp, value: ObjRef) -> Result<Option<usize>, Failure> {
     if let Decoded::SmallInt(small) = value.decode()
         && let Some(whole) = rexx_num::whole_i64(small, rexx_num::ARGUMENT_DIGITS)
     {
-        return usize::try_from(whole).ok();
+        return Ok(usize::try_from(whole).ok());
     }
-    let number = interp.to_number(value).ok()?;
-    usize::try_from(number.whole_value(rexx_num::ARGUMENT_DIGITS)?).ok()
+    Ok(index_number(interp, value)?
+        .and_then(|number| number.whole_value(rexx_num::ARGUMENT_DIGITS))
+        .and_then(|whole| usize::try_from(whole).ok()))
 }
 
 /// A comparison result as `numberValue` reads it -- the conversion both sort
@@ -310,7 +321,7 @@ pub(super) fn positive_index(
     value: ObjRef,
     position: usize,
 ) -> Result<usize, Failure> {
-    match whole_index(interp, value) {
+    match whole_index(interp, value)? {
         Some(index) => Ok(index),
         None => {
             let found = interp.string_value_text(value);
@@ -330,7 +341,7 @@ fn position_index(
     let Some(value) = subscript else {
         return Err(Raised::missing_method_argument(position).into());
     };
-    match whole_index(interp, value) {
+    match whole_index(interp, value)? {
         Some(index) => Ok(index),
         None => {
             let found = interp.string_value_text(value);
@@ -624,7 +635,7 @@ fn multidimensional_body(
 /// `ArrayClass::validateSize` (`classes/ArrayClass.cpp:178`) over
 /// `nonNegativeArgument` (`classes/StringClassUtil.cpp:167`): a whole number
 /// of at least zero, `MaxFixedArraySize` its upper bound.
-pub(super) fn array_size_argument(
+fn array_size_argument(
     interp: &mut Interp,
     argument: Option<ObjRef>,
     position: usize,
@@ -632,9 +643,7 @@ pub(super) fn array_size_argument(
     let Some(value) = argument else {
         return Err(Raised::missing_method_argument(position).into());
     };
-    let size = interp
-        .to_number(value)
-        .ok()
+    let size = index_number(interp, value)?
         .and_then(|number| number.whole_value(rexx_num::ARGUMENT_DIGITS))
         .and_then(|whole| usize::try_from(whole).ok());
     match size {

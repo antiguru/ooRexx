@@ -16,6 +16,7 @@
 
 use rexx_core::ObjRef;
 
+use super::rexxutil::{self, stems::MAX_WHOLENUMBER};
 use super::{Args, arg, required_string};
 use crate::environment::EnvScope;
 use crate::error::Raised;
@@ -177,11 +178,10 @@ pub(crate) fn directory(
     if args.len() > 1 {
         return Err(Raised::too_many_internal_arguments(1).into());
     }
-    let Some(Some(target)) = args.first().copied() else {
+    let Some(text) = rexxutil::optional_text(interp, args, 1)? else {
         let here = interp.cwd_bytes().to_vec();
         return Ok(interp.text_built(here));
     };
-    let text = interp.to_text(target).into_owned();
     if text.is_empty() {
         return Ok(interp.text(b""));
     }
@@ -214,13 +214,9 @@ pub(crate) fn filespec(
     if args.len() > 2 {
         return Err(Raised::too_many_internal_arguments(2).into());
     }
-    let Some(Some(option)) = args.first().copied() else {
-        return Err(Raised::missing_internal_argument("1").into());
-    };
-    let Some(Some(spec)) = args.get(1).copied() else {
-        return Err(Raised::missing_internal_argument("2").into());
-    };
-    let option = interp.to_text(option).into_owned();
+    rexxutil::required(args, 1)?;
+    rexxutil::required(args, 2)?;
+    let option = rexxutil::required_c_string(interp, args, 1)?;
     let letter = option.first().map(u8::to_ascii_uppercase);
     let Some(letter) = letter.filter(|byte| FILESPEC_OPTIONS.contains(byte)) else {
         return Err(Raised::argument_not_in_list(
@@ -231,7 +227,7 @@ pub(crate) fn filespec(
         )
         .into());
     };
-    let spec = interp.to_text(spec).into_owned();
+    let spec = rexxutil::required_c_string(interp, args, 2)?;
     let cut = spec.iter().rposition(|byte| *byte == b'/');
     let answer: Vec<u8> = match letter {
         // Unix has no drive letter, and the oracle answers the null string.
@@ -280,36 +276,49 @@ pub(crate) fn beep(
     if args.len() > 2 {
         return Err(Raised::too_many_internal_arguments(2).into());
     }
-    // Frequency first, and both before the bell: `beep(1,1)` raises on the
-    // frequency and sounds nothing.
-    whole_argument(interp, args, 0, "frequency", MIN_FREQUENCY, MAX_FREQUENCY)?;
-    whole_argument(interp, args, 1, "duration", MIN_DURATION, MAX_DURATION)?;
+    // Both conversions, then frequency's range before duration's, and all
+    // before the bell: `beep(1,1)` raises on the frequency and sounds nothing.
+    let frequency = whole_number(interp, args, 1)?;
+    let duration = whole_number(interp, args, 2)?;
+    in_range(frequency, "frequency", MIN_FREQUENCY, MAX_FREQUENCY)?;
+    in_range(duration, "duration", MIN_DURATION, MAX_DURATION)?;
     interp.write_out(&[0x07]);
     Ok(interp.text(b""))
 }
 
-/// One of `BEEP`'s two required whole-number arguments, with the bounds it is
-/// checked against. **What the oracle answers for a non-numeric argument was
-/// not measured**, so this reports it as outside the routine's own range
-/// rather than inventing a second message; the range error is the one shape
-/// that is measured (`beep(1,1)` → 88.907, "range 37 to 32767").
-fn whole_argument(
+/// A required `wholenumber_t` argument as the routine's marshalling converts
+/// it (`NativeActivation::signedIntegerValue`): 88.901 where it is omitted,
+/// 88.907 over the whole-number range where it is not a whole number.
+fn whole_number(
     interp: &mut Interp,
     args: &[Option<ObjRef>],
-    index: usize,
-    argument: &str,
-    minimum: i64,
-    maximum: i64,
+    position: usize,
 ) -> Result<i64, Failure> {
-    let Some(Some(value)) = args.get(index).copied() else {
-        return Err(Raised::missing_internal_argument(argument).into());
-    };
-    let text = interp.to_text(value).into_owned();
-    let number = String::from_utf8_lossy(&text).trim().parse::<i64>().ok();
-    match number.filter(|number| (minimum..=maximum).contains(number)) {
-        Some(number) => Ok(number),
-        None => Err(Raised::native_argument_out_of_range(argument, minimum, maximum, &text).into()),
+    let value = rexxutil::required(args, position)?;
+    if let Some(number) = rexxutil::stems::whole_value(interp, value, -MAX_WHOLENUMBER)? {
+        return Ok(number);
     }
+    let found = interp.string_value_text(value);
+    Err(rexxutil::marshalled(Raised::native_argument_out_of_range(
+        &position.to_string(),
+        -MAX_WHOLENUMBER,
+        MAX_WHOLENUMBER,
+        &found,
+    )))
+}
+
+/// `BEEP`'s own range check of a converted argument, which names it.
+fn in_range(number: i64, argument: &str, minimum: i64, maximum: i64) -> Result<(), Failure> {
+    if (minimum..=maximum).contains(&number) {
+        return Ok(());
+    }
+    Err(Raised::native_argument_out_of_range(
+        argument,
+        minimum,
+        maximum,
+        number.to_string().as_bytes(),
+    )
+    .into())
 }
 
 /// `VALUE(name, [new], selector)`: the two external pools this phase answers.

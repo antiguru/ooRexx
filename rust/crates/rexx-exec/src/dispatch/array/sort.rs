@@ -20,12 +20,15 @@ use super::{
 
 // ---- the sort family ----
 
-/// Every item of a receiver the sort family will accept, in index order.
-fn dense_items(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<ObjRef>, Failure> {
+/// The receiver's first `items` slots, which are what the sort family sorts
+/// (`ArrayClass::stableSortRexx`, `classes/ArrayClass.cpp:2840`): 98.975 at
+/// the first of them that is empty. Slots past them are left as they are.
+fn leading_items(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<ObjRef>, Failure> {
     let receiver = store_of(interp, receiver)?;
     let slots = array_slots(interp, receiver)?;
-    let mut items = Vec::with_capacity(slots.len());
-    for (offset, slot) in slots.iter().enumerate() {
+    let count = slots.iter().flatten().count();
+    let mut items = Vec::with_capacity(count);
+    for (offset, slot) in slots.iter().take(count).enumerate() {
         match slot {
             Some(item) => items.push(*item),
             None => return Err(Raised::missing_array_element(offset + 1).into()),
@@ -271,13 +274,20 @@ fn write_back(interp: &mut Interp, receiver: ObjRef, items: Vec<ObjRef>) -> Resu
     }
 }
 
+/// Sorts the receiver's leading items in place. `unsorted` is the most items
+/// the method answers for without looking at its slots: none for `sort`
+/// (`:2841`), one for `sortWith` (`:2878`).
 fn sort_by(
     interp: &mut Interp,
     receiver: ObjRef,
     order: &Order,
+    unsorted: usize,
 ) -> Result<Option<ObjRef>, Failure> {
     let before = read_slots(interp, receiver, |slots| slots.iter().flatten().count())?;
-    let items = dense_items(interp, receiver)?;
+    if before <= unsorted {
+        return Ok(Some(receiver));
+    }
+    let items = leading_items(interp, receiver)?;
     // The whole run is held across every `COMPARE`/`COMPARETO`, each of which
     // runs Rexx that may empty the receiver -- so the items are rooted for
     // the duration rather than living only in the `Vec`.
@@ -311,7 +321,7 @@ fn native_array_sort(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    sort_by(interp, receiver, &Order::CompareTo)
+    sort_by(interp, receiver, &Order::CompareTo, 0)
 }
 
 /// `Array~sortWith(comparator)` and `Array~stableSortWith(comparator)`, both
@@ -323,7 +333,7 @@ fn native_array_sort_with(
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let comparator = item_argument(args)?;
-    sort_by(interp, receiver, &Order::With(comparator))
+    sort_by(interp, receiver, &Order::With(comparator), 1)
 }
 
 /// `Array`'s sort methods, chained into `ObjectModel::build` ahead of the
