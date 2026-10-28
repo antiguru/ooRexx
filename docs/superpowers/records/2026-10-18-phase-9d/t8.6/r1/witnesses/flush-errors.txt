@@ -1,0 +1,16 @@
+flush_errors.rex full oracle: h READY: UNKNOWN: | 0 ERROR:28 ERROR:28 No space left on device | ERROR:28 ERROR:28 No space left on device | 0 READY: | READY: READY: | 0 READY: rc 0 
+flush_errors.rex full base: h READY: UNKNOWN: | 0 READY: READY: | READY: READY: | 0 READY: | READY: READY: | 0 READY: rc 0 
+flush_errors.rex full prior: h READY: UNKNOWN: | 0 READY: READY: | READY: READY: | 0 READY: | READY: READY: | 0 READY: rc 0 
+flush_errors.rex full head: h READY: UNKNOWN: | 0 ERROR:28 ERROR:28 No space left on device | ERROR:28 ERROR:28 No space left on device | 0 READY: | READY: READY: | 0 READY: rc 0 
+flush_errors.rex pipe oracle: h READY: UNKNOWN: | 0 ERROR:32 ERROR:32 Broken pipe | ERROR:32 ERROR:32 Broken pipe | 0 READY: | READY: READY: | 0 READY: rc 0 
+flush_errors.rex pipe base: h READY: UNKNOWN: | 0 READY: READY: | READY: READY: | 0 READY: | READY: READY: | 0 READY: rc 0 
+flush_errors.rex pipe prior: h READY: UNKNOWN: | 0 READY: READY: | READY: READY: | 0 READY: | READY: READY: | 0 READY: rc 0 
+flush_errors.rex pipe head: h READY: UNKNOWN: | 0 ERROR:32 ERROR:32 Broken pipe | ERROR:32 ERROR:32 Broken pipe | 0 READY: | READY: READY: | 0 READY: rc 0 
+werr.rex full oracle: e 1 ERROR:28 No space left on device | 1 ERROR:28 No space left on device | 1 ERROR | 1 ERROR:28 No space left on device | 0 READY: | 0 READY: ERROR:28 ERROR:28 No space left on device rc 7 
+werr.rex full base: e 0 READY: | 0 READY: | 0 READY | 0 READY: | 0 READY: | 0 READY: READY: READY: rc 7 
+werr.rex full prior: e 0 READY: | 0 READY: | 0 READY | 0 READY: | 0 READY: | 0 READY: READY: READY: rc 7 
+werr.rex full head: e 0 READY: | 0 READY: | 0 READY | 0 READY: | 0 READY: | 0 READY: ERROR:28 ERROR:28 No space left on device rc 7 
+werr.rex pipe oracle: e 1 ERROR:32 Broken pipe | 1 ERROR:32 Broken pipe | 1 ERROR | 1 ERROR:32 Broken pipe | 0 READY: | 0 READY: ERROR:32 ERROR:32 Broken pipe rc 7 
+werr.rex pipe base: e 0 READY: | 0 READY: | 0 READY | 0 READY: | 0 READY: | 0 READY: READY: READY: rc 7 
+werr.rex pipe prior: e 0 READY: | 0 READY: | 0 READY | 0 READY: | 0 READY: | 0 READY: READY: READY: rc 7 
+werr.rex pipe head: e 0 READY: | 0 READY: | 0 READY | 0 READY: | 0 READY: | 0 READY: ERROR:32 ERROR:32 Broken pipe rc 7 

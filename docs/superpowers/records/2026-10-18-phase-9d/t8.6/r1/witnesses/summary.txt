@@ -1,0 +1,55 @@
+### stream_append_held.rex (stdout a pipe)
+== oracle rc=0 out: write append: cmd1|b1|b2| both append: cmd2|c1|c2| two appends: e1|d1|d2| write: f1|f2| implicit: g1|g2| past the buffer: 5008 cmd5|h2|  err: 
+== base rc=0 out: write append: b1|cmd1|b2| both append: c1|cmd2|c2| two appends: d1|e1|d2| write: f1|f2|3| implicit: g1|g2|4| past the buffer: 5008 cmd5|h2|  err: 
+== prior rc=0 out: write append: b1|1|b2| both append: c1|2|c2| two appends: d1|d2| write: f1|f2| implicit: g1|g2| past the buffer: 5008 cmd5|h2|  err: 
+== head rc=0 out: write append: cmd1|b1|b2| both append: cmd2|c1|c2| two appends: e1|d1|d2| write: f1|f2| implicit: g1|g2| past the buffer: 5008 cmd5|h2|  err: 
+### append.rex (stdout a pipe)
+== oracle rc=0 out: explicit append cmd1|b1|b2| implicit c1|c2| two appends e1|d1|d2|  err: 
+== base rc=0 out: explicit append b1|cmd1|b2| implicit c1|c2|2| two appends d1|e1|d2|  err: 
+== prior rc=0 out: explicit append b1|1|b2| implicit c1|c2| two appends d1|d2|  err: 
+== head rc=0 out: explicit append cmd1|b1|b2| implicit c1|c2| two appends e1|d1|d2|  err: 
+### append2.rex (stdout a pipe)
+== oracle rc=0 out: write b1|b2| both append cmd1|b1|b2|  err: 
+== base rc=0 out: write b1|b2|1| both append b1|cmd1|b2|  err: 
+== prior rc=0 out: write b1|b2| both append b1|1|b2|  err: 
+== head rc=0 out: write b1|b2| both append cmd1|b1|b2|  err: 
+### reo1.rex (stdout a pipe)
+== oracle rc=0 out:  err: 
+== base rc=0 out: x y z  err: 
+== prior rc=0 out: y  err: 
+== head rc=0 out: x y z  err: 
+### reo2.rex (stdout a pipe)
+== oracle rc=0 out:  err: 
+== base rc=0 out: x y z  err: 
+== prior rc=0 out: x y z  err: 
+== head rc=0 out: x y z  err: 
+### reo3.rex (stdout a pipe)
+== oracle rc=0 out:  err: 
+== base rc=0 out: x y z  err: 
+== prior rc=0 out: y  err: 
+== head rc=0 out: x y z  err: 
+### reo4.rex (stdout a pipe)
+== oracle rc=0 out:  err: 
+== base rc=0 out:  err: x y z 
+== prior rc=0 out:  err: 
+== head rc=0 out:  err: x y z 
+### reo5.rex (stdout a pipe)
+== oracle rc=0 out: x y  err: 
+== base rc=0 out: x y z  err: 
+== prior rc=0 out: y x z  err: 
+== head rc=0 out: x y z  err: 
+### reo1.rex (stdout a file)
+== oracle rc=0 out:  err: 
+== base rc=0 out: x y z  err: 
+== prior rc=0 out: y  err: 
+== head rc=0 out: x y z  err: 
+### reo5.rex (stdout a file)
+== oracle rc=0 out: x y  err: 
+== base rc=0 out: x y z  err: 
+== prior rc=0 out: y x z  err: 
+== head rc=0 out: x y z  err: 
+### reo6.rex: lines, first, last
+oracle 820 a yy
+base 1002 a end
+prior 1002 a end
+head 1002 a end

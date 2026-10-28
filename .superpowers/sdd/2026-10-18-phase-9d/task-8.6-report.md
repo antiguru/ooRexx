@@ -193,3 +193,84 @@ All from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t86-
 * `SysFile::hasData` reads an uninitialized `bytesWaiting` when `FIONREAD` fails (Concern 4).
 * `.Stream~new('HANDLE:1')~lineout` with stdout closed or redirected to a file segfaults (rc 139);
   this is entry 12a of `oracle-crashes.txt`, not new.
+
+## Fix round 1
+
+Code `4f079c0d2`. Records under `t8.6/r1/` (`witnesses/summary.txt` and `witnesses/flush-errors.txt`
+run oracle, base `0fd10a074`, prior head `b53b1de0c` (the code at `8ed7774e1`) and `4f079c0d2`, each in
+a fresh directory, by `witnesses/run4.sh`; `probes/flush_errors.rex` is the FLUSH probe).
+
+**Important 1 (APPEND).** An `APPEND` open is `O_APPEND` (`OpenOptions::append`, also on the
+write-only retry), as `SysFile::open` makes it, so held bytes land at the end the file has when they
+are written. Witness `corpus/lang/stream_append_held.rex` (in `phase-9.txt`, with its
+`sourceline_oracle` file from the test's driver): `write append: cmd1|b1|b2|`, `both append:
+cmd2|c1|c2|`, `two appends: e1|d1|d2|` on the oracle and here; the prior head answers `b1|1|b2|`,
+`c1|2|c2|` and `d1|d2|`. Its `write`, `implicit` and past-the-buffer lines are unchanged and agree
+with the oracle. The review's `append.rex` and `append2.rex` match the oracle too.
+
+**Important 2 (reopened `.STDOUT`/`.STDERR`).** `StreamState::local` marks `.local`'s standard
+streams, and an `OPEN` keeps them `NOBUFFER` whatever its options, so their writes go where `SAY` and
+trace output go. With stdout a pipe (reo1 and reo5 also a file), here and at base reo1 to reo5
+answer `x y z` (reo4 on stderr) and reo6 all 1002 lines, `a` first and `end` last. The prior head
+answered `y` for reo1 and reo3, `y x z` for reo5 and nothing for reo4 (reo2 and reo6 as here); the
+oracle answers nothing for reo1 to reo4, `x y` for reo5 and 820 lines for reo6 (its defect, not
+copied). Witness
+`tests/standard_stream_reopen.rs`, spawning `rexx` with stdout and stderr pipes, its shapes in
+`tests/standard_stream_reopen/cases` and the many-`SAY` one in its own test.
+
+**Minor 1 (size).** `NativeState::Stream` holds a `Box<StreamState>`. Measured with a size test in
+each tree: `NativeState` 176 bytes at base, 232 at the prior head, 72 now (the size of
+`BufferState`), held by a `const` assertion in `body.rs`. 200000 `.mutablebuffer~new('x')` in an
+array, `/usr/bin/time` the direct parent, three runs each (`rss-mutablebuffer.txt`): max RSS base
+134.1/134.3/134.4 MB, prior head 141.5/143.4/143.6 MB, now 111.9/112.1/112.4 MB.
+
+**Minor 3 (FLUSH).** `FLUSH` on a standard output or error stream hands the interpreter's buffer for
+its descriptor over; a buffered (program-made, not `NOBUFFER`) one answers `ERROR:n` with
+`NOTREADY` when that hand-over was refused, and again on each flush until it writes, as the oracle's
+keeps the refused bytes and retries them. An unopened one and `.STDOUT` answer `READY:` as the
+oracle's do. `flush-errors.txt`, `probes/flush_errors.rex` under `/dev/full` and a closed pipe:
+oracle and here `READY: UNKNOWN: | 0 ERROR:28 ERROR:28 No space left on device | ERROR:28 ERROR:28 No
+space left on device | 0 READY: | READY: READY: | 0 READY:` (`ERROR:32 Broken pipe` on the pipe);
+base and the prior head `READY:` for each flush. The review's `werr.rex`: the FLUSH column now
+matches the oracle (`ERROR:28`, `ERROR:32`); the write columns before it are candidate A's ruled
+answer. Witness: two tests added to `tests/stdout_write_errors.rs`. So candidate A's sentence needs
+no FLUSH clause.
+
+**Minor 2 (pingguard).** At `4f079c0d2` pingguard is +0.0001% libc subtracted (+0.3642% whole
+process), under the limit; no bisect.
+
+### Perf
+
+`r1/callgrind-r1.txt`: `bench-programs/callgrind.sh -B 0.5 -j 4 -o
+/home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.6/r1 base=.../rexx-base-0fd10a074
+head=.../rexx-head-4f079c0d2`, every program, 3 rounds, no OVER or SPREAD flag. Libc subtracted, the
+largest delta is interpret +0.0153%, then define +0.0042%; pingguard +0.0001%, pingsem +0.0000%,
+fibfunc +0.0000%, rexxcps +0.0000%. Whole process the largest is pingguard +0.3642% and dispatch the
+lowest at -0.3609%.
+
+### Commands
+
+All from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t86-target` except the
+workspace run; outputs in `t8.6/r1/`, at `4f079c0d2`.
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` (`checks-fmt.txt`) | 0 |
+| `memcap 16G cargo clippy -j 4 -p rexx-core -p rexx-exec --all-targets -- -D warnings` (`checks-clippy.txt`) | 0 |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --lib` and `--test` signals, dispatch_seam, owners, closed_phases, phase_ten_reasons, representation_refusals, refusal_sites, refusal_dispositions, stream_model, stream_handle, rexx_command, prompt_before_read, input_oracle, stdin_contention, no_process_state, stdout_write_errors, standard_stream_reopen, rexxutil_process, program_end (`checks-touched.txt`) | 0; lib 1200 passed |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test collect_stress` (`checks-collect-stress.txt`) | 0, 74 passed |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`checks-corpus.txt`) | 101: the one mismatch the known `rexxutil_file_date_time.rex` |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-parse --test sourceline_oracle --test errors` (`checks-parse.txt`) | 0 |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test coverage` (`checks-coverage.txt`) | 0 |
+| `memcap 16G cargo test -j 4 --release -p rexx-core --test unsafe_sites` (`checks-unsafe.txt`) | 0 |
+| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../t8.6/r1/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`suite/`) | 0; `tests.tsv`, `table.tsv`, `verdicts.tsv`, `oracle-differences.tsv` identical to `t8.6/final/suite/` |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast --workspace`, `rust/target/release/rexx` built first, default target dir (`workspace-tests.txt`, status in `workspace-status.txt`) | 101: one failure, `datetime_zone`'s `the_file_date_time_witness_reads_the_zone_the_oracle_does`, the known DST flake |
+
+### Concerns
+
+1. **`FLUSH` on `.STDOUT` hands over.** It writes the interpreter's buffer (Deviation 40) to the
+   descriptor and answers `READY:` even when that hand-over is refused, as the oracle's `NOBUFFER`
+   `.STDOUT` answers `READY:` with nothing held; the refusal is answered by the stream writes after it
+   (candidate A).
+2. **The `NativeState` box is smaller than at base** (72 bytes against 176), so every native object's
+   allocation moved size class; the perf table above includes it.
