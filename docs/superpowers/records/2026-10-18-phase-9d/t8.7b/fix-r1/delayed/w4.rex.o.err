@@ -1,0 +1,6 @@
+     4 *-* address system 'no_such_command_zz 2>/dev/null'
+       >>>   "no_such_command_zz 2>/dev/null"
+       +++   "RC(127)"
+    14 *-*   address system 'no_such_command_zz 2>/dev/null'
+       >>>     "no_such_command_zz 2>/dev/null"
+       +++     "RC(127)"

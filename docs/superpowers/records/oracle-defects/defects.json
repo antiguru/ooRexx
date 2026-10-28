@@ -1993,5 +1993,50 @@
   "source": "Phase 9d Task 8.7a review",
   "status": "open",
   "crate": "Prints 3 at rc 0 with its trace lines."
+ },
+ {
+  "id": "call-on-raise-again-then-signal-on-segfaults",
+  "added": "2026-10-28",
+  "title": "A CALL ON condition raised again from its handler, then a SIGNAL ON re-issued in a handler, segfaults",
+  "category": "crash",
+  "area": "conditions",
+  "severity": "crash",
+  "repro": "rust/corpus/oracle-crashes.txt entry 64",
+  "oracle": "SIGSEGV, rc 139, after two stdout lines.",
+  "expected": "rexxref condtra.xml (CALL ON, delayed state): the held condition redelivered on RETURN, and signalled after the SIGNAL ON.",
+  "cause": "",
+  "source": "Phase 9d Task 8.7b fix round 1",
+  "status": "open",
+  "crate": "Holds and redelivers both conditions at rc 0 (crates/rexx-exec/tests/delayed_trap_cases/crate)."
+ },
+ {
+  "id": "error-failure-raised-again-in-handler-segfaults",
+  "added": "2026-10-28",
+  "title": "ERROR and FAILURE raised again from their own CALL ON handlers segfault at the end",
+  "category": "crash",
+  "area": "conditions",
+  "severity": "crash",
+  "repro": "rust/corpus/oracle-crashes.txt entry 65",
+  "oracle": "SIGSEGV, rc 139, after the whole of stdout and stderr.",
+  "expected": "The same output at rc 0.",
+  "cause": "",
+  "source": "Phase 9d Task 8.7b fix round 1",
+  "status": "open",
+  "crate": "Same stdout and stderr at rc 0."
+ },
+ {
+  "id": "call-on-delayed-condition-dropped",
+  "added": "2026-10-28",
+  "title": "A condition raised again while its CALL ON handler runs is dropped",
+  "category": "wrong answer",
+  "area": "conditions",
+  "severity": "divergence",
+  "repro": "docs/superpowers/records/2026-10-18-phase-9d/t8.7b/probes/user-raised/u2.rex, u3.rex",
+  "oracle": "USER and HALT raised from a routine the handler calls run no second handler, after RETURN or after a CALL ON re-issued in the handler.",
+  "expected": "rexxref condtra.xml (CALL ON): delayed until RETURN, when the handler is called again, or until a CALL ON for it, after which the call takes place immediately.",
+  "cause": "The delayed trap's condition is queued on the raising activation's caller (RexxActivation::trap, processTraps), whose queue is discarded when it returns.",
+  "source": "Phase 9d Task 8.2 review Minor 6; Task 8.7b; ruled by Moritz 2026-10-28 (\"Follow rexxref, Deviation\")",
+  "status": "open",
+  "crate": "Follows rexxref (crates/rexx-exec/tests/delayed_trap_cases/crate)."
  }
 ]

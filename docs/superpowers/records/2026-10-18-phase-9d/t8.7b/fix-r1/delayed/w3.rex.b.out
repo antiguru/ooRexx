@@ -1,0 +1,7 @@
+hn 1 NOTREADY no_such_file_zz.txt
+hn 1 returns
+after notready, n = 1
+ha 1 USER ANYC first
+after any, m = 1
+he 1 ERROR 3
+after error, k = 1

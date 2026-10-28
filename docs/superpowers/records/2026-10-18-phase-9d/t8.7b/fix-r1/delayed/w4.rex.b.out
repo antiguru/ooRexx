@@ -1,0 +1,7 @@
+hf FAILURE
+he ERROR 127
+hf returns
+after failure
+he2 1 5
+after error, k = 1
+he2 2 6

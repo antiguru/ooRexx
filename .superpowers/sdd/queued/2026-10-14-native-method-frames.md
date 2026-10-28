@@ -1,4 +1,4 @@
-**CLOSED 2026-10-28 by Phase 9d Task 8.7b (probe agrees: docs/superpowers/records/2026-10-18-phase-9d/t8.7b/probes/frames/f1.rex).**
+**CLOSED 2026-10-28 by Phase 9d Task 8.7b (probe agrees: docs/superpowers/records/2026-10-18-phase-9d/t8.7b/probes/frames/f1.rex, whose `send`, `sendwith`, `osend`, `call` and `callwith` rows agree at base; its `run`, `sort`, `eq`, `makearray` and `hash` rows are 2026-10-22-live-frames-omit-nested-primitives.md's, closed by 5053fbd9b).**
 **OPEN: ruled 9d, cluster native-stack-frames (Phase 9d inventory).** names StackFrame TESTNATIVECODEFRAME, that cluster's test.
 
 # Native method frames missing from a live .context~stackFrames

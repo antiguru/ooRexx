@@ -1,4 +1,4 @@
-**OPEN after Phase 9d Task 8.7b: both interpreters depart from rexxref's delayed-state rule; a Deviation candidate went to the controller (task-8.7b-report.md, probes docs/superpowers/records/2026-10-18-phase-9d/t8.7b/probes/user-raised/).**
+**CLOSED 2026-10-28 by Phase 9d Task 8.7b fix round 1 (10b0f5081): ruled by Moritz 2026-10-28 ("Follow rexxref, Deviation"); a condition raised again while its CALL ON trap is delayed is held and redelivered as rexxref condtra.xml says (rust/crates/rexx-exec/tests/delayed_trap_cases/crate).**
 **OPEN, queued 2026-10-22 by the controller; proposed 9d.**
 
 # A USER condition raised during its own CALL ON handler is never redelivered

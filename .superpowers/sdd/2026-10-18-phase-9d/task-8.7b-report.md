@@ -80,7 +80,9 @@ minted on the first ask, shared by the live frame and the condition's INTERPRET 
 `build_ended_frame` takes it). Witness `interpret_frame_invocation_indent.rex`.
 
 **2026-10-14-native-method-frames.md (closed: probe agrees).** Its open parts (`Routine~call`'s CALL,
-`sendWith`'s SENDWITH, `Message~send`'s SEND) agree at base and head (`probes/frames/f1.rex`), and
+`sendWith`'s SENDWITH, `Message~send`'s SEND) agree at base and head (`probes/frames/f1.rex`'s `send`,
+`sendwith`, `osend`, `call` and `callwith` rows; its `run`, `sort`, `eq`, `makearray` and `hash` rows
+differ at base and are the live-frames item's), and
 StackFrame `TESTNATIVECODEFRAME` passes in `suite/tests.tsv`.
 
 **2026-10-22-interpret-clause-traceback-indent.md (closed).** Rule: an activation running INTERPRET
@@ -224,3 +226,111 @@ All from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t87b
 5. **A busy interpreter outlives SIGTERM.** The base debug binary on `call_depth_cap_call.rex` ran on
    for 30 minutes after `timeout`'s SIGTERM and ended only on SIGKILL. Why was not established; at
    head the program finishes in 1.6 s.
+
+## Fix round 1
+
+Status: DONE_WITH_CONCERNS. Code `97ccdac9c`, `848403a01`, `10b0f5081`, `cca0956e0` (tests only); records
+and this section in the commit after. Records: `docs/superpowers/records/2026-10-18-phase-9d/t8.7b/fix-r1/`
+(`three.sh` the three-way runner: `o` oracle, `b` `5053fbd9b`, `h` this round; `checks-*.txt`, `suite/`,
+`callgrind-final.txt`, `close-workspace-tests.txt`).
+
+**Important 1 (primitive frame names the override).** `primitive_level` no longer looks the method up;
+the level keeps no resolution and `build_method_level_frame` asks `Interp::running_primitive` when the
+frame is built: the first method of the name in the receiver's search order that is a primitive, past
+any Rexx override that forwarded to it (`dispatch.rs`, `dispatch/context.rs`; `MethodLevel::resolution`).
+This also takes the hash put's by-name lookup off its path. Witness `corpus/lang/primitive_frame_past_override.rex`
+(the review's `f2` and `rn2` shapes: `SORT`, `[]=`, `REQUEST`, a `Routine` subclass's class `NEW`, and the
+trapped traceback beside them): oracle~`5053fbd9b` stdout differs, oracle~head equal on all three
+(`fix-r1/f2/`, `fix-r1/rn/`).
+
+**Important 2 (manager set during the main program's install).** `run_loaded` registers the package as
+installing (`Interp::installing_managers`); `keep_security_manager` records there the manager the
+package had before a set during the install; a directive's `::REQUIRES` asks it
+(`installing_security_manager`), the installing level keeps it, and the activation that runs after the
+install starts with it (`run_main`'s `kept_manager`). Witness
+`corpus/lang/security_manager_set_during_install.rex` (the review's `sm1`: the main program's later
+`::REQUIRES` and its command unasked, a routine begun after the set asked): oracle~`5053fbd9b` stdout
+differs, oracle~head equal on all three (`fix-r1/sm1/`).
+
+**Ruling 3 (a condition raised again while its CALL ON handler runs).** Derived rule, rexxref
+`condtra.xml` (Action Taken when a Condition Is Trapped, CALL): while a trap is delayed, a condition other
+than ERROR and FAILURE raised for it is held, and its action waits for the first of: a `CALL ON` or
+`SIGNAL ON` for it, after which the call or signal takes place at once; a `CALL OFF` or `SIGNAL OFF`,
+after which its default action occurs (only HALT's reports: 4.1); the handler's `RETURN`, after which the
+handler is called again at once. An ERROR or FAILURE raised again is ignored. Here: `trap_for` answers a
+delayed trap, so every raise site queues as for any `CALL ON` trap; delivery holds a condition whose trap
+is delayed on the delaying activation's record (`ActivationCold::delayed`, `DelayedTrap`); a `RAISE ...
+RETURN` in the handler, which queues on the delaying activation itself, is collected when the handler
+returns; `run_pending_handler` returns what was held and `deliver_one_pending_trap` calls the handler again
+for each, in raise order; `exec_condition_trap` releases the held conditions for a trap instruction naming
+the delayed condition (`release_delayed`). A condition the debug pause's own input read queues for a
+delayed trap is dropped rather than held (`debug_input_line`): rexxref's Notes set every trap OFF while
+that input is processed, and the corpus programs whose `CALL ON NOTREADY` handler pauses at the end
+of the input (`debug_input_eof_*`, `debug_handler_exit_at_iterate`, `debug_input_stdin_eof_call_on`)
+were otherwise called again for ever (at `97ccdac9c` each ended rc 124 or 137 under `memcap 2G timeout
+8`; at `848403a01` each agrees with `5053fbd9b` on stdout, stderr and rc). The oracle's answer: it drops the
+condition (`u2.rex`, `u3.rex`: oracle and `5053fbd9b` equal, no second handler run), and segfaults on two
+shapes (`corpus/oracle-crashes.txt` entries 64 and 65, never re-run). Witnesses:
+`crates/rexx-exec/tests/delayed_trap_cases/crate` (test
+`run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held`): USER and HALT raised from a
+routine the handler calls (the `u2` shape), a `RAISE ... RETURN` in the handler, a `CALL ON` re-issued in
+the handler (the `u3` shape), a `SIGNAL ON` re-issued, a `CALL OFF` for USER (ignored; the adjacent case,
+equal at `5053fbd9b`) and for HALT (4.1 at the `CALL OFF`), NOTREADY and `CALL ON ANY`, and ERROR and
+FAILURE ignored (a FAILURE in its own handler no longer becomes an ERROR). The probes the cases come
+from (`fix-r1/delayed/`, `b` and `h` outputs) each differ from `5053fbd9b` on stdout; the `CALL OFF
+USER` half of `w2.rex` prints the same at both. Also
+changed to the rule: `scheduler::tests::a_message_halt_inside_its_handler_runs_it_again_on_return` and
+the `signals` tests `a_second_signal_in_a_call_on_halt_handler_runs_it_again`,
+`a_second_signal_in_a_call_on_any_handler_runs_it_again` and `a_second_signal_ends_a_handlers_sleep`.
+`2026-10-22-user-raised-in-own-handler.md` closed (`closed:10b0f5081`). The new oracle defects are
+appended to `docs/superpowers/records/oracle-defects/defects.json`; its page is not republished.
+
+**Minor 1.** `push_installing_level`'s doc names both `None` cases. **Minor 3.** The native-method-frames
+closing (queued file and the paragraph above) names `f1.rex`'s rows that agree at base (`send`,
+`sendwith`, `osend`, `call`, `callwith`) and those that are the live-frames item's.
+
+### Perf
+
+`fix-r1/callgrind-final.txt`: `bench-programs/callgrind.sh -B 0.5 -j 4 -o .../cg-9d/t8.7b/fix-r1-final
+base=.../rexx-base-504ff0743 head=.../rexx-head-10b0f5081`, every program, 3 rounds, exit 0, no OVER or
+SPREAD flag. Libc subtracted against base, at most +0.0312% (pingmsg); startup +0.0235% (was +0.0469% at
+`5053fbd9b`), sayloop +0.0125%, interpret +0.0067%, pingguard -0.0076%, pingsem -0.3478%; whole process
+at most +0.4708% (interpret, `_int_malloc` as before). The run at `848403a01`
+(`fix-r1/callgrind-848403a01.txt`, exit 1) had pingguard +0.7743%, pingmsg +0.6539%, pingsem +0.4177%
+libc subtracted, and interpret +0.8819% whole process: two `Vec`s added to `Activity`, which an activity
+switch swaps whole (`switch_to`'s `mem::swap`); `10b0f5081` moves them to `ActivationCold` and `Interp`.
+
+### Commands
+
+From `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t87b-target` unless named; at
+`10b0f5081` unless named; outputs in `fix-r1/`.
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` | 0 (at `cca0956e0`) |
+| `memcap 16G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` (`checks-clippy.txt`) | 0 (at `cca0956e0`) |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --lib --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions --test method_bodies --test coverage` (`checks-touched.txt`) | 0; lib 1203 passed |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test collect_stress` (`checks-collect-stress.txt`, `-2.txt`) | 101 then 0 (74 passed): the first run's one failure the known redirected-target row (`command_redirected_target_waits_elsewhere.rex`, `guard 0 3 waited 1` under stress) |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`checks-corpus.txt`) | 101: the one mismatch the known `rexxutil_file_date_time.rex` |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-parse --test sourceline_oracle --test errors` (`checks-parse.txt`) | 0 |
+| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../fix-r1/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` | 0; `tests.tsv`, `table.tsv`, `verdicts.tsv`, `oracle-differences.tsv` identical to `suite-final/` |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test signals` | 0 at `cca0956e0`, 42 passed |
+| `memcap 16G cargo test --release -j 4 --no-fail-fast --workspace`, default target dir, `rust/target/release/rexx` built first (`close-workspace-tests.txt`) | 101 at `cca0956e0`: one failure, `datetime_zone`'s `the_file_date_time_witness_reads_the_zone_the_oracle_does`, the known DST flake. The run at `10b0f5081` (`close-workspace-tests-10b0f5081.txt`) also failed the three `signals` tests above, which asserted the oracle's drop; `cca0956e0` changes them to the rule |
+
+### Concerns
+
+1. **A primitive level is now pushed whatever the receiver answers.** Where no method of the name in the
+   receiver's search order is a primitive (a primitive reached with a receiver it was not found on), the
+   frame is built with the NIL object as scope and no executable, where `5053fbd9b` pushed no level. No
+   probe reaches it.
+2. **The level's method is found when the frame is built**, from the receiver's methods then; a primitive
+   defined into the receiver's search order between the push and a `stackFrames` read would be named
+   instead.
+3. **`Routine~call`'s level in `dispatch/executable.rs` keeps its by-name lookup.** Its receiver there is
+   the program's own `Routine`; a `Routine` subclass's `newFile` routine reaches another path and agrees
+   with the oracle at `5053fbd9b` (probed, not recorded as a witness).
+4. **Rexxref-derived arms not in the ruling's text**: `SIGNAL ON` re-issued signals the first held
+   condition with a condition object built at that clause (its rc and description, no ADDITIONAL);
+   `CALL OFF`/`SIGNAL OFF` drop the held conditions, HALT's default 4.1 at that clause; the debug pause's
+   own input conditions are dropped, not held. A handler that raises its own condition on every run is
+   now called for ever.

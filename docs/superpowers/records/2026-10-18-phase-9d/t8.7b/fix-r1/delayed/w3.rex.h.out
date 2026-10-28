@@ -1,0 +1,10 @@
+hn 1 NOTREADY no_such_file_zz.txt
+hn 1 returns
+hn 2 NOTREADY no_such_file_zz2.txt
+hn 2 returns
+after notready, n = 2
+ha 1 USER ANYC first
+ha 2 USER ANYC again
+after any, m = 2
+he 1 ERROR 3
+after error, k = 1

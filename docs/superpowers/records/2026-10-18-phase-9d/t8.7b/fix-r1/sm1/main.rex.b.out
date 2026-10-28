@@ -1,0 +1,12 @@
+frame ROUTINE /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/fr1.u4rl/sm1/a.cls 1
+frame PROGRAM /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/fr1.u4rl/sm1/main.rex 7
+pkg main.rex
+set
+MGR REQUIRES b.cls
+MGR REQUIRES /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/fr1.u4rl/sm1/b.cls
+b loaded
+main start
+MGR command exit 5
+main rc 42
+MGR command exit 6
+rt rc 42

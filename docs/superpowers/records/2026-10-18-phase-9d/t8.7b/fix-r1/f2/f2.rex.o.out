@@ -1,0 +1,10 @@
+   METHOD SORT array sort 1 myarr sort 0 tab 0 0 req 0 0        *-* Compiled method "SORT" with scope "Array".
+   METHOD []= array sort 0 myarr sort 0 tab 1 0 req 0 0        *-* Compiled method "[]=" with scope "Table".
+myk request
+   METHOD REQUEST array sort 0 myarr sort 0 tab 0 0 req 1 0        *-* Compiled method "REQUEST" with scope "Object".
+syntax 93.900
+  cf METHOD COMPARETO 32
+  cf METHOD SORT The NIL object
+  cf METHOD SORT 35
+  cf PROGRAM /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/fr1.u4rl/f2/f2.rex 8
+    32 *-* raise syntax 93.900 array('boom')/       *-* Compiled method "SORT" with scope "Array"./    35 *-* forward class (super)/     8 *-* c~sort

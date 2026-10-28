@@ -1,0 +1,6 @@
+     1 *-* do f over .context~stackFrames;
+     2 *-* ::requires 'pro.cls'
+       *-* Compiled method "NEW" with scope "MYR".
+     5 *-* forward class (super)
+     1 *-* r = .myr~new('r', .array~of('return 1', "::requires 'pro.cls'"))
+The MYR class
