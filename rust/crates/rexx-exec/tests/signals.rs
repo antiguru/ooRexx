@@ -1300,7 +1300,8 @@ fn only_the_interpreter_and_its_waits_take_the_halting_signals() {
     let run = thread("rexx", true);
     let timer = thread("rexx-timer", true);
     let interp = thread("rexx-interp", false);
-    // A command's wait reads the child's error stream on a thread of its own.
+    // The command's output and error are this process's own, so its wait
+    // reads no pipe and is one thread.
     let waiting = thread("rexx-pool", false);
     let idle = thread("rexx-pool", true);
     assert_eq!(
@@ -1309,7 +1310,6 @@ fn only_the_interpreter_and_its_waits_take_the_halting_signals() {
             vec![
                 run.clone(),
                 interp.clone(),
-                waiting.clone(),
                 waiting.clone(),
                 timer.clone()
             ],
