@@ -2911,9 +2911,10 @@ DEVIATIONS -- permanent, chosen
      sentence to 72"): its `equals` and `caselessEquals` compare the
      reference's default name instead, raising NOSTRING where that is
      trapped, so `'kmake'~equals(>k)` with `k = 'kmake'` answers 0 there and
-     1 here (Task 8.7a review, eqr/r1.rex). It already forwards to the
-     value, as this crate does, in an arithmetic operand, NUMERIC DIGITS, and a
-     comparison's right operand where the value has no string value. A
+     1 here (t8.7a/review-probes/equals-reference-r1.rex). It already
+     forwards to the value, as this crate does, in an arithmetic operand,
+     NUMERIC DIGITS, and a comparison's right operand where the value has
+     no string value. A
      reference to a stem names the stem in NOSTRING, by the same rule. A
      cycle of references and stem defaults raises 11.1 in a conversion here;
      the oracle spins (rust/corpus/oracle-crashes.txt). Measured by Phase 9d
@@ -3750,7 +3751,7 @@ above.
   Extended by Moritz 2026-10-28 ("Extend KNOWN GAP") to the String method,
   which tests its table arguments the same way: `'12'~translate(left('',0),
   left('',0))` prints [  ] on the oracle and [12] here, where every supplied
-  table is a table (Task 8.7a review, arg/x2.rex).
+  table is a table (t8.7a/review-probes/translate-null-x2.rex).
 
   WHY THE STATUS ROW STAYS `implemented` RATHER THAN `divergent`, which is a
   fact about the harness and not a judgement: builtin-status.txt is DERIVED

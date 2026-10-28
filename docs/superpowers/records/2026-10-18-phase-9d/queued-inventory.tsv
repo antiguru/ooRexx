@@ -258,5 +258,5 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b
 2026-10-28-bump-oracle-version.md	process	-	after 9d	build current upstream trunk as the oracle; re-check fixed defects and oracle-derived records	after 9d
 2026-10-28-append-stream-positioned-writes.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.6/r2/probes/a1.rex	9d	positioned CHAROUT/LINEOUT on an APPEND stream disagree with each other and the oracle	9d
 2026-10-28-internal-rendering-defaultname.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7a/probes/dn/dn5.rex	9d	trace lines, error inserts and Array joins print the default name, oracle sends DEFAULTNAME	9d
-2026-10-28-rexx-package-source.md	divergence	.superpowers/sdd/2026-10-18-phase-9d/t87a-review-scratch/ms/m1.rex	9d	Package~source of the REXX package answers its source, oracle 0 lines	9d
+2026-10-28-rexx-package-source.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7a/review-probes/package-source-m1.rex	9d	Package~source of the REXX package answers its source, oracle 0 lines	9d
 2026-10-28-trace-object-renderings.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7a/r1/probes/s25.rex	9d	TRACE I >K> of an Array PARSE VALUE and >O> of a returned reference render differently	9d

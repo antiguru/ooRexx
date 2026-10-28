@@ -1,0 +1,25 @@
+say '['||'12'~translate('', '')||']'
+say '['||'12'~translate(, '')||']'
+say '['||'12'~translate('ab', '')||']'
+say '['||'12'~translate('', , ' ')||']'
+say '['||'12'~translate('', '1')||']'
+say '['||'12'~translate()||']'
+say '['||'12'~translate(, , , 1, 1)||']'
+say '['||'12'~translate('', '', 'x', 1, 1)||']'
+e = ''
+say '['||'12'~translate(e, e)||']'
+say '['||'12'~translate(left('',0), left('',0))||']'
+say '['||'12'~translate(.s~new(''), .s~new(''))||']'
+say '['||translate('12', '', '')||']'
+say '['||translate('12', e, e)||']'
+say '['||.mutablebuffer~new('12')~translate('', '')||']'
+exit
+::class s subclass string
+::class t
+::method string
+  return ''
+say '['||'12'~translate('', substr('a',5))||']'
+say '['||'12'~translate(, copies('a',0))||']'
+x = 'ab'~left(0); say '['||'12'~translate(, x)||']'
+say '['||'12'~translate(, ''~left(0))||']'
+say '['||'12'~translate(, ''||'')||']'
