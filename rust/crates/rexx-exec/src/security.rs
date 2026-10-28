@@ -123,6 +123,17 @@ impl Interp {
         self.program_data(activation.program_id)?.security_manager
     }
 
+    /// The manager the running code's package has now, which its `LOCAL` and
+    /// `ENVIRONMENT` checkpoints ask: `PackageClass::findClass` reads the
+    /// package's own (`classes/PackageClass.cpp:1135`), not the activation's.
+    pub(crate) fn package_security_manager(&self) -> Option<ObjRef> {
+        if !self.security_armed {
+            return None;
+        }
+        let program = self.activity.running.as_deref()?.program_id;
+        self.program_data(program)?.security_manager
+    }
+
     /// The manager `program`'s own installing activation runs under, which is
     /// the one its `::REQUIRES` directives consult
     /// (`RexxActivation::run` installs the package, `RexxActivation.cpp:508`).

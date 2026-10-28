@@ -1,11 +1,12 @@
 /* An activation runs under the security manager its package had when the
    activation began, and an internal call or INTERPRET under its caller's:
    a manager set or replaced mid-activation is seen by the next routine or
-   method activation only. */
+   method activation only. The LOCAL and ENVIRONMENT checkpoints ask the
+   package's manager as it is now. */
 m = .stem~method('UNKNOWN'); m~setProtected
 .context~package~setSecurityManager(.sa~new)
 address system 'exit 5'
-say 'main rc' rc
+say 'main rc' rc .zzmain
 call r
 interpret "address system 'exit 7'; say 'interp rc' rc"
 say 'main prot' .p~new~pm
@@ -15,7 +16,7 @@ call swap
 exit
 r:
   address system 'exit 6'
-  say 'internal rc' rc
+  say 'internal rc' rc .zzinternal
   s. = 'abc'
   say 'len' s.~length
   say 'direct' s.~unknown('LENGTH', .array~new)

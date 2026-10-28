@@ -86,7 +86,8 @@ mod env_seam {
         name: &[u8],
         access: &Access,
     ) -> Result<Admission, Failure> {
-        if matches!(access, Access::Direct) || interp.effective_security_manager().is_none() {
+        let manager = interp.package_security_manager();
+        if matches!(access, Access::Direct) || manager.is_none() {
             return Ok(Admission::Permitted(Admitted(())));
         }
         let checkpoint = match scope {
@@ -95,7 +96,8 @@ mod env_seam {
         };
         let index = interp.text(name);
         interp.roots.activity_mut().push_temp(index);
-        let Some(info) = interp.security_check(checkpoint, &[(key::NAME, index)])? else {
+        let Some(info) = interp.security_check_by(manager, checkpoint, &[(key::NAME, index)])?
+        else {
             return Ok(Admission::Permitted(Admitted(())));
         };
         // A manager that handles the name and sets no `RESULT` has hidden it:
