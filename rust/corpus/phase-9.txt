@@ -435,3 +435,9 @@ lang/compile_failure_condition_origin.rex
 lang/requires_install_levels.rex
 lang/primitive_frame_past_override.rex
 lang/security_manager_set_during_install.rex
+lang/variable_reference_operator_traceback.rex
+lang/stem_default_string_rendering.rex
+lang/stream_method_extra_arguments.rex
+lang/trace_reference_and_parse_value.rex
+lang/internal_rendering_default_name.rex
+lang/collection_primitive_compare_frames.rex

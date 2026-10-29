@@ -624,9 +624,8 @@ impl Interp {
                 // The rendering exists for that line and for nothing else, so
                 // it is taken under the line's own gate.
                 if self.traced_mode().results {
-                    let traced = self.rendered_into_parse_buffer(value);
+                    let traced = self.string_value_text(value);
                     self.trace_keyword(indent, keyword, &traced);
-                    self.give_parse_buffer(traced);
                 }
                 let converted = self.required_string_value(value)?;
                 self.source_text(converted, parse)

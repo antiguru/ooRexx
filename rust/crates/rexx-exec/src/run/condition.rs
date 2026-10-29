@@ -1094,16 +1094,30 @@ impl Interp {
 
     /// Whether a condition already queued at `activation` put the `CALL ON`
     /// trap taking `NOTREADY` there into the delayed state: a `NOTREADY`, or,
-    /// where `CALL ON ANY` takes it, any condition that trap took.
+    /// where `CALL ON ANY` takes it, any condition that trap took. An internal
+    /// routine inherits its caller's DELAY state (rexxref condtra.xml, Notes:
+    /// the state of each trap is saved on entry to a subroutine), so one
+    /// queued at a caller its internal calls reach counts too.
     fn notready_trap_delayed_at(&self, activation: crate::activation::ActivationId) -> bool {
         if self.activity.pending_traps.is_empty() {
             return false;
         }
+        let mut inheriting = true;
+        let chain: Vec<crate::activation::ActivationId> = self
+            .frames()
+            .skip_while(|frame| frame.id != activation)
+            .take_while(|frame| {
+                let take = inheriting;
+                inheriting = frame.entry == crate::activation::Entry::InternalCall;
+                take
+            })
+            .map(|frame| frame.id)
+            .collect();
         let traps = self.trap_frame().map(|frame| &frame.traps);
         let by_any = traps.is_some_and(|traps| traps.get(b"NOTREADY".as_slice()).is_none());
         self.activity.pending_traps.iter().any(|pending| {
             !pending.request
-                && pending.activation == activation
+                && chain.contains(&pending.activation)
                 && (pending.condition.eq_ignore_ascii_case(b"NOTREADY")
                     || (by_any
                         && traps.is_some_and(|traps| traps.get(&pending.condition).is_none())))

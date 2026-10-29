@@ -1,0 +1,16 @@
+count 15
+/* TRACE renders a PARSE VALUE object by its string value and a reference
+   operator by the name of the variable the reference refers to. */
+trace i
+parse value .array~new(2) with a
+v = .array~new
+w = h(>v)
+call g >v
+trace off
+say w~class
+exit
+h: use arg >x; return >x
+g: procedure
+  use arg >y
+  r = >y
+  return

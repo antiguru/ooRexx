@@ -939,7 +939,7 @@ impl Interp {
         // succeeded -- `round_via_unary_plus`'s own range check is what
         // raises, still inside the same forwarded unary `+`.
         if result.is_err() {
-            self.blame_stem_forwarded_operator(b"+", value);
+            self.blame_forwarded_operator(b"+", value);
         }
         result
     }

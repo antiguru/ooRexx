@@ -244,6 +244,42 @@ rc> 0
 out> ha 1 USER U one
 out> after a, m = 1
 
+# a NOTREADY inside an internal routine the clause calls after queueing
+# one is ignored: the routine inherits the trap's DELAY state
+program
+call on notready name hn
+m = 0
+x = linein('no_such_file_zz.txt') || rn()
+say 'after a, m =' m
+exit
+rn: return linein('no_such_file_zz2.txt')
+hn:
+  m = m + 1
+  say 'hn' m condition('c') condition('d')
+  return
+----
+rc> 0
+out> hn 1 NOTREADY no_such_file_zz.txt
+out> after a, m = 1
+
+# and under a CALL ON ANY a USER condition queued at the clause delayed
+program
+call on any name ha
+m = 0
+x = ru('one') || rn()
+say 'after a, m =' m
+exit
+ru: raise user u description (arg(1)) return 'r'
+rn: return linein('no_such_file_zz.txt')
+ha:
+  m = m + 1
+  say 'ha' m condition('c') condition('d')
+  return
+----
+rc> 0
+out> ha 1 USER U one
+out> after a, m = 1
+
 # a condition the debug pause's input read raises while its trap is
 # delayed is dropped: traps are OFF while that input is processed
 program

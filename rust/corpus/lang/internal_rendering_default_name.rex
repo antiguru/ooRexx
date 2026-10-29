@@ -1,0 +1,44 @@
+/* A trace line, an error message and an Array join render an object by its
+   OBJECTNAME, which sends a DEFAULTNAME of the object's own, under the frame
+   of the primitive that sends it. */
+a = .array~of(.withname, .plain, .withname~new, .dn~new, 'x')
+say a~makestring(, ', ')
+say a~toString(, '|')
+say .array~of(.dn~new)
+say .dn~new~string
+say .dn~new~objectName
+say .on~new~string
+o = .dn~new
+o~objectName = 'named'
+say o~string .array~of(o)~makestring
+trace i
+x = .withname
+x = .withname~new
+trace off
+call try '.withname~nosuch'
+call try '.withname~new~nosuch'
+call try '.plain~nosuch'
+exit
+try:
+  signal on syntax
+  interpret arg(1)
+  return
+syntax:
+  say condition('o')~message
+  return
+::class withname
+::method defaultname class
+  return 'DNC'
+::method defaultname
+  return 'DNI'
+::class plain
+::class dn
+::method defaultname
+  f = .context~stackFrames
+  say '  frames' f~items f[2]~type f[2]~name
+  return 'DN'
+::class on
+::method objectname
+  f = .context~stackFrames
+  say '  frames' f~items f[2]~type f[2]~name
+  return 'ON'

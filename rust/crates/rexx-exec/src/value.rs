@@ -390,9 +390,32 @@ impl Interp {
 
     /// `RexxInternalObject::stringValue()`: the rendering of a value as an
     /// object rather than as text, which is what every `TRACE` value line
-    /// prints and what an array's own items are joined out of.
+    /// prints, what an error message names an object by, and what an
+    /// array's own items are joined out of. A stem renders as its default
+    /// (`StemClass::stringValue`); an instance or class whose `OBJECTNAME`
+    /// or `DEFAULTNAME` is a method of its own is sent it, as
+    /// `RexxObject::stringValue` sends `OBJECTNAME`
+    /// (`classes/ObjectClass.cpp:1157`). A send that fails renders the
+    /// default name.
     #[inline(never)]
     pub(crate) fn string_value_text(&mut self, value: ObjRef) -> Vec<u8> {
+        match self.heap.get(value).map(|object| &object.body) {
+            Some(Body::Stem {
+                default: Some(_), ..
+            }) => return self.stem_string_value_text(value),
+            Some(Body::Instance { .. } | Body::Class { .. }) => {
+                if let Some(text) = self.sent_string_value(value) {
+                    return text;
+                }
+            }
+            _ => {}
+        }
+        self.default_string_value_text(value)
+    }
+
+    /// [`Interp::string_value_text`] with nothing sent: the rendering the
+    /// primitive `OBJECTNAME`, `DEFAULTNAME` and `STRING` answer with.
+    pub(crate) fn default_string_value_text(&mut self, value: ObjRef) -> Vec<u8> {
         if matches!(
             self.heap.get(value).map(|object| &object.body),
             Some(Body::Array { .. })
@@ -403,6 +426,67 @@ impl Interp {
             };
         }
         self.to_text(value).to_vec()
+    }
+
+    /// [`Interp::string_value_text`] of the stem `store`: the rendering of
+    /// the value its chain of defaults and references ends at.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn stem_string_value_text(&mut self, store: ObjRef) -> Vec<u8> {
+        match self.chain_end(store) {
+            Referent::Value(end) if end != store => self.string_value_text(end),
+            Referent::Value(_) => self.default_string_value_text(store),
+            Referent::Unset(last) => self.unset_name(last, store).to_vec(),
+            Referent::Cycle => self.stem_name(store).unwrap_or_default().to_vec(),
+        }
+    }
+
+    /// The rendering `RexxObject::stringValue` sends for: an instance or
+    /// class's `OBJECTNAME` where that is a method of its own, else its
+    /// `DEFAULTNAME` where it has no name set and that is; `None` where
+    /// neither is sent. A `Stem` subclass instance renders as its stem.
+    #[cold]
+    #[inline(never)]
+    fn sent_string_value(&mut self, value: ObjRef) -> Option<Vec<u8>> {
+        if let Some(store) = self.stem_subclass_store(value) {
+            return Some(self.stem_string_value_text(store));
+        }
+        let named = match &self.heap.get(value)?.body {
+            Body::Instance {
+                native: None, name, ..
+            } => name.is_some(),
+            Body::Class { .. } => self.classes().set_name(value).is_some(),
+            _ => return None,
+        };
+        // The primitive `OBJECTNAME` sends `DEFAULTNAME` under a level of its
+        // own, which a `stackFrames` read in it lists.
+        let leveled = if self.answers_by_method(value, crate::dispatch::OBJECTNAME) {
+            false
+        } else if !named && self.answers_by_method(value, crate::dispatch::DEFAULTNAME) {
+            true
+        } else {
+            return None;
+        };
+        let caller = self.caller();
+        let send = |interp: &mut Interp| {
+            let name = match leveled {
+                true => crate::dispatch::DEFAULTNAME,
+                false => crate::dispatch::OBJECTNAME,
+            };
+            pinned!(
+                interp,
+                crate::pinning::PinKind::Conversion,
+                interp.send_message(value, name, None, &[], caller)
+            )
+        };
+        let answered = match leveled {
+            true => self.primitive_level(value, crate::dispatch::OBJECTNAME, &[], send),
+            false => send(self),
+        };
+        match answered {
+            Ok(Some(answered)) => Some(self.to_text(answered).into_owned()),
+            Ok(None) | Err(_) => None,
+        }
     }
 
     /// An array's own slots, borrowed, or `None` for a value that is not an

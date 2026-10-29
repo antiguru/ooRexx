@@ -1,0 +1,48 @@
+count 47
+/* A collection primitive that compares or hashes an argument lists its own
+   frame under the argument's == and hashCode. */
+k = .k~new
+call try 'array hasItem', '.array~of(1)~hasItem(k)'
+call try 'array index', '.array~of(1)~index(k)'
+call try 'array removeItem', '.array~of(1)~removeItem(k)'
+call try 'list hasItem', '.list~of(1)~hasItem(k)'
+call try 'list index', '.list~of(1)~index(k)'
+call try 'list removeItem', '.list~of(1)~removeItem(k)'
+call try 'queue hasItem', '.queue~of(1)~hasItem(k)'
+call try 'queue index', '.queue~of(1)~index(k)'
+call try 'queue removeItem', '.queue~of(1)~removeItem(k)'
+call try 'circularqueue hasItem', '.circularqueue~of(1)~hasItem(k)'
+call try 'table at', '.table~new~~put(1, "a")~at(k)'
+call try 'table []', '.table~new~~put(1, "a")[k]'
+call try 'table hasIndex', '.table~new~~put(1, "a")~hasIndex(k)'
+call try 'table hasItem', '.table~new~~put(1, "a")~hasItem(k)'
+call try 'table index', '.table~new~~put(1, "a")~index(k)'
+call try 'table put', 'r = .table~new~~put(1, "a"); r~put(1, k)'
+call try 'set hasIndex', '.set~of("a")~hasIndex(k)'
+call try 'set hasItem', '.set~of("a")~hasItem(k)'
+call try 'set put', 'r = .set~of("a"); r~put(k)'
+call try 'directory hasItem', '.directory~new~~put(1, "a")~hasItem(k)'
+call try 'directory index', '.directory~new~~put(1, "a")~index(k)'
+call try 'directory removeItem', '.directory~new~~put(1, "a")~removeItem(k)'
+call try 'stringtable hasItem', '.stringtable~new~~put(1, "a")~hasItem(k)'
+call try 'stringtable index', '.stringtable~new~~put(1, "a")~index(k)'
+call try 'stem hasItem', 's.a = 1; x = s.~hasItem(k)'
+call try 'stem index', 's.a = 1; x = s.~index(k)'
+call try 'stem removeItem', 's.a = 1; x = s.~removeItem(k)'
+call try 'identitytable hasItem', '.identitytable~new~~put(1, "a")~hasItem(k)'
+exit
+try: procedure expose k
+  say arg(1)
+  code = arg(2)
+  if code~pos('=') = 0 then code = 'x =' code
+  interpret code
+  return
+::class k
+::method '=='
+  f = .context~stackFrames[2]
+  say '  ==' f~type f~name
+  return 0
+::method hashCode
+  f = .context~stackFrames[2]
+  say '  hashCode' f~type f~name
+  return 'x'

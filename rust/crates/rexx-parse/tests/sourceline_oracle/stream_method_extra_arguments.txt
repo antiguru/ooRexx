@@ -1,0 +1,28 @@
+count 27
+/* A stream method's declared arguments convert before the rest are counted:
+   a bad argument 2 of three is 88.907, a good one 88.922. */
+s = .stream~new('zz_extra_args.txt')
+call try "x = s~lineout('a', 'b', 'c', 'd')"
+call try "x = s~lineout('a', 1, 'c', 'd')"
+call try "x = s~charout('a', 'b', 'c')"
+call try "x = s~charout('a', 1, 'c')"
+call try "x = s~linein('b', 1, 'c')"
+call try "x = s~linein(1, 1, 'c')"
+call try "x = s~linein(1, 'b', 'c')"
+call try "x = s~charin('b', 1, 'c')"
+call try "x = s~charin(1, 1, 'c')"
+call try "x = s~lineout(, , , )"
+call try "x = s~lineout('a', 'b')"
+call try "x = s~linein(1, 2)"
+x = s~close
+say 'file' chars('zz_extra_args.txt')
+call sysFileDelete 'zz_extra_args.txt'
+exit
+try:
+  signal on syntax
+  interpret arg(1)
+  say arg(1) 'ok' x
+  return
+syntax:
+  say arg(1) condition('o')~code '|' condition('o')~message
+  return

@@ -651,6 +651,26 @@ say '[' || linein() || ']' .stdin~description
 say 'L' chars() lines() .stdin~lines
 ";
 
+/// The program the file-query row runs: `.STDIN` and a program-made STDIN
+/// stream, opened, asked their size, position and time and moved by SEEK.
+const FILE_QUERY_PROGRAM: &str = "\
+s = .stream~new('STDIN')
+say 'unopened' '[' || s~query('size') || ']' '[' || s~query('position') || ']'
+say 'open' s~open('read')
+say 'size' s~query('size') .stdin~query('size') stream('STDIN', 'c', 'query size')
+say 'pos' s~query('position') s~query('position read char') s~query('position read line')
+say 'time' (s~query('datetime') \\== '') (s~query('timestamp') \\== '')
+i = .stdin
+say '[' || i~linein || ']' i~query('position read char') i~query('position read line')
+say 'seek' i~seek('1') i~state '[' || i~linein || ']'
+say 'line' i~seek('=2 read line') '[' || i~linein || ']'
+say 'back' i~seek('-2 char') i~query('position read char') '[' || i~charin || ']'
+say 'end' i~seek('<1') '[' || c2x(i~charin) || ']' chars() lines()
+say 'past' i~seek('=99') i~state chars() lines()
+say 'lines' i~seek('=99 line') i~query('position read line') i~query('position sys')
+say 'again' i~seek('=1 line') '[' || linein() || ']' chars() lines()
+";
+
 /// The program the child row runs: what a command inherits after a LINEIN.
 const FILE_CHILD_PROGRAM: &str = "\
 say length(linein())
@@ -755,6 +775,27 @@ fn a_file_console_has_one_read_position() {
     assert!(
         cpp.contains("\n[l]\nC 19 1 4\n[hel]\n[lo]\n"),
         "the oracle did not position the file: {cpp}"
+    );
+}
+
+/// A console redirected from a regular file is a persistent stream open for
+/// reading (rexxref funct.xml, STREAM QUERY and SEEK): `.STDIN` answers its
+/// size, position and time, and SEEK moves its read position.
+#[test]
+fn a_file_console_answers_queries_and_seeks() {
+    if !gate_mode() {
+        eprintln!(
+            "*** SKIPPED -- the file-query comparison needs the oracle and runs \
+             only with {GATE_ENV} set. ***"
+        );
+        return;
+    }
+    let (rust, cpp) =
+        file_console_outputs("file-query", FILE_QUERY_PROGRAM, b"line1\nline2\nline3\n");
+    assert_eq!(rust, cpp, "a file console's queries and seeks");
+    assert!(
+        cpp.contains("\nsize 18 18 18\n") && cpp.contains("\nline 2 [line2]\n"),
+        "the oracle did not answer from the file: {cpp}"
     );
 }
 

@@ -208,7 +208,12 @@ impl Interp {
                     // there is no value here to have traced.
                     return;
                 };
-                let name = code.symbols.name(*id).as_bytes().to_vec();
+                // The reference's own name, `value->getName()`: an alias
+                // made by `USE ARG >x` names the variable it refers to.
+                let name = match self.as_variable_reference(value) {
+                    Some(reference) => reference.name.to_vec(),
+                    None => code.symbols.name(*id).as_bytes().to_vec(),
+                };
                 self.trace_operator(indent, b">", &name);
             }
             // `>F>`, the **function form only** -- `trace_function`'s own
@@ -643,7 +648,7 @@ impl Interp {
         // the frame belongs to the forwarded activation, not to which of
         // its checks raised.
         if result.is_err() {
-            self.blame_stem_forwarded_operator(op.spelling().as_bytes(), value);
+            self.blame_forwarded_operator(op.spelling().as_bytes(), value);
         }
         result
     }
@@ -757,11 +762,11 @@ impl Interp {
         // 26.8 with the frame (the base converts fine; the *exponent*
         // fails), and `s. = 1; say s. + .array` is 41.1 with the frame even
         // though it is the *right* operand's own conversion that fails.
-        // The receiver test is `blame_stem_forwarded_operator`'s own, so
+        // The receiver test is `blame_forwarded_operator`'s own, so
         // this site gates on failure alone and hands it every failing path
         // here, leaving a non-stem receiver for that predicate to discard.
         if result.is_err() {
-            self.blame_stem_forwarded_operator(op.spelling().as_bytes(), left_value);
+            self.blame_forwarded_operator(op.spelling().as_bytes(), left_value);
         }
         result
     }
@@ -866,10 +871,10 @@ impl Interp {
     }
 
     /// Renders the operator-forwarded native-method frame for `op` when
-    /// `value` is a stem whose forward reaches a method that actually runs
-    /// -- a no-op otherwise.
-    pub(crate) fn blame_stem_forwarded_operator(&mut self, op: &[u8], value: ObjRef) {
-        if !self.is_stem_receiver(value) {
+    /// `value` is a stem or a variable reference whose forward reaches a
+    /// method that actually runs -- a no-op otherwise.
+    pub(crate) fn blame_forwarded_operator(&mut self, op: &[u8], value: ObjRef) {
+        if !self.is_forwarding_receiver(value) {
             return;
         }
         let scope = self.string_class();
@@ -877,12 +882,13 @@ impl Interp {
         self.blame_native_method(op, &scope_id, value, &[]);
     }
 
-    /// Whether `value` is a stem whose forwarded operator would actually
-    /// reach a native method to run: true for an unset stem (its own name
-    /// is a `String`) and for one whose default is itself `String`/
-    /// `Number`-valued; false for `.nil` and for anything
-    /// [`Interp::operator_operand_gap`] already named.
-    fn is_stem_receiver(&self, value: ObjRef) -> bool {
+    /// Whether `value` is a stem or a variable reference whose forwarded
+    /// operator would actually reach a native method to run: true for an
+    /// unset stem (its own name is a `String`), an unset referenced variable
+    /// (its name), and one whose value is itself `String`/`Number`-valued;
+    /// false for `.nil` and for anything [`Interp::operator_operand_gap`]
+    /// already named.
+    fn is_forwarding_receiver(&self, value: ObjRef) -> bool {
         let Decoded::Heap { .. } = value.decode() else {
             return false;
         };
@@ -892,7 +898,21 @@ impl Interp {
                 default: Some(default),
                 ..
             }) => self.stem_default_is_string_or_number(*default),
+            Some(Body::VarRef(_)) => self.is_forwarding_reference(value),
             _ => false,
+        }
+    }
+
+    /// [`Interp::is_forwarding_receiver`] of the reference `value`: measured,
+    /// `t = >s; say t + 0` with `s = 'abc'` is 41.1 under `Compiled method
+    /// "+" with scope "String"`, as `s~'+'(0)` is.
+    #[cold]
+    #[inline(never)]
+    fn is_forwarding_reference(&self, value: ObjRef) -> bool {
+        match self.chain_end(value) {
+            Referent::Value(referenced) => self.stem_default_is_string_or_number(referenced),
+            Referent::Unset(_) => true,
+            Referent::Cycle => false,
         }
     }
 
@@ -1025,13 +1045,13 @@ impl Interp {
         // arithmetic operator's operands can. Measured: `numeric digits 1;
         // s. = '9.9E999999999'; say s. > 1` is rc 214 with the frame; the
         // same overflow with `1 > s.` (the receiver `1`, not a stem) is the
-        // identical rc 214 with no frame, because `is_stem_receiver`
+        // identical rc 214 with no frame, because `is_forwarding_receiver`
         // answers `false` for the plain-number receiver regardless of which
         // operand overflowed. Strict `==`/`>>` and the non-numeric fallback
         // (`compare_strings`) never reach `compare_numbers` at all, so they
         // stay rc 0 and frameless, unaffected by this wrapping.
         if result.is_err() {
-            self.blame_stem_forwarded_operator(op.spelling().as_bytes(), left_value);
+            self.blame_forwarded_operator(op.spelling().as_bytes(), left_value);
         }
         result
     }
@@ -1163,7 +1183,7 @@ impl Interp {
         // even though it is the *right* operand's own text that fails the
         // logical check.
         if result.is_err() {
-            self.blame_stem_forwarded_operator(op.spelling().as_bytes(), left_value);
+            self.blame_forwarded_operator(op.spelling().as_bytes(), left_value);
         }
         result
     }

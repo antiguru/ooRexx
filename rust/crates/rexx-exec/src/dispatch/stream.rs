@@ -222,6 +222,19 @@ pub(super) fn handle_set(
 
 /// Whether `receiver` is a standard or `HANDLE:n` stream nothing has opened,
 /// or one closed since, which the queries answer as an unopened stream.
+/// Whether `receiver` is `.STDIN`, opened, and standard input is a regular
+/// file, which it then reads as a persistent stream.
+fn standard_input_file(interp: &mut Interp, receiver: ObjRef) -> Result<bool, Failure> {
+    let state = require(interp, receiver)?;
+    if state.standard != Some(StandardStream::In)
+        || state.handle.is_some()
+        || state.status == StreamStatus::Unknown
+    {
+        return Ok(false);
+    }
+    Ok(interp.input_file().is_some())
+}
+
 fn unopened_standard(interp: &Interp, receiver: ObjRef) -> Result<bool, Failure> {
     let state = require(interp, receiver)?;
     Ok(state.standard.is_some() && state.status == StreamStatus::Unknown)
@@ -339,8 +352,11 @@ pub(super) fn query_size(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let state = require_mut(interp, receiver)?;
-    if let Some(open) = state.open.as_mut() {
+    let open = match standard_input_file(interp, receiver)? {
+        true => interp.input_file(),
+        false => require_mut(interp, receiver)?.open.as_mut(),
+    };
+    if let Some(open) = open {
         let size = open
             .flushed()
             .metadata()
@@ -369,8 +385,15 @@ pub(super) fn query_time(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let path = qualified_path(interp, receiver)?;
-    let modified = std::fs::metadata(&path)
+    let metadata = match standard_input_file(interp, receiver)? {
+        true => interp.input_file().map(|open| open.file().metadata()),
+        false => None,
+    };
+    let metadata = match metadata {
+        Some(metadata) => metadata,
+        None => std::fs::metadata(qualified_path(interp, receiver)?),
+    };
+    let modified = metadata
         .and_then(|meta| meta.modified())
         .ok()
         .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok());
@@ -1221,6 +1244,7 @@ pub(super) fn charin(
         Some(value) => whole_number(interp, value, 2)?,
         None => 1,
     };
+    declared_only(args, 2)?;
     if let Some(which) = standard_opened(interp, receiver)? {
         refuse_transient_position(interp, which, start.is_some())?;
         let start = start.map(positive).transpose()?;
@@ -1333,6 +1357,7 @@ pub(super) fn linein(
         Some(value) => whole_number(interp, value, 2)?,
         None => 1,
     };
+    declared_only(args, 2)?;
     if !matches!(count, 0 | 1) {
         return Err(Raised::syntax(93, 0, Vec::new()).into());
     }
@@ -1578,6 +1603,7 @@ pub(super) fn charout(
         None => None,
     };
     let start = optional_position(interp, args.get(1).copied().flatten(), 2)?;
+    declared_only(args, 2)?;
     if data.is_none() && start.is_none() {
         return close_for_write(interp, _cleared, receiver, b"0");
     }
@@ -1633,6 +1659,7 @@ pub(super) fn lineout(
         None => None,
     };
     let line = optional_position(interp, args.get(1).copied().flatten(), 2)?;
+    declared_only(args, 2)?;
     if data.is_none() && line.is_none() {
         return close_for_write(interp, _cleared, receiver, b"1");
     }
@@ -1927,6 +1954,17 @@ fn optional_position(
     }
 }
 
+/// 88.922 for more arguments than the entry declares, raised after the
+/// declared ones convert: `NativeActivation::processArguments` converts each
+/// declared argument before it counts the rest, so `lineout('a', 'b', 'c')`
+/// is 88.907 on `'b'`.
+fn declared_only(args: &[Option<ObjRef>], arity: usize) -> Result<(), Failure> {
+    if args.len() > arity {
+        return Err(Raised::too_many_external_arguments(arity).into());
+    }
+    Ok(())
+}
+
 /// A marshalling raise is reported against the REXX package with no line:
 /// measured, oracle, `.Stream~new('f.txt')~lineIn(.nil)` is `Error 88 running
 /// REXX:`.
@@ -2095,6 +2133,9 @@ pub(super) fn position(
     // answers the bare 93, not 93.958.
     if let Some(which) = standard_opened(interp, receiver)? {
         refuse_transient_position(interp, which, true)?;
+        if which == StandardStream::In && interp.input_file().is_some() {
+            return seek_standard_input(interp, receiver, parsed);
+        }
     }
     if require(interp, receiver)?
         .open
@@ -2153,6 +2194,80 @@ pub(super) fn position(
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"0")));
     };
+    let landed = seek_open(open, &parsed, offset, mode, record_length);
+    seek_answer(interp, receiver, landed)
+}
+
+/// What a SEEK did to an open stream's positions.
+enum Seeked {
+    /// It moved to this character or line.
+    Landed(u64),
+    /// [`invalid_seek`]'s case.
+    Invalid,
+    /// Counting lines failed with this errno.
+    Failed(i32),
+}
+
+/// [`position`]'s answer for what [`seek_open`] did.
+fn seek_answer(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    seeked: Seeked,
+) -> Result<Option<ObjRef>, Failure> {
+    match seeked {
+        Seeked::Landed(at) => Ok(Some(interp.text_built(at.to_string().into_bytes()))),
+        Seeked::Invalid => invalid_seek(interp, receiver),
+        Seeked::Failed(errno) => {
+            notready(interp, receiver, StreamStatus::Error(errno), b"0".to_vec())
+        }
+    }
+}
+
+/// A SEEK of `.STDIN` when standard input is a regular file, which is a
+/// persistent stream open for reading: its read position moves.
+#[cold]
+#[inline(never)]
+fn seek_standard_input(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    mut parsed: Positioning,
+) -> Result<Option<ObjRef>, Failure> {
+    let Some(offset) = parsed.offset else {
+        return Err(Raised::missing_argument_named("SEEK").into());
+    };
+    require_mut(interp, receiver)?.status = StreamStatus::Ready;
+    if parsed.write {
+        return invalid_seek(interp, receiver);
+    }
+    parsed.read = true;
+    if !parsed.by_char && !parsed.by_line {
+        parsed.by_char = true;
+    }
+    let offset = if parsed.style == SeekFrom::Backward {
+        -offset
+    } else {
+        offset
+    };
+    let mode = rexx_core::OpenMode {
+        read_only: true,
+        ..rexx_core::OpenMode::default()
+    };
+    let Some(open) = interp.input_file() else {
+        return Ok(Some(interp.text(b"0")));
+    };
+    let seeked = seek_open(open, &parsed, offset, mode, 0);
+    seek_answer(interp, receiver, seeked)
+}
+
+/// [`position`]'s move of `open`'s positions, once the stream is open and
+/// the pointers and unit are chosen.
+fn seek_open(
+    open: &mut rexx_core::OpenFile,
+    parsed: &Positioning,
+    offset: i64,
+    mode: rexx_core::OpenMode,
+    record_length: u64,
+) -> Seeked {
     let from = if parsed.read {
         open.read_position
     } else {
@@ -2168,7 +2283,7 @@ pub(super) fn position(
             SeekFrom::Forward | SeekFrom::Backward => from + offset,
         };
         if landed < 1 {
-            return invalid_seek(interp, receiver);
+            return Seeked::Invalid;
         }
         if parsed.read {
             open.read_position = landed;
@@ -2176,13 +2291,13 @@ pub(super) fn position(
         if parsed.write {
             open.write_position = landed;
         }
-        return Ok(Some(interp.text_built(landed.to_string().into_bytes())));
+        return Seeked::Landed(landed as u64);
     }
     // Line positioning on a text stream open only for writing is an error
     // (rexxref funct.xml:4454-4455); a record stream's lines are character
     // positions.
     if !(mode.read_write || mode.read_only) && record_length == 0 {
-        return invalid_seek(interp, receiver);
+        return Seeked::Invalid;
     }
     let lines = match parsed.style {
         SeekFrom::Start => Ok(offset),
@@ -2193,13 +2308,10 @@ pub(super) fn position(
     };
     let target = match lines {
         Ok(target) => target,
-        Err(error) => {
-            let errno = error.raw_os_error().unwrap_or(0);
-            return notready(interp, receiver, StreamStatus::Error(errno), b"0".to_vec());
-        }
+        Err(error) => return Seeked::Failed(error.raw_os_error().unwrap_or(0)),
     };
     if target < 1 {
-        return invalid_seek(interp, receiver);
+        return Seeked::Invalid;
     }
     let (line, at) = seek_line(open, target, record_length);
     if parsed.read {
@@ -2208,7 +2320,7 @@ pub(super) fn position(
     if parsed.write {
         open.write_position = at;
     }
-    Ok(Some(interp.text_built(line.to_string().into_bytes())))
+    Seeked::Landed(line)
 }
 
 /// A SEEK to a position the stream does not have: below 1, the write
@@ -2272,8 +2384,19 @@ pub(super) fn query_position(
         }
     }
     let mode = require(interp, receiver)?.mode;
-    let state = require_mut(interp, receiver)?;
-    let Some(open) = state.open.as_mut() else {
+    let mode = if standard_input_file(interp, receiver)? {
+        rexx_core::OpenMode {
+            read_only: true,
+            ..rexx_core::OpenMode::default()
+        }
+    } else {
+        mode
+    };
+    let open = match standard_input_file(interp, receiver)? {
+        true => interp.input_file(),
+        false => require_mut(interp, receiver)?.open.as_mut(),
+    };
+    let Some(open) = open else {
         return Ok(Some(interp.text(b"")));
     };
     if open.transient {

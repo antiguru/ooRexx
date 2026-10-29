@@ -761,6 +761,14 @@ impl Interp {
         }
     }
 
+    /// The file `.STDIN` reads, when standard input is a regular file.
+    pub(crate) fn input_file(&mut self) -> Option<&mut rexx_core::OpenFile> {
+        match &mut self.input.source {
+            Source::File(file) => Some(&mut file.open),
+            _ => None,
+        }
+    }
+
     /// Moves `.STDIN`'s read position to character `position` for a CHARIN
     /// start: `Some(false)` past the end, where nothing moves, and `None`
     /// when standard input is not a regular file.

@@ -212,8 +212,8 @@ use object_protocol::{
 
 // The required-string protocol and the string conversion behind it.
 mod reqstr;
-pub(crate) use reqstr::{DEFAULTNAME, MAKESTRING};
-use reqstr::{OBJECTNAME, required_string_argument, required_string_named_argument};
+pub(crate) use reqstr::{DEFAULTNAME, MAKESTRING, OBJECTNAME};
+use reqstr::{required_string_argument, required_string_named_argument};
 
 /// One primitive method's implementation.
 type NativeMethod =
@@ -265,7 +265,55 @@ enum NativeBody {
     /// A [`NativeBody::Run`] that runs Rexx code under a stack frame of its
     /// own (`InternalActivationFrame`, `concurrency/ActivationFrame.cpp:100`).
     Leveled(NativeMethod),
+    /// A [`NativeBody::Leveled`] whose Rexx code is only an argument's own
+    /// `==` or `HASHCODE`, so it takes its level only for an argument not of
+    /// a base class.
+    Compared(NativeMethod),
 }
+
+/// The primitives that render their items by `stringValue`, which sends a
+/// `DEFAULTNAME` of an item's own (`ArrayClass::toString`).
+const RENDERING_METHODS: &[(&str, &str)] = &[("Array", "MAKESTRING"), ("Array", "TOSTRING")];
+
+/// The collection primitives that compare or hash an argument
+/// (`equalValue`, `isEqual` and `hash` in `ArrayClass`, `ListContents`,
+/// `HashContents`, `StemClass` and `DirectoryClass`), which a `==` or
+/// `HASHCODE` of the argument's own runs under. A row shared by several
+/// classes is one method, so every class's row for it is listed.
+const COMPARED_METHODS: &[(&str, &str)] = &[
+    ("Array", "INDEX"),
+    ("Array", "REMOVEITEM"),
+    ("List", "HASITEM"),
+    ("List", "INDEX"),
+    ("List", "REMOVEITEM"),
+    ("Directory", "AT"),
+    ("Directory", "[]"),
+    ("StringTable", "AT"),
+    ("StringTable", "[]"),
+    ("IdentityTable", "HASINDEX"),
+    ("IdentityTable", "HASITEM"),
+    ("IdentityTable", "INDEX"),
+    ("IdentityTable", "REMOVE"),
+    ("IdentityTable", "REMOVEITEM"),
+    ("Table", "HASINDEX"),
+    ("Table", "HASITEM"),
+    ("Table", "INDEX"),
+    ("Table", "REMOVE"),
+    ("Table", "REMOVEITEM"),
+    ("Set", "HASITEM"),
+    ("Set", "REMOVEITEM"),
+    ("Relation", "ALLAT"),
+    ("Relation", "ALLINDEX"),
+    ("Relation", "ITEMS"),
+    ("Relation", "REMOVEALL"),
+    ("Relation", "HASITEM"),
+    ("Relation", "REMOVEITEM"),
+    ("Bag", "HASITEM"),
+    ("Bag", "REMOVEITEM"),
+    ("Stem", "HASITEM"),
+    ("Stem", "INDEX"),
+    ("Stem", "REMOVEITEM"),
+];
 
 /// What a [`NativeBegin`] left.
 pub(crate) enum NativeStarted {
@@ -1418,7 +1466,14 @@ impl ObjectModel {
             .chain(package::NATIVE_METHODS)
             .chain(extra)
             .map(|(class_id, method_name, arity, run)| {
-                (class_id, method_name, arity, NativeBody::Run(*run))
+                let body = if COMPARED_METHODS.contains(&(*class_id, *method_name)) {
+                    NativeBody::Compared(*run)
+                } else if RENDERING_METHODS.contains(&(*class_id, *method_name)) {
+                    NativeBody::Leveled(*run)
+                } else {
+                    NativeBody::Run(*run)
+                };
+                (class_id, method_name, arity, body)
             })
             .chain(array::sort::LEVELED_METHODS.iter().map(
                 |(class_id, method_name, arity, run)| {
@@ -1950,8 +2005,8 @@ impl Interp {
     }
 
     /// `.String`: the class every string-valued receiver answers to, and the
-    /// scope a stem-forwarded operator's traceback frame names -- see
-    /// `eval.rs`'s `Interp::is_stem_receiver`.
+    /// scope a forwarded operator's traceback frame names -- see
+    /// `eval.rs`'s `Interp::is_forwarding_receiver`.
     pub(crate) fn string_class(&mut self) -> ObjRef {
         self.object_model().string
     }
@@ -2692,12 +2747,17 @@ impl Interp {
         }
         let outcome = match invocable {
             // A leveled primitive is run by `run_other`, off this path.
-            Invocable::Native(entry) if !matches!(entry.body, NativeBody::Leveled(_)) => {
+            Invocable::Native(entry)
+                if !matches!(entry.body, NativeBody::Leveled(_) | NativeBody::Compared(_)) =>
+            {
                 let outcome = match (entry.arity, entry.body) {
                     (Arity::Fixed(arity), _) if args.len() > arity => {
                         Err(Raised::too_many_method_arguments(arity).into())
                     }
-                    (_, NativeBody::Run(run) | NativeBody::Leveled(run)) => {
+                    (
+                        _,
+                        NativeBody::Run(run) | NativeBody::Leveled(run) | NativeBody::Compared(run),
+                    ) => {
                         let ran = pinned!(
                             self,
                             crate::pinning::PinKind::native(name),
@@ -2943,11 +3003,25 @@ impl Interp {
             },
             Invocable::Native(NativeEntry {
                 arity,
-                body: NativeBody::Leveled(run),
+                body: body @ (NativeBody::Leveled(run) | NativeBody::Compared(run)),
             }) => {
                 let ran = match arity {
                     Arity::Fixed(arity) if args.len() > arity => {
                         Err(Raised::too_many_method_arguments(arity).into())
+                    }
+                    _ if matches!(body, NativeBody::Compared(_))
+                        && args
+                            .iter()
+                            .flatten()
+                            .all(|value| self.is_base_class(*value)) =>
+                    {
+                        let ran = pinned!(
+                            self,
+                            crate::pinning::PinKind::native(name),
+                            run(self, cleared, receiver, args)
+                        );
+                        self.serve_posted_halt();
+                        ran
                     }
                     _ => self.run_leveled(run, cleared, resolution, receiver, name, args),
                 };
@@ -3972,6 +4046,15 @@ impl Interp {
             Raised::nomethod(report, name).into()
         } else {
             report.into()
+        }
+    }
+
+    /// Whether `name` sent to `value` runs a method that is not one of the
+    /// interpreter's own primitives.
+    pub(crate) fn answers_by_method(&mut self, value: ObjRef, name: &[u8]) -> bool {
+        match self.lookup(value, name, None) {
+            Some(resolution) => self.object_model().natives.get(resolution.method).is_none(),
+            None => false,
         }
     }
 

@@ -205,25 +205,25 @@ static LIBRARY_REXX_METHODS: &[NativeExternal] = &[
     implemented(
         "stream_charout",
         Family::Stream,
-        Arity::Fixed(2),
+        Arity::Counted,
         super::stream::charout,
     ),
     implemented(
         "stream_charin",
         Family::Stream,
-        Arity::Fixed(2),
+        Arity::Counted,
         super::stream::charin,
     ),
     implemented(
         "stream_linein",
         Family::Stream,
-        Arity::Fixed(2),
+        Arity::Counted,
         super::stream::linein,
     ),
     implemented(
         "stream_lineout",
         Family::Stream,
-        Arity::Fixed(2),
+        Arity::Counted,
         super::stream::lineout,
     ),
     implemented(

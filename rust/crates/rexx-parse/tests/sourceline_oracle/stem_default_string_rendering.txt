@@ -1,0 +1,18 @@
+count 17
+/* A stem's STRING and its trace rendering are its default value's string
+   representation, for a plain stem and a Stem subclass instance. */
+t. = .array~of('one', 'two')
+say t.~string
+u = .ustem~new
+u[] = .array~of('zz')
+say u~string
+s. = 7
+say s.~string
+v. = .stem~new
+v.[] = .array~of(1)
+say v.~string
+trace r
+x = t.
+x = u
+x = s.
+::class ustem subclass stem

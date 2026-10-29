@@ -316,14 +316,14 @@ pub(super) fn native_string(
         return Ok(Some(super::string::base_string(interp, receiver)));
     }
     if let Some(store) = interp.stem_subclass_store(receiver) {
-        let text = interp.to_text(store).into_owned();
+        let text = interp.stem_string_value_text(store);
         return Ok(Some(interp.text_built(text)));
     }
     // `PointerClass::stringValue` (`classes/PointerClass.cpp:152`) overrides
     // the send below: measured, oracle rc 0, `p~objectName = 'zzz'` leaves
     // `p~string` answering the address.
     if pointer_address(interp, receiver).is_some() {
-        let text = interp.string_value_text(receiver);
+        let text = interp.default_string_value_text(receiver);
         return Ok(Some(interp.text_built(text)));
     }
     // **Sent rather than shortcut for an instance**, whose `OBJECTNAME` a
@@ -336,11 +336,22 @@ pub(super) fn native_string(
     };
     if sent {
         let caller = interp.caller();
-        let answered = interp.send_message(receiver, OBJECTNAME, None, &[], caller)?;
+        let send =
+            |interp: &mut Interp| interp.send_message(receiver, OBJECTNAME, None, &[], caller);
+        // A level of its own where the send reaches a Rexx method.
+        let answered = if interp.answers_by_method(receiver, OBJECTNAME)
+            || interp.answers_by_method(receiver, DEFAULTNAME)
+        {
+            interp.primitive_level(receiver, b"STRING", &[], send)?
+        } else {
+            send(interp)?
+        };
         if let Some(answered) = answered {
-            let text = interp.string_value_text(answered);
+            let text = interp.default_string_value_text(answered);
             return Ok(Some(interp.text_built(text)));
         }
+        let text = interp.default_string_value_text(receiver);
+        return Ok(Some(interp.text_built(text)));
     }
     let text = interp.string_value_text(receiver);
     Ok(Some(interp.text_built(text)))
@@ -354,6 +365,18 @@ pub(super) fn native_string(
 fn declared_class(interp: &mut Interp, class: ObjRef) -> bool {
     let id = interp.classes().id_string(class).to_string();
     interp.classes().system_lookup(&id) != Some(class)
+}
+
+/// `DEFAULTNAME` sent to `receiver` by the primitive `OBJECTNAME`, under its
+/// level where that reaches a Rexx method.
+fn default_name_sent(interp: &mut Interp, receiver: ObjRef) -> Result<Option<ObjRef>, Failure> {
+    let caller = interp.caller();
+    let send = |interp: &mut Interp| interp.send_message(receiver, DEFAULTNAME, None, &[], caller);
+    if interp.answers_by_method(receiver, DEFAULTNAME) {
+        interp.primitive_level(receiver, OBJECTNAME, &[], send)
+    } else {
+        send(interp)
+    }
 }
 
 /// `Object~objectName`: the name something gave this object, or
@@ -380,11 +403,10 @@ pub(super) fn native_object_name(
         Primitive::Instance { .. } => match interp.instance_name(receiver) {
             Some(held) => held,
             None => {
-                let caller = interp.caller();
-                let answered = interp.send_message(receiver, DEFAULTNAME, None, &[], caller)?;
+                let answered = default_name_sent(interp, receiver)?;
                 match answered {
-                    Some(answered) => interp.string_value_text(answered),
-                    None => interp.string_value_text(receiver),
+                    Some(answered) => interp.default_string_value_text(answered),
+                    None => interp.default_string_value_text(receiver),
                 }
             }
         },
@@ -424,13 +446,10 @@ pub(super) fn native_object_name(
         Primitive::Class(class) if declared_class(interp, class) => {
             match interp.classes().set_name(class) {
                 Some(held) => held.as_bytes().to_vec(),
-                None => {
-                    let caller = interp.caller();
-                    match interp.send_message(receiver, DEFAULTNAME, None, &[], caller)? {
-                        Some(answered) => interp.string_value_text(answered),
-                        None => interp.string_value_text(receiver),
-                    }
-                }
+                None => match default_name_sent(interp, receiver)? {
+                    Some(answered) => interp.default_string_value_text(answered),
+                    None => interp.default_string_value_text(receiver),
+                },
             }
         }
         Primitive::Object
@@ -443,7 +462,7 @@ pub(super) fn native_object_name(
         | Primitive::StringTable(_)
         | Primitive::Context
         | Primitive::RexxInfo
-        | Primitive::Message => interp.string_value_text(receiver),
+        | Primitive::Message => interp.default_string_value_text(receiver),
     };
     Ok(Some(interp.text_built(name)))
 }
