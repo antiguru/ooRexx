@@ -66,7 +66,7 @@
   "category": "crash",
   "area": "conditions",
   "severity": "crash",
-  "repro": "call on user c1 name h1\nzr = ra() + ra()\nsay 'after' zr\nexit 0\nra:\nraise user c1 return 1\nh1:\nsay 'h1' sigl\nreturn",
+  "repro": "call on user c1 name h1\nzr = ra() + ra()\nsay 'after' zr\nexit 0\nra:\nraise user c1 return 1\nh1:\nsay 'h1' sigl\nreturn Also reached by NOTREADY (two LINEIN failures in one clause): rust/corpus/oracle-crashes.txt entry 66, added 2026-10-28, not narrowed to that half.",
   "oracle": "Prints 'h1 2' then SIGSEGV rc 139. Two differently named conditions in one clause drain cleanly in queue order. The same defect with NOTREADY (two NOTREADY-raising reads in one clause) and with a command-redirect target raising ERROR while the command itself ends non-zero (same condition queued twice, rc 139 after handler line).",
   "expected": "Per rexxref (Condition traps, CALL ON) the trap is delayed after the first raise and an ERROR raised again while delayed is ignored (stated in entry 58).",
   "cause": "The drain reaching the second copy of an already-delivered condition name; exact C++ site not given.",
