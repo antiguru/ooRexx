@@ -1,0 +1,10 @@
+    15 *-* x = .withname
+       >E>   .WITHNAME => "The WITHNAME class"
+       >>>   "The WITHNAME class"
+       >=>   X <= "The WITHNAME class"
+    16 *-* x = .withname~new
+       >E>   .WITHNAME => "The WITHNAME class"
+       >M>   "NEW" => "a WITHNAME"
+       >>>   "a WITHNAME"
+       >=>   X <= "a WITHNAME"
+    17 *-* trace off

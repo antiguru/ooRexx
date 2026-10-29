@@ -1,0 +1,19 @@
+    15 *-* x = t.
+       >V>   T. => "one
+two"
+       >>>   "one
+two"
+       >=>   X <= "one
+two"
+    16 *-* x = u
+       >V>   U => "zz"
+       >>>   "zz"
+       >=>   X <= "zz"
+    17 *-* x = s.
+       >V>   S. => "dflt"
+       >>>   "dflt"
+       >=>   X <= "dflt"
+    18 *-* x = v.
+       >V>   V. => "a NSTR"
+       >>>   "a NSTR"
+       >=>   X <= "a NSTR"

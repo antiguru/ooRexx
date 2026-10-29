@@ -1,0 +1,11 @@
+     2 *-* parse value .array~new(2) with a
+       >E>   .ARRAY => "The Array class"
+       >L>   "2"
+       >A>   "2"
+       >M>   "NEW" => "an Array"
+       >K>   "VALUE" => "an Array"
+       >>>   ""
+       >=>   A <= ""
+     3 *-* say a
+       >V>   A => ""
+       >>>   ""

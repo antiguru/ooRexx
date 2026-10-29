@@ -1,0 +1,13 @@
+unopened [] []
+open READY:
+size   
+pos   
+time 0 0
+[line1]  
+seek 0 ERROR [line2]
+line 0 [line3]
+back 0  []
+end 0 [] 0 0
+past 0 ERROR 0 0
+lines 0  
+again 0 [] 0 0

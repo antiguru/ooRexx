@@ -1,0 +1,15 @@
+     9 *-*   r = >x
+       >O>     ">" => "X"
+       >>>     "an Array"
+       >=>     R <= "an Array"
+    10 *-*   trace off
+    15 *-*   r = >y
+       >O>     ">" => "Y"
+       >>>     "an Array"
+       >=>     R <= "an Array"
+    16 *-*   w = (>y)~name
+       >O>     ">" => "Y"
+       >M>     "NAME" => "V"
+       >>>     "V"
+       >=>     W <= "V"
+    17 *-*   trace off

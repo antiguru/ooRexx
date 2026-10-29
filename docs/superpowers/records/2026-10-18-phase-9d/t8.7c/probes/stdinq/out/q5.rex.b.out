@@ -1,0 +1,14 @@
+size 
+pos 
+dt 0
+stdin size   0
+out size  
+seekr 0 line1
+seekc 0  l
+seeke 0 i
+seekw 0 ERROR
+seek0 0 ERROR
+linein ne2 1 6
+seek99 0 ERROR 1 6
+seekl99 0 ERROR 1 6
+pos   

@@ -1,0 +1,4 @@
+       *-* Compiled method "SEEK" with scope "Stream".
+     8 *-* say 'seek2' t~seek('1') t~state
+Error 93 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/stdinq/q4.rex line 8:  Incorrect call to method.
+Error 93.958:  Positioning of transient streams is not valid.

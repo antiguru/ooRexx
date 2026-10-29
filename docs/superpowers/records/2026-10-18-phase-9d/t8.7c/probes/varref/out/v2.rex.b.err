@@ -1,0 +1,3 @@
+     3 *-* say t + 0
+Error 41 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/varref/v2.rex line 3:  Bad arithmetic conversion.
+Error 41.1:  Nonnumeric value ("abc") used in arithmetic operation.

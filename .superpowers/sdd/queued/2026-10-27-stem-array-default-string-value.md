@@ -1,3 +1,4 @@
+**CLOSED 2026-10-29 by Phase 9d Task 8.7c (e620097f0).**
 **OPEN, queued 2026-10-27 by the controller; proposed 9d (Task 8.7).**
 
 # A stem's string value with an array default joins the items

@@ -1,0 +1,80 @@
+array hasItem
+  == METHOD HASITEM
+array index
+  == INTERPRET 
+array removeItem
+  == INTERPRET 
+list hasItem
+  == INTERPRET 
+list index
+  == INTERPRET 
+list removeItem
+  == INTERPRET 
+queue hasItem
+  == METHOD HASITEM
+queue index
+  == INTERPRET 
+queue removeItem
+  == INTERPRET 
+circularqueue hasItem
+  == METHOD HASITEM
+table at
+  hashCode INTERPRET 
+table []
+  hashCode INTERPRET 
+table hasIndex
+  hashCode INTERPRET 
+table hasItem
+  == INTERPRET 
+table index
+  == INTERPRET 
+table remove
+  hashCode INTERPRET 
+  hashCode INTERPRET 
+table removeItem
+  == INTERPRET 
+table put
+  hashCode METHOD PUT
+set hasIndex
+  hashCode INTERPRET 
+set hasItem
+  hashCode INTERPRET 
+set remove
+  hashCode INTERPRET 
+  hashCode INTERPRET 
+set removeItem
+  hashCode INTERPRET 
+  hashCode INTERPRET 
+set put
+  hashCode METHOD PUT
+bag hasItem
+  == INTERPRET 
+bag put
+  hashCode METHOD PUT
+relation allAt
+  == INTERPRET 
+relation hasItem
+  == INTERPRET 
+relation allIndex
+  == INTERPRET 
+relation items
+  == INTERPRET 
+relation removeItem
+  == INTERPRET 
+directory hasItem
+  == INTERPRET 
+directory index
+  == INTERPRET 
+directory removeItem
+  == INTERPRET 
+stringtable hasItem
+  == INTERPRET 
+stringtable index
+  == INTERPRET 
+stem hasItem
+  == INTERPRET 
+stem index
+  == INTERPRET 
+stem removeItem
+  == INTERPRET 
+identitytable hasItem

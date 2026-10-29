@@ -1,3 +1,4 @@
+**CLOSED 2026-10-29 by Phase 9d Task 8.7c (e620097f0).**
 **OPEN, queued 2026-10-28 by the controller; proposed 9d (Task 8.7c).**
 
 # TRACE I renderings of an Array PARSE VALUE and of a returned reference

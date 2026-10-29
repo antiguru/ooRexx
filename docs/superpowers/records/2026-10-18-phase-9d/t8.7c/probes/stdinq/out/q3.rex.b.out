@@ -1,0 +1,17 @@
+open READY:
+size 
+pos 
+posr  
+dt 0
+ts 0
+exists STDIN
+type PERSISTENT
+linein line1
+pos2  
+seek 0 ERROR
+linein2 line2
+seekl 0 ERROR
+linein3 line3
+chars 0 lines 0
+seek-new 0 ERROR
+cmd-size 

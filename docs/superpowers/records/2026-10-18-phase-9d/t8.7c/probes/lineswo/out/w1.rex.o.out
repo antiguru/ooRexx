@@ -1,0 +1,11 @@
+open READY:
+lineout 0 0
+lines 2 2 1
+chars 6
+bif 1 2 6
+linein f1 READY READY:
+lines2 1
+close READY:
+open READY:
+lines 2 2 6
+READY:

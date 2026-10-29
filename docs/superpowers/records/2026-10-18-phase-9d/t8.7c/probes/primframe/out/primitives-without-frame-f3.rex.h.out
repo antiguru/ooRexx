@@ -1,0 +1,13 @@
+array hasitem
+  frames 3 METHOD HASITEM
+list hasitem
+  frames 3 METHOD HASITEM
+array index
+  frames 3 METHOD INDEX
+queue hasitem
+  frames 3 METHOD HASITEM
+table hasitem
+  frames 3 METHOD HASITEM
+set put
+removeItem
+  frames 3 METHOD REMOVEITEM

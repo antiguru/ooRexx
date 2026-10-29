@@ -1,0 +1,55 @@
+array hasItem
+  == METHOD HASITEM
+array index
+  == METHOD INDEX
+array removeItem
+  == METHOD REMOVEITEM
+list hasItem
+  == METHOD HASITEM
+list index
+  == METHOD INDEX
+list removeItem
+  == METHOD REMOVEITEM
+queue hasItem
+  == METHOD HASITEM
+queue index
+  == METHOD INDEX
+queue removeItem
+  == METHOD REMOVEITEM
+circularqueue hasItem
+  == METHOD HASITEM
+table at
+  hashCode METHOD AT
+table []
+  hashCode METHOD []
+table hasIndex
+  hashCode METHOD HASINDEX
+table hasItem
+  == METHOD HASITEM
+table index
+  == METHOD INDEX
+table put
+  hashCode METHOD PUT
+set hasIndex
+  hashCode METHOD HASINDEX
+set hasItem
+  hashCode METHOD HASITEM
+set put
+  hashCode METHOD PUT
+directory hasItem
+  == METHOD HASITEM
+directory index
+  == METHOD INDEX
+directory removeItem
+  == METHOD REMOVEITEM
+stringtable hasItem
+  == METHOD HASITEM
+stringtable index
+  == METHOD INDEX
+stem hasItem
+  == METHOD HASITEM
+stem index
+  == METHOD INDEX
+stem removeItem
+  == METHOD REMOVEITEM
+identitytable hasItem

@@ -1,0 +1,11 @@
+open READY:
+lineout 0 0
+lines 0 0 0
+chars 0
+bif 0 0 0
+linein  ERROR ERROR:9 Bad file descriptor
+lines2 0
+close READY:
+open READY:
+lines 0 0 0
+READY:

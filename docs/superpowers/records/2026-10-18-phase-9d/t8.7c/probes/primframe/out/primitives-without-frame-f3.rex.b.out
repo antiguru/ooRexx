@@ -1,0 +1,13 @@
+array hasitem
+  frames 3 METHOD HASITEM
+list hasitem
+  frames 2 PROGRAM /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/primframe/primitives-without-frame-f3.rex
+array index
+  frames 2 PROGRAM /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/primframe/primitives-without-frame-f3.rex
+queue hasitem
+  frames 3 METHOD HASITEM
+table hasitem
+  frames 2 PROGRAM /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/primframe/primitives-without-frame-f3.rex
+set put
+removeItem
+  frames 2 PROGRAM /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/primframe/primitives-without-frame-f3.rex

@@ -1,0 +1,60 @@
+t = >s; say t + 0              41.1
+           *-* Compiled method "+" with scope "String".
+        18 *-*   say t + 0
+        18 *-*   interpret arg(1)
+         3 *-* call try 't = >s; say t + 0'
+t = >s; say -t                 41.1
+           *-* Compiled method "-" with scope "String".
+        18 *-*   say -t
+        18 *-*   interpret arg(1)
+         4 *-* call try 't = >s; say -t'
+t = >s; say +t                 41.1
+           *-* Compiled method "+" with scope "String".
+        18 *-*   say +t
+        18 *-*   interpret arg(1)
+         5 *-* call try 't = >s; say +t'
+t = >n; say t / 0              42.3
+           *-* Compiled method "/" with scope "String".
+        18 *-*   say t / 0
+        18 *-*   interpret arg(1)
+         6 *-* call try 't = >n; say t / 0'
+t = >n; say t ** "x"           26.8
+           *-* Compiled method "**" with scope "String".
+        18 *-*   say t ** "x"
+        18 *-*   interpret arg(1)
+         7 *-* call try 't = >n; say t ** "x"'
+t = >n; say t + .array~new     41.1
+           *-* Compiled method "+" with scope "String".
+        18 *-*   say t + .array~new
+        18 *-*   interpret arg(1)
+         8 *-* call try 't = >n; say t + .array~new'
+t = >u; say t + 1              41.1
+           *-* Compiled method "+" with scope "String".
+        18 *-*   say t + 1
+        18 *-*   interpret arg(1)
+         9 *-* call try 't = >u; say t + 1'
+t = >m.; say t * 2             41.1
+           *-* Compiled method "*" with scope "String".
+        18 *-*   say t * 2
+        18 *-*   interpret arg(1)
+        10 *-* call try 't = >m.; say t * 2'
+tt = >s; t = >tt; say t - 1    41.1
+           *-* Compiled method "-" with scope "String".
+        18 *-*   say t - 1
+        18 *-*   interpret arg(1)
+        11 *-* call try 'tt = >s; t = >tt; say t - 1'
+t = >n; say t // 0             42.3
+           *-* Compiled method "//" with scope "String".
+        18 *-*   say t // 0
+        18 *-*   interpret arg(1)
+        12 *-* call try 't = >n; say t // 0'
+t = >s; say \t                 34.901
+           *-* Compiled method "\" with scope "String".
+        18 *-*   say \t
+        18 *-*   interpret arg(1)
+        13 *-* call try 't = >s; say \t'
+t = >s; say t & 1              34.901
+           *-* Compiled method "&" with scope "String".
+        18 *-*   say t & 1
+        18 *-*   interpret arg(1)
+        14 *-* call try 't = >s; say t & 1'

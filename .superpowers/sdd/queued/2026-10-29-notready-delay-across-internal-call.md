@@ -1,3 +1,4 @@
+**CLOSED 2026-10-29 by Phase 9d Task 8.7c (e620097f0).**
 **OPEN, queued 2026-10-29 by the controller; proposed 9d (Task 8.7c).**
 
 # A NOTREADY inside an internal routine called in the clause does not see the clause's DELAY state

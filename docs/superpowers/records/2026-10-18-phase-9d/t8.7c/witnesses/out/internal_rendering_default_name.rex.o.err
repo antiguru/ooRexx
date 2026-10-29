@@ -1,0 +1,10 @@
+    15 *-* x = .withname
+       >E>   .WITHNAME => "DNC"
+       >>>   "DNC"
+       >=>   X <= "DNC"
+    16 *-* x = .withname~new
+       >E>   .WITHNAME => "DNC"
+       >M>   "NEW" => "DNI"
+       >>>   "DNI"
+       >=>   X <= "DNI"
+    17 *-* trace off

@@ -1,0 +1,12 @@
+  frames 4 METHOD OBJECTNAME
+DN,x
+  frames 4 METHOD OBJECTNAME
+DN,x
+  frames 3 METHOD OBJECTNAME
+DN
+x
+an Array
+  frames 4 METHOD OBJECTNAME
+DN
+  frames 3 METHOD OBJECTNAME
+Object "DN" does not understand message "NOSUCH".

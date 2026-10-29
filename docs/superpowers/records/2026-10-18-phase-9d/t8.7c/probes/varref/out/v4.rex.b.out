@@ -1,0 +1,10 @@
+t = >s; do i = t to 5; end     41.1
+         8 *-*   do i = t to 5;
+         8 *-*   interpret arg(1)
+         2 *-* call try 't = >s; do i = t to 5; end'
+t = >n; numeric digits 1; n =  42.901
+         8 *-*   say t > 1
+         8 *-*   interpret arg(1)
+         3 *-* call try 't = >n; numeric digits 1; n = "9.9E999999999"; say t > 1'
+0
+t = >s; say t = 1              ok

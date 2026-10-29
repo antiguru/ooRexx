@@ -1,0 +1,15 @@
+size 
+pos 
+dt 0
+stdin size 18 1 1
+out size  
+seekr 2 line2
+seekc 11 11 2
+seeke 18 
+
+seekw 0 NOTREADY
+seek0 0 NOTREADY
+linein  0 0
+seek99 99 READY 0 0
+seekl99 4 READY 0 0
+pos 4 1 18

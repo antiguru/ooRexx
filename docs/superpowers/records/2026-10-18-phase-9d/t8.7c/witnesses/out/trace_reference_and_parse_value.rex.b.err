@@ -1,0 +1,38 @@
+     4 *-* parse value .array~new(2) with a
+       >E>   .ARRAY => "The Array class"
+       >L>   "2"
+       >A>   "2"
+       >M>   "NEW" => "an Array"
+       >K>   "VALUE" => ""
+       >>>   ""
+       >=>   A <= ""
+     5 *-* v = .array~new
+       >E>   .ARRAY => "The Array class"
+       >M>   "NEW" => "an Array"
+       >>>   "an Array"
+       >=>   V <= "an Array"
+     6 *-* w = h(>v)
+       >O>   ">" => "V"
+       >A>   "an Array"
+    11 *-*   h:
+    11 *-*   use arg >x;
+       >R>     "V" => "X"
+    11 *-*   return >x
+       >O>     ">" => "X"
+       >>>     "an Array"
+       >F>   H => "an Array"
+       >>>   "an Array"
+       >=>   W <= "an Array"
+     7 *-* call g >v
+       >O>   ">" => "V"
+       >A>   "an Array"
+    12 *-*   g:
+    12 *-*   procedure
+    13 *-*   use arg >y
+       >R>     "V" => "Y"
+    14 *-*   r = >y
+       >O>     ">" => "Y"
+       >>>     "an Array"
+       >=>     R <= "an Array"
+    15 *-*   return
+     8 *-* trace off

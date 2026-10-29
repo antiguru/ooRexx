@@ -1,0 +1,16 @@
+  frames 4 METHOD OBJECTNAME
+DNC, The PLAIN class, DNI, DN, x
+  frames 4 METHOD OBJECTNAME
+DNC|The PLAIN class|DNI|DN|x
+  frames 3 METHOD OBJECTNAME
+DN
+  frames 4 METHOD OBJECTNAME
+DN
+  frames 3 METHOD OBJECTNAME
+DN
+  frames 3 METHOD STRING
+ON
+named named
+Object "DNC" does not understand message "NOSUCH".
+Object "DNI" does not understand message "NOSUCH".
+Object "The PLAIN class" does not understand message "NOSUCH".

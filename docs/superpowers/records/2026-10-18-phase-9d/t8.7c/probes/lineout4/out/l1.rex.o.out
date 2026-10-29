@@ -1,0 +1,9 @@
+call lineout 'zz_l4.txt', 'a', 1, 2 40.4 | Too many arguments in invocation of LINEOUT; maximum expected is 3.
+call charout 'zz_l4.txt', 'a', 1, 2 40.4 | Too many arguments in invocation of CHAROUT; maximum expected is 3.
+call linein 'zz_l4.txt', 1, 1, 2 40.4 | Too many arguments in invocation of LINEIN; maximum expected is 3.
+call charin 'zz_l4.txt', 1, 1, 2 40.4 | Too many arguments in invocation of CHARIN; maximum expected is 3.
+call lines 'zz_l4.txt', 'N', 2 40.4 | Too many arguments in invocation of LINES; maximum expected is 2.
+call chars 'zz_l4.txt', 2 40.4 | Too many arguments in invocation of CHARS; maximum expected is 1.
+call stream 'zz_l4.txt', 'C', 'QUERY EXISTS', 2 40.4 | Too many arguments in invocation of STREAM; maximum expected is 3.
+call lineout 'zz_l4.txt', 'a', 1, 2, 3 40.4 | Too many arguments in invocation of LINEOUT; maximum expected is 3.
+call lineout , , , 1 40.4 | Too many arguments in invocation of LINEOUT; maximum expected is 3.

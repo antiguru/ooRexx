@@ -1,0 +1,22 @@
+     2 *-* v = .array~new
+       >E>   .ARRAY => "The Array class"
+       >M>   "NEW" => "an Array"
+       >>>   "an Array"
+       >=>   V <= "an Array"
+     3 *-* w = h(>v)
+       >O>   ">" => "V"
+       >A>   "an Array"
+     6 *-*   h:
+     6 *-*   use arg >x;
+       >R>     "V" => "X"
+     6 *-*   return >x
+       >O>     ">" => "X"
+       >>>     "an Array"
+       >F>   H => "an Array"
+       >>>   "an Array"
+       >=>   W <= "an Array"
+     4 *-* say w~class
+       >V>   W => "an Array"
+       >M>   "CLASS" => "The VariableReference class"
+       >>>   "The VariableReference class"
+     5 *-* exit

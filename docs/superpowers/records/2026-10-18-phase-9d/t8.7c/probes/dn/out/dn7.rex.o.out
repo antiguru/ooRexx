@@ -1,0 +1,18 @@
+  frames 4 METHOD OBJECTNAME
+DN
+  frames 3 METHOD OBJECTNAME
+DN
+  frames 4 METHOD OBJECTNAME
+DN
+  on frames 3 METHOD STRING
+ON
+  on frames 2 PROGRAM /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/dn/dn7.rex
+  on frames 2 PROGRAM /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/dn/dn7.rex
+  on frames 2 PROGRAM /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/dn/dn7.rex
+  frames 3 METHOD OBJECTNAME
+  frames 3 METHOD OBJECTNAME
+  frames 3 METHOD OBJECTNAME
+named named
+DC
+DC
+Object "DC" does not understand message "ZORK".

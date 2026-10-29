@@ -1,0 +1,31 @@
+x = s~lineout('a', 'b', 'c', 'd') 88.907 | Argument 2 must be in the range -9223372036854775808 to 9223372036854775807; found "b".
+x = s~lineout('a', 1, 'c', 'd') 88.922 | Too many arguments in invocation; 2 expected.
+x = s~lineout('a', 1, 'c') 88.922 | Too many arguments in invocation; 2 expected.
+x = s~charout('a', 'b', 'c') 88.907 | Argument 2 must be in the range -9223372036854775808 to 9223372036854775807; found "b".
+x = s~charout('a', 1, 'c') 88.922 | Too many arguments in invocation; 2 expected.
+x = s~linein('b', 1, 'c') 88.907 | Argument 1 must be in the range -9223372036854775808 to 9223372036854775807; found "b".
+x = s~linein(1, 1, 'c') 88.922 | Too many arguments in invocation; 2 expected.
+x = s~charin(1, 1, 'c') 88.922 | Too many arguments in invocation; 2 expected.
+x = s~lines('N', 'c') 88.922 | Too many arguments in invocation; 1 expected.
+x = s~chars('c') 88.922 | Too many arguments in invocation; 0 expected.
+x = s~seek('=1', 'c') 88.922 | Too many arguments in invocation; 1 expected.
+x = s~open('read', 'c') 88.922 | Too many arguments in invocation; 1 expected.
+x = s~close('c') 88.922 | Too many arguments in invocation; 0 expected.
+x = s~query('exists', 'c') 93.902 | Too many arguments in invocation of method; 1 expected.
+x = s~qualify('c') 88.922 | Too many arguments in invocation; 0 expected.
+x = s~description('c') 88.922 | Too many arguments in invocation; 0 expected.
+x = s~state('c') 88.922 | Too many arguments in invocation; 0 expected.
+x = s~say('a', 'b') 93.902 | Too many arguments in invocation of method; 1 expected.
+x = s~arrayout(.array~of(1), 'b') 93.0 | The NIL object
+x = s~position('=1', 'c') 88.922 | Too many arguments in invocation; 1 expected.
+x = s~command('query exists', 'c') 93.902 | Too many arguments in invocation of method; 1 expected.
+x = s~uninit('c') 88.922 | Too many arguments in invocation; 0 expected.
+x = s~flush('c') 88.922 | Too many arguments in invocation; 0 expected.
+x = s~makearray('line', 'c') 93.902 | Too many arguments in invocation of method; 1 expected.
+x = s~supplier('c') 93.902 | Too many arguments in invocation of method; 0 expected.
+x = s~arrayin('line', 'c') 93.902 | Too many arguments in invocation of method; 1 expected.
+x = s~linein(, , ) ok 
+x = s~lineout(, , , ) ok 0
+x = s~lineout('a', 'b') 88.907 | Argument 2 must be in the range -9223372036854775808 to 9223372036854775807; found "b".
+x = s~lineout('a', -1, 'c') 88.922 | Too many arguments in invocation; 2 expected.
+x = s~lineout('a', 0, 'c') 88.922 | Too many arguments in invocation; 2 expected.

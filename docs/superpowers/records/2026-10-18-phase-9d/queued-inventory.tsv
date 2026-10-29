@@ -235,7 +235,7 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b
 2026-10-21-call-site-reads-kept-before-arguments.md	divergence	-	closed:68e7f15d5	CallExpr and Call read the kept routine before the arguments	closed:68e7f15d5
 2026-10-22-interpret-clause-traceback-indent.md	divergence	-	closed:5053fbd9b	traceback indents the INTERPRET clause by the fragment nesting	closed:5053fbd9b
 2026-10-22-directory-subclass-unknown-frame.md	divergence	-	closed:5053fbd9b	stackframes lacks a Directory subclass METHOD UNKNOWN frame	closed:5053fbd9b
-2026-10-22-lineout-four-args-error.md	divergence	-	9d	lineout with four args raises 88.922 where the oracle raises 88.907	9d
+2026-10-22-lineout-four-args-error.md	divergence	-	closed:e620097f0	lineout with four args raises 88.922 where the oracle raises 88.907	closed:e620097f0
 2026-10-22-user-raised-in-own-handler.md	divergence	-	closed:10b0f5081	a USER raised in its own CALL ON handler is never redelivered	closed:10b0f5081
 2026-10-22-security-manager-set-mid-activation.md	divergence	-	closed:5053fbd9b	an internal call sees a security manager its caller set mid-activation; the oracle keeps the caller's captured settings	closed:5053fbd9b
 2026-10-22-constant-frame-and-executable.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.3/probes/constant_frames.rex	closed:7fe50bedd	a ::CONSTANT frame is PROGRAM and its executable a Routine where the oracle has METHOD plus PROGRAM and a Method	closed:7fe50bedd
@@ -249,18 +249,18 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b
 2026-10-26-library-rxmath-error-number.md	divergence	-	closed:probe agrees	LIBRARY rxmath raises 98.903, the oracle 90.998/90.999	closed:probe agrees
 2026-10-27-deadlock-report-shape.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/r2/probes/d2.rex	closed:probe agrees	a guard deadlock prints two reports here, one on the oracle; echoes differ	closed:probe agrees
 2026-10-27-reaped-child-test-load-flake.md	process	-	9d	a SysWait witness fails under workspace load, passes alone	9d
-2026-10-27-varref-operator-traceback-line.md	divergence	-	9d	an operator on a variable reference omits the Compiled method traceback line	9d
+2026-10-27-varref-operator-traceback-line.md	divergence	-	closed:e620097f0	an operator on a variable reference omits the Compiled method traceback line	closed:e620097f0
 2026-10-27-string-equals-makestring-argument.md	divergence	-	closed:030af45a1	String~equals ignores a makeString argument here, converts it on the oracle	closed:030af45a1
 2026-10-27-stem-default-arithmetic-nostring.md	divergence	-	9d	a stem with a non-string default names the stem in arithmetic NOSTRING, the oracle the default	9d
-2026-10-27-stem-array-default-string-value.md	divergence	-	9d	a stem with an array default renders the items joined, the oracle an Array	9d
+2026-10-27-stem-array-default-string-value.md	divergence	-	closed:e620097f0	a stem with an array default renders the items joined, the oracle an Array	closed:e620097f0
 2026-10-28-trace-reference-assignment-unrooted.md	defect	docs/superpowers/records/2026-10-18-phase-9d/queued-probes/trace-ref-rooting/tr4.rex	closed:030af45a1	trace i over q = >y panics a live value: the traced reference is unrooted	closed:030af45a1
 2026-10-28-stream-query-residuals.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.6/r1/probes/q_stdinq.rex	9d	STDIN queries, LINES on a write-only stream, /dev/null treated as transient	9d
 2026-10-28-bump-oracle-version.md	process	-	after 9d	build current upstream trunk as the oracle; re-check fixed defects and oracle-derived records	after 9d
 2026-10-28-append-stream-positioned-writes.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.6/r2/probes/a1.rex	9d	positioned CHAROUT/LINEOUT on an APPEND stream disagree with each other and the oracle	9d
-2026-10-28-internal-rendering-defaultname.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7a/probes/dn/dn5.rex	9d	trace lines, error inserts and Array joins print the default name, oracle sends DEFAULTNAME	9d
+2026-10-28-internal-rendering-defaultname.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7a/probes/dn/dn5.rex	closed:e620097f0	trace lines, error inserts and Array joins print the default name, oracle sends DEFAULTNAME	closed:e620097f0
 2026-10-28-rexx-package-source.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7a/review-probes/package-source-m1.rex	closed:5053fbd9b	Package~source of the REXX package answers its source, oracle 0 lines	closed:5053fbd9b
-2026-10-28-trace-object-renderings.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7a/r1/probes/s25.rex	9d	TRACE I >K> of an Array PARSE VALUE and >O> of a returned reference render differently	9d
-2026-10-28-primitives-without-frame.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7b/review-probes/primitives-without-frame-f3.rex	9d	List/Table hasItem, Array~index, removeItem push no primitive frame when calling Rexx code	9d
+2026-10-28-trace-object-renderings.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7a/r1/probes/s25.rex	closed:e620097f0	TRACE I >K> of an Array PARSE VALUE and >O> of a returned reference render differently	closed:e620097f0
+2026-10-28-primitives-without-frame.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7b/review-probes/primitives-without-frame-f3.rex	closed:e620097f0	List/Table hasItem, Array~index, removeItem push no primitive frame when calling Rexx code	closed:e620097f0
 2026-10-28-hash-lookup-identity-first.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7b/review-probes/hash-identity-first-idq.rex	9d	hash lookup sends == to the identical index object, oracle compares identity first	9d
 2026-10-29-debug-input-traps-off.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7b/fix-r3/dp3/dp3.rex	9d	a condition raised while debug input is processed is delivered; rexxref Note 4 says traps are OFF then	9d
-2026-10-29-notready-delay-across-internal-call.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7b/review-probes/notready-internal-routine-n7.rex	9d	NOTREADY inside an internal routine called in a clause that queued one is not seen as delayed	9d
+2026-10-29-notready-delay-across-internal-call.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7b/review-probes/notready-internal-routine-n7.rex	closed:e620097f0	NOTREADY inside an internal routine called in a clause that queued one is not seen as delayed	closed:e620097f0

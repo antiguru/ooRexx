@@ -1,0 +1,271 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `release` profile [optimized + debuginfo] target(s) in 2m 01s
+     Running tests/collection_arity.rs (/tmp/claude-1000/t87c-target/release/deps/collection_arity-c954611e08c5f094)
+
+running 24 tests
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test every_exemption_says_why ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test every_row_is_sent_something_its_arity_needs ... ok
+test the_table_matches_the_three_sides ... ok
+test the_oracle_completes_every_send ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.91s
+
+     Running tests/dispatch_seam.rs (/tmp/claude-1000/t87c-target/release/deps/dispatch_seam-7dc15639217e8ef8)
+
+running 6 tests
+test the_seam_module_holds_one_struct_one_enum_and_one_function ... ok
+test the_seam_token_is_named_only_by_the_dispatch_module ... ok
+test the_protected_question_is_asked_only_inside_the_seam ... ok
+test heap_collect_is_called_from_collect_now_alone ... ok
+test the_scan_can_tell_a_present_token_from_an_absent_one ... ok
+test dispatch_passes_through_exactly_one_chokepoint ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/input_oracle.rs (/tmp/claude-1000/t87c-target/release/deps/input_oracle-34a1d59744772935)
+
+running 27 tests
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test a_file_console_counts_what_is_left ... ok
+test a_file_console_hands_a_command_what_is_unread ... ok
+test a_file_console_answers_queries_and_seeks ... ok
+test a_file_console_has_one_read_position ... ok
+test an_unreadable_console_is_end_of_input ... ok
+test a_command_moves_the_shared_read_position ... ok
+test command_line_arguments_and_the_console_agree_with_the_oracle ... ok
+
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.83s
+
+     Running tests/licensed_divergences.rs (/tmp/claude-1000/t87c-target/release/deps/licensed_divergences-1a5eeb8015a6b38e)
+
+running 22 tests
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test the_prose_rows_and_this_table_name_the_same_divergences ... ok
+test the_licensed_divergences_still_diverge_exactly_as_recorded ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+     Running tests/native_entries.rs (/tmp/claude-1000/t87c-target/release/deps/native_entries-22d1091a5c2bd58f)
+
+running 24 tests
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test every_family_has_a_program_and_every_program_has_a_family ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test no_family_program_is_a_corpus_row ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test the_implemented_entry_points_are_the_ones_the_plan_names ... ok
+test invoking_an_unimplemented_entry_point_is_loud_and_names_its_phase ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/standard_stream_reopen.rs (/tmp/claude-1000/t87c-target/release/deps/standard_stream_reopen-b295c75407f20953)
+
+running 2 tests
+test say_after_a_reopen_writes_every_line ... ok
+test a_reopened_standard_stream_keeps_its_writes_in_order ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/stdin_contention.rs (/tmp/claude-1000/t87c-target/release/deps/stdin_contention-9ba7c699f4caf6f1)
+
+running 1 test
+test readers_of_standard_input_are_served_as_the_oracles_are ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 25.43s
+
+     Running tests/stream_handle.rs (/tmp/claude-1000/t87c-target/release/deps/stream_handle-c43772cd2f062387)
+
+running 7 tests
+test a_second_open_opens_the_descriptor_again ... ok
+test the_stream_type_follows_the_invocation_once_opened ... ok
+test query_handle_after_open_answers_the_descriptor ... ok
+test handle_one_and_two_write_standard_output_and_error ... ok
+test handle_zero_reads_standard_input ... ok
+test an_append_stream_on_a_write_only_file_writes_at_the_end ... ok
+test another_descriptor_is_refused_loudly ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/stream_model.rs (/tmp/claude-1000/t87c-target/release/deps/stream_model-bef85aabf673daa0)
+
+running 26 tests
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test every_licensing_deviation_names_this_test ... ok
+test a_second_writer_leaves_the_line_cache_checks_quiet ... ok
+test on_the_oracle_the_generated_scenarios_part_only_where_the_deviations_say ... ok
+test the_model_answers_generated_scenarios_as_this_crate_does ... ok
+test the_model_answers_the_named_cases_as_this_crate_does ... ok
+test on_the_oracle_the_named_cases_part_only_where_listed ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.31s
+
+     Running tests/trace_indent.rs (/tmp/claude-1000/t87c-target/release/deps/trace_indent-616e855902dd3a25)
+
+running 23 tests
+test deviation_0_collapses_every_wrong_answer_this_file_holds ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test every_case_ships_all_three_files ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test every_case_matches_the_oracle ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running tests/trace_oracle.rs (/tmp/claude-1000/t87c-target/release/deps/trace_oracle-4deb172dd30bb35a)
+
+running 41 tests
+test every_trace_prefix_the_oracle_emits_has_a_witness ... ok
+test every_witness_still_emits_every_prefix_it_is_named_for ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+test the_prefix_table_reads_every_phase_subset_file ... ok
+test namespace_lookup_covers_the_class_resolution_line ... ok
+test dotvariable_beyond_the_list_covers_the_spec_correction ... ok
+test compound_read_write_covers_the_resolved_compound_name ... ok
+test call_arguments_covers_the_argument_prefix_at_every_position_shape ... ok
+test use_arg_alias_covers_the_alias_prefix_and_its_results_level_gate ... ok
+test exit_value_covers_the_exit_instructions_own_result_line ... ok
+test prefix_operators_covers_plus_and_backslash ... ok
+test parse_placeholder_covers_the_dummy_prefix_and_the_two_modes_disagreement ... ok
+test controlled_loop_covers_the_control_variables_own_value_lines ... ok
+test control_variable_novalue_covers_a_dropped_control_variable_under_a_trap ... ok
+test trace_labels_covers_the_labels_only_mode ... ok
+test function_call_covers_the_function_prefix_after_the_callees_own_lines ... ok
+test pull_queue_covers_the_line_reading_sources_in_both_modes ... ok
+test message_send_covers_the_message_result_line ... ok
+test keyword_while_covers_a_re_evaluated_keyword_across_every_pass ... ok
+test control_variable_reread_covers_a_body_that_writes_the_control_variable ... ok
+test trace_output_covers_clause_result_assignment_literal_variable_and_operator ... ok
+test every_live_witness_emits_its_prefix_and_is_run_by_the_corpus ... ok
+
+test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+

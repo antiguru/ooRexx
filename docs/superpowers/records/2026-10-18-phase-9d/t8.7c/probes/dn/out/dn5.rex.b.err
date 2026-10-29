@@ -1,0 +1,9 @@
+     5 *-* x = .withname~new
+       >E>   .WITHNAME => "The WITHNAME class"
+       >M>   "NEW" => "a WITHNAME"
+       >>>   "a WITHNAME"
+       >=>   X <= "a WITHNAME"
+     6 *-* trace off
+    13 *-* .plain~nosuch
+Error 97 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/dn/dn5.rex line 13:  Object method not found.
+Error 97.1:  Object "The PLAIN class" does not understand message "NOSUCH".

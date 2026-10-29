@@ -1,0 +1,7 @@
+second put same object
+  == called
+at same object
+  == called
+other object
+  == called
+1

@@ -1,0 +1,7 @@
+type UNKNOWN
+handle 
+chars 0
+lines 0
+open READY:
+exists STDIN
+qualify STDIN
