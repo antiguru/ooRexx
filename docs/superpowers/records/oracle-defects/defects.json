@@ -2038,5 +2038,20 @@
   "source": "Phase 9d Task 8.2 review Minor 6; Task 8.7b; ruled by Moritz 2026-10-28 (\"Follow rexxref, Deviation\")",
   "status": "open",
   "crate": "Follows rexxref (crates/rexx-exec/tests/delayed_trap_cases/crate)."
+ },
+ {
+  "id": "call-on-any-two-conditions-one-clause-segfaults",
+  "added": "2026-10-29",
+  "title": "USER and NOTREADY raised in one clause under one CALL ON ANY segfault",
+  "category": "crash",
+  "area": "conditions",
+  "severity": "crash",
+  "repro": "call on any name ha; x = ru('one') || linein('no_such_file_zz.txt') where ru raises USER U and ha returns (rust/corpus/oracle-crashes.txt entry 67)",
+  "oracle": "SIGSEGV, rc 139 (run once, Phase 9d Task 8.7b fix round 2 re-review).",
+  "expected": "The handler runs for USER; the later NOTREADY in that clause is ignored while ANY is delayed (condtra.xml).",
+  "cause": "",
+  "source": "Phase 9d Task 8.7b fix round 2 re-review",
+  "status": "open",
+  "crate": "Delivers USER and ignores the NOTREADY."
  }
 ]
