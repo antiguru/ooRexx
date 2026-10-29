@@ -843,3 +843,68 @@ fn a_command_moves_the_shared_read_position() {
         "the commands read on from each other"
     );
 }
+
+/// Positioning a transient stream is 93.958 (rexxref iostrms.xml:194-197),
+/// the first SEEK of one nothing has opened included: with standard input
+/// `/dev/null`, `.stream~new('STDIN')~seek('1')` raises it. The oracle tests
+/// `transient` before its implicit open sets it and answers `1` and
+/// `READY` there (t8.7c/probes/stdinq/q4.rex).
+#[test]
+fn the_first_seek_of_an_unopened_transient_stream_is_refused() {
+    let dir = fresh_run_dir();
+    let file = dir.join("transient-seek.rex");
+    fs::write(
+        &file,
+        "s = .stream~new('STDIN')\nsay 'seek' s~seek('1') s~state\nsay 'not reached'\n",
+    )
+    .unwrap_or_else(|e| panic!("cannot write {}: {e}", file.display()));
+    let rust = run_rust(&file, &[], None);
+    assert!(
+        rust.stdout.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&rust.stdout)
+    );
+    let stderr = String::from_utf8_lossy(&rust.stderr);
+    assert!(
+        stderr.ends_with("Error 93.958:  Positioning of transient streams is not valid.\n"),
+        "{stderr}"
+    );
+}
+
+/// The `corpus/unfiled.txt` programs whose oracle answer a ruling departs
+/// from, each run from a copy in a fresh directory with its `.stdin` sidecar,
+/// or `/dev/null`, as standard input: a debug pause's input read with every
+/// trap but SYNTAX's OFF
+/// (rexxref condtra.xml, Notes), and an APPEND stream's write position kept
+/// out of the file as it was opened (funct.xml, STREAM OPEN APPEND). The case
+/// file holds this crate's answers, the run directory written as `<dir>`.
+#[test]
+fn the_unfiled_ruled_programs_answer_as_this_crate_rules() {
+    let mut cases = 0;
+    datadriven::walk("tests/input_oracle", |file| {
+        file.run(|case| {
+            assert_eq!(case.directive, "run", "{}", case.directive);
+            cases += 1;
+            let program = case.input.trim();
+            let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../corpus")
+                .join(program);
+            let dir = fresh_run_dir();
+            let file = dir.join(source.file_name().expect("a program file"));
+            fs::copy(&source, &file)
+                .unwrap_or_else(|e| panic!("cannot copy {}: {e}", source.display()));
+            let stdin = fs::read(source.with_extension("stdin")).ok();
+            let rust = run_rust(&file, &[], stdin.as_deref());
+            let shown = dir.display().to_string();
+            let mut rendered = format!("rc> {}\n", rust.expect_exit_code());
+            for line in String::from_utf8_lossy(&rust.stdout).lines() {
+                rendered.push_str(&format!("out> {line}\n"));
+            }
+            for line in String::from_utf8_lossy(&rust.stderr).lines() {
+                rendered.push_str(&format!("err> {}\n", line.replace(&shown, "<dir>")));
+            }
+            rendered
+        });
+    });
+    assert!(cases > 0, "tests/input_oracle ran no case");
+}

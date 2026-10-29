@@ -123,7 +123,7 @@ fn copy(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let target = interp.string_value_text(receiver);
+    let target = interp.string_value_text(receiver)?;
     Err(Raised::copy_not_supported(&target).into())
 }
 

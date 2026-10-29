@@ -475,7 +475,9 @@ macro_rules! region_ops {
                     if !$self.tracing_intermediates() {
                         continue 'region_loop;
                     }
-                    $self.trace_call_arg($registers, *src);
+                    if let Err(failure) = $self.trace_call_arg($registers, *src) {
+                        break $cold Err(failure);
+                    }
                 }
                 Op::CallArgs {
                     slot,
@@ -552,7 +554,9 @@ macro_rules! region_ops {
                         break $cold Err(Loud::call_op_off_its_node().into());
                     };
                     let value = $registers.get(*src);
-                    $self.trace_intermediate($code, expr, value);
+                    if let Err(failure) = $self.trace_intermediate($code, expr, value) {
+                        break $cold Err(failure);
+                    }
                 }
                 // A send whose receiver and arguments ops of this region
                 // computed. Its body is behind a call for the reason
@@ -811,7 +815,9 @@ macro_rules! region_ops {
                         continue 'region_loop;
                     }
                     let value = $registers.get(*src);
-                    $self.echo_symbol_read($code, *symbol, value);
+                    if let Err(failure) = $self.echo_symbol_read($code, *symbol, value) {
+                        break $cold Err(failure);
+                    }
                 }
                 // **A native expression op**: one arithmetic
                 // operator applied to two registers, through
@@ -1558,7 +1564,9 @@ macro_rules! region_ops {
                      reserved"
                     );
                     let value = $registers.get(*src);
-                    $self.echo_header_value(*role, value);
+                    if let Err(failure) = $self.echo_header_value(*role, value) {
+                        break $cold Err(failure);
+                    }
                 }
                 // One header value's own validation, in front of
                 // the next value's evaluation because that order
@@ -1944,16 +1952,17 @@ impl Interp {
     /// One [`crate::ir::Op::TraceArgument`]'s `>A>` line, its gate already
     /// answered by the caller.
     #[inline(never)]
-    fn trace_call_arg(&mut self, registers: RegFrame<'_>, src: u16) {
+    fn trace_call_arg(&mut self, registers: RegFrame<'_>, src: u16) -> Result<(), Failure> {
         let indent = self.activity.clause_state.current_value_indent;
         if src == Op::ARG_OMITTED {
             self.trace_argument(indent, b"");
-            return;
+            return Ok(());
         }
         let value = registers.get(src);
-        if let Some(rendered) = self.intermediate_text(value) {
+        if let Some(rendered) = self.intermediate_text(value)? {
             self.trace_argument(indent, &rendered);
         }
+        Ok(())
     }
 
     /// One [`crate::ir::Op::CallArgs`]: resolve the callee, then run it over
@@ -2431,7 +2440,7 @@ impl Interp {
         if let Some(value) = sent
             && self.tracing_intermediates()
         {
-            self.trace_sent(chunk.send_name(site).unwrap_or_default(), value);
+            self.trace_sent(chunk.send_name(site).unwrap_or_default(), value)?;
         }
         if form == SendForm::Value {
             return Ok(sent.unwrap_or(ObjRef::NIL));
@@ -2453,13 +2462,14 @@ impl Interp {
     /// The `>M>` line a send of `name` that answered `value` owes.
     #[cold]
     #[inline(never)]
-    pub(crate) fn trace_sent(&mut self, name: &[u8], value: ObjRef) {
+    pub(crate) fn trace_sent(&mut self, name: &[u8], value: ObjRef) -> Result<(), Failure> {
         // Rooted across the rendering, which can run a `STRING` method.
         self.roots.activity_mut().push_temp(value);
-        if let Some(rendered) = self.intermediate_text(value) {
+        if let Some(rendered) = self.intermediate_text(value)? {
             let indent = self.activity.clause_state.current_value_indent;
             self.trace_message(indent, name, &rendered);
         }
+        Ok(())
     }
 
     /// One [`Op::List`]: the array of the `argc` values on top of the argument
@@ -2478,7 +2488,7 @@ impl Interp {
         let array =
             self.alloc_charged(rexx_core::BehaviourId::ARRAY, rexx_core::Body::array(slots));
         registers.set(dst, array);
-        if let Some(rendered) = self.result_text(array) {
+        if let Some(rendered) = self.result_text(array)? {
             let indent = self.activity.clause_state.current_value_indent;
             self.trace_result(indent, &rendered);
         }
@@ -2509,7 +2519,7 @@ impl Interp {
             Ok(true) => Ok(RegionEnd::At(clause_pc)),
             // A `DO`/`LOOP` header owes no boundary of its own, but the oracle
             // checks its traps after the header's pause as after any clause,
-            // so a condition the pause's read queued is delivered here.
+            // so a queued condition is delivered here.
             Ok(false)
                 if matches!(
                     clause.kind,

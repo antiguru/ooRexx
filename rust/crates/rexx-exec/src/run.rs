@@ -1784,7 +1784,7 @@ impl Interp {
         self.novalue_check(novalue, value)?;
         if self.tracing_intermediates() {
             let indent = self.activity.clause_state.current_value_indent;
-            let text = self.string_value_text(value);
+            let text = self.string_representation(value)?;
             self.trace_variable(indent, &spelling, &text, value);
         }
         Ok(value)
@@ -2052,7 +2052,7 @@ impl Interp {
             return match value {
                 Some(value) => {
                     let indent = self.activity.clause_state.current_value_indent;
-                    let rendered = self.result_text(value);
+                    let rendered = self.result_text(value)?;
                     if let Some(rendered) = &rendered {
                         self.trace_result(indent, rendered);
                     }
@@ -2094,7 +2094,7 @@ impl Interp {
                 // needs both: `results` is the weaker gate, true wherever
                 // `intermediates` is, so this renders for either line and
                 // drops neither.
-                let rendered = self.result_text(value);
+                let rendered = self.result_text(value)?;
                 if let Some(rendered) = &rendered {
                     self.trace_result(indent, rendered);
                 }
@@ -2356,7 +2356,7 @@ impl Interp {
         // the C++ and this is the shared call here.
         if let Some(value) = value {
             self.roots.activity_mut().push_temp(value);
-            if let Some(rendered) = self.result_text(value) {
+            if let Some(rendered) = self.result_text(value)? {
                 self.trace_result(self.activity.clause_state.current_value_indent, &rendered);
             }
         }
@@ -2416,7 +2416,7 @@ impl Interp {
                 if !self.heap.is_class(value) {
                     return Err(Raised::scope_override_not_a_class().into());
                 }
-                self.trace_forward_keyword("CLASS", value);
+                self.trace_forward_keyword("CLASS", value)?;
                 Some(value)
             }
         };
@@ -2456,7 +2456,7 @@ impl Interp {
         match sent {
             Some(value) => {
                 self.roots.activity_mut().push_temp(value);
-                if let Some(rendered) = self.result_text(value) {
+                if let Some(rendered) = self.result_text(value)? {
                     self.trace_result(indent, &rendered);
                 }
                 self.set_variable(frame, slot, value);
@@ -2486,19 +2486,20 @@ impl Interp {
     ) -> Result<ObjRef, Failure> {
         let value = self.eval(code, expr)?;
         self.roots.activity_mut().push_temp(value);
-        self.trace_forward_keyword(keyword, value);
+        self.trace_forward_keyword(keyword, value)?;
         Ok(value)
     }
 
     /// One `FORWARD` option's `>K>` line, for a caller that has to evaluate
     /// and trace at separate points.
-    fn trace_forward_keyword(&mut self, keyword: &str, value: ObjRef) {
-        let traced = self.string_value_text(value);
+    fn trace_forward_keyword(&mut self, keyword: &str, value: ObjRef) -> Result<(), Failure> {
+        let traced = self.string_representation(value)?;
         self.trace_keyword(
             self.activity.clause_state.current_value_indent,
             keyword,
             &traced,
         );
+        Ok(())
     }
 
     /// The argument list a `FORWARD` sends, into a borrowed buffer so that
@@ -2682,7 +2683,7 @@ impl Interp {
     ) -> Result<Flow, Failure> {
         if let Some(value) = value {
             self.roots.activity_mut().push_temp(value);
-            if let Some(rendered) = self.result_text(value) {
+            if let Some(rendered) = self.result_text(value)? {
                 self.trace_result(self.activity.clause_state.current_value_indent, &rendered);
             }
         }
@@ -2792,7 +2793,7 @@ impl Interp {
         // `intermediates`, and `results` is true wherever `intermediates` is.
         // Guarding on `intermediates` instead would drop the `>>>` line under
         // `TRACE R`.
-        let rendered = self.result_text(value);
+        let rendered = self.result_text(value)?;
         if let Some(rendered) = &rendered {
             // **The entry gate, not just the setting in force.** An assignment
             // whose expression turned tracing on owes no `>>>`, because the
@@ -2963,7 +2964,11 @@ impl Interp {
                         }
                         None => None,
                     };
-                    if let Some(shown) = evaluated.and_then(|value| self.result_text(value)) {
+                    if let Some(shown) = evaluated
+                        .map(|value| self.result_text(value))
+                        .transpose()?
+                        .flatten()
+                    {
                         self.trace_result(indent, &shown);
                     } else if evaluated.is_none() {
                         self.trace_result(indent, b"");
@@ -2980,7 +2985,7 @@ impl Interp {
                     self.send_message(receiver, &setter, scope, &values, caller)
                 )?;
                 if let Some(answer) = answer
-                    && let Some(shown) = self.intermediate_text(answer)
+                    && let Some(shown) = self.intermediate_text(answer)?
                 {
                     self.trace_assignment(indent, &setter, &shown, answer);
                 }

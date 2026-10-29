@@ -83,7 +83,7 @@ impl Surface for Interp {
         additional: Option<ObjRef>,
         result: Option<ObjRef>,
     ) {
-        let description = description.map(|text| self.string_value_text(text));
+        let description = description.map(|text| self.unsent_string_value_text(text));
         let raised = Raised {
             description,
             ..Raised::condition(Cow::Owned(String::from_utf8_lossy(name).into_owned()))
@@ -121,7 +121,7 @@ impl Surface for Interp {
         };
         let condition = self.condition_entry(object, b"CONDITION");
         if condition
-            .map(|name| self.string_value_text(name))
+            .map(|name| self.unsent_string_value_text(name))
             .as_deref()
             != Some(b"SYNTAX")
         {
@@ -132,7 +132,7 @@ impl Surface for Interp {
         // `Error_Interpretation / 1000` where `RC` is not a number.
         self.condition_entry(object, b"RC")
             .and_then(|rc| {
-                std::str::from_utf8(&self.string_value_text(rc))
+                std::str::from_utf8(&self.unsent_string_value_text(rc))
                     .ok()?
                     .trim()
                     .parse()
@@ -982,7 +982,7 @@ impl Interp {
                 .unwrap_or_default();
             for line in lines.into_iter().flatten() {
                 if line != ObjRef::NIL {
-                    report.extend_from_slice(&self.string_value_text(line));
+                    report.extend_from_slice(&self.unsent_string_value_text(line));
                     report.push(b'\n');
                 }
             }
@@ -990,7 +990,7 @@ impl Interp {
         let entry = |interp: &mut Interp, name: &[u8]| {
             interp
                 .condition_entry(object, name)
-                .map(|value| interp.string_value_text(value))
+                .map(|value| interp.unsent_string_value_text(value))
         };
         let rc = entry(self, b"RC").unwrap_or_default();
         report.extend_from_slice(b"Error ");

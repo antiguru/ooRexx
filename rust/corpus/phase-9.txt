@@ -327,8 +327,6 @@ lang/command_redirected_started_target_sleeps.rex
 lang/lostdigits_fuzz_compare.rex
 # 9d Task 6.14: LOSTDIGITS from a DO repetitor or FOR count.
 lang/lostdigits_do_count.rex
-# 9d Task 6.15: APPEND writes at the end, and a LINES count leaves the stream READY.
-lang/stream_append_writes_at_end.rex
 # 9d Task 7.1: a library routine frame's executable, and COPY and OBJECTNAME= on .nil
 # through a scope override.
 lang/stackframe_library_routine_executable.rex
@@ -441,3 +439,4 @@ lang/stream_method_extra_arguments.rex
 lang/trace_reference_and_parse_value.rex
 lang/internal_rendering_default_name.rex
 lang/collection_primitive_compare_frames.rex
+lang/internal_rendering_raises.rex

@@ -67,6 +67,12 @@ const CRATE_RUN_LIMIT: std::time::Duration = std::time::Duration::from_secs(120)
 /// one), the rule, and the oracle's first item that differs. [`oracle_rule`] must name the same rule from the answers.
 const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
     (
+        "append-extent",
+        0,
+        "append-extent",
+        "S_=1_write=1 READY 1 1",
+    ),
+    (
         "charin-bounds",
         62,
         "charin-eof-notready",
@@ -903,6 +909,22 @@ fn oracle_rule(
                 == model.write.parse::<i64>().ok().map(|w| w - 1) =>
         {
             Some((60, "ctrlz-is-data"))
+        }
+        "S" | "P" | "CO" | "CP" | "LO" | "LP"
+            if appending
+                && model.state == "NOTREADY"
+                && oracle.state != "NOTREADY"
+                && !(write_only && line_numbered && !opened.contains("binary"))
+                && match words[0] {
+                    "S" | "P" => {
+                        !op.contains("read")
+                            && oracle.result.parse::<i64>().is_ok_and(|landed| landed >= 1)
+                    }
+                    "CO" | "LO" => words.len() > 2,
+                    _ => true,
+                } =>
+        {
+            Some((0, "append-extent"))
         }
         "LO" | "LE"
             if appending

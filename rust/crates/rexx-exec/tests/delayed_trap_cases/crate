@@ -280,8 +280,32 @@ rc> 0
 out> ha 1 USER U one
 out> after a, m = 1
 
-# a condition the debug pause's input read raises while its trap is
-# delayed is dropped: traps are OFF while that input is processed
+# an internal routine's own CALL ON NOTREADY is not delayed by the NOTREADY
+# its caller's clause queued: a trap the routine sets is its own
+program
+call on notready name hn
+m = 0
+x = linein('no_such_file_zz.txt') || rn()
+say 'after a, m =' m
+exit
+rn:
+  call on notready name hn
+  y = linein('no_such_file_zz2.txt')
+  say 'rn after its linein'
+  return y
+hn:
+  m = m + 1
+  say 'hn' m condition('c') condition('d')
+  return
+----
+rc> 0
+out> hn 1 NOTREADY no_such_file_zz2.txt
+out> rn after its linein
+out> hn 2 NOTREADY no_such_file_zz.txt
+out> after a, m = 2
+
+# a condition the debug pause's input read raises takes its default
+# action: every trap but SYNTAX's is OFF while that input is processed
 program
 .local~debuginput = .src~new
 .local~reads = 0
@@ -304,34 +328,49 @@ h:
 ----
 rc> 0
 out> linein 1
+out> after 0
 out> linein 2
-out> linein 3
-out> h 1 from input
-out> linein 4
-out> after 1
-out> linein 5
-out> linein 6
-out> linein 7
-out> h 2 from input
-out> linein 8
 err>        +++ "LINUX COMMAND /t.rex"
 err>      6 *-* nop
 err> +++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
-err>      9 *-*   h:
-err>     10 *-*   n = n + 1
-err>        >>>     "1"
-err>     11 *-*   say 'h' n condition('d')
-err>        >>>     "h 1 from input"
-err>     12 *-*   return
 err>      7 *-* say 'after' n
-err>        >>>   "after 1"
-err>      9 *-*   h:
-err>     10 *-*   n = n + 1
-err>        >>>     "2"
-err>     11 *-*   say 'h' n condition('d')
-err>        >>>     "h 2 from input"
-err>     12 *-*   return
+err>        >>>   "after 0"
 err>      8 *-* exit
+
+# a SYNTAX condition the debug pause's input read raises is still trapped
+program
+.local~debuginput = .src~new
+.local~reads = 0
+signal on syntax name s
+trace ?r
+nop
+say 'not reached'
+exit
+s:
+  trace off
+  say 's' condition('o')~code condition('o')~message
+  exit
+::class src
+::method linein
+  .local~reads = .local~reads + 1
+  say 'linein' .local~reads
+  if .local~reads > 1 then return ''
+  raise syntax 98.900 array('from input') return ''
+----
+rc> 0
+out> linein 1
+out> linein 2
+out> linein 3
+out> s 98.900 from input.
+out> linein 4
+err>        +++ "LINUX COMMAND /t.rex"
+err>      5 *-* nop
+err> +++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+err>      8 *-* s:
+err>      9 *-* trace off
+err>     10 *-* say 's' condition('o')~code condition('o')~message
+err>        >>>   "s 98.900 from input."
+err>     11 *-* exit
 
 # ERROR and FAILURE raised again are ignored, and a FAILURE does not
 # become an ERROR

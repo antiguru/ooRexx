@@ -335,7 +335,7 @@ pub(super) fn positive_index(
     match whole_index(interp, value)? {
         Some(index) => Ok(index),
         None => {
-            let found = interp.string_value_text(value);
+            let found = interp.string_value_text(value)?;
             Err(Raised::method_argument_not_positive(position, &found).into())
         }
     }
@@ -355,7 +355,7 @@ fn position_index(
     match whole_index(interp, value)? {
         Some(index) => Ok(index),
         None => {
-            let found = interp.string_value_text(value);
+            let found = interp.string_value_text(value)?;
             Err(Raised::invalid_position(&found).into())
         }
     }
@@ -661,7 +661,7 @@ fn array_size_argument(
         Some(size) if size <= MAX_FIXED_ARRAY_SIZE => Ok(size),
         Some(_) => Err(Raised::array_too_big(MAX_FIXED_ARRAY_SIZE).into()),
         None => {
-            let found = interp.string_value_text(value);
+            let found = interp.string_value_text(value)?;
             Err(Raised::argument_not_non_negative(position, &found).into())
         }
     }
@@ -731,6 +731,6 @@ pub(super) fn native_array_make_string(
     // `makeString` with no arguments is what a string context asks an array
     // for, so the two must not be able to disagree about an empty slot or
     // about a nested array's rendering.
-    let out = interp.array_string(&slots, &separator);
+    let out = interp.array_string(&slots, &separator)?;
     Ok(Some(interp.text_built(out)))
 }

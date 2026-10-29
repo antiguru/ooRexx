@@ -170,26 +170,6 @@ impl Interp {
         }
     }
 
-    /// Drops each condition queued since `queued` whose trap is delayed.
-    #[cold]
-    #[inline(never)]
-    pub(crate) fn drop_queued_for_delayed(&mut self, queued: usize) {
-        let mut row = queued;
-        while row < self.activity.pending_traps.len() {
-            let pending = &self.activity.pending_traps[row];
-            let delayed = !pending.request
-                && pending.trace_failure.is_none()
-                && self
-                    .trap_for(&pending.condition)
-                    .is_some_and(|trap| trap.delayed);
-            if delayed {
-                self.activity.pending_traps.remove(row);
-            } else {
-                row += 1;
-            }
-        }
-    }
-
     /// Holds `pending`, whose trap is delayed, for the innermost delayed trap
     /// it matches; a condition [`ignored_while_delayed`] is dropped instead.
     #[cold]
@@ -490,9 +470,9 @@ impl Interp {
         }
         self.lostdigits_fuzz_raise(
             left,
-            |interp| interp.string_value_text(left_value),
+            |interp| interp.unsent_string_value_text(left_value),
             right,
-            |interp| interp.string_value_text(right_value),
+            |interp| interp.unsent_string_value_text(right_value),
             fuzz,
         )
     }
@@ -548,7 +528,7 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn lostdigits_raise(&mut self, operand: &Number, value: ObjRef) -> Result<(), Failure> {
-        self.lostdigits_raise_with(operand, |interp| interp.string_value_text(value))
+        self.lostdigits_raise_with(operand, |interp| interp.unsent_string_value_text(value))
     }
 
     /// The operand's own digit count, then the trap, then the per-activation
@@ -1097,22 +1077,28 @@ impl Interp {
     /// where `CALL ON ANY` takes it, any condition that trap took. An internal
     /// routine inherits its caller's DELAY state (rexxref condtra.xml, Notes:
     /// the state of each trap is saved on entry to a subroutine), so one
-    /// queued at a caller its internal calls reach counts too.
+    /// queued at a caller its internal calls reach counts too, while the
+    /// routine's trap is still the one it inherited: a trap it set itself is
+    /// not delayed by its caller's.
     fn notready_trap_delayed_at(&self, activation: crate::activation::ActivationId) -> bool {
         if self.activity.pending_traps.is_empty() {
             return false;
         }
-        let mut inheriting = true;
-        let chain: Vec<crate::activation::ActivationId> = self
+        let frames: Vec<&crate::activation::Activation> = self
             .frames()
             .skip_while(|frame| frame.id != activation)
-            .take_while(|frame| {
-                let take = inheriting;
-                inheriting = frame.entry == crate::activation::Entry::InternalCall;
-                take
-            })
-            .map(|frame| frame.id)
             .collect();
+        let mut chain = Vec::new();
+        for (at, frame) in frames.iter().enumerate() {
+            chain.push(frame.id);
+            let inherited = frame.entry == crate::activation::Entry::InternalCall
+                && frames
+                    .get(at + 1)
+                    .is_some_and(|caller| same_notready_trap(frame, caller));
+            if !inherited {
+                break;
+            }
+        }
         let traps = self.trap_frame().map(|frame| &frame.traps);
         let by_any = traps.is_some_and(|traps| traps.get(b"NOTREADY".as_slice()).is_none());
         self.activity.pending_traps.iter().any(|pending| {
@@ -1181,7 +1167,7 @@ impl Interp {
                 // object and `rc->requestString()` (`:193`) is what becomes the
                 // code. Measured, `trace i` over `raise syntax (1,2)`:
                 // `>K>   "SYNTAX" => "an Array"`.
-                let traced = self.string_value_text(value);
+                let traced = self.string_representation(value)?;
                 let keyword = String::from_utf8_lossy(&raise.condition).into_owned();
                 self.trace_keyword(indent, &keyword, &traced);
                 Some(self.to_text(value).to_vec())
@@ -1200,7 +1186,7 @@ impl Interp {
             // the same split the `rc` keyword above takes. Measured,
             // `trace i` over `raise syntax 93.900 description (1,2)
             // additional 'x'`: `>K>   "DESCRIPTION" => "an Array"`.
-            let traced = self.string_value_text(value);
+            let traced = self.string_representation(value)?;
             self.trace_keyword(indent, "DESCRIPTION", &traced);
             description = Some(self.to_text(value).to_vec());
         }
@@ -1243,7 +1229,7 @@ impl Interp {
             // The object on the line, the same split the two keywords above
             // take. Measured, `trace i` over `raise syntax 93.900 additional
             // (1,2)`: `>K>   "ADDITIONAL" => "an Array"`.
-            let traced = self.string_value_text(value);
+            let traced = self.string_representation(value)?;
             self.trace_keyword(indent, "ADDITIONAL", &traced);
             if converted && slots.is_none() {
                 // `requestArray`, a string's lines included, and 98.939 for
@@ -1263,7 +1249,7 @@ impl Interp {
                 Some(slots) => {
                     for slot in slots {
                         additional.push(match slot {
-                            Some(item) => self.string_value_text(item),
+                            Some(item) => self.string_value_text(item)?,
                             None => Vec::new(),
                         });
                     }
@@ -1317,9 +1303,12 @@ impl Interp {
                 // (.environment)` and `array (.array, 'b')` are all rc 216
                 // and byte-identical here. A check on this arm refused all
                 // three.
-                let rendered = self.string_value_text(value);
-                self.trace_argument(indent, &rendered);
-                self.trace_argument(indent, &rendered);
+                let rendered = self.string_value_text(value)?;
+                if self.traced_mode().intermediates {
+                    let traced = self.string_representation(value)?;
+                    self.trace_argument(indent, &traced);
+                    self.trace_argument(indent, &traced);
+                }
                 additional.push(rendered);
             }
             // The condition object's `ADDITIONAL` is the array of the items
@@ -1484,7 +1473,7 @@ impl Interp {
             None if name.as_ref() == b"NOMETHOD" => {
                 let mut raised = match (self.activity.pending_additional.take(), description) {
                     (Some(receiver), description) => {
-                        let receiver = self.string_value_text(receiver);
+                        let receiver = self.string_value_text(receiver)?;
                         Raised::no_method(&receiver, &description.unwrap_or_default())
                     }
                     (None, _) => Raised::syntax(97, 5, Vec::new()),
@@ -1511,7 +1500,7 @@ impl Interp {
         };
         let value = self.eval(code, expr)?;
         self.roots.activity_mut().push_temp(value);
-        if let Some(rendered) = self.result_text(value) {
+        if let Some(rendered) = self.result_text(value)? {
             let indent = self.activity.clause_state.current_value_indent;
             self.trace_keyword(indent, "RESULT", &rendered);
         }
@@ -1699,7 +1688,7 @@ impl Interp {
                     object.and_then(|object| self.condition_entry_held(object, b"ADDITIONAL"));
                 let mut raised = match (receiver, raised.description.clone()) {
                     (Some(receiver), Some(description)) => {
-                        let receiver = self.string_value_text(receiver);
+                        let receiver = self.string_value_text(receiver)?;
                         Raised::no_method(&receiver, &description)
                     }
                     _ => Raised::syntax(97, 5, Vec::new()),
@@ -1877,4 +1866,23 @@ fn call_on_any_takes(condition: &[u8]) -> bool {
 /// condition but `SYNTAX` goes untrapped (`RexxActivation.cpp:2475`, `:2600`).
 fn ignored_in_debug_pause(frame: &crate::activation::Activation, condition: &[u8]) -> bool {
     frame.flags.debug_pause() && condition != b"SYNTAX"
+}
+
+/// Whether `frame` takes `NOTREADY` by the very trap `caller` does, the one
+/// it inherited on entry: each `CALL ON` or `SIGNAL ON` makes a new label.
+fn same_notready_trap(
+    frame: &crate::activation::Activation,
+    caller: &crate::activation::Activation,
+) -> bool {
+    fn in_force(activation: &crate::activation::Activation) -> Option<&std::rc::Rc<[u8]>> {
+        let traps = &activation.traps;
+        traps
+            .get(b"NOTREADY".as_slice())
+            .or_else(|| traps.get(b"ANY".as_slice()))
+            .map(|trap| &trap.label)
+    }
+    match (in_force(frame), in_force(caller)) {
+        (Some(own), Some(inherited)) => std::rc::Rc::ptr_eq(own, inherited),
+        _ => false,
+    }
 }

@@ -305,7 +305,9 @@ impl Interp {
         match redirect {
             Redirect::StemDefault(default) => return self.text_len_inner(default),
             Redirect::StemSubclass(store) => return self.stem_subclass_text_len(store),
-            Redirect::VarRefValue(referenced) => return self.string_value_text(referenced).len(),
+            Redirect::VarRefValue(referenced) => {
+                return self.unsent_string_value_text(referenced).len();
+            }
             Redirect::VarRefUnset => return self.unset_reference_name(value).len(),
             // Built rather than measured off the object, because an array's
             // string value exists nowhere until something asks for it -- the
@@ -373,15 +375,36 @@ impl Interp {
     /// (`classes/ArrayClass.cpp:1856`), which `ArrayClass::makeString`
     /// forwards to with no arguments (`classes/ArrayClass.cpp:1841`) and which
     /// is therefore also what a string context asks an array for, at the
-    /// platform line ending.
-    pub(crate) fn array_string(&mut self, items: &[Option<ObjRef>], separator: &[u8]) -> Vec<u8> {
+    /// platform line ending. A condition an item's rendering raises ends the
+    /// join.
+    pub(crate) fn array_string(
+        &mut self,
+        items: &[Option<ObjRef>],
+        separator: &[u8],
+    ) -> Result<Vec<u8>, Failure> {
         let mut out = Vec::new();
         let mut first = true;
         for item in items.iter().filter_map(|item| *item) {
             if !first {
                 out.extend_from_slice(separator);
             }
-            let bytes = self.string_value_text(item);
+            let bytes = self.string_value_text(item)?;
+            out.extend_from_slice(&bytes);
+            first = false;
+        }
+        Ok(out)
+    }
+
+    /// [`Interp::array_string`] with nothing sent, for a rendering that cannot
+    /// raise.
+    fn unsent_array_string(&mut self, items: &[Option<ObjRef>], separator: &[u8]) -> Vec<u8> {
+        let mut out = Vec::new();
+        let mut first = true;
+        for item in items.iter().filter_map(|item| *item) {
+            if !first {
+                out.extend_from_slice(separator);
+            }
+            let bytes = self.unsent_string_value_text(item);
             out.extend_from_slice(&bytes);
             first = false;
         }
@@ -395,18 +418,80 @@ impl Interp {
     /// (`StemClass::stringValue`); an instance or class whose `OBJECTNAME`
     /// or `DEFAULTNAME` is a method of its own is sent it, as
     /// `RexxObject::stringValue` sends `OBJECTNAME`
-    /// (`classes/ObjectClass.cpp:1157`). A send that fails renders the
-    /// default name.
+    /// (`classes/ObjectClass.cpp:1157`), and a condition the send raises is
+    /// the rendering's.
     #[inline(never)]
-    pub(crate) fn string_value_text(&mut self, value: ObjRef) -> Vec<u8> {
-        // Called through a pointer the optimiser cannot see through, so the
-        // sends it may make stay out of what is inferred for callers that
-        // render only on a failure: measured by callgrind, a direct call costs
-        // `parse` +0.10% and `decloop` +0.08%.
-        let object: fn(&mut Interp, ObjRef) -> Option<Vec<u8>> =
+    pub(crate) fn string_value_text(&mut self, value: ObjRef) -> Result<Vec<u8>, Failure> {
+        // Called through a pointer the optimiser cannot see through: measured
+        // by callgrind, a direct call costs `parse` +0.10% and `decloop`
+        // +0.08%.
+        let object: fn(&mut Interp, ObjRef) -> Result<Option<Vec<u8>>, Failure> =
             std::hint::black_box(Interp::object_string_value_text);
-        if let Some(text) = object(self, value) {
-            return text;
+        if let Some(text) = object(self, value)? {
+            return Ok(text);
+        }
+        Ok(self.default_string_value_text(value))
+    }
+
+    /// What `value~string` answers, as text: the string representation a
+    /// TRACE line shows a non-string result by (rexxref instrc.xml, TRACE),
+    /// and for a stem its default's (intro.xml, Stems). An object whose
+    /// `STRING` is not `Object`'s is sent it; anything else renders as
+    /// [`Interp::string_value_text`].
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn string_representation(&mut self, value: ObjRef) -> Result<Vec<u8>, Failure> {
+        let (object, stem) = match self.heap.get(value).map(|object| &object.body) {
+            Some(Body::Instance { .. }) => (true, false),
+            Some(Body::Class { .. }) => (true, false),
+            Some(Body::Stem { .. }) => (false, true),
+            _ => (false, false),
+        };
+        if object && self.overrides_object_method(value, crate::dispatch::STRING) {
+            return match self.send_for_conversion(value, crate::dispatch::STRING)? {
+                Some(answered) => Ok(self.default_string_value_text(answered)),
+                None => Ok(self.default_string_value_text(value)),
+            };
+        }
+        let store = match (object, stem) {
+            (_, true) => Some(value),
+            (true, _) => self.stem_subclass_store(value),
+            _ => None,
+        };
+        match store {
+            Some(store) => self.stem_string_representation(store),
+            None => self.string_value_text(value),
+        }
+    }
+
+    /// The stem `store`'s `STRING`: the string representation of the value
+    /// its chain of defaults and references ends at.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn stem_string_representation(&mut self, store: ObjRef) -> Result<Vec<u8>, Failure> {
+        match self.chain_end(store) {
+            Referent::Value(end) if end != store => self.string_representation(end),
+            _ => self.stem_string_value_text(store),
+        }
+    }
+
+    /// [`Interp::string_value_text`] with nothing sent, for a rendering that
+    /// cannot raise: a stem renders as its default, anything else as
+    /// [`Interp::default_string_value_text`].
+    pub(crate) fn unsent_string_value_text(&mut self, value: ObjRef) -> Vec<u8> {
+        if matches!(
+            self.heap.get(value).map(|object| &object.body),
+            Some(Body::Stem {
+                default: Some(_),
+                ..
+            })
+        ) {
+            return match self.chain_end(value) {
+                Referent::Value(end) if end != value => self.unsent_string_value_text(end),
+                Referent::Value(_) => self.default_string_value_text(value),
+                Referent::Unset(last) => self.unset_name(last, value).to_vec(),
+                Referent::Cycle => self.stem_name(value).unwrap_or_default().to_vec(),
+            };
         }
         self.default_string_value_text(value)
     }
@@ -415,13 +500,16 @@ impl Interp {
     /// `None` where the default rendering answers.
     #[cold]
     #[inline(never)]
-    fn object_string_value_text(&mut self, value: ObjRef) -> Option<Vec<u8>> {
-        match &self.heap.get(value)?.body {
+    fn object_string_value_text(&mut self, value: ObjRef) -> Result<Option<Vec<u8>>, Failure> {
+        let Some(object) = self.heap.get(value) else {
+            return Ok(None);
+        };
+        match &object.body {
             Body::Stem {
                 default: Some(_), ..
-            } => Some(self.stem_string_value_text(value)),
+            } => self.stem_string_value_text(value).map(Some),
             Body::Instance { .. } | Body::Class { .. } => self.sent_string_value(value),
-            _ => None,
+            _ => Ok(None),
         }
     }
 
@@ -429,31 +517,32 @@ impl Interp {
     /// the value its chain of defaults and references ends at.
     #[cold]
     #[inline(never)]
-    pub(crate) fn stem_string_value_text(&mut self, store: ObjRef) -> Vec<u8> {
-        match self.chain_end(store) {
-            Referent::Value(end) if end != store => self.string_value_text(end),
+    pub(crate) fn stem_string_value_text(&mut self, store: ObjRef) -> Result<Vec<u8>, Failure> {
+        Ok(match self.chain_end(store) {
+            Referent::Value(end) if end != store => return self.string_value_text(end),
             Referent::Value(_) => self.default_string_value_text(store),
             Referent::Unset(last) => self.unset_name(last, store).to_vec(),
             Referent::Cycle => self.stem_name(store).unwrap_or_default().to_vec(),
-        }
+        })
     }
 
     /// The rendering `RexxObject::stringValue` sends for: an instance or
     /// class's `OBJECTNAME` where that is a method of its own, else its
     /// `DEFAULTNAME` where it has no name set and that is; `None` where
-    /// neither is sent. A `Stem` subclass instance renders as its stem.
+    /// neither is sent. A `Stem` subclass instance renders as its stem. The
+    /// answer renders as the primitive `OBJECTNAME` renders it.
     #[cold]
     #[inline(never)]
-    fn sent_string_value(&mut self, value: ObjRef) -> Option<Vec<u8>> {
+    fn sent_string_value(&mut self, value: ObjRef) -> Result<Option<Vec<u8>>, Failure> {
         if let Some(store) = self.stem_subclass_store(value) {
-            return Some(self.stem_string_value_text(store));
+            return self.stem_string_value_text(store).map(Some);
         }
-        let named = match &self.heap.get(value)?.body {
-            Body::Instance {
+        let named = match self.heap.get(value).map(|object| &object.body) {
+            Some(Body::Instance {
                 native: None, name, ..
-            } => name.is_some(),
-            Body::Class { .. } => self.classes().set_name(value).is_some(),
-            _ => return None,
+            }) => name.is_some(),
+            Some(Body::Class { .. }) => self.classes().set_name(value).is_some(),
+            _ => return Ok(None),
         };
         // The primitive `OBJECTNAME` sends `DEFAULTNAME` under a level of its
         // own, which a `stackFrames` read in it lists.
@@ -462,18 +551,22 @@ impl Interp {
         } else if !named && self.answers_by_method(value, crate::dispatch::DEFAULTNAME) {
             true
         } else {
-            return None;
+            return Ok(None);
         };
         let answered = match leveled {
-            true => self.primitive_level(value, crate::dispatch::OBJECTNAME, &[], |interp| {
-                interp.send_for_conversion(value, crate::dispatch::DEFAULTNAME)
-            }),
-            false => self.send_for_conversion(value, crate::dispatch::OBJECTNAME),
+            true => {
+                let sent =
+                    self.primitive_level(value, crate::dispatch::OBJECTNAME, &[], |interp| {
+                        interp.send_for_conversion(value, crate::dispatch::DEFAULTNAME)
+                    });
+                if sent.is_err() {
+                    self.blame_native_method(crate::dispatch::OBJECTNAME, "Object", value, &[]);
+                }
+                sent?
+            }
+            false => self.send_for_conversion(value, crate::dispatch::OBJECTNAME)?,
         };
-        match answered {
-            Ok(Some(answered)) => Some(self.to_text(answered).into_owned()),
-            Ok(None) | Err(_) => None,
-        }
+        Ok(answered.map(|answered| self.default_string_value_text(answered)))
     }
 
     /// [`Interp::string_value_text`] with nothing sent: the rendering the
@@ -576,15 +669,15 @@ impl Interp {
         Some(self.array_slots(value)?.to_vec())
     }
 
-    /// [`array_string`] for an array named by its handle, whose items it looks
-    /// up itself.
+    /// [`Interp::unsent_array_string`] for an array named by its handle, whose
+    /// items it looks up itself.
     fn array_string_of(&mut self, value: ObjRef) -> Vec<u8> {
         // Unreachable as `None`: every caller has just read `Redirect::Array`
         // off this handle's own body, or -- `heap_to_number`'s, which does not
         // go through `Redirect` at all -- has just matched `Body::Array`. An
         // array of no items renders empty, which is what that answers.
         let items = self.array_slots_of(value).unwrap_or_default();
-        self.array_string(&items, b"\n")
+        self.unsent_array_string(&items, b"\n")
     }
 
     #[allow(
@@ -646,7 +739,7 @@ impl Interp {
             // an instance whose class defines `makeString`, `say 'p' >k` is
             // the default name where `say 'p' k` runs the method.
             Redirect::VarRefValue(referenced) => {
-                return Cow::Owned(self.string_value_text(referenced));
+                return Cow::Owned(self.unsent_string_value_text(referenced));
             }
             // A variable holding nothing reads as its own derived name,
             // which for a simple or stem symbol is the reference's own
@@ -1511,7 +1604,7 @@ impl Interp {
     fn stem_subclass_text(&mut self, store: ObjRef) -> Vec<u8> {
         let chain = self.chain_from(Some(store));
         match chain.end {
-            Referent::Value(end) if chain.through_reference => self.string_value_text(end),
+            Referent::Value(end) if chain.through_reference => self.unsent_string_value_text(end),
             Referent::Value(end) => self.to_text(end).into_owned(),
             Referent::Unset(last) => self.unset_name(last, store).to_vec(),
             Referent::Cycle => self.stem_name(store).unwrap_or_default().to_vec(),
@@ -1525,7 +1618,9 @@ impl Interp {
     fn stem_subclass_text_len(&mut self, store: ObjRef) -> usize {
         let chain = self.chain_from(Some(store));
         match chain.end {
-            Referent::Value(end) if chain.through_reference => self.string_value_text(end).len(),
+            Referent::Value(end) if chain.through_reference => {
+                self.unsent_string_value_text(end).len()
+            }
             Referent::Value(end) => self.text_len_inner(end),
             Referent::Unset(last) => self.unset_name(last, store).len(),
             Referent::Cycle => self.stem_name(store).map_or(0, <[u8]>::len),

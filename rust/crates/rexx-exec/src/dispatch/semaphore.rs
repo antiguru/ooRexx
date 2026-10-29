@@ -200,7 +200,7 @@ fn timeout_seconds(
     // refusal names the object: measured, oracle rc 168, 88.902 `found "a
     // SN"`.
     let bytes = if text == ObjRef::NIL && seconds != ObjRef::NIL {
-        interp.string_value_text(seconds)
+        interp.string_value_text(seconds)?
     } else {
         interp.to_text(text).into_owned()
     };

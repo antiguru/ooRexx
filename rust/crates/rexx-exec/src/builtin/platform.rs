@@ -299,7 +299,7 @@ fn whole_number(
     if let Some(number) = rexxutil::stems::whole_value(interp, value, -MAX_WHOLENUMBER)? {
         return Ok(number);
     }
-    let found = interp.string_value_text(value);
+    let found = interp.string_value_text(value)?;
     Err(rexxutil::marshalled(Raised::native_argument_out_of_range(
         &position.to_string(),
         -MAX_WHOLENUMBER,

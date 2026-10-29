@@ -1610,7 +1610,7 @@ impl Interp {
     ) -> Result<ObjRef, Failure> {
         let argument = self.eval(code, expr)?;
         self.roots.activity_mut().push_temp(argument);
-        if let Some(rendered) = self.intermediate_text(argument) {
+        if let Some(rendered) = self.intermediate_text(argument)? {
             self.trace_argument(self.activity.clause_state.current_value_indent, &rendered);
         }
         Ok(argument)
@@ -1743,7 +1743,7 @@ impl Interp {
                 // The caller's own `>>>`, at the `CALL` clause's indent --
                 // `base_indent`, saved before the callee overwrote
                 // `current_value_indent` with its own clauses'.
-                if let Some(rendered) = self.result_text(value) {
+                if let Some(rendered) = self.result_text(value)? {
                     self.trace_result(base_indent, &rendered);
                 }
                 self.set_variable(frame, slot, value);

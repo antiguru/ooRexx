@@ -1736,7 +1736,15 @@ impl Host for Interp {
     }
 
     fn string_value_text(&mut self, object: ObjRef) -> Vec<u8> {
-        Interp::string_value_text(self, object)
+        match Interp::string_value_text(self, object) {
+            Ok(text) => text,
+            Err(failure) => {
+                if !self.activity.native_handles.is_empty() {
+                    self.hold_native_condition(failure);
+                }
+                self.unsent_string_value_text(object)
+            }
+        }
     }
 
     fn receiver(&mut self) -> ObjRef {
@@ -1909,10 +1917,10 @@ impl Interp {
                 self.send_message(object, super::OBJECTNAME, None, &[], caller)
             {
                 self.roots.activity_mut().push_temp(answered);
-                return self.string_value_text(answered);
+                return self.unsent_string_value_text(answered);
             }
         }
-        self.string_value_text(object)
+        self.unsent_string_value_text(object)
     }
 
     /// `requestString` for a native argument, holding a raised condition on

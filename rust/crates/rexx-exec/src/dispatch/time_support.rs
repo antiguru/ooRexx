@@ -292,7 +292,7 @@ fn whole_number_argument(
     match number.filter(|number| (-MAX_WHOLENUMBER..=MAX_WHOLENUMBER).contains(number)) {
         Some(number) => Ok(number),
         None => {
-            let found = interp.string_value_text(value);
+            let found = interp.string_value_text(value)?;
             let (min, max) = (i128::from(-MAX_WHOLENUMBER), i128::from(MAX_WHOLENUMBER));
             Err(Raised::native_argument_outside_range(index + 1, min, max, &found).into())
         }

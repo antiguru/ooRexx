@@ -102,7 +102,7 @@ pub(super) fn queue_index(
     match super::array::whole_index(interp, lines)? {
         Some(whole) => Ok(interp.counted(whole)),
         None => {
-            let found = interp.string_value_text(index);
+            let found = interp.string_value_text(index)?;
             Err(Raised::method_argument_not_positive(position, &found).into())
         }
     }
@@ -342,7 +342,7 @@ pub(super) fn queue_bound(
     };
     let extent = declared.max(slots_of(interp, receiver)?.iter().flatten().count());
     if position > extent {
-        let written = interp.string_value_text(index);
+        let written = interp.string_value_text(index)?;
         return Err(Raised::incorrect_list_index(&written).into());
     }
     if position > last_item(interp, receiver)? {

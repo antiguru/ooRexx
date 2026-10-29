@@ -43,8 +43,10 @@ enum StringConversion {
     /// The object that *is* the string value: the value itself, or a stem's
     /// own default value, or what a `makeString` answered.
     Object(ObjRef),
-    /// The string value as bytes no object holds -- an array's items joined.
+    /// The string value as bytes no object holds.
     Bytes(Vec<u8>),
+    /// An array, whose string value is its items joined.
+    Array(ObjRef),
     /// The receiver's behaviour has a `makeString` to send.
     MakeString,
     /// None of those, which is `.nil` from `requestString`'s point of view.
@@ -160,7 +162,10 @@ impl Interp {
             Some(RequiredString::Bytes(bytes)) => bytes,
             // `stringValue()`, which is what the fast path's own rendering of
             // an object with no string value comes to.
-            None => self.string_value_text(value),
+            None => match self.string_value_text(value) {
+                Ok(bytes) => bytes,
+                Err(_) => return false,
+            },
         };
         bytes == expected
     }
@@ -212,19 +217,21 @@ impl Interp {
                 crate::pinning::PinKind::Conversion,
                 self.send_message(value, STRING, None, &[], caller)
             )? {
-                Some(answered) => match self.string_answer_text(answered) {
+                Some(answered) => match self.string_answer_text(answered)? {
                     Some(text) => text,
                     // `.nil`, raised as NOSTRING's description before any
                     // consumer reads it (`ObjectClass.cpp:1259-1287`).
                     None => {
                         no_string = true;
-                        self.string_value_text(ObjRef::NIL)
+                        self.string_value_text(ObjRef::NIL)?
                     }
                 },
-                None => self.string_value_text(value),
+                None => self.string_value_text(value)?,
             }
+        } else if self.is_stem_object(value) {
+            self.stem_string_representation(value)?
         } else {
-            self.string_value_text(value)
+            self.string_value_text(value)?
         };
         // Gated on the trap rather than raised unconditionally, the shape
         // `Interp::novalue_raised` describes: an untrapped NOSTRING resumes
@@ -261,7 +268,7 @@ impl Interp {
     /// itself, an array (not a queue) is its items joined by a newline, and a
     /// buffer is its text. Any other object is `None`: `.nil` there, which a
     /// consumer of bytes reads as a string (Deviation 30).
-    fn string_answer_text(&mut self, answered: ObjRef) -> Option<Vec<u8>> {
+    fn string_answer_text(&mut self, answered: ObjRef) -> Result<Option<Vec<u8>>, Failure> {
         let joined = match answered.decode() {
             Decoded::SmallInt(_) | Decoded::Text(_) => None,
             Decoded::Heap { .. } if !self.heap.is_class(answered) => {
@@ -278,17 +285,17 @@ impl Interp {
                     if self.array_slots(store).is_none()
                         || super::collection::is_queue(self, answered)
                     {
-                        return None;
+                        return Ok(None);
                     }
                     Some(store)
                 }
             }
-            _ => return None,
+            _ => return Ok(None),
         };
-        Some(match joined {
-            Some(store) => self.string_conversion_array_text(store),
+        Ok(Some(match joined {
+            Some(store) => self.string_conversion_array_text(store)?,
             None => self.to_text(answered).into_owned(),
-        })
+        }))
     }
 
     /// Every supplied argument of one builtin call **except the positions
@@ -342,6 +349,9 @@ impl Interp {
         Ok(match self.classify_string_conversion(value) {
             StringConversion::Object(text) => Some(RequiredString::Object(text)),
             StringConversion::Bytes(bytes) => Some(RequiredString::Bytes(bytes)),
+            StringConversion::Array(store) => Some(RequiredString::Bytes(
+                self.string_conversion_array_text(store)?,
+            )),
             StringConversion::None => None,
             StringConversion::MakeString => {
                 // `string_value = string_value->primitiveMakeString()`
@@ -356,6 +366,9 @@ impl Interp {
                     Some(answered) => match self.classify_string_conversion(answered) {
                         StringConversion::Object(text) => Some(RequiredString::Object(text)),
                         StringConversion::Bytes(bytes) => Some(RequiredString::Bytes(bytes)),
+                        StringConversion::Array(store) => Some(RequiredString::Bytes(
+                            self.string_conversion_array_text(store)?,
+                        )),
                         StringConversion::MakeString | StringConversion::None => None,
                     },
                     None => None,
@@ -442,13 +455,13 @@ impl Interp {
         };
         match redirect {
             Some(default) => self.classify_string_conversion(default),
-            None => StringConversion::Bytes(self.string_conversion_array_text(value)),
+            None => StringConversion::Array(value),
         }
     }
 
     /// [`Interp::classify_string_conversion`]'s array arm, split out so the
     /// borrow of the heap object above ends before the join runs.
-    fn string_conversion_array_text(&mut self, value: ObjRef) -> Vec<u8> {
+    fn string_conversion_array_text(&mut self, value: ObjRef) -> Result<Vec<u8>, Failure> {
         let items = self.array_slots_of(value).unwrap_or_default();
         self.array_string(&items, b"\n")
     }

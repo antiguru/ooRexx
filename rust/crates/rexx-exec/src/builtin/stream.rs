@@ -78,7 +78,7 @@ fn whole_positions(
         };
         if !whole {
             let named = args.object(position).unwrap_or(value);
-            let found = interp.string_value_text(named);
+            let found = interp.string_value_text(named)?;
             return Err(Raised::argument_not_whole(name, position, &found).into());
         }
     }

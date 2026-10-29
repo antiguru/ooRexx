@@ -316,7 +316,7 @@ pub(super) fn native_string(
         return Ok(Some(super::string::base_string(interp, receiver)));
     }
     if let Some(store) = interp.stem_subclass_store(receiver) {
-        let text = interp.stem_string_value_text(store);
+        let text = interp.stem_string_representation(store)?;
         return Ok(Some(interp.text_built(text)));
     }
     // `PointerClass::stringValue` (`classes/PointerClass.cpp:152`) overrides
@@ -353,7 +353,10 @@ pub(super) fn native_string(
         let text = interp.default_string_value_text(receiver);
         return Ok(Some(interp.text_built(text)));
     }
-    let text = interp.string_value_text(receiver);
+    let text = match interp.is_stem_object(receiver) {
+        true => interp.stem_string_representation(receiver)?,
+        false => interp.string_value_text(receiver)?,
+    };
     Ok(Some(interp.text_built(text)))
 }
 
@@ -707,7 +710,7 @@ fn copy_object(interp: &mut Interp, receiver: ObjRef) -> Result<ObjRef, Failure>
         // the oracle's own `copyRexx` raises 93.970 for a plain send, and a
         // scope override reaches `RexxObject::copy`, which copies.
         Ok(Primitive::Class(_) | Primitive::Context | Primitive::RexxInfo) => {
-            let target = interp.string_value_text(receiver);
+            let target = interp.string_value_text(receiver)?;
             return Err(Raised::copy_not_supported(&target).into());
         }
         Ok(Primitive::Directory) => return Err(Loud::interpreter_table_copy("Directory").into()),
@@ -1702,10 +1705,10 @@ impl Interp {
             Some(traceback) => super::collection::list_items(self, traceback)?,
             None => Vec::new(),
         };
-        Ok(lines
+        lines
             .into_iter()
             .map(|line| self.string_value_text(line))
-            .collect())
+            .collect()
     }
 }
 
@@ -1869,7 +1872,7 @@ pub(super) fn decode_message_name(
         return Ok((interp.to_text(message).to_ascii_uppercase(), None));
     }
     let Some(slots) = interp.array_slots_of(message) else {
-        let rendered = interp.string_value_text(message);
+        let rendered = interp.string_value_text(message)?;
         return Err(Raised::message_name_shape(&rendered).into());
     };
     // `messageArgCount() != 2` (`classes/ObjectClass.cpp:2143`), which is
@@ -1991,7 +1994,7 @@ fn converted_array_argument(
     Err(match overload {
         ArrayArgument::Named(argument) => Raised::argument_not_single_dimensional(argument).into(),
         ArrayArgument::Positional => {
-            let found = interp.string_value_text(value);
+            let found = interp.string_value_text(value)?;
             Raised::object_not_single_dimensional(&found).into()
         }
     })

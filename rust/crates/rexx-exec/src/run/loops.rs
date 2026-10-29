@@ -588,9 +588,13 @@ pub(crate) struct LoopHeaderValues {
 impl Interp {
     /// One header value's own `>K>` line, at the `DO`/`LOOP` clause's own
     /// indent, for the roles the oracle echoes one for.
-    pub(crate) fn echo_header_value(&mut self, role: HeaderRole, value: ObjRef) {
+    pub(crate) fn echo_header_value(
+        &mut self,
+        role: HeaderRole,
+        value: ObjRef,
+    ) -> Result<(), Failure> {
         let Some(keyword) = role.keyword() else {
-            return;
+            return Ok(());
         };
         // `trace_keyword` carries its own `results` gate, so this is not a second
         // decision about whether to *print*: it decides whether to render the
@@ -598,14 +602,15 @@ impl Interp {
         // same shape and the same reason as `bind_control`'s own check, one level
         // down from where that one sits.
         if !self.trace_mode().results {
-            return;
+            return Ok(());
         }
-        let text = self.string_value_text(value);
+        let text = self.string_representation(value)?;
         self.trace_keyword(
             self.activity.clause_state.current_value_indent,
             keyword,
             &text,
         );
+        Ok(())
     }
 
     /// One `Op::LoopHeaderValue`: a `COUNTER`'s reset, or `value` validated
@@ -687,7 +692,7 @@ impl Interp {
                 values.for_remaining = Some(match self.whole_nonneg(converted) {
                     Some(count) => count,
                     None => {
-                        let found = self.string_value_text(value);
+                        let found = self.string_value_text(value)?;
                         return Err(raised_for_count_not_whole(&found).into());
                     }
                 });
@@ -698,7 +703,7 @@ impl Interp {
                 values.count = Some(match self.whole_nonneg(converted) {
                     Some(count) => count,
                     None => {
-                        let found = self.string_value_text(value);
+                        let found = self.string_value_text(value)?;
                         return Err(raised_repetition_count_not_whole(&found).into());
                     }
                 });
@@ -732,7 +737,7 @@ impl Interp {
                 return Ok(supplier);
             }
         }
-        let found = self.string_value_text(value);
+        let found = self.string_value_text(value)?;
         Err(Raised::syntax(98, 994, vec![found]).into())
     }
 
@@ -752,7 +757,7 @@ impl Interp {
         };
         let indent = self.activity.clause_state.current_value_indent;
         self.bind_control(code, counter.name, indent, value, counter.at, counter.shape)?;
-        self.echo_header_value(HeaderRole::Counter, value);
+        self.echo_header_value(HeaderRole::Counter, value)?;
         Ok(())
     }
 
@@ -779,7 +784,7 @@ impl Interp {
             counter.shape,
         )?;
         if self.trace_mode().results {
-            let text = self.string_value_text(value);
+            let text = self.string_representation(value)?;
             self.trace_keyword(loop_indent, "COUNTER", &text);
         }
         self.roots.activity_mut().pop_frame(pass);
@@ -799,7 +804,7 @@ impl Interp {
         {
             return Ok(converted);
         }
-        let found = self.string_value_text(value);
+        let found = self.string_value_text(value)?;
         Err(Raised::object_not_single_dimensional(&found).into())
     }
 
@@ -2585,7 +2590,7 @@ impl Interp {
                 // than absent.
                 self.roots.activity_mut().push_temp(value);
                 let bind_indent = if re_tested { loop_indent } else { do_indent };
-                if re_tested && let Some(rendered) = self.result_text(value) {
+                if re_tested && let Some(rendered) = self.result_text(value)? {
                     self.trace_result(loop_indent, &rendered);
                 }
                 self.bind_control(code, *control, bind_indent, value, *at, shape)?;
@@ -2699,7 +2704,7 @@ impl Interp {
         // `>V>` is `intermediates` and `>>>` is `results`, and
         // `results` is the weaker of the two, so it renders for
         // either and drops neither.
-        if let Some(rendered) = self.result_text(previous) {
+        if let Some(rendered) = self.result_text(previous)? {
             let name = code.symbols.name(control).as_bytes();
             self.trace_variable(loop_indent, name, &rendered, previous);
             self.trace_result(loop_indent, &rendered);
@@ -2798,7 +2803,7 @@ impl Interp {
             Some(previous) => {
                 let sum = self.arith_general(rexx_parse::Operator::Plus, previous, ctl.by)?;
                 self.roots.activity_mut().push_temp(sum);
-                if let Some(rendered) = self.result_text(sum) {
+                if let Some(rendered) = self.result_text(sum)? {
                     self.trace_result(loop_indent, &rendered);
                 }
                 (sum, loop_indent)
@@ -2980,7 +2985,7 @@ impl Interp {
                 // it exists because this function runs once per loop pass.
                 if self.tracing_intermediates() {
                     let name = code.symbols.name(control).as_bytes().to_vec();
-                    let rendered = self.string_value_text(value);
+                    let rendered = self.string_representation(value)?;
                     self.trace_assignment(indent, &name, &rendered, value);
                 }
                 Ok(())
@@ -2990,7 +2995,7 @@ impl Interp {
                     kind: ExprKind::Stem(control),
                     span: 0..0,
                 };
-                let rendered = self.intermediate_text(value);
+                let rendered = self.intermediate_text(value)?;
                 // `None`, and a literal one rather than the loop's kept
                 // slot: `assign_expr_target`'s `Stem` arm finds this stem's
                 // slot on its own entry, and a value here in place of the
@@ -3003,7 +3008,7 @@ impl Interp {
                     kind: ExprKind::Compound(control),
                     span: 0..0,
                 };
-                let rendered = self.intermediate_text(value);
+                let rendered = self.intermediate_text(value)?;
                 // `None` because a compound writes one tail through a key
                 // resolved on this pass, so the symbol's own slot is not what
                 // is written and there is none to carry.

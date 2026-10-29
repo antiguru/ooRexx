@@ -2824,7 +2824,7 @@ impl Interp {
             self.eval(&code, expr)
         });
         if let Ok(value) = result
-            && let Some(rendered) = self.result_text(value)
+            && let Some(rendered) = self.result_text(value)?
         {
             self.trace_result(0, &rendered);
         }

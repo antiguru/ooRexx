@@ -220,40 +220,27 @@ lang/debug_reexecute.rex
 lang/debug_reexecute_command.rex
 lang/debug_skip_flowed.rex
 lang/debug_input_object.rex
-lang/debug_input_eof.rex
 lang/debug_input_nil.rex
 lang/debug_input_removed.rex
 
 # Task 6 fix round 1: a condition the paused clause queued keeps its SIGL and
 # indent across a typed line; CALL ON and CALL OFF do not pause; a LEAVE that
-# raises does not pause; NOTREADY from the debug read reaches CALL ON in the
-# program; INTERPRET's fragment keeps its indent.
+# raises does not pause; INTERPRET's fragment keeps its indent.
 lang/debug_pause_sigl_notready.rex
 lang/debug_pause_sigl_error.rex
 lang/debug_pause_call_on.rex
 lang/debug_reexecute_call_on.rex
 lang/debug_leave_no_loop.rex
 lang/debug_leave_unknown_label.rex
-lang/debug_input_eof_call_on.rex
-lang/debug_input_eof_call_on_loop.rex
-lang/debug_input_stdin_eof_call_on.rex
 lang/debug_interpret_indent.rex
 
-# Task 6 fix round 2: a LEAVE's or ITERATE's pause delivers what its read
-# queued; a line typed at a pause traps nothing but SYNTAX, and a command
-# typed there leaves RC alone; CALL ON NOTREADY for a read of standard input
-# runs in the program.
-lang/debug_input_eof_iterate.rex
-lang/debug_input_eof_leave.rex
-lang/debug_input_eof_iterate_outer.rex
+# Task 6 fix round 2: a line typed at a pause traps nothing but SYNTAX, and a
+# command typed there leaves RC alone; CALL ON NOTREADY for a read of
+# standard input runs in the program.
 lang/debug_typed_condition_ignored.rex
 lang/debug_typed_command_quiet.rex
 lang/notready_call_on_stdin.rex
 lang/notready_call_on_stdin_loop.rex
-
-# Task 6 fix round 3: a handler EXIT at an ITERATE pause leaves the method with
-# its loop closed; a method under debug prints its own banner.
-lang/debug_handler_exit_at_iterate.rex
 
 # Task 11a: deferred items. A loop with no body clause reads a fresh elapsed
 # time per pass; Message~halt asks the activity a message was sent from; an

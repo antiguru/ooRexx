@@ -15,8 +15,8 @@
 //! 4b's calls add (`>A>`, `>F>`, `>R>`, Task 9) -- and the classification a
 //! `TRACE`/`TRACE VALUE` setting goes through to become one.
 
-use crate::Interp;
 use crate::error::Raised;
+use crate::{Failure, Interp};
 use rexx_core::ObjRef;
 use rexx_num::Number;
 use rexx_parse::{Operator, PrefixOp, Trace};
@@ -598,20 +598,22 @@ impl Interp {
     /// `value`'s rendered bytes, **or `None` when no intermediate-value
     /// trace line would print them**.
     #[inline(always)]
-    pub(crate) fn intermediate_text(&mut self, value: ObjRef) -> Option<Vec<u8>> {
+    pub(crate) fn intermediate_text(&mut self, value: ObjRef) -> Result<Option<Vec<u8>>, Failure> {
         self.trace_mode()
             .intermediates
-            .then(|| self.string_value_text(value))
+            .then(|| self.string_representation(value))
+            .transpose()
     }
 
     /// `value`'s rendered bytes, or `None` when no **result-level** trace line
     /// would print them -- [`Interp::intermediate_text`]'s sibling, and its
     /// doc has the argument for both.
     #[inline(always)]
-    pub(crate) fn result_text(&mut self, value: ObjRef) -> Option<Vec<u8>> {
+    pub(crate) fn result_text(&mut self, value: ObjRef) -> Result<Option<Vec<u8>>, Failure> {
         self.trace_mode()
             .results
-            .then(|| self.string_value_text(value))
+            .then(|| self.string_representation(value))
+            .transpose()
     }
 
     /// `>I>`/`<I<` (`TRACE_PREFIX_INVOCATION`/`_INVOCATION_EXIT`): a routine

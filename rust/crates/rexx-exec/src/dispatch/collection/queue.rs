@@ -131,7 +131,10 @@ fn native_queue_put(
     };
     let store = store_of(interp, receiver)?;
     let refuse = |interp: &mut Interp| {
-        let written = interp.string_value_text(index);
+        let written = match interp.string_value_text(index) {
+            Ok(written) => written,
+            Err(failure) => return failure,
+        };
         Failure::from(Raised::incorrect_list_index(&written))
     };
     let subscript = queue_index(interp, receiver, index, 2)?;

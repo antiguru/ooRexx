@@ -416,22 +416,28 @@ fn nothing_is_rendered_for_a_trace_line_that_will_not_print() {
     let value = interp.text(b"whatever");
 
     assert_eq!(interp.trace_mode().letter, b'N', "the default setting");
-    assert!(interp.intermediate_text(value).is_none());
-    assert!(interp.result_text(value).is_none());
+    assert!(matches!(interp.intermediate_text(value), Ok(None)));
+    assert!(matches!(interp.result_text(value), Ok(None)));
 
     // The neighbouring settings, because "always None" would pass the
     // three lines above. `R` traces results and not intermediates, which
     // is the one mode in which the two functions disagree.
     interp.set_trace_mode(crate::trace::mode_from_setting(b"r").expect("R is a valid setting"));
-    assert!(interp.intermediate_text(value).is_none());
-    assert_eq!(interp.result_text(value).as_deref(), Some(&b"whatever"[..]));
+    assert!(matches!(interp.intermediate_text(value), Ok(None)));
+    assert_eq!(
+        interp.result_text(value).ok().flatten().as_deref(),
+        Some(&b"whatever"[..])
+    );
 
     interp.set_trace_mode(crate::trace::mode_from_setting(b"i").expect("I is a valid setting"));
     assert_eq!(
-        interp.intermediate_text(value).as_deref(),
+        interp.intermediate_text(value).ok().flatten().as_deref(),
         Some(&b"whatever"[..])
     );
-    assert_eq!(interp.result_text(value).as_deref(), Some(&b"whatever"[..]));
+    assert_eq!(
+        interp.result_text(value).ok().flatten().as_deref(),
+        Some(&b"whatever"[..])
+    );
 }
 
 /// `EXIT` inside a `::ROUTINE` ends the routine and settles `RESULT`,

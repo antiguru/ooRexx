@@ -1615,7 +1615,7 @@ fn numeric_receiver(
     match interp.to_number(receiver) {
         Ok(number) => Ok(number),
         Err(_) => {
-            let found = interp.string_value_text(receiver);
+            let found = interp.string_value_text(receiver)?;
             Err(Raised::method_target_not_a_number(method, &found).into())
         }
     }
@@ -1726,7 +1726,7 @@ fn native_string_modulo(
     let value = numeric_receiver(interp, receiver, b"MODULO")?;
     let digits = numeric::digits_setting(interp);
     if !value.is_integer(digits) {
-        let found = interp.string_value_text(receiver);
+        let found = interp.string_value_text(receiver)?;
         return Err(Raised::method_target_not_whole(b"MODULO", &found).into());
     }
     let Some(object) = args.first().copied().flatten() else {
@@ -1735,7 +1735,7 @@ fn native_string_modulo(
     let divisor = match interp.to_number(object) {
         Ok(number) if number.is_integer(digits) && number.signum() == 1 => number,
         _ => {
-            let found = interp.string_value_text(object);
+            let found = interp.string_value_text(object)?;
             return Err(Raised::method_argument_not_positive(1, &found).into());
         }
     };
@@ -1919,7 +1919,7 @@ pub(super) fn native_string_sign(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     let Ok(value) = interp.to_number(receiver) else {
-        let found = interp.string_value_text(receiver);
+        let found = interp.string_value_text(receiver)?;
         return Err(Raised::method_target_not_a_number(b"SIGN", &found).into());
     };
     Ok(Some(crate::builtin::numeric::sign_of(interp, &value)))

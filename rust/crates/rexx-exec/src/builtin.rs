@@ -881,7 +881,7 @@ fn whole_number(
     // `substr(.A, .B)` where `.B`'s class-side `makeString` answers `'x'` is
     // 40.12 `found "The B class"` and not `found "x"`.
     let named = args.object(position).unwrap_or(value);
-    let found = interp.string_value_text(named);
+    let found = interp.string_value_text(named)?;
     Err(Raised::argument_not_whole(name, position, &found).into())
 }
 

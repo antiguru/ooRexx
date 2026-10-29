@@ -132,7 +132,7 @@ pub(super) fn pad_method_argument(
     };
     match pad {
         Some(byte) => Ok(Some(byte)),
-        None => Err(Raised::incorrect_pad(&interp.string_value_text(value)).into()),
+        None => Err(Raised::incorrect_pad(&interp.string_value_text(value)?).into()),
     }
 }
 
@@ -159,7 +159,7 @@ pub(super) fn option_method_argument(
     match letter {
         Some(letter) if letter == 0 || valid.as_bytes().contains(&letter) => Ok(Some(letter)),
         _ => Err(
-            Raised::method_option_not_recognised(valid, &interp.string_value_text(value)).into(),
+            Raised::method_option_not_recognised(valid, &interp.string_value_text(value)?).into(),
         ),
     }
 }
@@ -288,9 +288,11 @@ pub(super) fn named_pad_argument(
     };
     match pad {
         Some(byte) => Ok(Some(byte)),
-        None => Err(
-            Raised::named_argument_invalid_pad(argument, &interp.string_value_text(value)).into(),
-        ),
+        None => Err(Raised::named_argument_invalid_pad(
+            argument,
+            &interp.string_value_text(value)?,
+        )
+        .into()),
     }
 }
 
@@ -325,7 +327,10 @@ pub(super) fn refuse_method_argument(
     raise: impl Fn(&[u8]) -> Raised,
 ) -> Failure {
     let found = match args.get(index).copied().flatten() {
-        Some(value) => interp.string_value_text(value),
+        Some(value) => match interp.string_value_text(value) {
+            Ok(found) => found,
+            Err(failure) => return failure,
+        },
         None => Vec::new(),
     };
     raise(&found).into()

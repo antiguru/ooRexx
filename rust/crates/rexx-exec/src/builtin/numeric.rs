@@ -362,7 +362,7 @@ pub(crate) fn max_min_over(
             // argument message's rule -- `whole_number`'s own doc has the
             // measurement behind it.
             let named = match objects.get(index).copied().flatten() {
-                Some(object) => interp.string_value_text(object),
+                Some(object) => interp.string_value_text(object)?,
                 None => found,
             };
             return Err(Raised::method_argument_not_a_number(index + 1, &named).into());

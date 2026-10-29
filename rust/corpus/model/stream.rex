@@ -95,6 +95,7 @@ open: procedure expose m.
   parse upper arg words
   m.0mode = 'BOTH'
   m.0append = 0
+  m.0extent = 0
   m.0record = 0
   binary = 0
   do while words \== ''
@@ -112,6 +113,7 @@ open: procedure expose m.
     end
   end
   if binary & m.0record = 0 then m.0record = length(m.0data)
+  if m.0append & \m.0transient then m.0extent = length(m.0data)
   m.0open = 1
   m.0state = 'READY'
   if m.0transient then return 'READY:'
@@ -126,6 +128,7 @@ implicit: procedure expose m.
   if m.0open then return
   m.0mode = 'BOTH'
   m.0append = 0
+  m.0extent = 0
   m.0record = 0
   m.0open = 1
   m.0read = 1
@@ -172,14 +175,21 @@ unwritable: procedure expose m.
   return arg(1)
 
 /* Where a write from position `p` lands. On an APPEND stream every write
-   lands at the end: the write position cannot move into the stream as it
-   was opened (funct.xml:4309-4312). The model reads that as the interpreters
-   do: SEEK and QUERY still report the write position as set, and a write
-   from beyond the end lands at the end too, so what the stream's own writes
-   added is kept (this crate's `landing`, :1669). */
+   lands at the end, and the write position cannot move to a character of
+   the stream as it was opened (funct.xml:4309-4312): `within_extent` refuses
+   a SEEK, a CHAROUT start or a LINEOUT line naming one. A write from beyond
+   that extent lands at the end too, so what the stream's own writes added
+   is kept (this crate's `landing`). */
 landing: procedure expose m.
   if m.0append then return length(m.0data) + 1
   return arg(1)
+
+/* Whether write position `p` is a character of an APPEND stream as it was
+   opened. Such a SEEK is refused as an invalid one is, and a CHAROUT start
+   or a LINEOUT line is NOTREADY, writing and moving nothing (this crate's
+   `within_append_extent`). */
+within_extent: procedure expose m.
+  return arg(1) <= m.0extent
 
 /* What is left of the record holding position `p`. */
 room: procedure expose m.
@@ -227,6 +237,10 @@ charout: procedure expose m.
   if start \== '' then do
     bad = position_arg(start)
     if bad \== '' then return bad
+    if within_extent(start) then do
+      m.0state = 'NOTREADY'
+      return length(s)
+    end
     m.0write = start
   end
   if \given | s == '' then return 0
@@ -265,6 +279,10 @@ lineout: procedure expose m.
   if line \== '' then do
     bad = position_arg(line)
     if bad \== '' then return bad
+    if within_extent(line_start(line)) then do
+      m.0state = 'NOTREADY'
+      return 1
+    end
     m.0write = line_start(line)
   end
   if \given then return 0
@@ -518,7 +536,7 @@ seek: procedure expose m.
       when style == '<' then landed = length(m.0data) - off + 1
       otherwise landed = from + off
     end
-    if landed < 1 then return invalid_seek()
+    if landed < 1 | (wr & within_extent(landed)) then return invalid_seek()
     if rd then m.0read = landed
     if wr then m.0write = landed
     return landed
@@ -535,12 +553,14 @@ seek: procedure expose m.
   if target < 1 then return invalid_seek()
   line = line_reached(target)
   at = line_start(target)
+  if wr & within_extent(at) then return invalid_seek()
   if rd then m.0read = at
   if wr then m.0write = at
   return line
 
-/* A SEEK to a position the stream does not have, below 1 or the write
-   position of a READ stream (funct.xml:4299), is not "successfully located"
+/* A SEEK to a position the stream does not have, below 1, the write
+   position of a READ stream (funct.xml:4299) or a write position within an
+   APPEND stream as it was opened (funct.xml:4309-4312), is not "successfully located"
    (funct.xml:4427-4429): it answers 0, is NOTREADY, and moves nothing. */
 invalid_seek: procedure expose m.
   m.0state = 'NOTREADY'

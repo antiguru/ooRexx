@@ -50,7 +50,7 @@ fn stem_argument(
             return Ok(stem);
         }
     }
-    let found = interp.string_value_text(value);
+    let found = interp.string_value_text(value)?;
     Err(marshalled(Raised::native_argument_not_a_stem(
         false, position, &found,
     )))
@@ -87,7 +87,7 @@ fn optional_positive(
     match whole_value(interp, value, 1)? {
         Some(number) => Ok(Some(number)),
         None => {
-            let found = interp.string_value_text(value);
+            let found = interp.string_value_text(value)?;
             Err(marshalled(Raised::native_argument_not_positive(
                 position, &found,
             )))
@@ -118,7 +118,7 @@ fn optional_nonnegative(
     match whole_value(interp, value, 0)? {
         Some(number) => Ok(Some(number)),
         None => {
-            let found = interp.string_value_text(value);
+            let found = interp.string_value_text(value)?;
             Err(marshalled(Raised::native_argument_not_nonnegative(
                 position, &found,
             )))

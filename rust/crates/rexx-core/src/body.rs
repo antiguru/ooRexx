@@ -552,6 +552,10 @@ pub struct OpenFile {
     /// waits without being read leaves one.
     pub pending: Option<u8>,
     pub transient: bool,
+    /// The size of the file when an APPEND open opened it, 0 otherwise: the
+    /// write position cannot move to a byte within it (rexxref funct.xml,
+    /// STREAM OPEN APPEND).
+    pub append_extent: i64,
     /// A character position and the line it lies in, from the last line
     /// operation. Any write landing before the position drops it, so it is
     /// always what a count from the start would answer.
@@ -584,6 +588,7 @@ impl OpenFile {
             write_position,
             pending: None,
             transient,
+            append_extent: 0,
             line_mark: None,
             line_total: None,
             line_mark_digest: None,

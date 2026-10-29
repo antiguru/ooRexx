@@ -215,7 +215,7 @@ use object_protocol::{
 
 // The required-string protocol and the string conversion behind it.
 mod reqstr;
-pub(crate) use reqstr::{DEFAULTNAME, MAKESTRING, OBJECTNAME};
+pub(crate) use reqstr::{DEFAULTNAME, MAKESTRING, OBJECTNAME, STRING};
 use reqstr::{required_string_argument, required_string_named_argument};
 
 /// One primitive method's implementation.
@@ -2446,8 +2446,8 @@ impl Interp {
         if self.receiver_has_scope(target, scope) {
             return Ok(());
         }
-        let named_target = self.string_value_text(target);
-        let named_scope = self.string_value_text(scope);
+        let named_target = self.string_value_text(target)?;
+        let named_scope = self.string_value_text(scope)?;
         Err(Raised::scope_override_not_a_scope(&named_target, &named_scope).into())
     }
 
@@ -3420,7 +3420,7 @@ impl Interp {
             return Ok(Some(value));
         }
         let declared = self.constant_name(generated)?;
-        let target = self.message_target_text(receiver);
+        let target = self.message_target_text(receiver)?;
         let report = Raised::constant_not_initialized(&target, &declared);
         Err(
             if self.trap_for(b"NOMETHOD").is_some_and(|trap| !trap.call) {
@@ -4028,7 +4028,10 @@ impl Interp {
     /// neither the message nor `UNKNOWN`, and **which condition that is
     /// depends on what is armed**.
     fn nomethod(&mut self, receiver: ObjRef, name: &[u8], miss: Miss) -> Failure {
-        let target = self.message_target_text(receiver);
+        let target = match self.message_target_text(receiver) {
+            Ok(target) => target,
+            Err(failure) => return failure,
+        };
         let report = match miss {
             Miss::NoMethod => Raised::no_method(&target, name),
             Miss::Private => Raised::private_method(&target, name),
@@ -4065,6 +4068,18 @@ impl Interp {
         }
     }
 
+    /// Whether `value`'s `name` resolves to a method other than `Object`'s
+    /// primitive.
+    pub(crate) fn overrides_object_method(&mut self, value: ObjRef, name: &[u8]) -> bool {
+        let Some(found) = self.lookup(value, name, None) else {
+            return false;
+        };
+        if self.object_model().natives.get(found.method).is_none() {
+            return true;
+        }
+        self.classes().lookup("Object") != Some(found.scope)
+    }
+
     /// Whether `name` sent to `value` runs a method that is not one of the
     /// interpreter's own primitives.
     pub(crate) fn answers_by_method(&mut self, value: ObjRef, name: &[u8]) -> bool {
@@ -4076,7 +4091,7 @@ impl Interp {
 
     /// The receiver as 97.1 names it: `stringValue()`, which is **not** the
     /// string value [`Interp::to_text`] answers for every receiver.
-    fn message_target_text(&mut self, receiver: ObjRef) -> Vec<u8> {
+    fn message_target_text(&mut self, receiver: ObjRef) -> Result<Vec<u8>, Failure> {
         self.string_value_text(receiver)
     }
 
@@ -4144,7 +4159,7 @@ impl Interp {
         if let Some(value) = value
             && self.trace_mode().intermediates
         {
-            self.trace_sent(name, value);
+            self.trace_sent(name, value)?;
         }
         Ok(value)
     }

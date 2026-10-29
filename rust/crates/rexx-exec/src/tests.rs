@@ -1877,3 +1877,110 @@ fn a_references_nostring_syntax_names_its_values_string() {
         String::from_utf8_lossy(&outcome.stderr)
     );
 }
+
+/// A stem's string value is its default's `request('STRING')` in every
+/// required-string position (rexxref provide.xml, "Required String Values";
+/// collclasses.xml, Stem `request`), and where that answers none, NOSTRING
+/// names the stem with its `STRING` answer, the concatenation receiver
+/// included. The oracle raises NOSTRING for every stem
+/// (t8.7c/probes/stemnostr/s2.rex).
+#[test]
+fn a_stems_string_value_is_its_defaults_and_nostring_names_the_stem() {
+    assert_eq!(
+        clean_stdout(
+            "/w/s.rex",
+            b"s. = 7\nt. = .array~of('one','two')\nv. = .nstr~new\nk. = .kmake~new\n\
+              do stem over 's.', 't.', 'v.', 'k.'\n\
+                call try 'say' stem '\"\"'\n\
+                call try 'say length('stem')'\n\
+                call try 'say \"<\"||'stem'||\">\"'\n\
+                call try 'say' stem'\"\"'\n\
+                call try 'say 1 +' stem\n\
+                call try 'say \"x\" =' stem\n\
+              end\nexit\n\
+              try:\n  signal on nostring name h2\n  signal on syntax name h3\n\
+                interpret 'r =' arg(1)~substr(5)\n\
+                say stem r~changestr('0a'x, '|')\n  return\n\
+              h2: say stem 'NOSTRING' condition('d') condition('o')~additional~class~id\n  return\n\
+              h3: say stem 'SYNTAX' condition('o')~code\n  return\n\
+              ::class nstr\n::method string; return 'NSTR'\n\
+              ::class kmake\n::method makestring; return 'KM'\n::method string; return 'KS'\n"
+        ),
+        "s. 7 \ns. 1\ns. <7>\ns. 7\ns. 8\ns. 0\n\
+         t. one|two \nt. 7\nt. <one|two>\nt. one|two\nt. SYNTAX 41.1\nt. 0\n\
+         v. NOSTRING NSTR Stem\nv. NOSTRING NSTR Stem\nv. NOSTRING NSTR Stem\n\
+         v. NOSTRING NSTR Stem\nv. NOSTRING NSTR Stem\nv. NOSTRING NSTR Stem\n\
+         k. KM \nk. 2\nk. <KM>\nk. KM\nk. SYNTAX 41.1\nk. 0\n"
+    );
+}
+
+/// TRACE shows a non-string result by the string representation sending it
+/// `STRING` obtains (rexxref instrc.xml, TRACE), and a stem's `STRING` is its
+/// default's (intro.xml, Stems), so an object whose class overrides `STRING`
+/// renders as that answer in both. The oracle renders both by the object's
+/// name (t8.7c/probes/stemarr/b.rex, t8.7c/probes/dn/dn7.rex).
+#[test]
+fn a_traced_value_and_a_stems_string_send_string_to_an_override() {
+    let outcome = run_program(
+        "/w/t.rex",
+        b"v. = .nstr~new\nq = .nstr~new\nt. = .array~of(1)\nsay v.~string q~string t.~string\n\
+          trace i\nx = v.\nx = q\nx = t.\n::class nstr\n::method string; return 'NSTR'\n"
+            .to_vec(),
+        crate::Invocation::none(),
+    );
+    assert_eq!(outcome.exit_code, 0);
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "NSTR NSTR an Array\n"
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stderr),
+        "     6 *-* x = v.\n       >V>   V. => \"NSTR\"\n       >>>   \"NSTR\"\n\
+         \x20      >=>   X <= \"NSTR\"\n     7 *-* x = q\n       >V>   Q => \"NSTR\"\n\
+         \x20      >>>   \"NSTR\"\n       >=>   X <= \"NSTR\"\n     8 *-* x = t.\n\
+         \x20      >V>   T. => \"an Array\"\n       >>>   \"an Array\"\n\
+         \x20      >=>   X <= \"an Array\"\n"
+    );
+}
+
+/// rexxref (collclasses.xml, Table `at` and `put`): "Index equality is
+/// determined by using the `==` method of index", so storing at and reading
+/// the identical index sends its `==`. The oracle compares identity first and
+/// sends none (t8.7c/probes/hashid/hash-identity-first-idq.rex).
+#[test]
+fn a_hash_lookup_sends_the_identical_indexs_equality() {
+    assert_eq!(
+        clean_stdout(
+            "/w/h.rex",
+            b"k = .k~new\nt = .table~new\nt[k] = 1\nsay 'second put same object'\nt[k] = 2\n\
+              say 'at same object'\nx = t[k]\nsay 'other object'\nt[.k~new] = 3\nsay t~items\n\
+              ::class k\n::method hashCode; return 'x'\n\
+              ::method '=='; say '  == called'; return 1\n"
+        ),
+        "second put same object\n  == called\nat same object\n  == called\nother object\n\
+         \x20 == called\n1\n"
+    );
+}
+
+/// A `DEFAULTNAME` that renders its receiver inside an Array join recurses
+/// until the control stack is full, and that condition is the join's: 11.1,
+/// rc 245, as on the oracle (t87c-review-scratch/c1r/r4.rex).
+#[test]
+fn a_join_rendering_itself_through_defaultname_runs_out_of_stack() {
+    let outcome = run_program(
+        "/w/r.rex",
+        b"o = .rec~new\nsay .array~of(o)~makestring\nsay 'after'\nexit\n\
+          ::class rec\n::method defaultname\n  return .array~of(self)~makestring\n"
+            .to_vec(),
+        crate::Invocation::none(),
+    );
+    assert_eq!(outcome.exit_code, 245);
+    assert!(outcome.stdout.is_empty());
+    assert!(
+        String::from_utf8_lossy(&outcome.stderr).ends_with(
+            "Error 11.1:  Insufficient control stack space; cannot continue execution.\n"
+        ),
+        "{}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+}

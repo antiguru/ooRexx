@@ -500,7 +500,10 @@ fn handle_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<u64, 
             .and_then(|number| number.unsigned_int64_value(DIGITS64)),
     };
     handle.ok_or_else(|| {
-        let found = interp.string_value_text(value);
+        let found = match interp.string_value_text(value) {
+            Ok(found) => found,
+            Err(failure) => return failure,
+        };
         outside_range(1, 0, u64::MAX.into(), &found)
     })
 }
@@ -516,7 +519,10 @@ fn int_argument(interp: &mut Interp, value: ObjRef, position: usize) -> Result<i
     number
         .filter(|number| (min..=max).contains(number))
         .ok_or_else(|| {
-            let found = interp.string_value_text(value);
+            let found = match interp.string_value_text(value) {
+                Ok(found) => found,
+                Err(failure) => return failure,
+            };
             outside_range(position, min.into(), max.into(), &found)
         })
 }

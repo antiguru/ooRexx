@@ -1957,11 +1957,9 @@ fn leveled_store_at(
     args: &[Option<ObjRef>],
     name: &[u8],
 ) -> Result<Option<ObjRef>, Failure> {
-    // Through a pointer, so that `store_at` keeps only the direct callers it
-    // is inlined into: measured by callgrind, a third costs `dirread` +0.19%.
-    let at: fn(&mut Interp, ObjRef, &[Option<ObjRef>]) -> Result<Option<ObjRef>, Failure> =
-        std::hint::black_box(store_at);
-    interp.primitive_level(receiver, name, args, |interp| at(interp, receiver, args))
+    interp.primitive_level(receiver, name, args, |interp| {
+        store_at(interp, receiver, args)
+    })
 }
 
 /// `~put(item, index)` on a `Directory` or a `StringTable`: stores `item`

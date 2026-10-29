@@ -569,13 +569,13 @@ impl Interp {
             // `merge` answers `None` for both, so neither reaches here.
             Redirection::Default | Redirection::Normal => (Vec::new(), Origin::Other),
             Redirection::Stem(id) => {
-                let object = self.redirect_stem(code, *id, Stream::Input);
+                let object = self.redirect_stem(code, *id, Stream::Input)?;
                 (self.stem_input_lines(object)?, Origin::Stem(object))
             }
             Redirection::Using(expression) => {
                 let object = self.eval(code, expression)?;
                 self.roots.activity_mut().push_temp(object);
-                self.trace_redirect_target(Stream::Input, object);
+                self.trace_redirect_target(Stream::Input, object)?;
                 let origin = if self.is_stem_object(object) {
                     Origin::Stem(object)
                 } else if self.is_stream_object(object) {
@@ -611,7 +611,7 @@ impl Interp {
         for index in 1..=count {
             let key = index.to_string().into_bytes();
             let value = self.stem_object_read(object, &key);
-            lines.push(self.string_value_text(value));
+            lines.push(self.string_value_text(value)?);
         }
         Ok(lines)
     }
@@ -625,7 +625,7 @@ impl Interp {
     /// that, `42` being a String.
     fn using_input_lines(&mut self, object: ObjRef) -> Result<Vec<Vec<u8>>, Failure> {
         if is_string(self, object) {
-            return Ok(vec![self.string_value_text(object)]);
+            return Ok(vec![self.string_value_text(object)?]);
         }
         if self.is_stem_object(object) {
             return self.stem_input_lines(object);
@@ -657,12 +657,12 @@ impl Interp {
             }
         };
         let Some(slots) = self.array_slots_of(array) else {
-            let shown = self.string_value_text(object);
+            let shown = self.string_value_text(object)?;
             return Err(Raised::address_input_source(&shown).into());
         };
         let mut lines = Vec::new();
         for item in slots.into_iter().flatten() {
-            lines.push(self.string_value_text(item));
+            lines.push(self.string_value_text(item)?);
         }
         Ok(lines)
     }
@@ -682,13 +682,13 @@ impl Interp {
                 unreachable!("a stream `merge` answered `None` for reached the target builder")
             }
             Redirection::Stem(id) => {
-                let object = self.redirect_stem(code, *id, stream);
+                let object = self.redirect_stem(code, *id, stream)?;
                 Ok(Target::Stem { object, append })
             }
             Redirection::Using(expression) => {
                 let object = self.eval(code, expression)?;
                 self.roots.activity_mut().push_temp(object);
-                self.trace_redirect_target(stream, object);
+                self.trace_redirect_target(stream, object)?;
                 self.using_output_target(object, option)
             }
             Redirection::Stream(expression) => {
@@ -751,7 +751,7 @@ impl Interp {
         if self.is_ordered_collection(object) {
             return Ok(Target::Collection { object, append });
         }
-        let shown = self.string_value_text(object);
+        let shown = self.string_value_text(object)?;
         Err(Raised::address_output_target(&shown).into())
     }
 
@@ -761,25 +761,31 @@ impl Interp {
     /// The read echoes as an ordinary variable read before the `>K>` line --
     /// measured under `trace i`, `>V> OO. => "OO."` then
     /// `>K> "OUTPUT" => "OO."`.
-    fn redirect_stem(&mut self, code: &Code<'_>, id: SymbolId, stream: Stream) -> ObjRef {
+    fn redirect_stem(
+        &mut self,
+        code: &Code<'_>,
+        id: SymbolId,
+        stream: Stream,
+    ) -> Result<ObjRef, Failure> {
         let name = code.symbols.name(id).as_bytes().to_vec();
         let object = self.read_stem(&name);
         self.roots.activity_mut().push_temp(object);
-        self.echo_symbol_read(code, id, object);
-        self.trace_redirect_target(stream, object);
-        object
+        self.echo_symbol_read(code, id, object)?;
+        self.trace_redirect_target(stream, object)?;
+        Ok(object)
     }
 
     /// `traceKeywordResult`: the `>K>` line naming an evaluated target.
     /// Gated on the same flag [`Interp::trace_keyword`] is, because the
     /// string value it shows can cost a `makeString` send.
-    fn trace_redirect_target(&mut self, stream: Stream, value: ObjRef) {
+    fn trace_redirect_target(&mut self, stream: Stream, value: ObjRef) -> Result<(), Failure> {
         if !self.trace_mode().results {
-            return;
+            return Ok(());
         }
-        let text = self.string_value_text(value);
+        let text = self.string_representation(value)?;
         let indent = self.activity.clause_state.current_value_indent;
         self.trace_keyword(indent, stream.keyword(), &text);
+        Ok(())
     }
 
     /// `init` of one target, answering the stem tail its first line goes to.
@@ -855,7 +861,7 @@ impl Interp {
     ) -> Result<Vec<u8>, Failure> {
         let value = self.eval(code, expression)?;
         self.roots.activity_mut().push_temp(value);
-        self.trace_redirect_target(stream, value);
+        self.trace_redirect_target(stream, value)?;
         let value = self.required_string_value(value)?;
         let name = self.to_text(value).into_owned();
         Ok(crate::builtin::platform::qualify_name(self, &name))
@@ -892,7 +898,7 @@ impl Interp {
         let answer = self
             .send_message(object, b"OPEN", None, &[Some(option)], caller)?
             .unwrap_or(ObjRef::NIL);
-        let answered = self.string_value_text(answer);
+        let answered = self.string_value_text(answer)?;
         if answered != b"READY:" {
             let raised = match reading {
                 true => Raised::stream_not_readable(qualified, &answered),
@@ -939,7 +945,7 @@ impl Interp {
             if trapped {
                 return Ok(lines);
             }
-            lines.push(self.string_value_text(value));
+            lines.push(self.string_value_text(value)?);
         }
     }
 
@@ -963,7 +969,7 @@ impl Interp {
         let Some(value) = self.stem_object_tail(object, b"0") else {
             return Ok(None);
         };
-        let text = self.string_value_text(value);
+        let text = self.string_value_text(value)?;
         match whole_number(&text) {
             Some(count) => Ok(Some(count)),
             None => {
@@ -1112,7 +1118,7 @@ impl Interp {
         let answer = self
             .send_message(value, b"ABSOLUTEPATH", None, &[], caller)?
             .unwrap_or(ObjRef::NIL);
-        Ok(Some(self.string_value_text(answer)))
+        Ok(Some(self.string_value_text(answer)?))
     }
 
     /// Whether `value` is an `OrderedCollection`.

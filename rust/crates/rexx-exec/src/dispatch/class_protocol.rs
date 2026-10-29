@@ -312,7 +312,7 @@ pub(super) fn method_source_lines(
         // oracle rc 0, a `MAKESTRING` answering an `Array` compiles the line
         // `an Array`.
         if let Some(line) = answered.filter(|line| *line != ObjRef::NIL) {
-            return Ok(vec![interp.string_value_text(line)]);
+            return Ok(vec![interp.string_value_text(line)?]);
         }
     }
     Err(match taker {
@@ -654,7 +654,7 @@ fn method_table_pairs(
     interp.roots.activity_mut().push_temp(supplier);
     let mut pairs = Vec::new();
     for (index, item) in super::collection::supplier::drain_supplier(interp, supplier)? {
-        let name = interp.string_value_text(index).into_boxed_slice();
+        let name = interp.string_value_text(index)?.into_boxed_slice();
         pairs.push((name, item));
     }
     Ok(pairs)
@@ -911,7 +911,7 @@ fn factory_metaclass(
     };
     let is_class = matches!(interp.receiver_kind(metaclass), Ok(Primitive::Class(_)));
     if !is_class || !interp.classes().is_metaclass(metaclass) {
-        let shown = interp.string_value_text(metaclass);
+        let shown = interp.string_value_text(metaclass)?;
         return Err(Raised::bad_metaclass(&shown).into());
     }
     Ok(metaclass)
@@ -1114,7 +1114,10 @@ fn mixin_class_argument(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<
         return Err(Raised::missing_named_argument("mixin class").into());
     };
     class_receiver(interp, argument).map_err(|_| {
-        let shown = interp.string_value_text(argument);
+        let shown = match interp.string_value_text(argument) {
+            Ok(shown) => shown,
+            Err(failure) => return failure,
+        };
         Failure::from(Raised::inherit_needs_a_mixinclass(&shown))
     })
 }
@@ -1128,17 +1131,29 @@ fn inherit_refusal(
     mixin: ObjRef,
     refusal: InheritRefusal,
 ) -> Failure {
-    let class_name = interp.string_value_text(class);
-    let mixin_name = interp.string_value_text(mixin);
+    let class_name = match interp.string_value_text(class) {
+        Ok(class_name) => class_name,
+        Err(failure) => return failure,
+    };
+    let mixin_name = match interp.string_value_text(mixin) {
+        Ok(mixin_name) => mixin_name,
+        Err(failure) => return failure,
+    };
     match refusal {
         InheritRefusal::NotAMixin => Raised::inherit_needs_a_mixinclass(&mixin_name).into(),
         InheritRefusal::Recursive => Raised::recursive_inherit(&class_name, &mixin_name).into(),
         InheritRefusal::BaseClass(base) => {
-            let base_name = interp.string_value_text(base);
+            let base_name = match interp.string_value_text(base) {
+                Ok(base_name) => base_name,
+                Err(failure) => return failure,
+            };
             Raised::inherit_base_class(&class_name, &mixin_name, &base_name).into()
         }
         InheritRefusal::NotInherited(other) => {
-            let other_name = interp.string_value_text(other);
+            let other_name = match interp.string_value_text(other) {
+                Ok(other_name) => other_name,
+                Err(failure) => return failure,
+            };
             Raised::not_inherited(&class_name, &other_name).into()
         }
     }
@@ -1218,7 +1233,7 @@ pub(super) fn native_class_copy(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let target = interp.string_value_text(receiver);
+    let target = interp.string_value_text(receiver)?;
     Err(Raised::copy_not_supported(&target).into())
 }
 

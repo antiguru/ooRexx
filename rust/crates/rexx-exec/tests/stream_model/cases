@@ -186,13 +186,13 @@ model: O_both_nobuffer=READY: READY 19 1;CI_2=li READY 19 3;CO_ab_10=0 READY 12 
 # On an APPEND stream every write lands at the end (funct.xml:4309-4312).
 case name=append-writes-at-end initial=text3
 O both append nobuffer
-CO x 1
-LO y 1
-S =2 write
+CO x 19
+LO y 4
+S =20 write
 CO z
 Q write
 ----
-model: O_both_append_nobuffer=READY: READY 19 1;CO_x_1=0 READY 20 1;LO_y_1=0 READY 22 1;S_=2_write=2 READY 2 1;CO_z=0 READY 23 1;Q_write=23 READY 23 1; [line1|line2|line3|xy|z]
+model: O_both_append_nobuffer=READY: READY 19 1;CO_x_19=0 READY 20 1;LO_y_4=0 READY 22 1;S_=20_write=20 READY 20 1;CO_z=0 READY 23 1;Q_write=23 READY 23 1; [line1|line2|line3|xy|z]
 
 # Positioning and closing write nothing on a record stream (Deviation 46).
 case name=record-close-pads-nothing initial=rec16
@@ -284,13 +284,36 @@ LO tail
 ----
 model: O_both_nobuffer=READY: READY 19 1;P_=7_read=7 READY 19 7;LI=line2 READY 19 13;P_<1_write_line=2 READY 7 13;LO_tail=0 READY 12 13; [line1|tail||line3|]
 
+# On an APPEND stream the write position cannot move to a character of the
+# stream as it was opened (funct.xml:4309-4312): a SEEK there answers 0, and a
+# CHAROUT start or a LINEOUT line there answers its residual count; each is
+# NOTREADY and writes and moves nothing.
+case name=append-extent initial=text3
+O both append nobuffer
+S =1 write
+S =2 write line
+S -1 write
+CO abc 18
+CP 5
+LO y 2
+LP 3
+LO z 4
+S =19 write
+Q write
+X
+O both binary reclength 4 append nobuffer
+LO w 1
+CO v 4
+----
+model: O_both_append_nobuffer=READY: READY 19 1;S_=1_write=0 NOTREADY 19 1;S_=2_write_line=0 NOTREADY 19 1;S_-1_write=0 NOTREADY 19 1;CO_abc_18=3 NOTREADY 19 1;CP_5=0 NOTREADY 19 1;LO_y_2=1 NOTREADY 19 1;LP_3=1 NOTREADY 19 1;LO_z_4=0 READY 21 1;S_=19_write=19 READY 19 1;Q_write=19 READY 19 1;X=READY: UNKNOWN  ;O_both_binary_reclength_4_append_nobuffer=READY: READY 21 1;LO_w_1=1 NOTREADY 21 1;CO_v_4=1 NOTREADY 21 1; [line1|line2|line3|z|]
+
 # An APPEND stream on a record stream: every write lands at the end.
 case name=append-record initial=rec16
 O both binary reclength 4 append nobuffer
-LO ab 1
-CO Z 3
+LO ab 5
+CO Z 17
 ----
-model: O_both_binary_reclength_4_append_nobuffer=READY: READY 17 1;LO_ab_1=0 READY 21 1;CO_Z_3=0 READY 22 1; [AAAABBBBCCCCDDDDab__Z]
+model: O_both_binary_reclength_4_append_nobuffer=READY: READY 17 1;LO_ab_5=0 READY 21 1;CO_Z_17=0 READY 22 1; [AAAABBBBCCCCDDDDab__Z]
 
 # A ctrl-Z at the end is data like any other byte: Unix-like systems use no
 # end-of-file character in text files (intro.xml:3322-3330), so the write

@@ -631,7 +631,8 @@ fn read_unfiled(corpus_dir: &Path) -> Vec<(String, String)> {
 }
 
 /// Every `<name>.env` and `<name>.d/` beside a corpus program names a program
-/// a phase subset file runs, so a sidecar cannot sit unread.
+/// a phase subset file runs, or one `input_oracle`'s ruled cases run, so a
+/// sidecar cannot sit unread.
 #[test]
 fn every_sidecar_names_a_program_the_subset_runs() {
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
@@ -647,10 +648,19 @@ fn every_sidecar_names_a_program_the_subset_runs() {
         .iter()
         .map(|name| corpus_dir.join(name))
         .collect();
-    let filed: BTreeSet<String> =
+    let mut filed: BTreeSet<String> =
         read_subset(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>())
             .into_iter()
             .collect();
+    let ruled = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/input_oracle/ruled");
+    let ruled = fs::read_to_string(&ruled)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", ruled.display()));
+    filed.extend(
+        ruled
+            .lines()
+            .filter(|line| line.starts_with(&format!("{LANG_SUBDIR}/")))
+            .map(str::to_string),
+    );
 
     for stem in &stems {
         let program = format!("{LANG_SUBDIR}/{stem}.rex");

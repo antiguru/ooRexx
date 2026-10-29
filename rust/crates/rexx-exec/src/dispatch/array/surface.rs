@@ -550,7 +550,7 @@ fn native_array_section(
             match super::super::optional_length_argument(interp, &[Some(lines)], 0) {
                 Ok(count) => count,
                 Err(_) => {
-                    let found = interp.string_value_text(count);
+                    let found = interp.string_value_text(count)?;
                     return Err(Raised::invalid_length(&found).into());
                 }
             }

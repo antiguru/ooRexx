@@ -201,7 +201,7 @@ pub(super) fn handle_set(
         // A marshalling raise, reported against the REXX package with no
         // line: measured, oracle, `.Stream~new('HANDLE:x')` is `Error 88
         // running REXX:`.
-        let found = interp.string_value_text(value);
+        let found = interp.string_value_text(value)?;
         let mut raised =
             Raised::native_argument_outside_range(1, i128::from(min), i128::from(max), &found);
         raised.delivery.lineless = true;
@@ -220,8 +220,6 @@ pub(super) fn handle_set(
     Ok(None)
 }
 
-/// Whether `receiver` is a standard or `HANDLE:n` stream nothing has opened,
-/// or one closed since, which the queries answer as an unopened stream.
 /// Whether `receiver` is `.STDIN`, opened, and standard input is a regular
 /// file, which it then reads as a persistent stream.
 fn standard_input_file(interp: &mut Interp, receiver: ObjRef) -> Result<bool, Failure> {
@@ -235,6 +233,8 @@ fn standard_input_file(interp: &mut Interp, receiver: ObjRef) -> Result<bool, Fa
     Ok(interp.input_file().is_some())
 }
 
+/// Whether `receiver` is a standard or `HANDLE:n` stream nothing has opened,
+/// or one closed since, which the queries answer as an unopened stream.
 fn unopened_standard(interp: &Interp, receiver: ObjRef) -> Result<bool, Failure> {
     let state = require(interp, receiver)?;
     Ok(state.standard.is_some() && state.status == StreamStatus::Unknown)
@@ -825,12 +825,11 @@ pub(super) fn open(
         record_length: parsed.record_length,
     };
     let buffered = !parsed.nobuffer && !std::io::IsTerminal::is_terminal(&opened);
-    state.open = Some(rexx_core::OpenFile::new(
-        opened,
-        write_position,
-        transient,
-        buffered,
-    ));
+    let mut open = rexx_core::OpenFile::new(opened, write_position, transient, buffered);
+    if parsed.append && !transient {
+        open.append_extent = size as i64;
+    }
+    state.open = Some(open);
     state.status = StreamStatus::Ready;
     Ok(Some(interp.text(b"READY:")))
 }
@@ -1627,7 +1626,11 @@ pub(super) fn charout(
         if open.transient {
             return Err(Raised::transient_positioning().into());
         }
-        open.write_position = as_position(positive(start)?);
+        let start = as_position(positive(start)?);
+        if within_append_extent(open, start) {
+            return notready(interp, receiver, StreamStatus::NotReady, residual);
+        }
+        open.write_position = start;
     }
     // A null string writes nothing, so it moves nothing either.
     let Some(data) = data.filter(|data| !data.is_empty()) else {
@@ -1703,6 +1706,9 @@ pub(super) fn lineout(
         }
         let line = as_position(positive(line)?);
         let (_, at) = seek_line(open, line, record_length);
+        if within_append_extent(open, at) {
+            return notready(interp, receiver, StreamStatus::NotReady, b"1".to_vec());
+        }
         open.write_position = at;
     }
     let Some(data) = data else {
@@ -1784,6 +1790,12 @@ fn write_record(
             notready(interp, receiver, StreamStatus::Error(errno), b"1".to_vec())
         }
     }
+}
+
+/// Whether the write position `at` is a byte of the file as an APPEND open
+/// found it, where it cannot move (rexxref funct.xml:4309-4312).
+fn within_append_extent(open: &rexx_core::OpenFile, at: i64) -> bool {
+    at <= open.append_extent
 }
 
 /// Where a write from `position` lands: at the end of the file on an APPEND
@@ -1941,7 +1953,7 @@ fn optional_position(
     match number {
         Some(number) => Ok(Some(number)),
         None => {
-            let found = interp.string_value_text(value);
+            let found = interp.string_value_text(value)?;
             let mut raised = Raised::native_argument_out_of_range(
                 &format!("{which}"),
                 i64::MIN,
@@ -1997,7 +2009,7 @@ fn whole_number(interp: &mut Interp, value: ObjRef, which: usize) -> Result<u64,
     match number {
         Some(number) => Ok(number),
         None => {
-            let found = interp.string_value_text(value);
+            let found = interp.string_value_text(value)?;
             let mut raised = Raised::native_argument_out_of_range_unsigned(
                 &format!("{which}"),
                 0,
@@ -2282,7 +2294,7 @@ fn seek_open(
             SeekFrom::End => size - offset + 1,
             SeekFrom::Forward | SeekFrom::Backward => from + offset,
         };
-        if landed < 1 {
+        if landed < 1 || (parsed.write && within_append_extent(open, landed)) {
             return Seeked::Invalid;
         }
         if parsed.read {
@@ -2314,6 +2326,9 @@ fn seek_open(
         return Seeked::Invalid;
     }
     let (line, at) = seek_line(open, target, record_length);
+    if parsed.write && within_append_extent(open, at) {
+        return Seeked::Invalid;
+    }
     if parsed.read {
         open.read_position = at;
     }
@@ -2324,7 +2339,8 @@ fn seek_open(
 }
 
 /// A SEEK to a position the stream does not have: below 1, the write
-/// position of a READ stream, or a line of a stream open only for writing.
+/// position of a READ stream, a line of a stream open only for writing, or a
+/// write position within an APPEND stream's file as it was opened.
 /// It answers 0, raises `NOTREADY`, and moves nothing.
 #[cold]
 #[inline(never)]

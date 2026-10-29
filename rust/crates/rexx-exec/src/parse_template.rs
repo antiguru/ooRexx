@@ -346,20 +346,21 @@ impl Interp {
 
     /// `value`'s rendering for a trace line, in a buffer from the pool: its
     /// text, or for an object its string value.
-    fn traced_into_parse_buffer(&mut self, value: ObjRef) -> Vec<u8> {
+    fn traced_into_parse_buffer(&mut self, value: ObjRef) -> Result<Vec<u8>, Failure> {
         match value.decode() {
             Decoded::Heap { .. } => self.object_into_parse_buffer(value),
-            _ => self.rendered_into_parse_buffer(value),
+            _ => Ok(self.rendered_into_parse_buffer(value)),
         }
     }
 
     /// [`Interp::traced_into_parse_buffer`] of a heap value.
     #[cold]
     #[inline(never)]
-    fn object_into_parse_buffer(&mut self, value: ObjRef) -> Vec<u8> {
+    fn object_into_parse_buffer(&mut self, value: ObjRef) -> Result<Vec<u8>, Failure> {
+        let text = self.string_representation(value)?;
         let mut buffer = self.take_parse_buffer();
-        buffer.extend_from_slice(&self.string_value_text(value));
-        buffer
+        buffer.extend_from_slice(&text);
+        Ok(buffer)
     }
 
     /// Hands a source buffer back, if it is one worth keeping.
@@ -642,7 +643,7 @@ impl Interp {
                 // The rendering exists for that line and for nothing else, so
                 // it is taken under the line's own gate.
                 if self.traced_mode().results {
-                    let traced = self.traced_into_parse_buffer(value);
+                    let traced = self.traced_into_parse_buffer(value)?;
                     self.trace_keyword(indent, keyword, &traced);
                     self.give_parse_buffer(traced);
                 }

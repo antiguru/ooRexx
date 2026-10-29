@@ -80,7 +80,7 @@ fn order_of(
     // `a,b,c`, where parsing the text left it untouched; one answering
     // `'abc'` raises, where this crate ran to completion.
     let Some(value) = whole_comparison(interp, answer) else {
-        let found = interp.string_value_text(answer);
+        let found = interp.string_value_text(answer)?;
         return Err(match order {
             Order::CompareTo => Raised::compare_to_result_not_whole(&found).into(),
             Order::With(_) => Raised::compare_result_not_whole(&found).into(),

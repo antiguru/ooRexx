@@ -255,7 +255,7 @@ fn substitution_array(interp: &mut Interp, value: ObjRef) -> Result<ObjRef, Fail
             return Ok(array);
         }
     }
-    let found = interp.string_value_text(value);
+    let found = interp.string_value_text(value)?;
     Err(marshalled(Raised::native_argument_not_an_array(&found)))
 }
 

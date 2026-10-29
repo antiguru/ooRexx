@@ -1124,7 +1124,7 @@ impl Interp {
             },
         };
         self.roots.activity_mut().push_temp(object);
-        let text = self.string_value_text(object);
+        let text = self.string_value_text(object)?;
         let status = match condition.as_ref().map(|held| held.name.as_slice()) {
             Some(b"FAILURE") => ReturnStatus::Failure,
             Some(b"ERROR") => ReturnStatus::Error,
@@ -1566,7 +1566,10 @@ impl Interp {
     fn handler_escalation(&mut self, held: &HandlerCondition, condition: &[u8]) -> Failure {
         let rc = match held.result {
             Some(result) if matches!(condition, b"ERROR" | b"FAILURE") => {
-                self.string_value_text(result)
+                match self.string_value_text(result) {
+                    Ok(rc) => rc,
+                    Err(failure) => return failure,
+                }
             }
             _ => Vec::new(),
         };
