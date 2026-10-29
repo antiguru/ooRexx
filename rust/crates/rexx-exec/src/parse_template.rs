@@ -337,14 +337,28 @@ impl Interp {
         self.parse_buffers.pop().unwrap_or_default()
     }
 
-    /// `value`'s text in a buffer from the pool, or for a trace line its
-    /// rendering.
-    fn rendered_into_parse_buffer(&mut self, value: ObjRef, traced: bool) -> Vec<u8> {
+    /// `value`'s text in a buffer from the pool.
+    fn rendered_into_parse_buffer(&mut self, value: ObjRef) -> Vec<u8> {
         let mut buffer = self.take_parse_buffer();
-        match traced {
-            true => buffer.extend_from_slice(&self.string_value_text(value)),
-            false => buffer.extend_from_slice(&self.to_text(value)),
+        buffer.extend_from_slice(&self.to_text(value));
+        buffer
+    }
+
+    /// `value`'s rendering for a trace line, in a buffer from the pool: its
+    /// text, or for an object its string value.
+    fn traced_into_parse_buffer(&mut self, value: ObjRef) -> Vec<u8> {
+        match value.decode() {
+            Decoded::Heap { .. } => self.object_into_parse_buffer(value),
+            _ => self.rendered_into_parse_buffer(value),
         }
+    }
+
+    /// [`Interp::traced_into_parse_buffer`] of a heap value.
+    #[cold]
+    #[inline(never)]
+    fn object_into_parse_buffer(&mut self, value: ObjRef) -> Vec<u8> {
+        let mut buffer = self.take_parse_buffer();
+        buffer.extend_from_slice(&self.string_value_text(value));
         buffer
     }
 
@@ -400,7 +414,7 @@ impl Interp {
                 _ => {}
             }
         }
-        SourceText::Owned(self.rendered_into_parse_buffer(value, false))
+        SourceText::Owned(self.rendered_into_parse_buffer(value))
     }
 
     /// One piece of the parse string in a buffer from the pool, for a caller
@@ -628,7 +642,7 @@ impl Interp {
                 // The rendering exists for that line and for nothing else, so
                 // it is taken under the line's own gate.
                 if self.traced_mode().results {
-                    let traced = self.rendered_into_parse_buffer(value, true);
+                    let traced = self.traced_into_parse_buffer(value);
                     self.trace_keyword(indent, keyword, &traced);
                     self.give_parse_buffer(traced);
                 }

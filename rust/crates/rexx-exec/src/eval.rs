@@ -873,8 +873,6 @@ impl Interp {
     /// Renders the operator-forwarded native-method frame for `op` when
     /// `value` is a stem or a variable reference whose forward reaches a
     /// method that actually runs -- a no-op otherwise.
-    #[cold]
-    #[inline(never)]
     pub(crate) fn blame_forwarded_operator(&mut self, op: &[u8], value: ObjRef) {
         if !self.is_forwarding_receiver(value) {
             return;
