@@ -399,33 +399,30 @@ impl Interp {
     /// default name.
     #[inline(never)]
     pub(crate) fn string_value_text(&mut self, value: ObjRef) -> Vec<u8> {
-        match self.heap.get(value).map(|object| &object.body) {
-            Some(Body::Stem {
-                default: Some(_), ..
-            }) => return self.stem_string_value_text(value),
-            Some(Body::Instance { .. } | Body::Class { .. }) => {
-                if let Some(text) = self.sent_string_value(value) {
-                    return text;
-                }
-            }
-            _ => {}
+        // Called through a pointer the optimiser cannot see through, so the
+        // sends it may make stay out of what is inferred for callers that
+        // render only on a failure: measured by callgrind, a direct call costs
+        // `parse` +0.10% and `decloop` +0.08%.
+        let object: fn(&mut Interp, ObjRef) -> Option<Vec<u8>> =
+            std::hint::black_box(Interp::object_string_value_text);
+        if let Some(text) = object(self, value) {
+            return text;
         }
         self.default_string_value_text(value)
     }
 
-    /// [`Interp::string_value_text`] with nothing sent: the rendering the
-    /// primitive `OBJECTNAME`, `DEFAULTNAME` and `STRING` answer with.
-    pub(crate) fn default_string_value_text(&mut self, value: ObjRef) -> Vec<u8> {
-        if matches!(
-            self.heap.get(value).map(|object| &object.body),
-            Some(Body::Array { .. })
-        ) {
-            return match self.heap.object_name(value) {
-                Some(name) => name.to_vec(),
-                None => crate::dispatch::ARRAY_DEFAULT_NAME.to_vec(),
-            };
+    /// [`Interp::string_value_text`] of a stem, an instance or a class, or
+    /// `None` where the default rendering answers.
+    #[cold]
+    #[inline(never)]
+    fn object_string_value_text(&mut self, value: ObjRef) -> Option<Vec<u8>> {
+        match &self.heap.get(value)?.body {
+            Body::Stem {
+                default: Some(_), ..
+            } => Some(self.stem_string_value_text(value)),
+            Body::Instance { .. } | Body::Class { .. } => self.sent_string_value(value),
+            _ => None,
         }
-        self.to_text(value).to_vec()
     }
 
     /// [`Interp::string_value_text`] of the stem `store`: the rendering of
@@ -467,26 +464,31 @@ impl Interp {
         } else {
             return None;
         };
-        let caller = self.caller();
-        let send = |interp: &mut Interp| {
-            let name = match leveled {
-                true => crate::dispatch::DEFAULTNAME,
-                false => crate::dispatch::OBJECTNAME,
-            };
-            pinned!(
-                interp,
-                crate::pinning::PinKind::Conversion,
-                interp.send_message(value, name, None, &[], caller)
-            )
-        };
         let answered = match leveled {
-            true => self.primitive_level(value, crate::dispatch::OBJECTNAME, &[], send),
-            false => send(self),
+            true => self.primitive_level(value, crate::dispatch::OBJECTNAME, &[], |interp| {
+                interp.send_for_conversion(value, crate::dispatch::DEFAULTNAME)
+            }),
+            false => self.send_for_conversion(value, crate::dispatch::OBJECTNAME),
         };
         match answered {
             Ok(Some(answered)) => Some(self.to_text(answered).into_owned()),
             Ok(None) | Err(_) => None,
         }
+    }
+
+    /// [`Interp::string_value_text`] with nothing sent: the rendering the
+    /// primitive `OBJECTNAME`, `DEFAULTNAME` and `STRING` answer with.
+    pub(crate) fn default_string_value_text(&mut self, value: ObjRef) -> Vec<u8> {
+        if matches!(
+            self.heap.get(value).map(|object| &object.body),
+            Some(Body::Array { .. })
+        ) {
+            return match self.heap.object_name(value) {
+                Some(name) => name.to_vec(),
+                None => crate::dispatch::ARRAY_DEFAULT_NAME.to_vec(),
+            };
+        }
+        self.to_text(value).to_vec()
     }
 
     /// An array's own slots, borrowed, or `None` for a value that is not an

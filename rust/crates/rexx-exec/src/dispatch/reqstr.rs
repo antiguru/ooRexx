@@ -521,6 +521,15 @@ impl Interp {
 
     /// Sends `makeString` on the receiver's behalf.
     fn send_make_string(&mut self, receiver: ObjRef) -> Result<Option<ObjRef>, Failure> {
+        self.send_for_conversion(receiver, MAKESTRING)
+    }
+
+    /// Sends `name`, with no arguments, on the receiver's behalf.
+    pub(crate) fn send_for_conversion(
+        &mut self,
+        receiver: ObjRef,
+        name: &[u8],
+    ) -> Result<Option<ObjRef>, Failure> {
         // The sending side is the frame the conversion happens in, not the
         // conversion itself: `checkPrivate` asks
         // `getTopStackFrame()->getReceiver()`, and `requestString` runs no
@@ -529,7 +538,7 @@ impl Interp {
         pinned!(
             self,
             crate::pinning::PinKind::Conversion,
-            self.send_message(receiver, MAKESTRING, None, &[], caller)
+            self.send_message(receiver, name, None, &[], caller)
         )
     }
 

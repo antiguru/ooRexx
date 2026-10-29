@@ -337,10 +337,14 @@ impl Interp {
         self.parse_buffers.pop().unwrap_or_default()
     }
 
-    /// `value`'s text in a buffer from the pool.
-    fn rendered_into_parse_buffer(&mut self, value: ObjRef) -> Vec<u8> {
+    /// `value`'s text in a buffer from the pool, or for a trace line its
+    /// rendering.
+    fn rendered_into_parse_buffer(&mut self, value: ObjRef, traced: bool) -> Vec<u8> {
         let mut buffer = self.take_parse_buffer();
-        buffer.extend_from_slice(&self.to_text(value));
+        match traced {
+            true => buffer.extend_from_slice(&self.string_value_text(value)),
+            false => buffer.extend_from_slice(&self.to_text(value)),
+        }
         buffer
     }
 
@@ -396,7 +400,7 @@ impl Interp {
                 _ => {}
             }
         }
-        SourceText::Owned(self.rendered_into_parse_buffer(value))
+        SourceText::Owned(self.rendered_into_parse_buffer(value, false))
     }
 
     /// One piece of the parse string in a buffer from the pool, for a caller
@@ -624,8 +628,9 @@ impl Interp {
                 // The rendering exists for that line and for nothing else, so
                 // it is taken under the line's own gate.
                 if self.traced_mode().results {
-                    let traced = self.string_value_text(value);
+                    let traced = self.rendered_into_parse_buffer(value, true);
                     self.trace_keyword(indent, keyword, &traced);
+                    self.give_parse_buffer(traced);
                 }
                 let converted = self.required_string_value(value)?;
                 self.source_text(converted, parse)

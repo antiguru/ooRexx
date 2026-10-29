@@ -1247,6 +1247,7 @@ fn validated_index(
 }
 
 /// `HashCollection::getRexx` and `[]`: the item under that index, or `.nil`.
+#[inline(always)]
 pub(super) fn store_at(
     interp: &mut Interp,
     receiver: ObjRef,
@@ -1897,6 +1898,27 @@ pub(super) fn native_hash_at(
     receiver: ObjRef,
     args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    hash_at(interp, receiver, args, b"AT")
+}
+
+/// `~[](index)`, [`native_hash_at`] under its own name.
+pub(super) fn native_hash_bracket_at(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    hash_at(interp, receiver, args, b"[]")
+}
+
+/// [`native_hash_at`] sent as `name`.
+#[inline(always)]
+fn hash_at(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    name: &[u8],
+) -> Result<Option<ObjRef>, Failure> {
     // **One body, two stores.** `Setup.cpp` donates `IdentityTable`'s `At`,
     // `Put` and `[]` rows to `StringTable` and that whole set on to
     // `Directory` (`memory/Setup.cpp:881`, `:933`), so `Table`,
@@ -1909,10 +1931,37 @@ pub(super) fn native_hash_at(
         Some(Body::Native(_))
     ) && owns(interp, receiver)
     {
+        // An index not of a base class may hash and compare through Rexx
+        // methods of its own.
+        if args
+            .first()
+            .copied()
+            .flatten()
+            .is_some_and(|index| interp.may_run_rexx(index))
+        {
+            return leveled_store_at(interp, receiver, args, name);
+        }
         return store_at(interp, receiver, args);
     }
     let index = hash_index(interp, args, 1)?;
     Ok(Some(interp.hash_entry_read(receiver, &index)))
+}
+
+/// [`store_at`] as the primitive `name`'s own level, for an index whose
+/// `HASHCODE` and `==` may be Rexx code.
+#[cold]
+#[inline(never)]
+fn leveled_store_at(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    args: &[Option<ObjRef>],
+    name: &[u8],
+) -> Result<Option<ObjRef>, Failure> {
+    // Through a pointer, so that `store_at` keeps only the direct callers it
+    // is inlined into: measured by callgrind, a third costs `dirread` +0.19%.
+    let at: fn(&mut Interp, ObjRef, &[Option<ObjRef>]) -> Result<Option<ObjRef>, Failure> =
+        std::hint::black_box(store_at);
+    interp.primitive_level(receiver, name, args, |interp| at(interp, receiver, args))
 }
 
 /// `~put(item, index)` on a `Directory` or a `StringTable`: stores `item`

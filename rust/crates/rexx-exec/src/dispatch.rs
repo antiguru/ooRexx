@@ -116,7 +116,10 @@ use files::{native_file_path_separator, native_file_separator};
 // The collection classes' primitive methods, chained the same way.
 mod collection;
 pub(crate) mod hash;
-use hash::{native_hash_at, native_hash_bracket_put, native_hash_put, native_hash_unknown};
+use hash::{
+    native_hash_at, native_hash_bracket_at, native_hash_bracket_put, native_hash_put,
+    native_hash_unknown,
+};
 
 // `RexxInfo`'s readers, chained the same way.
 mod rexx_info;
@@ -278,23 +281,14 @@ const RENDERING_METHODS: &[(&str, &str)] = &[("Array", "MAKESTRING"), ("Array", 
 /// The collection primitives that compare or hash an argument
 /// (`equalValue`, `isEqual` and `hash` in `ArrayClass`, `ListContents`,
 /// `HashContents`, `StemClass` and `DirectoryClass`), which a `==` or
-/// `HASHCODE` of the argument's own runs under. A row shared by several
-/// classes is one method, so every class's row for it is listed.
+/// `HASHCODE` of the argument's own runs under. `Table~at` and `~[]` take
+/// their level in `hash::hash_at`, whose row `Directory` shares.
 const COMPARED_METHODS: &[(&str, &str)] = &[
     ("Array", "INDEX"),
     ("Array", "REMOVEITEM"),
     ("List", "HASITEM"),
     ("List", "INDEX"),
     ("List", "REMOVEITEM"),
-    ("Directory", "AT"),
-    ("Directory", "[]"),
-    ("StringTable", "AT"),
-    ("StringTable", "[]"),
-    ("IdentityTable", "HASINDEX"),
-    ("IdentityTable", "HASITEM"),
-    ("IdentityTable", "INDEX"),
-    ("IdentityTable", "REMOVE"),
-    ("IdentityTable", "REMOVEITEM"),
     ("Table", "HASINDEX"),
     ("Table", "HASITEM"),
     ("Table", "INDEX"),
@@ -814,7 +808,7 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // them in `Directory`'s **own** dictionary, which is what the scope in the
     // traceback says: measured, `.environment~at()` reports `Compiled method
     // "AT" with scope "Directory".`, not `IdentityTable`.
-    ("Directory", "[]", Arity::Fixed(1), native_hash_at),
+    ("Directory", "[]", Arity::Fixed(1), native_hash_bracket_at),
     // `HashCollection::putRexx` under its second name, donated from
     // `IdentityTable` (`memory/Setup.cpp:826`) and so the same function with
     // the same argument order: `t[i] = v` sends `t~"[]="(v, i)`.
@@ -1042,7 +1036,7 @@ static NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
     // through the same donation: `StringTable` takes `[]`, `At` and `Put` from
     // `IdentityTable` (`memory/Setup.cpp:881`) and declares `Unknown` itself
     // (`:883`), and `Directory` then takes that whole set from `StringTable`.
-    ("StringTable", "[]", Arity::Fixed(1), native_hash_at),
+    ("StringTable", "[]", Arity::Fixed(1), native_hash_bracket_at),
     (
         "StringTable",
         "[]=",
@@ -1466,14 +1460,7 @@ impl ObjectModel {
             .chain(package::NATIVE_METHODS)
             .chain(extra)
             .map(|(class_id, method_name, arity, run)| {
-                let body = if COMPARED_METHODS.contains(&(*class_id, *method_name)) {
-                    NativeBody::Compared(*run)
-                } else if RENDERING_METHODS.contains(&(*class_id, *method_name)) {
-                    NativeBody::Leveled(*run)
-                } else {
-                    NativeBody::Run(*run)
-                };
-                (class_id, method_name, arity, body)
+                (class_id, method_name, arity, NativeBody::Run(*run))
             })
             .chain(array::sort::LEVELED_METHODS.iter().map(
                 |(class_id, method_name, arity, run)| {
@@ -1515,6 +1502,26 @@ impl ObjectModel {
                     body,
                 },
             );
+        }
+        for (rows, leveled) in [(COMPARED_METHODS, false), (RENDERING_METHODS, true)] {
+            for (class_id, method_name) in rows {
+                let class = classes
+                    .lookup(class_id)
+                    .or_else(|| classes.system_lookup(class_id))
+                    .unwrap_or_else(|| panic!("{class_id:?} is not in the registry"));
+                let (_, method) = classes
+                    .lookup_instance_method(class, method_name)
+                    .unwrap_or_else(|| panic!("{class_id}~{method_name} is not answered"));
+                let entry = natives
+                    .get_mut(method)
+                    .unwrap_or_else(|| panic!("{class_id}~{method_name} is not a primitive"));
+                if let NativeBody::Run(run) = entry.body {
+                    entry.body = match leveled {
+                        true => NativeBody::Leveled(run),
+                        false => NativeBody::Compared(run),
+                    };
+                }
+            }
         }
         for (class_id, method_name, arity, body) in NATIVE_CLASS_METHODS
             .iter()
@@ -2747,13 +2754,14 @@ impl Interp {
         }
         let outcome = match invocable {
             // A leveled primitive is run by `run_other`, off this path.
-            Invocable::Native(entry)
-                if !matches!(entry.body, NativeBody::Leveled(_) | NativeBody::Compared(_)) =>
-            {
+            Invocable::Native(entry) if !matches!(entry.body, NativeBody::Leveled(_)) => {
                 let outcome = match (entry.arity, entry.body) {
                     (Arity::Fixed(arity), _) if args.len() > arity => {
                         Err(Raised::too_many_method_arguments(arity).into())
                     }
+                    (_, NativeBody::Compared(run)) if self.argument_may_run_rexx(args) => self
+                        .run_leveled(run, cleared, resolution, receiver, name, args)
+                        .map(NativeStarted::Ran),
                     (
                         _,
                         NativeBody::Run(run) | NativeBody::Leveled(run) | NativeBody::Compared(run),
@@ -3003,25 +3011,11 @@ impl Interp {
             },
             Invocable::Native(NativeEntry {
                 arity,
-                body: body @ (NativeBody::Leveled(run) | NativeBody::Compared(run)),
+                body: NativeBody::Leveled(run),
             }) => {
                 let ran = match arity {
                     Arity::Fixed(arity) if args.len() > arity => {
                         Err(Raised::too_many_method_arguments(arity).into())
-                    }
-                    _ if matches!(body, NativeBody::Compared(_))
-                        && args
-                            .iter()
-                            .flatten()
-                            .all(|value| self.is_base_class(*value)) =>
-                    {
-                        let ran = pinned!(
-                            self,
-                            crate::pinning::PinKind::native(name),
-                            run(self, cleared, receiver, args)
-                        );
-                        self.serve_posted_halt();
-                        ran
                     }
                     _ => self.run_leveled(run, cleared, resolution, receiver, name, args),
                 };
@@ -4046,6 +4040,28 @@ impl Interp {
             Raised::nomethod(report, name).into()
         } else {
             report.into()
+        }
+    }
+
+    /// Whether an argument of a [`NativeBody::Compared`] primitive may answer
+    /// its `==` or `HASHCODE` with Rexx code.
+    #[inline]
+    fn argument_may_run_rexx(&mut self, args: &[Option<ObjRef>]) -> bool {
+        args.iter().flatten().any(|value| self.may_run_rexx(*value))
+    }
+
+    /// Whether `value` is not of a base class, so its own methods may be
+    /// Rexx code; a string or number answers on the handle alone.
+    #[inline]
+    pub(crate) fn may_run_rexx(&mut self, value: ObjRef) -> bool {
+        match value.decode() {
+            Decoded::Nil | Decoded::SmallInt(_) | Decoded::Text(_) => false,
+            Decoded::Heap { .. } => {
+                !matches!(
+                    self.heap.get(value).map(|object| &object.body),
+                    Some(Body::Text { .. } | Body::Num { .. })
+                ) && !self.is_base_class(value)
+            }
         }
     }
 
