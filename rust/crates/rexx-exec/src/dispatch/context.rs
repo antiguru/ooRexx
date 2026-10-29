@@ -626,22 +626,6 @@ pub(crate) enum LiveLevel {
 /// entered it. A primitive's level is listed only where its method is found
 /// ([`Interp::running_primitive`]).
 pub(crate) fn live_levels(interp: &mut Interp) -> Vec<LiveLevel> {
-    let mut levels = listed_levels(interp);
-    levels.retain(|level| match *level {
-        LiveLevel::Method(row) => {
-            let level = &interp.activity.method_levels[row];
-            level.resolution.is_some() || {
-                let (receiver, name) = (level.receiver, level.name.clone());
-                interp.running_primitive(receiver, &name).is_some()
-            }
-        }
-        _ => true,
-    });
-    levels
-}
-
-/// [`live_levels`] before primitive levels are checked.
-fn listed_levels(interp: &Interp) -> Vec<LiveLevel> {
     let mut levels = Vec::new();
     for (depth, activation) in interp.frames().enumerate() {
         let id = activation.id;
@@ -669,7 +653,26 @@ fn listed_levels(interp: &Interp) -> Vec<LiveLevel> {
         levels.push(LiveLevel::Activation(depth));
         levels.extend(interp.entering_tails(id).map(LiveLevel::Entering));
     }
+    if !interp.activity.method_levels.is_empty() {
+        retain_found_primitives(interp, &mut levels);
+    }
     levels
+}
+
+/// Drops from `levels` each primitive level whose method is not found.
+#[cold]
+#[inline(never)]
+fn retain_found_primitives(interp: &mut Interp, levels: &mut Vec<LiveLevel>) {
+    levels.retain(|level| match *level {
+        LiveLevel::Method(row) => {
+            let level = &interp.activity.method_levels[row];
+            level.resolution.is_some() || {
+                let (receiver, name) = (level.receiver, level.name.clone());
+                interp.running_primitive(receiver, &name).is_some()
+            }
+        }
+        _ => true,
+    });
 }
 
 /// The `StackFrame` of one live level.
