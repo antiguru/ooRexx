@@ -1829,6 +1829,11 @@ struct Interp {
     /// Whether the required-string protocol can answer anything other than
     /// the value it was handed -- `Interp::required_string_value`'s gate.
     reqstr_armed: bool,
+    /// The condition a trace op's rendering raised, held from that op until
+    /// the region it ran in exits with it. On the interpreter rather than
+    /// the activity: measured by callgrind, a field there costs `pingguard`
+    /// +0.30% and `pingsem` +0.26%.
+    pub(crate) held_trace_failure: Option<Failure>,
     /// One entry per activity inside a stem's forward ([`Interp::forwarded`]).
     forwardings: Vec<crate::value::Forwarding>,
     /// Whether anything in this run could take `LOSTDIGITS`: a `SIGNAL ON
@@ -2471,6 +2476,7 @@ impl Interp {
             command_words: Vec::new(),
             command_words_base: Some(1),
             reqstr_armed: false,
+            held_trace_failure: None,
             forwardings: Vec::new(),
             lostdigits_armed: false,
             program_path: Vec::new(),
@@ -3467,6 +3473,8 @@ impl Interp {
             queue: _,
             input: _,
             reqstr_armed: _,
+            // A condition, whose ADDITIONAL `pending_additional` roots.
+            held_trace_failure: _,
             // Each receiver is a forward's, rooted by that send too; handed
             // over so the handle it is compared with never names a slot the
             // collector has freed.

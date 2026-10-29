@@ -433,6 +433,21 @@ impl Interp {
         Ok(self.default_string_value_text(value))
     }
 
+    /// `raise` with `value`'s [`Interp::string_value_text`] as its insert, or
+    /// the condition that rendering raises.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn rendered_failure(
+        &mut self,
+        value: ObjRef,
+        raise: fn(&[u8]) -> crate::error::Raised,
+    ) -> Failure {
+        match self.string_value_text(value) {
+            Ok(text) => raise(&text).into(),
+            Err(failure) => failure,
+        }
+    }
+
     /// What `value~string` answers, as text: the string representation a
     /// TRACE line shows a non-string result by (rexxref instrc.xml, TRACE),
     /// and for a stem its default's (intro.xml, Stems). An object whose

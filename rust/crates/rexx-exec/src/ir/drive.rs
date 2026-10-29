@@ -1957,7 +1957,7 @@ impl Interp {
         match traced {
             Ok(()) => false,
             Err(failure) => {
-                self.activity.held_trace_failure = Some(failure);
+                self.held_trace_failure = Some(failure);
                 true
             }
         }
@@ -1967,8 +1967,7 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn take_held_trace_failure(&mut self) -> Failure {
-        self.activity
-            .held_trace_failure
+        self.held_trace_failure
             .take()
             .expect("a trace op that failed held its condition")
     }

@@ -836,8 +836,9 @@ impl Interp {
             let exponent = match self.to_number(converted) {
                 Ok(number) => number,
                 Err(NotNumeric) => {
-                    let text = self.string_value_text(right_value)?;
-                    return Err(Raised::power_exponent_not_whole(&text).into());
+                    return Err(
+                        self.rendered_failure(right_value, Raised::power_exponent_not_whole)
+                    );
                 }
             };
             // The base alone: measured, `1.23456789 ** 1` at DIGITS 3 is
@@ -850,8 +851,7 @@ impl Interp {
             let right_number = match self.to_number(converted) {
                 Ok(number) => number,
                 Err(NotNumeric) => {
-                    let text = self.string_value_text(right_value)?;
-                    return Err(Raised::nonnumeric(&text).into());
+                    return Err(self.rendered_failure(right_value, Raised::nonnumeric));
                 }
             };
             // Left first, which is the oracle's order: measured, `987654321 +
@@ -879,10 +879,7 @@ impl Interp {
     pub(crate) fn arith_operand(&mut self, value: ObjRef) -> Result<Number, Failure> {
         match self.to_number(value) {
             Ok(number) => Ok(number),
-            Err(NotNumeric) => {
-                let text = self.string_value_text(value)?;
-                Err(Raised::nonnumeric(&text).into())
-            }
+            Err(NotNumeric) => Err(self.rendered_failure(value, Raised::nonnumeric)),
         }
     }
 
@@ -897,8 +894,7 @@ impl Interp {
                 if let Some(kind) = self.operator_operand_gap(value) {
                     return Err(Loud::operator_operand(op, kind).into());
                 }
-                let text = self.string_value_text(value)?;
-                Err(Raised::nonnumeric(&text).into())
+                Err(self.rendered_failure(value, Raised::nonnumeric))
             }
         }
     }

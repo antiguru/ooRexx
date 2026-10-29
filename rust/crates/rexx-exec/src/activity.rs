@@ -157,9 +157,6 @@ pub(crate) struct Activity {
     /// destructure can root it, and this field is covered by the exhaustive
     /// match in `object_roots`.
     pub(crate) pending_additional: Option<ObjRef>,
-    /// The condition a trace op's rendering raised, held from that op until
-    /// the region it ran in exits with it.
-    pub(crate) held_trace_failure: Option<crate::Failure>,
     /// Condition objects a `CALL ON` trap queued inside a `LIBRARY REXX`
     /// method, owed that method's frame once it returns.
     pub(crate) native_frames_owed: Vec<ObjRef>,
@@ -476,7 +473,6 @@ impl Activity {
             native_tails: Vec::new(),
             pending_traps: VecDeque::new(),
             pending_additional: None,
-            held_trace_failure: None,
             native_frames_owed: Vec::new(),
             reraised_object: None,
             reraise_leaving: 0,
@@ -633,8 +629,6 @@ impl Activity {
             flat_spares: _,
             pending_traps,
             pending_additional,
-            // A condition, whose ADDITIONAL `pending_additional` roots.
-            held_trace_failure: _,
             native_frames_owed,
             reraised_object,
             reraise_leaving: _,

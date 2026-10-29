@@ -4027,6 +4027,8 @@ impl Interp {
     /// The condition a send raises when the receiver's behaviour answers
     /// neither the message nor `UNKNOWN`, and **which condition that is
     /// depends on what is armed**.
+    #[cold]
+    #[inline(never)]
     fn nomethod(&mut self, receiver: ObjRef, name: &[u8], miss: Miss) -> Failure {
         let target = match self.message_target_text(receiver) {
             Ok(target) => target,
