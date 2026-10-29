@@ -286,3 +286,4 @@ Task 8.7c re-review r1 (t87c-rr1, rounds 1+2): CHANGES REQUESTED 0C/2I/2M. Every
 Ruling: LOSTDIGITS description for an object operand (re-review candidate 2) goes in fix round 3, not the queue — round 1 changed that path (unsent) and the rule (operand's string value) is unambiguous — cost if wrong: a small extra item in a fix round.
 Queued (8.8): stem-index-string-values, grandchild-sleeps-process-wide.
 Task 8.7c fix round 3: fresh implementer, brief task-8.7c-fix-r3.md (N1, N2, LOSTDIGITS, M-a, M-b + binding test, perf).
+Task 8.7c fix round 3: dispatched t87c-fix3 (opus), BASE 09a2db9a6.
