@@ -1,0 +1,20 @@
+       +++ "LINUX METHOD /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7c/fix-r2/probes/eof/debug_handler_exit_at_iterate.rex"
+    14 *-* do i = 1 to 3
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+    15 *-*   iterate
+    14 *-* do i = 1 to 3
+    15 *-*   iterate
+    14 *-* do i = 1 to 3
+    15 *-*   iterate
+    14 *-* do i = 1 to 3
+    17 *-* return 'normal'
+       +++ "LINUX METHOD /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7c/fix-r2/probes/eof/debug_handler_exit_at_iterate.rex"
+    14 *-* do i = 1 to 3
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+    15 *-*   iterate
+    14 *-* do i = 1 to 3
+    15 *-*   iterate
+    14 *-* do i = 1 to 3
+    15 *-*   iterate
+    14 *-* do i = 1 to 3
+    17 *-* return 'normal'

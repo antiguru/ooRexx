@@ -1,4 +1,4 @@
-**CLOSED 2026-10-29 by Phase 9d Task 8.7c fix round 1 (6da312e62), ruled R4 "Every condition".**
+**CLOSED 2026-10-29 by Phase 9d Task 8.7c fix round 2 (9af69058d), ruled by Moritz 2026-10-29 ("Traps off only while the line runs"): traps are OFF while the typed line runs; the read of .DEBUGINPUT is an ordinary stream read, so its conditions reach their traps (Deviation 75's delayed rule included).**
 **OPEN, queued 2026-10-29 by the controller; proposed 9d (Task 8.7c).**
 
 # Conditions raised while debug input is processed are delivered

@@ -440,3 +440,149 @@ workspace run, at `3c8978185`; outputs in `fix-r1/`.
 `1462fd46f` (findings, rulings, witnesses), `6da312e62` (trace ops, trace text gates, the extent in
 `StreamState`), `246ab583d` (the held failure on `Interp`, cold error renders), `3c8978185` (the
 `black_box` comment); records and this section in the commit after.
+
+## Fix round 2
+
+Status: DONE_WITH_CONCERNS. Code `9af69058d` (R4 as replaced, R6 narrowed) and `8dd9a4ae0` (perf); records,
+the closing and this section in the commit after. Records: `docs/superpowers/records/2026-10-18-phase-9d/t8.7c/fix-r2/`
+(`probes/r3.sh` the runner: `o` oracle, `b` `rexx-head-246ab583d` (round 1's head), `h` this round's head;
+outputs under each probe directory's `out/`). This section supersedes round 1's R4 and R6 entries.
+
+### What changed
+
+* **R4 as replaced.** `debug_input_line` (`run/interpret.rs`) is an ordinary send of `LINEIN` again: round 1's
+  traps-OFF window around the read is gone, and Task 8.7b round 3's `drop_queued_for_delayed` stays gone. The
+  eight debug EOF programs are back in `corpus/phase-6-1.txt` where they were and out of `corpus/unfiled.txt`;
+  `input_oracle/ruled` holds the R3 program alone, and `corpus.rs`'s sidecar check is as before round 1.
+  `ir/drive.rs`'s header-pause delivery comment is restored.
+* **R6 narrowed.** Every TRACE site round 1 moved to `string_representation` renders by `string_value_text`
+  again, through a cold wrapper `traced_string_value_text` (Perf); the ADDITIONAL `>A>` pair renders as before
+  round 1. `string_representation` remains for `stem_string_representation` alone (`Stem~string`, a stem's
+  NOSTRING description).
+* **Perf.** `eval`'s trace hook answers a flag and holds its condition (`trace_intermediate_held`,
+  `take_held_trace_failure`); PARSE's source and patterns evaluate through `eval_in_parse`, which takes the
+  hook's `Result` in place.
+
+### Rulings
+
+**R1 (unchanged).** Rule: a stem's string value is its default's `request('STRING')` (provide.xml, Required
+String Values; collclasses.xml, Stem `request`); where that answers none, NOSTRING names the stem. Oracle:
+NOSTRING `|7| Stem` in every required-string position, the default named in an arithmetic operand
+(`t8.7c/fix-r1/probes/r1/s2.rex`). Witness `tests::a_stems_string_value_is_its_defaults_and_nostring_names_the_stem`.
+
+**R2 (pinned, unchanged).** Rule: "Index equality is determined by using the `==` method of index"
+(collclasses.xml, Table `at`/`put`). Oracle: identity first, `==` never sent
+(`t8.7c/probes/hashid/hash-identity-first-idq.rex`). Witness `tests::a_hash_lookup_sends_the_identical_indexs_equality`.
+
+**R3 (unchanged).** Rule: on an APPEND stream a write SEEK, a CHAROUT start or a LINEOUT line within the file's
+extent at open is refused, 0 or the residual count and NOTREADY (funct.xml:4307-4312). Oracle: moves the write
+position there (`t8.7c/fix-r1/probes/ap/a1.rex`). Witnesses: stream model case `append-extent`, and
+`input_oracle::the_unfiled_ruled_programs_answer_as_this_crate_rules` over `stream_append_writes_at_end.rex`.
+
+**R4 as replaced ("Traps off only while the line runs").** Rule: every condition trap is OFF while the line typed
+at a pause runs (condtra.xml:489-494, Note 4; xintdeb.xml, "as though DO; line; END;"), so a condition the line
+raises takes its default action and SYNTAX reports and prompts again; the read of `.DEBUGINPUT` is an ordinary
+stream read, Deviation 75's delayed rule included. Oracle: the same (`RexxActivation::debugInterpret`,
+`RexxActivation.cpp:2789`, sets `debugPause` around the line only; `trap` answers false for any other condition
+while it is set). Witnesses:
+* the eight debug EOF programs (`debug_input_eof.rex`, `_call_on`, `_call_on_loop`, `debug_input_stdin_eof_call_on.rex`,
+  `debug_input_eof_iterate.rex`, `_leave`, `_iterate_outer`, `debug_handler_exit_at_iterate.rex`): o~h equal on
+  stdout, stderr and rc, o~b differ (`probes/eof/`). The header-pause delivery arm has its witness back: with its
+  guard made false (mutation build), `debug_input_eof_call_on_loop`, `debug_input_eof_iterate`,
+  `debug_input_eof_iterate_outer` and `debug_handler_exit_at_iterate` differ from the oracle on stdout and stderr.
+* new `corpus/lang/debug_typed_traps_off.rex` (with `.stdin`): a NOVALUE under SIGNAL ON NOVALUE, a USER raised
+  into the line by a routine's `RAISE ... RETURN` under CALL ON USER and a NOTREADY from a LINEIN in the line
+  under SIGNAL ON NOTREADY take their default actions, and the pause's read at the end of standard input
+  reaches SIGNAL ON NOTREADY. o~h equal, o~b differ at that last read (`probes/off/all.rex`); with
+  `ignored_in_debug_pause` answering false (mutation build) its stdout differs. NOTREADY under CALL ON in a
+  typed line was already `debug_typed_condition_ignored.rex`.
+* the pinned `delayed_trap_cases/crate` case "a condition the debug pause's input read raises is an ordinary
+  read's": each of the six reads that raise USER runs the handler once, those read inside the handler held
+  until its RETURN (`after 6`); bounded by its source returning `''` after six reads. The SYNTAX case is
+  unchanged.
+* `2026-10-29-debug-input-traps-off.md` closed under this ruling.
+Not covered by this ruling and pre-existing: a typed `raise user ping` without RETURN, and a typed `exit 3`, end
+the program on the oracle and are ignored here (`probes/off/us.rex`, `rr.rex`, `ex.rex`, `ex2.rex`, `ex3.rex`;
+the RAISE half is the deferred `2026-10-10-debug-typed-raise-untrapped.md`).
+
+**R5 (pinned, unchanged).** Rule: positioning a transient stream is 93.958 (iostrms.xml:194-197). Oracle: the
+first SEEK of an unopened `.stream~new('STDIN')` answers `1 READY` (`t8.7c/probes/stdinq/q4.rex`). Witness
+`input_oracle::the_first_seek_of_an_unopened_transient_stream_is_refused`.
+
+**R6 narrowed ("Narrow to the Stem half").** Rule: a Stem's `STRING` is its default's string representation
+(intro.xml:2653-2656), sent `STRING` when the default's class overrides it; a TRACE value line renders by the
+object's name (`stringValue`), Moritz's licensed departure from instrc.xml:3697-3699. Oracle: `v.~string`
+answers the default's name (`a NSTR`); the TRACE lines name the object (`>V>   V. => "a NSTR"`,
+`probes/r6/t1.rex`). Witness `tests::a_stems_string_sends_string_to_its_default_and_a_trace_line_names_it`
+(stdout red at `e620097f0`, stderr red at `246ab583d`). ooTest `base/keyword/TRACE` `TEST_TRACE_FORWARD`
+passes again.
+
+### Witness for the perf shape
+
+`corpus/lang/trace_rendering_raises_in_parse_and_guard.rex`: a DEFAULTNAME raising 98.900 while TRACE I renders
+a PARSE pattern, a PARSE VALUE source and a GUARD WHEN operand; o, b and h equal (`probes/hook/w.rex`). Making
+`eval`'s hook drop its held condition reddens the GUARD case, and making `eval_in_parse` drop its `Result`
+reddens the pattern case (mutation builds, `probes/hook/out/w.rex.m1.*`, `m2.*`).
+
+### Perf
+
+`fix-r2/callgrind.txt`: `bench-programs/callgrind.sh -B 0.5 -j 6 -o .../cg-9d/t8.7c/fix2-final2
+base=.../rexx-base-97eee8a9a head=.../rexx-head-8dd9a4ae0`, every program, 3 rounds; every `.vg` names one of the
+two binaries (99 each); no SPREAD, OVER or stdout flag in the log (the run's exit status was not recorded). Libc
+subtracted against base, every program at most +0.05%:
+
+| program | head -libc d% |
+|---|---|
+| arith | +0.0403 |
+| parse | +0.0396 |
+| pingsem | +0.0352 |
+| startup | +0.0201 |
+| hashnew | +0.0198 |
+| decloop | +0.0171 |
+| dispatchclass | -0.1304 |
+| fibfunc | -0.1064 |
+
+The rest lie between -0.0881 (heapshape) and +0.0107 (sayloop). Shapes measured on the way, one round each
+(`fix-r2/callgrind-variants/`, `try.sh` the driver):
+* at `9af69058d` (`callgrind-9af69058d.txt`): rexxcps +0.1334, pingguard +0.0703, compound +0.0556, from the
+  TRACE sites calling `string_value_text`, which is not cold; the cold wrapper restores round 1's figures
+  (`fix2-exp-a`: parse +0.0525, pingguard +0.0737).
+* `eval` answering its trace hook early, as a tail call, a flag, or a cold flag (`-b`, `-c`, `-e`): pingguard
+  -0.05 to +0.001, parse +0.3633 every time (`exec_parse` +26 Ir per pass, register allocation).
+* the flag in `eval` and the `Result` in PARSE's evaluations (`-f`, `-h`): every measured program within budget.
+  Sharing their prologue through an `#[inline(always)]` helper (`-g`) gives parse +0.1172 and pingguard +0.1051,
+  so the two bodies stay separate.
+
+### Commands
+
+All from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t87c-fix2-target` but the
+workspace run, at `8dd9a4ae0`; outputs in `fix-r2/`.
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` (`checks-fmt.txt`) | 0 |
+| `memcap 16G cargo clippy -j 4 -p rexx-exec -p rexx-core --all-targets -- -D warnings` (`checks-clippy.txt`) | 0 |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-core -p rexx-exec --lib` and the `--test` binaries of round 1's touched list (`checks-touched.txt`) | 0; 1553 passed, lib 1211 |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --test corpus` (`checks-corpus.txt`) | 101: 1233 of 1234 match, the known `rexxutil_file_date_time.rex` |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-parse --test sourceline_oracle --test errors --test tiling --test variants` (`checks-parse.txt`) | 0 |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test collect_stress` (`checks-collect-stress.txt`) | 0, 74 of 74 |
+| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../fix-r2/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`checks-suite.txt`) | 0; `tests.tsv`, `table.tsv`, `verdicts.tsv` and `oracle-differences.tsv` byte-identical to `t8.7c/suite/` (`cmp`). The run at `9af69058d` differed only in SysFileTree `TEST_TREE_DIRECTORY`'s oracle column, the known flake |
+| `memcap 16G cargo build --release -j 4 --bin rexx` then `memcap 16G cargo test --release -j 4 --no-fail-fast --workspace`, default target dir (`close-workspace-build.txt`, `close-workspace-tests.txt`, `close-workspace-status.txt`) | build 0; tests 101, 3536 passed, 2 failed: `datetime_zone`'s `the_file_date_time_witness_reads_the_zone_the_oracle_does` (the known DST flake) and `suite`'s `fixtures::a_child_refusing_on_the_inherited_stderr_leaves_the_run_ended_normally` (`passed` `{}` against `{"TEST_A"}`, 10.15 s); that test alone passes 3 of 3 in 0.22 s (`close-workspace-rerun-fixture.txt`) |
+
+### Concerns
+
+1. Deviation 75's sentence "A condition the debug pause's own input read raises while its trap is delayed is
+   dropped" is false at `9af69058d`; not edited here (the controller writes Deviations).
+2. A typed EXIT at a debug pause is ignored here and ends the program on the oracle (`probes/off/ex.rex`,
+   `ex2.rex`, `ex3.rex`; `run_debug_fragment` drops the fragment's `Flow`). No queued item names EXIT; queue
+   candidate, beside the deferred typed-RAISE and typed-SIGNAL items.
+3. `fixtures::a_child_refusing_on_the_inherited_stderr_leaves_the_run_ended_normally` failed once under the
+   workspace run's load and is not on the known-flake list.
+4. The workspace run was started through `nohup sh -c`, against the no-wrapper rule.
+5. The perf shape rests on two copies of `eval`'s body, measured rather than understood (register allocation
+   in `exec_parse`).
+
+### Commits
+
+`9af69058d` (R4 as replaced, R6 narrowed, witnesses), `8dd9a4ae0` (the cold TRACE rendering wrapper, `eval`'s
+flag hook, `eval_in_parse`, its witness); records and this section in the commit after.

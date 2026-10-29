@@ -1,0 +1,12 @@
+     6 *-* x = v.
+       >V>   V. => "NSTR"
+       >>>   "NSTR"
+       >=>   X <= "NSTR"
+     7 *-* x = q
+       >V>   Q => "NSTR"
+       >>>   "NSTR"
+       >=>   X <= "NSTR"
+     8 *-* x = t.
+       >V>   T. => "an Array"
+       >>>   "an Array"
+       >=>   X <= "an Array"

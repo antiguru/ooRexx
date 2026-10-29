@@ -1,0 +1,5 @@
+       +++ "LINUX COMMAND /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7c/fix-r2/probes/off/ex2.rex"
+     2 *-* x = 1
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+     3 *-* say 'after' x
+     4 *-* exit

@@ -1,0 +1,14 @@
+     7 *-* parse value 'xyz' with a (p) b
+       >L>   "xyz"
+       >K>   "VALUE" => "xyz"
+       >>>   "xyz"
+       >>>   "a BAD"
+       >=>   A <= "xyz"
+       >=>   B <= ""
+     8 *-* trace off
+    13 *-* parse value o with a
+    16 *-* s2:
+    16 *-* trace off;
+    26 *-* guard on when v \== 1
+    30 *-* s:
+    30 *-* trace off;

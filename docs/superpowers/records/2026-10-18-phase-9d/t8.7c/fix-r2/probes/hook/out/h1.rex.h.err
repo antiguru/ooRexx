@@ -1,0 +1,15 @@
+     6 *-* parse value o with a
+     9 *-* s1:
+     9 *-* trace off;
+    13 *-* parse value 'xyz' with a (p) b
+       >L>   "xyz"
+       >K>   "VALUE" => "xyz"
+       >>>   "xyz"
+    16 *-* s2:
+    16 *-* trace off;
+    19 *-* interpret 'x = o'
+       >L>   "x = o"
+       >>>   "x = o"
+    19 *-* x = o
+    22 *-* s3:
+    22 *-* trace off;

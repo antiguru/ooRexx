@@ -1,0 +1,12 @@
+       +++ "LINUX COMMAND /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7c/fix-r2/probes/eof/debug_input_eof_leave.rex"
+     6 *-* do i = 1 to 2
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+     7 *-*   leave
+    11 *-*   nr:
+    11 *-*   say 'nr' sigl;
+    11 *-*   return
+     9 *-* say 'after'
+    11 *-*   nr:
+    11 *-*   say 'nr' sigl;
+    11 *-*   return
+    10 *-* exit
