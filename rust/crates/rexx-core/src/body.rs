@@ -552,10 +552,6 @@ pub struct OpenFile {
     /// waits without being read leaves one.
     pub pending: Option<u8>,
     pub transient: bool,
-    /// The size of the file when an APPEND open opened it, 0 otherwise: the
-    /// write position cannot move to a byte within it (rexxref funct.xml,
-    /// STREAM OPEN APPEND).
-    pub append_extent: i64,
     /// A character position and the line it lies in, from the last line
     /// operation. Any write landing before the position drops it, so it is
     /// always what a count from the start would answer.
@@ -588,7 +584,6 @@ impl OpenFile {
             write_position,
             pending: None,
             transient,
-            append_extent: 0,
             line_mark: None,
             line_total: None,
             line_mark_digest: None,
@@ -721,6 +716,13 @@ pub struct StreamState {
     /// where `SAY` and trace output go and so never hold a write, whatever
     /// a reopen's options say.
     pub local: bool,
+    /// The size of the file when an APPEND open opened it, saturating at
+    /// `u32::MAX`, and 0 for any other open: the write position cannot move
+    /// to a byte within it (rexxref funct.xml, STREAM OPEN APPEND). A `u32`
+    /// fits the state's padding: measured by callgrind, an `i64` in
+    /// [`OpenFile`] cost `intcall` +5.8% whole process, all of it in libc's
+    /// allocator.
+    pub append_extent: u32,
 }
 
 /// A copy is an **unopened** stream carrying the same name: a descriptor
@@ -740,6 +742,7 @@ impl Clone for StreamState {
             mode: OpenMode::default(),
             held: Vec::new(),
             local: false,
+            append_extent: 0,
         }
     }
 }
@@ -757,6 +760,7 @@ impl StreamState {
             mode: OpenMode::default(),
             held: Vec::new(),
             local: false,
+            append_extent: 0,
         }
     }
 

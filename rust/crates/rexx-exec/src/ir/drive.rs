@@ -475,8 +475,8 @@ macro_rules! region_ops {
                     if !$self.tracing_intermediates() {
                         continue 'region_loop;
                     }
-                    if let Err(failure) = $self.trace_call_arg($registers, *src) {
-                        break $cold Err(failure);
+                    if $self.trace_call_arg_op($registers, *src) {
+                        break $cold Err($self.take_held_trace_failure());
                     }
                 }
                 Op::CallArgs {
@@ -554,8 +554,8 @@ macro_rules! region_ops {
                         break $cold Err(Loud::call_op_off_its_node().into());
                     };
                     let value = $registers.get(*src);
-                    if let Err(failure) = $self.trace_intermediate($code, expr, value) {
-                        break $cold Err(failure);
+                    if $self.trace_intermediate_op($code, expr, value) {
+                        break $cold Err($self.take_held_trace_failure());
                     }
                 }
                 // A send whose receiver and arguments ops of this region
@@ -815,8 +815,8 @@ macro_rules! region_ops {
                         continue 'region_loop;
                     }
                     let value = $registers.get(*src);
-                    if let Err(failure) = $self.echo_symbol_read($code, *symbol, value) {
-                        break $cold Err(failure);
+                    if $self.echo_symbol_read_op($code, *symbol, value) {
+                        break $cold Err($self.take_held_trace_failure());
                     }
                 }
                 // **A native expression op**: one arithmetic
@@ -1564,8 +1564,8 @@ macro_rules! region_ops {
                      reserved"
                     );
                     let value = $registers.get(*src);
-                    if let Err(failure) = $self.echo_header_value(*role, value) {
-                        break $cold Err(failure);
+                    if $self.echo_header_value_op(*role, value) {
+                        break $cold Err($self.take_held_trace_failure());
                     }
                 }
                 // One header value's own validation, in front of
@@ -1947,6 +1947,63 @@ impl Interp {
             Some(registers.get(src))
         };
         self.activity.value_buffer.push(value);
+    }
+
+    /// A trace op's call: `traced` held for [`Interp::take_held_trace_failure`],
+    /// answering whether it failed. The region loop takes the flag rather
+    /// than the `Result`: measured by callgrind, the `Result` costs `nop`
+    /// +6.5% and `assign` +4.3%.
+    fn hold_trace_failure(&mut self, traced: Result<(), Failure>) -> bool {
+        match traced {
+            Ok(()) => false,
+            Err(failure) => {
+                self.activity.held_trace_failure = Some(failure);
+                true
+            }
+        }
+    }
+
+    /// The condition [`Interp::hold_trace_failure`] held.
+    #[cold]
+    #[inline(never)]
+    fn take_held_trace_failure(&mut self) -> Failure {
+        self.activity
+            .held_trace_failure
+            .take()
+            .expect("a trace op that failed held its condition")
+    }
+
+    /// [`Interp::trace_call_arg`] for its op.
+    #[inline(never)]
+    fn trace_call_arg_op(&mut self, registers: RegFrame<'_>, src: u16) -> bool {
+        let traced = self.trace_call_arg(registers, src);
+        self.hold_trace_failure(traced)
+    }
+
+    /// [`Interp::trace_intermediate`] for its op.
+    #[inline(never)]
+    fn trace_intermediate_op(
+        &mut self,
+        code: &Code<'_>,
+        expr: &rexx_parse::Expr,
+        value: ObjRef,
+    ) -> bool {
+        let traced = self.trace_intermediate(code, expr, value);
+        self.hold_trace_failure(traced)
+    }
+
+    /// [`Interp::echo_symbol_read`] for its op.
+    #[inline(never)]
+    fn echo_symbol_read_op(&mut self, code: &Code<'_>, symbol: SymbolId, value: ObjRef) -> bool {
+        let traced = self.echo_symbol_read(code, symbol, value);
+        self.hold_trace_failure(traced)
+    }
+
+    /// [`Interp::echo_header_value`] for its op.
+    #[inline(never)]
+    fn echo_header_value_op(&mut self, role: crate::run::HeaderRole, value: ObjRef) -> bool {
+        let traced = self.echo_header_value(role, value);
+        self.hold_trace_failure(traced)
     }
 
     /// One [`crate::ir::Op::TraceArgument`]'s `>A>` line, its gate already

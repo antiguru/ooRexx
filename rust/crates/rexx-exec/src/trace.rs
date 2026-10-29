@@ -599,10 +599,10 @@ impl Interp {
     /// trace line would print them**.
     #[inline(always)]
     pub(crate) fn intermediate_text(&mut self, value: ObjRef) -> Result<Option<Vec<u8>>, Failure> {
-        self.trace_mode()
-            .intermediates
-            .then(|| self.string_representation(value))
-            .transpose()
+        if !self.trace_mode().intermediates {
+            return Ok(None);
+        }
+        self.string_representation(value).map(Some)
     }
 
     /// `value`'s rendered bytes, or `None` when no **result-level** trace line
@@ -610,10 +610,10 @@ impl Interp {
     /// doc has the argument for both.
     #[inline(always)]
     pub(crate) fn result_text(&mut self, value: ObjRef) -> Result<Option<Vec<u8>>, Failure> {
-        self.trace_mode()
-            .results
-            .then(|| self.string_representation(value))
-            .transpose()
+        if !self.trace_mode().results {
+            return Ok(None);
+        }
+        self.string_representation(value).map(Some)
     }
 
     /// `>I>`/`<I<` (`TRACE_PREFIX_INVOCATION`/`_INVOCATION_EXIT`): a routine

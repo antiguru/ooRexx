@@ -825,11 +825,16 @@ pub(super) fn open(
         record_length: parsed.record_length,
     };
     let buffered = !parsed.nobuffer && !std::io::IsTerminal::is_terminal(&opened);
-    let mut open = rexx_core::OpenFile::new(opened, write_position, transient, buffered);
-    if parsed.append && !transient {
-        open.append_extent = size as i64;
-    }
-    state.open = Some(open);
+    state.open = Some(rexx_core::OpenFile::new(
+        opened,
+        write_position,
+        transient,
+        buffered,
+    ));
+    state.append_extent = match parsed.append && !transient {
+        true => u32::try_from(size).unwrap_or(u32::MAX),
+        false => 0,
+    };
     state.status = StreamStatus::Ready;
     Ok(Some(interp.text(b"READY:")))
 }
@@ -1039,6 +1044,7 @@ fn ensure_open(
         transient,
         buffered,
     ));
+    state.append_extent = 0;
     Ok(true)
 }
 
@@ -1619,6 +1625,7 @@ pub(super) fn charout(
     }
     let state = require_mut(interp, receiver)?;
     let append = state.mode.append;
+    let extent = state.append_extent;
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"0")));
     };
@@ -1627,7 +1634,7 @@ pub(super) fn charout(
             return Err(Raised::transient_positioning().into());
         }
         let start = as_position(positive(start)?);
-        if within_append_extent(open, start) {
+        if within_append_extent(extent, start) {
             return notready(interp, receiver, StreamStatus::NotReady, residual);
         }
         open.write_position = start;
@@ -1689,6 +1696,7 @@ pub(super) fn lineout(
     let record = record_length(interp, receiver)?;
     let mode = require(interp, receiver)?.mode;
     let state = require_mut(interp, receiver)?;
+    let extent = state.append_extent;
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"1")));
     };
@@ -1706,7 +1714,7 @@ pub(super) fn lineout(
         }
         let line = as_position(positive(line)?);
         let (_, at) = seek_line(open, line, record_length);
-        if within_append_extent(open, at) {
+        if within_append_extent(extent, at) {
             return notready(interp, receiver, StreamStatus::NotReady, b"1".to_vec());
         }
         open.write_position = at;
@@ -1794,8 +1802,8 @@ fn write_record(
 
 /// Whether the write position `at` is a byte of the file as an APPEND open
 /// found it, where it cannot move (rexxref funct.xml:4309-4312).
-fn within_append_extent(open: &rexx_core::OpenFile, at: i64) -> bool {
-    at <= open.append_extent
+fn within_append_extent(extent: u32, at: i64) -> bool {
+    at <= i64::from(extent)
 }
 
 /// Where a write from `position` lands: at the end of the file on an APPEND
@@ -2203,10 +2211,11 @@ pub(super) fn position(
         offset
     };
     let state = require_mut(interp, receiver)?;
+    let extent = state.append_extent;
     let Some(open) = state.open.as_mut() else {
         return Ok(Some(interp.text(b"0")));
     };
-    let landed = seek_open(open, &parsed, offset, mode, record_length);
+    let landed = seek_open(open, &parsed, offset, mode, record_length, extent);
     seek_answer(interp, receiver, landed)
 }
 
@@ -2267,7 +2276,7 @@ fn seek_standard_input(
     let Some(open) = interp.input_file() else {
         return Ok(Some(interp.text(b"0")));
     };
-    let seeked = seek_open(open, &parsed, offset, mode, 0);
+    let seeked = seek_open(open, &parsed, offset, mode, 0, 0);
     seek_answer(interp, receiver, seeked)
 }
 
@@ -2279,6 +2288,7 @@ fn seek_open(
     offset: i64,
     mode: rexx_core::OpenMode,
     record_length: u64,
+    extent: u32,
 ) -> Seeked {
     let from = if parsed.read {
         open.read_position
@@ -2294,7 +2304,7 @@ fn seek_open(
             SeekFrom::End => size - offset + 1,
             SeekFrom::Forward | SeekFrom::Backward => from + offset,
         };
-        if landed < 1 || (parsed.write && within_append_extent(open, landed)) {
+        if landed < 1 || (parsed.write && within_append_extent(extent, landed)) {
             return Seeked::Invalid;
         }
         if parsed.read {
@@ -2326,7 +2336,7 @@ fn seek_open(
         return Seeked::Invalid;
     }
     let (line, at) = seek_line(open, target, record_length);
-    if parsed.write && within_append_extent(open, at) {
+    if parsed.write && within_append_extent(extent, at) {
         return Seeked::Invalid;
     }
     if parsed.read {
