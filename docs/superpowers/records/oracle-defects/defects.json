@@ -2068,5 +2068,50 @@
   "source": "Phase 9d Task 8.7b",
   "status": "deviation 76 (Moritz 2026-10-28: \"New Deviation, oracle bug\")",
   "crate": "Answers the running package."
+ },
+ {
+  "id": "stem-required-string-nostring-whatever-default",
+  "added": "2026-10-29",
+  "title": "A stem in a required-string position raises NOSTRING naming the stem whatever its default",
+  "category": "wrong result",
+  "area": "variables",
+  "severity": "wrong answer",
+  "repro": "docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/stemnostr/s2.rex (s. = 7; signal on nostring; say s. '')",
+  "oracle": "NOSTRING, description 7, naming the stem; in an arithmetic operand it forwards and names the default.",
+  "expected": "7: a stem's string value is its default's request('STRING') (provide.xml:758; collclasses.xml, Stem request); NOSTRING only where that answers none.",
+  "cause": "StemClass has no primitiveMakeString, so requestString takes stringValue (ObjectClass.cpp:1240-1247).",
+  "source": "Phase 9d Task 8.7c",
+  "status": "open (Moritz 2026-10-29: \"Default's value, stem named\"; Deviation pending)",
+  "crate": "Answers the default's string value; NOSTRING names the stem."
+ },
+ {
+  "id": "transient-stream-first-seek-before-open",
+  "added": "2026-10-29",
+  "title": "The first SEEK of an unopened transient stream answers 1 READY",
+  "category": "wrong result",
+  "area": "streams",
+  "severity": "wrong answer",
+  "repro": "docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/stdinq/q4.rex (.stream~new('STDIN')~seek('1') with stdin /dev/null)",
+  "oracle": "1 and READY; after open('read') 93.958.",
+  "expected": "93.958: a transient stream cannot be positioned.",
+  "cause": "stream_position tests transient before its implicit open sets it (StreamNative.cpp:2694).",
+  "source": "Phase 9d Task 8.7c",
+  "status": "open (Moritz 2026-10-29: \"New Deviation, oracle bug\"; Deviation pending)",
+  "crate": "Raises 93.958 either way."
+ },
+ {
+  "id": "array-join-objectname-non-string-raw-bytes",
+  "added": "2026-10-29",
+  "title": "An Array join of an item whose OBJECTNAME answers a non-string writes raw bytes",
+  "category": "wrong result",
+  "area": "collections",
+  "severity": "wrong answer",
+  "repro": "docs/superpowers/records/2026-10-18-phase-9d/t8.7c/review-probes/join-objectname-array-e6.rex (::method objectname returning .array~of('p','q'); say .array~of(.on~new)~makestring)",
+  "oracle": "Two NUL bytes, rc 0.",
+  "expected": "A rendering of the answer's string value, or a condition.",
+  "cause": "",
+  "source": "Phase 9d Task 8.7c review",
+  "status": "open",
+  "crate": "Renders the item."
  }
 ]
