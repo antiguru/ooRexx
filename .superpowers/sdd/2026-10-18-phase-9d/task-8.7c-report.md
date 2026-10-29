@@ -227,6 +227,7 @@ All from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t87c
 | `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-parse --test sourceline_oracle --test errors --test tiling --test variants` (`checks-parse.txt`) | 0 |
 | `memcap 16G cargo test -j 4 --release -p rexx-exec --test collect_stress` (`checks-collect-stress.txt`) | 0, 74 passed |
 | `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../t8.7c/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`checks-suite.txt`) | 0; `tests.tsv`, `table.tsv`, `verdicts.tsv`, `oracle-differences.tsv` identical to `t8.7b/fix-r3/suite/` (also at `a33114804`) |
+| `memcap 16G cargo test --release -j 4 --no-fail-fast --workspace`, default target dir, `rust/target/release/rexx` built first, at `6d16e0037` (`close-workspace-build.txt`, `close-workspace-tests.txt`) | 101: two failures, both known flakes. `collect_stress`'s `the_l0_subset_passes_again_under_collect_on_every_allocation` on `command_redirected_target_waits_elsewhere.rex` (`guard 0 3 waited 0` plain, `waited 1` under stress), the redirected-target row; `datetime_zone`'s `the_file_date_time_witness_reads_the_zone_the_oracle_does`, the DST flake. `collect_stress` alone at `e620097f0` was 74 of 74 (`checks-collect-stress.txt`) |
 
 ## Concerns
 
