@@ -1,3 +1,4 @@
+**CLOSED 2026-10-29 by Phase 9d Task 8.7c fix round 1 (6da312e62), ruled R4 "Every condition".**
 **OPEN, queued 2026-10-29 by the controller; proposed 9d (Task 8.7c).**
 
 # Conditions raised while debug input is processed are delivered

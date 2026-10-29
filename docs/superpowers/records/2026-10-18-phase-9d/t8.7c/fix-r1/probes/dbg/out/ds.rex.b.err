@@ -1,0 +1,8 @@
+       +++ "LINUX COMMAND /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/f1/dbg/ds.rex"
+     5 *-* nop
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+     8 *-* s:
+     9 *-* trace off
+    10 *-* say 's' condition('o')~code condition('o')~message
+       >>>   "s 98.900 from input."
+    11 *-* exit

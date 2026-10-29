@@ -1,3 +1,4 @@
+**CLOSED 2026-10-29 by Phase 9d Task 8.7c fix round 1 (6da312e62), under the Deviation ruled R2 "Keep rexxref, Deviation".**
 **OPEN, queued 2026-10-28 by the controller; proposed 9d (Task 8.7c).**
 
 # A hash collection's lookup sends == to the identical index object

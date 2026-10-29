@@ -1,0 +1,3 @@
+     3 *-* say .array~of(o)~makestring
+Error 11 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/f1/i1/r4.rex line 8:  Control stack full.
+Error 11.1:  Insufficient control stack space; cannot continue execution.

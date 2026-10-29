@@ -1,3 +1,4 @@
+**CLOSED 2026-10-29 by Phase 9d Task 8.7c fix round 1 (6da312e62): part 1 fixed by e620097f0, part 2 under Deviation 55, part 3 ruled R5 "New Deviation, oracle bug".**
 **OPEN, queued 2026-10-28 by the controller; proposed 9d (Task 8.7).**
 
 # Stream query residuals: STDIN queries, LINES on a write-only stream, /dev/null as transient

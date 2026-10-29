@@ -1,0 +1,5 @@
+    11 *-*   say 1 + s.~string
+    11 *-*   interpret arg(1)
+     6 *-* call try 'say 1 + s.~string'
+Error 41 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/f1/r1/s1.rex line 11:  Bad arithmetic conversion.
+Error 41.1:  Nonnumeric value ("NSTR") used in arithmetic operation.

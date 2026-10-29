@@ -1,0 +1,16 @@
+say v. ""            NOSTRING |NSTR| Stem
+say v.""             NOSTRING |NSTR| Stem
+say v. || "x"        NOSTRING |NSTR| Stem
+say v. + 1           SYNTAX 97.1
+say v. = "x"         => 0
+say \v.              SYNTAX 97.1
+say v. & 1           SYNTAX 97.1
+say s. ""            => 7 
+say s.""             => 7
+say s. || "x"        => 7x
+say s. + 1           => 8
+say s. = "x"         => 0
+say \s.              SYNTAX 34.901
+say s. & 1           SYNTAX 34.901
+say o ""             NOSTRING |NSTR| NSTR
+say o || "x"         NOSTRING |NSTR| NSTR

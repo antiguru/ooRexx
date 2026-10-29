@@ -1,0 +1,6 @@
+     4 *-* x = o
+     9 *-* raise syntax 98.900 array('boom')
+       *-* Compiled method "OBJECTNAME" with scope "Object".
+     4 *-* x = o
+Error 98 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/f1/i1/e3.rex line 9:  Execution error.
+Error 98.900:  boom.

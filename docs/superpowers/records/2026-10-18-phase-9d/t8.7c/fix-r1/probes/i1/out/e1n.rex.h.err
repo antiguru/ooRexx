@@ -1,0 +1,6 @@
+     6 *-* return 1 + 'a'
+       *-* Compiled method "OBJECTNAME" with scope "Object".
+       *-* Compiled method "MAKESTRING" with scope "Array".
+     2 *-* say .array~of(1, .bad~new)~makestring
+Error 41 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/f1/i1/e1n.rex line 6:  Bad arithmetic conversion.
+Error 41.1:  Nonnumeric value ("a") used in arithmetic operation.

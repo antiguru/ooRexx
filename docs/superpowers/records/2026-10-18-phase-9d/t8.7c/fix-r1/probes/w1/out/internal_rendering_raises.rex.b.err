@@ -1,0 +1,13 @@
+    21 *-*   x = o
+       >V>     O => "a BAD"
+       >>>     "a BAD"
+       >=>     X <= "a BAD"
+    22 *-*   trace off
+    44 *-*   x = o
+       >V>     O => "p
+q"
+       >>>     "p
+q"
+       >=>     X <= "p
+q"
+    45 *-*   trace off

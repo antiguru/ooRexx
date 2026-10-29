@@ -1,0 +1,28 @@
+say s. ""                    NOSTRING |7| Stem
+say length(s.)               NOSTRING |7| Stem
+say "<"||s.||">"             NOSTRING |7| Stem
+say 1 + s.                   => 8
+say "x" = s.                 NOSTRING |7| Stem
+say s.~string                => 7
+say s.~request("STRING")     => 7
+say t. ""                    NOSTRING |an Array| Stem
+say length(t.)               NOSTRING |an Array| Stem
+say "<"||t.||">"             NOSTRING |an Array| Stem
+say 1 + t.                   SYNTAX 41.1
+say "x" = t.                 NOSTRING |an Array| Stem
+say t.~string                => an Array
+say t.~request("STRING")     => one|two
+say v. ""                    NOSTRING |a NSTR| Stem
+say length(v.)               NOSTRING |a NSTR| Stem
+say "<"||v.||">"             NOSTRING |a NSTR| Stem
+say 1 + v.                   NOSTRING |NSTR| NSTR
+say "x" = v.                 NOSTRING |NSTR| NSTR
+say v.~string                => a NSTR
+say v.~request("STRING")     => obj Object
+say k. ""                    NOSTRING |a KMAKE| Stem
+say length(k.)               NOSTRING |a KMAKE| Stem
+say "<"||k.||">"             NOSTRING |a KMAKE| Stem
+say 1 + k.                   SYNTAX 41.1
+say "x" = k.                 NOSTRING |a KMAKE| Stem
+say k.~string                => a KMAKE
+say k.~request("STRING")     => KM

@@ -1,0 +1,4 @@
+3c8978185 Phase 9d Task 8.7c fix round 1: the rendering pointer's measured cost
+build status 0
+test status 101
+finished

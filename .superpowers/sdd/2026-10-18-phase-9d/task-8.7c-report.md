@@ -237,3 +237,206 @@ All from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t87c
 2. Queue candidate 2 is visible only through a side-effecting `DEFAULTNAME` under trace.
 3. Four items stop at Deviation candidates and stay open; part 1 of the stream-query item is fixed but
    the item stays open for candidate 5.
+
+## Fix round 1
+
+Status: DONE_WITH_CONCERNS. Code `1462fd46f`, `6da312e62`, `246ab583d` (the perf round) and `3c8978185`
+(a comment); records, closings and this section in the commit after. Records:
+`docs/superpowers/records/2026-10-18-phase-9d/t8.7c/fix-r1/` (`probes/r3.sh` the runner: `o` oracle, `b`
+`rexx-head-e620097f0` (this round's base), `h` `rexx-head-246ab583d`; each probe directory's outputs under
+`out/`, the oracle and head stderr of the recursion probe `i1/r4.rex` kept as its last three lines).
+
+### Findings
+
+**I1 (fixed).** `string_value_text` answers `Result`: a condition `DEFAULTNAME` or `OBJECTNAME` raises
+while an Array join, a trace line or an error insert renders an object is the rendering's, and a
+leveled `DEFAULTNAME` adds the primitive `OBJECTNAME`'s `Compiled method` traceback line
+(`value.rs`; the callers across `rexx-exec` propagate it, a constructor returning `Failure` returns it,
+the arithmetic inserts through `rendered_failure`). The trace emitters (`eval.rs`, `trace.rs`,
+`run.rs`, `loops.rs`, `redirect.rs`, `parse_template.rs`, `run/condition.rs`) and the region loop's trace
+ops (`ir/drive.rs`, a flag and a held failure: Perf) propagate it. The array join behind `to_text`, a
+reference's `to_text` and the native API's renderings cannot raise; they render with nothing sent
+(`unsent_string_value_text`), and `Host::string_value_text` holds a raised condition on the native
+frame. Probes `probes/i1/e1`, `e1n`, `e3`, `e4`, `e4n`, `e4c`: o~b differ, o~h equal; `r4` rc 245 on
+the oracle and head (the depth at which the stack runs out differs), rc 0 at base. Witnesses
+`corpus/lang/internal_rendering_raises.rex` (o~b differ, o~h equal, `probes/w1`) and
+`tests::a_join_rendering_itself_through_defaultname_runs_out_of_stack`.
+
+**I2 (fixed).** `notready_trap_delayed_at` stops the internal-call chain at a frame whose `NOTREADY` (or
+`ANY`) trap is not the one its caller holds (a new `CALL ON` or `SIGNAL ON` makes a new label,
+`same_notready_trap`). `probes/nr/n1.rex` (crate only): head prints `hn2 NOTREADY no_such_file_zz2.txt`
+first, as the base before Task 8.7c did; `b` does not. Witness: the `delayed_trap_cases/crate` case "an
+internal routine's own CALL ON NOTREADY ...", which re-arms the caller's own label and so tests the trap's
+identity rather than its name.
+
+**M1 (fixed).** The answer of a sent `DEFAULTNAME` or `OBJECTNAME` renders as the primitive `OBJECTNAME`
+renders it (`default_string_value_text`): `an Array` in a trace line and an error insert
+(`probes/i1/e6.rex`; the witness's `answered` case). `e6` still differs from the oracle in its first two
+lines: the oracle's join writes raw bytes (the reviewer's oracle defect) and its `.on~new~string` answers
+the array an `OBJECTNAME` returned, as `e620097f0` did.
+
+**M2 (fixed).** `leveled_store_at` calls `store_at` directly, with no comment.
+
+**M3 (fixed).** `unopened_standard` and `standard_input_file` each carry their own doc block.
+
+### Rulings
+
+**R1 (implemented).** Rule: a stem's string value is its default's `request('STRING')` (rexxref
+provide.xml, "Required String Values"; collclasses.xml, Stem `request`); where that answers none,
+NOSTRING names the stem, with the stem's `STRING` answer (R6) as its description (condtra.xml, NOSTRING).
+The concatenation receiver (`v. ''`, `v.''`, `v. || 'x'`) now joins the stem's string value
+(`concat_reference`, `eval.rs`), and the NOSTRING description of a stem is its `STRING`
+(`dispatch/reqstr.rs`). Oracle: NOSTRING for every stem in every required-string position (`|7| Stem`),
+and in an arithmetic operand and a comparison's right operand the default named (`|NSTR| NSTR`)
+(`probes/r1/s2.rex`, `c1.rex`, `s1.rex`; `a1.rex` `say t.` joins here, the oracle prints `an Array`).
+Witness `tests::a_stems_string_value_is_its_defaults_and_nostring_names_the_stem` (`s2`'s shapes; the
+`v.` rows red at `e620097f0`, which named the default for the concatenation receiver).
+
+**R2 (pinned).** Rule: "Index equality is determined by using the `==` method of index" (collclasses.xml,
+Table `at` and `put`). Oracle: identity first, the index's own `==` never sent
+(`t8.7c/probes/hashid/hash-identity-first-idq.rex`). Witness
+`tests::a_hash_lookup_sends_the_identical_indexs_equality` (green at `e620097f0` too: a pin).
+
+**R3 (implemented).** Rule: on an APPEND stream the write pointer cannot move into the file as it was opened
+(funct.xml:4307-4312): a write SEEK there answers 0 and is NOTREADY (as Deviation 59's invalid SEEK), a
+CHAROUT start answers its residual count and a LINEOUT line 1, both NOTREADY, writing and moving nothing.
+The extent is the file's size at an APPEND open (`StreamState::append_extent`, a `u32` saturating at
+`u32::MAX`: Perf). Oracle: `seek =1 write char` answers 1 and the write position moves there while the
+writes land at the end, and `lineout(f,'L4',1)` writes (`probes/ap/a1.rex`: `seek 0`, `w3 1`, `w4 1` here).
+The stream model (`corpus/model/stream.rex`, `within_extent`) follows; the named case `append-extent` is
+the witness, and `append-writes-at-end` and `append-record` now position past the extent.
+`stream_model`'s `oracle_rule` judges the oracle's departures under a new rule `append-extent`
+(Deviation 0 there, for the controller to number); `departures-oracle.tsv` refreshed: the scenarios
+whose first departure is now an extent refusal changed label.
+
+**R4 (implemented).** Rule: "While user input is processed during interactive tracing, all condition traps
+are temporarily set OFF" (condtra.xml:489-494), and "a syntax error during interactive tracing does not
+cause the exit from the program but is trapped specially" (the same note), so the paused activation's
+traps but SYNTAX's are OFF across the `.DEBUGINPUT` read as while the typed line runs
+(`debug_input_line`, `run/interpret.rs`; `drop_queued_for_delayed` removed). Oracle: `debugPause` is set
+only around `debugInterpret`, so the read's conditions reach their traps, the end-of-input NOTREADY
+included. Witnesses: the pinned debug case of `delayed_trap_cases/crate` (no handler runs now) and a new
+case "a SYNTAX condition the debug pause's input read raises is still trapped". Consequence: eight
+`corpus/lang` programs that matched the oracle depart (below).
+
+**R5 (pinned).** Rule: positioning a transient stream is 93.958 (iostrms.xml:194-197). Oracle: the first
+SEEK of an unopened `.stream~new('STDIN')` with standard input `/dev/null` answers `1 READY`
+(`t8.7c/probes/stdinq/q4.rex`). Witness
+`input_oracle::the_first_seek_of_an_unopened_transient_stream_is_refused` (a pin).
+
+**R6 (implemented).** Rule: "Results other than strings appear in the string representation obtained by
+sending them a STRING message" (instrc.xml:3697-3699), and a Stem's `STRING` is its default's string
+representation (intro.xml:2653-2656): `string_representation` (`value.rs`) sends `STRING` to an object
+whose `STRING` is not `Object`'s, and renders a stem as its chain end's; every TRACE value line and
+`Stem~string` use it. Oracle: both render by the object's name (`v.~string` and `>V> V.` `a NSTR`,
+`>V> Q` `a SN`; `probes/r1/b.rex`, `probes/r6/dn7.rex`). Witness
+`tests::a_traced_value_and_a_stems_string_send_string_to_an_override` (red at `e620097f0`).
+Consequence: ooTest `base/keyword/TRACE` `TEST_TRACE_FORWARD` (below).
+
+### What else changed
+
+* **Nine corpus programs leave the differential.** R4: `debug_input_eof.rex`,
+  `debug_input_eof_call_on.rex`, `debug_input_eof_call_on_loop.rex`, `debug_input_stdin_eof_call_on.rex`,
+  `debug_input_eof_iterate.rex`, `debug_input_eof_leave.rex`, `debug_input_eof_iterate_outer.rex`,
+  `debug_handler_exit_at_iterate.rex`, each witnessing the end-of-input NOTREADY of a debug read reaching
+  its trap. R3: `stream_append_writes_at_end.rex`. Each is in `corpus/unfiled.txt` with its ruling, out
+  of `phase-6-1.txt` and `phase-9.txt` (their comments corrected), and this crate's answers are pinned
+  by `input_oracle::the_unfiled_ruled_programs_answer_as_this_crate_rules` (`tests/input_oracle/ruled`,
+  each run from a copy with its `.stdin` sidecar); `corpus.rs`'s sidecar check accepts a program that file
+  runs.
+* `ir/drive.rs`'s header-pause delivery (`Op::Clause`'s `Do`/`Loop` arm after a pause) lost its only
+  witnesses with those programs: disabling it left the lib tests, the corpus gate and `input_oracle`
+  green. Its comment no longer says the pause's read queues the condition.
+
+### Perf
+
+`fix-r1/callgrind.txt`: `bench-programs/callgrind.sh -B 0.5 -j 6 -o .../cg-9d/t8.7c/fix1-final2
+base=.../rexx-base-97eee8a9a head=.../rexx-head-246ab583d`, every program, 3 rounds; every `.vg` names
+one of the two binaries (99 each). Flags: SPREAD on pingguard and pingsem (0.015-0.017%), reported; the
+run's exit status was not recorded, and a SPREAD flag makes the script exit 1 (its usage text). Libc
+subtracted against base, and this round's own delta (minus `e620097f0`'s, `t8.7c/callgrind.txt`):
+
+| program | head -libc d% | own |
+|---|---|---|
+| pingguard | +0.0705 | **+0.0695** |
+| parse | +0.0525 | **+0.0518** |
+| pingsem | +0.0351 | +0.0000 |
+| arith | +0.0316 | +0.0315 |
+| startup | +0.0202 | +0.0003 |
+| decloop | +0.0171 | +0.0166 |
+| dispatchclass | -0.1304 | -0.1304 |
+| fibcall | -0.2295 | -0.2296 |
+
+The rest lie between -0.2296 (fibcall) and +0.0315 (arith) own, in `fix-r1/callgrind-own.tsv` (the two
+tables' `-libc d%` columns joined by program); whole process at most +0.0617% (pingguard).
+**Two programs are over the +0.05% budget, parse by 0.0018 and pingguard by 0.0195.** The causes, each found
+by `cgdiff.py` against one-round reruns (`fix-r1/callgrind-variants/`):
+* The region loop's trace ops answering `Result`: `nop` +6.5%, `assign` +4.3% at `1462fd46f`
+  (`callgrind-1462fd46f.txt`); all four ops infallible restores them (`fix1-exp-a`), and each alone moves
+  `nop` between -0.01% and +2.1% (`fix1-exp-c`). They now answer a flag and hold the failure on the
+  interpreter (`fix1-exp-e`).
+* An `i64` in `OpenFile`: `intcall` +5.8% whole process, all in libc's allocator (one malloc per pass off
+  the fast path); without it +0.04% (`fix1-exp-f`). The extent is a `u32` in `StreamState`'s padding
+  (`fix1-exp-g`).
+* `result_text`/`intermediate_text` through `then(..).transpose()`: `compound` +0.17%, `alloc4c` +0.10%;
+  an early `return Ok(None)` restores them (`fix1-exp-h`).
+* The held failure on `Activity`: `pingguard` +0.30%, `pingsem` +0.26% (`callgrind-6da312e62.txt`); on
+  `Interp`, `fix1-exp-i`.
+* `nomethod` and the arithmetic inserts inline: `dirread` +0.05%; cold and out of line, -0.03%
+  (`fix1-exp-i`).
+* What is left is `eval`'s trace hook: parse's `exec_parse` and `eval_node`, pingguard's `exec_guard`.
+  Other shapes of the hook were measured (`fix1-exp-j`, `-k`, `-l`, `-mop`, `-t`) against the committed one
+  (`fix1-exp-i`, parse +0.0525 and pingguard +0.0703 against base): a cold `traced_value` tail gives
+  pingguard +0.0018 and parse +0.3633; `eval` not inlined gives parse +0.7906 and pingguard +0.9734. None
+  was within budget on both.
+* `value.rs`'s `black_box` stays load-bearing: without it `decloop` +0.1502 against +0.0171 and `fibcall`
+  -0.0625 against -0.2296 (`fix1-ctl-nobb`); its comment states that.
+
+### Closings
+
+`**CLOSED 2026-10-29 by Phase 9d Task 8.7c fix round 1 (6da312e62) ...**` heads
+`2026-10-27-stem-default-arithmetic-nostring.md` (R1), `2026-10-28-hash-lookup-identity-first.md` (under
+the R2 Deviation), `2026-10-28-append-stream-positioned-writes.md` (R3), `2026-10-29-debug-input-traps-off.md`
+(R4) and `2026-10-28-stream-query-residuals.md` (part 1 by `e620097f0`, part 2 Deviation 55, part 3 R5);
+their inventory rows read `closed:6da312e62` in columns 4 and 6. R6 has no queued file.
+
+### Commands
+
+All from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t87c-fix1-target` but the
+workspace run, at `3c8978185`; outputs in `fix-r1/`.
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` (`checks-fmt.txt`) | 0 |
+| `memcap 16G cargo clippy -j 4 -p rexx-exec -p rexx-core --all-targets -- -D warnings` (`checks-clippy.txt`) | 0 |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-core -p rexx-exec --lib` and `--test` owners, closed_phases, phase_ten_reasons, representation_refusals, refusal_sites, refusal_dispositions, method_bodies, coverage, signals, input_oracle, stream_handle, stream_model, standard_stream_reopen, stdin_contention, collection_arity, trace_oracle, trace_indent, licensed_divergences, native_entries, dispatch_seam (`checks-touched.txt`) | 0; lib 1211 passed. The same command at `6da312e62`, run beside a callgrind run, failed `sync::tests::a_timed_wait_ends_close_to_its_timeout` (2.8 ms late) and `scheduler::tests::native::quick_native_calls_at_the_smallest_bound_run_alike` (a bound exceeded), both timing |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --test corpus` (`checks-corpus.txt`) | 101: 1 of 1224 disagree, the known `rexxutil_file_date_time.rex` |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-parse --test sourceline_oracle --test errors --test tiling --test variants` (`checks-parse.txt`) | 0 |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test collect_stress` (`checks-collect-stress.txt`, `-r2.txt`) | 101 then 0: the first run failed `command_redirected_target_waits_elsewhere.rex` (`guard 0 3 waited 0` plain, `waited 1` under stress), the known redirected-target flake; the rerun 74 of 74 |
+| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../fix-r1/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`checks-suite.txt`) | 101 (expected while the phase is open); against `t8.7c/suite/` one row changed: `base/keyword/TRACE` `TEST_TRACE_FORWARD` `passed passed` to `passed failed` (R6, Concerns 1) |
+| `memcap 16G cargo build --release -j 4 --bin rexx` then `memcap 16G cargo test --release -j 4 --no-fail-fast --workspace`, default target dir (`close-workspace-build.txt`, `close-workspace-tests.txt`, `close-workspace-status.txt`) | build 0; tests 101: one failure, `datetime_zone`'s `the_file_date_time_witness_reads_the_zone_the_oracle_does`, the known DST flake |
+
+### Concerns
+
+1. **R6 turns ooTest `base/keyword/TRACE` `TEST_TRACE_FORWARD` red.** ooTest's `TestCase` defines
+   `::method string` (`ootest/framework/OOREXXUNIT.CLS:1664`), so `>V>   SELF` and `>K>   "TO"` show its
+   answer where the test's resource and the oracle show `a TRACE.TESTGROUP`. Licence it, narrow R6 to the
+   Stem half, or revert: the controller's call (sent 2026-10-29).
+2. **R4 and R3 take nine oracle-matching corpus programs off the differential** (What else changed). Their
+   crate answers are pinned; `ir/drive.rs`'s header-pause delivery is now unwitnessed.
+3. **parse (+0.0518) and pingguard (+0.0695) are over the +0.05% own budget**, from `eval`'s trace hook
+   (Perf).
+4. `append_extent` saturates at `u32::MAX`: on a file larger than that opened APPEND, a write position past
+   `u32::MAX` within the extent is accepted.
+5. The renderings that cannot raise (`to_text` of an array or a reference, the native API's condition
+   reports) send nothing; at `e620097f0` they sent a `DEFAULTNAME` of the object's own and dropped its
+   failure. No probe here reaches them through a raising `DEFAULTNAME`.
+6. `native_found` (`dispatch/library.rs`) still drops a failing `OBJECTNAME` send and renders the default
+   name, citing message substitution's catch; `probes/i1/e4n.rex` shows that catch does not hold on the
+   oracle for an unhandled condition (it reports the 98.900). It now renders without sending a second time.
+
+### Commits
+
+`1462fd46f` (findings, rulings, witnesses), `6da312e62` (trace ops, trace text gates, the extent in
+`StreamState`), `246ab583d` (the held failure on `Interp`, cold error renders), `3c8978185` (the
+`black_box` comment); records and this section in the commit after.

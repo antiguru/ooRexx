@@ -1,0 +1,16 @@
+    15 *-* x = t.
+       >V>   T. => "an Array"
+       >>>   "an Array"
+       >=>   X <= "an Array"
+    16 *-* x = u
+       >V>   U => "an Array"
+       >>>   "an Array"
+       >=>   X <= "an Array"
+    17 *-* x = s.
+       >V>   S. => "dflt"
+       >>>   "dflt"
+       >=>   X <= "dflt"
+    18 *-* x = v.
+       >V>   V. => "NSTR"
+       >>>   "NSTR"
+       >=>   X <= "NSTR"

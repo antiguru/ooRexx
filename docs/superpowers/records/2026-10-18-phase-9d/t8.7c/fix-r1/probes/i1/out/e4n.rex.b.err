@@ -1,0 +1,4 @@
+     8 *-* raise syntax 98.900 array('boom')
+     3 *-* o~nosuch
+Error 97 running /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/f1/i1/e4n.rex line 8:  Object method not found.
+Error 97.1:  Object "a BAD" does not understand message "NOSUCH".

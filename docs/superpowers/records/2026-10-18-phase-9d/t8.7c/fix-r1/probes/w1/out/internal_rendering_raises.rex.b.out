@@ -1,0 +1,11 @@
+defaultname ran for join
+1
+a BAD
+joined not reached
+defaultname ran for trace
+defaultname ran for trace
+traced not reached
+defaultname ran for insert
+inserted 97.1 Object "a BAD" does not understand message "NOSUCH".
+answered 97.1 Object "p
+q" does not understand message "NOSUCH".

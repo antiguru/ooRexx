@@ -1,0 +1,16 @@
+  frames 4 METHOD OBJECTNAME
+DN
+  frames 3 METHOD OBJECTNAME
+DN
+  frames 4 METHOD OBJECTNAME
+DN
+  on frames 3 METHOD STRING
+ON
+  on frames 2 PROGRAM /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/f1/r6/dn7.rex
+  on frames 2 PROGRAM /tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/f1/r6/dn7.rex
+  frames 3 METHOD OBJECTNAME
+  frames 3 METHOD OBJECTNAME
+named named
+DC
+DC
+Object "DC" does not understand message "ZORK".

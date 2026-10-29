@@ -1,0 +1,14 @@
+     8 *-* x = p
+       >V>   P => "ON"
+       >>>   "ON"
+       >=>   X <= "ON"
+     9 *-* x = o
+       >V>   O => "DN"
+       >>>   "DN"
+       >=>   X <= "DN"
+    10 *-* trace off
+    15 *-* x = q
+       >V>   Q => "a SN"
+       >>>   "a SN"
+       >=>   X <= "a SN"
+    16 *-* trace off

@@ -1,0 +1,8 @@
+    21 *-*   x = o
+    25 *-* tracedCaught:
+    26 *-* trace off
+    44 *-*   x = o
+       >V>     O => "an Array"
+       >>>     "an Array"
+       >=>     X <= "an Array"
+    45 *-*   trace off

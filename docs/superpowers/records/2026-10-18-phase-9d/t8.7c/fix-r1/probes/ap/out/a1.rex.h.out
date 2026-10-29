@@ -1,0 +1,14 @@
+READY:
+pos0 11 3
+w1 0
+pos1 14 4
+seek 0
+pos2 14
+w2 0
+pos3 17 16
+w3 1
+pos4 17
+w4 1
+pos5 17 5
+close READY:
+file aaaa|bbbb|L1|L2|
