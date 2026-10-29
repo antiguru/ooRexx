@@ -1,0 +1,45 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.03s
+     Running unittests src/lib.rs (/tmp/claude-1000/t87b-r3-red/release/deps/rexx_exec-1baa841287e130a8)
+
+running 1 test
+test run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held ... FAILED
+
+failures:
+
+---- run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held stdout ----
+
+thread 'run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held' (1526595) panicked at /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/datadriven-0.9.0/src/lib.rs:276:9:
+failure:
+tests/delayed_trap_cases/crate:3:
+call on any name ha
+m = 0
+x = ru('one') || linein('no_such_file_zz.txt')
+say 'after a, m =' m
+exit
+ru: raise user u description (arg(1)) return 'r'
+ha:
+  m = m + 1
+  say 'ha' m condition('c') condition('d')
+  return
+
+expected:
+rc> 0
+out> ha 1 USER U one
+out> after a, m = 1
+
+actual:
+rc> 0
+out> ha 1 USER U one
+out> ha 2 NOTREADY no_such_file_zz.txt
+out> after a, m = 2
+
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1206 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p rexx-exec --lib`

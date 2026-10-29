@@ -1,0 +1,21 @@
+hn 1 no_such_file_zz.txt
+charin ERROR
+lineout 1
+charout 1
+linein dir ERROR
+chars 0
+open ERROR:2
+hn 1 returns
+hn 2 no_such_zz2.txt
+charin ERROR
+lineout 1
+charout 1
+linein dir ERROR
+chars 0
+open ERROR:2
+hn 2 returns
+hn 3 no_such_zz2.txt
+charin ERROR
+lineout 1
+charout 1
+(776577 lines; first 20 kept in .head)

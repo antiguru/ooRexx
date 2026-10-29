@@ -1,0 +1,21 @@
+ha 1 USER U one
+ha 1 returns
+ha 2 NOTREADY no_such_file_zz.txt
+ha 2 returns
+ha 3 NOTREADY no_such_file_zz.txt
+ha 3 returns
+ha 4 NOTREADY no_such_file_zz.txt
+ha 4 returns
+ha 5 NOTREADY no_such_file_zz.txt
+ha 5 returns
+ha 6 NOTREADY no_such_file_zz.txt
+ha 6 returns
+ha 7 NOTREADY no_such_file_zz.txt
+ha 7 returns
+ha 8 NOTREADY no_such_file_zz.txt
+ha 8 returns
+ha 9 NOTREADY no_such_file_zz.txt
+ha 9 returns
+ha 10 NOTREADY no_such_file_zz.txt
+ha 10 returns
+(417225 lines; first 20 kept in .head)

@@ -1,0 +1,5 @@
+hn 1 no_such_file_zz.txt DELAY
+hn 1 returns no_such_file_zz.txt
+hn 2 no_such_file_zz2.txt DELAY
+hn 2 returns no_such_file_zz2.txt
+after notready, n = 2

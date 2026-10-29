@@ -1,0 +1,146 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.03s
+     Running unittests src/lib.rs (/tmp/claude-1000/t87b-r3-red/release/deps/rexx_exec-1baa841287e130a8)
+
+running 1 test
+test run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held ... FAILED
+
+failures:
+
+---- run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held stdout ----
+
+thread 'run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held' (1526624) panicked at /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/datadriven-0.9.0/src/lib.rs:276:9:
+failure:
+tests/delayed_trap_cases/crate:3:
+.local~debuginput = .src~new
+.local~reads = 0
+call on user ping name h
+n = 0
+trace ?r
+nop
+say 'after' n
+exit
+h:
+  n = n + 1
+  say 'h' n condition('d')
+  return
+::class src
+::method linein
+  .local~reads = .local~reads + 1
+  say 'linein' .local~reads
+  if .local~reads > 6 then return ''
+  raise user ping description 'from input' return ''
+
+expected:
+rc> 0
+out> linein 1
+out> linein 2
+out> linein 3
+out> h 1 from input
+out> linein 4
+out> after 1
+out> linein 5
+out> linein 6
+out> linein 7
+out> h 2 from input
+out> linein 8
+err>        +++ "LINUX COMMAND /t.rex"
+err>      6 *-* nop
+err> +++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+err>      9 *-*   h:
+err>     10 *-*   n = n + 1
+err>        >>>     "1"
+err>     11 *-*   say 'h' n condition('d')
+err>        >>>     "h 1 from input"
+err>     12 *-*   return
+err>      7 *-* say 'after' n
+err>        >>>   "after 1"
+err>      9 *-*   h:
+err>     10 *-*   n = n + 1
+err>        >>>     "2"
+err>     11 *-*   say 'h' n condition('d')
+err>        >>>     "h 2 from input"
+err>     12 *-*   return
+err>      8 *-* exit
+
+actual:
+rc> 0
+out> linein 1
+out> linein 2
+out> linein 3
+out> h 1 from input
+out> linein 4
+out> linein 5
+out> linein 6
+out> h 2 from input
+out> linein 7
+out> linein 8
+out> linein 9
+out> h 3 from input
+out> linein 10
+out> linein 11
+out> linein 12
+out> h 4 from input
+out> linein 13
+out> linein 14
+out> linein 15
+out> h 5 from input
+out> linein 16
+out> linein 17
+out> linein 18
+out> h 6 from input
+out> linein 19
+out> after 6
+out> linein 20
+err>        +++ "LINUX COMMAND /t.rex"
+err>      6 *-* nop
+err> +++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+err>      9 *-*   h:
+err>     10 *-*   n = n + 1
+err>        >>>     "1"
+err>     11 *-*   say 'h' n condition('d')
+err>        >>>     "h 1 from input"
+err>     12 *-*   return
+err>      9 *-*   h:
+err>     10 *-*   n = n + 1
+err>        >>>     "2"
+err>     11 *-*   say 'h' n condition('d')
+err>        >>>     "h 2 from input"
+err>     12 *-*   return
+err>      9 *-*   h:
+err>     10 *-*   n = n + 1
+err>        >>>     "3"
+err>     11 *-*   say 'h' n condition('d')
+err>        >>>     "h 3 from input"
+err>     12 *-*   return
+err>      9 *-*   h:
+err>     10 *-*   n = n + 1
+err>        >>>     "4"
+err>     11 *-*   say 'h' n condition('d')
+err>        >>>     "h 4 from input"
+err>     12 *-*   return
+err>      9 *-*   h:
+err>     10 *-*   n = n + 1
+err>        >>>     "5"
+err>     11 *-*   say 'h' n condition('d')
+err>        >>>     "h 5 from input"
+err>     12 *-*   return
+err>      9 *-*   h:
+err>     10 *-*   n = n + 1
+err>        >>>     "6"
+err>     11 *-*   say 'h' n condition('d')
+err>        >>>     "h 6 from input"
+err>     12 *-*   return
+err>      7 *-* say 'after' n
+err>        >>>   "after 6"
+err>      8 *-* exit
+
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1206 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p rexx-exec --lib`

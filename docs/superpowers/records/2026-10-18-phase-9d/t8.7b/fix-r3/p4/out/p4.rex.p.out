@@ -1,0 +1,6 @@
+ha 1 USER U one
+ha 2 NOTREADY no_such_file_zz.txt
+after a, m = 2
+ha 3 NOTREADY no_such_file_zz2.txt
+ha 4 USER U two
+after b, m = 4

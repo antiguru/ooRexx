@@ -1,0 +1,21 @@
+hn 1 no_such_file_zz.txt
+sub ERROR
+hn 1 returns
+hn 2 no_such_file_zz2.txt
+sub ERROR
+hn 2 returns
+hn 3 no_such_file_zz2.txt
+sub ERROR
+hn 3 returns
+hn 4 no_such_file_zz2.txt
+sub ERROR
+hn 4 returns
+hn 5 no_such_file_zz2.txt
+sub ERROR
+hn 5 returns
+hn 6 no_such_file_zz2.txt
+sub ERROR
+hn 6 returns
+hn 7 no_such_file_zz2.txt
+sub ERROR
+(551251 lines; first 20 kept in .head)

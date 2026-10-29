@@ -1,0 +1,8 @@
+hs one 10 2
+hs two 10 2
+after one
+hc one 11 5
+hc two 11 21
+after c
+hs2 one 12 8
+sg two 12 27     12 *-*     raise user s2 description (dd) return

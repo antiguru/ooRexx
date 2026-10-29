@@ -1,0 +1,21 @@
+       +++ "LINUX COMMAND /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7b/fix-r3/dp2/dp2.rex"
+     5 *-* nop
++++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+     8 *-*   h:
+     9 *-*   n = n + 1
+       >>>     "1"
+    10 *-*   say 'h' n condition('d')
+       >>>     "h 1 from input"
+    11 *-*   return
+     8 *-*   h:
+     9 *-*   n = n + 1
+       >>>     "2"
+    10 *-*   say 'h' n condition('d')
+       >>>     "h 2 from input"
+    11 *-*   return
+     8 *-*   h:
+     9 *-*   n = n + 1
+       >>>     "3"
+    10 *-*   say 'h' n condition('d')
+       >>>     "h 3 from input"
+(322425 lines; first 20 kept in .head)

@@ -444,3 +444,110 @@ in `fix-r2/`.
 2. **Entry 66 was run on the oracle once**, against the probes rule; it is recorded and never to be re-run.
 3. **The SIGNAL release's other condition fields** (`POSITION` 10, the `SIGNAL ON` clause) are still the
    release clause's; only `ADDITIONAL` and `RESULT` are taken from the held condition.
+
+## Fix round 3
+
+Code `9cb989e54`, `376052dd5` (`refusal-sites.tsv` re-derived for `error.rs`'s shifted lines). Records
+and this section are in the commit after them. Records: `docs/superpowers/records/2026-10-18-phase-9d/t8.7b/fix-r3/`
+(`four.sh` is the runner: `o` oracle, `p` `d1f8b387f`, `c` `cca0956e0` (`rexx-head-10b0f5081`), `h` this
+round (`rexx-head-9cb989e54`), stdin `/dev/null`. Probe directories hold their `out/`. A crate output
+of more than 200k lines keeps its first 20 lines in `.head`. Also there: `red-d1f8b387f-*.txt`,
+`checks-*.txt`, `suite/`, `callgrind-final.txt`, `close-workspace-tests.txt`). The oracle was run on
+no probe this round.
+
+**Important 1 (debug pause input).** `debug_input_line` again drops each condition its `LINEIN` send
+queues for a trap that is delayed (`drop_queued_for_delayed`). The citation is rexxref `condtra.xml:489`-`:494`,
+Note 4: every trap is OFF while interactive input is processed. NOTREADY is still ignored while
+delayed (`ignored_while_delayed` is unchanged). Results:
+* `dp2/`: `p` rc 137, OOM-killed at the 2G cap after 210840 stdout lines.
+* `c` and `h` agree on all three descriptors (rc 0, `after 1`).
+* `dp1/`: `p` prints `h 2 from input` to `h 4 from input`, then `after 4`. `c` and `h` agree with each
+  other (`after 1`).
+
+Witness: the case file's new case "a condition the debug pause's input read raises while its trap
+is delayed is dropped" (`dp3/dp3.rex`). It is dp2's shape, bounded because the reader stops raising
+after six reads. It is red at `d1f8b387f` (`red-d1f8b387f-debug.txt`): the handler runs six times and
+the program prints `after 6`. At head it prints `after 1`.
+
+**Minor 1 (SIGNAL ON release).** `release_delayed` now signals the held condition with the object it
+was raised with. That object travels in `Activity::reraised_object` with the new `Delivery::held`
+flag. The trap marks it `INSTRUCTION` `SIGNAL` (`trap_held_condition_object`) and changes nothing
+else, so `POSITION`, `TRACEBACK`, `STACKFRAMES`, `ADDITIONAL` and `RESULT` all come from the raise.
+SIGL still names the `SIGNAL ON` clause (`condtra.xml:677`-`:678`). The flag is cleared before the
+condition becomes the activation's `active_condition`. A missing label clears the object through
+`clear_failure_levels`. Results:
+* `p8/`: `h` prints `sg two 12 27     12 *-*     raise user s2 description (dd) return`.
+* `p` and `c` print `sg two 27 27     27 *-*   signal on user s2 name sg`.
+
+Witness: the case file's `SIGNAL ON` case now also prints `POSITION` and the first `TRACEBACK` line
+(`sg 5      5 *-*     raise ...`). It is red at `d1f8b387f` (`red-d1f8b387f-signal.txt`: `sg 10     10
+*-*   signal on user sig name sg`).
+
+**Minor 2 (NOTREADY under a CALL ON ANY delayed at the clause).** `raise_notready` treats the trap as
+delayed when one of these was already queued at the trapping activation (`notready_trap_delayed_at`):
+* a NOTREADY;
+* where `CALL ON ANY` is the trap that takes NOTREADY, any condition that the `ANY` trap took.
+
+Results:
+* `p4/`: `h` prints `ha 1 USER U one`, `after a, m = 1`. `p` and `c` print `m = 2`.
+* The second clause, where the NOTREADY comes first, is unchanged: one handler run for each condition.
+* `p5/`: `p` and `h` agree on all three descriptors.
+
+Witness: the case file's new case "NOTREADY is ignored under a CALL ON ANY trap a USER condition
+queued at the same clause delayed". It is p4's first clause and runs on the crate only. It is red at
+`d1f8b387f` (`red-d1f8b387f-notready.txt`: `ha 2 NOTREADY no_such_file_zz.txt`, `m = 2`).
+
+Each red file comes from `d1f8b387f`'s `rust/` and `interpreter/` (`git archive`) with the case file
+holding only the case concerned, through `cargo test --release -p rexx-exec --lib --
+a_condition_raised_while_its_handler_runs_is_held`, exit 101 each. The signal file is the first
+run, with the whole case file. Its first failure is the signal case.
+
+**Regression probes.** The re-review's `d1`, `p1`, `p2`, `p3`, `p6` and `p7`: `p` and `h` agree on all
+three descriptors for each.
+
+**Item 4.** `oracle-crashes.txt` entry 67 is p4's program, with the reviewer's single run: rc 139,
+stdout `ha 1 NOTREADY no_such_file_zz.txt`, stderr empty. `rust/CLAUDE.md`'s probe bullet gained a
+sentence: two differently named conditions in one clause are not safe when one `CALL ON ANY` traps
+both (entry 67).
+
+### Perf
+
+`fix-r3/callgrind-final.txt` was produced by `bench-programs/callgrind.sh -B 0.5 -j 4 -r 3 -o .../cg-9d/t8.7b/fix-r3-final
+base=.../rexx-base-504ff0743 head=.../rexx-head-9cb989e54`, run on every program. It exited 0 with no
+OVER or SPREAD flag. Every `cmd:` names one of the two binaries, 99 each.
+
+| program | -libc d% against base |
+|---|---|
+| pingmsg (the largest) | +0.0366% |
+| startup | +0.0238% |
+| sayloop | +0.0125% |
+| interpret | +0.0067% |
+| pingguard | -0.0162% |
+| pingsem | -0.3563% |
+
+Whole process, the largest is +0.4644% (interpret, as in fix round 2).
+
+### Commands
+
+All from `rust/` with `CARGO_INCREMENTAL=0` and `CARGO_TARGET_DIR=/tmp/claude-1000/t87b-target` unless named.
+All at `9cb989e54`/`376052dd5`. Outputs are in `fix-r3/`.
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` | 0 |
+| `memcap 16G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` (`checks-clippy.txt`) | 0 |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --lib --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions --test method_bodies --test coverage --test signals` (`checks-touched.txt`) | 101 at `9cb989e54`. lib 1207 passed, signals 42. The one failure was `refusal_sites`: `error.rs` lines shifted. Re-derived with `REXX_REFUSAL_SITES_REFRESH=1` (`376052dd5`), then 0 (`checks-refusal-sites.txt`) |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test collect_stress` (`checks-collect-stress.txt`) | 0, 74 passed |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`checks-corpus.txt`) | 101. The one mismatch is the known `rexxutil_file_date_time.rex` |
+| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../fix-r3/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`checks-suite.txt`) | 0. `tests.tsv`, `table.tsv`, `verdicts.tsv` and `oracle-differences.tsv` are identical to `fix-r2/suite/` |
+| the new cases against `d1f8b387f` (`red-d1f8b387f-*.txt`) | 101 each, red as named above |
+| `memcap 16G cargo test --release -j 4 --no-fail-fast --workspace`, default target dir, `rust/target/release/rexx` built first (`close-workspace-build.txt`, `close-workspace-tests.txt`) | 101. One failure: `datetime_zone`'s `the_file_date_time_witness_reads_the_zone_the_oracle_does`, the known DST flake |
+
+### Concerns
+
+1. **Note 4 is wider than the restored drop.** A condition that the input read raises in a level
+   whose trap is not delayed is still delivered. Examples: dp2's first read in main, and `dp3`'s
+   `h 2 from input` after `after 1`. `c` does the same, and this predates the task. The new debug case
+   pins that output too, so a later fix of the rest of Note 4 changes its expected block.
+2. **The SIGNAL release reuses `Activity::reraised_object`** with a `Delivery::held` flag. No probe
+   reaches a path that sets `reraised_object` between the release and its trap.

@@ -1,0 +1,12 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.03s
+     Running tests/refusal_sites.rs (/tmp/claude-1000/t87b-target/release/deps/refusal_sites-dd9d226747a50c09)
+
+running 5 tests
+test the_answers_more_than_one_row_shares_are_the_recorded_ones ... ok
+test every_send_surface_row_is_walked ... ok
+test the_table_holds_every_constructor_the_source_defines ... ok
+test the_scanner_finds_constructors_and_only_constructors ... ok
+test a_reached_row_carries_its_own_site_identifier_and_an_unreached_one_does_not ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+
