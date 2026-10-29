@@ -334,3 +334,113 @@ From `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t87b-tar
    `CALL OFF`/`SIGNAL OFF` drop the held conditions, HALT's default 4.1 at that clause; the debug pause's
    own input conditions are dropped, not held. A handler that raises its own condition on every run is
    now called for ever.
+
+## Fix round 2
+
+Status: DONE_WITH_CONCERNS. Code `d775871f7`, `d1f8b387f`; records and this section in the commit after.
+Records: `docs/superpowers/records/2026-10-18-phase-9d/t8.7b/fix-r2/` (`four.sh` the runner: `o` oracle,
+`b` `5053fbd9b`, `c` `cca0956e0`, `h` this round; probe directories with their `out/`; `red-cca0956e0*.txt`
+the new tests run against `cca0956e0`'s code; `mem/figures.txt`; `checks-*.txt`, `suite/`,
+`callgrind-final.txt`, `close-workspace-tests.txt`).
+
+**Important 1 (NOTREADY raised while its trap is delayed).** Ignored, with ERROR and FAILURE
+(`ignored_while_delayed`, `run/condition.rs`): a held or `RAISE ... RETURN`-queued NOTREADY is dropped,
+and `raise_notready` raises none where its `CALL ON` trap, its own or `ANY`, is delayed by a running
+handler or by a NOTREADY its clause already queued. rexxref: `condtra.xml:278`-`:280` ("ignored if the
+NOTREADY condition trap is already in the delayed state"), `iostrms.xml:657`-`:667` (the trap enters the
+DELAY state at the raise, and a NOTREADY raised in that state leaves it there and processing continues).
+`d1/d1.rex`: `o`, `b` and `h` equal on all three descriptors, `c` runs the handler twice. Witnesses:
+`a_condition_raised_again_while_its_call_trap_is_delayed`'s `notready` row (one handler run; red at
+`cca0956e0`, `h NOTREADY` twice), the case file's "NOTREADY raised again is ignored" (red at `cca0956e0`,
+`n = 2`, `red-cca0956e0-notready.txt`), and a new case "NOTREADY is ignored under a delayed CALL ON ANY
+trap, and when raised twice in one clause" (`nr/nr.rex`: `c` calls the `ANY` handler again until the 2G
+cap kills it, rc 137; `b` runs the NOTREADY handler twice for the one clause).
+**The debug-pause drop of `848403a01` is removed**: its commit and comment justify it only by the `CALL
+ON NOTREADY` handler pausing at the end of the input being called again for ever, which the ignore now
+prevents where the NOTREADY is raised. `debug_input_line` is `5053fbd9b`'s again and
+`drop_queued_for_delayed` is gone. What rexxref supports and stays: the NOTREADY ignore above, and Note
+4 (`condtra.xml:489`-`:494`, traps OFF while interactive input is processed) as `ignored_in_debug_pause`
+already applies it to the typed line. The corpus gate's `debug_input_eof_*`,
+`debug_handler_exit_at_iterate` and `debug_input_stdin_eof_call_on` agree with the oracle.
+
+**Important 2 (hidden primitive).** `live_levels` drops a primitive level whose method
+`running_primitive` does not find, in a cold pass taken only while a primitive level is live, so such a
+primitive lists no frame, as at `5053fbd9b`. `n5/`, `n6/`: `h` equal to `b` on all three; the oracle's
+`METHOD HAS ... scope "MYARR"` row is the queue candidate `n2` of the re-review, at base too. Witness
+`dispatch::tests::a_hidden_primitive_lists_no_frame`, red at `cca0956e0` (rc 120, the `lib.rs:730`
+refusal).
+
+**Important 3 (memory of a redelivery chain).** What each redelivery keeps is the chain of condition
+objects, and the program can reach every one of them: a condition raised in the handler carries the
+handler's frame in `STACKFRAMES`, whose `ARGUMENTS` is the condition the handler was called with.
+`mem/walk.rex` walks m1's chain from the last handler run back to `first`, 2000 links at 2000. The same
+graph built from ordinary deliveries, with no trap ever delayed (`mem/ctl3.rex`, each routine's frame
+holding the previous condition object as its argument), retains as much here and on the oracle:
+
+| program, N | `c` | `h` | oracle |
+|---|---|---|---|
+| `m1.rex` 2000 / 20000 | 40,804 / 218,944 KB | 38,932 / 218,916 KB | (drops the held condition) |
+| `ctl3.rex` 2000 / 20000 | 40,180 / 226,640 KB | 41,580 / 226,744 KB | 20,248 / 99,104 KB |
+
+So the redelivery keeps nothing of its own, and a chain cannot stay flat without collecting objects the
+program can still read; an endless self-raising handler grows for the same reason. No bounded test: the
+growth is the reachable graph's. The size per link against the oracle's is the condition object and
+frame representation, on any delivery. Found instead: `redeliver_held`'s queue rooted nothing, so a
+condition waiting while the handler runs for one before it was collectable. It is rooted as a
+temporary now, and `release_delayed` roots the held object it reads. Witness
+`conditions::conditions_waiting_for_their_handler_survive_a_collection` (the `w/g.rex` shape under
+`run_program_collect_every_alloc`), red at `cca0956e0`: stdout ends after `h 2 second second-add`.
+
+**Minor 1.** The `SIGNAL ON` released over a held condition takes its `ADDITIONAL` and `RESULT` from the
+held condition object. The case file's `SIGNAL ON` case now asserts both (`sg two SIGNAL 10 two-add
+two-res`); red at `cca0956e0` (`w/s.rex`: `sg two The NIL object The NIL object SIGNAL`).
+
+**Minor 3.** `oracle-crashes.txt` entry 64 is titled for its program's two halves: a direct `RAISE ...
+RETURN` in the handler, then a `SIGNAL ON` re-issued over a condition raised again.
+
+**Deviation witnesses (tests only).** `run::tests::conditions::an_interpret_translation_failure_names_the_running_package`
+pins `1 35.1` (oracle `0 35.1`, `w/a.rex`). `run::tests::indent::interpret_frames_after_a_completed_do_indent_by_block_structure`
+pins the traceback and the `traceLine`s after `do 2; nop; end` inside `INTERPRET` (`w/b1.rex`,
+`w/b2.rex`; the oracle's `return 1 / 0`, `x = f()` and `do f over` rows are two columns short). Both
+pass at `cca0956e0` as well.
+
+**New oracle crash, entry 66.** `nr/nr.rex` was run on the oracle by the four-way runner before its
+second half was checked against the probes rule (one NOTREADY condition queued twice at one boundary):
+SIGSEGV, rc 139. Entered in `oracle-crashes.txt`; `defects.json` is the controller's.
+
+### Perf
+
+`fix-r2/callgrind-final.txt`: `bench-programs/callgrind.sh -B 0.5 -j 4 -r 3 -o .../cg-9d/t8.7b/fix-r2-final
+base=.../rexx-base-504ff0743 head=.../rexx-head-d1f8b387f`, every program, no OVER or SPREAD flag (`-T`
+over the outputs exit 0; every `cmd:` names one of the two binaries). Libc subtracted against base, at
+most +0.0353% (pingmsg); startup +0.0235%, sayloop +0.0125%, interpret +0.0067%, pingguard -0.0076%,
+pingsem -0.3481%. Whole process at most +0.4644% (interpret). The run at `d775871f7`
+(`callgrind-d775871f7.txt`) had pingmsg +0.2051% libc subtracted: the primitive check ran on every
+`live_levels` call, which every `START` makes for its spawner frame; `d1f8b387f` takes it only while a
+primitive level is live.
+
+### Commands
+
+From `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t87b-target` unless named; outputs
+in `fix-r2/`.
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` | 0 (at `d1f8b387f`) |
+| `memcap 16G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` (`checks-clippy.txt`) | 0 (at `d775871f7`; again 0 at `d1f8b387f`) |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --lib --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites --test refusal_dispositions --test method_bodies --test coverage --test signals` (`checks-touched.txt`) | 0 at `d775871f7`; lib 1207 passed, signals 42; lib again 1207 passed at `d1f8b387f` |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test collect_stress` (`checks-collect-stress.txt`) | 0, 74 passed |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release -p rexx-exec --test corpus` (`checks-corpus.txt`) | 101: the one mismatch the known `rexxutil_file_date_time.rex` |
+| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../fix-r2/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` | 0; `tests.tsv`, `table.tsv`, `verdicts.tsv`, `oracle-differences.tsv` identical to `fix-r1/suite/` |
+| the new tests against `cca0956e0`'s code (`red-cca0956e0.txt`, `red-cca0956e0-notready.txt`) | 101: red as named above; the two Deviation pins pass |
+| `memcap 16G cargo test --release -j 4 --no-fail-fast --workspace`, default target dir, `rust/target/release/rexx` built first (`close-workspace-tests.txt`) | 101 at `d1f8b387f`: one failure, `datetime_zone`'s `the_file_date_time_witness_reads_the_zone_the_oracle_does`, the known DST flake |
+
+### Concerns
+
+1. **Important 3 is not closable as briefed.** The retained memory is the reachable condition chain;
+   flattening it would collect objects the program reads (`mem/walk.rex`). The outcome to rule is whether
+   that is acceptable, or whether a redelivered handler should be called with something that does not
+   link the chain.
+2. **Entry 66 was run on the oracle once**, against the probes rule; it is recorded and never to be re-run.
+3. **The SIGNAL release's other condition fields** (`POSITION` 10, the `SIGNAL ON` clause) are still the
+   release clause's; only `ADDITIONAL` and `RESULT` are taken from the held condition.

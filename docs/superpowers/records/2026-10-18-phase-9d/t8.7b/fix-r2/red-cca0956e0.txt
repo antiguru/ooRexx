@@ -1,0 +1,125 @@
+   Compiling rexx-inventory v0.1.0 (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/r2/redtree/rust/crates/rexx-inventory)
+   Compiling libc v0.2.186
+   Compiling log v0.4.34
+   Compiling rustc-hash v2.1.2
+   Compiling regex-syntax v0.8.11
+   Compiling autocfg v1.5.1
+   Compiling rexx-num v0.1.0 (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/r2/redtree/rust/crates/rexx-num)
+   Compiling generator v0.8.10
+   Compiling syn v2.0.119
+   Compiling num-traits v0.2.19
+   Compiling crossbeam-epoch v0.9.20
+   Compiling pin-project-lite v0.2.17
+   Compiling rayon-core v1.13.0
+   Compiling thiserror v1.0.69
+   Compiling lazy_static v1.5.1
+   Compiling sharded-slab v0.1.7
+   Compiling regex-automata v0.4.14
+   Compiling tracing v0.1.44
+   Compiling crossbeam-deque v0.8.6
+   Compiling rexx-core v0.1.0 (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/r2/redtree/rust/crates/rexx-core)
+   Compiling thiserror-impl v1.0.69
+   Compiling matchers v0.2.0
+   Compiling tracing-log v0.2.0
+   Compiling thread_local v1.1.10
+   Compiling rexx-classes v0.1.0 (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/r2/redtree/rust/crates/rexx-classes)
+   Compiling nu-ansi-term v0.50.3
+   Compiling rexx-lib v0.1.0 (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/r2/redtree/rust/crates/rexx-lib)
+   Compiling smallvec v1.16.2
+   Compiling rustix v1.1.4
+   Compiling tracing-subscriber v0.3.23
+   Compiling libloading v0.8.9
+   Compiling either v1.16.0
+   Compiling bitflags v2.13.1
+   Compiling linux-raw-sys v0.12.1
+   Compiling iana-time-zone v0.1.65
+   Compiling scoped-tls v1.0.1
+   Compiling loom v0.7.2
+   Compiling chrono v0.4.45
+   Compiling rayon v1.12.0
+   Compiling rexx-api v0.1.0 (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/r2/redtree/rust/crates/rexx-api)
+   Compiling datadriven v0.9.0
+   Compiling rexx-parse v0.1.0 (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/r2/redtree/rust/crates/rexx-parse)
+   Compiling rexx-extract v0.1.0 (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/r2/redtree/rust/crates/rexx-extract)
+   Compiling tz-rs v0.7.3
+   Compiling rexx-exec v0.1.0 (/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/91ae65d5-ff7c-4420-b551-a1575c2ba797/scratchpad/r2/redtree/rust/crates/rexx-exec)
+    Finished `release` profile [optimized + debuginfo] target(s) in 2m 42s
+     Running unittests src/lib.rs (/tmp/claude-1000/t87b-red-target/release/deps/rexx_exec-1baa841287e130a8)
+
+running 6 tests
+test run::tests::conditions::an_interpret_translation_failure_names_the_running_package ... ok
+test dispatch::tests::a_hidden_primitive_lists_no_frame ... FAILED
+test run::tests::conditions::a_condition_raised_again_while_its_call_trap_is_delayed ... FAILED
+test run::tests::conditions::conditions_waiting_for_their_handler_survive_a_collection ... FAILED
+test run::tests::indent::interpret_frames_after_a_completed_do_indent_by_block_structure ... ok
+test run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held ... FAILED
+
+failures:
+
+---- dispatch::tests::a_hidden_primitive_lists_no_frame stdout ----
+
+thread 'dispatch::tests::a_hidden_primitive_lists_no_frame' (1254172) panicked at crates/rexx-exec/src/dispatch/tests.rs:2314:5:
+assertion `left == right` failed
+  left: (120, "", "rexx-exec: the executable of a stack frame built without one is not implemented\n")
+ right: (0, "0\n", "")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- run::tests::conditions::a_condition_raised_again_while_its_call_trap_is_delayed stdout ----
+
+thread 'run::tests::conditions::a_condition_raised_again_while_its_call_trap_is_delayed' (1254173) panicked at crates/rexx-exec/src/run/tests/conditions.rs:1085:9:
+assertion `left == right` failed: notready
+  left: "h NOTREADY\nh NOTREADY\nzr 2\n"
+ right: "h NOTREADY\nzr 2\n"
+
+---- run::tests::conditions::conditions_waiting_for_their_handler_survive_a_collection stdout ----
+
+thread 'run::tests::conditions::conditions_waiting_for_their_handler_survive_a_collection' (1254176) panicked at crates/rexx-exec/src/run/tests/conditions.rs:1135:5:
+assertion `left == right` failed
+  left: "h 1 first first-add\nh 2 second second-add\n"
+ right: "h 1 first first-add\nh 2 second second-add\nh 3 third third-add\nh 4 fourth fourth-add\nafter 4\n"
+
+---- run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held stdout ----
+
+thread 'run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held' (1254174) panicked at /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/datadriven-0.9.0/src/lib.rs:276:9:
+failure:
+tests/delayed_trap_cases/crate:100:
+call on user sig name hs
+call rs 'one'
+say 'not reached'
+exit
+rs: parse arg dd; raise user sig description (dd) additional (dd'-add') return (dd'-res')
+hs:
+  say 'hs' condition('d') condition('i') condition('a')
+  call rs 'two'
+  say 'hs raised again'
+  signal on user sig name sg
+  say 'hs not reached'
+  return
+sg:
+  say 'sg' condition('d') condition('i') sigl condition('a') condition('o')~result
+  exit
+
+expected:
+rc> 0
+out> hs one CALL one-add
+out> hs raised again
+out> sg two SIGNAL 10 two-add two-res
+
+actual:
+rc> 0
+out> hs one CALL one-add
+out> hs raised again
+out> sg two SIGNAL 10 The NIL object The NIL object
+
+
+
+
+failures:
+    dispatch::tests::a_hidden_primitive_lists_no_frame
+    run::tests::conditions::a_condition_raised_again_while_its_call_trap_is_delayed
+    run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held
+    run::tests::conditions::conditions_waiting_for_their_handler_survive_a_collection
+
+test result: FAILED. 2 passed; 4 failed; 0 ignored; 0 measured; 1201 filtered out; finished in 0.11s
+
+error: test failed, to rerun pass `-p rexx-exec --lib`

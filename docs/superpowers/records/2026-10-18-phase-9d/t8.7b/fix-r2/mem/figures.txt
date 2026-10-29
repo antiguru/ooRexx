@@ -1,0 +1,16 @@
+Peak RSS, /usr/bin/time -f %M around `memcap 2G timeout 60 BIN PROG N` (crate) and around the
+standard oracle wrapper (oracle). c = cca0956e0, h = d775871f7's code (pre-commit build of the same src).
+
+m1.rex (a chain of redeliveries, one clause in main)
+  c  2000  40,804 KB    c 20000 218,944 KB
+  h  2000  38,932 KB    h 20000 218,916 KB
+
+ctl3.rex (the same object graph from ordinary deliveries: each condition object's G frame holds
+the previous condition object as its argument; no trap is ever delayed)
+  c  2000  40,180 KB    c 20000 226,640 KB
+  h  2000  41,580 KB    h 20000 226,744 KB
+  oracle 2000 20,248 KB oracle 20000 99,104 KB
+
+walk.rex (m1's chain, walked back from the last handler run through each condition's H frame's
+argument): h `walked 5 back to first` at 5, `walked 2000 back to first` at 2000, rc 0.
+ctl3.rex prints `walked 2000` and `walked 20000` on h and on the oracle.

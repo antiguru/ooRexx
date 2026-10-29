@@ -1,0 +1,2 @@
+/home/moritz/.local/bin/memcap: line 67: 1251304 Killed                     ( echo "$BASHPID" > "$cg/cgroup.procs"; exec "$@" )
+memcap: OOM-killed at the 2G cap (peak 2.0G)

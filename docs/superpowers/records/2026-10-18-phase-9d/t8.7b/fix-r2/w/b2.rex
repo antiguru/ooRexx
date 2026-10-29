@@ -1,0 +1,7 @@
+call t2
+exit
+t2:
+  do 1
+    interpret 'do 2; nop; end; do f over .context~stackframes; say "t2" f~traceline; end'
+  end
+  return

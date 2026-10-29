@@ -1,0 +1,65 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.04s
+     Running unittests src/lib.rs (/tmp/claude-1000/t87b-red-target/release/deps/rexx_exec-1baa841287e130a8)
+
+running 1 test
+test run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held ... FAILED
+
+failures:
+
+---- run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held stdout ----
+
+thread 'run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held' (1254337) panicked at /home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/datadriven-0.9.0/src/lib.rs:276:9:
+failure:
+tests/delayed_trap_cases/crate:2:
+call on notready name hn
+n = 0
+x = linein('no_such_file_zz.txt')
+say 'after notready, n =' n
+call on any name ha
+m = 0
+call rp 'first'
+say 'after any, m =' m
+exit
+rp: parse arg dd; raise user anyc description (dd) return
+hn:
+  n = n + 1
+  say 'hn' n condition('c') condition('d')
+  if n = 1 then x = linein('no_such_file_zz2.txt')
+  say 'hn' n 'returns'
+  return
+ha:
+  m = m + 1
+  say 'ha' m condition('c') condition('d')
+  if m = 1 then call rp 'again'
+  return
+
+expected:
+rc> 0
+out> hn 1 NOTREADY no_such_file_zz.txt
+out> hn 1 returns
+out> after notready, n = 1
+out> ha 1 USER ANYC first
+out> ha 2 USER ANYC again
+out> after any, m = 2
+
+actual:
+rc> 0
+out> hn 1 NOTREADY no_such_file_zz.txt
+out> hn 1 returns
+out> hn 2 NOTREADY no_such_file_zz2.txt
+out> hn 2 returns
+out> after notready, n = 2
+out> ha 1 USER ANYC first
+out> ha 2 USER ANYC again
+out> after any, m = 2
+
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1206 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p rexx-exec --lib`
