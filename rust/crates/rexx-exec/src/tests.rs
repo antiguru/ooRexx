@@ -1914,13 +1914,13 @@ fn a_stems_string_value_is_its_defaults_and_nostring_names_the_stem() {
     );
 }
 
-/// TRACE shows a non-string result by the string representation sending it
-/// `STRING` obtains (rexxref instrc.xml, TRACE), and a stem's `STRING` is its
-/// default's (intro.xml, Stems), so an object whose class overrides `STRING`
-/// renders as that answer in both. The oracle renders both by the object's
-/// name (t8.7c/probes/stemarr/b.rex, t8.7c/probes/dn/dn7.rex).
+/// A stem's `STRING` is its default's string representation (rexxref
+/// intro.xml, Stems), sent `STRING` where the default's class overrides it;
+/// the oracle answers the default's name (t8.7c/probes/stemarr/b.rex). A
+/// TRACE value line names the object, overridden `STRING` or not, as the
+/// oracle does (t8.7c/fix-r2/probes/r6/t1.rex).
 #[test]
-fn a_traced_value_and_a_stems_string_send_string_to_an_override() {
+fn a_stems_string_sends_string_to_its_default_and_a_trace_line_names_it() {
     let outcome = run_program(
         "/w/t.rex",
         b"v. = .nstr~new\nq = .nstr~new\nt. = .array~of(1)\nsay v.~string q~string t.~string\n\
@@ -1935,9 +1935,9 @@ fn a_traced_value_and_a_stems_string_send_string_to_an_override() {
     );
     assert_eq!(
         String::from_utf8_lossy(&outcome.stderr),
-        "     6 *-* x = v.\n       >V>   V. => \"NSTR\"\n       >>>   \"NSTR\"\n\
-         \x20      >=>   X <= \"NSTR\"\n     7 *-* x = q\n       >V>   Q => \"NSTR\"\n\
-         \x20      >>>   \"NSTR\"\n       >=>   X <= \"NSTR\"\n     8 *-* x = t.\n\
+        "     6 *-* x = v.\n       >V>   V. => \"a NSTR\"\n       >>>   \"a NSTR\"\n\
+         \x20      >=>   X <= \"a NSTR\"\n     7 *-* x = q\n       >V>   Q => \"a NSTR\"\n\
+         \x20      >>>   \"a NSTR\"\n       >=>   X <= \"a NSTR\"\n     8 *-* x = t.\n\
          \x20      >V>   T. => \"an Array\"\n       >>>   \"an Array\"\n\
          \x20      >=>   X <= \"an Array\"\n"
     );

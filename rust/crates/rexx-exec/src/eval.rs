@@ -243,7 +243,7 @@ impl Interp {
                     CallTarget::Symbol(id) => code.symbols.name(*id).as_bytes().to_vec(),
                     CallTarget::Literal(bytes) => bytes.to_vec(),
                 };
-                let text = self.string_representation(value)?;
+                let text = self.string_value_text(value)?;
                 self.trace_function(indent, &name, &text);
             }
             // `>F>` too, tagged with the routine name **alone** -- measured,
@@ -253,7 +253,7 @@ impl Interp {
             // than `>N>`'s.
             ExprKind::QualifiedCall { name, .. } => {
                 let name = code.symbols.name(*name).as_bytes().to_vec();
-                let text = self.string_representation(value)?;
+                let text = self.string_value_text(value)?;
                 self.trace_function(indent, &name, &text);
             }
             // `>N>`, tagged `namespace:class` -- `traceClassResolution`
@@ -263,7 +263,7 @@ impl Interp {
                 let mut tag = code.symbols.name(*namespace).as_bytes().to_vec();
                 tag.push(b':');
                 tag.extend_from_slice(code.symbols.name(*name).as_bytes());
-                let text = self.string_representation(value)?;
+                let text = self.string_value_text(value)?;
                 self.trace_namespace(indent, &tag, &text);
             }
             // **`>M>` is not here**, and that is the one value prefix this
@@ -372,7 +372,7 @@ impl Interp {
     ) -> Result<(), Failure> {
         let indent = self.activity.clause_state.current_value_indent;
         let tag = code.symbols.name(id).as_bytes().to_vec();
-        let text = self.string_representation(value)?;
+        let text = self.string_value_text(value)?;
         self.trace_dotvar(indent, &tag, &text);
         Ok(())
     }
@@ -407,7 +407,7 @@ impl Interp {
         }
         let indent = self.activity.clause_state.current_value_indent;
         let tag = code.symbols.name(id).as_bytes().to_vec();
-        let text = self.string_representation(value)?;
+        let text = self.string_value_text(value)?;
         self.trace_variable(indent, &tag, &text, value);
         Ok(())
     }

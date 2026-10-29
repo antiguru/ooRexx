@@ -782,7 +782,7 @@ impl Interp {
         if !self.trace_mode().results {
             return Ok(());
         }
-        let text = self.string_representation(value)?;
+        let text = self.string_value_text(value)?;
         let indent = self.activity.clause_state.current_value_indent;
         self.trace_keyword(indent, stream.keyword(), &text);
         Ok(())

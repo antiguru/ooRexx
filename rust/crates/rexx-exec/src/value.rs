@@ -447,10 +447,9 @@ impl Interp {
         }
     }
 
-    /// What `value~string` answers, as text: the string representation a
-    /// TRACE line shows a non-string result by (rexxref instrc.xml, TRACE),
-    /// and for a stem its default's (intro.xml, Stems). An object whose
-    /// `STRING` is not `Object`'s is sent it; anything else renders as
+    /// What `value~string` answers, as text, for a stem's default: for a stem
+    /// its own default's (rexxref intro.xml, Stems). An object whose `STRING`
+    /// is not `Object`'s is sent it; anything else renders as
     /// [`Interp::string_value_text`].
     #[cold]
     #[inline(never)]

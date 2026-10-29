@@ -2575,7 +2575,7 @@ impl Interp {
             Ok(true) => Ok(RegionEnd::At(clause_pc)),
             // A `DO`/`LOOP` header owes no boundary of its own, but the oracle
             // checks its traps after the header's pause as after any clause,
-            // so a queued condition is delivered here.
+            // so a condition the pause's read queued is delivered here.
             Ok(false)
                 if matches!(
                     clause.kind,

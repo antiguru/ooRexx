@@ -873,9 +873,7 @@ fn the_first_seek_of_an_unopened_transient_stream_is_refused() {
 
 /// The `corpus/unfiled.txt` programs whose oracle answer a ruling departs
 /// from, each run from a copy in a fresh directory with its `.stdin` sidecar,
-/// or `/dev/null`, as standard input: a debug pause's input read with every
-/// trap but SYNTAX's OFF
-/// (rexxref condtra.xml, Notes), and an APPEND stream's write position kept
+/// or `/dev/null`, as standard input: an APPEND stream's write position kept
 /// out of the file as it was opened (funct.xml, STREAM OPEN APPEND). The case
 /// file holds this crate's answers, the run directory written as `<dir>`.
 #[test]

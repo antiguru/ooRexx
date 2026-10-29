@@ -304,8 +304,8 @@ out> rn after its linein
 out> hn 2 NOTREADY no_such_file_zz.txt
 out> after a, m = 2
 
-# a condition the debug pause's input read raises takes its default
-# action: every trap but SYNTAX's is OFF while that input is processed
+# a condition the debug pause's input read raises is an ordinary read's:
+# trapped, and held while its handler runs (the handler pauses too)
 program
 .local~debuginput = .src~new
 .local~reads = 0
@@ -328,16 +328,76 @@ h:
 ----
 rc> 0
 out> linein 1
-out> after 0
 out> linein 2
+out> linein 3
+out> h 1 from input
+out> linein 4
+out> linein 5
+out> linein 6
+out> h 2 from input
+out> linein 7
+out> linein 8
+out> linein 9
+out> h 3 from input
+out> linein 10
+out> linein 11
+out> linein 12
+out> h 4 from input
+out> linein 13
+out> linein 14
+out> linein 15
+out> h 5 from input
+out> linein 16
+out> linein 17
+out> linein 18
+out> h 6 from input
+out> linein 19
+out> after 6
+out> linein 20
 err>        +++ "LINUX COMMAND /t.rex"
 err>      6 *-* nop
 err> +++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+err>      9 *-*   h:
+err>     10 *-*   n = n + 1
+err>        >>>     "1"
+err>     11 *-*   say 'h' n condition('d')
+err>        >>>     "h 1 from input"
+err>     12 *-*   return
+err>      9 *-*   h:
+err>     10 *-*   n = n + 1
+err>        >>>     "2"
+err>     11 *-*   say 'h' n condition('d')
+err>        >>>     "h 2 from input"
+err>     12 *-*   return
+err>      9 *-*   h:
+err>     10 *-*   n = n + 1
+err>        >>>     "3"
+err>     11 *-*   say 'h' n condition('d')
+err>        >>>     "h 3 from input"
+err>     12 *-*   return
+err>      9 *-*   h:
+err>     10 *-*   n = n + 1
+err>        >>>     "4"
+err>     11 *-*   say 'h' n condition('d')
+err>        >>>     "h 4 from input"
+err>     12 *-*   return
+err>      9 *-*   h:
+err>     10 *-*   n = n + 1
+err>        >>>     "5"
+err>     11 *-*   say 'h' n condition('d')
+err>        >>>     "h 5 from input"
+err>     12 *-*   return
+err>      9 *-*   h:
+err>     10 *-*   n = n + 1
+err>        >>>     "6"
+err>     11 *-*   say 'h' n condition('d')
+err>        >>>     "h 6 from input"
+err>     12 *-*   return
 err>      7 *-* say 'after' n
-err>        >>>   "after 0"
+err>        >>>   "after 6"
 err>      8 *-* exit
 
-# a SYNTAX condition the debug pause's input read raises is still trapped
+# a SYNTAX condition the debug pause's input read raises is trapped
 program
 .local~debuginput = .src~new
 .local~reads = 0

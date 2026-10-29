@@ -1784,7 +1784,7 @@ impl Interp {
         self.novalue_check(novalue, value)?;
         if self.tracing_intermediates() {
             let indent = self.activity.clause_state.current_value_indent;
-            let text = self.string_representation(value)?;
+            let text = self.string_value_text(value)?;
             self.trace_variable(indent, &spelling, &text, value);
         }
         Ok(value)
@@ -2493,7 +2493,7 @@ impl Interp {
     /// One `FORWARD` option's `>K>` line, for a caller that has to evaluate
     /// and trace at separate points.
     fn trace_forward_keyword(&mut self, keyword: &str, value: ObjRef) -> Result<(), Failure> {
-        let traced = self.string_representation(value)?;
+        let traced = self.string_value_text(value)?;
         self.trace_keyword(
             self.activity.clause_state.current_value_indent,
             keyword,

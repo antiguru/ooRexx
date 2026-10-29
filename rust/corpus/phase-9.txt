@@ -440,3 +440,5 @@ lang/trace_reference_and_parse_value.rex
 lang/internal_rendering_default_name.rex
 lang/collection_primitive_compare_frames.rex
 lang/internal_rendering_raises.rex
+# 9d Task 8.7c fix round 2: traps are OFF while a line typed at a debug pause runs.
+lang/debug_typed_traps_off.rex

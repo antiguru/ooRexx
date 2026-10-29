@@ -604,7 +604,7 @@ impl Interp {
         if !self.trace_mode().results {
             return Ok(());
         }
-        let text = self.string_representation(value)?;
+        let text = self.string_value_text(value)?;
         self.trace_keyword(
             self.activity.clause_state.current_value_indent,
             keyword,
@@ -784,7 +784,7 @@ impl Interp {
             counter.shape,
         )?;
         if self.trace_mode().results {
-            let text = self.string_representation(value)?;
+            let text = self.string_value_text(value)?;
             self.trace_keyword(loop_indent, "COUNTER", &text);
         }
         self.roots.activity_mut().pop_frame(pass);
@@ -2985,7 +2985,7 @@ impl Interp {
                 // it exists because this function runs once per loop pass.
                 if self.tracing_intermediates() {
                     let name = code.symbols.name(control).as_bytes().to_vec();
-                    let rendered = self.string_representation(value)?;
+                    let rendered = self.string_value_text(value)?;
                     self.trace_assignment(indent, &name, &rendered, value);
                 }
                 Ok(())

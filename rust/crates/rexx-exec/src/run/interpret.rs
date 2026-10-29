@@ -372,23 +372,17 @@ impl Interp {
 
     /// `Activity::traceInput` (`Activity.cpp:3240`-`3263`): `LINEIN` sent to
     /// `.local~DEBUGINPUT`, an absent entry or a `.nil` answer read as the
-    /// null string. A condition the send raises is the pause's failure. The
-    /// paused activation's traps but SYNTAX's are OFF across the read, as
-    /// while the line runs (rexxref `condtra.xml`, Notes), so a condition the
-    /// read raises there takes its default action.
+    /// null string. A condition the send raises is the pause's failure.
     fn debug_input_line(&mut self) -> Result<Vec<u8>, Failure> {
         let Some(route) = self.local_route(b"DEBUGINPUT")? else {
             return Ok(Vec::new());
         };
         let caller = self.caller();
-        let paused = self.replace_debug_pause(true);
         let answer = pinned!(
             self,
             crate::pinning::PinKind::TraceWrapper,
             self.send_message(route, crate::dispatch::LINEIN, None, &[], caller)
-        );
-        self.replace_debug_pause(paused);
-        let answer = answer?;
+        )?;
         Ok(match answer {
             Some(value) if value != ObjRef::NIL => self.to_text(value).into_owned(),
             _ => Vec::new(),

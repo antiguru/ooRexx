@@ -357,7 +357,7 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn object_into_parse_buffer(&mut self, value: ObjRef) -> Result<Vec<u8>, Failure> {
-        let text = self.string_representation(value)?;
+        let text = self.string_value_text(value)?;
         let mut buffer = self.take_parse_buffer();
         buffer.extend_from_slice(&text);
         Ok(buffer)
