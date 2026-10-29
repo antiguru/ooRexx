@@ -90,7 +90,7 @@ impl Interp {
     /// What rexxref (`condtra.xml`, CALL ON) does with the conditions held
     /// for the delayed trap `key` once a trap instruction for it has been
     /// processed: after `CALL ON` each handler is called, after `SIGNAL ON`
-    /// the first is signalled with its `ADDITIONAL` and `RESULT`, and after
+    /// the first is signalled with the object it was raised with, and after
     /// `CALL OFF` or `SIGNAL OFF` each takes its default action, which only
     /// `HALT`'s reports.
     #[cold]
@@ -115,16 +115,19 @@ impl Interp {
                 let Some(pending) = held.into_iter().next() else {
                     return Ok(Flow::Next);
                 };
-                if let Some(object) = pending.object {
-                    self.roots.activity_mut().push_temp(object);
-                    self.activity.pending_additional =
-                        self.condition_entry_held(object, b"ADDITIONAL");
-                    self.activity.pending_result = self.condition_entry_held(object, b"RESULT");
-                }
                 let mut raised = Raised::condition(condition_name(&pending.condition));
                 raised.rc = pending.rc;
                 raised.description = pending.description;
-                raised.position = u32::try_from(self.activity.clause_state.line()).unwrap_or(0);
+                match pending.object {
+                    Some(object) => {
+                        self.activity.reraised_object = Some(object);
+                        raised.delivery.held = true;
+                    }
+                    None => {
+                        raised.position =
+                            u32::try_from(self.activity.clause_state.line()).unwrap_or(0);
+                    }
+                }
                 Err(raised.into())
             }
             (false, _) if held.iter().any(|pending| *pending.condition == *b"HALT") => {
@@ -161,6 +164,26 @@ impl Interp {
                 if !ignored_while_delayed(&pending.condition) {
                     held.push(pending);
                 }
+            } else {
+                row += 1;
+            }
+        }
+    }
+
+    /// Drops each condition queued since `queued` whose trap is delayed.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn drop_queued_for_delayed(&mut self, queued: usize) {
+        let mut row = queued;
+        while row < self.activity.pending_traps.len() {
+            let pending = &self.activity.pending_traps[row];
+            let delayed = !pending.request
+                && pending.trace_failure.is_none()
+                && self
+                    .trap_for(&pending.condition)
+                    .is_some_and(|trap| trap.delayed);
+            if delayed {
+                self.activity.pending_traps.remove(row);
             } else {
                 row += 1;
             }
@@ -255,8 +278,7 @@ impl Interp {
             // Raised again while the trap is delayed, by a handler running or
             // by a raise this clause queued.
             Some(trap)
-                if trap.call
-                    && (trap.delayed || self.call_trap_delayed_at(trapping, b"NOTREADY")) =>
+                if trap.call && (trap.delayed || self.notready_trap_delayed_at(trapping)) =>
             {
                 Ok(())
             }
@@ -665,7 +687,7 @@ impl Interp {
                 return self.offer_to_trap(missing);
             }
         };
-        let Failure::Raised(raised) = failure else {
+        let Failure::Raised(mut raised) = failure else {
             unreachable!("matched Failure::Raised immediately above")
         };
         // Removed when it fires (`Activation::traps`' own doc comment has
@@ -713,6 +735,7 @@ impl Interp {
             reraised,
         };
         let object = match self.activity.reraised_object.take() {
+            Some(object) if raised.delivery.held => self.trap_held_condition_object(object)?,
             // `RexxActivation::raise` re-raises any other condition with the
             // object it was built with, where `Activity::reraiseException`
             // moves a SYNTAX condition's position to this level.
@@ -722,6 +745,7 @@ impl Interp {
             Some(object) => self.trap_reraised_condition_object(object, unwound.origin)?,
             None => self.build_trapped_condition_object(&raised, &unwound)?,
         };
+        raised.delivery.held = false;
         self.attach_condition(object);
         self.activation_mut()
             .replace_condition(Some(TrappedCondition {
@@ -1065,6 +1089,24 @@ impl Interp {
             !pending.request
                 && pending.activation == activation
                 && pending.condition.eq_ignore_ascii_case(condition)
+        })
+    }
+
+    /// Whether a condition already queued at `activation` put the `CALL ON`
+    /// trap taking `NOTREADY` there into the delayed state: a `NOTREADY`, or,
+    /// where `CALL ON ANY` takes it, any condition that trap took.
+    fn notready_trap_delayed_at(&self, activation: crate::activation::ActivationId) -> bool {
+        if self.activity.pending_traps.is_empty() {
+            return false;
+        }
+        let traps = self.trap_frame().map(|frame| &frame.traps);
+        let by_any = traps.is_some_and(|traps| traps.get(b"NOTREADY".as_slice()).is_none());
+        self.activity.pending_traps.iter().any(|pending| {
+            !pending.request
+                && pending.activation == activation
+                && (pending.condition.eq_ignore_ascii_case(b"NOTREADY")
+                    || (by_any
+                        && traps.is_some_and(|traps| traps.get(&pending.condition).is_none())))
         })
     }
 

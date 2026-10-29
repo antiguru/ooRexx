@@ -96,7 +96,8 @@ out> handler 2 returns
 out> after first, n = 2
 
 # a SIGNAL ON re-issued in the handler signals at once, with the held
-# condition's ADDITIONAL and RESULT
+# condition's ADDITIONAL, RESULT, POSITION and TRACEBACK; SIGL names the
+# SIGNAL ON
 program
 call on user sig name hs
 call rs 'one'
@@ -112,12 +113,14 @@ hs:
   return
 sg:
   say 'sg' condition('d') condition('i') sigl condition('a') condition('o')~result
+  say 'sg' condition('o')~position condition('o')~traceback~firstitem
   exit
 ----
 rc> 0
 out> hs one CALL one-add
 out> hs raised again
 out> sg two SIGNAL 10 two-add two-res
+out> sg 5      5 *-*     raise user sig description (dd) additional (dd'-add') return (dd'-res')
 
 # a CALL OFF in the handler: a USER condition is ignored
 program
@@ -222,6 +225,77 @@ out> ha 1 returns
 out> after any, m = 1
 out> hn 1 NOTREADY no_such_file_zz3.txt
 out> after two, n = 1
+
+# NOTREADY is ignored under a CALL ON ANY trap a USER condition queued
+# at the same clause delayed
+program
+call on any name ha
+m = 0
+x = ru('one') || linein('no_such_file_zz.txt')
+say 'after a, m =' m
+exit
+ru: raise user u description (arg(1)) return 'r'
+ha:
+  m = m + 1
+  say 'ha' m condition('c') condition('d')
+  return
+----
+rc> 0
+out> ha 1 USER U one
+out> after a, m = 1
+
+# a condition the debug pause's input read raises while its trap is
+# delayed is dropped: traps are OFF while that input is processed
+program
+.local~debuginput = .src~new
+.local~reads = 0
+call on user ping name h
+n = 0
+trace ?r
+nop
+say 'after' n
+exit
+h:
+  n = n + 1
+  say 'h' n condition('d')
+  return
+::class src
+::method linein
+  .local~reads = .local~reads + 1
+  say 'linein' .local~reads
+  if .local~reads > 6 then return ''
+  raise user ping description 'from input' return ''
+----
+rc> 0
+out> linein 1
+out> linein 2
+out> linein 3
+out> h 1 from input
+out> linein 4
+out> after 1
+out> linein 5
+out> linein 6
+out> linein 7
+out> h 2 from input
+out> linein 8
+err>        +++ "LINUX COMMAND /t.rex"
+err>      6 *-* nop
+err> +++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+err>      9 *-*   h:
+err>     10 *-*   n = n + 1
+err>        >>>     "1"
+err>     11 *-*   say 'h' n condition('d')
+err>        >>>     "h 1 from input"
+err>     12 *-*   return
+err>      7 *-* say 'after' n
+err>        >>>   "after 1"
+err>      9 *-*   h:
+err>     10 *-*   n = n + 1
+err>        >>>     "2"
+err>     11 *-*   say 'h' n condition('d')
+err>        >>>     "h 2 from input"
+err>     12 *-*   return
+err>      8 *-* exit
 
 # ERROR and FAILURE raised again are ignored, and a FAILURE does not
 # become an ERROR

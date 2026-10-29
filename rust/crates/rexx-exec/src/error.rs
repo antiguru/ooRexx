@@ -58,6 +58,10 @@ pub(crate) struct Delivery {
     /// `SysFileExists()` both report `Error 88 running REXX:`, where a
     /// routine's own body raising 88.902 names the program and its line.
     pub(crate) internal_package: bool,
+    /// A condition held while its `CALL ON` trap was delayed and released
+    /// by a `SIGNAL ON`: trapped with the object it was raised with, which
+    /// `Activity::reraised_object` carries.
+    pub(crate) held: bool,
 }
 
 /// One value a catalogue message interpolates: **bytes, not text**.

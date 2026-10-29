@@ -388,6 +388,19 @@ impl Interp {
         Ok(object)
     }
 
+    /// Marks the object of a condition held while its trap was delayed as
+    /// taken by the `SIGNAL ON` trap that released it; the rest of it is the
+    /// raise's (rexxref `condtra.xml`, CALL ON: the update of the condition
+    /// information is what waits).
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn trap_held_condition_object(&mut self, object: ObjRef) -> Result<ObjRef, Failure> {
+        self.roots.activity_mut().push_temp(object);
+        let instruction = self.text(b"SIGNAL");
+        self.condition_put(object, key::INSTRUCTION, instruction)?;
+        Ok(object)
+    }
+
     /// Marks a condition object `PROPAGATED` and taken by a `CALL ON` trap,
     /// as `RAISE PROPAGATE` passes it to the caller's trap.
     pub(crate) fn propagate_to_call_trap(&mut self, object: ObjRef) -> Result<(), Failure> {

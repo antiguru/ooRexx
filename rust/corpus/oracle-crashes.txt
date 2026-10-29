@@ -2017,3 +2017,25 @@ second half is the shape of the probes rule against queueing one `CALL ON` condi
 boundary. This crate ignores both NOTREADY conditions raised again while the trap is delayed (rexxref,
 `condtra.xml`, NOTREADY; `iostrms.xml`, the DELAY state): `crates/rexx-exec/tests/delayed_trap_cases/crate`.
 No upstream ticket.
+
+## 67. Two differently named conditions raised in one clause, both trapped by one CALL ON ANY
+
+    call on any name ha
+    m = 0
+    x = ru('one') || linein('no_such_file_zz.txt')
+    say 'after a, m =' m
+    x = linein('no_such_file_zz2.txt') || ru('two')
+    say 'after b, m =' m
+    exit
+    ru: raise user u description (arg(1)) return 'r'
+    ha:
+      m = m + 1
+      say 'ha' m condition('c') condition('d')
+      return
+
+Effect: SIGSEGV, rc 139, stdout `ha 1 NOTREADY no_such_file_zz.txt` only, stderr empty. Measured
+2026-10-29 by the Phase 9d Task 8.7b fix round 2 re-review under the standard wrapper from a fresh
+directory, once (`docs/superpowers/records/2026-10-18-phase-9d/t8.7b/fix-r3/p4/p4.rex`); not narrowed.
+The first clause raises USER (a `RAISE ... RETURN` in a function call) and NOTREADY. This crate runs
+the handler for the USER condition and ignores the NOTREADY raised while the `ANY` trap is delayed:
+`crates/rexx-exec/tests/delayed_trap_cases/crate`. No upstream ticket.
