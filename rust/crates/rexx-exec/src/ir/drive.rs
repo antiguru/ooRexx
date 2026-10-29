@@ -1953,7 +1953,7 @@ impl Interp {
     /// answering whether it failed. The region loop takes the flag rather
     /// than the `Result`: measured by callgrind, the `Result` costs `nop`
     /// +6.5% and `assign` +4.3%.
-    fn hold_trace_failure(&mut self, traced: Result<(), Failure>) -> bool {
+    pub(crate) fn hold_trace_failure(&mut self, traced: Result<(), Failure>) -> bool {
         match traced {
             Ok(()) => false,
             Err(failure) => {
@@ -1966,7 +1966,7 @@ impl Interp {
     /// The condition [`Interp::hold_trace_failure`] held.
     #[cold]
     #[inline(never)]
-    fn take_held_trace_failure(&mut self) -> Failure {
+    pub(crate) fn take_held_trace_failure(&mut self) -> Failure {
         self.held_trace_failure
             .take()
             .expect("a trace op that failed held its condition")

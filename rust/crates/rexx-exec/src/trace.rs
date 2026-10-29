@@ -602,7 +602,7 @@ impl Interp {
         if !self.trace_mode().intermediates {
             return Ok(None);
         }
-        self.string_value_text(value).map(Some)
+        self.traced_string_value_text(value).map(Some)
     }
 
     /// `value`'s rendered bytes, or `None` when no **result-level** trace line
@@ -613,7 +613,7 @@ impl Interp {
         if !self.trace_mode().results {
             return Ok(None);
         }
-        self.string_value_text(value).map(Some)
+        self.traced_string_value_text(value).map(Some)
     }
 
     /// `>I>`/`<I<` (`TRACE_PREFIX_INVOCATION`/`_INVOCATION_EXIT`): a routine

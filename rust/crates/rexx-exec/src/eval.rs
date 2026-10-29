@@ -107,10 +107,41 @@ impl Interp {
         // show, and the oracle's own trace never shows one for a failing
         // sub-expression either (the *clause* echo already happened, and
         // the raise's own report is what follows).
+        if let Ok(v) = &value
+            && self.tracing_intermediates()
+            && self.trace_intermediate_held(code, expr, *v)
+        {
+            return Err(self.take_held_trace_failure());
+        }
+        value
+    }
+
+    /// [`Interp::eval`] for PARSE's source and patterns, taking its trace
+    /// hook's `Result` in place: measured by callgrind, `eval`'s own shape
+    /// there costs `parse` +0.32%, and this shape in `eval` costs
+    /// `pingguard` +0.07%.
+    pub(crate) fn eval_in_parse(
+        &mut self,
+        code: &Code<'_>,
+        expr: &Expr,
+    ) -> Result<ObjRef, Failure> {
+        let probe = 0u8;
+        self.enter_eval_node(&raw const probe)?;
+        let value = self.eval_node(code, expr);
+        self.activity.depth -= 1;
         if let Ok(v) = &value {
             self.trace_intermediate(code, expr, *v)?;
         }
         value
+    }
+
+    /// [`Interp::trace_intermediate_event`], its condition held for
+    /// [`Interp::take_held_trace_failure`], answering whether it failed.
+    #[cold]
+    #[inline(never)]
+    fn trace_intermediate_held(&mut self, code: &Code<'_>, expr: &Expr, v: ObjRef) -> bool {
+        let traced = self.trace_intermediate_event(code, expr, v);
+        self.hold_trace_failure(traced)
     }
 
     /// `>L>`/`>V>`/`>E>`/`>C>`/`>O>`/`>P>`/`>F>`, dispatched on `expr.kind`
@@ -243,7 +274,7 @@ impl Interp {
                     CallTarget::Symbol(id) => code.symbols.name(*id).as_bytes().to_vec(),
                     CallTarget::Literal(bytes) => bytes.to_vec(),
                 };
-                let text = self.string_value_text(value)?;
+                let text = self.traced_string_value_text(value)?;
                 self.trace_function(indent, &name, &text);
             }
             // `>F>` too, tagged with the routine name **alone** -- measured,
@@ -253,7 +284,7 @@ impl Interp {
             // than `>N>`'s.
             ExprKind::QualifiedCall { name, .. } => {
                 let name = code.symbols.name(*name).as_bytes().to_vec();
-                let text = self.string_value_text(value)?;
+                let text = self.traced_string_value_text(value)?;
                 self.trace_function(indent, &name, &text);
             }
             // `>N>`, tagged `namespace:class` -- `traceClassResolution`
@@ -263,7 +294,7 @@ impl Interp {
                 let mut tag = code.symbols.name(*namespace).as_bytes().to_vec();
                 tag.push(b':');
                 tag.extend_from_slice(code.symbols.name(*name).as_bytes());
-                let text = self.string_value_text(value)?;
+                let text = self.traced_string_value_text(value)?;
                 self.trace_namespace(indent, &tag, &text);
             }
             // **`>M>` is not here**, and that is the one value prefix this
@@ -372,7 +403,7 @@ impl Interp {
     ) -> Result<(), Failure> {
         let indent = self.activity.clause_state.current_value_indent;
         let tag = code.symbols.name(id).as_bytes().to_vec();
-        let text = self.string_value_text(value)?;
+        let text = self.traced_string_value_text(value)?;
         self.trace_dotvar(indent, &tag, &text);
         Ok(())
     }
@@ -407,7 +438,7 @@ impl Interp {
         }
         let indent = self.activity.clause_state.current_value_indent;
         let tag = code.symbols.name(id).as_bytes().to_vec();
-        let text = self.string_value_text(value)?;
+        let text = self.traced_string_value_text(value)?;
         self.trace_variable(indent, &tag, &text, value);
         Ok(())
     }

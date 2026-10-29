@@ -432,6 +432,14 @@ impl Interp {
         Ok(self.default_string_value_text(value))
     }
 
+    /// [`Interp::string_value_text`] for a TRACE line, out of line of the
+    /// traced path.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn traced_string_value_text(&mut self, value: ObjRef) -> Result<Vec<u8>, Failure> {
+        self.string_value_text(value)
+    }
+
     /// `raise` with `value`'s [`Interp::string_value_text`] as its insert, or
     /// the condition that rendering raises.
     #[cold]

@@ -357,7 +357,7 @@ impl Interp {
     #[cold]
     #[inline(never)]
     fn object_into_parse_buffer(&mut self, value: ObjRef) -> Result<Vec<u8>, Failure> {
-        let text = self.string_value_text(value)?;
+        let text = self.traced_string_value_text(value)?;
         let mut buffer = self.take_parse_buffer();
         buffer.extend_from_slice(&text);
         Ok(buffer)
@@ -575,7 +575,7 @@ impl Interp {
                 let value = match evaluated {
                     Some(value) => value,
                     None => {
-                        let value = self.eval(code, expression)?;
+                        let value = self.eval_in_parse(code, expression)?;
                         self.roots.activity_mut().push_temp(value);
                         value
                     }
@@ -739,7 +739,7 @@ impl Interp {
                 None => return Err(Loud::parse_trigger_operand().into()),
             },
         };
-        let value = self.eval(code, operand)?;
+        let value = self.eval_in_parse(code, operand)?;
         self.roots.activity_mut().push_temp(value);
         // `>>>` for the operand, after `eval`'s own `>L>`/`>V>` and before
         // the conversion that can fail: `integerTrigger`
