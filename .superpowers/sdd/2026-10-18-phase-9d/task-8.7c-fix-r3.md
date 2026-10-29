@@ -1,0 +1,16 @@
+# Task 8.7c fix round 3
+
+Phase 9d Task 8.7c (variables and streams residuals) of the ooRexx Rust rewrite. Code HEAD 8dd9a4ae0, records HEAD d6720f350 (later commits are controller records only). You are a fresh implementer for this round.
+
+Read first: task-8.7c-dispatch.md (requirements and rules; follow its build, probe, perf and commit rules), task-8.7c-fix-r1.md and task-8.7c-fix-r2.md (earlier briefs; r2 supersedes r1's R4 and R6), the "Fix round 1" and "Fix round 2" sections of task-8.7c-report.md, task-8.7c-rereview-r1.md (this round's findings; its probes are copied to docs/superpowers/records/2026-10-18-phase-9d/t8.7c/review-probes-rr1/), task-6-dispatch-rules.md, global-constraints.md, and Deviation 72 in docs/superpowers/plans/phase-4-exclusions.txt. Never run oracle-crashes.txt entries 64 to 67 or anything shaped like them on the oracle.
+
+1. N1. A variable reference's rendering sends again: `to_text`'s and `text_len_inner`'s `Redirect::VarRefValue` arms (value.rs) render the referenced value by its sent string value (Deviation 72; with no makeString that is OBJECTNAME, so DEFAULTNAME is sent), and a condition the send raises propagates from every rendering that can carry one (I1's rule): Array join item, `r~string`, a TRACE line naming a reference. Witness review-probes-rr1/i1b/g.rex and i1d/k.rex shapes, each matching the oracle.
+2. N2. RAISE renders its RC, DESCRIPTION and ADDITIONAL values for a trace line only when that line prints (gate on the trace mode as trace_redirect_target and echo_header_value do; run/condition.rs near :1170, :1189, :1232). Untraced, nothing is sent: i1f/n.rex and i1g/p.rex match the oracle. Witness both.
+3. LOSTDIGITS (re-review queue candidate 2, round 1 made lostdigits_raise and the fuzz raise unsent, run/condition.rs:473-531): the description names the operand's string value (oracle and rule: `LOSTDIGITS 1234567890` for i1c/l.rex). Witness.
+4. M-a. R3's APPEND extent holds on any file size: no 4 GiB saturation (a sentinel meaning "read the size recorded at open", or a u64 outside the hot struct; keep the padding). Witness with a sparse file over 4 GiB in a temp dir (review-probes-rr1/r3b/b.rex shape), crate only, and delete the file in the test.
+5. M-b and concern 5. Fix eval.rs's "single insertion point" comment to name eval_in_parse as the second, and bind the two copies: a test that drives a PARSE pattern expression and an ordinary expression to the same MAX_EVAL_DEPTH refusal (or a debug_assert that fails if they diverge).
+6. Perf: every program within +0.05% libc subtracted of rexx-base-97eee8a9a (pingguard/pingsem SPREAD flags reported, not failed; a deterministic delta over budget is a finding). Callgrind on every program.
+
+Run the workspace test once at the end and name every failure. Commit before gating. Never go idle on a background command: poll in a bounded foreground loop; never pgrep -f or pkill -f; no nohup, bash -c or sh -c.
+
+Report: append a "## Fix round 3" section to task-8.7c-report.md (what changed per item, witnesses red at d6720f350 and green at head, perf table, workspace result, commits), commit it, then SendMessage the team lead: status, commits, one-line tests, concerns. Never dispatch subagents. Never write a numbered Deviation. Do not edit defects.json or phase-4-exclusions.txt.

@@ -275,3 +275,5 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b
 2026-10-29-stdout-query-size-position-file.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/stdinq/q5.rex	9d	.STDOUT QUERY SIZE/POSITION on a regular file answer the null string	9d
 2026-10-29-debug-typed-exit.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/fix-r2/probes/off/ex.rex	11.1	a typed EXIT at a debug pause is ignored, the oracle ends the program	phase:11.1
 2026-10-29-suite-fixture-stderr-refusal-load-flake.md	process	-	9d	suite fixtures stderr-refusal test failed once under load	9d
+2026-10-29-stem-index-string-values.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/review-probes-rr1/r1c/d.rex	9d	Stem [] does not take its indexes' string values	9d
+2026-10-29-grandchild-sleeps-process-wide.md	process	-	9d	suite grandchild_sleeps scans every process	9d
