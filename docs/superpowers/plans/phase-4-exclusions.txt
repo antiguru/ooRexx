@@ -843,6 +843,15 @@ DEVIATIONS -- permanent, chosen
      not byte-exact is the interactive prefix, and the TRACE ? row below now
      carries that.
 
+     A PROGRAM'S OWN READ OF THE INDENT. Extended by Moritz 2026-10-29
+     ("Extend Dev 0"): the same counter reaches strings a program reads,
+     so `~traceLine` and `condition('o')~traceback` inside INTERPRET after
+     `do 2; nop; end` are two columns short on the oracle. This crate
+     indents them by block structure there too; that stdout difference is
+     this deviation's, not a normalisation. Witnessed by
+     run::tests::indent::interpret_frames_after_a_completed_do_indent_by_block_structure
+     (Phase 9d Task 8.7b fix round 2, t8.7b/fix-r2/w/b1.rex, b2.rex).
+
   1. DO OVER on a stem does not reproduce the oracle's traversal order.
 
      The oracle walks a balanced tree; we use a hash map. Measured, inserting
@@ -2962,6 +2971,51 @@ DEVIATIONS -- permanent, chosen
      (t8.6/r2/probes/a3.rex).
      Witnessed by stream_handle::an_append_stream_on_a_write_only_file_writes_at_the_end
      (rust/crates/rexx-exec/tests/stream_handle.rs).
+
+ 75. A CONDITION RAISED AGAIN WHILE ITS CALL ON TRAP IS DELAYED IS HELD
+     (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-28 ("Follow rexxref, Deviation"). rexxref
+     condtra.xml (Action Taken when a Condition Is Trapped, CALL): while a
+     trap is delayed, a condition other than ERROR, FAILURE and NOTREADY
+     raised for it is held, and its action waits for the first of a CALL
+     ON or SIGNAL ON for it (the call or signal takes place at once, with
+     the held condition object, its POSITION and TRACEBACK), a CALL OFF or
+     SIGNAL OFF (its default action occurs; only HALT's reports, 4.1), or
+     the handler's RETURN (the handler is called again at once). ERROR and
+     FAILURE raised again are ignored, and so is NOTREADY (condtra.xml:
+     278-280, iostrms.xml:657-667), also under CALL ON ANY once a
+     condition queued at the clause has delayed it. A condition the debug
+     pause's own input read raises while its trap is delayed is dropped
+     (condtra.xml:489-494, traps OFF while that input is processed).
+     ORACLE BUG: the delayed trap's condition is queued on the raising
+     activation's caller and discarded when it returns, so USER and HALT
+     raised from a routine the handler calls run no second handler after
+     RETURN, nor after a CALL ON re-issued in the handler
+     (t8.7b/probes/user-raised/u2.rex, u3.rex); two such shapes segfault
+     it (rust/corpus/oracle-crashes.txt entries 64 and 65). Measured by
+     Phase 9d Task 8.7b and its fix rounds.
+     Witnessed by run::tests::conditions::a_condition_raised_while_its_handler_runs_is_held
+     (rust/crates/rexx-exec/tests/delayed_trap_cases/crate),
+     a_condition_raised_again_while_its_call_trap_is_delayed,
+     scheduler::tests::a_message_halt_inside_its_handler_runs_it_again_on_return
+     and the signals tests a_second_signal_in_a_call_on_halt_handler_runs_it_again,
+     a_second_signal_in_a_call_on_any_handler_runs_it_again and
+     a_second_signal_ends_a_handlers_sleep.
+
+ 76. AN INTERPRET TRANSLATION FAILURE'S PACKAGE IS THE RUNNING PACKAGE
+     (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-28 ("New Deviation, oracle bug"). A condition
+     object's PACKAGE is the package of the program where the condition was
+     raised (rexxref condtra.xml, condition object), which for an INTERPRET
+     is the running program's. ORACLE BUG: the oracle's condition object
+     for an INTERPRET that fails to translate carries a package object
+     other than the running one, named as the program, so `.context~package
+     == condition('o')~package` answers 0 there and 1 here
+     (t8.7b/probes/compile-condition/m2.rex). Measured by Phase 9d Task 8.7b.
+     Witnessed by run::tests::conditions::an_interpret_translation_failure_names_the_running_package
+     (rust/crates/rexx-exec/src/run/tests/conditions.rs).
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------

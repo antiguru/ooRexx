@@ -92,7 +92,7 @@ gate:phase-9a-gate.md:469, 2026-10-28-rexx-package-source.md.
 gate:phase-9c-gate.md:139 (2026-10-16-stream-command-open-missing-file.md), gate:phase-9a-gate.md:485,
 2026-10-28-internal-rendering-defaultname.md, 2026-10-28-trace-object-renderings.md,
 2026-10-28-primitives-without-frame.md, 2026-10-28-hash-lookup-identity-first.md,
-2026-10-29-debug-input-traps-off.md.
+2026-10-29-debug-input-traps-off.md, 2026-10-29-notready-delay-across-internal-call.md.
 
 Pre-dispatch check (controller 2026-10-28): every inventory row ruled 9d and still open that no batch
 named is placed above by area; an item a Task 6 cluster already fixed closes as `closed:probe agrees`

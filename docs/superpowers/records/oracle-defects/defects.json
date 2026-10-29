@@ -926,7 +926,7 @@
   "expected": "Indentation derived from block structure.",
   "cause": "settings.traceIndent (execution/ActivationSettings.hpp:188); newBlockInstruction (RexxActivation.hpp:308); DoBlock ctor saves indent (instructions/DoBlock.cpp:71); terminate -> terminateBlockInstruction(doblock->getIndent()) (instructions/BaseDoInstruction.cpp:161, RexxActivation.hpp:306); endLoop (BaseDoInstruction.cpp:377); unindent clamp (RexxActivation.hpp:318).",
   "source": "docs/superpowers/plans/phase-4-exclusions.txt Deviation 0; docs/superpowers/plans/phase-4-exclusions.txt Known gaps (trace indent rows); memory/oorexx-traceindent-defect.md; memory/oorexx-filed-tickets-2026-08.md",
-  "status": "deviation 0 (normalisation of leading stderr indentation); comment on SF #1850 'TRACE issues' (accepted), post 8, 2026-08-22",
+  "status": "deviation 0 (normalisation of leading stderr indentation); comment on SF #1850 'TRACE issues' (accepted), post 8, 2026-08-22; reaches ~traceLine and condition tracebacks a program reads, deviation 0 extended by Moritz 2026-10-29",
   "crate": "Does not reproduce the counter; the harness normalises the run of spaces after the prefix field on stderr only (Deviation 0), with unnormalised pinned witnesses. The related missing >>> lines on a controlled loop's re-tested pass were a 5.0 vs 5.3 artifact, closed by the oracle swap on 2026-08-20."
  },
  {
@@ -2036,7 +2036,7 @@
   "expected": "rexxref condtra.xml (CALL ON): delayed until RETURN, when the handler is called again, or until a CALL ON for it, after which the call takes place immediately.",
   "cause": "The delayed trap's condition is queued on the raising activation's caller (RexxActivation::trap, processTraps), whose queue is discarded when it returns.",
   "source": "Phase 9d Task 8.2 review Minor 6; Task 8.7b; ruled by Moritz 2026-10-28 (\"Follow rexxref, Deviation\")",
-  "status": "open",
+  "status": "deviation 75 (Moritz 2026-10-28: \"Follow rexxref, Deviation\")",
   "crate": "Follows rexxref (crates/rexx-exec/tests/delayed_trap_cases/crate)."
  },
  {
@@ -2053,5 +2053,20 @@
   "source": "Phase 9d Task 8.7b fix round 2 re-review",
   "status": "open",
   "crate": "Delivers USER and ignores the NOTREADY."
+ },
+ {
+  "id": "interpret-translation-failure-foreign-package",
+  "added": "2026-10-29",
+  "title": "An INTERPRET translation failure's condition object names a package other than the running one",
+  "category": "wrong result",
+  "area": "conditions",
+  "severity": "wrong answer",
+  "repro": "docs/superpowers/records/2026-10-18-phase-9d/t8.7b/probes/compile-condition/m2.rex (.context~package == condition('o')~package after a trapped INTERPRET 'say (')",
+  "oracle": "0: a separate package object named as the program.",
+  "expected": "1: the package of the program where the condition was raised, the running one (rexxref condtra.xml, condition object).",
+  "cause": "",
+  "source": "Phase 9d Task 8.7b",
+  "status": "deviation 76 (Moritz 2026-10-28: \"New Deviation, oracle bug\")",
+  "crate": "Answers the running package."
  }
 ]
