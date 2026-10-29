@@ -72,7 +72,7 @@ fn write_text(interp: &mut Interp, value: ObjRef) -> Result<Vec<u8>, Failure> {
 fn qualified_path(interp: &Interp, receiver: ObjRef) -> Result<std::path::PathBuf, Failure> {
     let state = require(interp, receiver)?;
     let path = match state.qualified.first() {
-        Some(b'/') => state.qualified.clone(),
+        Some(b'/') => state.qualified.to_vec(),
         _ => crate::builtin::platform::qualify_name(interp, &state.qualified),
     };
     Ok(crate::paths::os_path(&path).to_path_buf())
@@ -107,7 +107,7 @@ pub(crate) fn standard_stream(
     interp.heap.clear_uninit_all(&[object]);
     let named = interp.text(name);
     interp.set_pool_variable(object, class, b"STREAM_NAME", named);
-    let mut state = StreamState::new(name.to_vec(), name.to_vec());
+    let mut state = StreamState::new(name.to_vec(), name.into());
     state.standard = Some(which);
     state.status = StreamStatus::Ready;
     // `.STDOUT` and `.STDERR` are opened `NOBUFFER` (`CoreClasses.orx`'s
@@ -139,7 +139,7 @@ pub(super) fn init(
         None => Vec::new(),
     };
     let qualified = crate::builtin::platform::qualify_name(interp, &name);
-    let state = StreamState::new(name, qualified);
+    let state = StreamState::new(name, qualified.into_boxed_slice());
     let Some(object) = interp.heap.get_mut(receiver) else {
         unreachable!("a live receiver")
     };
@@ -294,7 +294,7 @@ pub(super) fn qualify(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    let qualified = require(interp, receiver)?.qualified.clone();
+    let qualified = require(interp, receiver)?.qualified.to_vec();
     Ok(Some(interp.text_built(qualified)))
 }
 
@@ -327,7 +327,7 @@ pub(super) fn query_exists(
         let answer = if is_device(open.file()) {
             state.name.clone()
         } else {
-            state.qualified.clone()
+            state.qualified.to_vec()
         };
         return Ok(Some(interp.text_built(answer)));
     }
@@ -710,7 +710,7 @@ pub(super) fn open(
     // A `HANDLE:n` stream takes the options a file does and reports its name
     // as written from here on (`StreamNative.cpp`'s `handleOpen`).
     if state.handle.is_some() {
-        state.qualified = state.name.clone();
+        state.qualified = state.name.as_slice().into();
         if parse_open_options(&options).is_err() {
             return Err(Raised::syntax(93, 0, Vec::new()).into());
         }
@@ -727,7 +727,7 @@ pub(super) fn open(
                 .to_ascii_uppercase()
                 .windows(8)
                 .any(|word| word == b"NOBUFFER");
-        state.qualified = state.name.clone();
+        state.qualified = state.name.as_slice().into();
         state.status = StreamStatus::Ready;
         return Ok(Some(interp.text(b"READY:")));
     }
@@ -1116,7 +1116,7 @@ fn standard_opened(
     let state = require_mut(interp, receiver)?;
     if state.standard.is_some() && state.handle.is_none() && state.status == StreamStatus::Unknown {
         state.status = StreamStatus::Ready;
-        state.qualified = state.name.clone();
+        state.qualified = state.name.as_slice().into();
     }
     Ok(state.standard)
 }

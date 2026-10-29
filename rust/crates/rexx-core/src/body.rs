@@ -696,7 +696,7 @@ pub struct StreamState {
     /// The name resolved against the interpreter's current directory, filled
     /// in when the stream is initialised so a later `DIRECTORY()` cannot move
     /// an already-named stream.
-    pub qualified: Vec<u8>,
+    pub qualified: Box<[u8]>,
     /// Set by `!std_set` for `STDIN`, `STDOUT` and `STDERR`, with or without a
     /// trailing colon.
     pub standard: Option<StandardStream>,
@@ -722,6 +722,10 @@ pub struct StreamState {
     pub append_extent: u64,
 }
 
+/// Measured by callgrind, a state eight bytes larger cost `intcall` +5.8%
+/// whole process, all of it in libc's allocator.
+const _: () = assert!(size_of::<StreamState>() <= 232);
+
 /// A copy is an **unopened** stream carrying the same name: a descriptor
 /// cannot be cloned without either sharing a file position or a `dup(2)` that
 /// can fail where `Clone` cannot. The oracle has no answer to match --
@@ -746,7 +750,7 @@ impl Clone for StreamState {
 
 impl StreamState {
     /// The state `~init` leaves behind: named, resolved, and unopened.
-    pub fn new(name: Vec<u8>, qualified: Vec<u8>) -> StreamState {
+    pub fn new(name: Vec<u8>, qualified: Box<[u8]>) -> StreamState {
         StreamState {
             name,
             qualified,
