@@ -716,13 +716,10 @@ pub struct StreamState {
     /// where `SAY` and trace output go and so never hold a write, whatever
     /// a reopen's options say.
     pub local: bool,
-    /// The size of the file when an APPEND open opened it, saturating at
-    /// `u32::MAX`, and 0 for any other open: the write position cannot move
-    /// to a byte within it (rexxref funct.xml, STREAM OPEN APPEND). A `u32`
-    /// fits the state's padding: measured by callgrind, an `i64` in
-    /// [`OpenFile`] cost `intcall` +5.8% whole process, all of it in libc's
-    /// allocator.
-    pub append_extent: u32,
+    /// The size of the file when an APPEND open opened it, and 0 for any
+    /// other open: the write position cannot move to a byte within it
+    /// (rexxref funct.xml, STREAM OPEN APPEND).
+    pub append_extent: u64,
 }
 
 /// A copy is an **unopened** stream carrying the same name: a descriptor

@@ -832,7 +832,7 @@ pub(super) fn open(
         buffered,
     ));
     state.append_extent = match parsed.append && !transient {
-        true => u32::try_from(size).unwrap_or(u32::MAX),
+        true => size,
         false => 0,
     };
     state.status = StreamStatus::Ready;
@@ -1802,8 +1802,8 @@ fn write_record(
 
 /// Whether the write position `at` is a byte of the file as an APPEND open
 /// found it, where it cannot move (rexxref funct.xml:4309-4312).
-fn within_append_extent(extent: u32, at: i64) -> bool {
-    at <= i64::from(extent)
+fn within_append_extent(extent: u64, at: i64) -> bool {
+    u64::try_from(at).ok().is_none_or(|at| at <= extent)
 }
 
 /// Where a write from `position` lands: at the end of the file on an APPEND
@@ -2288,7 +2288,7 @@ fn seek_open(
     offset: i64,
     mode: rexx_core::OpenMode,
     record_length: u64,
-    extent: u32,
+    extent: u64,
 ) -> Seeked {
     let from = if parsed.read {
         open.read_position

@@ -175,3 +175,39 @@ fn an_append_stream_on_a_write_only_file_writes_at_the_end() {
     assert_eq!(stdout(&outcome), "READY:\n0\n0\nREADY:\n");
     assert_eq!(String::from_utf8_lossy(&held), "y\nwcmd\nw1\nw2\n");
 }
+
+/// An `APPEND` stream's write position cannot move into the file as it was
+/// opened, on a file larger than 4 GiB too.
+#[test]
+fn an_append_stream_refuses_positions_within_a_file_over_four_gib() {
+    let dir = std::env::temp_dir().join(format!("rexx-append-big-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a private directory");
+    let file = dir.join("big.dat");
+    std::fs::File::create(&file)
+        .and_then(|created| created.set_len(5_368_709_120))
+        .expect("a sparse file");
+    let path = file.display();
+    let program = format!(
+        "s = .stream~new('{path}'); say s~open('write append')\n\
+         say s~seek('=4294967290 write char') s~state\n\
+         say s~seek('=4294967296 write char') s~state\n\
+         say s~seek('=5368709120 write char') s~state\n\
+         say s~charout('x', 5000000000) s~state\n\
+         say s~lineout('L') s~state\n\
+         say s~seek('=5368709122 write char') s~state\n\
+         say s~query('size'); s~close\n"
+    );
+    let outcome = run(&program, Invocation::none());
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(
+        outcome.exit_code,
+        0,
+        "stderr: {}",
+        String::from_utf8_lossy(&outcome.stderr)
+    );
+    assert_eq!(
+        stdout(&outcome),
+        "READY:\n0 NOTREADY\n0 NOTREADY\n0 NOTREADY\n1 NOTREADY\n0 READY\n5368709122 READY\n\
+         5368709122\n"
+    );
+}

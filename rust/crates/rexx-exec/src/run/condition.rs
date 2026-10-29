@@ -1167,10 +1167,17 @@ impl Interp {
                 // object and `rc->requestString()` (`:193`) is what becomes the
                 // code. Measured, `trace i` over `raise syntax (1,2)`:
                 // `>K>   "SYNTAX" => "an Array"`.
-                let traced = self.traced_string_value_text(value)?;
-                let keyword = String::from_utf8_lossy(&raise.condition).into_owned();
-                self.trace_keyword(indent, &keyword, &traced);
-                Some(self.to_text(value).to_vec())
+                if self.traced_mode().results {
+                    let traced = self.traced_string_value_text(value)?;
+                    let keyword = String::from_utf8_lossy(&raise.condition).into_owned();
+                    self.trace_keyword(indent, &keyword, &traced);
+                }
+                // A SYNTAX code is `rc->requestString()` (`:193`).
+                let code = match raise.condition.as_ref() == b"SYNTAX" {
+                    true => self.required_string_value(value)?,
+                    false => value,
+                };
+                Some(self.to_text(code).to_vec())
             }
             None => None,
         };
@@ -1186,8 +1193,10 @@ impl Interp {
             // the same split the `rc` keyword above takes. Measured,
             // `trace i` over `raise syntax 93.900 description (1,2)
             // additional 'x'`: `>K>   "DESCRIPTION" => "an Array"`.
-            let traced = self.traced_string_value_text(value)?;
-            self.trace_keyword(indent, "DESCRIPTION", &traced);
+            if self.traced_mode().results {
+                let traced = self.traced_string_value_text(value)?;
+                self.trace_keyword(indent, "DESCRIPTION", &traced);
+            }
             description = Some(self.to_text(value).to_vec());
         }
         // `ADDITIONAL expr` and `ARRAY (a, b)` produce the identical
@@ -1229,8 +1238,10 @@ impl Interp {
             // The object on the line, the same split the two keywords above
             // take. Measured, `trace i` over `raise syntax 93.900 additional
             // (1,2)`: `>K>   "ADDITIONAL" => "an Array"`.
-            let traced = self.traced_string_value_text(value)?;
-            self.trace_keyword(indent, "ADDITIONAL", &traced);
+            if self.traced_mode().results {
+                let traced = self.traced_string_value_text(value)?;
+                self.trace_keyword(indent, "ADDITIONAL", &traced);
+            }
             if converted && slots.is_none() {
                 // `requestArray`, a string's lines included, and 98.939 for
                 // `TheNilObject` or a multi-dimensional answer.

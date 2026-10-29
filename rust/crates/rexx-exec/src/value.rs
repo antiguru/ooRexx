@@ -305,9 +305,7 @@ impl Interp {
         match redirect {
             Redirect::StemDefault(default) => return self.text_len_inner(default),
             Redirect::StemSubclass(store) => return self.stem_subclass_text_len(store),
-            Redirect::VarRefValue(referenced) => {
-                return self.unsent_string_value_text(referenced).len();
-            }
+            Redirect::VarRefValue(referenced) => return self.reference_text(referenced).len(),
             Redirect::VarRefUnset => return self.unset_reference_name(value).len(),
             // Built rather than measured off the object, because an array's
             // string value exists nowhere until something asks for it -- the
@@ -517,6 +515,18 @@ impl Interp {
         self.default_string_value_text(value)
     }
 
+    /// [`Interp::string_value_text`] of a reference's `referenced` value, for
+    /// a rendering that cannot carry a condition: one the send raises is
+    /// dropped and the value renders with nothing sent.
+    #[cold]
+    #[inline(never)]
+    fn reference_text(&mut self, referenced: ObjRef) -> Vec<u8> {
+        match self.string_value_text(referenced) {
+            Ok(text) => text,
+            Err(_) => self.unsent_string_value_text(referenced),
+        }
+    }
+
     /// [`Interp::string_value_text`] of a stem, an instance or a class, or
     /// `None` where the default rendering answers.
     #[cold]
@@ -530,6 +540,10 @@ impl Interp {
                 default: Some(_), ..
             } => self.stem_string_value_text(value).map(Some),
             Body::Instance { .. } | Body::Class { .. } => self.sent_string_value(value),
+            Body::VarRef(_) => match self.chain_end(value) {
+                Referent::Value(referenced) => self.string_value_text(referenced).map(Some),
+                Referent::Unset(_) | Referent::Cycle => Ok(None),
+            },
             _ => Ok(None),
         }
     }
@@ -760,7 +774,7 @@ impl Interp {
             // an instance whose class defines `makeString`, `say 'p' >k` is
             // the default name where `say 'p' k` runs the method.
             Redirect::VarRefValue(referenced) => {
-                return Cow::Owned(self.unsent_string_value_text(referenced));
+                return Cow::Owned(self.reference_text(referenced));
             }
             // A variable holding nothing reads as its own derived name,
             // which for a simple or stem symbol is the reference's own

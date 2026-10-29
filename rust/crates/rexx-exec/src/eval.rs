@@ -98,15 +98,14 @@ impl Interp {
         self.enter_eval_node(&raw const probe)?;
         let value = self.eval_node(code, expr);
         self.activity.depth -= 1;
-        // `TRACE I`'s own value events (D17), and the **single insertion
-        // point** for all of them: `eval` was already split from
-        // `eval_node` so every exit path -- every `?`-propagated one
-        // included -- passes through here, so a post-order event with the
-        // value already in hand needs no threading through `eval_node`'s
-        // own arms at all. Only `Ok` gets one: a raise has no value to
-        // show, and the oracle's own trace never shows one for a failing
-        // sub-expression either (the *clause* echo already happened, and
-        // the raise's own report is what follows).
+        // `TRACE I`'s own value events (D17), inserted here and in
+        // [`Interp::eval_in_parse`], which repeats this depth bookkeeping, so
+        // a post-order event with the value already in hand needs no
+        // threading through `eval_node`'s own arms at all. Only `Ok` gets
+        // one: a raise has no value to show, and the oracle's own trace
+        // never shows one for a failing sub-expression either (the *clause*
+        // echo already happened, and the raise's own report is what
+        // follows).
         if let Ok(v) = &value
             && self.tracing_intermediates()
             && self.trace_intermediate_held(code, expr, *v)
@@ -886,8 +885,9 @@ impl Interp {
                 }
             };
             // Left first, which is the oracle's order: measured, `987654321 +
-            // 123456789` at DIGITS 3 names 987654321.
-            self.lostdigits_check2(&left_number, left_value, &right_number, right_value)?;
+            // 123456789` at DIGITS 3 names 987654321. The right operand is
+            // named by its string value.
+            self.lostdigits_check2(&left_number, left_value, &right_number, converted)?;
             match op {
                 Operator::Plus => left_number.add(&right_number, digits),
                 Operator::Subtract => left_number.sub(&right_number, digits),

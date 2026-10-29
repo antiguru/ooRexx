@@ -978,6 +978,53 @@ fn eval_raises_11_1_exactly_one_term_past_max_eval_depth() {
     );
 }
 
+/// `eval_walked_chain`'s expression of `pattern` terms as a PARSE pattern,
+/// `repeats` times, then `eval_walked_chain(terms)`.
+fn pattern_then_say_chain(pattern: usize, repeats: usize, terms: usize) -> Vec<u8> {
+    let walked = eval_walked_chain(pattern);
+    let expression = &walked[b"say ".len()..walked.len() - 1];
+    let mut program = Vec::new();
+    for _ in 0..repeats {
+        program.extend_from_slice(b"parse value 'a' with (");
+        program.extend_from_slice(expression);
+        program.extend_from_slice(b") v\n");
+    }
+    program.extend_from_slice(&eval_walked_chain(terms));
+    program
+}
+
+/// A PARSE pattern, evaluated through `eval_in_parse`, reaches the same
+/// depth limit as an ordinary expression and leaves the depth as it found it.
+#[test]
+fn a_parse_pattern_and_an_expression_share_the_eval_depth_limit() {
+    let at = crate::run_program(
+        "depth-pattern-at.rex",
+        pattern_then_say_chain(MAX_EVAL_DEPTH, 3, MAX_EVAL_DEPTH),
+        crate::Invocation::none(),
+    );
+    assert_eq!(
+        at.exit_code,
+        0,
+        "stderr: {:?}",
+        String::from_utf8_lossy(&at.stderr)
+    );
+    assert_eq!(at.stdout, b"a\n");
+    assert_eq!(at.stack.max_depth, MAX_EVAL_DEPTH);
+
+    let past = crate::run_program(
+        "depth-pattern-past.rex",
+        pattern_then_say_chain(MAX_EVAL_DEPTH + 1, 1, 1),
+        crate::Invocation::none(),
+    );
+    assert_eq!(
+        past.exit_code,
+        245,
+        "256 - 11, stderr: {:?}",
+        String::from_utf8_lossy(&past.stderr)
+    );
+    assert_eq!(past.stdout, b"");
+}
+
 // ---- ExprKind::Call (Task 4, 4b): the internal-function expression
 // form ----
 
