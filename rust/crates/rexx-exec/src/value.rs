@@ -423,8 +423,7 @@ impl Interp {
     #[inline(never)]
     pub(crate) fn string_value_text(&mut self, value: ObjRef) -> Result<Vec<u8>, Failure> {
         // Called through a pointer the optimiser cannot see through: measured
-        // by callgrind, a direct call costs `parse` +0.10% and `decloop`
-        // +0.08%.
+        // by callgrind, a direct call costs `decloop` +0.13%.
         let object: fn(&mut Interp, ObjRef) -> Result<Option<Vec<u8>>, Failure> =
             std::hint::black_box(Interp::object_string_value_text);
         if let Some(text) = object(self, value)? {
