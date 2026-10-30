@@ -210,6 +210,105 @@
         },
         "performance": "All-program own-BASE comparison remains controller-owned; lookup and cold-allocation costs are not assumed free."
       }
+    },
+    {
+      "name": "f",
+      "source_record": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/semantics/fix-r1/release-pin.json",
+      "source_record_sha256": "e8bbf2cec7bfc212f4e1445d7913091e4772685703f5494cef9f786d609edc98",
+      "record": {
+        "pin": "/tmp/codex-p9d-t88-pins/8.8f-r1-rexx",
+        "sha256": "b695b78fe24903b4be5a2874c8cd128193bbe165f92b50a4d6a8a9956d03d3be",
+        "source_commit": "3e1aa9c879a90214bb5c680357975f58a0081abc",
+        "fix_base": "d84ac3917",
+        "dispatch_head": "6849449c70726dc5e7077021c99971a75e2882a1",
+        "source_worktree_clean": true,
+        "build_record": "checks/release-final.json",
+        "compiler": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1\n",
+        "runtime_files": {
+          "rust/crates/rexx-exec/src/dispatch/hash/relation.rs": "f55e253528e27b8c642ae5d479a361d0c2781814a9a4de12f2474cf293cb3095",
+          "rust/crates/rexx-exec/src/dispatch/hash/removal.rs": "908b43b2277c1090b91b8deb7f1d3a5da33bd20480bbc6b7abefedb3efaee864"
+        },
+        "old_f_pin": "/tmp/codex-p9d-t88-pins/8.8f-rexx",
+        "old_f_sha256": "0c9fb8371ab3d6dcea780194e02c112ed7981447f7f396e606e5f418975583f0"
+      }
+    },
+    {
+      "name": "h",
+      "source_record": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/release-pin.json",
+      "source_record_sha256": "af2a205875819b8e2bf3834488cb3dc65b014fa74a77230595f5a88a9caafdd3",
+      "record": {
+        "source_revision": "1233b81da730142057fcf810e324d10d0e55c109",
+        "rust_tree": "8b6fc7672eaf5bcea5a38072043be49fc6cdd0eb",
+        "source_clean": true,
+        "pin": "/tmp/codex-p9d-t88-pins/8.8e2-perf-r1-rexx",
+        "built_binary": "/tmp/codex-p9d-t88-target/release/rexx",
+        "sha256": "470dcb41db61ab7a4d64f3276ce28e539d5686d130be245a4ec7b30e6d6725ac",
+        "compiler": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1\n",
+        "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)",
+        "cargo_lock_sha256": "ca3b38a9343c4d44502f6d15d3404ec6ddb2f970fc7561be3fd82c4d109a94a2",
+        "build_record": "release-build.json",
+        "build_record_sha256": "955d72215570982e10d7fbf0ec82336193c8d49e18931373a3feeb3b82831ea9",
+        "pre_repair_pin": "/tmp/codex-p9d-t88-pins/8.8f-r1-rexx",
+        "pre_repair_sha256": "b695b78fe24903b4be5a2874c8cd128193bbe165f92b50a4d6a8a9956d03d3be"
+      }
+    },
+    {
+      "name": "a",
+      "source_record": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/pow/perf-fix-r1/pin-provenance.json",
+      "source_record_sha256": "df04b23afc4f389fcc88692569ebacad4a9e82608e6a9a4c4afb7de0ce7a4611",
+      "record": {
+        "source": "f56dfd25e4394ca32c7cfb18733d640a4f584ed9",
+        "source_tree": "68a291ee5089d9357b51b238056aaefcfac1500f",
+        "pin": "/tmp/codex-p9d-t88-pins/8.8a-perf-r1-rexx",
+        "pin_sha256": "ecb06e984ed736233ce0e2ef779b74941488ae64fdec10333dfb2215c309198a",
+        "build_binary": "/tmp/codex-p9d-t88-target/release/rexx",
+        "compiler": "/home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+        "compiler_sha256": "f3834d26669b03f6855fa54bd2381443123e860167bc0c7a8dd137e5cf6e5e4f",
+        "rustc_version": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1\n",
+        "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)\n",
+        "baseline": "/tmp/codex-p9d-t88-pins/8.8e2-perf-r1-rexx",
+        "baseline_source": "1233b81da730142057fcf810e324d10d0e55c109",
+        "baseline_sha256": "470dcb41db61ab7a4d64f3276ce28e539d5686d130be245a4ec7b30e6d6725ac",
+        "matched_all_program_comparison": "Pending controller-owned all-program comparison and scoped review.",
+        "build_binary_sha256": "ecb06e984ed736233ce0e2ef779b74941488ae64fdec10333dfb2215c309198a",
+        "source_file_sha256": {
+          "rust/crates/rexx-num/src/pow.rs": "90124ea01a8970b27659e10cef26a343bd69ee2fafc38097df2e308c013e660e",
+          "rust/crates/rexx-num/tests/pow.rs": "5d831deef31d6fc45e645f93933817c1b2d6b2d32cabd239e1635126fb5d3a7f"
+        }
+      }
+    },
+    {
+      "name": "p",
+      "source_record": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/semantics/perf-fix-r1/release-pin.json",
+      "source_record_sha256": "b1f074cd602eaedf7d5c2e8ecc0840f066877094ba6418526114af6e28ae25f5",
+      "record": {
+        "pin": "/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx",
+        "sha256": "6ed1c08eb03d54c48d1fe3947ce376f09502aaeba34ac221c334b01b1572b86e",
+        "source_commit": "4c11ee4449a1fe7b537c2a216ee7c10b1a5b12ab",
+        "dispatch_head": "b7a82272f3e111d131982854fdc2cb1ecb86acb5",
+        "source_worktree_clean": true,
+        "compiler": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1\n",
+        "build_record": "checks/release.json",
+        "build_record_sha256": "5870f34816fdcb359fff81013fd8e9c1b90710c4ee79b1160d8f7b7d652c0cd6",
+        "build_executable": "/tmp/codex-p9d-t88-target/release/rexx",
+        "build_sha256": "6ed1c08eb03d54c48d1fe3947ce376f09502aaeba34ac221c334b01b1572b86e",
+        "source_hashes": {
+          "rust/Cargo.toml": "eb99ce602d4c7105848a33ed287d4c7e4dbb2a6ac7f4552bf47bf81f8d5b9b5d",
+          "rust/Cargo.lock": "ca3b38a9343c4d44502f6d15d3404ec6ddb2f970fc7561be3fd82c4d109a94a2",
+          "rust/crates/rexx-exec/src/run.rs": "52cb557ff39795cec5fb56134608e67df20aacb4cb717b7b30d8a0093d8b2fab",
+          "rust/crates/rexx-exec/src/run/use_args.rs": "5b706eb1de568c3a374dba4b2b28a7e2674fc5c7ffc10860af418f43116ef571",
+          "rust/crates/rexx-exec/src/parse_template/trigger.rs": "206b668fbce8192d07a4b7c8f1d1507f51085a257708677f00ac2d6ed2171efc",
+          "rust/crates/rexx-exec/src/dispatch/hash.rs": "6b1347ccec832f16ceb82041835bbcaf48c95e5de5b7a72e24ac1361827c7cd8",
+          "rust/crates/rexx-exec/src/dispatch/hash/probe.rs": "425ed4030cc01c55e00159414db3395bd3cc115298ff40fd788e89aa6b3e87a2",
+          "rust/crates/rexx-exec/src/dispatch/hash/removal.rs": "908b43b2277c1090b91b8deb7f1d3a5da33bd20480bbc6b7abefedb3efaee864",
+          "rust/crates/rexx-exec/src/dispatch/hash/relation.rs": "f55e253528e27b8c642ae5d479a361d0c2781814a9a4de12f2474cf293cb3095"
+        },
+        "preserved_pins": {
+          "/tmp/codex-p9d-t88-pins/8.8a-perf-r1-rexx": "ecb06e984ed736233ce0e2ef779b74941488ae64fdec10333dfb2215c309198a",
+          "/tmp/codex-p9d-t88-pins/8.8f-r1-rexx": "b695b78fe24903b4be5a2874c8cd128193bbe165f92b50a4d6a8a9956d03d3be",
+          "/tmp/codex-p9d-t88-pins/8.8f-rexx": "0c9fb8371ab3d6dcea780194e02c112ed7981447f7f396e606e5f418975583f0"
+        }
+      }
     }
   ]
 }

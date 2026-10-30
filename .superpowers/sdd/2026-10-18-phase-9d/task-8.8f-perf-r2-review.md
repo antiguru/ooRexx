@@ -1,0 +1,20 @@
+Spec compliance: Compliant with the scoped PARSE repair brief. The measured performance gap remains pending matched profiling.
+
+Code quality: Approved. No new correctness or invariant finding in this diff.
+
+## Checked risks
+
+* **Original operand lifetime:** `rust/crates/rexx-exec/src/parse_template/trigger.rs:41` roots the evaluated operand before TRACE naming and required conversion. The focused unchanged-callee check confirms that `rexx-core/src/roots.rs:455` saves the current temporary length and `:461` truncates only entries above that saved mark. Nested Rexx execution through `dispatch.rs:3135` opens clauses with later watermarks at `run.rs:2578`, and clause exit at `run.rs:2610` checks and restores that watermark. Native pinned waits likewise establish their frame after existing roots at `dispatch.rs:3161`, so a successful conversion does not remove the caller's original operand root.
+* **Identity and distinct results:** `parse_template/trigger.rs:65` and `:75` skip the converted-result root only when its handle equals the original handle. `rexx-core/src/handle.rs:71` derives ObjRef equality over the stored handle, so this test neither sends language equality nor allocates. A distinct result still receives its own temporary root before `render`, including conversion through objects, references, and stem defaults. The required-string call remains fallible, and `?` propagates failure before either retention decision or search.
+* **Search ordering and representation:** The separate String/Mixed arms retain required conversion followed by `Rendered`, ordinary or caseless search, and no source-byte borrow across conversion. The initial evaluation/root and preceding TRACE operation remain outside those arms, while the positional branch is unchanged. The retained Q disassembly at `semantics/perf-fix-r2/disassembly/q.parse.asm:2319` and `:2565` contains the packed mask/OR/eight-byte-store rendering sequences described by the report. That static observation supports the chosen mechanism but establishes no instruction-budget result.
+* **Scope:** Only `parse_template/trigger.rs` has a runtime hunk in `task-8.8f-perf-r2-source-review.diff`. Actual hashes for USE, StringValue probing, removal, and Relation match `semantics/perf-fix-r2/source-scope.json:1` and the prior reviewed hashes. Their F1/F2 behavior and conservative roots were not reopened in this review. The diff introduces no global root API, dependency, unsafe site, or numbered Deviation.
+
+## Evidence checked
+
+The reviewed range is `f825415471a5f98635c09abda823bc8ab5199112` through `51cedf7cb`, with runtime source at `cd418bd304`. The retained semantic-boundaries, parse-trace-lib, and parse-trace-oracle records show three, 69, and one passing tests respectively, including the existing semantic fixture loop under normal and every-allocation collection. Final format, affected all-target clippy, and release records all show status 0, with only normal Cargo progress in stderr. No successful suite or interpreter probe was rerun during this review.
+
+All 15 raw stdout/stderr/status channels agree across the oracle, P baseline, and Q candidate. The five probes cover immediate and heap patterns, ordinary/caseless search, positional movement, makeString, a raising reference conversion, NOSTRING, and long required-string boundaries. Every source hash in `semantics/perf-fix-r2/release-pin.json:1` matches the current source, and the actual Q pin matches SHA256 `22c317baa3ed111935a6577ac33097e428a53b64eb64b4697af2b85664e3f8eb`. These checks support functional preservation without repeating the previously passing tests.
+
+## Verdict and limits
+
+The authorized source repair is addressed, with no new blocking finding. Neither the smaller frame nor restored packed rendering proves that the prior +0.34815184% regression has been recovered. The controller owns all-33-program matched profiling and final broad gates. The separately pending count ruling 84 remains unchanged and outside this scoped verdict.

@@ -1,0 +1,26 @@
+{
+  "verified_utc": "2026-10-30T20:12:22.072990+00:00",
+  "status": "ACCEPTED_FOR_COMPARISON",
+  "profiling_authorized": true,
+  "authorization": "Root f performance scoped review PASSED at source4c11ee4449a1fe7b537c2a216ee7c10b1a5b12ab/evidence8e16ad172",
+  "runtime_source_revision": "4c11ee4449a1fe7b537c2a216ee7c10b1a5b12ab",
+  "pins": [
+    {
+      "name": "p",
+      "path": "/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx",
+      "sha256": "6ed1c08eb03d54c48d1fe3947ce376f09502aaeba34ac221c334b01b1572b86e",
+      "bytes": 67484520
+    }
+  ],
+  "cohort": {
+    "h-a-fperf": [
+      "h",
+      "a",
+      "p"
+    ]
+  },
+  "rounds": 3,
+  "profiles": 297,
+  "existing_instrument_manifest": "inputs.json",
+  "provenance_record": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/semantics/perf-fix-r1/release-pin.json"
+}

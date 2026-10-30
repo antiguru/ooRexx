@@ -1,0 +1,12 @@
+{
+  "command": ["python3", "-B", "rust/bench-programs/cgdiff.py", "/tmp/codex-p9d-t88-performance/h-a-fperf/parse.a.r1.cg", "/tmp/codex-p9d-t88-performance/h-a-fperf/parse.p.r1.cg"],
+  "status": 0,
+  "execution": "Ordinary sandboxed file analysis, with no approval or interpreter/profile invocation",
+  "helper_sha256": "fc6e11404be48fb3bb548ad5c150ec49bd7bf52e1429b3dd35426611addba429",
+  "base_profile_sha256": "0bc7f38b46b075837d1da732538165a7139235d7b5ee6f8acc355ea8e5a7adc7",
+  "head_profile_sha256": "c13f3397153fddfac58bcfc4516dd3512ddd88c6dbf89a5c745b7801eaf09953",
+  "largest_self_increase": {"function": "<rexx_exec::Interp>::exec_parse", "instructions": 5400000},
+  "other_self_increase": {"function": "rexx_exec::dispatch::hash::probe::probe_by_protocol::<false>", "instructions": 23983},
+  "attribution_limit": "Function self totals include compiler-inlined work. This identifies the containing function rather than an isolated source-line mechanism.",
+  "output": "parse-cgdiff-r1.stdout"
+}

@@ -1,0 +1,32 @@
+{
+  "incident": "Optional metadata attribution blocked the agent status loop on an unanswered approval",
+  "failed_initial_command": ["memcap", "8G", "python3", "-B", "-"],
+  "initial_command_form": "Shell heredoc with Python cgdiff analysis of existing parse, dirread, and pingmsg profiles",
+  "initial_status": 1,
+  "initial_error": "memcap: no writable cgroup at /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service",
+  "escalation_requested": true,
+  "approval_wait_seconds": 1777.4,
+  "approval_disposition": "Aborted by user",
+  "optional_analysis_body_executed": false,
+  "optional_attribution_directory_exists": false,
+  "profiling_during_wait": {
+    "session": 77827,
+    "batch": "batch-11.json",
+    "driver_status": 0,
+    "elapsed_seconds": 361.4858385719708,
+    "deadline_seconds": 525,
+    "valid_profiles": 197,
+    "invalid_profiles": 0,
+    "unlaunched_profile": "rexxcps.f.r3"
+  },
+  "recovery": {
+    "batch": "batch-12-recovery.json",
+    "session": 93418,
+    "driver_status": 0,
+    "elapsed_seconds": 102.38205553800799,
+    "profiles_run": ["rexxcps.f.r3"],
+    "previous_profiles_preserved": 197,
+    "final_f_profiles": 198
+  },
+  "guardrail": "Optional analysis uses ordinary sandboxed file analysis or an owned script with plain approved memcap argv. No escalated heredocs, shell redirects, globs, leading environment assignments, or approval-dependent status waits."
+}

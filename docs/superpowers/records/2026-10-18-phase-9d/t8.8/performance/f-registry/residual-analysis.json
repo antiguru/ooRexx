@@ -1,0 +1,64 @@
+{
+  "complete_programs": 33,
+  "ordinary_send": [
+    {
+      "program": "dispatch",
+      "e1_own": 20683753607,
+      "e2_own": 20823756231,
+      "f_prior_own": 20823763935,
+      "f_matched_own": 20823763935,
+      "h_own": 20708763220,
+      "h_vs_e1_percent": 0.12091428603914524,
+      "h_vs_e2_percent": -0.5522203089796629,
+      "h_vs_f_prior_percent": -0.5522571008726718,
+      "h_vs_f_matched_percent": -0.5522571008726718
+    },
+    {
+      "program": "dispatchclass",
+      "e1_own": 15310186503,
+      "e2_own": 15422189066,
+      "f_prior_own": 15422196694,
+      "f_matched_own": 15422196694,
+      "h_own": 15330196101,
+      "h_vs_e1_percent": 0.13069467178652044,
+      "h_vs_e2_percent": -0.5964974531586383,
+      "h_vs_f_prior_percent": -0.5965466193009508,
+      "h_vs_f_matched_percent": -0.5965466193009508
+    },
+    {
+      "program": "sendloop",
+      "e1_own": 13828062110,
+      "e2_own": 13968064690,
+      "f_prior_own": 13968072394,
+      "f_matched_own": 13968072394,
+      "h_own": 13853071725,
+      "h_vs_e1_percent": 0.18086131520854154,
+      "h_vs_e2_percent": -0.8232562459588666,
+      "h_vs_f_prior_percent": -0.8233109462505267,
+      "h_vs_f_matched_percent": -0.8233109462505267
+    }
+  ],
+  "reference_cohorts": {
+    "e1": [
+      "c-e1-e2",
+      "e1"
+    ],
+    "e2": [
+      "c-e1-e2",
+      "e2"
+    ],
+    "f_prior": [
+      "e2-f",
+      "f"
+    ],
+    "f_matched": [
+      "f-registry",
+      "f"
+    ],
+    "h": [
+      "f-registry",
+      "h"
+    ]
+  },
+  "attribution_limits": "Independent cohorts compare different complete source revisions. H versus original e1 includes intervening e2 and f changes, rather than isolating the registry mechanism. A negative matched H versus F repair delta alone does not establish that the original regression was eliminated."
+}

@@ -1,0 +1,3943 @@
+{
+  "group": "e2-f",
+  "jobs": 8,
+  "driver_sha256": "5e8baf40bd10f661bf857c6ceda91085321eeb5b3586a3e74cb5b20371ee3184",
+  "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/5e8baf40bd10f661bf857c6ceda91085321eeb5b3586a3e74cb5b20371ee3184.py",
+  "driver_command": [
+    "memcap",
+    "8G",
+    "python3",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+    "run",
+    "e2-f",
+    "batch-11",
+    "1000",
+    "8"
+  ],
+  "deadline_seconds": 525,
+  "elapsed_seconds": 361.4858385719708,
+  "completed_profiles": [
+    {
+      "group": "e2-f",
+      "program": "pingmsg",
+      "name": "f",
+      "round": 2,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "pingmsg",
+        "PROFILE_ROUND": "2",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 28.70115639496362,
+      "finished_utc": "2026-10-30T19:10:45.097404+00:00",
+      "memory": {
+        "subprocess_pid": 1580127,
+        "max_tree_rss_kib": 122568,
+        "max_child_hwm_kib": 105340,
+        "peak_sample": [
+          {
+            "pid": 1580127,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5484,
+            "hwm_kib": 5484
+          },
+          {
+            "pid": 1580266,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2020,
+            "hwm_kib": 2020
+          },
+          {
+            "pid": 1580277,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.f.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.f.r2.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pingpong/pingmsg.rex ",
+            "rss_kib": 5560,
+            "hwm_kib": 5560
+          },
+          {
+            "pid": 1580311,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.f.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.f.r2.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pingpong/pingmsg.rex ",
+            "rss_kib": 4164,
+            "hwm_kib": 4164
+          },
+          {
+            "pid": 1580316,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.f.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.f.r2.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pingpong/pingmsg.rex ",
+            "rss_kib": 105340,
+            "hwm_kib": 105340
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "pingmsg",
+        "r2",
+        "7541374946",
+        "5891213649",
+        "350733",
+        "1649810564",
+        "rc=0"
+      ],
+      "whole": 7541374946,
+      "libc": 5891213649,
+      "ld": 350733,
+      "own": 1649810564,
+      "out_sha256": "5b3f51e287785d5bf4f1d2b4b35c60bd52e11edffe7d3a4a4bf7f98b1627abbe",
+      "out_bytes": 6,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "varlookup",
+      "name": "f",
+      "round": 2,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "varlookup",
+        "PROFILE_ROUND": "2",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 50.82814088999294,
+      "finished_utc": "2026-10-30T19:11:07.222993+00:00",
+      "memory": {
+        "subprocess_pid": 1580112,
+        "max_tree_rss_kib": 95376,
+        "max_child_hwm_kib": 78432,
+        "peak_sample": [
+          {
+            "pid": 1580112,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5488,
+            "hwm_kib": 5488
+          },
+          {
+            "pid": 1580263,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2080,
+            "hwm_kib": 2080
+          },
+          {
+            "pid": 1580279,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.f.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.f.r2.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/varlookup.rex ",
+            "rss_kib": 5448,
+            "hwm_kib": 5448
+          },
+          {
+            "pid": 1580312,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.f.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.f.r2.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/varlookup.rex ",
+            "rss_kib": 3928,
+            "hwm_kib": 3928
+          },
+          {
+            "pid": 1580319,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.f.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.f.r2.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/varlookup.rex ",
+            "rss_kib": 78432,
+            "hwm_kib": 78432
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "varlookup",
+        "r2",
+        "13156701727",
+        "61565671",
+        "350602",
+        "13094785454",
+        "rc=0"
+      ],
+      "whole": 13156701727,
+      "libc": 61565671,
+      "ld": 350602,
+      "own": 13094785454,
+      "out_sha256": "f9324ce079f2051f207b18f86b8c6672e022e7d1bb2c056d1b11ff5ad991908d",
+      "out_bytes": 9,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "pingmsg",
+      "name": "e2",
+      "round": 2,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "pingmsg",
+        "PROFILE_ROUND": "2",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 28.542053019977175,
+      "finished_utc": "2026-10-30T19:11:13.647451+00:00",
+      "memory": {
+        "subprocess_pid": 1582471,
+        "max_tree_rss_kib": 126872,
+        "max_child_hwm_kib": 109440,
+        "peak_sample": [
+          {
+            "pid": 1582471,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5600,
+            "hwm_kib": 5600
+          },
+          {
+            "pid": 1582496,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2232,
+            "hwm_kib": 2232
+          },
+          {
+            "pid": 1582498,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pingpong/pingmsg.rex ",
+            "rss_kib": 5504,
+            "hwm_kib": 5504
+          },
+          {
+            "pid": 1582502,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pingpong/pingmsg.rex ",
+            "rss_kib": 4096,
+            "hwm_kib": 4096
+          },
+          {
+            "pid": 1582503,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pingpong/pingmsg.rex ",
+            "rss_kib": 109440,
+            "hwm_kib": 109440
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "pingmsg",
+        "r2",
+        "7540206346",
+        "5891253209",
+        "350541",
+        "1648602596",
+        "rc=0"
+      ],
+      "whole": 7540206346,
+      "libc": 5891253209,
+      "ld": 350541,
+      "own": 1648602596,
+      "out_sha256": "5b3f51e287785d5bf4f1d2b4b35c60bd52e11edffe7d3a4a4bf7f98b1627abbe",
+      "out_bytes": 6,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "assign",
+      "name": "e2",
+      "round": 2,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "assign",
+        "PROFILE_ROUND": "2",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 61.486072225961834,
+      "finished_utc": "2026-10-30T19:11:17.876025+00:00",
+      "memory": {
+        "subprocess_pid": 1580086,
+        "max_tree_rss_kib": 97692,
+        "max_child_hwm_kib": 80444,
+        "peak_sample": [
+          {
+            "pid": 1580086,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5612,
+            "hwm_kib": 5612
+          },
+          {
+            "pid": 1580270,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2184,
+            "hwm_kib": 2184
+          },
+          {
+            "pid": 1580281,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/assign.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/assign.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/assign.rex ",
+            "rss_kib": 5448,
+            "hwm_kib": 5448
+          },
+          {
+            "pid": 1580308,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/assign.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/assign.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/assign.rex ",
+            "rss_kib": 4004,
+            "hwm_kib": 4004
+          },
+          {
+            "pid": 1580317,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/assign.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/assign.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/assign.rex ",
+            "rss_kib": 80444,
+            "hwm_kib": 80444
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "assign",
+        "r2",
+        "18441873697",
+        "61677144",
+        "350515",
+        "18379846038",
+        "rc=0"
+      ],
+      "whole": 18441873697,
+      "libc": 61677144,
+      "ld": 350515,
+      "own": 18379846038,
+      "out_sha256": "edeaaff3f1774ad2888673770c6d64097e391bc362d7d6fb34982ddf0efd18cb",
+      "out_bytes": 4,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "strings",
+      "name": "f",
+      "round": 2,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "strings",
+        "PROFILE_ROUND": "2",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 80.6686721209553,
+      "finished_utc": "2026-10-30T19:11:37.064265+00:00",
+      "memory": {
+        "subprocess_pid": 1580131,
+        "max_tree_rss_kib": 103220,
+        "max_child_hwm_kib": 85856,
+        "peak_sample": [
+          {
+            "pid": 1580131,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5604,
+            "hwm_kib": 5604
+          },
+          {
+            "pid": 1580264,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2272,
+            "hwm_kib": 2272
+          },
+          {
+            "pid": 1580278,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r2.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 5592,
+            "hwm_kib": 5592
+          },
+          {
+            "pid": 1580314,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r2.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 3896,
+            "hwm_kib": 3896
+          },
+          {
+            "pid": 1580318,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r2.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 85856,
+            "hwm_kib": 85856
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "strings",
+        "r2",
+        "18655851712",
+        "1271812044",
+        "350602",
+        "17383689066",
+        "rc=0"
+      ],
+      "whole": 18655851712,
+      "libc": 1271812044,
+      "ld": 350602,
+      "own": 17383689066,
+      "out_sha256": "770aa431c68377532cd3810b36135c7a1ad25c1db8c992285a24af9b5a09a627",
+      "out_bytes": 10,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "strings",
+      "name": "f",
+      "round": 1,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "strings",
+        "PROFILE_ROUND": "1",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 81.14258129399968,
+      "finished_utc": "2026-10-30T19:11:37.525872+00:00",
+      "memory": {
+        "subprocess_pid": 1580072,
+        "max_tree_rss_kib": 103256,
+        "max_child_hwm_kib": 85856,
+        "peak_sample": [
+          {
+            "pid": 1580072,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5624,
+            "hwm_kib": 5624
+          },
+          {
+            "pid": 1580249,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2232,
+            "hwm_kib": 2232
+          },
+          {
+            "pid": 1580251,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r1.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r1.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 5488,
+            "hwm_kib": 5488
+          },
+          {
+            "pid": 1580276,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r1.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r1.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 4056,
+            "hwm_kib": 4056
+          },
+          {
+            "pid": 1580306,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r1.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r1.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 85856,
+            "hwm_kib": 85856
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "strings",
+        "r1",
+        "18655851712",
+        "1271812044",
+        "350602",
+        "17383689066",
+        "rc=0"
+      ],
+      "whole": 18655851712,
+      "libc": 1271812044,
+      "ld": 350602,
+      "own": 17383689066,
+      "out_sha256": "770aa431c68377532cd3810b36135c7a1ad25c1db8c992285a24af9b5a09a627",
+      "out_bytes": 10,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "alloc",
+      "name": "f",
+      "round": 2,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "alloc",
+        "PROFILE_ROUND": "2",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 98.65817153302487,
+      "finished_utc": "2026-10-30T19:11:55.049749+00:00",
+      "memory": {
+        "subprocess_pid": 1580090,
+        "max_tree_rss_kib": 106576,
+        "max_child_hwm_kib": 89064,
+        "peak_sample": [
+          {
+            "pid": 1580090,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5532,
+            "hwm_kib": 5532
+          },
+          {
+            "pid": 1580262,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2272,
+            "hwm_kib": 2272
+          },
+          {
+            "pid": 1580275,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.f.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.f.r2.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/alloc.rex ",
+            "rss_kib": 5544,
+            "hwm_kib": 5544
+          },
+          {
+            "pid": 1580310,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.f.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.f.r2.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/alloc.rex ",
+            "rss_kib": 4164,
+            "hwm_kib": 4164
+          },
+          {
+            "pid": 1580315,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.f.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.f.r2.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/alloc.rex ",
+            "rss_kib": 89064,
+            "hwm_kib": 89064
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "alloc",
+        "r2",
+        "22580718320",
+        "2480189075",
+        "350576",
+        "20100178669",
+        "rc=0"
+      ],
+      "whole": 22580718320,
+      "libc": 2480189075,
+      "ld": 350576,
+      "own": 20100178669,
+      "out_sha256": "a389b4c169ee8d98bb3e0e348bb71bc2de39c93d9effe49c4aeb232025d6d0c9",
+      "out_bytes": 9,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "rexxcps",
+      "name": "f",
+      "round": 1,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "rexxcps",
+        "PROFILE_ROUND": "1",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 100.67350962600904,
+      "finished_utc": "2026-10-30T19:11:57.062811+00:00",
+      "memory": {
+        "subprocess_pid": 1580084,
+        "max_tree_rss_kib": 108784,
+        "max_child_hwm_kib": 91608,
+        "peak_sample": [
+          {
+            "pid": 1580084,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5656,
+            "hwm_kib": 5656
+          },
+          {
+            "pid": 1580261,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2148,
+            "hwm_kib": 2148
+          },
+          {
+            "pid": 1580273,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.f.r1.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.f.r1.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/../bench-rexxcps/rexxcps.rex ",
+            "rss_kib": 5412,
+            "hwm_kib": 5412
+          },
+          {
+            "pid": 1580309,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.f.r1.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.f.r1.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/../bench-rexxcps/rexxcps.rex ",
+            "rss_kib": 3960,
+            "hwm_kib": 3960
+          },
+          {
+            "pid": 1580321,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.f.r1.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.f.r1.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/../bench-rexxcps/rexxcps.rex ",
+            "rss_kib": 91608,
+            "hwm_kib": 91608
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "rexxcps",
+        "r1",
+        "19286546779",
+        "1487427214",
+        "350763",
+        "17798768802",
+        "rc=0"
+      ],
+      "whole": 19286546779,
+      "libc": 1487427214,
+      "ld": 350763,
+      "own": 17798768802,
+      "out_sha256": "2cf79419d3a9fa963a19aaad1261f74c2ff138ba58d1a53b66ad474d4b190d13",
+      "out_bytes": 251,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "varlookup",
+      "name": "e2",
+      "round": 2,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "varlookup",
+        "PROFILE_ROUND": "2",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 50.26436373201432,
+      "finished_utc": "2026-10-30T19:11:57.493662+00:00",
+      "memory": {
+        "subprocess_pid": 1583808,
+        "max_tree_rss_kib": 99196,
+        "max_child_hwm_kib": 81912,
+        "peak_sample": [
+          {
+            "pid": 1583808,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5580,
+            "hwm_kib": 5580
+          },
+          {
+            "pid": 1583834,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2212,
+            "hwm_kib": 2212
+          },
+          {
+            "pid": 1583836,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/varlookup.rex ",
+            "rss_kib": 5436,
+            "hwm_kib": 5436
+          },
+          {
+            "pid": 1583840,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/varlookup.rex ",
+            "rss_kib": 4056,
+            "hwm_kib": 4056
+          },
+          {
+            "pid": 1583842,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/varlookup.rex ",
+            "rss_kib": 81912,
+            "hwm_kib": 81912
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "varlookup",
+        "r2",
+        "13156693997",
+        "61565429",
+        "350541",
+        "13094778027",
+        "rc=0"
+      ],
+      "whole": 13156693997,
+      "libc": 61565429,
+      "ld": 350541,
+      "own": 13094778027,
+      "out_sha256": "f9324ce079f2051f207b18f86b8c6672e022e7d1bb2c056d1b11ff5ad991908d",
+      "out_bytes": 9,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "rexxcps",
+      "name": "f",
+      "round": 2,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "rexxcps",
+        "PROFILE_ROUND": "2",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 102.38288464496145,
+      "finished_utc": "2026-10-30T19:11:58.780241+00:00",
+      "memory": {
+        "subprocess_pid": 1580142,
+        "max_tree_rss_kib": 109044,
+        "max_child_hwm_kib": 91608,
+        "peak_sample": [
+          {
+            "pid": 1580142,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5572,
+            "hwm_kib": 5572
+          },
+          {
+            "pid": 1580280,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2284,
+            "hwm_kib": 2284
+          },
+          {
+            "pid": 1580283,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.f.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.f.r2.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/../bench-rexxcps/rexxcps.rex ",
+            "rss_kib": 5492,
+            "hwm_kib": 5492
+          },
+          {
+            "pid": 1580313,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.f.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.f.r2.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/../bench-rexxcps/rexxcps.rex ",
+            "rss_kib": 4088,
+            "hwm_kib": 4088
+          },
+          {
+            "pid": 1580320,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.f.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.f.r2.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/../bench-rexxcps/rexxcps.rex ",
+            "rss_kib": 91608,
+            "hwm_kib": 91608
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "rexxcps",
+        "r2",
+        "19286561603",
+        "1487435310",
+        "350763",
+        "17798775530",
+        "rc=0"
+      ],
+      "whole": 19286561603,
+      "libc": 1487435310,
+      "ld": 350763,
+      "own": 17798775530,
+      "out_sha256": "b0607ab4c5a8162afa258dbbb6bbb03386eada56c92938254385ae6ae3b25233",
+      "out_bytes": 251,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "arith",
+      "name": "e2",
+      "round": 3,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "arith",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 50.10901292000199,
+      "finished_utc": "2026-10-30T19:12:07.991674+00:00",
+      "memory": {
+        "subprocess_pid": 1584499,
+        "max_tree_rss_kib": 105920,
+        "max_child_hwm_kib": 88468,
+        "peak_sample": [
+          {
+            "pid": 1584499,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5584,
+            "hwm_kib": 5584
+          },
+          {
+            "pid": 1584522,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2256,
+            "hwm_kib": 2256
+          },
+          {
+            "pid": 1584524,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/arith.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/arith.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/arith.rex ",
+            "rss_kib": 5512,
+            "hwm_kib": 5512
+          },
+          {
+            "pid": 1584528,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/arith.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/arith.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/arith.rex ",
+            "rss_kib": 4100,
+            "hwm_kib": 4100
+          },
+          {
+            "pid": 1584530,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/arith.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/arith.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/arith.rex ",
+            "rss_kib": 88468,
+            "hwm_kib": 88468
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "arith",
+        "r3",
+        "12132162438",
+        "605566915",
+        "350660",
+        "11526244863",
+        "rc=0"
+      ],
+      "whole": 12132162438,
+      "libc": 605566915,
+      "ld": 350660,
+      "own": 11526244863,
+      "out_sha256": "184b0492309dbc90ad1483e827e2e88dc991dcee4f5a242d981ed0142fd087ef",
+      "out_bytes": 22,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "decrender",
+      "name": "f",
+      "round": 3,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "decrender",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 20.183592197019607,
+      "finished_utc": "2026-10-30T19:12:17.684128+00:00",
+      "memory": {
+        "subprocess_pid": 1586912,
+        "max_tree_rss_kib": 103956,
+        "max_child_hwm_kib": 86660,
+        "peak_sample": [
+          {
+            "pid": 1586912,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5540,
+            "hwm_kib": 5540
+          },
+          {
+            "pid": 1586941,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2232,
+            "hwm_kib": 2232
+          },
+          {
+            "pid": 1586943,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/decrender.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/decrender.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/decrender.rex ",
+            "rss_kib": 5480,
+            "hwm_kib": 5480
+          },
+          {
+            "pid": 1586947,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/decrender.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/decrender.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/decrender.rex ",
+            "rss_kib": 4044,
+            "hwm_kib": 4044
+          },
+          {
+            "pid": 1586948,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/decrender.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/decrender.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/decrender.rex ",
+            "rss_kib": 86660,
+            "hwm_kib": 86660
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "decrender",
+        "r3",
+        "4590264676",
+        "461295478",
+        "350747",
+        "4128618451",
+        "rc=0"
+      ],
+      "whole": 4590264676,
+      "libc": 461295478,
+      "ld": 350747,
+      "own": 4128618451,
+      "out_sha256": "20906f772bf0b93e695828b6019fcd7284341cbe95ee2865a6e86b8e400551ed",
+      "out_bytes": 7,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "dirread",
+      "name": "f",
+      "round": 3,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "dirread",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 14.779252184962388,
+      "finished_utc": "2026-10-30T19:12:32.469901+00:00",
+      "memory": {
+        "subprocess_pid": 1588237,
+        "max_tree_rss_kib": 102932,
+        "max_child_hwm_kib": 85788,
+        "peak_sample": [
+          {
+            "pid": 1588237,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5512,
+            "hwm_kib": 5512
+          },
+          {
+            "pid": 1588260,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2104,
+            "hwm_kib": 2104
+          },
+          {
+            "pid": 1588263,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/dirread.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/dirread.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/dirread.rex ",
+            "rss_kib": 5484,
+            "hwm_kib": 5484
+          },
+          {
+            "pid": 1588267,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/dirread.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/dirread.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/dirread.rex ",
+            "rss_kib": 4044,
+            "hwm_kib": 4044
+          },
+          {
+            "pid": 1588269,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/dirread.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/dirread.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/dirread.rex ",
+            "rss_kib": 85788,
+            "hwm_kib": 85788
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "dirread",
+        "r3",
+        "3148633582",
+        "503962174",
+        "350747",
+        "2644320661",
+        "rc=0"
+      ],
+      "whole": 3148633582,
+      "libc": 503962174,
+      "ld": 350747,
+      "own": 2644320661,
+      "out_sha256": "6e3efc811d40b03baab295f398ccc5f3a0b8c8c98c77fcd857540eea09e69f33",
+      "out_bytes": 6,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "compound",
+      "name": "e2",
+      "round": 3,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "compound",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 38.74763882800471,
+      "finished_utc": "2026-10-30T19:12:35.819350+00:00",
+      "memory": {
+        "subprocess_pid": 1586863,
+        "max_tree_rss_kib": 98008,
+        "max_child_hwm_kib": 80732,
+        "peak_sample": [
+          {
+            "pid": 1586863,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5472,
+            "hwm_kib": 5472
+          },
+          {
+            "pid": 1586889,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2140,
+            "hwm_kib": 2140
+          },
+          {
+            "pid": 1586891,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/compound.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/compound.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/compound.rex ",
+            "rss_kib": 5496,
+            "hwm_kib": 5496
+          },
+          {
+            "pid": 1586895,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/compound.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/compound.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/compound.rex ",
+            "rss_kib": 4168,
+            "hwm_kib": 4168
+          },
+          {
+            "pid": 1586896,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/compound.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/compound.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/compound.rex ",
+            "rss_kib": 80732,
+            "hwm_kib": 80732
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "compound",
+        "r3",
+        "9443464872",
+        "431365186",
+        "350541",
+        "9011749145",
+        "rc=0"
+      ],
+      "whole": 9443464872,
+      "libc": 431365186,
+      "ld": 350541,
+      "own": 9011749145,
+      "out_sha256": "a3ee977aa98830c6d545a83f6a0e756983f823ae7621f9224e39cb1d3ed1b66b",
+      "out_bytes": 8,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "assign",
+      "name": "e2",
+      "round": 3,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "assign",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 60.67014309199294,
+      "finished_utc": "2026-10-30T19:12:38.202208+00:00",
+      "memory": {
+        "subprocess_pid": 1585605,
+        "max_tree_rss_kib": 97964,
+        "max_child_hwm_kib": 80444,
+        "peak_sample": [
+          {
+            "pid": 1585605,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5672,
+            "hwm_kib": 5672
+          },
+          {
+            "pid": 1585630,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2264,
+            "hwm_kib": 2264
+          },
+          {
+            "pid": 1585632,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/assign.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/assign.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/assign.rex ",
+            "rss_kib": 5580,
+            "hwm_kib": 5580
+          },
+          {
+            "pid": 1585636,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/assign.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/assign.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/assign.rex ",
+            "rss_kib": 4004,
+            "hwm_kib": 4004
+          },
+          {
+            "pid": 1585637,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/assign.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/assign.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/assign.rex ",
+            "rss_kib": 80444,
+            "hwm_kib": 80444
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "assign",
+        "r3",
+        "18441873962",
+        "61677264",
+        "350660",
+        "18379846038",
+        "rc=0"
+      ],
+      "whole": 18441873962,
+      "libc": 61677264,
+      "ld": 350660,
+      "own": 18379846038,
+      "out_sha256": "edeaaff3f1774ad2888673770c6d64097e391bc362d7d6fb34982ddf0efd18cb",
+      "out_bytes": 4,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "alloc",
+      "name": "e2",
+      "round": 3,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "alloc",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 98.05602930497844,
+      "finished_utc": "2026-10-30T19:12:51.709772+00:00",
+      "memory": {
+        "subprocess_pid": 1584207,
+        "max_tree_rss_kib": 108408,
+        "max_child_hwm_kib": 91052,
+        "peak_sample": [
+          {
+            "pid": 1584207,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5596,
+            "hwm_kib": 5596
+          },
+          {
+            "pid": 1584230,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2224,
+            "hwm_kib": 2224
+          },
+          {
+            "pid": 1584232,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/alloc.rex ",
+            "rss_kib": 5532,
+            "hwm_kib": 5532
+          },
+          {
+            "pid": 1584236,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/alloc.rex ",
+            "rss_kib": 4004,
+            "hwm_kib": 4004
+          },
+          {
+            "pid": 1584238,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/alloc.rex ",
+            "rss_kib": 91052,
+            "hwm_kib": 91052
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "alloc",
+        "r3",
+        "22580709983",
+        "2480188282",
+        "350660",
+        "20100171041",
+        "rc=0"
+      ],
+      "whole": 22580709983,
+      "libc": 2480188282,
+      "ld": 350660,
+      "own": 20100171041,
+      "out_sha256": "a389b4c169ee8d98bb3e0e348bb71bc2de39c93d9effe49c4aeb232025d6d0c9",
+      "out_bytes": 9,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "strings",
+      "name": "e2",
+      "round": 2,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "strings",
+        "PROFILE_ROUND": "2",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 79.8904927590047,
+      "finished_utc": "2026-10-30T19:12:56.963115+00:00",
+      "memory": {
+        "subprocess_pid": 1585558,
+        "max_tree_rss_kib": 104944,
+        "max_child_hwm_kib": 87840,
+        "peak_sample": [
+          {
+            "pid": 1585558,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5512,
+            "hwm_kib": 5512
+          },
+          {
+            "pid": 1585583,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2092,
+            "hwm_kib": 2092
+          },
+          {
+            "pid": 1585585,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/strings.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/strings.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 5540,
+            "hwm_kib": 5540
+          },
+          {
+            "pid": 1585589,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/strings.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/strings.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 3960,
+            "hwm_kib": 3960
+          },
+          {
+            "pid": 1585590,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/strings.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/strings.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 87840,
+            "hwm_kib": 87840
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "strings",
+        "r2",
+        "18655844189",
+        "1271811981",
+        "350660",
+        "17383681548",
+        "rc=0"
+      ],
+      "whole": 18655844189,
+      "libc": 1271811981,
+      "ld": 350660,
+      "own": 17383681548,
+      "out_sha256": "770aa431c68377532cd3810b36135c7a1ad25c1db8c992285a24af9b5a09a627",
+      "out_bytes": 10,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "arith",
+      "name": "f",
+      "round": 3,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "arith",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 50.8639636390144,
+      "finished_utc": "2026-10-30T19:12:58.862994+00:00",
+      "memory": {
+        "subprocess_pid": 1587653,
+        "max_tree_rss_kib": 103640,
+        "max_child_hwm_kib": 86484,
+        "peak_sample": [
+          {
+            "pid": 1587653,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5492,
+            "hwm_kib": 5492
+          },
+          {
+            "pid": 1587679,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2008,
+            "hwm_kib": 2008
+          },
+          {
+            "pid": 1587681,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/arith.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/arith.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/arith.rex ",
+            "rss_kib": 5612,
+            "hwm_kib": 5612
+          },
+          {
+            "pid": 1587685,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/arith.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/arith.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/arith.rex ",
+            "rss_kib": 4044,
+            "hwm_kib": 4044
+          },
+          {
+            "pid": 1587686,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/arith.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/arith.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/arith.rex ",
+            "rss_kib": 86484,
+            "hwm_kib": 86484
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "arith",
+        "r3",
+        "12132170594",
+        "605567526",
+        "350576",
+        "11526252492",
+        "rc=0"
+      ],
+      "whole": 12132170594,
+      "libc": 605567526,
+      "ld": 350576,
+      "own": 11526252492,
+      "out_sha256": "184b0492309dbc90ad1483e827e2e88dc991dcee4f5a242d981ed0142fd087ef",
+      "out_bytes": 22,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "emptyloop",
+      "name": "e2",
+      "round": 3,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "emptyloop",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 27.58943527500378,
+      "finished_utc": "2026-10-30T19:13:00.065842+00:00",
+      "memory": {
+        "subprocess_pid": 1589062,
+        "max_tree_rss_kib": 97796,
+        "max_child_hwm_kib": 80416,
+        "peak_sample": [
+          {
+            "pid": 1589062,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5632,
+            "hwm_kib": 5632
+          },
+          {
+            "pid": 1589089,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2132,
+            "hwm_kib": 2132
+          },
+          {
+            "pid": 1589091,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/emptyloop.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/emptyloop.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/emptyloop.rex ",
+            "rss_kib": 5520,
+            "hwm_kib": 5520
+          },
+          {
+            "pid": 1589095,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/emptyloop.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/emptyloop.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/emptyloop.rex ",
+            "rss_kib": 4096,
+            "hwm_kib": 4096
+          },
+          {
+            "pid": 1589096,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/emptyloop.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/emptyloop.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/emptyloop.rex ",
+            "rss_kib": 80416,
+            "hwm_kib": 80416
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "emptyloop",
+        "r3",
+        "7747258544",
+        "61560185",
+        "350686",
+        "7685347673",
+        "rc=0"
+      ],
+      "whole": 7747258544,
+      "libc": 61560185,
+      "ld": 350686,
+      "own": 7685347673,
+      "out_sha256": "d117fa006ba9208500b2930ce69cbde436c647afa917cb7396a9bc9111a46dd2",
+      "out_bytes": 5,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "compound",
+      "name": "f",
+      "round": 3,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "compound",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 38.34387570101535,
+      "finished_utc": "2026-10-30T19:13:14.171489+00:00",
+      "memory": {
+        "subprocess_pid": 1589263,
+        "max_tree_rss_kib": 96716,
+        "max_child_hwm_kib": 79528,
+        "peak_sample": [
+          {
+            "pid": 1589263,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5512,
+            "hwm_kib": 5512
+          },
+          {
+            "pid": 1589288,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2100,
+            "hwm_kib": 2100
+          },
+          {
+            "pid": 1589290,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/compound.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/compound.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/compound.rex ",
+            "rss_kib": 5540,
+            "hwm_kib": 5540
+          },
+          {
+            "pid": 1589294,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/compound.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/compound.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/compound.rex ",
+            "rss_kib": 4036,
+            "hwm_kib": 4036
+          },
+          {
+            "pid": 1589295,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/compound.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/compound.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/compound.rex ",
+            "rss_kib": 79528,
+            "hwm_kib": 79528
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "compound",
+        "r3",
+        "9378473006",
+        "431365570",
+        "350602",
+        "8946756834",
+        "rc=0"
+      ],
+      "whole": 9378473006,
+      "libc": 431365570,
+      "ld": 350602,
+      "own": 8946756834,
+      "out_sha256": "a3ee977aa98830c6d545a83f6a0e756983f823ae7621f9224e39cb1d3ed1b66b",
+      "out_bytes": 8,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "emptyloop",
+      "name": "f",
+      "round": 3,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "emptyloop",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 27.2917500140029,
+      "finished_utc": "2026-10-30T19:13:27.364552+00:00",
+      "memory": {
+        "subprocess_pid": 1590918,
+        "max_tree_rss_kib": 96112,
+        "max_child_hwm_kib": 78904,
+        "peak_sample": [
+          {
+            "pid": 1590918,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5536,
+            "hwm_kib": 5536
+          },
+          {
+            "pid": 1590943,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2120,
+            "hwm_kib": 2120
+          },
+          {
+            "pid": 1590945,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/emptyloop.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/emptyloop.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/emptyloop.rex ",
+            "rss_kib": 5492,
+            "hwm_kib": 5492
+          },
+          {
+            "pid": 1590949,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/emptyloop.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/emptyloop.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/emptyloop.rex ",
+            "rss_kib": 4060,
+            "hwm_kib": 4060
+          },
+          {
+            "pid": 1590950,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/emptyloop.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/emptyloop.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/emptyloop.rex ",
+            "rss_kib": 78904,
+            "hwm_kib": 78904
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "emptyloop",
+        "r3",
+        "7747267310",
+        "61561608",
+        "350602",
+        "7685355100",
+        "rc=0"
+      ],
+      "whole": 7747267310,
+      "libc": 61561608,
+      "ld": 350602,
+      "own": 7685355100,
+      "out_sha256": "d117fa006ba9208500b2930ce69cbde436c647afa917cb7396a9bc9111a46dd2",
+      "out_bytes": 5,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "extcall",
+      "name": "e2",
+      "round": 3,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "extcall",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 31.14242557104444,
+      "finished_utc": "2026-10-30T19:13:28.112321+00:00",
+      "memory": {
+        "subprocess_pid": 1590600,
+        "max_tree_rss_kib": 103672,
+        "max_child_hwm_kib": 86408,
+        "peak_sample": [
+          {
+            "pid": 1590600,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5536,
+            "hwm_kib": 5536
+          },
+          {
+            "pid": 1590625,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2224,
+            "hwm_kib": 2224
+          },
+          {
+            "pid": 1590627,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/extcall.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/extcall.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/extcall.rex ",
+            "rss_kib": 5496,
+            "hwm_kib": 5496
+          },
+          {
+            "pid": 1590631,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/extcall.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/extcall.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/extcall.rex ",
+            "rss_kib": 4008,
+            "hwm_kib": 4008
+          },
+          {
+            "pid": 1590633,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/extcall.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/extcall.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/extcall.rex ",
+            "rss_kib": 86408,
+            "hwm_kib": 86408
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "extcall",
+        "r3",
+        "7863138057",
+        "382815984",
+        "425706",
+        "7479896367",
+        "rc=0"
+      ],
+      "whole": 7863138057,
+      "libc": 382815984,
+      "ld": 425706,
+      "own": 7479896367,
+      "out_sha256": "86462511f5bae5ed2d407ecc8d2699a032b2ee003e4d10c3e38511780dd6d016",
+      "out_bytes": 8,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "fibcall",
+      "name": "e2",
+      "round": 3,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "fibcall",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 34.04487713804701,
+      "finished_utc": "2026-10-30T19:13:32.915932+00:00",
+      "memory": {
+        "subprocess_pid": 1590757,
+        "max_tree_rss_kib": 98288,
+        "max_child_hwm_kib": 80764,
+        "peak_sample": [
+          {
+            "pid": 1590757,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5660,
+            "hwm_kib": 5660
+          },
+          {
+            "pid": 1590819,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2168,
+            "hwm_kib": 2168
+          },
+          {
+            "pid": 1590821,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/fibcall.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/fibcall.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/fibcall.rex ",
+            "rss_kib": 5532,
+            "hwm_kib": 5532
+          },
+          {
+            "pid": 1590833,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/fibcall.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/fibcall.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/fibcall.rex ",
+            "rss_kib": 4164,
+            "hwm_kib": 4164
+          },
+          {
+            "pid": 1590834,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/fibcall.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/fibcall.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/fibcall.rex ",
+            "rss_kib": 80764,
+            "hwm_kib": 80764
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "fibcall",
+        "r3",
+        "8747088363",
+        "519269086",
+        "350660",
+        "8227468617",
+        "rc=0"
+      ],
+      "whole": 8747088363,
+      "libc": 519269086,
+      "ld": 350660,
+      "own": 8227468617,
+      "out_sha256": "b29b82d5d23a1c74d1247749fac3244d75ce03830921b2f05cfc5086ca6ace0c",
+      "out_bytes": 16,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "alloc",
+      "name": "e2",
+      "round": 2,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "alloc",
+        "PROFILE_ROUND": "2",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 98.20589814096456,
+      "finished_utc": "2026-10-30T19:13:33.261776+00:00",
+      "memory": {
+        "subprocess_pid": 1586722,
+        "max_tree_rss_kib": 108416,
+        "max_child_hwm_kib": 91052,
+        "peak_sample": [
+          {
+            "pid": 1586722,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5604,
+            "hwm_kib": 5604
+          },
+          {
+            "pid": 1586747,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2248,
+            "hwm_kib": 2248
+          },
+          {
+            "pid": 1586749,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/alloc.rex ",
+            "rss_kib": 5464,
+            "hwm_kib": 5464
+          },
+          {
+            "pid": 1586753,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/alloc.rex ",
+            "rss_kib": 4048,
+            "hwm_kib": 4048
+          },
+          {
+            "pid": 1586754,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/alloc.rex ",
+            "rss_kib": 91052,
+            "hwm_kib": 91052
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "alloc",
+        "r2",
+        "22580709718",
+        "2480188162",
+        "350515",
+        "20100171041",
+        "rc=0"
+      ],
+      "whole": 22580709718,
+      "libc": 2480188162,
+      "ld": 350515,
+      "own": 20100171041,
+      "out_sha256": "a389b4c169ee8d98bb3e0e348bb71bc2de39c93d9effe49c4aeb232025d6d0c9",
+      "out_bytes": 9,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "rexxcps",
+      "name": "e2",
+      "round": 2,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "rexxcps",
+        "PROFILE_ROUND": "2",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 97.0551744819968,
+      "finished_utc": "2026-10-30T19:13:35.841600+00:00",
+      "memory": {
+        "subprocess_pid": 1587044,
+        "max_tree_rss_kib": 111124,
+        "max_child_hwm_kib": 93704,
+        "peak_sample": [
+          {
+            "pid": 1587044,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5564,
+            "hwm_kib": 5564
+          },
+          {
+            "pid": 1587069,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2288,
+            "hwm_kib": 2288
+          },
+          {
+            "pid": 1587071,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/../bench-rexxcps/rexxcps.rex ",
+            "rss_kib": 5560,
+            "hwm_kib": 5560
+          },
+          {
+            "pid": 1587075,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/../bench-rexxcps/rexxcps.rex ",
+            "rss_kib": 4008,
+            "hwm_kib": 4008
+          },
+          {
+            "pid": 1587076,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.e2.r2.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.e2.r2.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/../bench-rexxcps/rexxcps.rex ",
+            "rss_kib": 93704,
+            "hwm_kib": 93704
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "rexxcps",
+        "r2",
+        "19300252844",
+        "1487423863",
+        "350716",
+        "17812478265",
+        "rc=0"
+      ],
+      "whole": 19300252844,
+      "libc": 1487423863,
+      "ld": 350716,
+      "own": 17812478265,
+      "out_sha256": "e803d7fbcb7092e921e364d2c5929c6d3a9fd07227229e1e98706b7496e67b63",
+      "out_bytes": 251,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "assign",
+      "name": "f",
+      "round": 3,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "assign",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 60.223060965014156,
+      "finished_utc": "2026-10-30T19:13:38.431856+00:00",
+      "memory": {
+        "subprocess_pid": 1589430,
+        "max_tree_rss_kib": 97232,
+        "max_child_hwm_kib": 79976,
+        "peak_sample": [
+          {
+            "pid": 1589430,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5504,
+            "hwm_kib": 5504
+          },
+          {
+            "pid": 1589457,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2096,
+            "hwm_kib": 2096
+          },
+          {
+            "pid": 1589459,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/assign.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/assign.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/assign.rex ",
+            "rss_kib": 5560,
+            "hwm_kib": 5560
+          },
+          {
+            "pid": 1589463,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/assign.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/assign.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/assign.rex ",
+            "rss_kib": 4096,
+            "hwm_kib": 4096
+          },
+          {
+            "pid": 1589464,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/assign.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/assign.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/assign.rex ",
+            "rss_kib": 79976,
+            "hwm_kib": 79976
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "assign",
+        "r3",
+        "18441882591",
+        "61678068",
+        "350747",
+        "18379853776",
+        "rc=0"
+      ],
+      "whole": 18441882591,
+      "libc": 61678068,
+      "ld": 350747,
+      "own": 18379853776,
+      "out_sha256": "edeaaff3f1774ad2888673770c6d64097e391bc362d7d6fb34982ddf0efd18cb",
+      "out_bytes": 4,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "interpret",
+      "name": "e2",
+      "round": 3,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "interpret",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 19.68341363297077,
+      "finished_utc": "2026-10-30T19:13:47.057723+00:00",
+      "memory": {
+        "subprocess_pid": 1592637,
+        "max_tree_rss_kib": 102788,
+        "max_child_hwm_kib": 85292,
+        "peak_sample": [
+          {
+            "pid": 1592637,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5660,
+            "hwm_kib": 5660
+          },
+          {
+            "pid": 1592663,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2232,
+            "hwm_kib": 2232
+          },
+          {
+            "pid": 1592665,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/interpret.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/interpret.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/interpret.rex ",
+            "rss_kib": 5544,
+            "hwm_kib": 5544
+          },
+          {
+            "pid": 1592669,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/interpret.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/interpret.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/interpret.rex ",
+            "rss_kib": 4060,
+            "hwm_kib": 4060
+          },
+          {
+            "pid": 1592671,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/interpret.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/interpret.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/interpret.rex ",
+            "rss_kib": 85292,
+            "hwm_kib": 85292
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "interpret",
+        "r3",
+        "4132030041",
+        "2427696369",
+        "350541",
+        "1703983131",
+        "rc=0"
+      ],
+      "whole": 4132030041,
+      "libc": 2427696369,
+      "ld": 350541,
+      "own": 1703983131,
+      "out_sha256": "374cce5c88e5c50adeb0f26095ae3a9fd8a1c90660b0f918ec38403ea89251ae",
+      "out_bytes": 7,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "fibfunc",
+      "name": "e2",
+      "round": 3,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "fibfunc",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 33.54413797700545,
+      "finished_utc": "2026-10-30T19:13:47.722444+00:00",
+      "memory": {
+        "subprocess_pid": 1591839,
+        "max_tree_rss_kib": 97944,
+        "max_child_hwm_kib": 80764,
+        "peak_sample": [
+          {
+            "pid": 1591839,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5504,
+            "hwm_kib": 5504
+          },
+          {
+            "pid": 1591862,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2104,
+            "hwm_kib": 2104
+          },
+          {
+            "pid": 1591864,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/fibfunc.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/fibfunc.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/fibfunc.rex ",
+            "rss_kib": 5524,
+            "hwm_kib": 5524
+          },
+          {
+            "pid": 1591868,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/fibfunc.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/fibfunc.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/fibfunc.rex ",
+            "rss_kib": 4048,
+            "hwm_kib": 4048
+          },
+          {
+            "pid": 1591869,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/fibfunc.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/fibfunc.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/fibfunc.rex ",
+            "rss_kib": 80764,
+            "hwm_kib": 80764
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "fibfunc",
+        "r3",
+        "8576877786",
+        "519433137",
+        "350660",
+        "8057093989",
+        "rc=0"
+      ],
+      "whole": 8576877786,
+      "libc": 519433137,
+      "ld": 350660,
+      "own": 8057093989,
+      "out_sha256": "b29b82d5d23a1c74d1247749fac3244d75ce03830921b2f05cfc5086ca6ace0c",
+      "out_bytes": 16,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "pkglocal",
+      "name": "e2",
+      "round": 3,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "pkglocal",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 17.33095701498678,
+      "finished_utc": "2026-10-30T19:13:53.180329+00:00",
+      "memory": {
+        "subprocess_pid": 1593355,
+        "max_tree_rss_kib": 98244,
+        "max_child_hwm_kib": 80948,
+        "peak_sample": [
+          {
+            "pid": 1593355,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5512,
+            "hwm_kib": 5512
+          },
+          {
+            "pid": 1593379,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2108,
+            "hwm_kib": 2108
+          },
+          {
+            "pid": 1593381,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pkglocal.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pkglocal.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pkglocal.rex ",
+            "rss_kib": 5608,
+            "hwm_kib": 5608
+          },
+          {
+            "pid": 1593385,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pkglocal.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pkglocal.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pkglocal.rex ",
+            "rss_kib": 4068,
+            "hwm_kib": 4068
+          },
+          {
+            "pid": 1593387,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pkglocal.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pkglocal.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pkglocal.rex ",
+            "rss_kib": 80948,
+            "hwm_kib": 80948
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "pkglocal",
+        "r3",
+        "3815586862",
+        "303585386",
+        "350541",
+        "3511650935",
+        "rc=0"
+      ],
+      "whole": 3815586862,
+      "libc": 303585386,
+      "ld": 350541,
+      "own": 3511650935,
+      "out_sha256": "572562d7f4affc1d1b293499862860e9515659765b8815de62cc838a4e293cdf",
+      "out_bytes": 10,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "extcall",
+      "name": "f",
+      "round": 3,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "extcall",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 31.092820865043905,
+      "finished_utc": "2026-10-30T19:13:59.211982+00:00",
+      "memory": {
+        "subprocess_pid": 1592696,
+        "max_tree_rss_kib": 96644,
+        "max_child_hwm_kib": 79228,
+        "peak_sample": [
+          {
+            "pid": 1592696,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5612,
+            "hwm_kib": 5612
+          },
+          {
+            "pid": 1592736,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2192,
+            "hwm_kib": 2192
+          },
+          {
+            "pid": 1592738,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/extcall.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/extcall.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/extcall.rex ",
+            "rss_kib": 5544,
+            "hwm_kib": 5544
+          },
+          {
+            "pid": 1592742,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/extcall.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/extcall.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/extcall.rex ",
+            "rss_kib": 4068,
+            "hwm_kib": 4068
+          },
+          {
+            "pid": 1592763,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/extcall.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/extcall.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/extcall.rex ",
+            "rss_kib": 79228,
+            "hwm_kib": 79228
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "extcall",
+        "r3",
+        "7863146911",
+        "382817129",
+        "425897",
+        "7479903885",
+        "rc=0"
+      ],
+      "whole": 7863146911,
+      "libc": 382817129,
+      "ld": 425897,
+      "own": 7479903885,
+      "out_sha256": "86462511f5bae5ed2d407ecc8d2699a032b2ee003e4d10c3e38511780dd6d016",
+      "out_bytes": 8,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "nop",
+      "name": "e2",
+      "round": 3,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "nop",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 28.64149028400425,
+      "finished_utc": "2026-10-30T19:14:01.912272+00:00",
+      "memory": {
+        "subprocess_pid": 1593128,
+        "max_tree_rss_kib": 97544,
+        "max_child_hwm_kib": 80444,
+        "peak_sample": [
+          {
+            "pid": 1593128,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5556,
+            "hwm_kib": 5556
+          },
+          {
+            "pid": 1593153,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2020,
+            "hwm_kib": 2020
+          },
+          {
+            "pid": 1593155,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/nop.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/nop.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/nop.rex ",
+            "rss_kib": 5440,
+            "hwm_kib": 5440
+          },
+          {
+            "pid": 1593159,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/nop.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/nop.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/nop.rex ",
+            "rss_kib": 4084,
+            "hwm_kib": 4084
+          },
+          {
+            "pid": 1593161,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/nop.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/nop.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/nop.rex ",
+            "rss_kib": 80444,
+            "hwm_kib": 80444
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "nop",
+        "r3",
+        "9241545821",
+        "61611271",
+        "350515",
+        "9179584035",
+        "rc=0"
+      ],
+      "whole": 9241545821,
+      "libc": 61611271,
+      "ld": 350515,
+      "own": 9179584035,
+      "out_sha256": "d117fa006ba9208500b2930ce69cbde436c647afa917cb7396a9bc9111a46dd2",
+      "out_bytes": 5,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "interpret",
+      "name": "f",
+      "round": 3,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "interpret",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 19.73223148501711,
+      "finished_utc": "2026-10-30T19:14:06.798065+00:00",
+      "memory": {
+        "subprocess_pid": 1594127,
+        "max_tree_rss_kib": 100352,
+        "max_child_hwm_kib": 83300,
+        "peak_sample": [
+          {
+            "pid": 1594127,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5476,
+            "hwm_kib": 5476
+          },
+          {
+            "pid": 1594152,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2036,
+            "hwm_kib": 2036
+          },
+          {
+            "pid": 1594154,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/interpret.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/interpret.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/interpret.rex ",
+            "rss_kib": 5440,
+            "hwm_kib": 5440
+          },
+          {
+            "pid": 1594158,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/interpret.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/interpret.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/interpret.rex ",
+            "rss_kib": 4100,
+            "hwm_kib": 4100
+          },
+          {
+            "pid": 1594159,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/interpret.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/interpret.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/interpret.rex ",
+            "rss_kib": 83300,
+            "hwm_kib": 83300
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "interpret",
+        "r3",
+        "4132239788",
+        "2427899033",
+        "350602",
+        "1703990153",
+        "rc=0"
+      ],
+      "whole": 4132239788,
+      "libc": 2427899033,
+      "ld": 350602,
+      "own": 1703990153,
+      "out_sha256": "374cce5c88e5c50adeb0f26095ae3a9fd8a1c90660b0f918ec38403ea89251ae",
+      "out_bytes": 7,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "fibcall",
+      "name": "f",
+      "round": 3,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "fibcall",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 34.24491059296997,
+      "finished_utc": "2026-10-30T19:14:07.168059+00:00",
+      "memory": {
+        "subprocess_pid": 1593077,
+        "max_tree_rss_kib": 101908,
+        "max_child_hwm_kib": 84260,
+        "peak_sample": [
+          {
+            "pid": 1593077,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5688,
+            "hwm_kib": 5688
+          },
+          {
+            "pid": 1593107,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2228,
+            "hwm_kib": 2228
+          },
+          {
+            "pid": 1593109,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/fibcall.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/fibcall.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/fibcall.rex ",
+            "rss_kib": 5632,
+            "hwm_kib": 5632
+          },
+          {
+            "pid": 1593113,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/fibcall.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/fibcall.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/fibcall.rex ",
+            "rss_kib": 4100,
+            "hwm_kib": 4100
+          },
+          {
+            "pid": 1593115,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/fibcall.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/fibcall.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/fibcall.rex ",
+            "rss_kib": 84260,
+            "hwm_kib": 84260
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "fibcall",
+        "r3",
+        "8743657677",
+        "519269720",
+        "350602",
+        "8224037355",
+        "rc=0"
+      ],
+      "whole": 8743657677,
+      "libc": 519269720,
+      "ld": 350602,
+      "own": 8224037355,
+      "out_sha256": "b29b82d5d23a1c74d1247749fac3244d75ce03830921b2f05cfc5086ca6ace0c",
+      "out_bytes": 16,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "pkglocal",
+      "name": "f",
+      "round": 3,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "pkglocal",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 17.330199393967632,
+      "finished_utc": "2026-10-30T19:14:10.518814+00:00",
+      "memory": {
+        "subprocess_pid": 1594589,
+        "max_tree_rss_kib": 96168,
+        "max_child_hwm_kib": 78968,
+        "peak_sample": [
+          {
+            "pid": 1594589,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5480,
+            "hwm_kib": 5480
+          },
+          {
+            "pid": 1594612,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2040,
+            "hwm_kib": 2040
+          },
+          {
+            "pid": 1594614,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pkglocal.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pkglocal.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pkglocal.rex ",
+            "rss_kib": 5564,
+            "hwm_kib": 5564
+          },
+          {
+            "pid": 1594618,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pkglocal.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pkglocal.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pkglocal.rex ",
+            "rss_kib": 4116,
+            "hwm_kib": 4116
+          },
+          {
+            "pid": 1594619,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pkglocal.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pkglocal.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pkglocal.rex ",
+            "rss_kib": 78968,
+            "hwm_kib": 78968
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "pkglocal",
+        "r3",
+        "3815595875",
+        "303586456",
+        "350747",
+        "3511658672",
+        "rc=0"
+      ],
+      "whole": 3815595875,
+      "libc": 303586456,
+      "ld": 350747,
+      "own": 3511658672,
+      "out_sha256": "572562d7f4affc1d1b293499862860e9515659765b8815de62cc838a4e293cdf",
+      "out_bytes": 10,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "fibfunc",
+      "name": "f",
+      "round": 3,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "fibfunc",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 34.99735795799643,
+      "finished_utc": "2026-10-30T19:14:22.727819+00:00",
+      "memory": {
+        "subprocess_pid": 1594221,
+        "max_tree_rss_kib": 96020,
+        "max_child_hwm_kib": 78784,
+        "peak_sample": [
+          {
+            "pid": 1594221,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5552,
+            "hwm_kib": 5552
+          },
+          {
+            "pid": 1594248,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2096,
+            "hwm_kib": 2096
+          },
+          {
+            "pid": 1594250,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/fibfunc.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/fibfunc.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/fibfunc.rex ",
+            "rss_kib": 5516,
+            "hwm_kib": 5516
+          },
+          {
+            "pid": 1594254,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/fibfunc.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/fibfunc.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/fibfunc.rex ",
+            "rss_kib": 4072,
+            "hwm_kib": 4072
+          },
+          {
+            "pid": 1594255,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/fibfunc.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/fibfunc.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/fibfunc.rex ",
+            "rss_kib": 78784,
+            "hwm_kib": 78784
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "fibfunc",
+        "r3",
+        "8573447401",
+        "519433927",
+        "350747",
+        "8053662727",
+        "rc=0"
+      ],
+      "whole": 8573447401,
+      "libc": 519433927,
+      "ld": 350747,
+      "own": 8053662727,
+      "out_sha256": "b29b82d5d23a1c74d1247749fac3244d75ce03830921b2f05cfc5086ca6ace0c",
+      "out_bytes": 16,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "alloc",
+      "name": "f",
+      "round": 3,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "alloc",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 97.9528600340127,
+      "finished_utc": "2026-10-30T19:14:29.669212+00:00",
+      "memory": {
+        "subprocess_pid": 1590241,
+        "max_tree_rss_kib": 106388,
+        "max_child_hwm_kib": 89068,
+        "peak_sample": [
+          {
+            "pid": 1590241,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5560,
+            "hwm_kib": 5560
+          },
+          {
+            "pid": 1590264,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2184,
+            "hwm_kib": 2184
+          },
+          {
+            "pid": 1590266,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/alloc.rex ",
+            "rss_kib": 5524,
+            "hwm_kib": 5524
+          },
+          {
+            "pid": 1590270,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/alloc.rex ",
+            "rss_kib": 4052,
+            "hwm_kib": 4052
+          },
+          {
+            "pid": 1590271,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/alloc.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/alloc.rex ",
+            "rss_kib": 89068,
+            "hwm_kib": 89068
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "alloc",
+        "r3",
+        "22580718585",
+        "2480189195",
+        "350721",
+        "20100178669",
+        "rc=0"
+      ],
+      "whole": 22580718585,
+      "libc": 2480189195,
+      "ld": 350721,
+      "own": 20100178669,
+      "out_sha256": "a389b4c169ee8d98bb3e0e348bb71bc2de39c93d9effe49c4aeb232025d6d0c9",
+      "out_bytes": 9,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "nop",
+      "name": "f",
+      "round": 3,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "nop",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 29.19115457101725,
+      "finished_utc": "2026-10-30T19:14:31.111146+00:00",
+      "memory": {
+        "subprocess_pid": 1595204,
+        "max_tree_rss_kib": 97312,
+        "max_child_hwm_kib": 79960,
+        "peak_sample": [
+          {
+            "pid": 1595204,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5576,
+            "hwm_kib": 5576
+          },
+          {
+            "pid": 1595229,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2268,
+            "hwm_kib": 2268
+          },
+          {
+            "pid": 1595231,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/nop.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/nop.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/nop.rex ",
+            "rss_kib": 5436,
+            "hwm_kib": 5436
+          },
+          {
+            "pid": 1595235,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/nop.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/nop.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/nop.rex ",
+            "rss_kib": 4072,
+            "hwm_kib": 4072
+          },
+          {
+            "pid": 1595236,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/nop.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/nop.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/nop.rex ",
+            "rss_kib": 79960,
+            "hwm_kib": 79960
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "nop",
+        "r3",
+        "9241549974",
+        "61608081",
+        "350576",
+        "9179591317",
+        "rc=0"
+      ],
+      "whole": 9241549974,
+      "libc": 61608081,
+      "ld": 350576,
+      "own": 9179591317,
+      "out_sha256": "d117fa006ba9208500b2930ce69cbde436c647afa917cb7396a9bc9111a46dd2",
+      "out_bytes": 5,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "pingmsg",
+      "name": "e2",
+      "round": 3,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "pingmsg",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 28.43969589000335,
+      "finished_utc": "2026-10-30T19:14:35.616405+00:00",
+      "memory": {
+        "subprocess_pid": 1595591,
+        "max_tree_rss_kib": 128848,
+        "max_child_hwm_kib": 111620,
+        "peak_sample": [
+          {
+            "pid": 1595591,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5536,
+            "hwm_kib": 5536
+          },
+          {
+            "pid": 1595618,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2220,
+            "hwm_kib": 2220
+          },
+          {
+            "pid": 1595620,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pingpong/pingmsg.rex ",
+            "rss_kib": 5428,
+            "hwm_kib": 5428
+          },
+          {
+            "pid": 1595624,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pingpong/pingmsg.rex ",
+            "rss_kib": 4044,
+            "hwm_kib": 4044
+          },
+          {
+            "pid": 1595626,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pingpong/pingmsg.rex ",
+            "rss_kib": 111620,
+            "hwm_kib": 111620
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "pingmsg",
+        "r3",
+        "7540202521",
+        "5891253091",
+        "350541",
+        "1648598889",
+        "rc=0"
+      ],
+      "whole": 7540202521,
+      "libc": 5891253091,
+      "ld": 350541,
+      "own": 1648598889,
+      "out_sha256": "5b3f51e287785d5bf4f1d2b4b35c60bd52e11edffe7d3a4a4bf7f98b1627abbe",
+      "out_bytes": 6,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "varlookup",
+      "name": "e2",
+      "round": 3,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "varlookup",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 50.01262312696781,
+      "finished_utc": "2026-10-30T19:14:49.232081+00:00",
+      "memory": {
+        "subprocess_pid": 1595013,
+        "max_tree_rss_kib": 97904,
+        "max_child_hwm_kib": 80424,
+        "peak_sample": [
+          {
+            "pid": 1595013,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5640,
+            "hwm_kib": 5640
+          },
+          {
+            "pid": 1595058,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2204,
+            "hwm_kib": 2204
+          },
+          {
+            "pid": 1595060,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/varlookup.rex ",
+            "rss_kib": 5568,
+            "hwm_kib": 5568
+          },
+          {
+            "pid": 1595064,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/varlookup.rex ",
+            "rss_kib": 4068,
+            "hwm_kib": 4068
+          },
+          {
+            "pid": 1595066,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/varlookup.rex ",
+            "rss_kib": 80424,
+            "hwm_kib": 80424
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "varlookup",
+        "r3",
+        "13156694262",
+        "61565549",
+        "350686",
+        "13094778027",
+        "rc=0"
+      ],
+      "whole": 13156694262,
+      "libc": 61565549,
+      "ld": 350686,
+      "own": 13094778027,
+      "out_sha256": "f9324ce079f2051f207b18f86b8c6672e022e7d1bb2c056d1b11ff5ad991908d",
+      "out_bytes": 9,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "strings",
+      "name": "e2",
+      "round": 3,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "strings",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 79.99114395701326,
+      "finished_utc": "2026-10-30T19:14:58.430337+00:00",
+      "memory": {
+        "subprocess_pid": 1593519,
+        "max_tree_rss_kib": 105144,
+        "max_child_hwm_kib": 87840,
+        "peak_sample": [
+          {
+            "pid": 1593519,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5572,
+            "hwm_kib": 5572
+          },
+          {
+            "pid": 1593543,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2280,
+            "hwm_kib": 2280
+          },
+          {
+            "pid": 1593545,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/strings.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/strings.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 5388,
+            "hwm_kib": 5388
+          },
+          {
+            "pid": 1593549,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/strings.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/strings.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 4064,
+            "hwm_kib": 4064
+          },
+          {
+            "pid": 1593550,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/strings.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/strings.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 87840,
+            "hwm_kib": 87840
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "strings",
+        "r3",
+        "18655844189",
+        "1271811981",
+        "350660",
+        "17383681548",
+        "rc=0"
+      ],
+      "whole": 18655844189,
+      "libc": 1271811981,
+      "ld": 350660,
+      "own": 17383681548,
+      "out_sha256": "770aa431c68377532cd3810b36135c7a1ad25c1db8c992285a24af9b5a09a627",
+      "out_bytes": 10,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "pingmsg",
+      "name": "f",
+      "round": 3,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "pingmsg",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 27.989227815007325,
+      "finished_utc": "2026-10-30T19:15:03.613676+00:00",
+      "memory": {
+        "subprocess_pid": 1597757,
+        "max_tree_rss_kib": 122876,
+        "max_child_hwm_kib": 105344,
+        "peak_sample": [
+          {
+            "pid": 1597757,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5616,
+            "hwm_kib": 5616
+          },
+          {
+            "pid": 1597805,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2224,
+            "hwm_kib": 2224
+          },
+          {
+            "pid": 1597807,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pingpong/pingmsg.rex ",
+            "rss_kib": 5628,
+            "hwm_kib": 5628
+          },
+          {
+            "pid": 1597812,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pingpong/pingmsg.rex ",
+            "rss_kib": 4064,
+            "hwm_kib": 4064
+          },
+          {
+            "pid": 1597823,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/pingmsg.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pingpong/pingmsg.rex ",
+            "rss_kib": 105344,
+            "hwm_kib": 105344
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "pingmsg",
+        "r3",
+        "7541363914",
+        "5891213649",
+        "350733",
+        "1649799532",
+        "rc=0"
+      ],
+      "whole": 7541363914,
+      "libc": 5891213649,
+      "ld": 350733,
+      "own": 1649799532,
+      "out_sha256": "5b3f51e287785d5bf4f1d2b4b35c60bd52e11edffe7d3a4a4bf7f98b1627abbe",
+      "out_bytes": 6,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "varlookup",
+      "name": "f",
+      "round": 3,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "varlookup",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 49.31194778700592,
+      "finished_utc": "2026-10-30T19:15:38.552270+00:00",
+      "memory": {
+        "subprocess_pid": 1598817,
+        "max_tree_rss_kib": 96440,
+        "max_child_hwm_kib": 78920,
+        "peak_sample": [
+          {
+            "pid": 1598817,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5608,
+            "hwm_kib": 5608
+          },
+          {
+            "pid": 1598841,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2200,
+            "hwm_kib": 2200
+          },
+          {
+            "pid": 1598843,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/varlookup.rex ",
+            "rss_kib": 5624,
+            "hwm_kib": 5624
+          },
+          {
+            "pid": 1598847,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/varlookup.rex ",
+            "rss_kib": 4088,
+            "hwm_kib": 4088
+          },
+          {
+            "pid": 1598849,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/varlookup.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/varlookup.rex ",
+            "rss_kib": 78920,
+            "hwm_kib": 78920
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "varlookup",
+        "r3",
+        "13156701992",
+        "61565791",
+        "350747",
+        "13094785454",
+        "rc=0"
+      ],
+      "whole": 13156701992,
+      "libc": 61565791,
+      "ld": 350747,
+      "own": 13094785454,
+      "out_sha256": "f9324ce079f2051f207b18f86b8c6672e022e7d1bb2c056d1b11ff5ad991908d",
+      "out_bytes": 9,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "rexxcps",
+      "name": "e2",
+      "round": 3,
+      "binary_index": 0,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "0",
+        "PROFILE_PROGRAM": "rexxcps",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 98.0040750449989,
+      "finished_utc": "2026-10-30T19:15:44.809764+00:00",
+      "memory": {
+        "subprocess_pid": 1595548,
+        "max_tree_rss_kib": 111196,
+        "max_child_hwm_kib": 93704,
+        "peak_sample": [
+          {
+            "pid": 1595548,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5512,
+            "hwm_kib": 5512
+          },
+          {
+            "pid": 1595571,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2296,
+            "hwm_kib": 2296
+          },
+          {
+            "pid": 1595573,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/../bench-rexxcps/rexxcps.rex ",
+            "rss_kib": 5516,
+            "hwm_kib": 5516
+          },
+          {
+            "pid": 1595577,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/../bench-rexxcps/rexxcps.rex ",
+            "rss_kib": 4168,
+            "hwm_kib": 4168
+          },
+          {
+            "pid": 1595578,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.e2.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/rexxcps.e2.r3.cg /tmp/codex-p9d-t88-pins/8.8e2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/../bench-rexxcps/rexxcps.rex ",
+            "rss_kib": 93704,
+            "hwm_kib": 93704
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "e2",
+        "rexxcps",
+        "r3",
+        "19300253155",
+        "1487423835",
+        "350716",
+        "17812478604",
+        "rc=0"
+      ],
+      "whole": 19300253155,
+      "libc": 1487423835,
+      "ld": 350716,
+      "own": 17812478604,
+      "out_sha256": "ac860b02ac1284a6f61fe961b002ed64ccd73cd67d0dd2b8f280d7e1ba81ed67",
+      "out_bytes": 251,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    },
+    {
+      "group": "e2-f",
+      "program": "strings",
+      "name": "f",
+      "round": 3,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "strings",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 79.04262300097616,
+      "finished_utc": "2026-10-30T19:16:17.481867+00:00",
+      "memory": {
+        "subprocess_pid": 1599318,
+        "max_tree_rss_kib": 103384,
+        "max_child_hwm_kib": 85860,
+        "peak_sample": [
+          {
+            "pid": 1599318,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 5580,
+            "hwm_kib": 5580
+          },
+          {
+            "pid": 1599381,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/e2-f -B 0.05 e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx ",
+            "rss_kib": 2268,
+            "hwm_kib": 2268
+          },
+          {
+            "pid": 1599383,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 5580,
+            "hwm_kib": 5580
+          },
+          {
+            "pid": 1599387,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 4096,
+            "hwm_kib": 4096
+          },
+          {
+            "pid": 1599388,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/e2-f/strings.f.r3.cg /tmp/codex-p9d-t88-pins/8.8f-r1-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 85860,
+            "hwm_kib": 85860
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "f",
+        "strings",
+        "r3",
+        "18655851977",
+        "1271812164",
+        "350747",
+        "17383689066",
+        "rc=0"
+      ],
+      "whole": 18655851977,
+      "libc": 1271812164,
+      "ld": 350747,
+      "own": 17383689066,
+      "out_sha256": "770aa431c68377532cd3810b36135c7a1ad25c1db8c992285a24af9b5a09a627",
+      "out_bytes": 10,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    }
+  ],
+  "valid_profiles_total": 197,
+  "expected_profiles": 198,
+  "tmp_free_bytes": 6411116544,
+  "memory_available": "MemAvailable:   55233040 kB",
+  "cpu_count": 32,
+  "driver_status": 0
+}

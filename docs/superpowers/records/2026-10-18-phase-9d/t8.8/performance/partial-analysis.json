@@ -39,9 +39,45 @@
       "original_table_status": 1
     },
     "e2-f": {
-      "valid_profiles": 0,
+      "valid_profiles": 198,
       "expected_profiles": 198,
-      "complete_programs": 0,
+      "complete_programs": 33,
+      "spreads": [],
+      "original_table_command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-capped.sh",
+        "-T",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/e2-f",
+        "-B",
+        "0.05",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx"
+      ],
+      "original_table_status": 1
+    },
+    "f-registry": {
+      "valid_profiles": 198,
+      "expected_profiles": 198,
+      "complete_programs": 33,
+      "spreads": [],
+      "original_table_command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-capped.sh",
+        "-T",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/f-registry",
+        "-B",
+        "0.05",
+        "f=/tmp/codex-p9d-t88-pins/8.8f-r1-rexx",
+        "h=/tmp/codex-p9d-t88-pins/8.8e2-perf-r1-rexx"
+      ],
+      "original_table_status": 1
+    },
+    "h-a-fperf": {
+      "valid_profiles": 241,
+      "expected_profiles": 297,
+      "complete_programs": 16,
       "spreads": []
     }
   },
@@ -136,6 +172,34 @@
       "own_delta_percent": 0.49532411639463403,
       "base": "e1",
       "head": "e2"
+    },
+    {
+      "slice": "8.8f",
+      "program": "dirread",
+      "own_delta_percent": 0.36465390041406776,
+      "base": "e2",
+      "head": "f"
+    },
+    {
+      "slice": "8.8f",
+      "program": "parse",
+      "own_delta_percent": 0.22055591720090342,
+      "base": "e2",
+      "head": "f"
+    },
+    {
+      "slice": "8.8f",
+      "program": "pingmsg",
+      "own_delta_percent": 0.07291943528660233,
+      "base": "e2",
+      "head": "f"
+    },
+    {
+      "slice": "8.8f-repair",
+      "program": "parse",
+      "own_delta_percent": 0.34815184454923204,
+      "base": "a",
+      "head": "p"
     }
   ],
   "provisional_over_budget": [],

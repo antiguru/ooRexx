@@ -22,10 +22,12 @@ RAW = Path("/tmp/codex-p9d-t88-performance")
 HERE = REPO / "rust/bench-programs"
 LIB = Path("/home/moritz/dev/repos/ooRexx/build/lib")
 PROGRAMS = "alloc alloc4c arith assign churn compound decloop decrender define dirread dispatch dispatchclass emptyloop extcall fibcall fibfunc hashnew heapshape intcall interpret nop parse pkglocal sayloop sendloop startup strings textnum varlookup rexxcps pingguard pingmsg pingsem".split()
-GROUPS = {"base-ab-c": ["base", "ab", "c"], "c-e1-e2": ["c", "e1", "e2"], "e2-f": ["e2", "f"]}
+GROUPS = {"base-ab-c": ["base", "ab", "c"], "c-e1-e2": ["c", "e1", "e2"], "e2-f": ["e2", "f"], "f-registry": ["f", "h"], "h-a-fperf": ["h", "a", "p"]}
 PINS = {name: Path("/tmp/codex-p9d-t88-pins") / filename for name, filename in {
     "base": "8.8-base-rexx", "ab": "8.8ab-rexx", "c": "8.8c-rexx",
-    "e1": "8.8e1-rexx", "e2": "8.8e2-rexx", "f": "8.8f-r1-rexx"}.items()}
+    "e1": "8.8e1-rexx", "e2": "8.8e2-rexx", "f": "8.8f-r1-rexx",
+    "h": "8.8e2-perf-r1-rexx", "a": "8.8a-perf-r1-rexx",
+    "p": "8.8f-perf-r1-rexx"}.items()}
 EXPECTED = {
     "base": "4913ad067898fd6a786c12a696b2a21b0d066ad6b019c73273f78e30c16f5c58",
     "ab": "361392c36b1207a9174dfab7b32b2acb212d2c69e53f3e76f106e3a1cdad42dd",
@@ -33,6 +35,9 @@ EXPECTED = {
     "e1": "434d6567458248fdb804eebe9edb715a54ddb9ded650fcca994eed6c4b691e06",
     "e2": "00e29fde4456ee4845a76941263f495b827c083af35363cb54eb3ac8c6b7c733",
     "f": "b695b78fe24903b4be5a2874c8cd128193bbe165f92b50a4d6a8a9956d03d3be",
+    "h": "470dcb41db61ab7a4d64f3276ce28e539d5686d130be245a4ec7b30e6d6725ac",
+    "a": "ecb06e984ed736233ce0e2ef779b74941488ae64fdec10333dfb2215c309198a",
+    "p": "6ed1c08eb03d54c48d1fe3947ce376f09502aaeba34ac221c334b01b1572b86e",
 }
 
 
@@ -86,12 +91,13 @@ def verify_inputs():
     manifest = json.loads((RECORDS / "inputs.json").read_text())
     for item in manifest["files"] + manifest["pins"]:
         assert sha(item["path"]) == item["sha256"], item["path"]
-    extra = RECORDS / "additional-f-inputs.json"
-    if extra.exists():
-        for item in json.loads(extra.read_text())["pins"]:
-            assert Path(item["path"]) == PINS[item["name"]]
-            assert item["sha256"] == EXPECTED[item["name"]]
-            assert sha(item["path"]) == item["sha256"], item["path"]
+    for filename in ("additional-f-inputs.json", "registry-inputs.json", "numeric-inputs.json", "f-performance-inputs.json"):
+        extra = RECORDS / filename
+        if extra.exists():
+            for item in json.loads(extra.read_text())["pins"]:
+                assert Path(item["path"]) == PINS[item["name"]]
+                assert item["sha256"] == EXPECTED[item["name"]]
+                assert sha(item["path"]) == item["sha256"], item["path"]
 
 
 def prefix(group, program, name, round_number):
@@ -193,6 +199,13 @@ def run_batch(group, label, maximum, jobs):
     if group == "e2-f":
         authorization = RECORDS / "additional-f-inputs.json"
         assert authorization.exists() and json.loads(authorization.read_text())["profiling_authorized"], "Corrected f pin is not authorized for profiling yet"
+    if group == "f-registry":
+        authorization = RECORDS / "registry-inputs.json"
+        assert authorization.exists() and json.loads(authorization.read_text())["profiling_authorized"], "Registry repair pin is not authorized for profiling yet"
+    if group == "h-a-fperf":
+        for filename in ("numeric-inputs.json", "f-performance-inputs.json"):
+            authorization = RECORDS / filename
+            assert authorization.exists() and json.loads(authorization.read_text())["profiling_authorized"], "Accepted repair pins are required for this cohort"
     verify_inputs()
     driver_hash = sha(__file__)
     snapshots = RECORDS / "orchestrators"
@@ -213,7 +226,7 @@ def run_batch(group, label, maximum, jobs):
         fields = line.split("\t")
         counts[fields[0]] = int(fields[1])
     priority = ["startup", "dispatch", "dispatchclass", "intcall", "sendloop"]
-    if group == "base-ab-c":
+    if group in ("base-ab-c", "h-a-fperf"):
         priority.insert(1, "arith")
     tasks = [(p, r) for p in priority for r in range(1, 4)]
     tasks += [(p, r) for r in range(1, 4) for p in PROGRAMS if p not in priority]

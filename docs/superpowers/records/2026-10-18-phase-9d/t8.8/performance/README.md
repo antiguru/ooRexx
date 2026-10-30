@@ -1,6 +1,17 @@
-# Original slice performance
+# Slice performance
 
-The original four own-BASE comparisons completed 594 successful profiles across two cohorts. Every benchmark program ran in three rotating rounds, without a `-p` subset or shortened workload. [Independent verification](original-verification.json) checked the program enumeration, actual profiled arguments, raw summaries, stream hashes, pin hashes, and instrument hashes. All interpreter statuses were zero, non-TIMED stdout agreed, stderr was empty, and no scheduling SPREAD flag occurred. The additional e2-to-f comparison is tracked separately in [additional-f-inputs.json](additional-f-inputs.json), with the superseded unprofiled f pin preserved in [held-f-inputs.json](held-f-inputs.json).
+All accepted comparisons in this report completed 1,287 independently verified profiles across five cohorts, with 33 programs and three rotating rounds per cohort. The [final verification](repairs-complete-verification.json) reports no invalid profiles or driver diagnostics, and [final analysis](repairs-analysis.json) retains every original and repaired own-cost result. The additional comparisons below use immutable accepted pins, preserving the original failures as evidence rather than replacing their records. All interpreter statuses were zero, non-TIMED stdout agreed, stderr was empty, and no SPREAD flag occurred.
+
+| Additional adjacent comparison | Profiles in cohort | Programs over +0.05% | Failing programs |
+| --- | --- | --- | --- |
+| e2 to corrected f | 198 | 3 | dirread +0.36465390%, parse +0.22055592%, pingmsg +0.07291944% |
+| Corrected f to registry H | 198 | 0 | None |
+| Registry H to numeric A | 297 shared | 0 | None |
+| Numeric A to f-performance | Same 297 | 2 | parse +0.34815184%, rexxcps +0.08961594% |
+
+The [corrected f report](e2-f/README.md), [registry repair report](f-registry/README.md), and [numeric and f-performance report](h-a-fperf/README.md) retain complete tables and accepted pin provenance. Registry H improves ordinary sends directly, but its residual own cost relative to original e1 remains +0.12091429% on dispatch, +0.13069467% on dispatchclass, and +0.18086132% on sendloop. Numeric A reduces arithmetic by -0.30308812% against H, with a cross-source residual of +0.04647734% against pre-8.8. These residuals span intervening source changes, so negative repair deltas do not establish elimination of an original regression or isolate its mechanism.
+
+The original four own-BASE comparisons completed 594 successful profiles across two cohorts. Every benchmark program ran in three rotating rounds, without a `-p` subset or shortened workload. [Independent verification](original-verification.json) checked the program enumeration, actual profiled arguments, raw summaries, stream hashes, pin hashes, and instrument hashes. All interpreter statuses were zero, non-TIMED stdout agreed, stderr was empty, and no scheduling SPREAD flag occurred. The superseded unprofiled f pin remains preserved in [held-f-inputs.json](held-f-inputs.json).
 
 | Slice | Own BASE | Programs | Programs over +0.05% | Worst own delta |
 | --- | --- | --- | --- | --- |

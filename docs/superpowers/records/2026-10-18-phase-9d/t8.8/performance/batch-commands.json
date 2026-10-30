@@ -13,7 +13,12 @@
     ],
     "status": 0,
     "elapsed_seconds": 112.8682187909726,
-    "deadline_seconds": 525
+    "deadline_seconds": 525,
+    "completed_profiles": 9,
+    "group": "base-ab-c",
+    "tmp_free_bytes": 11480215552,
+    "driver_sha256": null,
+    "driver_snapshot": null
   },
   {
     "record": "batch-02.json",
@@ -29,7 +34,12 @@
     ],
     "status": 0,
     "elapsed_seconds": 501.2383480570279,
-    "deadline_seconds": 525
+    "deadline_seconds": 525,
+    "completed_profiles": 93,
+    "group": "base-ab-c",
+    "tmp_free_bytes": 10290020352,
+    "driver_sha256": "423ced746552643ff2145c5f225c3b0beca760e6620df02f8f2743710352e028",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/423ced746552643ff2145c5f225c3b0beca760e6620df02f8f2743710352e028.py"
   },
   {
     "record": "batch-03-memory.json",
@@ -45,7 +55,12 @@
     ],
     "status": 0,
     "elapsed_seconds": 92.2999944339972,
-    "deadline_seconds": 525
+    "deadline_seconds": 525,
+    "completed_profiles": 12,
+    "group": "c-e1-e2",
+    "tmp_free_bytes": 9871396864,
+    "driver_sha256": "7dca8bb40388ba35a80d422cb053f5defe551c5a749f1469823f3a0818adeb0c",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/7dca8bb40388ba35a80d422cb053f5defe551c5a749f1469823f3a0818adeb0c.py"
   },
   {
     "record": "batch-04.json",
@@ -62,7 +77,12 @@
     ],
     "status": 0,
     "elapsed_seconds": 493.27360080595827,
-    "deadline_seconds": 525
+    "deadline_seconds": 525,
+    "completed_profiles": 178,
+    "group": "c-e1-e2",
+    "tmp_free_bytes": 9146212352,
+    "driver_sha256": "708299f9132a3a0c8252e523a7407cfbfa732648348bae22da34b49b0352afe1",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/708299f9132a3a0c8252e523a7407cfbfa732648348bae22da34b49b0352afe1.py"
   },
   {
     "record": "batch-05.json",
@@ -79,7 +99,12 @@
     ],
     "status": 0,
     "elapsed_seconds": 474.8534004659741,
-    "deadline_seconds": 525
+    "deadline_seconds": 525,
+    "completed_profiles": 117,
+    "group": "base-ab-c",
+    "tmp_free_bytes": 8609497088,
+    "driver_sha256": "3bda23d25f4ae86faae78fd531418753abc1b42fbf31e4ffb5197051eee61151",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/3bda23d25f4ae86faae78fd531418753abc1b42fbf31e4ffb5197051eee61151.py"
   },
   {
     "record": "batch-06.json",
@@ -96,7 +121,12 @@
     ],
     "status": 0,
     "elapsed_seconds": 420.2413543880102,
-    "deadline_seconds": 525
+    "deadline_seconds": 525,
+    "completed_profiles": 67,
+    "group": "base-ab-c",
+    "tmp_free_bytes": 8251228160,
+    "driver_sha256": "6e5dbbff0fd9be4dcc883eecf13607d221545ff0c5ee6d413eb4753437648a2a",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/6e5dbbff0fd9be4dcc883eecf13607d221545ff0c5ee6d413eb4753437648a2a.py"
   },
   {
     "record": "batch-07.json",
@@ -113,7 +143,12 @@
     ],
     "status": 0,
     "elapsed_seconds": 305.2250324699562,
-    "deadline_seconds": 525
+    "deadline_seconds": 525,
+    "completed_profiles": 11,
+    "group": "base-ab-c",
+    "tmp_free_bytes": 8170373120,
+    "driver_sha256": "3730bc80eb950dda635cecd02beb8e6123a4e1a3a587b38a109eefed621c2aae",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/3730bc80eb950dda635cecd02beb8e6123a4e1a3a587b38a109eefed621c2aae.py"
   },
   {
     "record": "batch-08.json",
@@ -130,7 +165,12 @@
     ],
     "status": 0,
     "elapsed_seconds": 463.7290568249882,
-    "deadline_seconds": 525
+    "deadline_seconds": 525,
+    "completed_profiles": 83,
+    "group": "c-e1-e2",
+    "tmp_free_bytes": 7791792128,
+    "driver_sha256": "3730bc80eb950dda635cecd02beb8e6123a4e1a3a587b38a109eefed621c2aae",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/3730bc80eb950dda635cecd02beb8e6123a4e1a3a587b38a109eefed621c2aae.py"
   },
   {
     "record": "batch-09.json",
@@ -147,6 +187,231 @@
     ],
     "status": 0,
     "elapsed_seconds": 365.57419005798874,
-    "deadline_seconds": 525
+    "deadline_seconds": 525,
+    "completed_profiles": 24,
+    "group": "c-e1-e2",
+    "tmp_free_bytes": 7638433792,
+    "driver_sha256": "3730bc80eb950dda635cecd02beb8e6123a4e1a3a587b38a109eefed621c2aae",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/3730bc80eb950dda635cecd02beb8e6123a4e1a3a587b38a109eefed621c2aae.py"
+  },
+  {
+    "record": "batch-10.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "e2-f",
+      "batch-10",
+      "1000",
+      "8"
+    ],
+    "status": 0,
+    "elapsed_seconds": 487.92876543698367,
+    "deadline_seconds": 525,
+    "completed_profiles": 153,
+    "group": "e2-f",
+    "tmp_free_bytes": 6784462848,
+    "driver_sha256": "5e8baf40bd10f661bf857c6ceda91085321eeb5b3586a3e74cb5b20371ee3184",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/5e8baf40bd10f661bf857c6ceda91085321eeb5b3586a3e74cb5b20371ee3184.py"
+  },
+  {
+    "record": "batch-11.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "e2-f",
+      "batch-11",
+      "1000",
+      "8"
+    ],
+    "status": 0,
+    "elapsed_seconds": 361.4858385719708,
+    "deadline_seconds": 525,
+    "completed_profiles": 44,
+    "group": "e2-f",
+    "tmp_free_bytes": 6411116544,
+    "driver_sha256": "5e8baf40bd10f661bf857c6ceda91085321eeb5b3586a3e74cb5b20371ee3184",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/5e8baf40bd10f661bf857c6ceda91085321eeb5b3586a3e74cb5b20371ee3184.py"
+  },
+  {
+    "record": "batch-12-recovery.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "e2-f",
+      "batch-12-recovery",
+      "1",
+      "1"
+    ],
+    "status": 0,
+    "elapsed_seconds": 102.38205553800799,
+    "deadline_seconds": 525,
+    "completed_profiles": 1,
+    "group": "e2-f",
+    "tmp_free_bytes": 6027362304,
+    "driver_sha256": "5e8baf40bd10f661bf857c6ceda91085321eeb5b3586a3e74cb5b20371ee3184",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/5e8baf40bd10f661bf857c6ceda91085321eeb5b3586a3e74cb5b20371ee3184.py"
+  },
+  {
+    "record": "batch-13-registry.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "f-registry",
+      "batch-13-registry",
+      "1000",
+      "8"
+    ],
+    "status": 0,
+    "elapsed_seconds": 488.0719387520221,
+    "deadline_seconds": 525,
+    "completed_profiles": 154,
+    "group": "f-registry",
+    "tmp_free_bytes": 5327175680,
+    "driver_sha256": "0bed0ae0526a242a20548011bb213952d0a0452c2c226d18b44dc5ab46410872",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/0bed0ae0526a242a20548011bb213952d0a0452c2c226d18b44dc5ab46410872.py"
+  },
+  {
+    "record": "batch-14-registry.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "f-registry",
+      "batch-14-registry",
+      "1000",
+      "8"
+    ],
+    "status": 0,
+    "elapsed_seconds": 360.3453277849476,
+    "deadline_seconds": 525,
+    "completed_profiles": 43,
+    "group": "f-registry",
+    "tmp_free_bytes": 4928573440,
+    "driver_sha256": "0bed0ae0526a242a20548011bb213952d0a0452c2c226d18b44dc5ab46410872",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/0bed0ae0526a242a20548011bb213952d0a0452c2c226d18b44dc5ab46410872.py"
+  },
+  {
+    "record": "batch-15-registry-completion.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "f-registry",
+      "batch-15-registry-completion",
+      "1",
+      "1"
+    ],
+    "status": 0,
+    "elapsed_seconds": 100.33909481100272,
+    "deadline_seconds": 525,
+    "completed_profiles": 1,
+    "group": "f-registry",
+    "tmp_free_bytes": 4889227264,
+    "driver_sha256": "0bed0ae0526a242a20548011bb213952d0a0452c2c226d18b44dc5ab46410872",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/0bed0ae0526a242a20548011bb213952d0a0452c2c226d18b44dc5ab46410872.py"
+  },
+  {
+    "record": "batch-16-h-a-fperf.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "h-a-fperf",
+      "batch-16-h-a-fperf",
+      "1000",
+      "8"
+    ],
+    "status": 0,
+    "elapsed_seconds": 497.3294537590118,
+    "deadline_seconds": 525,
+    "completed_profiles": 129,
+    "group": "h-a-fperf",
+    "tmp_free_bytes": 3667521536,
+    "driver_sha256": "27d6603aef56ec4d047a095472baf0fabe8d753a71fa5f26b8312286911ee93e",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/27d6603aef56ec4d047a095472baf0fabe8d753a71fa5f26b8312286911ee93e.py"
+  },
+  {
+    "record": "batch-17-h-a-fperf.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "h-a-fperf",
+      "batch-17-h-a-fperf",
+      "1000",
+      "8"
+    ],
+    "status": 0,
+    "elapsed_seconds": 474.0623685690225,
+    "deadline_seconds": 525,
+    "completed_profiles": 118,
+    "group": "h-a-fperf",
+    "tmp_free_bytes": 2134564864,
+    "driver_sha256": "27d6603aef56ec4d047a095472baf0fabe8d753a71fa5f26b8312286911ee93e",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/27d6603aef56ec4d047a095472baf0fabe8d753a71fa5f26b8312286911ee93e.py"
+  },
+  {
+    "record": "batch-18-h-a-fperf.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "h-a-fperf",
+      "batch-18-h-a-fperf",
+      "1000",
+      "8"
+    ],
+    "status": 0,
+    "elapsed_seconds": 389.12880592100555,
+    "deadline_seconds": 525,
+    "completed_profiles": 45,
+    "group": "h-a-fperf",
+    "tmp_free_bytes": 1815691264,
+    "driver_sha256": "27d6603aef56ec4d047a095472baf0fabe8d753a71fa5f26b8312286911ee93e",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/27d6603aef56ec4d047a095472baf0fabe8d753a71fa5f26b8312286911ee93e.py"
+  },
+  {
+    "record": "batch-19-h-a-fperf-completion.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "h-a-fperf",
+      "batch-19-h-a-fperf-completion",
+      "5",
+      "8"
+    ],
+    "status": 0,
+    "elapsed_seconds": 295.1885323940078,
+    "deadline_seconds": 525,
+    "completed_profiles": 5,
+    "group": "h-a-fperf",
+    "tmp_free_bytes": 1631584256,
+    "driver_sha256": "27d6603aef56ec4d047a095472baf0fabe8d753a71fa5f26b8312286911ee93e",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/27d6603aef56ec4d047a095472baf0fabe8d753a71fa5f26b8312286911ee93e.py"
   }
 ]

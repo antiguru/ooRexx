@@ -1,8 +1,8 @@
 {
   "verified_utc": "2026-10-30T18:54:06.968214+00:00",
   "runtime_source_revision": "3e1aa9c879a90214bb5c680357975f58a0081abc",
-  "status": "CANDIDATE_PENDING_REREVIEW",
-  "profiling_authorized": false,
+  "status": "ACCEPTED_FOR_COMPARISON",
+  "profiling_authorized": true,
   "cohort": {
     "e2-f": [
       "e2",
@@ -20,5 +20,11 @@
     }
   ],
   "existing_instrument_manifest": "inputs.json",
-  "superseded_manifest": "held-f-inputs.json"
+  "superseded_manifest": "held-f-inputs.json",
+  "activated_utc": "2026-10-30T19:00:52.615169+00:00",
+  "authorization": "Root scoped re-review PASSED. Records committed; start f.",
+  "authorization_records_commit": "5bfbbcb43",
+  "staging_hold_release_commit": "416d69213",
+  "provenance_record": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/semantics/fix-r1/release-pin.json",
+  "source_tree": "5abf03d2120a2ce01cbed0e0a51b09581078f235"
 }

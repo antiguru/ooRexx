@@ -1,0 +1,31 @@
+{
+  "verified_utc": "2026-10-30T19:49:04.552020+00:00",
+  "status": "ACCEPTED_FOR_COMPARISON",
+  "profiling_authorized": true,
+  "authorization": "Root registry source/review PASSED at 57fdbedd3/runtime1233b81da",
+  "runtime_source_revision": "1233b81da730142057fcf810e324d10d0e55c109",
+  "rust_tree": "8b6fc7672eaf5bcea5a38072043be49fc6cdd0eb",
+  "cohort": {
+    "f-registry": [
+      "f",
+      "h"
+    ]
+  },
+  "rounds": 3,
+  "additional_profiles": 198,
+  "pins": [
+    {
+      "name": "h",
+      "path": "/tmp/codex-p9d-t88-pins/8.8e2-perf-r1-rexx",
+      "sha256": "470dcb41db61ab7a4d64f3276ce28e539d5686d130be245a4ec7b30e6d6725ac",
+      "bytes": 67475152
+    }
+  ],
+  "baseline": {
+    "name": "f",
+    "path": "/tmp/codex-p9d-t88-pins/8.8f-r1-rexx",
+    "sha256": "b695b78fe24903b4be5a2874c8cd128193bbe165f92b50a4d6a8a9956d03d3be"
+  },
+  "existing_instrument_manifest": "inputs.json",
+  "provenance_record": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/release-pin.json"
+}

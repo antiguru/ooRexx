@@ -1,0 +1,11 @@
+{
+  "own_medians": {
+    "original_pre88": 11486242239,
+    "h": 11526516240,
+    "a": 11491580739,
+    "f_performance": 11491573118
+  },
+  "a_vs_original_pre88_percent": 0.046477341230657984,
+  "f_performance_vs_original_pre88_percent": 0.04641099229040907,
+  "attribution_limit": "Original pre-8.8 and repaired pins span other semantic and performance source changes. This is a cross-source residual, not isolated numeric mechanism attribution."
+}

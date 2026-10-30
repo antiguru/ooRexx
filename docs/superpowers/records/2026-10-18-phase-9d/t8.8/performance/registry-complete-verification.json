@@ -1,0 +1,25 @@
+{
+  "verified_utc": "2026-10-30T20:07:18.624564+00:00",
+  "groups": [
+    "base-ab-c",
+    "c-e1-e2",
+    "e2-f",
+    "f-registry"
+  ],
+  "programs_per_cohort": 33,
+  "rounds": 3,
+  "verified_profiles": 990,
+  "raw_manifest": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/registry-complete-profile-manifest.tsv",
+  "raw_manifest_sha256": "3ef166cfb88d22f647a797a3decc66a1618a0d8bed891f4611793b4b59d06fb4",
+  "driver_diagnostics": [],
+  "checks": [
+    "program enumeration",
+    "pin and instrument hashes",
+    "successful status",
+    "row identity",
+    "libc/loader arithmetic",
+    "actual profiled argv",
+    "raw summary",
+    "independent output hashes"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "verified_utc": "2026-10-30T19:47:14.800646+00:00",
+  "groups": [
+    "base-ab-c",
+    "c-e1-e2",
+    "e2-f"
+  ],
+  "programs_per_cohort": 33,
+  "rounds": 3,
+  "verified_profiles": 792,
+  "raw_manifest": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/f-complete-profile-manifest.tsv",
+  "raw_manifest_sha256": "4141702897d842ce1e59a7f45411ce57654690f8b96585b4e8593a6880d9190d",
+  "driver_diagnostics": [],
+  "checks": [
+    "program enumeration",
+    "pin and instrument hashes",
+    "successful status",
+    "row identity",
+    "libc/loader arithmetic",
+    "actual profiled argv",
+    "raw summary",
+    "independent output hashes"
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "verified_utc": "2026-10-30T19:57:02.675051+00:00",
+  "status": "ACCEPTED_FOR_THREE_PIN_COMPARISON",
+  "profiling_authorized": true,
+  "authorization": "Root numeric source/review passed at ddea7bdd0/runtimef56dfd25e",
+  "runtime_source_revision": "f56dfd25e4394ca32c7cfb18733d640a4f584ed9",
+  "source_tree": "68a291ee5089d9357b51b238056aaefcfac1500f",
+  "pins": [
+    {
+      "name": "a",
+      "path": "/tmp/codex-p9d-t88-pins/8.8a-perf-r1-rexx",
+      "sha256": "ecb06e984ed736233ce0e2ef779b74941488ae64fdec10333dfb2215c309198a",
+      "bytes": 67481328
+    }
+  ],
+  "baseline": {
+    "name": "h",
+    "path": "/tmp/codex-p9d-t88-pins/8.8e2-perf-r1-rexx",
+    "sha256": "470dcb41db61ab7a4d64f3276ce28e539d5686d130be245a4ec7b30e6d6725ac"
+  },
+  "plan": "After H completes, use H/A/accepted-f-performance if ready, otherwise complete paired comparisons.",
+  "provenance_record": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/pow/perf-fix-r1/pin-provenance.json",
+  "selected_cohort": "h-a-fperf"
+}
