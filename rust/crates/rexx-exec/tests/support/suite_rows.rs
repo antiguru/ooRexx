@@ -548,3 +548,6 @@ pub fn derived_rows(context: &Context) -> Vec<String> {
     }
     lines
 }
+
+#[cfg(test)]
+mod tests;
