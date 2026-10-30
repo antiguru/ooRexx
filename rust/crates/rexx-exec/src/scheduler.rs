@@ -1273,6 +1273,9 @@ impl Interp {
             timer.waiters.retain(|waiter| waiter.activity != running);
             !(timer.ends_with_wait && timer.waiters.len() < before)
         });
+        self.activities
+            .sleepers
+            .retain(|Reverse((_, _, sleeper))| *sleeper != running);
     }
 
     /// Counts in [`CANCELLED_WAITS`] what [`Interp::cancel_wait`] finds to
