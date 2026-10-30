@@ -1,0 +1,10 @@
+    (noisy dn)
+handler USER ZZ
+    (noisy dn)
+handler ERROR
+    (bad dn)
+handler USER ZZ
+after bd user
+    (bad dn)
+handler ERROR
+after bd error
