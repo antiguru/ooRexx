@@ -1,0 +1,1424 @@
+8e16ad172 docs: record semantic performance repair evidence and pin
+4c11ee444 perf(exec): specialize immediate values and unsent hash probes
+14c486880 test(exec): invoke USE defaults without line continuation
+977a3482e test(exec): correct USE defaults and isolate trace assertion
+61ef99d9a test(exec): cover immediate and heap PARSE and USE boundaries
+64a2e9a10 refactor(exec): isolate USE binding and hash probing
+ .../task-8.8f-perf-fix-report.md                   |  43 +++
+ .../sdd/2026-10-18-phase-9d/task-8.8f-report.md    |   7 +
+ .../semantics/perf-fix-r1/baseline-agreement.json  |   9 +
+ .../parse-immediate-boundaries/crate/command.json  |   1 +
+ .../parse-immediate-boundaries/crate/status        |   1 +
+ .../parse-immediate-boundaries/crate/stderr        |   0
+ .../parse-immediate-boundaries/crate/stdout        |   7 +
+ .../parse-immediate-boundaries/oracle/command.json |   1 +
+ .../parse-immediate-boundaries/oracle/status       |   1 +
+ .../parse-immediate-boundaries/oracle/stderr       |   0
+ .../parse-immediate-boundaries/oracle/stdout       |   7 +
+ .../trace-use-raise/crate/command.json             |   1 +
+ .../trace-use-raise/crate/status                   |   1 +
+ .../trace-use-raise/crate/stderr                   |   7 +
+ .../trace-use-raise/crate/stdout                   |   5 +
+ .../trace-use-raise/oracle/command.json            |   1 +
+ .../trace-use-raise/oracle/status                  |   1 +
+ .../trace-use-raise/oracle/stderr                  |   7 +
+ .../trace-use-raise/oracle/stdout                  |   5 +
+ .../use-value-boundaries/crate/command.json        |   1 +
+ .../use-value-boundaries/crate/status              |   1 +
+ .../use-value-boundaries/crate/stderr              |   0
+ .../use-value-boundaries/crate/stdout              |   3 +
+ .../use-value-boundaries/oracle/command.json       |   1 +
+ .../use-value-boundaries/oracle/status             |   1 +
+ .../use-value-boundaries/oracle/stderr             |   0
+ .../use-value-boundaries/oracle/stdout             |   3 +
+ .../parse-immediate-boundaries/crate/command.json  |   1 +
+ .../parse-immediate-boundaries/crate/status        |   1 +
+ .../parse-immediate-boundaries/crate/stderr        |   0
+ .../parse-immediate-boundaries/crate/stdout        |   7 +
+ .../parse-immediate-boundaries/oracle/command.json |   1 +
+ .../parse-immediate-boundaries/oracle/status       |   1 +
+ .../parse-immediate-boundaries/oracle/stderr       |   0
+ .../parse-immediate-boundaries/oracle/stdout       |   7 +
+ .../trace-use-raise/crate/command.json             |   1 +
+ .../baseline-final/trace-use-raise/crate/status    |   1 +
+ .../baseline-final/trace-use-raise/crate/stderr    |   7 +
+ .../baseline-final/trace-use-raise/crate/stdout    |   5 +
+ .../trace-use-raise/oracle/command.json            |   1 +
+ .../baseline-final/trace-use-raise/oracle/status   |   1 +
+ .../baseline-final/trace-use-raise/oracle/stderr   |   7 +
+ .../baseline-final/trace-use-raise/oracle/stdout   |   5 +
+ .../use-value-boundaries/crate/command.json        |   1 +
+ .../use-value-boundaries/crate/status              |   1 +
+ .../use-value-boundaries/crate/stderr              |   0
+ .../use-value-boundaries/crate/stdout              |   2 +
+ .../use-value-boundaries/oracle/command.json       |   1 +
+ .../use-value-boundaries/oracle/status             |   1 +
+ .../use-value-boundaries/oracle/stderr             |   0
+ .../use-value-boundaries/oracle/stdout             |   2 +
+ .../parse-immediate-boundaries/crate/command.json  |   1 +
+ .../parse-immediate-boundaries/crate/status        |   1 +
+ .../parse-immediate-boundaries/crate/stderr        |   0
+ .../parse-immediate-boundaries/crate/stdout        |   7 +
+ .../parse-immediate-boundaries/oracle/command.json |   1 +
+ .../parse-immediate-boundaries/oracle/status       |   1 +
+ .../parse-immediate-boundaries/oracle/stderr       |   0
+ .../parse-immediate-boundaries/oracle/stdout       |   7 +
+ .../baseline/trace-use-raise/crate/command.json    |   1 +
+ .../baseline/trace-use-raise/crate/status          |   1 +
+ .../baseline/trace-use-raise/crate/stderr          |   7 +
+ .../baseline/trace-use-raise/crate/stdout          |   6 +
+ .../baseline/trace-use-raise/oracle/command.json   |   1 +
+ .../baseline/trace-use-raise/oracle/status         |   1 +
+ .../baseline/trace-use-raise/oracle/stderr         |   7 +
+ .../baseline/trace-use-raise/oracle/stdout         |   6 +
+ .../use-value-boundaries/crate/command.json        |   1 +
+ .../baseline/use-value-boundaries/crate/status     |   1 +
+ .../baseline/use-value-boundaries/crate/stderr     |   3 +
+ .../baseline/use-value-boundaries/crate/stdout     |   0
+ .../use-value-boundaries/oracle/command.json       |   1 +
+ .../baseline/use-value-boundaries/oracle/status    |   1 +
+ .../baseline/use-value-boundaries/oracle/stderr    |   3 +
+ .../baseline/use-value-boundaries/oracle/stdout    |   0
+ .../t8.8/semantics/perf-fix-r1/check.py            |  30 ++
+ .../checks/baseline-corrected-probes.json          |  16 +
+ .../checks/baseline-corrected-probes.stderr        |   0
+ .../checks/baseline-corrected-probes.stdout        |   6 +
+ .../perf-fix-r1/checks/baseline-final-probes.json  |  16 +
+ .../checks/baseline-final-probes.stderr            |   0
+ .../checks/baseline-final-probes.stdout            |   6 +
+ .../perf-fix-r1/checks/baseline-probes.json        |  16 +
+ .../perf-fix-r1/checks/baseline-probes.stderr      |   0
+ .../perf-fix-r1/checks/baseline-probes.stdout      |   6 +
+ .../perf-fix-r1/checks/boundaries-policy.json      |  27 ++
+ .../perf-fix-r1/checks/boundaries-policy.stderr    |  11 +
+ .../perf-fix-r1/checks/boundaries-policy.stdout    |  66 ++++
+ .../semantics/perf-fix-r1/checks/final-probes.json |  16 +
+ .../perf-fix-r1/checks/final-probes.stderr         |   0
+ .../perf-fix-r1/checks/final-probes.stdout         |   6 +
+ .../semantics/perf-fix-r1/checks/focused-lib.json  |  24 ++
+ .../perf-fix-r1/checks/focused-lib.stderr          |   3 +
+ .../perf-fix-r1/checks/focused-lib.stdout          | 134 ++++++++
+ .../t8.8/semantics/perf-fix-r1/checks/format.json  |  16 +
+ .../semantics/perf-fix-r1/checks/format.stderr     |   0
+ .../semantics/perf-fix-r1/checks/format.stdout     |   0
+ .../t8.8/semantics/perf-fix-r1/checks/lint.json    |  21 ++
+ .../t8.8/semantics/perf-fix-r1/checks/lint.stderr  |   6 +
+ .../t8.8/semantics/perf-fix-r1/checks/lint.stdout  |   0
+ .../perf-fix-r1/checks/pure-move-check.json        |  17 +
+ .../perf-fix-r1/checks/pure-move-check.stderr      |  10 +
+ .../perf-fix-r1/checks/pure-move-check.stdout      |   0
+ .../t8.8/semantics/perf-fix-r1/checks/release.json |  20 ++
+ .../semantics/perf-fix-r1/checks/release.stderr    |   2 +
+ .../semantics/perf-fix-r1/checks/release.stdout    |   0
+ .../semantics/perf-fix-r1/checks/trace-gc.json     |  21 ++
+ .../semantics/perf-fix-r1/checks/trace-gc.stderr   |   4 +
+ .../semantics/perf-fix-r1/checks/trace-gc.stdout   |  58 ++++
+ .../semantics/perf-fix-r1/final-agreement.json     |  56 ++++
+ .../parse-immediate-boundaries/crate/command.json  |   1 +
+ .../final/parse-immediate-boundaries/crate/status  |   1 +
+ .../final/parse-immediate-boundaries/crate/stderr  |   0
+ .../final/parse-immediate-boundaries/crate/stdout  |   7 +
+ .../parse-immediate-boundaries/oracle/command.json |   1 +
+ .../final/parse-immediate-boundaries/oracle/status |   1 +
+ .../final/parse-immediate-boundaries/oracle/stderr |   0
+ .../final/parse-immediate-boundaries/oracle/stdout |   7 +
+ .../final/trace-use-raise/crate/command.json       |   1 +
+ .../perf-fix-r1/final/trace-use-raise/crate/status |   1 +
+ .../perf-fix-r1/final/trace-use-raise/crate/stderr |   7 +
+ .../perf-fix-r1/final/trace-use-raise/crate/stdout |   5 +
+ .../final/trace-use-raise/oracle/command.json      |   1 +
+ .../final/trace-use-raise/oracle/status            |   1 +
+ .../final/trace-use-raise/oracle/stderr            |   7 +
+ .../final/trace-use-raise/oracle/stdout            |   5 +
+ .../final/use-value-boundaries/crate/command.json  |   1 +
+ .../final/use-value-boundaries/crate/status        |   1 +
+ .../final/use-value-boundaries/crate/stderr        |   0
+ .../final/use-value-boundaries/crate/stdout        |   2 +
+ .../final/use-value-boundaries/oracle/command.json |   1 +
+ .../final/use-value-boundaries/oracle/status       |   1 +
+ .../final/use-value-boundaries/oracle/stderr       |   0
+ .../final/use-value-boundaries/oracle/stdout       |   2 +
+ .../t8.8/semantics/perf-fix-r1/pin.py              |  33 ++
+ .../t8.8/semantics/perf-fix-r1/probes.py           |  21 ++
+ .../probes/parse-immediate-boundaries.rex          |  18 +
+ .../perf-fix-r1/probes/trace-use-raise.rex         |  27 ++
+ .../perf-fix-r1/probes/use-value-boundaries.rex    |  13 +
+ .../semantics/perf-fix-r1/pure-move-proof.json     |   6 +
+ .../t8.8/semantics/perf-fix-r1/release-pin.json    |  28 ++
+ rust/crates/rexx-exec/src/dispatch/hash.rs         |  81 +----
+ rust/crates/rexx-exec/src/dispatch/hash/probe.rs   | 120 +++++++
+ .../crates/rexx-exec/src/parse_template/trigger.rs |  35 +-
+ rust/crates/rexx-exec/src/run.rs                   | 351 +-------------------
+ rust/crates/rexx-exec/src/run/use_args.rs          | 367 +++++++++++++++++++++
+ .../parse-immediate-boundaries.rex                 |  18 +
+ .../parse-immediate-boundaries.stdout              |   7 +
+ .../tests/semantic_boundaries/trace-use-raise.rex  |  27 ++
+ .../semantic_boundaries/trace-use-raise.stdout     |   5 +
+ .../semantic_boundaries/use-value-boundaries.rex   |  13 +
+ .../use-value-boundaries.stdout                    |   2 +
+ 152 files changed, 1627 insertions(+), 440 deletions(-)
+diff --git a/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-perf-fix-report.md b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-perf-fix-report.md
+new file mode 100644
+index 000000000..518bec287
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-perf-fix-report.md
+@@ -0,0 +1,43 @@
++# Task 8.8f performance repair round 1
++
++## Scope and source
++
++This repair implements the three candidates authorized by `task-8.8f-perf-fix-brief.md` from verified dispatch HEAD `b7a82272f3e111d131982854fdc2cb1ecb86acb5` on `plan/rust-rewrite`. The measured original f gaps remain parse +0.22055592%, dirread +0.36465390%, and pingmsg +0.07291944%, as documented in the diagnosis and controller-owned matched profiles. The supplied pre-repair pin is `/tmp/codex-p9d-t88-pins/8.8a-perf-r1-rexx`, source `f56dfd25e4394ca32c7cfb18733d640a4f584ed9`, SHA256 `ecb06e984ed736233ce0e2ef779b74941488ae64fdec10333dfb2215c309198a`. This round neither rebuilds that pin nor claims a measured performance recovery.
++
++Commit `64a2e9a10` first extracts USE binding into `run/use_args.rs` and hash probing into `dispatch/hash/probe.rs`. `pure-move-proof.json` verifies body and comment identity against the dispatch HEAD after normalizing only the visibility required by child modules, and the committed extraction passes `cargo check`. Fixture commits `61ef99d9a`, `977a3482e`, and `14c486880` establish and correct the new preservation controls before implementation. Runtime commit `4c11ee4449a1fe7b537c2a216ee7c10b1a5b12ab` contains the three repairs and formatting, with source frozen throughout subsequent checks and release construction.
++
++## Preserved contracts
++
++PARSE String and Mixed triggers now consume decoded inline text directly and retain the existing local `Rendered` scratch representation for SmallInt. Those immediate paths omit the identity required-string call and duplicate temporary root, while heap and other values retain fallible `required_string_value`, the converted-result root, and rendering. The original evaluated-operand root and TRACE operation remain before conversion, and source bytes are borrowed only after conversion finishes. Positional triggers and required-string raising behavior are unchanged, with their existing controls included in verification.
++
++Hash probing selects a const-specialized shared traversal by its existing key protocol. Only StringValue, whose hash and index comparison do not send, omits generation snapshots and callback restart state. The callback-capable specialization still caches one hash, reloads and validates the store after sends, and preserves the existing bucket, candidate, and predecessor results. `baseline-agreement.json` verifies that the F1/F2 `removal.rs` and `relation.rs` files remain byte-identical to the dispatch HEAD, including their conservative roots and actual-current-slot semantics.
++
++USE binding retains a supplied value temporarily before assignment only when it is a heap reference. Immediate values cannot be collected, while default-expression roots and all heap-value retention remain in their prior locations. Result and assignment TRACE lines still render separately and propagate their own failures at the existing before-write and after-write points. The new raising witness proves both boundaries without introducing a new oracle ruling or changing Deviations 44 and 72/77/78/79/80/81/82/83.
++
++## Boundary evidence
++
++Three new fixtures cover inline text, integer, and heap PARSE patterns in ordinary and caseless searches, positional movement, supplied and default USE values, and two raising USE trace positions. The final baseline run compares the supplied immutable pre-repair executable with the oracle and matches stdout, stderr, and status separately for every fixture. The first draft exposed a missing parenthesized USE default and a trace assertion that itself sent another naming message, and the next draft exposed a trailing-comma line continuation. Those fixture mistakes were corrected and committed before runtime implementation, with the initial outputs retained under `baseline/` and `baseline-corrected/` rather than treated as runtime failures or red regressions.
++
++Final fixture source is under `perf-fix-r1/probes/`, with the identical source and expected stdout in `tests/semantic_boundaries/`. `parse-immediate-boundaries` prints six `[left][right]` lines and `[ab][cdef]`, while `use-value-boundaries` prints `12 xy 32 supplied` and `34 ab 28 default`. `trace-use-raise` records the first naming failure with `assigned 0`, then the second naming failure with `assigned 1`, both carrying code 98.900. The existing semantic harness also executes every previous conversion, raised callback, collision, F1/F2 reentry, and TRACE fixture normally and with collection on every allocation.
++
++## Commands and results
++
++All bounded checks use `memcap 8G python3 /tmp/t88f-perf-r1-check.py NAME BOUND CWD COMMAND...`, retained as `perf-fix-r1/check.py`. The driver explicitly writes to this round's `checks/` directory, sets `CARGO_INCREMENTAL=0` and `CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target`, and records the command, status, elapsed time, bound, stdout, and stderr independently. Cargo build/test/lint commands use `-j4`, source remains frozen while they run, and every outer bound is at most 520 seconds. Probe subprocesses use a fresh working directory each, `memcap 2G` for this interpreter, and a 1 GiB address-space cap plus `timeout -k 5 20` and the documented library path for the oracle.
++
++| Record | Command after wrapper | Result |
++| --- | --- | --- |
++| `pure-move-check` | `cargo check -p rexx-exec -j4` | Status 0, 5.77 s. |
++| `baseline-final-probes` | `python3 /tmp/t88f-perf-r1-probes.py baseline-final /tmp/codex-p9d-t88-pins/8.8a-perf-r1-rexx` | Status 0, 0.31 s; all three channel triples agree. |
++| `boundaries-policy` | `cargo test -j4 -p rexx-exec --test semantic_boundaries --test coverage --test refusal_sites --test owners --test representation_refusals` | Status 0, 44.64 s; 41 tests, including every fixture normally and under allocation stress. |
++| `focused-lib` | `cargo test -j4 -p rexx-exec --lib -- parse_template use_ hash directory trace` | Status 0, 52.76 s; 129 tests. |
++| `trace-gc` | `cargo test -j4 -p rexx-exec --test trace_oracle --test collect_policy` | Status 0, 1.72 s; 48 tests. |
++| `format` | `cargo fmt --all --check` | Status 0, 2.52 s. |
++| `lint` | `cargo clippy -j4 -p rexx-exec --all-targets -- -D warnings` | Status 0, 9.73 s. |
++| `release` | `cargo build -j4 --release -p rexx-exec --bin rexx` | Status 0, 89.02 s. |
++| `final-probes` | `python3 /tmp/t88f-perf-r1-probes.py final /tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx` | Status 0, 0.36 s; all three channel triples agree with oracle and baseline. |
++
++## Release and handoff
++
++The final pin is `/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx`, SHA256 `6ed1c08eb03d54c48d1fe3947ce376f09502aaeba34ac221c334b01b1572b86e`, built from `4c11ee4449a1fe7b537c2a216ee7c10b1a5b12ab`. `release-pin.json` records `rustc 1.99.0 (b940084d7 2026-09-28)`, LLVM 23.1.1, the complete compiler descriptor, source and build hashes, and equality between the copied pin and build executable. The exclusive-create pin script rehashes the pre-repair, original f, and corrected f-r1 pins and confirms all three remain unchanged. Final probes compare each stdout, stderr, and status against both the oracle and the supplied baseline, with all nine comparisons retained in `final-agreement.json`.
++
++No unsafe code, dependency, global root API, identity side map, scheduler behavior, or descriptor interface is changed. No Deviation 84 or new semantic departure is introduced, and the existing count-defect decision remains pending with the controller. Root owns the scoped source review, matched all-program performance measurement, broad final gates, and subsequent M6 work. The functional checks and pin support that handoff but do not establish that the three measured budget gaps are closed.
+diff --git a/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-report.md b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-report.md
+index 9583c5878..e9aa8100b 100644
+--- a/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-report.md
++++ b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-report.md
+@@ -64,10 +64,17 @@ The command wrapper and exact commands, status codes, elapsed times, environment
+ 
+ ## Release and handoff
+ 
+ The final release pin is `/tmp/codex-p9d-t88-pins/8.8f-rexx`, SHA256 `0c9fb8371ab3d6dcea780194e02c112ed7981447f7f396e606e5f418975583f0`, built successfully in 89.92 seconds from `3979b7e3135a05da4ef9372bc20e10773bde6efa`; `release-pin.json` records the compiler, build descriptor, and changed-source hashes. The own-BASE runtime remains `/tmp/codex-p9d-t88-pins/8.8e2-rexx`, SHA256 `00e29fde4456ee4845a76941263f495b827c083af35363cb54eb3ac8c6b7c733`. Both disposition columns of the eight assigned inventory rows are closed at `3979b7e31`, while their historical reason/probe fields and every unrelated row remain byte-for-byte unchanged. Parent-owned performance artifacts and the preexisting user ZIP remain unstaged for the controller's subsequent work.
+ 
+ ## Fix round 1 after review
+ 
+ The scoped review identified stale removal answers and Relation snapshot store provenance defects, both addressed in `task-8.8f-fix-r1-report.md`. The round's final runtime source is `3e1aa9c879a90214bb5c680357975f58a0081abc`, with paired red/baseline witnesses and ten new normal/every-allocation fixtures under `t8.8/semantics/fix-r1/`. Exact covering commands, independent stdout/stderr/statuses, source-policy results, formatting, clippy, release provenance, and the recovered evidence-path infrastructure mistake are recorded in that report and its `checks/` records. The original f pin and evidence remain preserved, and the separate count-ruling decision remains pending without Deviation 84.
+ 
+ The corrected pin is `/tmp/codex-p9d-t88-pins/8.8f-r1-rexx`, SHA256 `b695b78fe24903b4be5a2874c8cd128193bbe165f92b50a4d6a8a9956d03d3be`, from the final rooted source above. Its build exits 0, and all ten final paired probes agree exactly on stdout, stderr, and status. The final semantic stress, format, and affected all-target clippy checks also exit 0, with the earlier 1,235 library and focused policy checks retained in the round report. The conservative saved-store roots are explicitly described there for the controller's scoped re-review and performance assessment.
++
++
++## Performance repair round 1
++
++The controller-authorized repair of the measured parse, dirread, and pingmsg gaps is implemented in runtime commit `4c11ee4449a1fe7b537c2a216ee7c10b1a5b12ab`, following pure-move commit `64a2e9a10` and committed boundary controls. PARSE immediate patterns skip redundant conversion/rooting, StringValue probing specializes a shared traversal without callback bookkeeping, and USE avoids temporary retention only for immediate values. F1/F2 files remain byte-identical to dispatch HEAD `b7a82272f3e111d131982854fdc2cb1ecb86acb5`, while heap/default roots, fallible TRACE line boundaries, cached hash semantics, and previous rulings remain intact. No new deviation is written, and the pending count-defect ruling remains separate.
++
++[The repair report](task-8.8f-perf-fix-report.md) records exact commands and preserved outputs under `docs/superpowers/records/2026-10-18-phase-9d/t8.8/semantics/perf-fix-r1/`. Verification passes 41 semantic/policy tests, 129 focused library controls, 48 TRACE/collection-policy tests, formatting, affected all-target clippy, and release construction, with semantic fixtures also running under collection on every allocation. Three final paired probes match oracle and baseline stdout/stderr/status independently, and the new `/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx` has SHA256 `6ed1c08eb03d54c48d1fe3947ce376f09502aaeba34ac221c334b01b1572b86e`. Scoped re-review, matched all-program measurement, and broad final gates remain controller-owned, so this functional handoff does not claim performance-budget acceptance.
+diff --git a/rust/crates/rexx-exec/src/dispatch/hash.rs b/rust/crates/rexx-exec/src/dispatch/hash.rs
+index 712bf25d6..bdae2bb72 100644
+--- a/rust/crates/rexx-exec/src/dispatch/hash.rs
++++ b/rust/crates/rexx-exec/src/dispatch/hash.rs
+@@ -5,20 +5,23 @@
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! The mapped collections' store, and the two classes that are the store with
+ //! nothing on top.
+ 
++mod probe;
++use probe::{probe, probe_in};
++
+ mod removal;
+ use removal::{Removal, native_hash_remove_item, take, take_at, take_in, take_merged};
+ 
+ use rexx_core::Owner;
+ 
+ use super::collection;
+ use super::required_string_named_argument;
+ use super::{
+     Arity, ArrayArgument, BehaviourId, Body, Cleared, Decoded, Failure, Interp, Loud, NativeMethod,
+     ObjRef, Raised, array_argument, array_argument_object, array_slots, new_instance,
+@@ -650,98 +653,20 @@ fn same_held_item(
+     item: ObjRef,
+ ) -> Result<bool, Failure> {
+     match keys {
+         Keys::Identity => Ok(wanted == item),
+         Keys::Equality | Keys::StringValue => super::collection::same_item(interp, wanted, item),
+     }
+ }
+ 
+ // ---- the store's own operations ----
+ 
+-/// Where `index` belongs, and where it is: the bucket, the slot holding it if
+-/// any, and the last slot on that bucket's chain.
+-struct Probe {
+-    bucket: usize,
+-    found: Option<usize>,
+-    last: Option<usize>,
+-}
+-
+-fn probe(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Result<(Store, Probe), Failure> {
+-    let store = store_of(interp, receiver)?;
+-    probe_in(interp, receiver, CONTENTS, store, index)
+-}
+-
+-/// [`probe`] against a store the caller has already read, so that a
+-/// `Directory`'s method table can be searched with the same chain walk.
+-fn probe_in(
+-    interp: &mut Interp,
+-    receiver: ObjRef,
+-    half: Half,
+-    mut store: Store,
+-    index: ObjRef,
+-) -> Result<(Store, Probe), Failure> {
+-    let keys = keys_of(interp, receiver);
+-    let generation = interp.store_generation;
+-    let hash = hash_of(interp, keys, index)?;
+-    if generation != interp.store_generation {
+-        store = store_in(interp, receiver, half)?;
+-    }
+-    'search: loop {
+-        let bucket = (hash % store.buckets as u64) as usize;
+-        if slot_at(interp, store.indexes, bucket)?.is_none() {
+-            return Ok((
+-                store,
+-                Probe {
+-                    bucket,
+-                    found: None,
+-                    last: None,
+-                },
+-            ));
+-        }
+-        let mut slot = bucket;
+-        let mut last = bucket;
+-        loop {
+-            let generation = interp.store_generation;
+-            let matches = same_index(interp, &store, keys, slot, index)?;
+-            if generation != interp.store_generation {
+-                let current = store_in(interp, receiver, half)?;
+-                if current != store {
+-                    store = current;
+-                    continue 'search;
+-                }
+-            }
+-            if matches {
+-                return Ok((
+-                    store,
+-                    Probe {
+-                        bucket,
+-                        found: Some(slot),
+-                        last: Some(last),
+-                    },
+-                ));
+-            }
+-            last = slot;
+-            slot = link_at(interp, &store, slot)?;
+-            if slot >= store.total {
+-                return Ok((
+-                    store,
+-                    Probe {
+-                        bucket,
+-                        found: None,
+-                        last: Some(last),
+-                    },
+-                ));
+-            }
+-        }
+-    }
+-}
+-
+ /// Every occupied slot, in bucket order following each chain --
+ /// `HashContents::TableIterator`.
+ fn walk(interp: &mut Interp, receiver: ObjRef) -> Result<Vec<usize>, Failure> {
+     let store = store_of(interp, receiver)?;
+     walk_in(interp, &store)
+ }
+ 
+ /// [`walk`] over a store the caller has already read.
+ fn walk_in(interp: &Interp, store: &Store) -> Result<Vec<usize>, Failure> {
+     let mut order = Vec::new();
+diff --git a/rust/crates/rexx-exec/src/dispatch/hash/probe.rs b/rust/crates/rexx-exec/src/dispatch/hash/probe.rs
+new file mode 100644
+index 000000000..b8873fd95
+--- /dev/null
++++ b/rust/crates/rexx-exec/src/dispatch/hash/probe.rs
+@@ -0,0 +1,120 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++use super::*;
++
++/// Where `index` belongs, and where it is: the bucket, the slot holding it if
++/// any, and the last slot on that bucket's chain.
++pub(super) struct Probe {
++    pub(super) bucket: usize,
++    pub(super) found: Option<usize>,
++    pub(super) last: Option<usize>,
++}
++
++pub(super) fn probe(
++    interp: &mut Interp,
++    receiver: ObjRef,
++    index: ObjRef,
++) -> Result<(Store, Probe), Failure> {
++    let store = store_of(interp, receiver)?;
++    probe_in(interp, receiver, CONTENTS, store, index)
++}
++
++/// [`probe`] against a store the caller has already read, so that a
++/// `Directory`'s method table can be searched with the same chain walk.
++#[inline]
++pub(super) fn probe_in(
++    interp: &mut Interp,
++    receiver: ObjRef,
++    half: Half,
++    store: Store,
++    index: ObjRef,
++) -> Result<(Store, Probe), Failure> {
++    let keys = keys_of(interp, receiver);
++    // String-value hash and index comparison never send. Specialize the shared
++    // traversal so this protocol carries no callback restart state.
++    match keys {
++        Keys::StringValue => probe_by_protocol::<false>(interp, receiver, half, store, index, keys),
++        _ => probe_by_protocol::<true>(interp, receiver, half, store, index, keys),
++    }
++}
++
++fn probe_by_protocol<const MAY_REENTER: bool>(
++    interp: &mut Interp,
++    receiver: ObjRef,
++    half: Half,
++    mut store: Store,
++    index: ObjRef,
++    keys: Keys,
++) -> Result<(Store, Probe), Failure> {
++    let keys = if MAY_REENTER { keys } else { Keys::StringValue };
++    let generation = if MAY_REENTER {
++        interp.store_generation
++    } else {
++        0
++    };
++    let hash = hash_of(interp, keys, index)?;
++    if MAY_REENTER && generation != interp.store_generation {
++        store = store_in(interp, receiver, half)?;
++    }
++    'search: loop {
++        let bucket = (hash % store.buckets as u64) as usize;
++        if slot_at(interp, store.indexes, bucket)?.is_none() {
++            return Ok((
++                store,
++                Probe {
++                    bucket,
++                    found: None,
++                    last: None,
++                },
++            ));
++        }
++        let mut slot = bucket;
++        let mut last = bucket;
++        loop {
++            let generation = if MAY_REENTER {
++                interp.store_generation
++            } else {
++                0
++            };
++            let matches = same_index(interp, &store, keys, slot, index)?;
++            if MAY_REENTER && generation != interp.store_generation {
++                let current = store_in(interp, receiver, half)?;
++                if current != store {
++                    store = current;
++                    continue 'search;
++                }
++            }
++            if matches {
++                return Ok((
++                    store,
++                    Probe {
++                        bucket,
++                        found: Some(slot),
++                        last: Some(last),
++                    },
++                ));
++            }
++            last = slot;
++            slot = link_at(interp, &store, slot)?;
++            if slot >= store.total {
++                return Ok((
++                    store,
++                    Probe {
++                        bucket,
++                        found: None,
++                        last: Some(last),
++                    },
++                ));
++            }
++        }
++    }
++}
+diff --git a/rust/crates/rexx-exec/src/parse_template/trigger.rs b/rust/crates/rexx-exec/src/parse_template/trigger.rs
+index 4cab2f9ef..81c68e3b1 100644
+--- a/rust/crates/rexx-exec/src/parse_template/trigger.rs
++++ b/rust/crates/rexx-exec/src/parse_template/trigger.rs
+@@ -52,32 +52,43 @@ impl Interp {
+         // `to_vec` here was 5.2% of every allocation `samples/rexxcps.rex`
+         // made -- one per trigger, on a program whose templates are mostly
+         // numeric triggers that never look at the bytes at all.
+         if self.trace_mode().results {
+             let rendered = self.traced_string_value_text(value)?;
+             self.trace_result(indent, &rendered);
+         }
+         match trigger.kind {
+             // Convert before borrowing the source because conversion can allocate.
+             // Both source and needle bytes are borrowed only for the search.
+-            TriggerKind::String => {
+-                let needle = self.required_string_value(value)?;
+-                self.roots.activity_mut().push_temp(needle);
+-                let needle = self.render(needle);
+-                cursor.search(source.bytes(self), needle.text(self));
+-                Ok(())
+-            }
+-            TriggerKind::Mixed => {
+-                let needle = self.required_string_value(value)?;
+-                self.roots.activity_mut().push_temp(needle);
+-                let needle = self.render(needle);
+-                cursor.caseless_search(source.bytes(self), needle.text(self));
++            TriggerKind::String | TriggerKind::Mixed => {
++                let inline;
++                let rendered;
++                let needle = match value.decode() {
++                    Decoded::Text(text) => {
++                        inline = text;
++                        &inline[..]
++                    }
++                    Decoded::SmallInt(_) => {
++                        rendered = self.render(value);
++                        rendered.text(self)
++                    }
++                    _ => {
++                        let needle = self.required_string_value(value)?;
++                        self.roots.activity_mut().push_temp(needle);
++                        rendered = self.render(needle);
++                        rendered.text(self)
++                    }
++                };
++                match trigger.kind {
++                    TriggerKind::String => cursor.search(source.bytes(self), needle),
++                    _ => cursor.caseless_search(source.bytes(self), needle),
++                }
+                 Ok(())
+             }
+             _ => {
+                 // 26.4, and the conversion is bounded by the **active**
+                 // `NUMERIC DIGITS` rather than by a fixed width
+                 // (`integerTrigger`'s own `requestUnsignedNumber(result,
+                 // number_digits())`). Measured: `numeric digits 2; parse
+                 // value d with p +(100) q` is 26.4 on the oracle, as are a
+                 // fractional operand, a non-numeric one and a negative one.
+                 // The substitution is the operand's own rendering -- measured
+diff --git a/rust/crates/rexx-exec/src/run.rs b/rust/crates/rexx-exec/src/run.rs
+index 8d542c2cb..c09a2f47d 100644
+--- a/rust/crates/rexx-exec/src/run.rs
++++ b/rust/crates/rexx-exec/src/run.rs
+@@ -5,20 +5,21 @@
+ /* This program and the accompanying materials are made available under       */
+ /* the terms of the Common Public License v1.0 which accompanies this         */
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! The instruction loop: `Flow`, `step`, and the two functions that run it.
+ 
+ mod assignment;
++mod use_args;
+ 
+ use crate::activation::{
+     Activation, AutoExpose, CallType, Entry, Inherited, InstanceVar, ReplyState, TraceEntry, Trap,
+     TrappedCondition, body_of,
+ };
+ use crate::builtin;
+ use crate::clause::{ClauseEntry, ClauseOutcome, ClauseValue, HandlerExit};
+ use crate::error::{FailureSite, Raised, Search};
+ use crate::ir::{BodyEngine, NodePath};
+ use crate::plan::{BodyKey, CompoundName, Package, TailPiece};
+@@ -1785,370 +1786,20 @@ impl Interp {
+         };
+         self.novalue_check(novalue, value)?;
+         if self.tracing_intermediates() {
+             let indent = self.activity.clause_state.current_value_indent;
+             let text = self.traced_string_value_text(value)?;
+             self.trace_variable(indent, &spelling, &text, value);
+         }
+         Ok(value)
+     }
+ 
+-    /// `USE ARG`, `USE STRICT ARG` and `USE LOCAL`.
+-    /// ```text
+-    /// as the program's own first instruction    98.993, rc 158
+-    /// as a ::ROUTINE's own first instruction    98.993, rc 158
+-    /// anywhere else                             99.910, rc 157
+-    /// ```
+-    fn exec_use(
+-        &mut self,
+-        code: &Code<'_>,
+-        use_: &Use,
+-        first_instruction: bool,
+-    ) -> Result<(), Failure> {
+-        match use_ {
+-            Use::Local { variables } => {
+-                // 98.993 is "this is not a method invocation" and 99.910 is
+-                // "it is one, but this is not its first instruction", so
+-                // what decides between them is the entry kind rather than
+-                // whether there was a call. Measured on the oracle: `use
+-                // local` first in a `::ROUTINE` is 98.993 at rc 158, the
+-                // same answer the top-level shape gets.
+-                let method_invocation = match self.activation().entry {
+-                    Entry::TopLevel | Entry::InternalCall | Entry::Routine => false,
+-                    Entry::Method => true,
+-                };
+-                if first_instruction && method_invocation {
+-                    self.use_local(code, variables)
+-                } else if first_instruction {
+-                    Err(Raised::use_local_outside_method().into())
+-                } else {
+-                    Err(Raised::use_local_not_first().into())
+-                }
+-            }
+-            Use::Arg {
+-                strict,
+-                allow_optionals,
+-                targets,
+-            } => self.exec_use_arg(code, *strict, *allow_optionals, targets),
+-        }
+-    }
+-
+-    /// `USE LOCAL` as a method's first instruction
+-    /// (`RexxActivation::autoExpose`): the listed names and `SELF`, `SUPER`,
+-    /// `RC`, `SIGL` and `RESULT` stay local, and every other name binds to the
+-    /// receiver's pool for the method's scope, a name first met later
+-    /// included ([`Interp::slot_of`]).
+-    fn use_local(&mut self, code: &Code<'_>, variables: &[VariableRef]) -> Result<(), Failure> {
+-        let Some(identity) = self.activation().method_identity.as_ref() else {
+-            return Err(Raised::use_local_outside_method().into());
+-        };
+-        let (scope, receiver) = (identity.scope, identity.receiver);
+-        let owner = self.pool_owner(receiver)?;
+-        let mut local: Vec<Box<[u8]>> = [b"SELF".as_slice(), b"SUPER", b"RC", b"SIGL", b"RESULT"]
+-            .into_iter()
+-            .map(Into::into)
+-            .collect();
+-        for variable in variables {
+-            let (VariableRef::Direct(id) | VariableRef::Indirect(id)) = variable;
+-            local.push(code.symbols.name(*id).as_bytes().into());
+-        }
+-        let auto = AutoExpose {
+-            owner,
+-            scope,
+-            local: local.into(),
+-        };
+-        let activation = self.activation();
+-        let mut names: Vec<(usize, Box<[u8]>)> = activation
+-            .plan
+-            .names
+-            .iter()
+-            .chain(activation.extra.iter())
+-            .map(|(name, slot)| (*slot, name.clone()))
+-            .collect();
+-        names.sort_unstable_by_key(|(slot, _)| *slot);
+-        for (slot, name) in names {
+-            self.auto_expose_slot(&auto, slot, name);
+-        }
+-        self.activation_mut().cold_mut().auto_expose = Some(auto);
+-        Ok(())
+-    }
+-
+-    /// Binds `slot`, named `name`, to `auto`'s pool unless the name is one
+-    /// `USE LOCAL` keeps local or a compound, which reaches the pool through
+-    /// its stem.
+-    pub(crate) fn auto_expose_slot(&mut self, auto: &AutoExpose, slot: usize, name: Box<[u8]>) {
+-        if shape_of(&name) == NameShape::Compound || auto.local.contains(&name) {
+-            return;
+-        }
+-        self.expose_slot(
+-            slot,
+-            InstanceVar {
+-                owner: auto.owner,
+-                scope: auto.scope,
+-                name,
+-            },
+-        );
+-    }
+-
+-    /// `USE ARG`/`USE STRICT ARG`: bind the call's arguments to this
+-    /// instruction's targets, positionally.
+-    fn exec_use_arg(
+-        &mut self,
+-        code: &Code<'_>,
+-        strict: bool,
+-        allow_optionals: bool,
+-        targets: &[Option<UseTarget>],
+-    ) -> Result<(), Failure> {
+-        let in_method = self.activation().entry == Entry::Method;
+-        if strict {
+-            let supplied = self.activity.call_context.arguments.len();
+-            // The minimum is the position of the last target that must be
+-            // supplied -- one with no default of its own. A later target
+-            // carrying a default does not raise it, which is what makes `use
+-            // strict arg p, q = 'dflt'` legal with one argument.
+-            let minimum = targets
+-                .iter()
+-                .rposition(|target| {
+-                    target
+-                        .as_ref()
+-                        .is_none_or(|target| target.default.is_none())
+-                })
+-                .map_or(0, |index| index + 1);
+-            if supplied < minimum {
+-                return Err(if in_method {
+-                    Raised::not_enough_method_arguments(minimum).into()
+-                } else {
+-                    let name = Rc::clone(&self.activity.call_context.name);
+-                    Raised::not_enough_arguments(&name, minimum).into()
+-                });
+-            }
+-            if !allow_optionals && supplied > targets.len() {
+-                return Err(if in_method {
+-                    Raised::too_many_method_arguments(targets.len()).into()
+-                } else {
+-                    let name = Rc::clone(&self.activity.call_context.name);
+-                    Raised::too_many_arguments(&name, targets.len()).into()
+-                });
+-            }
+-        }
+-
+-        for (index, target) in targets.iter().enumerate() {
+-            let Some(target) = target else { continue };
+-            // `get` past the end and a `None` inside the list are the same
+-            // thing to a target: nothing was supplied for this position.
+-            let argument = self
+-                .activity
+-                .call_context
+-                .arguments
+-                .get(index)
+-                .cloned()
+-                .flatten();
+-            self.bind_use_target(code, index, target, argument, strict, in_method)?;
+-        }
+-        Ok(())
+-    }
+-
+-    /// Binds one `USE ARG` target to one argument, or to its default, or to
+-    /// nothing.
+-    fn bind_use_target(
+-        &mut self,
+-        code: &Code<'_>,
+-        index: usize,
+-        target: &UseTarget,
+-        argument: Option<ObjRef>,
+-        strict: bool,
+-        in_method: bool,
+-    ) -> Result<(), Failure> {
+-        let position = index + 1;
+-        if target.alias {
+-            let Some(argument) = argument else {
+-                return Err(Raised::variable_reference_omitted(position).into());
+-            };
+-            let Some(bound) = self.as_variable_reference(argument) else {
+-                let found = self.to_text(argument).to_vec();
+-                return Err(Raised::not_a_variable_reference(position, &found).into());
+-            };
+-            let reference = bound.name.clone();
+-            let slot = bound.home.clone();
+-            let name = self.use_target_name(code, target)?;
+-            // **The kinds must match, and the check is before the
+-            // uninitialised one.** Measured: a target that is both
+-            // kind-mismatched and already assigned reports the kind error,
+-            // not 98.995. Compound is not a third kind to handle -- `>p.1`
+-            // and `>q.1` are both rejected by `rexx-parse` (20.930/20.931),
+-            // so each side is a simple variable or a stem and nothing else.
+-            let target_is_stem = shape_of(&name) == NameShape::Stem;
+-            let reference_is_stem = shape_of(&reference) == NameShape::Stem;
+-            if target_is_stem != reference_is_stem {
+-                // Both substitute the *caller's* name, unlike 98.995 just
+-                // below, which names the target. Measured with a variable
+-                // whose value differs from its name, so the two cannot be
+-                // confused: `p = 'value-not-name'` passed as `>p` reports
+-                // `found "P"`.
+-                return Err(if target_is_stem {
+-                    Raised::not_a_stem_variable_reference(position, &reference).into()
+-                } else {
+-                    Raised::not_a_simple_variable_reference(position, &reference).into()
+-                });
+-            }
+-            let index = self.slot_of(&name);
+-            let frame = self.activation().frame;
+-            // The target must be **currently unset**. `RootSet::slot`
+-            // resolves through any alias already in force, which is what the
+-            // repeat case needs: after one `use arg >q`, `Q` reads the
+-            // caller's variable, so it "has a value" and the second attempt
+-            // is refused.
+-            if !self.target_is_uninitialised(&name, frame, index) {
+-                return Err(Raised::variable_reference_not_uninitialised(&name).into());
+-            }
+-            match slot {
+-                VarRefHome::Cell(cell) => self.roots.activity_mut().alias_slot(frame, index, cell),
+-                // The same binding `EXPOSE` makes, on this activation's own
+-                // slot: the target names the caller's object variable rather
+-                // than any frame storage, so there is nothing to alias to.
+-                VarRefHome::Instance { owner, scope } => {
+-                    let var = InstanceVar {
+-                        owner,
+-                        scope,
+-                        name: reference.clone(),
+-                    };
+-                    let activation = self.activation_mut();
+-                    match activation.exposed.iter_mut().find(|(at, _)| *at == index) {
+-                        Some(bound) => bound.1 = var,
+-                        None => activation.exposed.push((index, var)),
+-                    }
+-                }
+-            }
+-            // `>R>`, the alias's own line and the **only** trace line this
+-            // branch emits: no `>>>` and no `>=>`, because nothing was
+-            // evaluated and nothing was assigned (`UseInstruction.cpp:164`-
+-            // `167`, `aliasVariable` then `traceVariableAlias`, and
+-            // `handleArgument` `return`s before its own `traceResult` for
+-            // this case). Caller's name first, target's second -- see
+-            // `trace_alias`.
+-            self.trace_alias(
+-                self.activity.clause_state.current_value_indent,
+-                &reference,
+-                &name,
+-            );
+-            return Ok(());
+-        }
+-
+-        // Present: bind the value. Absent: the default if there is one, and
+-        // otherwise drop the target -- measured, an absent target does not
+-        // keep whatever it held before.
+-        let value = match argument {
+-            Some(argument) => Some(argument),
+-            None => match &target.default {
+-                Some(default) => {
+-                    let value = self.eval(code, default)?;
+-                    self.roots.activity_mut().push_temp(value);
+-                    Some(value)
+-                }
+-                None => None,
+-            },
+-        };
+-        // A message or bracket term assigns through PARSE's arm; its `drop` is
+-        // a no-op (`ExpressionBaseVariable.hpp:65`), so an omitted argument
+-        // without a default leaves it alone.
+-        if matches!(target.target.kind, ExprKind::Message { .. }) {
+-            return match value {
+-                Some(value) => {
+-                    let indent = self.activity.clause_state.current_value_indent;
+-                    let rendered = self.result_text(value)?;
+-                    if let Some(rendered) = &rendered {
+-                        self.trace_result(indent, rendered);
+-                    }
+-                    self.assign_expr_target(code, &target.target, value, indent, None)
+-                }
+-                None if strict => Err(if in_method {
+-                    Raised::missing_method_argument(position).into()
+-                } else {
+-                    let call = Rc::clone(&self.activity.call_context.name);
+-                    Raised::missing_argument(&call, position).into()
+-                }),
+-                None => Ok(()),
+-            };
+-        }
+-        let name = self.use_target_name(code, target)?;
+-        match value {
+-            Some(value) => {
+-                // `>>>` then `>=>`, in that order and both at this `USE`
+-                // clause's own indent -- `handleArgument`'s own
+-                // `traceResult(argument)` immediately before
+-                // `retriever->assign(context, argument)`, whose own
+-                // `traceAssignment` is the second line
+-                // (`UseInstruction.cpp:74`-`77`, and the default-value arm
+-                // ten lines below it does the identical pair). Measured
+-                // under `trace r`: `use arg a, b` on a two-argument call
+-                // traces `>>>     "1"` and `>>>     "2"` and no `>=>`, which
+-                // is the gating -- `>>>` is `results`, `>=>` is
+-                // `intermediates`, so the pair is not one line's worth of
+-                // conditional.
+-                let indent = self.activity.clause_state.current_value_indent;
+-                // Render each result and assignment line at its emission point.
+-                let rendered = self.result_text(value)?;
+-                if let Some(rendered) = &rendered {
+-                    self.trace_result(indent, rendered);
+-                }
+-                self.roots.activity_mut().push_temp(value);
+-                self.assign_by_name(&name, value);
+-                if let Some(rendered) = self.intermediate_text(value)? {
+-                    self.trace_assignment(indent, &name, &rendered, value);
+-                }
+-                Ok(())
+-            }
+-            // `USE STRICT ARG` refuses an omitted position that has no
+-            // default of its own, where `USE ARG` drops the target
+-            // (`UseInstruction.cpp:97`-`:111`). The position is the target's,
+-            // not the last one supplied -- measured, oracle rc 216, `call r
+-            // , 2` into `use strict arg a, b` reports `argument 1`.
+-            None if strict => Err(if in_method {
+-                Raised::missing_method_argument(position).into()
+-            } else {
+-                let call = Rc::clone(&self.activity.call_context.name);
+-                Raised::missing_argument(&call, position).into()
+-            }),
+-            None => {
+-                self.drop_by_name(&name);
+-                Ok(())
+-            }
+-        }
+-    }
+-
+-    /// Whether a `USE ARG >name` target is in the uninitialised state the
+-    /// oracle requires of it: a local variable (`RexxVariable::isAliasable`),
+-    /// so never one an `EXPOSE` or `USE LOCAL` bound to the object's pool, and
+-    /// for a stem one named as the variable that owns the slot's storage.
+-    fn target_is_uninitialised(&self, name: &[u8], frame: SlotFrame, index: usize) -> bool {
+-        if self.exposure(frame, index).is_some() {
+-            return false;
+-        }
+-        match self.variable(frame, index) {
+-            None => true,
+-            Some(value) => {
+-                let own = self.cell_owner_name(frame, index).unwrap_or(name);
+-                shape_of(name) == NameShape::Stem && self.is_uninitialised_stem(value, own)
+-            }
+-        }
+-    }
+-
+-    /// One `USE ARG` target's variable name.
+-    fn use_target_name(&self, code: &Code<'_>, target: &UseTarget) -> Result<Vec<u8>, Failure> {
+-        match &target.target.kind {
+-            ExprKind::Variable(id) | ExprKind::Stem(id) | ExprKind::Compound(id) => {
+-                Ok(code.symbols.name(*id).as_bytes().to_vec())
+-            }
+-            other => Err(Loud::expression(other).into()),
+-        }
+-    }
+-
+     /// Everything one `SAY` does once its expression has been evaluated:
+     /// `>>>`, then the line itself.
+     #[inline]
+     pub(crate) fn say_evaluated(&mut self, value: Option<ObjRef>) -> Result<(), Failure> {
+         let line = match value {
+             Some(value) => {
+                 self.roots.activity_mut().push_temp(value);
+                 let value = self.required_string_value(value)?;
+                 self.to_text(value).to_vec()
+             }
+diff --git a/rust/crates/rexx-exec/src/run/use_args.rs b/rust/crates/rexx-exec/src/run/use_args.rs
+new file mode 100644
+index 000000000..53da5d94c
+--- /dev/null
++++ b/rust/crates/rexx-exec/src/run/use_args.rs
+@@ -0,0 +1,367 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++use super::*;
++
++impl Interp {
++    /// `USE ARG`, `USE STRICT ARG` and `USE LOCAL`.
++    /// ```text
++    /// as the program's own first instruction    98.993, rc 158
++    /// as a ::ROUTINE's own first instruction    98.993, rc 158
++    /// anywhere else                             99.910, rc 157
++    /// ```
++    pub(super) fn exec_use(
++        &mut self,
++        code: &Code<'_>,
++        use_: &Use,
++        first_instruction: bool,
++    ) -> Result<(), Failure> {
++        match use_ {
++            Use::Local { variables } => {
++                // 98.993 is "this is not a method invocation" and 99.910 is
++                // "it is one, but this is not its first instruction", so
++                // what decides between them is the entry kind rather than
++                // whether there was a call. Measured on the oracle: `use
++                // local` first in a `::ROUTINE` is 98.993 at rc 158, the
++                // same answer the top-level shape gets.
++                let method_invocation = match self.activation().entry {
++                    Entry::TopLevel | Entry::InternalCall | Entry::Routine => false,
++                    Entry::Method => true,
++                };
++                if first_instruction && method_invocation {
++                    self.use_local(code, variables)
++                } else if first_instruction {
++                    Err(Raised::use_local_outside_method().into())
++                } else {
++                    Err(Raised::use_local_not_first().into())
++                }
++            }
++            Use::Arg {
++                strict,
++                allow_optionals,
++                targets,
++            } => self.exec_use_arg(code, *strict, *allow_optionals, targets),
++        }
++    }
++
++    /// `USE LOCAL` as a method's first instruction
++    /// (`RexxActivation::autoExpose`): the listed names and `SELF`, `SUPER`,
++    /// `RC`, `SIGL` and `RESULT` stay local, and every other name binds to the
++    /// receiver's pool for the method's scope, a name first met later
++    /// included ([`Interp::slot_of`]).
++    fn use_local(&mut self, code: &Code<'_>, variables: &[VariableRef]) -> Result<(), Failure> {
++        let Some(identity) = self.activation().method_identity.as_ref() else {
++            return Err(Raised::use_local_outside_method().into());
++        };
++        let (scope, receiver) = (identity.scope, identity.receiver);
++        let owner = self.pool_owner(receiver)?;
++        let mut local: Vec<Box<[u8]>> = [b"SELF".as_slice(), b"SUPER", b"RC", b"SIGL", b"RESULT"]
++            .into_iter()
++            .map(Into::into)
++            .collect();
++        for variable in variables {
++            let (VariableRef::Direct(id) | VariableRef::Indirect(id)) = variable;
++            local.push(code.symbols.name(*id).as_bytes().into());
++        }
++        let auto = AutoExpose {
++            owner,
++            scope,
++            local: local.into(),
++        };
++        let activation = self.activation();
++        let mut names: Vec<(usize, Box<[u8]>)> = activation
++            .plan
++            .names
++            .iter()
++            .chain(activation.extra.iter())
++            .map(|(name, slot)| (*slot, name.clone()))
++            .collect();
++        names.sort_unstable_by_key(|(slot, _)| *slot);
++        for (slot, name) in names {
++            self.auto_expose_slot(&auto, slot, name);
++        }
++        self.activation_mut().cold_mut().auto_expose = Some(auto);
++        Ok(())
++    }
++
++    /// Binds `slot`, named `name`, to `auto`'s pool unless the name is one
++    /// `USE LOCAL` keeps local or a compound, which reaches the pool through
++    /// its stem.
++    pub(crate) fn auto_expose_slot(&mut self, auto: &AutoExpose, slot: usize, name: Box<[u8]>) {
++        if shape_of(&name) == NameShape::Compound || auto.local.contains(&name) {
++            return;
++        }
++        self.expose_slot(
++            slot,
++            InstanceVar {
++                owner: auto.owner,
++                scope: auto.scope,
++                name,
++            },
++        );
++    }
++
++    /// `USE ARG`/`USE STRICT ARG`: bind the call's arguments to this
++    /// instruction's targets, positionally.
++    fn exec_use_arg(
++        &mut self,
++        code: &Code<'_>,
++        strict: bool,
++        allow_optionals: bool,
++        targets: &[Option<UseTarget>],
++    ) -> Result<(), Failure> {
++        let in_method = self.activation().entry == Entry::Method;
++        if strict {
++            let supplied = self.activity.call_context.arguments.len();
++            // The minimum is the position of the last target that must be
++            // supplied -- one with no default of its own. A later target
++            // carrying a default does not raise it, which is what makes `use
++            // strict arg p, q = 'dflt'` legal with one argument.
++            let minimum = targets
++                .iter()
++                .rposition(|target| {
++                    target
++                        .as_ref()
++                        .is_none_or(|target| target.default.is_none())
++                })
++                .map_or(0, |index| index + 1);
++            if supplied < minimum {
++                return Err(if in_method {
++                    Raised::not_enough_method_arguments(minimum).into()
++                } else {
++                    let name = Rc::clone(&self.activity.call_context.name);
++                    Raised::not_enough_arguments(&name, minimum).into()
++                });
++            }
++            if !allow_optionals && supplied > targets.len() {
++                return Err(if in_method {
++                    Raised::too_many_method_arguments(targets.len()).into()
++                } else {
++                    let name = Rc::clone(&self.activity.call_context.name);
++                    Raised::too_many_arguments(&name, targets.len()).into()
++                });
++            }
++        }
++
++        for (index, target) in targets.iter().enumerate() {
++            let Some(target) = target else { continue };
++            // `get` past the end and a `None` inside the list are the same
++            // thing to a target: nothing was supplied for this position.
++            let argument = self
++                .activity
++                .call_context
++                .arguments
++                .get(index)
++                .cloned()
++                .flatten();
++            self.bind_use_target(code, index, target, argument, strict, in_method)?;
++        }
++        Ok(())
++    }
++
++    /// Binds one `USE ARG` target to one argument, or to its default, or to
++    /// nothing.
++    fn bind_use_target(
++        &mut self,
++        code: &Code<'_>,
++        index: usize,
++        target: &UseTarget,
++        argument: Option<ObjRef>,
++        strict: bool,
++        in_method: bool,
++    ) -> Result<(), Failure> {
++        let position = index + 1;
++        if target.alias {
++            let Some(argument) = argument else {
++                return Err(Raised::variable_reference_omitted(position).into());
++            };
++            let Some(bound) = self.as_variable_reference(argument) else {
++                let found = self.to_text(argument).to_vec();
++                return Err(Raised::not_a_variable_reference(position, &found).into());
++            };
++            let reference = bound.name.clone();
++            let slot = bound.home.clone();
++            let name = self.use_target_name(code, target)?;
++            // **The kinds must match, and the check is before the
++            // uninitialised one.** Measured: a target that is both
++            // kind-mismatched and already assigned reports the kind error,
++            // not 98.995. Compound is not a third kind to handle -- `>p.1`
++            // and `>q.1` are both rejected by `rexx-parse` (20.930/20.931),
++            // so each side is a simple variable or a stem and nothing else.
++            let target_is_stem = shape_of(&name) == NameShape::Stem;
++            let reference_is_stem = shape_of(&reference) == NameShape::Stem;
++            if target_is_stem != reference_is_stem {
++                // Both substitute the *caller's* name, unlike 98.995 just
++                // below, which names the target. Measured with a variable
++                // whose value differs from its name, so the two cannot be
++                // confused: `p = 'value-not-name'` passed as `>p` reports
++                // `found "P"`.
++                return Err(if target_is_stem {
++                    Raised::not_a_stem_variable_reference(position, &reference).into()
++                } else {
++                    Raised::not_a_simple_variable_reference(position, &reference).into()
++                });
++            }
++            let index = self.slot_of(&name);
++            let frame = self.activation().frame;
++            // The target must be **currently unset**. `RootSet::slot`
++            // resolves through any alias already in force, which is what the
++            // repeat case needs: after one `use arg >q`, `Q` reads the
++            // caller's variable, so it "has a value" and the second attempt
++            // is refused.
++            if !self.target_is_uninitialised(&name, frame, index) {
++                return Err(Raised::variable_reference_not_uninitialised(&name).into());
++            }
++            match slot {
++                VarRefHome::Cell(cell) => self.roots.activity_mut().alias_slot(frame, index, cell),
++                // The same binding `EXPOSE` makes, on this activation's own
++                // slot: the target names the caller's object variable rather
++                // than any frame storage, so there is nothing to alias to.
++                VarRefHome::Instance { owner, scope } => {
++                    let var = InstanceVar {
++                        owner,
++                        scope,
++                        name: reference.clone(),
++                    };
++                    let activation = self.activation_mut();
++                    match activation.exposed.iter_mut().find(|(at, _)| *at == index) {
++                        Some(bound) => bound.1 = var,
++                        None => activation.exposed.push((index, var)),
++                    }
++                }
++            }
++            // `>R>`, the alias's own line and the **only** trace line this
++            // branch emits: no `>>>` and no `>=>`, because nothing was
++            // evaluated and nothing was assigned (`UseInstruction.cpp:164`-
++            // `167`, `aliasVariable` then `traceVariableAlias`, and
++            // `handleArgument` `return`s before its own `traceResult` for
++            // this case). Caller's name first, target's second -- see
++            // `trace_alias`.
++            self.trace_alias(
++                self.activity.clause_state.current_value_indent,
++                &reference,
++                &name,
++            );
++            return Ok(());
++        }
++
++        // Present: bind the value. Absent: the default if there is one, and
++        // otherwise drop the target -- measured, an absent target does not
++        // keep whatever it held before.
++        let value = match argument {
++            Some(argument) => Some(argument),
++            None => match &target.default {
++                Some(default) => {
++                    let value = self.eval(code, default)?;
++                    self.roots.activity_mut().push_temp(value);
++                    Some(value)
++                }
++                None => None,
++            },
++        };
++        // A message or bracket term assigns through PARSE's arm; its `drop` is
++        // a no-op (`ExpressionBaseVariable.hpp:65`), so an omitted argument
++        // without a default leaves it alone.
++        if matches!(target.target.kind, ExprKind::Message { .. }) {
++            return match value {
++                Some(value) => {
++                    let indent = self.activity.clause_state.current_value_indent;
++                    let rendered = self.result_text(value)?;
++                    if let Some(rendered) = &rendered {
++                        self.trace_result(indent, rendered);
++                    }
++                    self.assign_expr_target(code, &target.target, value, indent, None)
++                }
++                None if strict => Err(if in_method {
++                    Raised::missing_method_argument(position).into()
++                } else {
++                    let call = Rc::clone(&self.activity.call_context.name);
++                    Raised::missing_argument(&call, position).into()
++                }),
++                None => Ok(()),
++            };
++        }
++        let name = self.use_target_name(code, target)?;
++        match value {
++            Some(value) => {
++                // `>>>` then `>=>`, in that order and both at this `USE`
++                // clause's own indent -- `handleArgument`'s own
++                // `traceResult(argument)` immediately before
++                // `retriever->assign(context, argument)`, whose own
++                // `traceAssignment` is the second line
++                // (`UseInstruction.cpp:74`-`77`, and the default-value arm
++                // ten lines below it does the identical pair). Measured
++                // under `trace r`: `use arg a, b` on a two-argument call
++                // traces `>>>     "1"` and `>>>     "2"` and no `>=>`, which
++                // is the gating -- `>>>` is `results`, `>=>` is
++                // `intermediates`, so the pair is not one line's worth of
++                // conditional.
++                let indent = self.activity.clause_state.current_value_indent;
++                // Render each result and assignment line at its emission point.
++                let rendered = self.result_text(value)?;
++                if let Some(rendered) = &rendered {
++                    self.trace_result(indent, rendered);
++                }
++                // Immediate values cannot be collected during assignment.
++                if matches!(value.decode(), Decoded::Heap { .. }) {
++                    self.roots.activity_mut().push_temp(value);
++                }
++                self.assign_by_name(&name, value);
++                if let Some(rendered) = self.intermediate_text(value)? {
++                    self.trace_assignment(indent, &name, &rendered, value);
++                }
++                Ok(())
++            }
++            // `USE STRICT ARG` refuses an omitted position that has no
++            // default of its own, where `USE ARG` drops the target
++            // (`UseInstruction.cpp:97`-`:111`). The position is the target's,
++            // not the last one supplied -- measured, oracle rc 216, `call r
++            // , 2` into `use strict arg a, b` reports `argument 1`.
++            None if strict => Err(if in_method {
++                Raised::missing_method_argument(position).into()
++            } else {
++                let call = Rc::clone(&self.activity.call_context.name);
++                Raised::missing_argument(&call, position).into()
++            }),
++            None => {
++                self.drop_by_name(&name);
++                Ok(())
++            }
++        }
++    }
++
++    /// Whether a `USE ARG >name` target is in the uninitialised state the
++    /// oracle requires of it: a local variable (`RexxVariable::isAliasable`),
++    /// so never one an `EXPOSE` or `USE LOCAL` bound to the object's pool, and
++    /// for a stem one named as the variable that owns the slot's storage.
++    fn target_is_uninitialised(&self, name: &[u8], frame: SlotFrame, index: usize) -> bool {
++        if self.exposure(frame, index).is_some() {
++            return false;
++        }
++        match self.variable(frame, index) {
++            None => true,
++            Some(value) => {
++                let own = self.cell_owner_name(frame, index).unwrap_or(name);
++                shape_of(name) == NameShape::Stem && self.is_uninitialised_stem(value, own)
++            }
++        }
++    }
++
++    /// One `USE ARG` target's variable name.
++    fn use_target_name(&self, code: &Code<'_>, target: &UseTarget) -> Result<Vec<u8>, Failure> {
++        match &target.target.kind {
++            ExprKind::Variable(id) | ExprKind::Stem(id) | ExprKind::Compound(id) => {
++                Ok(code.symbols.name(*id).as_bytes().to_vec())
++            }
++            other => Err(Loud::expression(other).into()),
++        }
++    }
++}
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/parse-immediate-boundaries.rex b/rust/crates/rexx-exec/tests/semantic_boundaries/parse-immediate-boundaries.rex
+new file mode 100644
+index 000000000..f0b803267
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/parse-immediate-boundaries.rex
+@@ -0,0 +1,18 @@
++/* Immediate and heap patterns keep the same search and positional rules. */
++short = 'xy'
++whole = 12
++long = 'long-pattern-more-than-inline'
++parse value 'leftxyright' with before (short) after
++say '['before']['after']'
++parse value 'left12right' with before (whole) after
++say '['before']['after']'
++parse value 'leftlong-pattern-more-than-inlineright' with before (long) after
++say '['before']['after']'
++parse caseless value 'leftXYright' with before (short) after
++say '['before']['after']'
++parse caseless value 'left12right' with before (whole) after
++say '['before']['after']'
++parse caseless value 'leftLONG-PATTERN-MORE-THAN-INLINEright' with before (long) after
++say '['before']['after']'
++parse value 'abcdef' with before +(2) after
++say '['before']['after']'
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/parse-immediate-boundaries.stdout b/rust/crates/rexx-exec/tests/semantic_boundaries/parse-immediate-boundaries.stdout
+new file mode 100644
+index 000000000..70912aba0
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/parse-immediate-boundaries.stdout
+@@ -0,0 +1,7 @@
++[left][right]
++[left][right]
++[left][right]
++[left][right]
++[left][right]
++[left][right]
++[ab][cdef]
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/trace-use-raise.rex b/rust/crates/rexx-exec/tests/semantic_boundaries/trace-use-raise.rex
+new file mode 100644
+index 000000000..ee5525e3d
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/trace-use-raise.rex
+@@ -0,0 +1,27 @@
++/* Each USE trace line sends separately, before and after the assignment. */
++call bind .once~new(1)
++call bind .once~new(2)
++exit
++bind:
++  signal on syntax name caught
++  value = 'old'
++  trace i
++  use arg value
++  trace off
++  say 'not reached'
++  return
++caught:
++  trace off
++  say 'assigned' (value~class == .once) 'code' condition('o')~code
++  return
++::class once
++::method init
++  expose n limit
++  use arg limit
++  n = 0
++::method defaultname
++  expose n limit
++  n = n + 1
++  say 'name' n
++  if n = limit then raise syntax 98.900 array('boom')
++  return 'ONCE'
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/trace-use-raise.stdout b/rust/crates/rexx-exec/tests/semantic_boundaries/trace-use-raise.stdout
+new file mode 100644
+index 000000000..2240588c2
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/trace-use-raise.stdout
+@@ -0,0 +1,5 @@
++name 1
++assigned 0 code 98.900
++name 1
++name 2
++assigned 1 code 98.900
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/use-value-boundaries.rex b/rust/crates/rexx-exec/tests/semantic_boundaries/use-value-boundaries.rex
+new file mode 100644
+index 000000000..a3ccdedd7
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/use-value-boundaries.rex
+@@ -0,0 +1,13 @@
++/* Supplied immediates, heap strings and objects survive argument binding. */
++call bind 12, 'xy', copies('heap', 8), .box~new('supplied')
++call bind
++exit
++bind:
++  use arg number = 34, text = 'ab', heap = (copies('default', 4)), object = (.box~new('default'))
++  say number text length(heap) object~value
++  return
++::class box
++::method init
++  expose value
++  use arg value
++::attribute value
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/use-value-boundaries.stdout b/rust/crates/rexx-exec/tests/semantic_boundaries/use-value-boundaries.stdout
+new file mode 100644
+index 000000000..1b6a0c860
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/use-value-boundaries.stdout
+@@ -0,0 +1,2 @@
++12 xy 32 supplied
++34 ab 28 default
+$ git log --oneline b7a82272f3e111d131982854fdc2cb1ecb86acb5..8e16ad172
+$ git diff --stat b7a82272f3e111d131982854fdc2cb1ecb86acb5..8e16ad172
+$ git diff -U10 b7a82272f3e111d131982854fdc2cb1ecb86acb5..8e16ad172 -- rust .superpowers/sdd/2026-10-18-phase-9d/task-8.8f-report.md .superpowers/sdd/2026-10-18-phase-9d/task-8.8f-perf-fix-report.md
