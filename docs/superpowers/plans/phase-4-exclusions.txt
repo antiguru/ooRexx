@@ -2985,9 +2985,8 @@ DEVIATIONS -- permanent, chosen
      the handler's RETURN (the handler is called again at once). ERROR and
      FAILURE raised again are ignored, and so is NOTREADY (condtra.xml:
      278-280, iostrms.xml:657-667), also under CALL ON ANY once a
-     condition queued at the clause has delayed it. A condition the debug
-     pause's own input read raises while its trap is delayed is dropped
-     (condtra.xml:489-494, traps OFF while that input is processed).
+     condition queued at the clause has delayed it. The debug pause's
+     read of .DEBUGINPUT is an ordinary read under this rule.
      ORACLE BUG: the delayed trap's condition is queued on the raising
      activation's caller and discarded when it returns, so USER and HALT
      raised from a routine the handler calls run no second handler after
@@ -3016,6 +3015,84 @@ DEVIATIONS -- permanent, chosen
      (t8.7b/probes/compile-condition/m2.rex). Measured by Phase 9d Task 8.7b.
      Witnessed by run::tests::conditions::an_interpret_translation_failure_names_the_running_package
      (rust/crates/rexx-exec/src/run/tests/conditions.rs).
+
+ 77. A STEM'S STRING VALUE IS ITS DEFAULT'S (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-29 ("Default's value, stem named"). In every
+     required-string position a stem's string value is its default's
+     `request('STRING')` (rexxref provide.xml, Required String Values;
+     collclasses.xml, Stem `request`), the concatenation receiver
+     included; where that answers none, NOSTRING names the stem, its
+     description the stem's STRING answer. The oracle raises NOSTRING for
+     every stem in a required-string position, whatever its default, a
+     string included, and in an arithmetic operand or a comparison's
+     right operand names the default (t8.7c/probes/stemnostr/s2.rex,
+     t8.7c/fix-r1/probes/r1/s2.rex). Measured by Phase 9d Task 8.7c.
+     Witnessed by tests::a_stems_string_value_is_its_defaults_and_nostring_names_the_stem
+     (rust/crates/rexx-exec/src/tests.rs).
+
+ 78. A HASH LOOKUP OF THE IDENTICAL INDEX SENDS ITS == (Phase 9d).
+     OWNER: none.
+
+     Ruled by Moritz 2026-10-29 ("Keep rexxref, Deviation"). "Index
+     equality is determined by using the == method of index" (rexxref
+     collclasses.xml, Table AT and PUT), so a PUT or AT with the index
+     object already stored sends that object's ==. The oracle compares
+     identity first and sends none
+     (t8.7c/probes/hashid/hash-identity-first-idq.rex). Measured by Phase
+     9d Task 8.7c.
+     Witnessed by tests::a_hash_lookup_sends_the_identical_indexs_equality
+     (rust/crates/rexx-exec/src/tests.rs).
+
+ 79. AN APPEND STREAM'S WRITE POINTER STAYS OUT OF THE FILE AS IT WAS
+     OPENED (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-29 ("Enforce rexxref"). On a stream opened
+     APPEND the write pointer cannot be moved into the file as it was at
+     the open (rexxref funct.xml:4307-4312, STREAM OPEN APPEND): a write
+     SEEK there answers 0 and is NOTREADY, as Deviation 59's invalid SEEK;
+     a CHAROUT start there answers its residual count and a LINEOUT line
+     there answers 1, both NOTREADY, writing and moving nothing. The
+     extent is the file's size at the open, of any size. The oracle moves
+     the write position there, `seek =1 write char` answering 1, while the
+     writes still land at the end, and `lineout(f, 'L4', 1)` writes
+     (t8.7c/fix-r1/probes/ap/a1.rex). Measured by Phase 9d Task 8.7c.
+     Witnessed by the stream model case append-extent
+     (rust/crates/rexx-exec/tests/stream_model.rs, rule append-extent),
+     input_oracle::the_unfiled_ruled_programs_answer_as_this_crate_rules
+     over corpus/lang/stream_append_writes_at_end.rex, and
+     stream_handle::an_append_stream_refuses_positions_within_a_file_over_four_gib.
+
+ 80. THE FIRST SEEK OF AN UNOPENED TRANSIENT STREAM IS REFUSED (Phase
+     9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-29 ("New Deviation, oracle bug"). Positioning
+     a transient stream is 93.958 (rexxref iostrms.xml:194-197), the
+     first SEEK of one nothing has opened included. ORACLE BUG: the
+     oracle tests the stream's transient flag before its implicit open
+     sets it, so with standard input /dev/null
+     `.stream~new('STDIN')~seek('1')` answers 1 and the state READY
+     there (t8.7c/probes/stdinq/q4.rex).
+     Measured by Phase 9d Task 8.7c.
+     Witnessed by input_oracle::the_first_seek_of_an_unopened_transient_stream_is_refused
+     (rust/crates/rexx-exec/tests/input_oracle.rs).
+
+ 81. A STEM'S STRING SENDS STRING TO ITS DEFAULT (Phase 9d). OWNER:
+     none.
+
+     Ruled by Moritz 2026-10-29 ("Follow rexxref, Deviation", narrowed to
+     "Narrow to the Stem half"). A Stem's STRING is its default's string
+     representation (rexxref intro.xml:2653-2656), so where the default's
+     class overrides STRING it is sent; the oracle answers the default's
+     name, `a NSTR` for a default whose STRING answers NSTR
+     (t8.7c/probes/stemarr/b.rex). LICENSED DEPARTURE FROM REXXREF: a
+     TRACE value line renders a non-string result by the object's name,
+     as the oracle and ooTest base/keyword/TRACE TEST_TRACE_FORWARD do,
+     not by the STRING message instrc.xml:3697-3699 names
+     (`>V>   V. => "a NSTR"`, t8.7c/fix-r2/probes/r6/t1.rex). Measured by
+     Phase 9d Task 8.7c.
+     Witnessed by tests::a_stems_string_sends_string_to_its_default_and_a_trace_line_names_it
+     (rust/crates/rexx-exec/src/tests.rs).
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------

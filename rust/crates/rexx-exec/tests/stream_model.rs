@@ -68,7 +68,7 @@ const CRATE_RUN_LIMIT: std::time::Duration = std::time::Duration::from_secs(120)
 const ORACLE_DEPARTURES: &[(&str, u32, &str, &str)] = &[
     (
         "append-extent",
-        0,
+        79,
         "append-extent",
         "S_=1_write=1 READY 1 1",
     ),
@@ -924,7 +924,7 @@ fn oracle_rule(
                     _ => true,
                 } =>
         {
-            Some((0, "append-extent"))
+            Some((79, "append-extent"))
         }
         "LO" | "LE"
             if appending

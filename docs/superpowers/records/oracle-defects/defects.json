@@ -2081,7 +2081,7 @@
   "expected": "7: a stem's string value is its default's request('STRING') (provide.xml:758; collclasses.xml, Stem request); NOSTRING only where that answers none.",
   "cause": "StemClass has no primitiveMakeString, so requestString takes stringValue (ObjectClass.cpp:1240-1247).",
   "source": "Phase 9d Task 8.7c",
-  "status": "open (Moritz 2026-10-29: \"Default's value, stem named\"; Deviation pending)",
+  "status": "deviation 77 (Moritz 2026-10-29: \"Default's value, stem named\")",
   "crate": "Answers the default's string value; NOSTRING names the stem."
  },
  {
@@ -2096,7 +2096,7 @@
   "expected": "93.958: a transient stream cannot be positioned.",
   "cause": "stream_position tests transient before its implicit open sets it (StreamNative.cpp:2694).",
   "source": "Phase 9d Task 8.7c",
-  "status": "open (Moritz 2026-10-29: \"New Deviation, oracle bug\"; Deviation pending)",
+  "status": "deviation 80 (Moritz 2026-10-29: \"New Deviation, oracle bug\")",
   "crate": "Raises 93.958 either way."
  },
  {
