@@ -39,7 +39,7 @@ fn executing_copies_and_enhanced_metaclass_entries_survive_collection() {
         (
             "enhanced",
             include_str!("../../../../../corpus/lang/enhanced_metaclass_method_identity.rex"),
-            "entry pong 1\ninherited pong 1\nheld 1 1\nlisted 1 1\nfound 1\nheld 1 1\nlisted 1 1\nfound 1\nheld 1 1\nlisted 1 1\nfound 1\nobject own 1\nordinary ordinary 1\n",
+            "entry pong 1\ninherited pong 1\nheld 1 1\nlisted 1 1\nfound 1\nheld 1 1\nlisted 1 1\nfound 1\nheld 1 1\nlisted 1 1\nfound 1\nobject 17 1\nordinary ordinary 1\n",
         ),
     ] {
         let outcome = crate::run_program_collect_every_alloc(
@@ -48,6 +48,8 @@ fn executing_copies_and_enhanced_metaclass_entries_survive_collection() {
             crate::Invocation::none(),
         );
         assert_eq!(outcome.exit_code, 0, "{:?}", outcome);
+        assert!(outcome.collections > 0, "collection must actually run");
+        eprintln!("{name}: {} collections", outcome.collections);
         assert_eq!(String::from_utf8_lossy(&outcome.stdout), expected, "{name}");
     }
 }

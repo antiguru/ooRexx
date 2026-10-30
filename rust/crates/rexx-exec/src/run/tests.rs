@@ -87,12 +87,13 @@ fn say_output_with_directives(interp: &mut Interp, source: &[u8]) -> Vec<u8> {
     std::mem::take(&mut interp.out)
 }
 
-/// A method whose own entry is taken back while it runs, and whose `Method`
-/// objects a forced collection then sweeps, gets a `.context~executable`
-/// rebuilt under the `.nil` scope it ran in. The rebuild keyed that object's
-/// annotation table by `.nil` as if it were a class, and panicked.
+/// A method whose own entry is taken back while it runs retains its Method
+/// through a forced collection and answers `.context~executable` under the
+/// `.nil` scope it ran in. Previously collection swept its Method objects
+/// and rebuilding keyed its annotation table by `.nil` as if it were a class,
+/// which panicked. Entry retention now keeps the registered executable.
 #[test]
-fn an_executable_rebuilt_under_the_nil_scope_answers() {
+fn an_executable_retained_under_the_nil_scope_answers() {
     let mut interp = Interp::new();
     let out = say_output_with_directives(
         &mut interp,
@@ -103,8 +104,8 @@ fn an_executable_rebuilt_under_the_nil_scope_answers() {
     );
     assert_eq!(String::from_utf8_lossy(&out), "Method The NIL object 1\n");
     assert_eq!(
-        interp.executables_rebuilt, 1,
-        "the rebuild path did not run"
+        interp.executables_rebuilt, 0,
+        "the executing Method should remain rooted"
     );
 }
 

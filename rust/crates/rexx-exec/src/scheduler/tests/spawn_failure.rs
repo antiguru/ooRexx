@@ -69,6 +69,22 @@ fn command_spawn_failure_creates_no_child_and_repeats() {
         "call probe\ncall probe\nsay 'progress'\nexit\nprobe: procedure\nsignal on syntax name caught\naddress system 'echo child > {}'\nsay 'CHILD RAN'\nreturn\ncaught: say condition('o')~code\nreturn\n",
         marker.display()
     );
+    let mut unrelated = std::process::Command::new("python3")
+        .args([
+            "-c",
+            "import sys; print('ready',flush=True); sys.stdin.buffer.read(1)",
+        ])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .expect("unrelated child");
+    let mut ready = String::new();
+    std::io::BufRead::read_line(
+        &mut std::io::BufReader::new(unrelated.stdout.take().expect("stdout")),
+        &mut ready,
+    )
+    .expect("ready line");
+    assert_eq!(ready, "ready\n");
     let ran = run_shaped(
         &source,
         Shape {
@@ -78,6 +94,14 @@ fn command_spawn_failure_creates_no_child_and_repeats() {
     )
     .expect("run");
     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+    let unrelated_alive = unrelated.try_wait().expect("unrelated status").is_none();
+    std::io::Write::write_all(unrelated.stdin.as_mut().expect("stdin"), b"x")
+        .expect("release unrelated child");
+    assert!(unrelated.wait().expect("reap unrelated child").success());
+    assert!(
+        unrelated_alive,
+        "reservation failure touched an unrelated child"
+    );
     assert_eq!(ran.stdout(), "48.1\n48.1\nprogress\n");
     assert!(
         !marker.exists(),
