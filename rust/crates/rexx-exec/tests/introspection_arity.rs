@@ -40,10 +40,9 @@ const HEADER: &str = "\
 #                  compared. It is deliberately not `agree`: a reader sizing
 #                  work from it learns that the send is reachable and nothing
 #                  about what the method answers.
-#   unstable       marked UNSTABLE: -- the oracle does not reproduce its own
-#                  answer between two runs, so no value comparison could say
-#                  anything. The marker is policed by running the oracle
-#                  twice, not by this line.
+#   unstable       classified identity-derived value. Its documented
+#                  stability and uniqueness properties are checked within
+#                  one process without printing or comparing raw identities.
 #
 # THE ANSWERED VALUE IS COMPARED HERE, unlike corpus/collection-arity.tsv:
 # the probe assigns the send's result and prints `vv~string`, so a row both
@@ -114,11 +113,11 @@ fn every_refused_row_is_really_refused() {
     assert!(completed.is_empty(), "{completed:#?}");
 }
 
-/// A row marked `UNSTABLE:` is one the oracle really does not reproduce.
+/// An identity marker has an explicit classification and satisfies its contract.
 #[test]
-fn every_unstable_row_is_really_unstable() {
-    let stable = arity::stable_rows_marked_unstable(&layout());
-    assert!(stable.is_empty(), "{stable:#?}");
+fn every_identity_marker_satisfies_its_documented_property() {
+    let invalid = arity::invalid_identity_markers(&layout());
+    assert!(invalid.is_empty(), "{invalid:#?}");
 }
 
 /// Every documented row has a list, and a native row whose upstream arity is

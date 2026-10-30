@@ -1,8 +1,8 @@
 /* SysSetFileDateTime and SysGetFileDateTime: dates and times that scan and
    ones that do not, fields past their range carrying into the next, a
    reading the local zone skips and one it repeats (each also as seconds
-   since the epoch, which tells the two instants of a repeated reading
-   apart), years before 1000 and before 1970, the access time a set keeps,
+   since the epoch for ordinary and skipped readings, and a validity
+   property for the two allowed instants of a repeated reading), years before 1000 and before 1970, the access time a set keeps,
    either half omitted, links, a directory, names that resolve to nothing,
    and the argument errors. The daylight-saving lines are the zone's own
    transitions in Europe and in North America. Last, TZ is set by the
@@ -18,11 +18,11 @@ call s '2020-03-04', '05:06:07'
 call s '2020-03-29', '02:30:00', 'epoch'
 call s '2020-03-29', '01:59:59', 'epoch'
 call s '2020-03-29', '03:00:00', 'epoch'
-call s '2020-10-25', '02:30:00', 'epoch'
+call overlap 'Europe/Zurich', '2020-10-25', '02:30:00', '1603585800 1603589400'
 call s '2020-10-25', '01:59:59', 'epoch'
 call s '2020-10-25', '03:00:00', 'epoch'
 call s '2020-03-08', '02:30:00', 'epoch'
-call s '2020-11-01', '01:30:00', 'epoch'
+call overlap 'America/New_York', '2020-11-01', '01:30:00', '1604208600 1604212200'
 call s '2020-07-01', '12:00:00', 'epoch'
 call s '2020-13-01', '00:00:00'
 call s '2020-02-30', '00:00:00'
@@ -92,7 +92,7 @@ call value 'TZ', 'Europe/Dublin', 'ENVIRONMENT'
 call s '2020-03-29', '01:30:00', 'epoch'
 call s '2020-03-29', '00:59:59', 'epoch'
 call s '2020-03-29', '02:00:00', 'epoch'
-call s '2020-10-25', '01:30:00', 'epoch'
+call overlap 'Europe/Dublin', '2020-10-25', '01:30:00', '1603585800 1603589400'
 call s '2021-03-28', '01:30:00', 'epoch'
 call s '2045-03-26', '01:30:00', 'epoch'
 call value 'TZ', 'UTC', 'ENVIRONMENT'
@@ -120,6 +120,21 @@ s: procedure expose f
   say left('['translate(arg(1), '?', '00'x)'] ['translate(arg(2), '?', '00'x)']', 34) r ,
     SysGetFileDateTime(f) SysGetFileDateTime(f, 'W')
   if arg(3) == 'epoch' then 'stat -c "  %Y"' f
+  if arg(3) == 'overlap' then do
+    address system 'stat -c %Y' f with output stem epoch.
+    say '  valid overlap' (wordpos(strip(epoch.1), arg(4)) > 0) ,
+      (SysGetFileDateTime(f) == arg(1)' 'arg(2))
+  end
+  return
+
+-- The reference does not select one occurrence of a repeated local reading.
+-- A named zone fixes the allowed pair without depending on prior file atime.
+overlap: procedure expose f
+  use arg zone, day, clock, candidates
+  saved = value('TZ', , 'ENVIRONMENT')
+  call value 'TZ', zone, 'ENVIRONMENT'
+  call s day, clock, 'overlap', candidates
+  call value 'TZ', saved, 'ENVIRONMENT'
   return
 
 t: procedure expose f d

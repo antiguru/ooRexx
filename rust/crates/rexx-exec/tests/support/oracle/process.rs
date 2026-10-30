@@ -62,6 +62,7 @@ pub(super) fn wait_with_deadline(
                     // otherwise be a flaky `TimedOut` (and the panic
                     // `expect_exit_code` gives one) into the `Exited` this
                     // run actually earned.
+                    report_timeout(path, "child wait", deadline, start.elapsed());
                     let _ = child.kill();
                     let status = child.wait().ok();
                     break (status.and_then(|s| s.code()), true);
@@ -80,7 +81,8 @@ pub(super) fn wait_with_deadline(
     // two channels share one clock rather than each getting a fresh
     // deadline, so the pair together are bounded by it once, not
     // twice.
-    let read_deadline = Instant::now() + deadline;
+    let read_start = Instant::now();
+    let read_deadline = read_start + deadline;
     let stdout_result =
         stdout_rx.recv_timeout(read_deadline.saturating_duration_since(Instant::now()));
     let stderr_result =
@@ -102,6 +104,7 @@ pub(super) fn wait_with_deadline(
     let (stdout, stderr) = match (stdout_result, stderr_result) {
         (Ok(stdout), Ok(stderr)) => (stdout, stderr),
         _ => {
+            report_timeout(path, "output drain", deadline, read_start.elapsed());
             // At least one side is still blocked, almost always behind a
             // descriptor its direct child handed to a process of its own.
             // The transcript is not trustworthy either way -- a stdout that
@@ -126,6 +129,25 @@ pub(super) fn wait_with_deadline(
         stderr,
         classify_termination(code, deadline_exceeded),
     )
+}
+
+fn timeout_context(
+    path: &Path,
+    phase: &str,
+    deadline: Duration,
+    elapsed: Duration,
+    load: Result<&[u8], &std::io::Error>,
+) -> String {
+    let load = match load {
+        Ok(bytes) => String::from_utf8_lossy(bytes).trim().to_string(),
+        Err(error) => format!("unavailable ({error})"),
+    };
+    format!("oracle timeout: probe={} phase={phase} configured={deadline:?} elapsed={elapsed:?} loadavg={load}", path.display())
+}
+
+fn report_timeout(path: &Path, phase: &str, deadline: Duration, elapsed: Duration) {
+    let load = fs::read("/proc/loadavg");
+    eprintln!("{}", timeout_context(path, phase, deadline, elapsed, load.as_deref()));
 }
 
 #[cfg(test)]

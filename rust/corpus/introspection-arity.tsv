@@ -20,10 +20,9 @@
 #                  compared. It is deliberately not `agree`: a reader sizing
 #                  work from it learns that the send is reachable and nothing
 #                  about what the method answers.
-#   unstable       marked UNSTABLE: -- the oracle does not reproduce its own
-#                  answer between two runs, so no value comparison could say
-#                  anything. The marker is policed by running the oracle
-#                  twice, not by this line.
+#   unstable       classified identity-derived value. Its documented
+#                  stability and uniqueness properties are checked within
+#                  one process without printing or comparing raw identities.
 #
 # THE ANSWERED VALUE IS COMPARED HERE, unlike corpus/collection-arity.tsv:
 # the probe assigns the send's result and prints `vv~string`, so a row both
@@ -110,8 +109,8 @@ Object	class	instance	agree	rc0
 Object	copy	instance	agree	rc0
 Object	defaultName	instance	agree	rc0
 Object	hasMethod	instance	agree	rc0
-Object	hashCode	instance	unstable	rc0, the oracle does not reproduce its own answer
-Object	identityHash	instance	unstable	rc0, the oracle does not reproduce its own answer
+Object	hashCode	instance	unstable	rc0, identity-derived value checked by its documented property
+Object	identityHash	instance	unstable	rc0, identity-derived value checked by its documented property
 Object	instanceMethod	instance	agree	rc0
 Object	instanceMethods	instance	agree	rc0
 Object	isA	instance	agree	rc0

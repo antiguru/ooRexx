@@ -14,14 +14,12 @@
 # named by the plan's Tasks 4 and 7; an instance-only
 # table would leave them unsized.
 #
-# `UNSTABLE:` marks a row whose answered value the ORACLE does not reproduce
-# between two of its own runs, so no value comparison could say anything
-# about it. The value is not printed for such a row and the verdict is
-# `unstable`; the marker is earned by running the oracle twice and is a test
-# failure on a row whose two answers agree. Object~hashCode is address-derived
-# and answers RAW BYTES rather than a printable number -- measured, three runs
-# of one program put three different unprintable octet strings on stdout --
-# so a probe of its own must not print one.
+# `UNSTABLE:` marks an explicitly classified identity-derived value. The
+# probe compares setup, send completion and status across processes, then
+# checks the documented repeatability and identity uniqueness properties
+# within one process. Unknown markers fail instead of suppressing comparison.
+# Historical measurements of Object~hashCode produced distinct raw byte
+# strings, which the property probe does not print.
 #
 # `REFUSED:` marks a row the ORACLE refuses BY DESIGN, where the refusal is
 # the measurement and no argument list would change it. The row is still
@@ -99,8 +97,8 @@ Object	class	instance	--
 Object	copy	instance	--
 Object	defaultName	instance	--
 Object	hasMethod	instance	'MM'
-Object	hashCode	instance	UNSTABLE:the oracle does not reproduce its own answer -- measured, three runs of one program answered three different byte strings, so a value comparison here would compare the allocator against itself
-Object	identityHash	instance	UNSTABLE:the oracle does not reproduce its own answer -- measured, two runs of one program answered -140458910717729 and -140371917186849
+Object	hashCode	instance	UNSTABLE:default Object hashCode is identity-derived; repeated sends to the held receiver must agree, and unequal objects may collide
+Object	identityHash	instance	UNSTABLE:Object identityHash repeats for a held receiver and differs for simultaneously held distinct receivers
 Object	instanceMethod	instance	'MM'
 Object	instanceMethods	instance	.K
 Object	isA	instance	.K
