@@ -310,7 +310,10 @@ impl Interp {
                 if let Some(rendered) = &rendered {
                     self.trace_result(indent, rendered);
                 }
-                self.roots.activity_mut().push_temp(value);
+                // Immediate values cannot be collected during assignment.
+                if matches!(value.decode(), Decoded::Heap { .. }) {
+                    self.roots.activity_mut().push_temp(value);
+                }
                 self.assign_by_name(&name, value);
                 if let Some(rendered) = self.intermediate_text(value)? {
                     self.trace_assignment(indent, &name, &rendered, value);

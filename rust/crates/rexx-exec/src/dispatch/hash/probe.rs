@@ -19,24 +19,50 @@ pub(super) struct Probe {
     pub(super) last: Option<usize>,
 }
 
-pub(super) fn probe(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Result<(Store, Probe), Failure> {
+pub(super) fn probe(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    index: ObjRef,
+) -> Result<(Store, Probe), Failure> {
     let store = store_of(interp, receiver)?;
     probe_in(interp, receiver, CONTENTS, store, index)
 }
 
 /// [`probe`] against a store the caller has already read, so that a
 /// `Directory`'s method table can be searched with the same chain walk.
+#[inline]
 pub(super) fn probe_in(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    half: Half,
+    store: Store,
+    index: ObjRef,
+) -> Result<(Store, Probe), Failure> {
+    let keys = keys_of(interp, receiver);
+    // String-value hash and index comparison never send. Specialize the shared
+    // traversal so this protocol carries no callback restart state.
+    match keys {
+        Keys::StringValue => probe_by_protocol::<false>(interp, receiver, half, store, index, keys),
+        _ => probe_by_protocol::<true>(interp, receiver, half, store, index, keys),
+    }
+}
+
+fn probe_by_protocol<const MAY_REENTER: bool>(
     interp: &mut Interp,
     receiver: ObjRef,
     half: Half,
     mut store: Store,
     index: ObjRef,
+    keys: Keys,
 ) -> Result<(Store, Probe), Failure> {
-    let keys = keys_of(interp, receiver);
-    let generation = interp.store_generation;
+    let keys = if MAY_REENTER { keys } else { Keys::StringValue };
+    let generation = if MAY_REENTER {
+        interp.store_generation
+    } else {
+        0
+    };
     let hash = hash_of(interp, keys, index)?;
-    if generation != interp.store_generation {
+    if MAY_REENTER && generation != interp.store_generation {
         store = store_in(interp, receiver, half)?;
     }
     'search: loop {
@@ -54,9 +80,13 @@ pub(super) fn probe_in(
         let mut slot = bucket;
         let mut last = bucket;
         loop {
-            let generation = interp.store_generation;
+            let generation = if MAY_REENTER {
+                interp.store_generation
+            } else {
+                0
+            };
             let matches = same_index(interp, &store, keys, slot, index)?;
-            if generation != interp.store_generation {
+            if MAY_REENTER && generation != interp.store_generation {
                 let current = store_in(interp, receiver, half)?;
                 if current != store {
                     store = current;
