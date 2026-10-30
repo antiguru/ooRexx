@@ -146,7 +146,7 @@ fn check_owned_stdout(case: &str, source: &[u8], expected: &[u8], errors: &[u8],
         .read(true)
         .write(true)
         .create_new(true)
-        .open(directory.join("stdout"))
+        .open(directory.join("captured-output.bin"))
         .unwrap();
     let child = Command::new("memcap")
         .args(["2G", "timeout", "20"])

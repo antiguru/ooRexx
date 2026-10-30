@@ -14,5 +14,5 @@ call physical 'reopened-bytes'
 exit
 physical: procedure
   use arg label
-  call lineout 'STDERR', label .stream~new('stdout')~query('size')
+  call lineout 'STDERR', label .stream~new('captured-output.bin')~query('size')
   return

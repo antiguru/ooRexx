@@ -549,9 +549,9 @@ pub struct StreamState {
     /// and per-stream positions across close and reopen, gated by `status`.
     pub open: Option<OpenFile>,
     pub mode: OpenMode,
-    /// What a standard output or error stream opened without `NOBUFFER` has
-    /// written and not yet handed to its descriptor, as [`OpenFile`] holds a
-    /// file's writes.
+    /// What a sink-backed standard output or error stream opened without
+    /// `NOBUFFER` has written and not yet handed to its descriptor, as
+    /// [`OpenFile`] holds a file's or an owned stdout alias's writes.
     pub held: Vec<u8>,
     /// Set for `.local`'s `.STDIN`, `.STDOUT` and `.STDERR`, which write
     /// where `SAY` and trace output go and so never hold a write, whatever

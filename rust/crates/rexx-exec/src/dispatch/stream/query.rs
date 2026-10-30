@@ -80,36 +80,31 @@ pub(in crate::dispatch) fn query_size(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
-    if owned_standard_output(interp, receiver)? {
-        if unopened_standard(interp, receiver)? {
-            return Ok(Some(interp.text(b"")));
-        }
+    let unopened = unopened_standard(interp, receiver)?;
+    if !unopened && owned_standard_output(interp, receiver)? {
         interp.hand_over_stdout();
         if owned_stdout_alias(interp, receiver)? {
             if let Some(error) = ensure_owned_stdout_file(interp, receiver)? {
                 return open_failed(interp, receiver, &error);
             }
-            let size = require_mut(interp, receiver)?
-                .open
-                .as_mut()
-                .unwrap()
-                .flushed()
-                .metadata()
-                .map_or(0, |meta| meta.len());
-            return Ok(Some(interp.text_built(size.to_string().into_bytes())));
+        } else {
+            let size = rustix::fs::fstat(std::io::stdout()).ok().and_then(|stat| {
+                (rustix::fs::FileType::from_raw_mode(stat.st_mode)
+                    == rustix::fs::FileType::RegularFile)
+                    .then_some(stat.st_size)
+            });
+            return Ok(Some(match size {
+                Some(size) => interp.text_built(size.to_string().into_bytes()),
+                None => interp.text(b""),
+            }));
         }
-        let size = rustix::fs::fstat(std::io::stdout()).ok().and_then(|stat| {
-            (rustix::fs::FileType::from_raw_mode(stat.st_mode) == rustix::fs::FileType::RegularFile)
-                .then_some(stat.st_size)
-        });
-        return Ok(Some(match size {
-            Some(size) => interp.text_built(size.to_string().into_bytes()),
-            None => interp.text(b""),
-        }));
     }
-    let open = match standard_input_file(interp, receiver)? {
-        true => interp.input_file(),
-        false => require_mut(interp, receiver)?.open.as_mut(),
+    let open = if unopened {
+        None
+    } else if standard_input_file(interp, receiver)? {
+        interp.input_file()
+    } else {
+        require_mut(interp, receiver)?.open.as_mut()
     };
     if let Some(open) = open {
         let size = open
