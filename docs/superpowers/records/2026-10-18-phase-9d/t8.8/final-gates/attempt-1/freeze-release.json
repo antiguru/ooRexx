@@ -1,0 +1,8 @@
+{
+  "source_commit": "8b7767ed3fda908fffe75181b2c8bd12dd7509f8",
+  "released_utc": "2026-10-30T23:49:00.882748+00:00",
+  "reason": "Apply the existing Deviation83 test-only corpus registration repair after all active commands stopped. Production runtime remains unchanged.",
+  "live_commands": [],
+  "release_suite_preserved": true,
+  "debug_workspace_started": false
+}

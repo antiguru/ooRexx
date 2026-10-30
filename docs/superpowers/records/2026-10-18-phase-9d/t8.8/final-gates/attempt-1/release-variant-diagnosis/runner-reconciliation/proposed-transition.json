@@ -1,0 +1,18 @@
+{
+  "status": "Proposed, awaiting root acceptance before execution",
+  "before_driver": "/tmp/codex-p9d-t88-final-gate-before-test-variant-reconciliation.py",
+  "before_sha256": "d5afb5d99b4e861104a0e902e56894fafa7aa544c3331edc1cae29f3b1ccb321",
+  "proposed_driver": "/tmp/codex-p9d-t88-final-gate-draft.py",
+  "proposed_sha256": "ad6f7678c3c3186efbbd0632e6ddecd85fc1281d3c4bbb090916f34f5a6b51b0",
+  "authorization_sha256": "e2f37ea8d96b6fe16f94254034f1f30262b39424fc3bf6ec1e5973bbd9758188",
+  "proof_sha256": "c15d10a04a63c9b9a2db52dd6568b19692f445e847fedc88e02b9c38fce3e96d",
+  "config_sha256": "008d05b7b4986a58fa11560c8373fcd335a4357b84102efd0a4893e89f463475",
+  "reconciliation_action_executed": false,
+  "verified_marker_exists": false,
+  "preserved_function_identities": {
+    "guard": true,
+    "check_source": true,
+    "release_provenance": true,
+    "run": true
+  }
+}

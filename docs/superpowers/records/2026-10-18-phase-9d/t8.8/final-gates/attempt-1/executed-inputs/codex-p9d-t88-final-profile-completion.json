@@ -1,0 +1,10 @@
+{
+  "source_commit": "8b7767ed3fda908fffe75181b2c8bd12dd7509f8",
+  "runtime_source_commit": "9d919b7c3832c55edc3a0a07974309f092102201",
+  "profiling_complete": true,
+  "active_profile_commands": [],
+  "verification_evidence": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/final-fix/metrics/final-all-complete-verification.json",
+  "verified_profiles": 1683,
+  "combined_manifest_sha256": "3bfa61c576e191ba69f94598346a715ff2bc382bf5c1b238d649ab2ef6e01edc",
+  "performance_budget_acceptance": "Pending user decision, independent of functional validation"
+}

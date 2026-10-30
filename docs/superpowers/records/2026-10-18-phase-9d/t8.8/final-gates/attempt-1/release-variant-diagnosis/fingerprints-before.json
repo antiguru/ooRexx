@@ -1,0 +1,535 @@
+{
+  "cli": {
+    "paths": [
+      "rexx-exec-095e073ed0524874/bin-rexx.json",
+      "rexx-exec-3d4cd710d9320d42/bin-rexx.json"
+    ],
+    "normal": {
+      "rustc": 5244445300240561903,
+      "features": "[]",
+      "declared_features": "[\"pinning\", \"sharing\"]",
+      "target": 4763471529106453558,
+      "profile": 13829625745400711177,
+      "path": 16225095268297092373,
+      "deps": [
+        [
+          1409986759270936666,
+          "rexx_inventory",
+          false,
+          9091735499727562456
+        ],
+        [
+          3241720348413676168,
+          "rexx_api",
+          false,
+          8489882876833475548
+        ],
+        [
+          5249784862587537831,
+          "rexx_lib",
+          false,
+          1776580892059352053
+        ],
+        [
+          5295377534660655036,
+          "rexx_classes",
+          false,
+          6998123180840446405
+        ],
+        [
+          7098700569944897890,
+          "libc",
+          false,
+          11036698859813619575
+        ],
+        [
+          7904095233736241416,
+          "rustc_hash",
+          false,
+          4522023115088996757
+        ],
+        [
+          9154616691536863262,
+          "rexx_parse",
+          false,
+          13237482571092641934
+        ],
+        [
+          11272748060098137546,
+          "rexx_core",
+          false,
+          12526035847913418895
+        ],
+        [
+          13444390205569559046,
+          "rexx_exec",
+          false,
+          14265991178923753038
+        ],
+        [
+          14454469620188320185,
+          "tz",
+          false,
+          17565687582863836918
+        ],
+        [
+          16117757646811882223,
+          "chrono",
+          false,
+          10299214428319668232
+        ],
+        [
+          17337852054191976368,
+          "rexx_num",
+          false,
+          12625107689406945432
+        ],
+        [
+          18407532691439737072,
+          "rustix",
+          false,
+          5571675742780275793
+        ]
+      ],
+      "local": [
+        {
+          "CheckDepInfo": {
+            "dep_info": "release/.fingerprint/rexx-exec-095e073ed0524874/dep-bin-rexx",
+            "checksum": false
+          }
+        }
+      ],
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "compile_kind": 0
+    },
+    "test": {
+      "rustc": 5244445300240561903,
+      "features": "[]",
+      "declared_features": "[\"pinning\", \"sharing\"]",
+      "target": 4763471529106453558,
+      "profile": 13829625745400711177,
+      "path": 16225095268297092373,
+      "deps": [
+        [
+          1409986759270936666,
+          "rexx_inventory",
+          false,
+          9091735499727562456
+        ],
+        [
+          3241720348413676168,
+          "rexx_api",
+          false,
+          8489882876833475548
+        ],
+        [
+          5249784862587537831,
+          "rexx_lib",
+          false,
+          1776580892059352053
+        ],
+        [
+          5295377534660655036,
+          "rexx_classes",
+          false,
+          6998123180840446405
+        ],
+        [
+          7098700569944897890,
+          "libc",
+          false,
+          11036698859813619575
+        ],
+        [
+          7904095233736241416,
+          "rustc_hash",
+          false,
+          4522023115088996757
+        ],
+        [
+          9154616691536863262,
+          "rexx_parse",
+          false,
+          13237482571092641934
+        ],
+        [
+          11272748060098137546,
+          "rexx_core",
+          false,
+          12526035847913418895
+        ],
+        [
+          13444390205569559046,
+          "rexx_exec",
+          false,
+          7877299131054521012
+        ],
+        [
+          14454469620188320185,
+          "tz",
+          false,
+          17565687582863836918
+        ],
+        [
+          16117757646811882223,
+          "chrono",
+          false,
+          10299214428319668232
+        ],
+        [
+          17337852054191976368,
+          "rexx_num",
+          false,
+          12625107689406945432
+        ],
+        [
+          18407532691439737072,
+          "rustix",
+          false,
+          5576402188232864384
+        ]
+      ],
+      "local": [
+        {
+          "CheckDepInfo": {
+            "dep_info": "release/.fingerprint/rexx-exec-3d4cd710d9320d42/dep-bin-rexx",
+            "checksum": false
+          }
+        }
+      ],
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "compile_kind": 0
+    },
+    "changed_dependency_edges": [
+      "rexx_exec",
+      "rustix"
+    ]
+  },
+  "library": {
+    "paths": [
+      "rexx-exec-a64a8b3482d6d7e6/lib-rexx_exec.json",
+      "rexx-exec-315c6b8e46b965db/lib-rexx_exec.json"
+    ],
+    "normal": {
+      "rustc": 5244445300240561903,
+      "features": "[]",
+      "declared_features": "[\"pinning\", \"sharing\"]",
+      "target": 590617071368314278,
+      "profile": 17840901619920551334,
+      "path": 14013588293113296022,
+      "deps": [
+        [
+          1409986759270936666,
+          "rexx_inventory",
+          false,
+          9091735499727562456
+        ],
+        [
+          3241720348413676168,
+          "rexx_api",
+          false,
+          8489882876833475548
+        ],
+        [
+          5249784862587537831,
+          "rexx_lib",
+          false,
+          1776580892059352053
+        ],
+        [
+          5295377534660655036,
+          "rexx_classes",
+          false,
+          6998123180840446405
+        ],
+        [
+          7098700569944897890,
+          "libc",
+          false,
+          11036698859813619575
+        ],
+        [
+          7904095233736241416,
+          "rustc_hash",
+          false,
+          4522023115088996757
+        ],
+        [
+          9154616691536863262,
+          "rexx_parse",
+          false,
+          13237482571092641934
+        ],
+        [
+          11272748060098137546,
+          "rexx_core",
+          false,
+          12526035847913418895
+        ],
+        [
+          14454469620188320185,
+          "tz",
+          false,
+          17565687582863836918
+        ],
+        [
+          16117757646811882223,
+          "chrono",
+          false,
+          10299214428319668232
+        ],
+        [
+          17337852054191976368,
+          "rexx_num",
+          false,
+          12625107689406945432
+        ],
+        [
+          18407532691439737072,
+          "rustix",
+          false,
+          5571675742780275793
+        ]
+      ],
+      "local": [
+        {
+          "CheckDepInfo": {
+            "dep_info": "release/.fingerprint/rexx-exec-a64a8b3482d6d7e6/dep-lib-rexx_exec",
+            "checksum": false
+          }
+        }
+      ],
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "compile_kind": 0
+    },
+    "test": {
+      "rustc": 5244445300240561903,
+      "features": "[]",
+      "declared_features": "[\"pinning\", \"sharing\"]",
+      "target": 590617071368314278,
+      "profile": 17840901619920551334,
+      "path": 14013588293113296022,
+      "deps": [
+        [
+          1409986759270936666,
+          "rexx_inventory",
+          false,
+          9091735499727562456
+        ],
+        [
+          3241720348413676168,
+          "rexx_api",
+          false,
+          8489882876833475548
+        ],
+        [
+          5249784862587537831,
+          "rexx_lib",
+          false,
+          1776580892059352053
+        ],
+        [
+          5295377534660655036,
+          "rexx_classes",
+          false,
+          6998123180840446405
+        ],
+        [
+          7098700569944897890,
+          "libc",
+          false,
+          11036698859813619575
+        ],
+        [
+          7904095233736241416,
+          "rustc_hash",
+          false,
+          4522023115088996757
+        ],
+        [
+          9154616691536863262,
+          "rexx_parse",
+          false,
+          13237482571092641934
+        ],
+        [
+          11272748060098137546,
+          "rexx_core",
+          false,
+          12526035847913418895
+        ],
+        [
+          14454469620188320185,
+          "tz",
+          false,
+          17565687582863836918
+        ],
+        [
+          16117757646811882223,
+          "chrono",
+          false,
+          10299214428319668232
+        ],
+        [
+          17337852054191976368,
+          "rexx_num",
+          false,
+          12625107689406945432
+        ],
+        [
+          18407532691439737072,
+          "rustix",
+          false,
+          5576402188232864384
+        ]
+      ],
+      "local": [
+        {
+          "CheckDepInfo": {
+            "dep_info": "release/.fingerprint/rexx-exec-315c6b8e46b965db/dep-lib-rexx_exec",
+            "checksum": false
+          }
+        }
+      ],
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "compile_kind": 0
+    },
+    "changed_dependency_edges": [
+      "rustix"
+    ]
+  },
+  "rustix": {
+    "paths": [
+      "rustix-1c52c0ec65a2485b/lib-rustix.json",
+      "rustix-1a9d1be0d5de2fde/lib-rustix.json"
+    ],
+    "normal": {
+      "rustc": 5244445300240561903,
+      "features": "[\"alloc\", \"default\", \"event\", \"fs\", \"param\", \"process\", \"std\", \"system\", \"termios\", \"time\"]",
+      "declared_features": "[\"all-apis\", \"alloc\", \"core\", \"default\", \"event\", \"fs\", \"io_uring\", \"libc\", \"libc_errno\", \"linux_4_11\", \"linux_5_1\", \"linux_5_11\", \"linux_latest\", \"mm\", \"mount\", \"net\", \"param\", \"pipe\", \"process\", \"pty\", \"rand\", \"runtime\", \"rustc-dep-of-std\", \"rustc-std-workspace-alloc\", \"shm\", \"std\", \"stdio\", \"system\", \"termios\", \"thread\", \"time\", \"try_close\", \"use-explicitly-provided-auxv\", \"use-libc\", \"use-libc-auxv\"]",
+      "target": 16221545317719767766,
+      "profile": 1281945080867191755,
+      "path": 4089857698654015446,
+      "deps": [
+        [
+          1494862380562376909,
+          "linux_raw_sys",
+          false,
+          1702572750408496930
+        ],
+        [
+          5127344325563758221,
+          "bitflags",
+          false,
+          15605454810179573803
+        ],
+        [
+          18407532691439737072,
+          "build_script_build",
+          false,
+          8516334177692105495
+        ]
+      ],
+      "local": [
+        {
+          "CheckDepInfo": {
+            "dep_info": "release/.fingerprint/rustix-1c52c0ec65a2485b/dep-lib-rustix",
+            "checksum": false
+          }
+        }
+      ],
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "compile_kind": 0
+    },
+    "test": {
+      "rustc": 5244445300240561903,
+      "features": "[\"alloc\", \"default\", \"event\", \"fs\", \"param\", \"process\", \"pty\", \"std\", \"system\", \"termios\", \"time\"]",
+      "declared_features": "[\"all-apis\", \"alloc\", \"core\", \"default\", \"event\", \"fs\", \"io_uring\", \"libc\", \"libc_errno\", \"linux_4_11\", \"linux_5_1\", \"linux_5_11\", \"linux_latest\", \"mm\", \"mount\", \"net\", \"param\", \"pipe\", \"process\", \"pty\", \"rand\", \"runtime\", \"rustc-dep-of-std\", \"rustc-std-workspace-alloc\", \"shm\", \"std\", \"stdio\", \"system\", \"termios\", \"thread\", \"time\", \"try_close\", \"use-explicitly-provided-auxv\", \"use-libc\", \"use-libc-auxv\"]",
+      "target": 16221545317719767766,
+      "profile": 1281945080867191755,
+      "path": 4089857698654015446,
+      "deps": [
+        [
+          1494862380562376909,
+          "linux_raw_sys",
+          false,
+          1702572750408496930
+        ],
+        [
+          5127344325563758221,
+          "bitflags",
+          false,
+          15605454810179573803
+        ],
+        [
+          18407532691439737072,
+          "build_script_build",
+          false,
+          9651995885822052010
+        ]
+      ],
+      "local": [
+        {
+          "CheckDepInfo": {
+            "dep_info": "release/.fingerprint/rustix-1a9d1be0d5de2fde/dep-lib-rustix",
+            "checksum": false
+          }
+        }
+      ],
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "compile_kind": 0
+    }
+  },
+  "rustix-build-script": {
+    "paths": [
+      "rustix-1ec7bef65744d44f/build-script-build-script-build.json",
+      "rustix-87448afb0afefcb7/build-script-build-script-build.json"
+    ],
+    "normal": {
+      "rustc": 5244445300240561903,
+      "features": "[\"alloc\", \"default\", \"event\", \"fs\", \"param\", \"process\", \"std\", \"system\", \"termios\", \"time\"]",
+      "declared_features": "[\"all-apis\", \"alloc\", \"core\", \"default\", \"event\", \"fs\", \"io_uring\", \"libc\", \"libc_errno\", \"linux_4_11\", \"linux_5_1\", \"linux_5_11\", \"linux_latest\", \"mm\", \"mount\", \"net\", \"param\", \"pipe\", \"process\", \"pty\", \"rand\", \"runtime\", \"rustc-dep-of-std\", \"rustc-std-workspace-alloc\", \"shm\", \"std\", \"stdio\", \"system\", \"termios\", \"thread\", \"time\", \"try_close\", \"use-explicitly-provided-auxv\", \"use-libc\", \"use-libc-auxv\"]",
+      "target": 5408242616063297496,
+      "profile": 7946278946635510480,
+      "path": 15937863934014540768,
+      "deps": [],
+      "local": [
+        {
+          "CheckDepInfo": {
+            "dep_info": "release/.fingerprint/rustix-1ec7bef65744d44f/dep-build-script-build-script-build",
+            "checksum": false
+          }
+        }
+      ],
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "compile_kind": 0
+    },
+    "test": {
+      "rustc": 5244445300240561903,
+      "features": "[\"alloc\", \"default\", \"event\", \"fs\", \"param\", \"process\", \"pty\", \"std\", \"system\", \"termios\", \"time\"]",
+      "declared_features": "[\"all-apis\", \"alloc\", \"core\", \"default\", \"event\", \"fs\", \"io_uring\", \"libc\", \"libc_errno\", \"linux_4_11\", \"linux_5_1\", \"linux_5_11\", \"linux_latest\", \"mm\", \"mount\", \"net\", \"param\", \"pipe\", \"process\", \"pty\", \"rand\", \"runtime\", \"rustc-dep-of-std\", \"rustc-std-workspace-alloc\", \"shm\", \"std\", \"stdio\", \"system\", \"termios\", \"thread\", \"time\", \"try_close\", \"use-explicitly-provided-auxv\", \"use-libc\", \"use-libc-auxv\"]",
+      "target": 5408242616063297496,
+      "profile": 7946278946635510480,
+      "path": 15937863934014540768,
+      "deps": [],
+      "local": [
+        {
+          "CheckDepInfo": {
+            "dep_info": "release/.fingerprint/rustix-87448afb0afefcb7/dep-build-script-build-script-build",
+            "checksum": false
+          }
+        }
+      ],
+      "rustflags": [],
+      "config": 9396254390672932401,
+      "compile_kind": 0
+    }
+  }
+}

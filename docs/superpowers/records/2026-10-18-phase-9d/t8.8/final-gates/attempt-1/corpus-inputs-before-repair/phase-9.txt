@@ -1,0 +1,457 @@
+# Phase 9 corpus subset -- witnesses for the ooTest suite gate's findings.
+# The union with the earlier phase-*.txt files is what the harnesses read, not
+# this file alone.
+#
+# One path per line, relative to this directory (rust/corpus/). Lines starting
+# with # are comments; blank lines are ignored.
+
+# 9a Task 5: the native_method batch.
+lang/rexxinfo_executable_file.rex
+lang/stackframe_executable.rex
+lang/object_copy_method.rex
+lang/unknown_argument_list.rex
+lang/define_methods_supplier.rex
+lang/array_argument_callers.rex
+
+# 9a Task 6: hash methods on the condition object and the package tables.
+lang/condition_object_hash.rex
+lang/package_tables_hash.rex
+
+# 9a Task 7: package setting writes.
+lang/package_option_writes.rex
+lang/package_default_options.rex
+
+# 9a Task 8: NEW on subclasses of String, Stem, Method, Routine and Message.
+lang/string_subclass_new.rex
+lang/stem_subclass_new.rex
+lang/executable_subclass_new.rex
+lang/message_subclass_new.rex
+
+# 9a Task 8: the queued subclass items.
+lang/package_subclass_new.rex
+lang/class_target_not_a_class.rex
+lang/hash_subclass_init_capacity.rex
+
+# 9a Task 8b: object names, metaclass NEW and enhanced, copies, tables, .ROUTINES.
+lang/object_name_set_values.rex
+lang/enhanced_runs_new.rex
+lang/enhanced_primitive_receivers.rex
+lang/metaclass_new.rex
+lang/executable_copies.rex
+lang/package_store_tables.rex
+lang/routines_table_resolution.rex
+lang/nil_hidden_methods.rex
+lang/rexx_routine_frame_executable.rex
+lang/package_copy.rex
+
+# 9a Task 10 fix: class-side Method objects keyed by their defining class.
+lang/class_side_method_objects.rex
+
+# 9a final review fixes: a package's store-backed local in the class search,
+# a Method/Routine subclass copy's own annotation table, and .NAME read again
+# after each kind of write to the package local.
+lang/package_local_find_class.rex
+lang/executable_subclass_copy_annotations.rex
+lang/package_local_symbol_writes.rex
+
+# 9b Task 1: the package local miss memo answering a repeated miss, and a
+# native method's class search raising its package local's UNKNOWN condition.
+lang/package_local_miss_repeat.rex
+lang/package_local_class_search_raise.rex
+
+# 9b Task 1 fix round 1: a native FindClass of STDQUE answers no class.
+lang/native_find_class_stdque.rex
+
+# 9b Task 3: the RexxUtil stem routines and SysDumpVariables.
+lang/rexxutil_stem_sort.rex
+lang/rexxutil_stem_copy.rex
+lang/rexxutil_stem_delete_insert.rex
+lang/rexxutil_dump_variables.rex
+
+# 9b Task 4: the RexxUtil file and search-path routines.
+lang/rexxutil_file_copy_move.rex
+lang/rexxutil_file_tests.rex
+lang/rexxutil_file_date_time.rex
+lang/rexxutil_temp_file_name.rex
+lang/rexxutil_search_path.rex
+lang/rexxutil_file_search.rex
+
+# 9b Task 4 fix round 1: names the shared qualifier reaches from streams,
+# .Stream, .File and redirects.
+lang/rexxutil_qualified_names.rex
+
+# 9b Task 5: SysFileTree.
+lang/rexxutil_file_tree.rex
+
+# 9b Task 6: the RexxUtil message routines.
+lang/rexxutil_messages.rex
+
+# 9b Task 6 fix round 1: cd run in this process.
+lang/address_cd.rex
+
+# 9b Task 7: the RexxUtil process and session routines.
+lang/rexxutil_process.rex
+
+# 9b Task 7 fix round 1: a security manager renaming a REQUIRES.
+lang/requires_manager_rename.rex
+
+# 9b Task 8: semaphore names sem_open rejects, answered without a semaphore.
+lang/sys_semaphore_names_rejected.rex
+
+# 9b Task 9: LIBRARY rexxutil and LIBRARY REXX name the internal packages.
+lang/rexxutil_library_requires.rex
+lang/rexxutil_library_external.rex
+lang/rexxutil_library_method.rex
+lang/rexxutil_library_routine_missing.rex
+lang/rexxutil_library_identity.rex
+
+# 9b Task 9: HANDLE: streams, the shapes Deviation 35 leaves agreeing.
+lang/stream_handle_names.rex
+
+# 9b1 Task 1: what stays specified for a value-based value.
+lang/value_based_identity.rex
+
+# 9b1 Task 2: L1, L2 and L3.
+lang/weak_reference_held_values.rex
+lang/string_subclass_operators.rex
+lang/class_side_string.rex
+
+# 9b1 Task 3: L10 and L11.
+lang/routine_object_add_copy.rex
+lang/stackframes_native_routine.rex
+
+# 9b1 Task 4: a copied package mutated, L5 and L6.
+lang/package_copy_mutated.rex
+
+# 9b1 Task 4 fix round 1: a REXX package copy's lookups and merge (I2, I3).
+lang/package_rexx_copy_lookups.rex
+
+# 9b1 Task 5: packages are collected, and the requires cache holds them weakly.
+lang/package_rerequire_collected.rex
+lang/package_library_binder_kept.rex
+
+# 9b1 Task 5 fix round 2: an external routine's merged routines keep its package.
+lang/package_external_merge_held.rex
+
+# 9b1 Task 7: the collector counts a program, its package and its ::CLASS classes.
+lang/package_class_collected.rex
+
+# 9b1 Task 8: the collector counts a class Class~new made.
+lang/class_new_collected.rex
+
+# 9b1 final review I1: an external routine's merged classes outlive its package.
+lang/package_external_merge_class_held.rex
+
+# 9c Task 3 fix round 1: inserts the oracle passes beyond its message text.
+lang/parse_error_unused_insert.rex
+
+# 9c Task 4: the token the oracle passes to a directive error that does not
+# show it, reached through .Package~new.
+lang/parse_error_directive_insert.rex
+
+# 9c Task 4: an INTERPRET error names the INTERPRET clause's line.
+lang/parse_error_interpret_line.rex
+
+# 9d Task 4: a WHILE or UNTIL test that runs a routine with a loop of its own,
+# at a pass boundary with loops open around it.
+lang/loop_test_callee_loop.rex
+lang/loop_test_callee_loop_chunk.rex
+
+# 9d Task 6.1: a ::REQUIRES in code compiled from source searches from the
+# name the code was given, then from its parent package.
+lang/requires_dynamic_search_start.rex
+
+# 9d Task 6.1 fix round 1: an external CALL and findProgram in code compiled
+# from source search the same way.
+lang/external_call_dynamic_search_start.rex
+
+# 9d Task 6.3: LOSTDIGITS reaches a SIGNAL ON trap, and DATATYPE W rounds at
+# any width.
+lang/lostdigits_signal_trap.rex
+lang/datatype_whole_wide.rex
+
+# 9d Task 6.3 fix round 1: MAX and MIN raise LOSTDIGITS for an argument after
+# the first, outside the integer path.
+lang/lostdigits_max_min.rex
+
+# 9d Task 6.4: NOTREADY names the stream as ADDITIONAL and carries RESULT, an
+# implicit open rejects a directory, a propagated NOTREADY reaches COMMAND's
+# caller, CHARIN's end-of-file states, and stream position arguments.
+lang/stream_notready_names.rex
+lang/stream_command_open_failure.rex
+lang/stream_charin_eof.rex
+lang/stream_position_arguments.rex
+
+# 9d Task 6.4 fix round 1: a propagated HALT is reported untrapped, a
+# propagate after REPLY returning a value is 98.936, and transient stream
+# writes, QUERY EXISTS on an open device and the LINES method option.
+lang/raise_propagate_unreportable.rex
+lang/stream_transient_queries.rex
+
+# 9d Task 6.5: BINARY RECLENGTH record reads, writes and counts, OPEN WRITE
+# retrying write-only, and stream positions after an implicit open.
+lang/stream_binary_records.rex
+lang/stream_open_write_only.rex
+lang/stream_command_position.rex
+
+# 9d Task 6.5 fix round 1: a write-only stream's read side, and the write
+# line of a read-only implicit open.
+lang/stream_write_only_reads.rex
+
+# 9d Task 6.5 fix round 4: read and write positions on a NOBUFFER stream,
+# where the oracle keeps the documented positions (Deviation 49).
+lang/stream_nobuffer_positions.rex
+
+# 9d Task 6.6: a ::CONSTANT expression starts from the package's ::OPTIONS
+# numeric and condition settings, and a ::CLASS target found in .local that
+# is not a class is 99.949.
+lang/class_constant_expression_numeric_options.rex
+lang/class_constant_expression_novalue_option.rex
+lang/class_subclass_local_not_a_class.rex
+
+# 9d Task 6.6 fix round 1: under NUMERIC INHERIT a ::CONSTANT expression and
+# a ::REQUIRES prologue start from the activation installing their package.
+lang/class_constant_expression_numeric_inherit.rex
+
+# 9d Task 6.6 fix round 2: a package a run-time load requires starts from
+# the requiring package's own settings, and a .Package~new source from the
+# running activation's under NUMERIC INHERIT.
+lang/class_constant_expression_runtime_requires.rex
+
+# 9d Task 6.7: collections. An IdentityTable compares items by identity, a
+# Queue's removeItem closes the gap, insert and section read an Array index
+# as validateIndex does, a Queue reads one without spreading it, an Array
+# growth the allocator refuses is 5.0, and a comparison with .nil reads no
+# string value.
+lang/collection_identity_table_items.rex
+lang/collection_queue_remove_item.rex
+lang/collection_array_index_argument.rex
+lang/string_compare_nil.rex
+lang/collection_queue_array_index.rex
+lang/collection_array_grow_refused.rex
+
+# 9d Task 6.8: variable references. A variable list's (name) selector is read
+# as an expression reads it, with its NOVALUE check and trace lines, and
+# USE ARG >name refuses a target bound to the object's pool.
+lang/variable_list_selector_trace.rex
+lang/variable_list_selector_novalue.rex
+lang/use_arg_reference_exposed.rex
+
+# 9d Task 6.9: conditions. A CALL ON handler's condition-object argument, a
+# SIGNAL ON trap with a missing label, RAISE RESULT values and the sender a
+# RETURN tail offers to, report lines holding line ends, and the condition
+# object's origin entries.
+lang/condition_call_on_argument.rex
+lang/signal_on_missing_label.rex
+lang/raise_result_and_sender.rex
+lang/error_report_line_ends.rex
+lang/condition_object_origin.rex
+# 9d Task 6.9 fix round 1: a replied method's interpreted RAISE RETURN, and
+# a missing SIGNAL ON label reached from a native stream method.
+lang/raise_after_reply_interpreted.rex
+lang/signal_on_missing_label_native.rex
+# 9d Task 6.10: trace. PROCEDURE after a traced label with a Rexx trace
+# destination, TRACE in interactive debug, prologue and install entry lines,
+# a trace destination with no LINEOUT, TraceObject collection under option P,
+# a REPLY continuation's entry and exit lines, and the T, S and F formats on
+# the default route.
+lang/trace_procedure_after_label.rex
+lang/trace_interactive_ignored.rex
+lang/trace_prologue_entry.rex
+lang/trace_output_invalid_destination.rex
+lang/trace_object_probe_collect.rex
+lang/trace_reply_continuation.rex
+lang/trace_object_format_default_route.rex
+# 9d Task 6.10 fix round 1: a Rexx trace destination whose own clauses wait
+# on another thread, and two threads delivering into one guarded counter.
+lang/trace_destination_waits_on_thread.rex
+lang/trace_destinations_two_threads.rex
+# 9d Task 6.10 fix round 2: a waiting destination that calls a method or a
+# label on each pass.
+lang/trace_destination_waits_calling_a_method.rex
+lang/trace_destination_waits_calling_a_label.rex
+# 9d Task 6.11: classes, methods and packages.
+lang/trace_compiled_package_name.rex
+lang/class_activate_dependency_order.rex
+lang/method_object_identity_through_subclass.rex
+lang/setmethod_instance_method.rex
+lang/uninit_defined_on_superclass_later.rex
+lang/package_prolog_of_compiled_executable.rex
+lang/stackframes_sortwith_comparator.rex
+# 9d Task 6.11 fix round 1: the frame of a sortWith reached through an
+# override or a define, and a class object's own instanceMethods.
+lang/stackframes_sortwith_dispatched_scope.rex
+lang/class_setmethod_instance_methods.rex
+# 9d Task 6.12: a protected primitive's METHOD event, setProtected on the
+# method an object stands for, and a .nil entry the manager sets.
+lang/security_manager_protected_primitive.rex
+lang/security_manager_set_protected.rex
+lang/security_manager_nil_entry.rex
+# 9d Task 6.12 fix round 1: a started message, a protected PUT, a shared
+# primitive's flags, a Directory entry method, the REQUIRES replacement
+# and a manager-raised command condition's RC.
+lang/security_manager_started_message.rex
+lang/security_manager_protected_put.rex
+lang/security_manager_donated_flags.rex
+lang/security_manager_directory_entry.rex
+lang/security_manager_requires_replacement.rex
+lang/security_manager_command_rc_condition.rex
+# 9d Task 6.12 fix round 2: a shared primitive's flags reach the instances
+# made before the setter.
+lang/security_manager_existing_instances.rex
+# 9d Task 6.13: .context~rs after a command, and a redirected command
+# that leaves the baton to the other activities while its child runs.
+lang/context_rs_command.rex
+lang/command_redirected_off_baton.rex
+# 9d Task 6.13 fix round 1: unregistered environments named after loaded
+# packages, redirect targets seen mid-command, parked targets rooted, the
+# TRACE C echo of an ADDRESS command, and a target raising mid-command.
+lang/command_library_environments_unregistered.rex
+lang/command_redirected_targets_mid_command.rex
+lang/command_redirected_targets_collected.rex
+lang/trace_commands_address_clause.rex
+lang/command_redirected_target_raises.rex
+# 9d Task 6.13 fix round 2: a raising target holds its condition until the
+# child ends.
+lang/command_redirected_target_raises_held.rex
+# 9d Task 6.13 fix round 3: a target whose method parks, and a raising
+# line dropping its part line.
+lang/command_redirected_target_parks.rex
+lang/command_redirected_target_raises_part_line.rex
+# 9d Task 6.13 fix round 4: a target's own wait keeps its own wake, and a
+# condition other than SYNTAX taken by SIGNAL ON ends the clause at once.
+lang/command_redirected_target_waits_elsewhere.rex
+lang/command_redirected_target_signals.rex
+lang/command_redirected_started_target_sleeps.rex
+# 9d Task 6.14: LOSTDIGITS from a comparison under NUMERIC FUZZ.
+lang/lostdigits_fuzz_compare.rex
+# 9d Task 6.14: LOSTDIGITS from a DO repetitor or FOR count.
+lang/lostdigits_do_count.rex
+# 9d Task 7.1: a library routine frame's executable, and COPY and OBJECTNAME= on .nil
+# through a scope override.
+lang/stackframe_library_routine_executable.rex
+lang/stackframe_merged_library_executable.rex
+lang/object_scope_override_nil.rex
+# 9d Task 7.1 fix round 1: a library Routine copy's frame, and COPY of an object
+# rexxref forbids copying.
+lang/stackframe_library_routine_copy_executable.rex
+lang/object_copy_uncopyable_receivers.rex
+# 9d Task 7.1 fix round 2: a call site keeps the routine a call found once the call returns.
+lang/call_site_routine_copy_lifetime.rex
+# 9d Task 7.1 fix round 3: a raise through a kept routine does not undo the keeping.
+lang/call_site_kept_routine_raises.rex
+# 9d Task 7.1 fix round 4: the same through the call ops that evaluate their own arguments, and a
+# raise through a routine the call resolved afresh keeps nothing.
+lang/call_site_kept_routine_raises_cascade.rex
+lang/call_site_fresh_routine_raises.rex
+
+# 9d Task 8.1: Routine~start with no caller activation, and the UNINIT drain at a SIGNAL out of an
+# INTERPRET and at a delivered trace line.
+lang/routine_start_call.rex
+lang/uninit_drain_interpret_signal.rex
+lang/uninit_drain_trace_line.rex
+# 9d Task 8.2: conditions and tracebacks.
+lang/leave_iterate_trapped.rex
+lang/raise_return_call_on_any.rex
+lang/unknown_frameless_traceback.rex
+lang/while_retest_blame.rex
+lang/raise_propagate_traceback.rex
+lang/raise_propagate_return_line.rex
+lang/reply_propagate_traceback.rex
+lang/stream_boundary_report.rex
+lang/stream_boundary_arity.rex
+lang/until_retest_blame.rex
+lang/unknown_forward_unasked.rex
+# 9d Task 8.3: call sites read and keep after the arguments and the call, Routine~call frames and
+# names, copied routines, main and install contexts, and three executable answers.
+lang/call_site_reentry_reads_after_arguments.rex
+lang/call_site_reentry_raise_keeps.rex
+lang/call_site_routine_raise_forgets.rex
+lang/routine_call_frame_names.rex
+lang/routine_copy_internal_executable.rex
+lang/main_executable_annotations.rex
+lang/context_name_install.rex
+lang/instance_method_after_define.rex
+lang/enhanced_unguarded_copy_executable.rex
+lang/raise_syntax_string_additional.rex
+# 9d Task 8.3 fix round 2: a routine only a call site keeps survives a collection.
+lang/call_site_kept_routine_collected.rex
+# 9d Task 8.4: a scanner error waits for the parse to reach its clause.
+lang/scan_error_waits_for_its_clause.rex
+# 9d Task 8.4: translation checks in source order, and a called file's translation error.
+lang/translation_checks_in_source_order.rex
+lang/translation_error_in_called_file.rex
+# 9d Task 8.4: an install error names the package it installs.
+lang/install_error_in_called_file.rex
+lang/install_error_in_routine_new.rex
+lang/install_error_in_required_file.rex
+# 9d Task 8.4: a ::CONSTANT expression runs as a traced method level.
+lang/constant_expression_level.rex
+lang/constant_expression_trace.rex
+lang/constant_expression_trace_labels.rex
+# 9d Task 8.4 fix round 1: the frames of a ::CONSTANT expression echo their directives.
+lang/constant_expression_traceline.rex
+lang/constant_expression_method_runs.rex
+# 9d Task 8.4 fix round 2: a ::CONSTANT expression Method run under any scope and named by its message.
+lang/constant_expression_method_scopes.rex
+lang/constant_expression_method_trace.rex
+# 9d Task 8.4 fix round 3: a failing run of a ::CONSTANT expression Method is a level of its own.
+lang/constant_expression_method_fails.rex
+# 9d Task 8.5: any use of a compound creates its stem; the .local~novalue hook; references made from an alias.
+lang/compound_use_creates_stem.rex
+lang/local_novalue_hook.rex
+lang/local_novalue_hook_syntax.rex
+lang/variable_reference_through_alias.rex
+# 9d Task 8.5 fix round 2: a reference's string value where the oracle already forwards to the referenced value.
+lang/variable_reference_forwarded_string.rex
+# 9d Task 8.6: path names kept as bytes; streams hold their writes; a standard stream opens like any other; a command ends with its process.
+lang/path_names_not_utf8.rex
+lang/stream_writes_held.rex
+lang/stream_standard_open.rex
+lang/command_background_child.rex
+# 9d Task 8.6 fix round 1: a held write on an APPEND stream lands at the file's end as it then stands.
+lang/stream_append_held.rex
+# 9d Task 8.7a: a traced value is held while its trace lines are written.
+lang/trace_reference_value_rooted.rex
+# 9d Task 8.7a: native routine argument marshalling; a class's DEFAULTNAME; translate's empty input table; the sort family's leading items; REXX package methods have no source; whole-number and index arguments read as string values; equals reads its argument's string value.
+lang/native_routine_argument_marshalling.rex
+lang/class_side_defaultname.rex
+lang/string_translate_empty_input_table.rex
+lang/array_sort_leading_items.rex
+lang/method_source_rexx_package.rex
+lang/index_argument_string_value.rex
+lang/string_equals_string_value.rex
+# 9d Task 8.7b: a native class search keeps a raised condition; NewMethod and NewRoutine have no parent package; the security manager an activation began under; the manager a ::REQUIRES asks; a primitive's frame under the Rexx code it runs; an INTERPRET fragment's frame; the REXX package's methods; an untranslated source's condition origin; the installing package's level.
+lang/native_find_class_raised_condition.rex
+lang/native_new_executable_no_parent.rex
+lang/security_manager_activation_boundary.rex
+lang/security_manager_requires_installing.rex
+lang/live_frames_nested_primitives.rex
+lang/interpret_frame_invocation_indent.rex
+lang/method_package_rexx_library.rex
+lang/compile_failure_condition_origin.rex
+lang/requires_install_levels.rex
+lang/primitive_frame_past_override.rex
+lang/security_manager_set_during_install.rex
+lang/variable_reference_operator_traceback.rex
+lang/stem_default_string_rendering.rex
+lang/stream_method_extra_arguments.rex
+lang/trace_reference_and_parse_value.rex
+lang/internal_rendering_default_name.rex
+lang/collection_primitive_compare_frames.rex
+lang/internal_rendering_raises.rex
+# 9d Task 8.7c fix round 2: traps are OFF while a line typed at a debug pause runs.
+lang/debug_typed_traps_off.rex
+# 9d Task 8.7c fix round 2: a traced rendering that raises in PARSE and GUARD WHEN.
+lang/trace_rendering_raises_in_parse_and_guard.rex
+# 9d Task 8.7c fix round 3: a reference renders by its value's sent string value.
+lang/reference_rendering_sends.rex
+# 9d Task 8.7c fix round 3: LOSTDIGITS names the operand's string value.
+lang/lostdigits_names_the_string_value.rex
+# 9d Task 8.7c fix round 4: a reference's conversion that raises raises in its clause.
+lang/reference_conversion_raises_in_clause.rex
+lang/power_integral_exponent.rex
+lang/executing_method_after_redefinition.rex
+lang/enhanced_metaclass_method_identity.rex
+lang/required_string_boundaries.rex
+lang/raise_additional_untraced.rex

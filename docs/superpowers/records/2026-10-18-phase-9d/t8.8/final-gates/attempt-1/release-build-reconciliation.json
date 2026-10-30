@@ -1,0 +1,19 @@
+{
+  "source_commit": "8b7767ed3fda908fffe75181b2c8bd12dd7509f8",
+  "action": "reconcile-release-build",
+  "metadata_only": true,
+  "returncode": 0,
+  "command": [
+    "memcap",
+    "8G",
+    "python3",
+    "/tmp/codex-p9d-t88-final-gate-draft.py",
+    "reconcile-release-build"
+  ],
+  "no_cargo_command_executed": true,
+  "normal_pin_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+  "test_cli_sha256": "9c3d09f9f9e39810985b1200007035488a3eba9d00ab6ee7382b6d7aea1b4d06",
+  "verified_marker_sha256": "8e4adf345d8b7f201e97534abf0647f11a27b0588b3bbf948f9006d7f692a632",
+  "authorization_sha256": "e2f37ea8d96b6fe16f94254034f1f30262b39424fc3bf6ec1e5973bbd9758188",
+  "proof_sha256": "c15d10a04a63c9b9a2db52dd6568b19692f445e847fedc88e02b9c38fce3e96d"
+}

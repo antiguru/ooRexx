@@ -1,0 +1,9 @@
+{
+  "head": "8b7767ed3fda908fffe75181b2c8bd12dd7509f8",
+  "retained_failure": "/tmp/codex-p9d-t88-final-gates/release-corpus.stderr",
+  "retained_failure_sha256": "1f5632c90d8247d9f67206f81d4f8884ebf61fb0803b2f52b2a5db950092e23b",
+  "full_original_sha256": "bffc4c25bb8c81633b0dc7efe66a5b9de742a9d8a1e021c0dbb682184d7a4e64",
+  "original_executable_lines_preserved": true,
+  "differential_candidate_executed": false,
+  "tracked_files_modified": false
+}

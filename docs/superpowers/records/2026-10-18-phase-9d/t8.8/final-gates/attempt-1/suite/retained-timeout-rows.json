@@ -1,0 +1,23 @@
+[
+  {
+    "group": "extensions/rxsock/socketClass",
+    "test": "TEST_005",
+    "row": "Phase10(Extension)",
+    "oracle": "passed",
+    "crate": "blocked: timeout after 60 s"
+  },
+  {
+    "group": "extensions/rxsock/socketClass",
+    "test": "TEST_006",
+    "row": "Phase10(Extension)",
+    "oracle": "passed",
+    "crate": "blocked: timeout after 60 s"
+  },
+  {
+    "group": "extensions/rxsock/socketClass",
+    "test": "TEST_007",
+    "row": "Phase10(Extension)",
+    "oracle": "passed",
+    "crate": "blocked: timeout after 60 s"
+  }
+]

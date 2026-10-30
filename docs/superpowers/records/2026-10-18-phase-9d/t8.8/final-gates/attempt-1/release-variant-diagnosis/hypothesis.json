@@ -1,0 +1,9 @@
+{
+  "hypothesis": "Enabling only rustix/pty on the normal production build reproduces the Cargo-test CLI bytes",
+  "baseline_normal_pin": "/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx",
+  "baseline_normal_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+  "baseline_test_cli": "/tmp/codex-p9d-t88-final-gates/release-variant-diagnosis/retained-test-built-rexx",
+  "baseline_test_sha256": "9c3d09f9f9e39810985b1200007035488a3eba9d00ab6ee7382b6d7aea1b4d06",
+  "approved_driver_sha256": "d5afb5d99b4e861104a0e902e56894fafa7aa544c3331edc1cae29f3b1ccb321",
+  "source_commit": "8b7767ed3fda908fffe75181b2c8bd12dd7509f8"
+}

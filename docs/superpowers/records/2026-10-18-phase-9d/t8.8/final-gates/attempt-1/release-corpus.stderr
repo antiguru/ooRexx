@@ -1,0 +1,18 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.05s
+     Running tests/corpus.rs (/tmp/codex-p9d-t88-target/release/deps/corpus-6953cc47785bd785)
+==============================================================================
+rexx-exec differential corpus report -- rust/corpus/phase-4a.txt + phase-4b.txt + phase-4c.txt + phase-5a.txt + phase-5b.txt + phase-5c.txt + phase-5d.txt + phase-5j.txt + phase-6-1.txt + phase-6.txt + phase-7.txt + phase-8.txt + phase-9.txt
+mode: STRICT (the gate) -- REXX_CORPUS_GATE is set
+1241 of 1242 matching
+mismatches (1):
+  [UNCLASSIFIED] lang/reference_conversion_raises_in_clause.rex: stdout differ
+      rust:   stdout="    (dn 1)\ns1 98.900 boom.\n    (dn 1)\ns2 98.900 boom.\n    (noisy dn)\nhandler USER ZZ\nhandler ERROR\n    (bad dn)\ns3 98.900 boom.\n" stderr="" exit=0
+      oracle: stdout="    (dn 1)\ns1 98.900 boom.\n    (dn 1)\ns2 98.900 boom.\nhandler USER ZZ\nhandler ERROR\nhandler USER ZZ\nafter bd user\nhandler ERROR\nafter bd error\n" stderr="" exit=0
+by owner:
+  UNCLASSIFIED: 1
+==============================================================================
+
+thread 'corpus_differential' (2035175) panicked at crates/rexx-exec/tests/corpus.rs:887:5:
+STRICT (REXX_CORPUS_GATE) mode: 1 of 1242 corpus programs disagree with the oracle; see the report above for which and why.
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+error: test failed, to rerun pass `-p rexx-exec --test corpus`

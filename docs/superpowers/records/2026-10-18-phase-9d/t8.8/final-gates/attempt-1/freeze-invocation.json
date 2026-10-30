@@ -1,0 +1,8 @@
+{
+  "command": ["memcap", "8G", "python3", "/tmp/codex-p9d-t88-final-gate-draft.py", "freeze"],
+  "status": 0,
+  "stdout": "",
+  "stderr": "",
+  "elapsed_seconds": 0.040810627,
+  "input_freeze_record": "/tmp/codex-p9d-t88-final-gates/input-freeze.json"
+}

@@ -1,0 +1,87 @@
+{
+  "source_commit": "8b7767ed3fda908fffe75181b2c8bd12dd7509f8",
+  "command_status": 0,
+  "actual_cli_path": "/tmp/codex-p9d-t88-target/release/rexx",
+  "actual_cli_sha256": "9c3d09f9f9e39810985b1200007035488a3eba9d00ab6ee7382b6d7aea1b4d06",
+  "test_built_sha256": "9c3d09f9f9e39810985b1200007035488a3eba9d00ab6ee7382b6d7aea1b4d06",
+  "matches_test_variant": true,
+  "immutable_normal_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+  "immutable_normal_unchanged": true,
+  "cli_artifact": {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rexx",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/src/bin/rexx.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": false,
+      "overflow_checks": false,
+      "test": false
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/release/rexx"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/release/rexx",
+    "fresh": true
+  },
+  "rustix_artifact": {
+    "reason": "compiler-artifact",
+    "package_id": "registry+https://github.com/rust-lang/crates.io-index#rustix@1.1.4",
+    "manifest_path": "/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/Cargo.toml",
+    "target": {
+      "kind": [
+        "lib"
+      ],
+      "crate_types": [
+        "lib"
+      ],
+      "name": "rustix",
+      "src_path": "/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/src/lib.rs",
+      "edition": "2021",
+      "doc": true,
+      "doctest": true,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": false,
+      "overflow_checks": false,
+      "test": false
+    },
+    "features": [
+      "alloc",
+      "default",
+      "event",
+      "fs",
+      "param",
+      "process",
+      "pty",
+      "std",
+      "system",
+      "termios",
+      "time"
+    ],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/release/deps/librustix-1a9d1be0d5de2fde.rlib",
+      "/tmp/codex-p9d-t88-target/release/deps/librustix-1a9d1be0d5de2fde.rmeta"
+    ],
+    "executable": null,
+    "fresh": true
+  }
+}

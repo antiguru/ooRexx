@@ -1,0 +1,86 @@
+{
+  "source_commit": "8b7767ed3fda908fffe75181b2c8bd12dd7509f8",
+  "driver_sha256": "ad6f7678c3c3186efbbd0632e6ddecd85fc1281d3c4bbb090916f34f5a6b51b0",
+  "driver_at_freeze_sha256": "d5afb5d99b4e861104a0e902e56894fafa7aa544c3331edc1cae29f3b1ccb321",
+  "runner_transition": {
+    "status": "Accepted by root before metadata-only reconciliation",
+    "acceptance_record": "release-variant-diagnosis/runner-reconciliation/root-patch-acceptance.json",
+    "original_driver": "/tmp/codex-p9d-t88-final-gate-before-test-variant-reconciliation.py"
+  },
+  "delta_helper_sha256": "d293a87767001d7acb6b918f2b719bb883c3daa07fdbc5d24013fa491977f674",
+  "release_pin_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+  "stage": "Paused source freeze explicitly released for Deviation83 test-input repair",
+  "config_sha256": "008d05b7b4986a58fa11560c8373fcd335a4357b84102efd0a4893e89f463475",
+  "completed_actions": [
+    {
+      "action": "freeze",
+      "status": 0
+    },
+    {
+      "action": "preflight",
+      "status": 0
+    },
+    {
+      "action": "provenance",
+      "status": 0
+    },
+    {
+      "action": "fmt",
+      "status": 0
+    },
+    {
+      "action": "clippy",
+      "status": 0
+    }
+  ],
+  "reconcile_release_build_status": 0,
+  "release_corpus": {
+    "cargo_status": 101,
+    "driver_status": 1,
+    "programs": 1242,
+    "matching": 1241,
+    "mismatches": [
+      "lang/reference_conversion_raises_in_clause.rex"
+    ],
+    "harness_passed": 33,
+    "harness_failed": 1,
+    "harness_ignored": 1
+  },
+  "release_suite": {
+    "cargo_status": 0,
+    "driver_status": 0,
+    "groups": 402,
+    "red_groups": 0,
+    "test_rows": 24523,
+    "diagnostic_run_bundles": 829,
+    "SysFileTree_oracle_passed": 26,
+    "SysFileTree_crate_passed": 26,
+    "stderr_fixture_executed": false
+  },
+  "suite_delta": {
+    "status": 0,
+    "old_test_rows": 24523,
+    "new_test_rows": 24523,
+    "added_keys": 0,
+    "removed_keys": 0,
+    "changed_rows": 1,
+    "change": "base/class/Bag TEST_HASITEM_VALUE_NOTEQUAL_INDEX crate failed to passed, same Deviation45 owner and oracle passed"
+  },
+  "paused_before_debug_workspace": true,
+  "pause_reason": "Root ordered pause after suite/delta for already-authorized Deviation83 witness-registration repair. Await explicit freeze release.",
+  "normal_production_pin_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+  "cargo_test_cli_sha256": "9c3d09f9f9e39810985b1200007035488a3eba9d00ab6ee7382b6d7aea1b4d06",
+  "last_completed_target_index": null,
+  "failures": [
+    {
+      "action": "release-build",
+      "cargo_child_status": 0,
+      "driver_status": 1,
+      "reason": "Fresh Cargo CLI differs from immutable final pin",
+      "evidence": "release-build-artifact-mismatch.json"
+    }
+  ],
+  "live_command": null,
+  "session_id": null,
+  "freeze_active": false
+}

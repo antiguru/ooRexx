@@ -1,0 +1,23 @@
+{
+  "source_commit": "8b7767ed3fda908fffe75181b2c8bd12dd7509f8",
+  "authorized_evidence_outputs": [],
+  "config_sha256": "008d05b7b4986a58fa11560c8373fcd335a4357b84102efd0a4893e89f463475",
+  "release_pin_provenance": {
+    "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/final-review/fix-r1/release-pin.json",
+    "sha256": "dfd51f8c035fcb4cc8a9fa1d60403bf70a42acf97edac6fac68ad473550d5a5d",
+    "runtime_source_commit": "9d919b7c3832c55edc3a0a07974309f092102201",
+    "rust_tree": "a908e0b806da7078cee4d5c3539d492215163512"
+  },
+  "profiling_completion_record": "/tmp/codex-p9d-t88-final-profile-completion.json",
+  "profiling_completion": {
+    "source_commit": "8b7767ed3fda908fffe75181b2c8bd12dd7509f8",
+    "runtime_source_commit": "9d919b7c3832c55edc3a0a07974309f092102201",
+    "profiling_complete": true,
+    "active_profile_commands": [],
+    "verification_evidence": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/final-fix/metrics/final-all-complete-verification.json",
+    "verified_profiles": 1683,
+    "combined_manifest_sha256": "3bfa61c576e191ba69f94598346a715ff2bc382bf5c1b238d649ab2ef6e01edc",
+    "performance_budget_acceptance": "Pending user decision, independent of functional validation"
+  },
+  "index_staging_sha256": "a011e96e6bcfbca68f90e7c3624ebf13ce5b878d70e4e4b7872f2ee11d2081ae"
+}

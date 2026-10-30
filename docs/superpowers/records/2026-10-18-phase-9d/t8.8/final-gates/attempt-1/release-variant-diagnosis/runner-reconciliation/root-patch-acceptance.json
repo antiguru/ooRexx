@@ -1,0 +1,7 @@
+{
+  "source_commit": "8b7767ed3fda908fffe75181b2c8bd12dd7509f8",
+  "accepted_driver_sha256": "ad6f7678c3c3186efbbd0632e6ddecd85fc1281d3c4bbb090916f34f5a6b51b0",
+  "previous_driver_sha256": "d5afb5d99b4e861104a0e902e56894fafa7aa544c3331edc1cae29f3b1ccb321",
+  "authorization": "Root inspected the exact patch and accepts only the documented test-variant reconciliation. Continue remaining gates without repeating unchanged successful checks.",
+  "source_index_config_freeze_unchanged": true
+}

@@ -1,0 +1,21 @@
+# The corpus/lang programs deliberately named by no phase subset file, each
+# with the reason nothing runs it against the oracle in the differential.
+#
+# `corpus.rs`'s `every_lang_program_is_run_or_named_unfiled` reads this file
+# and the phase subset files together: every `lang/*.rex` on disk must be in
+# one or the other, a program in both is as red as a program in neither, and
+# an entry naming a path that is not on disk is red too.
+#
+# Without this file that check would redden any task that commits a witness
+# ahead of the phase subset file it will eventually live in. 5c carried its
+# three that way in test binaries of their own, which nothing but a reader
+# could see; an entry here is visible to the check instead.
+#
+# One `path<TAB>reason` per line, relative to rust/corpus/. Lines starting
+# with # are comments; blank lines are ignored.
+#
+# An entry here is a debt, not a category: it says the differential does not
+# compare that program against the oracle.
+lang/stream_builtin_errors.rex	A `try:` procedure here cannot catch the 93.914 the orx `command` method raises. Measured: a RAISE from any Rexx method body escapes a trap armed in a called frame, while the same raise armed in the main activation is caught and substr('abc') and 1/0 in that same procedure are both caught. Pre-existing and not a stream defect -- the stream builtins only made it reachable, since before them the call refused before any orx body ran. Runs the moment that is fixed.
+lang/stream_append_writes_at_end.rex	Ruled by Moritz 2026-10-29 ("Enforce rexxref", Deviation 79): on an APPEND stream a write SEEK, a CHAROUT start or a LINEOUT line within the file as it was opened is refused (rexxref funct.xml, STREAM OPEN APPEND); the oracle moves the write position there. This crate's answer is pinned by input_oracle::the_unfiled_ruled_programs_answer_as_this_crate_rules.
+lang/raise_untraced_renders_nothing.rex	Deviation 83, approved 2026-10-30: DESCRIPTION converts at RAISE. The complete ruled output is pinned by semantic_boundaries::conversion_and_trace_boundaries.

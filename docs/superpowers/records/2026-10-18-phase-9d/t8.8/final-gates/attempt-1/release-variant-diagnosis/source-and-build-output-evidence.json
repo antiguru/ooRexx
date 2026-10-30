@@ -1,0 +1,25 @@
+{
+  "source_file_sha256": {
+    "/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/Cargo.toml": "13302af30f997a373ad50b7aa668d9612483e85be6b455e09d95bbd59fb5296f",
+    "/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/build.rs": "74cb32e64aa6fe99c2496a425b016e22f4e43c438a8237966b8acae04a98eaf9",
+    "/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/src/lib.rs": "e7b621db482e374c751adf4fd092af9c5ebea7e0e9cb15f7afe25266b8156963",
+    "/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/src/pty.rs": "8ccdcd92b4c7a452da1068b44b196836f694fa46fa22c446a7f9e1d1dc4172c7",
+    "/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/src/backend/linux_raw/mod.rs": "8edbb969111d27b64a90c42307799e0a5cb1828a7bec3cba7cda67ea68b532d7",
+    "/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/src/backend/linux_raw/conv.rs": "1bd94a915370530ef5883c16b984680c7dacb0100a660408716f4b86d0f5ea79",
+    "/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/src/backend/linux_raw/c.rs": "1352edd3a4289765b485035604408c416ec653dab47cf1846759035845599970",
+    "/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/src/backend/linux_raw/pty/syscalls.rs": "ae09c4aecc0ae87b1ca58d82efc58007b9dddaae78460d615f48da19d1cd0f89",
+    "/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/src/backend/libc/mod.rs": "92d16eed953b10d3a0eed59f1413352c6a1c64a2b75be2c8d20628c59e7da127"
+  },
+  "build_outputs": {
+    "/tmp/codex-p9d-t88-target/release/build/rustix-0359e27d55511814/output": "7d847dfd34d215f2ce35bd48a35e35a5430fa50280de8a9b13dad50e39817064",
+    "/tmp/codex-p9d-t88-target/release/build/rustix-a44fb2db4ad95fde/output": "7d847dfd34d215f2ce35bd48a35e35a5430fa50280de8a9b13dad50e39817064"
+  },
+  "build_outputs_byte_identical": true,
+  "primary_cargo_docs": [
+    "/home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/share/doc/rust/html/cargo/reference/resolver.html#feature-resolver-version-2",
+    "/home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/share/doc/rust/html/cargo/reference/features.html#feature-resolver-version-2"
+  ],
+  "approved_driver_sha256": "d5afb5d99b4e861104a0e902e56894fafa7aa544c3331edc1cae29f3b1ccb321",
+  "config_sha256": "008d05b7b4986a58fa11560c8373fcd335a4357b84102efd0a4893e89f463475",
+  "success_marker_absent": true
+}

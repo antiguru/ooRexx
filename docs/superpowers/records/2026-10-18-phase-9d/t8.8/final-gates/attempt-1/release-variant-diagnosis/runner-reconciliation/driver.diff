@@ -1,0 +1,145 @@
+--- /tmp/codex-p9d-t88-final-gate-before-test-variant-reconciliation.py
++++ /tmp/codex-p9d-t88-final-gate-draft.py
+@@ -18,6 +18,8 @@
+ TARGET = '/tmp/codex-p9d-t88-target'
+ BASE = ROOT / 'docs/superpowers/records/2026-10-18-phase-9d/t8.8/prerequisites'
+ RELEASE_PIN_PROVENANCE = ROOT / 'docs/superpowers/records/2026-10-18-phase-9d/t8.8/final-review/fix-r1/release-pin.json'
++TEST_VARIANT_AUTHORIZATION = OUT / 'release-variant-diagnosis/root-authorization.json'
++TEST_VARIANT_AUTHORIZATION_SHA256 = 'e2f37ea8d96b6fe16f94254034f1f30262b39424fc3bf6ec1e5973bbd9758188'
+ ADDED_TARGETS = {('rexx-exec', 'semantic_boundaries', ('test',), ('bin',)):
+                  'Task 8.8f adds semantic boundary integration coverage after the prerequisite enumeration'}
+ RENAMED_TESTS = {
+@@ -94,14 +96,45 @@
+             'runtime_source_commit': provenance['source_commit'], 'rust_tree': runtime_tree}
+ 
+ 
++def release_test_variant():
++    assert digest(TEST_VARIANT_AUTHORIZATION) == TEST_VARIANT_AUTHORIZATION_SHA256, 'Test variant authorization changed'
++    authorization = json.loads(TEST_VARIANT_AUTHORIZATION.read_text())
++    assert authorization['source_commit'] == PIN and authorization['source_index_freeze_unchanged'] is True
++    normal = release_provenance()
++    assert authorization['runtime_source_commit'] == normal['runtime_source_commit']
++    assert authorization['normal_pin_sha256'] == CONFIG['release_binary_sha256'] == digest(CONFIG['release_binary'])
++    proof_path = Path(authorization['one_variable_proof'])
++    assert proof_path == OUT / 'release-variant-diagnosis/one-variable-result.json'
++    assert digest(proof_path) == authorization['one_variable_proof_sha256'], 'One-variable proof changed'
++    proof = json.loads(proof_path.read_text())
++    assert proof['source_commit'] == PIN and proof['command_status'] == 0
++    assert proof['matches_test_variant'] is True and proof['immutable_normal_unchanged'] is True
++    assert proof['immutable_normal_sha256'] == authorization['normal_pin_sha256']
++    assert proof['actual_cli_sha256'] == proof['test_built_sha256'] == authorization['test_cli_sha256']
++    assert proof['rustix_artifact']['features'] == authorization['test_rustix_features']
++    assert proof['cli_artifact']['features'] == [] and not proof['cli_artifact']['profile']['test']
++    return {'source_commit': PIN, 'runtime_source_commit': normal['runtime_source_commit'], 'rust_tree': normal['rust_tree'],
++            'authorization_path': str(TEST_VARIANT_AUTHORIZATION), 'authorization_sha256': TEST_VARIANT_AUTHORIZATION_SHA256,
++            'proof_path': str(proof_path), 'proof_sha256': authorization['one_variable_proof_sha256'],
++            'test_cli_sha256': authorization['test_cli_sha256'], 'normal_pin_sha256': authorization['normal_pin_sha256'],
++            'cli_profile': proof['cli_artifact']['profile'], 'rustix_features': authorization['test_rustix_features'],
++            'rustix_package_id': proof['rustix_artifact']['package_id'],
++            'rustix_manifest_path': proof['rustix_artifact']['manifest_path'], 'rustix_profile': proof['rustix_artifact']['profile']}
++
++
+ def release_artifacts(log_path, required_tests):
+     selected = {}
++    rustix = {}
+     for line in log_path.read_text(errors='replace').splitlines():
+         try:
+             item = json.loads(line)
+         except json.JSONDecodeError:
+             continue
+-        if not isinstance(item, dict) or item.get('reason') != 'compiler-artifact' or not item.get('executable'):
++        if not isinstance(item, dict) or item.get('reason') != 'compiler-artifact':
++            continue
++        if item['target']['name'] == 'rustix' and item['target']['kind'] == ['lib']:
++            rustix[tuple(item['filenames'])] = item
++        if not item.get('executable'):
+             continue
+         if Path(item['manifest_path']) != RUST / 'crates/rexx-exec/Cargo.toml':
+             continue
+@@ -112,14 +145,24 @@
+     assert Path(cli['executable']).resolve() == (Path(TARGET) / 'release/rexx').resolve()
+     assert Path(cli['target']['src_path']) == RUST / 'crates/rexx-exec/src/bin/rexx.rs'
+     assert not cli['features'] and not cli['profile']['debug_assertions'] and not cli['profile']['overflow_checks']
++    variant = release_test_variant()
++    assert cli['profile'] == variant['cli_profile'], 'Cargo-test CLI profile changed'
+     cli_sha256 = digest(cli['executable'])
+-    assert cli_sha256 == CONFIG['release_binary_sha256'] == digest(CONFIG['release_binary']), 'Fresh Cargo CLI differs from immutable final pin'
++    assert cli_sha256 == variant['test_cli_sha256'], 'Fresh Cargo CLI differs from authorized test variant'
++    assert len(rustix) == 1, 'Fresh resolved rustix artifact missing or ambiguous'
++    rustix = next(iter(rustix.values()))
++    assert rustix['package_id'] == variant['rustix_package_id'] and rustix['manifest_path'] == variant['rustix_manifest_path']
++    assert rustix['features'] == variant['rustix_features'] and rustix['profile'] == variant['rustix_profile'], 'Resolved rustix test features/profile changed'
+     tests = {item['target']['name']: item for item in selected.values() if item['target']['kind'] == ['test'] and item['profile']['test']}
+     assert set(tests) == set(required_tests), 'Release test artifact population differs'
+     for item in tests.values():
+         assert not item['features'] and not item['profile']['debug_assertions'] and not item['profile']['overflow_checks']
+-    return {'source_commit': PIN, 'pin_provenance': release_provenance(),
++        assert item['profile'] == {**variant['cli_profile'], 'test': True}, 'Release harness profile changed'
++        assert Path(item['target']['src_path']) == RUST / 'crates/rexx-exec/tests' / (item['target']['name'] + '.rs')
++    return {'source_commit': PIN, 'pin_provenance': release_provenance(), 'test_variant': variant,
++            'normal_pin': {'path': CONFIG['release_binary'], 'sha256': digest(CONFIG['release_binary'])},
+             'cli': {'executable': cli['executable'], 'sha256': cli_sha256, 'profile': cli['profile']},
++            'rustix': {'package_id': rustix['package_id'], 'features': rustix['features'], 'profile': rustix['profile'], 'filenames': rustix['filenames']},
+             'tests': {name: {'executable': item['executable'], 'sha256': digest(item['executable']), 'profile': item['profile']} for name, item in tests.items()}}
+ 
+ 
+@@ -229,7 +272,39 @@
+                    }, output, indent=2)
+     sys.exit(0)
+ guard()
+-if mode in {'preflight', 'fmt', 'clippy', 'release-build', 'release-corpus', 'release-suite', 'suite-delta', 'sysfiletree-diagnostic', 'pinning'}:
++if mode == 'reconcile-release-build':
++    original_path = OUT / 'release-build.json'
++    original = json.loads(original_path.read_text())
++    failure_path = OUT / 'release-build-artifact-mismatch.json'
++    failure = json.loads(failure_path.read_text())
++    assert original['source_commit'] == PIN and original['returncode'] == 0 and not original['timed_out']
++    assert failure['source_commit'] == PIN and failure['cargo_child_status'] == 0 and failure['driver_status'] == 1
++    assert original['command'] == ['python3', 'scripts/test_preflight.py', '--', 'cargo', 'test', '--release', '--locked', '-j4', '-p', 'rexx-exec', '--test', 'corpus', '--test', 'suite', '--no-run', '--message-format=json']
++    verified = release_artifacts(OUT / 'release-build.stdout', {'corpus', 'suite'})
++    verified['reconciliation'] = {'metadata_only': True, 'original_cargo_record': str(original_path),
++                                  'original_cargo_record_sha256': digest(original_path),
++                                  'original_cargo_stdout_sha256': digest(OUT / 'release-build.stdout'),
++                                  'original_cargo_stderr_sha256': digest(OUT / 'release-build.stderr'),
++                                  'first_failure_record': str(failure_path), 'first_failure_sha256': digest(failure_path),
++                                  'original_cargo_status': 0, 'original_driver_status': 1}
++    guard()
++    with (OUT / 'release-artifacts-verified.json').open('x') as output:
++        json.dump(verified, output, indent=2)
++        output.write('\n')
++    record = {'source_commit': PIN, 'action': mode, 'metadata_only': True, 'returncode': 0,
++              'command': ['memcap', '8G', 'python3', '/tmp/codex-p9d-t88-final-gate-draft.py', mode],
++              'no_cargo_command_executed': True, 'normal_pin_sha256': verified['normal_pin']['sha256'],
++              'test_cli_sha256': verified['cli']['sha256'], 'verified_marker_sha256': digest(OUT / 'release-artifacts-verified.json'),
++              'authorization_sha256': verified['test_variant']['authorization_sha256'], 'proof_sha256': verified['test_variant']['proof_sha256']}
++    with (OUT / 'release-build-reconciliation.json').open('x') as output:
++        json.dump(record, output, indent=2)
++        output.write('\n')
++    with (OUT / 'release-build-reconciliation.stdout').open('x') as output:
++        output.write(json.dumps(record) + '\n')
++    (OUT / 'release-build-reconciliation.stderr').open('x').close()
++    guard()
++    print(json.dumps(record), flush=True)
++elif mode in {'preflight', 'fmt', 'clippy', 'release-build', 'release-corpus', 'release-suite', 'suite-delta', 'sysfiletree-diagnostic', 'pinning'}:
+     env = {k: v for k, v in ENV.items() if not k.startswith('REXX_')}
+     commands = {
+         'preflight': ['python3', 'scripts/test_preflight.py'],
+@@ -251,7 +326,9 @@
+     if mode in {'release-corpus', 'release-suite'}:
+         prior = json.loads((OUT / 'release-artifacts-verified.json').read_text())
+         assert prior['source_commit'] == PIN and prior['pin_provenance'] == release_provenance()
+-        assert digest(prior['cli']['executable']) == prior['cli']['sha256'] == CONFIG['release_binary_sha256']
++        assert prior['test_variant'] == release_test_variant()
++        assert prior['normal_pin']['sha256'] == CONFIG['release_binary_sha256'] == digest(CONFIG['release_binary'])
++        assert digest(prior['cli']['executable']) == prior['cli']['sha256'] == prior['test_variant']['test_cli_sha256']
+         selected_test = mode.removeprefix('release-')
+         assert digest(prior['tests'][selected_test]['executable']) == prior['tests'][selected_test]['sha256']
+     result = run(mode, commands[mode], RUST, env, 525)
+@@ -262,6 +339,7 @@
+     elif mode in {'release-corpus', 'release-suite'}:
+         fresh = release_artifacts(OUT / (mode + '.stdout'), {selected_test})
+         assert fresh['cli'] == prior['cli'] and fresh['tests'][selected_test] == prior['tests'][selected_test], 'Actual release command artifacts changed'
++        assert fresh['test_variant'] == prior['test_variant'] and fresh['rustix'] == prior['rustix'], 'Actual release test dependency variant changed'
+         (OUT / (mode + '-artifacts.json')).write_text(json.dumps(fresh, indent=2) + '\n')
+     if mode == 'pinning':
+         text = (OUT / 'pinning.stdout').read_text(errors='replace')

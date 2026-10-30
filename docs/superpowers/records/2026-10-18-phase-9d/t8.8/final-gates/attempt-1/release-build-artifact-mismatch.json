@@ -1,0 +1,154 @@
+{
+  "source_commit": "8b7767ed3fda908fffe75181b2c8bd12dd7509f8",
+  "cargo_child_status": 0,
+  "driver_status": 1,
+  "immutable_pin": {
+    "path": "/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx",
+    "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+    "bytes": 67517088
+  },
+  "cargo_artifacts": [
+    {
+      "executable": "/tmp/codex-p9d-t88-target/release/rexx-ir",
+      "target": {
+        "kind": [
+          "bin"
+        ],
+        "crate_types": [
+          "bin"
+        ],
+        "name": "rexx-ir",
+        "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/src/bin/rexx-ir.rs",
+        "edition": "2024",
+        "doc": true,
+        "doctest": false,
+        "test": true
+      },
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 2,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "features": [],
+      "fresh": false,
+      "sha256": "5cd186f642aa7d3d7ef637ff6815c1b4092d62c84351f64f33bd74d7038a9632",
+      "bytes": 9220512
+    },
+    {
+      "executable": "/tmp/codex-p9d-t88-target/release/deps/suite-edb8ccd5504785e7",
+      "target": {
+        "kind": [
+          "test"
+        ],
+        "crate_types": [
+          "bin"
+        ],
+        "name": "suite",
+        "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/suite.rs",
+        "edition": "2024",
+        "doc": false,
+        "doctest": false,
+        "test": true
+      },
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 2,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": true
+      },
+      "features": [],
+      "fresh": false,
+      "sha256": "b9ce0bc5e286796b8b7c45ea8efecc0abcdbcb728e37e28835df76d22864baa7",
+      "bytes": 18839048
+    },
+    {
+      "executable": "/tmp/codex-p9d-t88-target/release/rexxc",
+      "target": {
+        "kind": [
+          "bin"
+        ],
+        "crate_types": [
+          "bin"
+        ],
+        "name": "rexxc",
+        "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/src/bin/rexxc.rs",
+        "edition": "2024",
+        "doc": true,
+        "doctest": false,
+        "test": true
+      },
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 2,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "features": [],
+      "fresh": false,
+      "sha256": "89bfb72fdc488b956972882a2c68d8b6da5db4e9cd4ca4292dea38f595ffa64d",
+      "bytes": 67186160
+    },
+    {
+      "executable": "/tmp/codex-p9d-t88-target/release/rexx",
+      "target": {
+        "kind": [
+          "bin"
+        ],
+        "crate_types": [
+          "bin"
+        ],
+        "name": "rexx",
+        "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/src/bin/rexx.rs",
+        "edition": "2024",
+        "doc": true,
+        "doctest": false,
+        "test": true
+      },
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 2,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": false
+      },
+      "features": [],
+      "fresh": false,
+      "sha256": "9c3d09f9f9e39810985b1200007035488a3eba9d00ab6ee7382b6d7aea1b4d06",
+      "bytes": 67515656
+    },
+    {
+      "executable": "/tmp/codex-p9d-t88-target/release/deps/corpus-6953cc47785bd785",
+      "target": {
+        "kind": [
+          "test"
+        ],
+        "crate_types": [
+          "bin"
+        ],
+        "name": "corpus",
+        "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/corpus.rs",
+        "edition": "2024",
+        "doc": false,
+        "doctest": false,
+        "test": true
+      },
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 2,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": true
+      },
+      "features": [],
+      "fresh": false,
+      "sha256": "97935a9ba034987051c144ec4f14a20ab7755a4df83e24d733bc9925375fb670",
+      "bytes": 73190000
+    }
+  ],
+  "verified_marker_exists": false,
+  "source_changed": false
+}

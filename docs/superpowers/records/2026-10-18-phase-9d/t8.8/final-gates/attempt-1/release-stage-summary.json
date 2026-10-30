@@ -1,0 +1,55 @@
+{
+  "source_commit": "8b7767ed3fda908fffe75181b2c8bd12dd7509f8",
+  "suite_cargo_status": 0,
+  "suite_driver_status": 0,
+  "delta_status": 0,
+  "revision": 13178,
+  "groups": 402,
+  "verdicts": {
+    "green": 402
+  },
+  "oracle_denominators": {
+    "equal": 402
+  },
+  "test_rows": 24523,
+  "side_totals": {
+    "oracle": {
+      "expected": 23430,
+      "started": 23935,
+      "passed": 23932,
+      "ended_normally": {
+        "yes": 402
+      }
+    },
+    "crate": {
+      "expected": 23430,
+      "started": 23935,
+      "passed": 23830,
+      "ended_normally": {
+        "yes": 402
+      }
+    }
+  },
+  "per_test_status_counts": {
+    "oracle": {
+      "passed": 23932,
+      "not started": 588,
+      "failed": 3
+    },
+    "crate": {
+      "passed": 23830,
+      "failed": 80,
+      "not started": 588,
+      "blocked: rexx-exec: environment symbol \".STDQUE\" is not implemented (Phase 10 Rxapi)": 2,
+      "blocked: rexx-exec: the LIBRARY REXX entry point \"rexx_query_queue\" is not implemented (Phase 10 Rxapi)": 1,
+      "blocked: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)": 2,
+      "blocked: rexx-exec: ADDRESS environment \"hostemu\" a native package loader registers is not implemented (Phase 10 Extension)": 10,
+      "blocked: rexx-exec: the LIBRARY REXX entry point \"rexx_clear_queue\" is not implemented (Phase 10 Rxapi)": 7,
+      "blocked: timeout after 60 s": 3
+    }
+  },
+  "diagnostic_contexts": 829,
+  "stderr_fixture_executed": false,
+  "debug_workspace_started": false,
+  "freeze_active": true
+}

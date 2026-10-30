@@ -1,0 +1,25 @@
+{
+  "source_commit": "8b7767ed3fda908fffe75181b2c8bd12dd7509f8",
+  "runtime_source_commit": "9d919b7c3832c55edc3a0a07974309f092102201",
+  "authorization": "Root authorizes a distinct Cargo-test build variant after the exact one-variable rustix/pty build reproduced it. Keep the normal production performance pin unchanged and identify test artifacts separately.",
+  "normal_pin_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+  "test_cli_sha256": "9c3d09f9f9e39810985b1200007035488a3eba9d00ab6ee7382b6d7aea1b4d06",
+  "test_rustix_features": [
+    "alloc",
+    "default",
+    "event",
+    "fs",
+    "param",
+    "process",
+    "pty",
+    "std",
+    "system",
+    "termios",
+    "time"
+  ],
+  "one_variable_proof": "/tmp/codex-p9d-t88-final-gates/release-variant-diagnosis/one-variable-result.json",
+  "one_variable_proof_sha256": "c15d10a04a63c9b9a2db52dd6568b19692f445e847fedc88e02b9c38fce3e96d",
+  "ruling": "The previous exact-byte expectation conflated Cargo normal and development-feature-unified test builds. Validate each known variant explicitly, preserving source/profile/feature/artifact guards and the initial failure.",
+  "limit": "Functional gates use the documented Cargo-test variant. All performance figures refer to the unchanged normal production pin.",
+  "source_index_freeze_unchanged": true
+}

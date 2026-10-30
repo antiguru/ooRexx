@@ -1,0 +1,3 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.04s
+     Running tests/suite.rs (/tmp/codex-p9d-t88-target/release/deps/suite-edb8ccd5504785e7)
+suite: 402 groups, 0 red, table /tmp/codex-p9d-t88-final-gates/suite/table.tsv, verdicts /tmp/codex-p9d-t88-final-gates/suite/verdicts.tsv
