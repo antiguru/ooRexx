@@ -1,0 +1,72 @@
+[
+  {
+    "probe": "relation-allat-equality",
+    "stdout": "answer new current new items 1\n",
+    "stderr": "",
+    "status": 0,
+    "all_descriptors_match": true
+  },
+  {
+    "probe": "relation-equality-counts",
+    "stdout": "calls 1 2\nanswer new current new items 1\n",
+    "stderr": "",
+    "status": 0,
+    "all_descriptors_match": true
+  },
+  {
+    "probe": "relation-removeitem",
+    "stdout": "removed extra items 1 victim-still-present 1\n",
+    "stderr": "",
+    "status": 0,
+    "all_descriptors_match": true
+  },
+  {
+    "probe": "relation-removeitem-unindexed",
+    "stdout": "removed extra items 1 victim-still-present 1\n",
+    "stderr": "",
+    "status": 0,
+    "all_descriptors_match": true
+  },
+  {
+    "probe": "relation-supplier-equality",
+    "stdout": "answer new current new items 1\n",
+    "stderr": "",
+    "status": 0,
+    "all_descriptors_match": true
+  },
+  {
+    "probe": "relation-supplier-hash",
+    "stdout": "answer new current new items 1\n",
+    "stderr": "",
+    "status": 0,
+    "all_descriptors_match": true
+  },
+  {
+    "probe": "removeitem-overwrite",
+    "stdout": "removed replacement items 0 victim-still-present 0\n",
+    "stderr": "",
+    "status": 0,
+    "all_descriptors_match": true
+  },
+  {
+    "probe": "removeitem-reused",
+    "stdout": "removed extra items 0 victim-still-present 0\n",
+    "stderr": "",
+    "status": 0,
+    "all_descriptors_match": true
+  },
+  {
+    "probe": "review-allat",
+    "stdout": "answer new current new items 1\n",
+    "stderr": "",
+    "status": 0,
+    "all_descriptors_match": true
+  },
+  {
+    "probe": "review-removeitem",
+    "stdout": "removed victim items 1 victim-still-present 0\n",
+    "stderr": "",
+    "status": 0,
+    "all_descriptors_match": true
+  }
+]

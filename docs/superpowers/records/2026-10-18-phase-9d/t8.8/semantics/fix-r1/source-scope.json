@@ -1,0 +1,10 @@
+{
+  "source_commit": "3e1aa9c879a90214bb5c680357975f58a0081abc",
+  "fix_base": "d84ac3917",
+  "runtime_files": [
+    "rust/crates/rexx-exec/src/dispatch/hash/relation.rs",
+    "rust/crates/rexx-exec/src/dispatch/hash/removal.rs"
+  ],
+  "runtime_worktree_clean": true,
+  "new_probe_count": 10
+}

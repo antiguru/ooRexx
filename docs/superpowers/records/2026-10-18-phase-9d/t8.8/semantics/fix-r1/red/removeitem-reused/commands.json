@@ -1,0 +1,25 @@
+{
+  "probe": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/semantics/fix-r1/probes/removeitem-reused.rex",
+  "oracle_cwd": "/tmp/t88f-control-36_pwl1i",
+  "crate_cwd": "/tmp/t88f-control-muy0cf3q",
+  "oracle_command": [
+    "timeout",
+    "-k",
+    "5",
+    "20",
+    "/home/moritz/dev/repos/ooRexx/build/bin/rexx",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/semantics/fix-r1/probes/removeitem-reused.rex"
+  ],
+  "oracle_address_space_bytes": 1073741824,
+  "oracle_library_path": "/home/moritz/dev/repos/ooRexx/build/lib",
+  "crate_command": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "5",
+    "20",
+    "/tmp/codex-p9d-t88-pins/8.8f-rexx",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/semantics/fix-r1/probes/removeitem-reused.rex"
+  ]
+}

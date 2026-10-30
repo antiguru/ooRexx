@@ -1,0 +1,7 @@
+{
+  "source": "75db0f64a",
+  "crate": "/tmp/codex-p9d-t88-target/debug/rexx",
+  "oracle_cwd": "/tmp/t88f-control-__pclfjv",
+  "crate_cwd": "/tmp/t88f-control-87jodfc6",
+  "wrapper": "memcap 2G python3 /tmp/t88f-run-one.py <committed probe> <crate executable>"
+}
