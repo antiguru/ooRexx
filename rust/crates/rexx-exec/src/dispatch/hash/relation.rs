@@ -234,32 +234,83 @@ fn native_relation_has_item(
         return Err(not_this_task(interp, receiver, b"HASITEM"));
     }
     let wanted = super::collection::item_argument(args)?;
-    let under = args
-        .get(1)
-        .copied()
-        .flatten()
-        .or_else(|| super::index_only(interp, receiver).then_some(wanted));
+    let bag = super::index_only(interp, receiver);
+    let supplied_index = args.get(1).copied().flatten();
+    // Bag's item is its index. Its optional argument is compared before
+    // hashing, and a successful lookup sends only the index comparison.
+    if bag
+        && let Some(index) = supplied_index
+        && !super::collection::same_item(interp, wanted, index)?
+    {
+        return Ok(Some(ObjRef::NIL));
+    }
+    let under = if bag { Some(wanted) } else { supplied_index };
     let keys = keys_of(interp, receiver);
     let hash = under
         .map(|index| super::hash_of(interp, keys, index))
         .transpose()?;
-    let store = store_of(interp, receiver)?;
-    let bucket = hash.map(|hash| (hash % store.buckets as u64) as usize);
-    for (slot, _) in super::entries_in(interp, &store, bucket)? {
-        if let Some(index) = under
-            && !same_index(interp, &store, keys, slot, index)?
-        {
-            continue;
-        }
-        let Some(item) = slot_at(interp, store.items, slot)? else {
-            continue;
+    'search: loop {
+        let mut store = store_of(interp, receiver)?;
+        let first = hash.map_or(0, |hash| (hash % store.buckets as u64) as usize);
+        let end = if under.is_some() {
+            first + 1
+        } else {
+            store.buckets
         };
-        if !super::collection::same_item(interp, wanted, item)? {
-            continue;
+        for bucket in first..end {
+            let mut slot = bucket;
+            while slot < store.total && slot_at(interp, store.indexes, slot)?.is_some() {
+                let matches = match under {
+                    Some(index) => same_index(interp, &store, keys, slot, index)?,
+                    None => true,
+                };
+                if bag && matches {
+                    return Ok(Some(crate::eval::logical(true)));
+                }
+                // No saved array is dereferenced after a send. EMPTY may
+                // replace the arrays while leaving this live chain location
+                // selected, so preserve the comparison and refresh its store.
+                let Some(current) = current_has_item_slot(interp, receiver, &store, bucket, slot)?
+                else {
+                    continue 'search;
+                };
+                store = current;
+                if matches && let Some(item) = slot_at(interp, store.items, slot)? {
+                    if super::collection::same_item(interp, wanted, item)? {
+                        return Ok(Some(crate::eval::logical(true)));
+                    }
+                    let Some(current) =
+                        current_has_item_slot(interp, receiver, &store, bucket, slot)?
+                    else {
+                        continue 'search;
+                    };
+                    store = current;
+                }
+                // A false comparison can replace the collision tail too.
+                // Continue through the current chain, not a saved entry list.
+                slot = super::link_at(interp, &store, slot)?;
+            }
         }
-        return Ok(Some(crate::eval::logical(true)));
+        return Ok(Some(crate::eval::logical(false)));
     }
-    Ok(Some(crate::eval::logical(false)))
+}
+
+/// The current store when a compared location remains live in its bucket.
+fn current_has_item_slot(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    previous: &super::Store,
+    bucket: usize,
+    slot: usize,
+) -> Result<Option<super::Store>, Failure> {
+    let current = store_of(interp, receiver)?;
+    if current.buckets != previous.buckets {
+        return Ok(None);
+    }
+    Ok(super::entries_in(interp, &current, Some(bucket))?
+        .iter()
+        .any(|&(candidate, _)| candidate == slot)
+        .then_some(current))
 }
 
 /// `RelationClass::removeItemRexx(item [, index])`: takes out the first entry
@@ -328,8 +379,8 @@ pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod
     // is why they are one task: `Setup.cpp` writes `Bag`'s `AllAt`,
     // `AllIndex`, `Items`, `RemoveAll`, `Supplier` and `UniqueIndexes` as
     // `RelationClass::` bodies, and only `HasItem` and `RemoveItem` are
-    // `BagClass::` -- and those two answer the same thing here, because a
-    // `Bag`'s index is its item.
+    // `BagClass::`. A Bag's index is its item, so HASITEM specializes the
+    // optional argument check and index-only comparison in its shared body.
     ("Relation", "ALLAT", Arity::Fixed(1), native_relation_all_at),
     (
         "Relation",

@@ -257,6 +257,9 @@ pub(in crate::dispatch) fn query_position(
             return Err(Raised::syntax(93, 0, Vec::new()).into());
         }
     }
+    if unopened_standard(interp, receiver)? {
+        return Ok(Some(interp.text(b"")));
+    }
     if !by_line && owned_standard_output(interp, receiver)? {
         if sys {
             interp.hand_over_stdout();
