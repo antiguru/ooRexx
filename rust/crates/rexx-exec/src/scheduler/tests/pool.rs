@@ -304,14 +304,14 @@ fn two_native_calls_waiting_for_each_other_meet_on_pool_threads() {
     assert_eq!(MEETINGS[0].outcome(), (2, 0));
 }
 
-/// Where no pool thread can be spawned, a call runs on the releasing thread
+/// Where the pool is disabled, a call runs on the releasing thread
 /// and the ready activity waits for the next thread that takes the baton:
 /// the calls run one after the other, and each gives up.
 #[test]
-fn a_spawn_failure_leaves_ready_activities_to_the_next_baton_holder() {
+fn a_disabled_pool_leaves_ready_activities_to_the_next_baton_holder() {
     MEETINGS[1].reset();
     let source = MEETING.replace("MEET\n", "MEETBRIEFLY\n");
-    let ran = run(&source, Some(1 << 46));
+    let ran = run_shaped(&source, Shape { bound: Some(0), ..SHAPE }).expect("run");
     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
     assert_eq!(ran.stdout(), "main\nother\n");
     assert_eq!(ran.exits, 2);

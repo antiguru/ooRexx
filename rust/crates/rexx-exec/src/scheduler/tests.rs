@@ -1642,3 +1642,5 @@ mod lent;
 mod mutants;
 mod native;
 mod pool;
+
+mod spawn_failure;

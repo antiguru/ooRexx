@@ -173,3 +173,6 @@ impl Interp {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests;
