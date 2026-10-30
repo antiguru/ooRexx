@@ -3,6 +3,7 @@ root=pathlib.Path('/home/moritz/dev/repos/ooRexx-rust-rewrite')
 base=root/'docs/superpowers/records/2026-10-18-phase-9d/t8.8/final-review/fix'
 label=sys.argv[1]; binary=sys.argv[2]
 for probe in sorted((base/'probes').glob('*.rex')):
+ if len(sys.argv)>3 and probe.stem not in sys.argv[3:]:continue
  for side in ['oracle','baseline','crate']:
   dest=base/label/probe.stem/side;dest.mkdir(parents=True,exist_ok=True)
   cwd=tempfile.mkdtemp(prefix='t88f-')
