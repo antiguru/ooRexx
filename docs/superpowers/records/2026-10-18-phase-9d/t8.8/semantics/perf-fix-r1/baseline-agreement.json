@@ -1,0 +1,9 @@
+{
+  "base": "b7a82272f3e111d131982854fdc2cb1ecb86acb5",
+  "f1_f2_unchanged": {
+    "rust/crates/rexx-exec/src/dispatch/hash/removal.rs": "908b43b2277c1090b91b8deb7f1d3a5da33bd20480bbc6b7abefedb3efaee864",
+    "rust/crates/rexx-exec/src/dispatch/hash/relation.rs": "f55e253528e27b8c642ae5d479a361d0c2781814a9a4de12f2474cf293cb3095"
+  },
+  "final_baseline_channels_agree": true,
+  "new_fixture_count": 3
+}

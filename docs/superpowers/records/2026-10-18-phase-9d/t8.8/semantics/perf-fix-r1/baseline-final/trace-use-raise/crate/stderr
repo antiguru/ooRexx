@@ -1,0 +1,7 @@
+     9 *-*   use arg value
+    13 *-* caught:
+    14 *-* trace off
+     9 *-*   use arg value
+       >>>     "ONCE"
+    13 *-* caught:
+    14 *-* trace off

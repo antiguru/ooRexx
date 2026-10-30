@@ -1,0 +1,6 @@
+baseline parse-immediate-boundaries oracle 0 b'[left][right]\n[left][right]\n[left][right]\n[left][right]\n[left][right]\n[left][right]\n[ab][cdef]\n' b''
+baseline parse-immediate-boundaries crate 0 b'[left][right]\n[left][right]\n[left][right]\n[left][right]\n[left][right]\n[left][right]\n[ab][cdef]\n' b''
+baseline trace-use-raise oracle 0 b'name 1\nname 2\nassigned 0 code 98.900\nname 1\nname 2\nassigned 1 code 98.900\n' b''
+baseline trace-use-raise crate 0 b'name 1\nname 2\nassigned 0 code 98.900\nname 1\nname 2\nassigned 1 code 98.900\n' b''
+baseline use-value-boundaries oracle 221 b'' b''
+baseline use-value-boundaries crate 221 b'' b''

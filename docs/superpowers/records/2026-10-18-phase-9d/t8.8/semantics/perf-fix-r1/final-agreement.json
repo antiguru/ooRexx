@@ -1,0 +1,56 @@
+[
+  {
+    "case": "parse-immediate-boundaries",
+    "channel": "stdout",
+    "sha256": "0002b65a6b48b60cbd6b08a2bc549159244c4dae62b917edd938a29790e9d133",
+    "oracle_final_baseline_agree": true
+  },
+  {
+    "case": "parse-immediate-boundaries",
+    "channel": "stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle_final_baseline_agree": true
+  },
+  {
+    "case": "parse-immediate-boundaries",
+    "channel": "status",
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "oracle_final_baseline_agree": true
+  },
+  {
+    "case": "trace-use-raise",
+    "channel": "stdout",
+    "sha256": "fce5e35273593344ac85aec6df1bad16afd0be248e2d02cec9f3ad1492c5cd34",
+    "oracle_final_baseline_agree": true
+  },
+  {
+    "case": "trace-use-raise",
+    "channel": "stderr",
+    "sha256": "2cb9e06a9c03555bf9075f07797a506e856d450fb29eeddc201afe16179ae68c",
+    "oracle_final_baseline_agree": true
+  },
+  {
+    "case": "trace-use-raise",
+    "channel": "status",
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "oracle_final_baseline_agree": true
+  },
+  {
+    "case": "use-value-boundaries",
+    "channel": "stdout",
+    "sha256": "81a3a857bfbb686cbfca5cab190358735c9ab8a94bb4e52b77876e6d0aee38ce",
+    "oracle_final_baseline_agree": true
+  },
+  {
+    "case": "use-value-boundaries",
+    "channel": "stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle_final_baseline_agree": true
+  },
+  {
+    "case": "use-value-boundaries",
+    "channel": "status",
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "oracle_final_baseline_agree": true
+  }
+]

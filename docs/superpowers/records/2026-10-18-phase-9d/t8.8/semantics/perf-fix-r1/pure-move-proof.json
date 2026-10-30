@@ -1,0 +1,6 @@
+{
+  "base": "b7a82272f3e111d131982854fdc2cb1ecb86acb5",
+  "move_commit": "64a2e9a10",
+  "use_body_and_comments_identical_except_child_visibility": true,
+  "probe_body_and_comments_identical_except_child_visibility": true
+}
