@@ -453,3 +453,5 @@ lang/lostdigits_names_the_string_value.rex
 # 9d Task 8.7c fix round 4: a reference's conversion that raises raises in its clause.
 lang/reference_conversion_raises_in_clause.rex
 lang/power_integral_exponent.rex
+lang/executing_method_after_redefinition.rex
+lang/enhanced_metaclass_method_identity.rex
