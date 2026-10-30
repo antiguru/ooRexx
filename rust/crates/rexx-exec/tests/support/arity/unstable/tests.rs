@@ -17,6 +17,7 @@ fn identity_properties_reject_stable_overrides_and_failed_sends() {
     let path = dir.join("probe.rex");
     fs::write(&path, property_program(&receiver, "identityHash", property)).unwrap();
     let answer = run(&mut oracle_command(&oracle::oracle_root(), &path, &dir));
+    assert_eq!(answer, (0, "SETUP-OK\nSENT\nVALUE 0\n".into(), String::new()));
     assert!(!property_holds(&answer), "{answer:?}");
     assert!(!property_holds(&(0, "SETUP-OK\nSYNTAX 97.1\n".into(), String::new())));
     fs::remove_dir_all(dir).unwrap();

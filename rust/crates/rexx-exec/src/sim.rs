@@ -884,8 +884,7 @@ pub(crate) struct Sim {
     invariant_broken: bool,
 }
 
-mod native_watch;
-use native_watch::Watch;
+pub(crate) mod native_watch;
 
 impl Interp {
     /// The clock every deadline is set and tested against: virtual time in
