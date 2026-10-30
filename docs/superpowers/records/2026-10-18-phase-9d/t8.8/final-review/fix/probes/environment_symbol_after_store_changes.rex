@@ -1,0 +1,39 @@
+/* A .NAME read of a .local or .environment entry answers what the directory
+ * holds at the time of the read, however the store changed since the last
+ * read: after puts that grow it, removals, empty, a setMethod entry, an
+ * UNKNOWN method set and unset, and a put replacing the entry in place.
+ */
+
+l = .local
+e = .environment
+say 'before  ' .zzkey1 .zzkey2 .zzglobal1
+l~zzkey1 = 'local one'
+say 'put     ' .zzkey1 .zzkey2
+do i = 1 to 60
+  l~put('local' i, 'ZZGROW'i)
+end
+say 'grown   ' .zzgrow1 .zzgrow60 .zzkey1 l~items
+l~remove('ZZGROW1')
+say 'removed ' .zzgrow1 .zzgrow2
+l~zzkey1 = 'local one again'
+say 'replaced' .zzkey1
+l~setMethod('ZZKEY2', 'return "via a method"')
+say 'method  ' .zzkey2
+l~setMethod('UNKNOWN', 'use arg name; return "unknown" name')
+say 'unknown ' .zzabsent .zzkey1
+l~unsetMethod('UNKNOWN')
+say 'unset   ' .zzabsent
+
+e~zzglobal1 = 'global one'
+say 'env put ' .zzglobal1
+do i = 1 to 150
+  e~put('global' i, 'ZZENVGROW'i)
+end
+say 'env grow' .zzenvgrow1 .zzenvgrow150 .zzglobal1 e~items
+say 'classes ' .array~id .string~id .endofline~length
+
+saved = l~stdout
+l~empty
+say 'emptied ' .zzkey1 .zzgrow2 .zzkey2 l~items
+l~stdout = saved
+say 'restored' (.stdout == saved)

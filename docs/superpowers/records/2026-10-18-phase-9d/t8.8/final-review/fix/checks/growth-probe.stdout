@@ -1,0 +1,3 @@
+growth relation-hasitem-growth oracle 0 b'calls 1 18\nanswer 1 items 41\n' b''
+growth relation-hasitem-growth baseline 0 b'calls 1 1\nanswer 0 items 41\n' b''
+growth relation-hasitem-growth crate 0 b'calls 1 42\nanswer 1 items 41\n' b''

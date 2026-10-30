@@ -1,0 +1,26 @@
+[
+  {
+    "path": "red-physical/stdout-buffered-physical/crate/stderr",
+    "bytes": 764062577,
+    "sha256": "5ff6c210054a7c215d95daa011da19b9f695268364f98fef270ef6e21b211284",
+    "sample": "red-physical/stdout-buffered-physical/crate/stderr.head-tail"
+  },
+  {
+    "path": "red-physical/stdout-buffered-physical/baseline/stderr",
+    "bytes": 755768177,
+    "sha256": "995cc5aa151b8813c83e66c26eb46bdc465140fd894283eb86f4242d2aaba1d1",
+    "sample": "red-physical/stdout-buffered-physical/baseline/stderr.head-tail"
+  },
+  {
+    "path": "red-physical/stdout-buffered-physical/oracle/stderr",
+    "bytes": 763460465,
+    "sha256": "cf7af31544504b222917e53edea52905e652abb0157c3d059880c8be1f1653fc",
+    "sample": "red-physical/stdout-buffered-physical/oracle/stderr.head-tail"
+  },
+  {
+    "path": "checks/red-physical-probes.stdout",
+    "bytes": 2329910465,
+    "sha256": "a076e80468953cd533ff6d6ff2c643e4359f5442df9afda448f569edb8ce8737",
+    "sample": "checks/red-physical-probes.stdout.head-tail"
+  }
+]

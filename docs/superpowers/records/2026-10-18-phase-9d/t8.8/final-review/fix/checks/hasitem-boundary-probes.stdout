@@ -1,0 +1,6 @@
+hasitem-boundaries bag-hasitem-optional oracle 0 b'hash\nequal allowed\nhash\nequal held\nallowed 1\nequal blocked\nblocked 1\ncalls 1 3\n' b''
+hasitem-boundaries bag-hasitem-optional baseline 0 b'hash\nhash\nequal held\nequal held\nallowed 1\nhash\nequal held\nequal held\nblocked 0\ncalls 0 2\n' b''
+hasitem-boundaries bag-hasitem-optional crate 0 b'hash\nhash\nequal held\nequal held\nallowed 1\nhash\nequal held\nequal held\nblocked 0\ncalls 0 2\n' b''
+hasitem-boundaries relation-hasitem-vacated oracle 0 b'calls 1 1\nanswer 0 items 0\n' b''
+hasitem-boundaries relation-hasitem-vacated baseline 0 b'calls 1 1\nanswer 0 items 0\n' b''
+hasitem-boundaries relation-hasitem-vacated crate 0 b'calls 1 1\nanswer 0 items 0\n' b''

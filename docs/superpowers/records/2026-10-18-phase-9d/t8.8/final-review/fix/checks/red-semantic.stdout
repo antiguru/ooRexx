@@ -1,0 +1,31 @@
+
+running 4 tests
+test buffered_invocations_do_not_query_the_hosts_stdout ... ok
+test owned_stdout_queries_observe_the_redirected_file ... ok
+test owned_stdout_position_is_empty_before_open_and_after_close ... FAILED
+test conversion_and_trace_boundaries ... FAILED
+
+failures:
+
+---- owned_stdout_position_is_empty_before_open_and_after_close stdout ----
+
+thread 'owned_stdout_position_is_empty_before_open_and_after_close' (1976822) panicked at crates/rexx-exec/tests/semantic_boundaries.rs:133:5:
+assertion `left == right` failed: closed
+  left: [108, 111, 99, 97, 108, 45, 111, 112, 101, 110, 32, 91, 49, 93, 91, 49, 93, 91, 48, 93, 10, 108, 111, 99, 97, 108, 45, 99, 108, 111, 115, 101, 100, 32, 91, 49, 93, 91, 49, 93, 91, 48, 93, 10, 105, 110, 118, 97, 108, 105, 100, 32, 57, 51, 46, 48, 10, 83, 84, 68, 79, 85, 84, 45, 110, 101, 119, 32, 91, 49, 93, 91, 49, 93, 91, 48, 93, 10, 105, 110, 118, 97, 108, 105, 100, 32, 57, 51, 46, 48, 10, 83, 84, 68, 79, 85, 84, 45, 111, 112, 101, 110, 32, 91, 49, 93, 91, 49, 93, 91, 48, 93, 10, 83, 84, 68, 79, 85, 84, 45, 99, 108, 111, 115, 101, 100, 32, 91, 49, 93, 91, 49, 93, 91, 48, 93, 10, 83, 84, 68, 79, 85, 84, 58, 45, 110, 101, 119, 32, 91, 49, 93, 91, 49, 93, 91, 48, 93, 10, 105, 110, 118, 97, 108, 105, 100, 32, 57, 51, 46, 48, 10, 83, 84, 68, 79, 85, 84, 58, 45, 111, 112, 101, 110, 32, 91, 49, 93, 91, 49, 93, 91, 48, 93, 10, 83, 84, 68, 79, 85, 84, 58, 45, 99, 108, 111, 115, 101, 100, 32, 91, 49, 93, 91, 49, 93, 91, 48, 93, 10]
+ right: [108, 111, 99, 97, 108, 45, 111, 112, 101, 110, 32, 91, 49, 93, 91, 49, 93, 91, 48, 93, 10, 108, 111, 99, 97, 108, 45, 99, 108, 111, 115, 101, 100, 32, 91, 93, 91, 93, 91, 93, 10, 105, 110, 118, 97, 108, 105, 100, 32, 57, 51, 46, 48, 10, 83, 84, 68, 79, 85, 84, 45, 110, 101, 119, 32, 91, 93, 91, 93, 91, 93, 10, 105, 110, 118, 97, 108, 105, 100, 32, 57, 51, 46, 48, 10, 83, 84, 68, 79, 85, 84, 45, 111, 112, 101, 110, 32, 91, 49, 93, 91, 49, 93, 91, 48, 93, 10, 83, 84, 68, 79, 85, 84, 45, 99, 108, 111, 115, 101, 100, 32, 91, 93, 91, 93, 91, 93, 10, 83, 84, 68, 79, 85, 84, 58, 45, 110, 101, 119, 32, 91, 93, 91, 93, 91, 93, 10, 105, 110, 118, 97, 108, 105, 100, 32, 57, 51, 46, 48, 10, 83, 84, 68, 79, 85, 84, 58, 45, 111, 112, 101, 110, 32, 91, 49, 93, 91, 49, 93, 91, 48, 93, 10, 83, 84, 68, 79, 85, 84, 58, 45, 99, 108, 111, 115, 101, 100, 32, 91, 93, 91, 93, 91, 93, 10]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- conversion_and_trace_boundaries stdout ----
+
+thread 'conversion_and_trace_boundaries' (1976821) panicked at crates/rexx-exec/tests/semantic_boundaries.rs:51:9:
+assertion `left == right` failed: tests/semantic_boundaries/reentry-relation-hasitem-index.rex
+  left: [99, 97, 108, 108, 115, 32, 49, 32, 49, 10, 97, 110, 115, 119, 101, 114, 32, 48, 32, 99, 117, 114, 114, 101, 110, 116, 32, 110, 101, 119, 32, 105, 116, 101, 109, 115, 32, 49, 10]
+ right: [99, 97, 108, 108, 115, 32, 49, 32, 49, 10, 97, 110, 115, 119, 101, 114, 32, 49, 32, 99, 117, 114, 114, 101, 110, 116, 32, 110, 101, 119, 32, 105, 116, 101, 109, 115, 32, 49, 10]
+
+
+failures:
+    conversion_and_trace_boundaries
+    owned_stdout_position_is_empty_before_open_and_after_close
+
+test result: FAILED. 2 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+

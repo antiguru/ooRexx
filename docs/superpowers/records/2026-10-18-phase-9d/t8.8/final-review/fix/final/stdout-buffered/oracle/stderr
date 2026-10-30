@@ -1,0 +1,6 @@
+STDOUT held 4 sys 3
+STDOUT both 4 sys 3
+STDOUT flushed 4 sys 5
+STDOUT: held 4 sys 3
+STDOUT: both 4 sys 3
+STDOUT: flushed 4 sys 5

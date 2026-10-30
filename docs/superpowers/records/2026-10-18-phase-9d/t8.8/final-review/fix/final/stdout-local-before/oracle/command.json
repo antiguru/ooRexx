@@ -1,0 +1,1 @@
+{"cmd": ["timeout", "-k", "5", "20", "/home/moritz/dev/repos/ooRexx/build/bin/rexx", "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/final-review/fix/probes/stdout-local-before.rex"], "cwd": "/tmp/t88f-zt2fkqyr", "oracle_as": 1073741824}

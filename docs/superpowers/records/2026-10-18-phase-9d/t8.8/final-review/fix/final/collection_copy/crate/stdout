@@ -1,0 +1,8 @@
+array    2 3 x,y x,y,z
+class    Array
+multi    1 2 2,2 2,2
+queue    2 3 Queue
+list     2 3 List
+table    1 2 Table
+stem     1 2 dflt 1 Stem
+shallow  2 2 2

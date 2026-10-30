@@ -1,0 +1,12 @@
+held 1 1 1 0
+before-flush 0
+flushed 4 3
+after-flush 3
+pending 4 3
+before-size 3
+size 3
+after-size 3
+closed [1] [4]
+reopen 1 5 4
+rewritten 6 5
+reopened-bytes 5

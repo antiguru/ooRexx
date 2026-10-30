@@ -1,0 +1,57 @@
+/* `copy` is deep in the contents and shallow in the elements, which is what
+ * upstream's virtual `copy()` does: the copy gets a container of its own and
+ * the two share what is in it.
+ *
+ * An `Array` and a `Stem` are copyable and each keeps its own class -- this
+ * crate answered only for a plain instance and refused both.  A `Queue` and a
+ * `List` were the other half of the same rule and were fixed with the store
+ * aliasing in Phase 5h Task 2; they are here so that all four families are
+ * asserted together rather than one at a time.
+ *
+ * The pairs are the point.  Every line changes the COPY and then reads the
+ * RECEIVER, because a copy that shares its container passes any test that
+ * only reads the copy.
+ */
+
+a = .Array~of('x','y')
+b = a~copy
+b~append('z')
+say 'array   ' a~items b~items a~makeString('L',',') b~makeString('L',',')
+say 'class   ' b~class~id
+
+m = .Array~new(2,2)
+m[1,1] = 'p'
+n = m~copy
+n[2,2] = 'q'
+say 'multi   ' m~items n~items m~dimensions~makeString('L',',') n~dimensions~makeString('L',',')
+
+q = .Queue~of('a','b')
+qc = q~copy
+qc~queue('z')
+say 'queue   ' q~items qc~items qc~class~id
+
+l = .List~of('a','b')
+lc = l~copy
+lc~append('z')
+say 'list    ' l~items lc~items lc~class~id
+
+t = .Table~new
+t['k'] = 1
+tc = t~copy
+tc['j'] = 2
+say 'table   ' t~items tc~items tc~class~id
+
+s. = 'dflt'
+s.k = 1
+obj = s.
+sc = obj~copy
+sc['J'] = 2
+say 'stem    ' obj~items sc~items obj['J'] sc['K'] sc~class~id
+
+/* Shallow in the elements: the copy holds the same objects, so a mutation
+   THROUGH one of them is seen by both. */
+inner = .Array~of('one')
+outer = .Array~of(inner)
+oc = outer~copy
+oc[1]~append('two')
+say 'shallow ' inner~items outer[1]~items oc[1]~items

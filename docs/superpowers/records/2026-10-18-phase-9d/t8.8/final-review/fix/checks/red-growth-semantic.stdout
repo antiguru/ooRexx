@@ -1,0 +1,20 @@
+
+running 1 test
+test conversion_and_trace_boundaries ... FAILED
+
+failures:
+
+---- conversion_and_trace_boundaries stdout ----
+
+thread 'conversion_and_trace_boundaries' (1989025) panicked at crates/rexx-exec/tests/semantic_boundaries.rs:51:9:
+assertion `left == right` failed: tests/semantic_boundaries/reentry-relation-hasitem-growth.rex
+  left: [99, 97, 108, 108, 115, 32, 49, 32, 52, 50, 10, 97, 110, 115, 119, 101, 114, 32, 49, 32, 105, 116, 101, 109, 115, 32, 52, 49, 10]
+ right: [99, 97, 108, 108, 115, 32, 49, 32, 49, 56, 10, 97, 110, 115, 119, 101, 114, 32, 49, 32, 105, 116, 101, 109, 115, 32, 52, 49, 10]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    conversion_and_trace_boundaries
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 4 filtered out; finished in 1.57s
+

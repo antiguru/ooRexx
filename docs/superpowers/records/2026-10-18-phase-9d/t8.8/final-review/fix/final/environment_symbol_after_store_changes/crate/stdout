@@ -1,0 +1,13 @@
+before   .ZZKEY1 .ZZKEY2 .ZZGLOBAL1
+put      local one .ZZKEY2
+grown    local 1 local 60 local one 71
+removed  .ZZGROW1 local 2
+replaced local one again
+method   via a method
+unknown  unknown ZZABSENT local one again
+unset    .ZZABSENT
+env put  global one
+env grow global 1 global 150 global one 220
+classes  Array String 1
+emptied  .ZZKEY1 .ZZGROW2 via a method 1
+restored 1

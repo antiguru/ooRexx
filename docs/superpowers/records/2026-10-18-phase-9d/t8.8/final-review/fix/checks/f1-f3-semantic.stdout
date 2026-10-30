@@ -1,0 +1,9 @@
+
+running 4 tests
+test buffered_invocations_do_not_query_the_hosts_stdout ... ok
+test owned_stdout_queries_observe_the_redirected_file ... ok
+test owned_stdout_position_is_empty_before_open_and_after_close ... ok
+test conversion_and_trace_boundaries ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.75s
+

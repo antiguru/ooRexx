@@ -1,0 +1,42 @@
+
+running 37 tests
+test builtin::state::tests::gc_forces_a_collection_only_when_asked ... ok
+test dispatch::library::tests::a_handle_carried_values_copy_lasts_until_a_collection ... ok
+test builtin::rexxutil::files::tests::a_move_on_one_file_system_renames_without_copying ... ok
+test dispatch::tests::the_string_hash_matches_the_oracle_including_above_7f ... ok
+test dispatch::library::tests::handle_carried_copies_are_pruned_without_a_collection ... ok
+test value::tests::text_owned_takes_the_buffer_rather_than_copying_it ... ok
+test scheduler::tests::a_collection_without_the_baton_fails_its_assertion - should panic ... ok
+test run::tests::a_collection_drops_the_identity_rows_of_swept_method_copies ... ok
+test run::tests::a_collection_drops_the_rows_of_swept_executables_and_messages ... ok
+test run::tests::conditions::conditions_waiting_for_their_handler_survive_a_collection ... ok
+test scheduler::tests::an_uninit_a_collection_readied_runs_when_its_activity_ends ... ok
+test tests::a_hash_lookup_sends_the_identical_indexs_equality ... ok
+test dispatch::tests::identity_hash_answers_a_number_that_follows_the_handle ... ok
+test run::tests::a_collection_drops_the_rows_of_swept_loaded_methods ... ok
+test dispatch::tests::identity_hash_answers_every_receiver_kind_as_the_oracle_does ... ok
+test dispatch::tests::a_scope_override_copy_of_an_uncopyable_object_raises ... ok
+test tests::a_builtins_stream_survives_collections_while_its_table_holds_it ... ok
+test run::tests::a_collection_drops_the_unnotified_and_waiter_rows_of_swept_messages ... ok
+test parse_template::tests::a_late_parse_arg_template_survives_collection ... ok
+test scheduler::tests::mutants::a_dropped_failed_send_retains_its_condition_across_settlement_collection ... ok
+test parse_template::tests::a_template_walk_survives_a_collection_between_its_targets ... ok
+test run::tests::a_collection_frees_retired_behaviours_no_instance_holds ... ok
+test condition::tests::a_syntax_condition_objects_entries_survive_a_collection_at_every_allocation ... ok
+test run::tests::routines::a_stream_builtins_name_survives_a_collection_at_every_allocation ... ok
+test dispatch::tests::a_hash_collection_forwards_a_missing_name_to_its_own_unknown ... ok
+test dispatch::library::tests::a_library_call_answers_the_same_under_a_collection_at_every_allocation ... ok
+test dispatch::library::tests::a_library_routine_answers_the_same_under_a_collection_at_every_allocation ... ok
+test condition::tests::a_call_on_handlers_condition_object_survives_a_collection_at_every_allocation ... ok
+test dispatch::library::tests::the_native_finaliser_answers_the_same_under_a_collection_at_every_allocation ... ok
+test dispatch::library::tests::the_conversion_rows_answer_the_same_under_a_collection_at_every_allocation ... ok
+test dispatch::method_entry::tests::executing_copies_and_enhanced_metaclass_entries_survive_collection ... ok
+test dispatch::tests::appends_and_reads_copy_slots_linearly ... ok
+test sim::tests::a_recorded_trace_replays_to_the_same_output_and_hash ... ok
+test environment::tests::every_directory_method_answers_on_both_directories_as_on_a_copy ... ok
+test dispatch::tests::a_copy_or_frame_executable_this_crate_does_not_keep_is_loud ... ok
+test scheduler::tests::lent::a_held_heap_string_survives_another_activitys_collection ... ok
+test dispatch::method_entry::tests::registered_executable_survives_dictionary_mutation_and_collection ... ok
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 1202 filtered out; finished in 0.26s
+

@@ -1,0 +1,6 @@
+mixed-growth hash-empty-copy-supplier oracle 0 b'Table 1 2 1 1 one,two\nreused 1 0 1\nIdentityTable 1 2 1 1 one,two\nreused 1 0 1\nRelation 1 2 1 1 one,two\nreused 1 0 1\nBag 1 2 1 1 one,two\nreused 1 0 1\nDirectory 1 2 1 1 one,two\nreused 1 0 1\nStringTable 1 2 1 1 one,two\nreused 1 0 1\n' b''
+mixed-growth hash-empty-copy-supplier baseline 0 b'Table 1 2 1 1 one,two\nreused 1 0 1\nIdentityTable 1 2 1 1 one,two\nreused 1 0 1\nRelation 1 2 1 1 one,two\nreused 1 0 1\nBag 1 2 1 1 one,two\nreused 1 0 1\nDirectory 1 2 1 1 one,two\nreused 1 0 1\nStringTable 1 2 1 1 one,two\nreused 1 0 1\n' b''
+mixed-growth hash-empty-copy-supplier crate 0 b'Table 1 2 1 1 one,two\nreused 1 0 1\nIdentityTable 1 2 1 1 one,two\nreused 1 0 1\nRelation 1 2 1 1 one,two\nreused 1 0 1\nBag 1 2 1 1 one,two\nreused 1 0 1\nDirectory 1 2 1 1 one,two\nreused 1 0 1\nStringTable 1 2 1 1 one,two\nreused 1 0 1\n' b''
+mixed-growth relation-hasitem-empty-growth oracle 0 b'calls 1 18\nanswer 1 items 41\n' b''
+mixed-growth relation-hasitem-empty-growth baseline 0 b'calls 1 1\nanswer 0 items 41\n' b''
+mixed-growth relation-hasitem-empty-growth crate 0 b'calls 1 42\nanswer 1 items 41\n' b''

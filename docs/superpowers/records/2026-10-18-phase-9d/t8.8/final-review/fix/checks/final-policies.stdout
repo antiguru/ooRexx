@@ -1,0 +1,65 @@
+
+running 2 tests
+test a_dead_transients_slots_are_reused_before_the_collector_runs_again ... ok
+test a_live_set_that_does_not_die_still_collects_as_it_grows ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+
+running 21 tests
+test a_class_directive_is_admitted_without_panicking ... ok
+test phase_4a_subset_matches_the_committed_list ... ok
+test an_unadmitted_directive_still_panics - should panic ... ok
+test owners::variant_counts_match_the_audited_split ... ok
+test owners::only_backslash_is_unreachable ... ok
+test owners::every_excluded_builtin_names_a_phase_that_owes_it ... ok
+test phase_5b_subset_matches_the_committed_list ... ok
+test owners::out_of_scope_set_matches_the_committed_expectation ... ok
+test phase_4b_subset_matches_the_committed_list ... ok
+test phase_5d_subset_matches_the_committed_list ... ok
+test phase_5c_subset_matches_the_committed_list ... ok
+test phase_4c_subset_matches_the_committed_list ... ok
+test every_directive_keyword_is_correctly_admitted_or_refused ... ok
+test owners::assert_owner_strings_are_split_table_phases ... ok
+test the_builtin_exclusion_set_matches_the_committed_file ... ok
+test owners::the_two_harnesses_include_this_exact_file ... ok
+test read_subset_unions_two_files_first_seen_order_deduplicated ... ok
+test phase_5a_subset_matches_the_committed_list ... ok
+test the_union_reads_every_phase_subset_file ... ok
+test the_walker_descends_into_a_method_body_and_an_attribute_body ... ok
+test every_in_scope_variant_is_witnessed_by_the_phase_subsets ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+
+running 6 tests
+test assert_owner_strings_are_split_table_phases ... ok
+test out_of_scope_set_matches_the_committed_expectation ... ok
+test only_backslash_is_unreachable ... ok
+test every_excluded_builtin_names_a_phase_that_owes_it ... ok
+test variant_counts_match_the_audited_split ... ok
+test the_two_harnesses_include_this_exact_file ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 8 tests
+test refusal_scanner::tests::constructor_ownership_is_independent_of_production_filename ... ok
+test refusal_scanner::tests::inline_test_refusals_are_excluded ... ok
+test refusal_scanner::tests::separate_test_modules_and_their_descendants_are_not_production ... ok
+test every_send_surface_row_is_walked ... ok
+test the_answers_more_than_one_row_shares_are_the_recorded_ones ... ok
+test the_table_holds_every_constructor_the_source_defines ... ok
+test the_scanner_finds_constructors_and_only_constructors ... ok
+test a_reached_row_carries_its_own_site_identifier_and_an_unreached_one_does_not ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+
+running 3 tests
+test every_row_names_an_owner ... ok
+test the_scanner_reads_literals_and_skips_comments ... ok
+test every_representation_refusal_is_on_the_allow_list ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+

@@ -1,0 +1,11 @@
+local-open [1][1][0]
+local-closed [1][1][0]
+invalid 93.0
+STDOUT-new [1][1][0]
+invalid 93.0
+STDOUT-open [1][1][0]
+STDOUT-closed [1][1][0]
+STDOUT:-new [1][1][0]
+invalid 93.0
+STDOUT:-open [1][1][0]
+STDOUT:-closed [1][1][0]

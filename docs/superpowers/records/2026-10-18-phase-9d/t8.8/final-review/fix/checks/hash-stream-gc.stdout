@@ -1,0 +1,24 @@
+
+running 13 tests
+test builtin::numeric::tests::a_seed_starts_a_stream_that_later_calls_continue ... ok
+test dispatch::tests::the_string_hash_matches_the_oracle_including_above_7f ... ok
+test ir::golden_tests::a_traced_counted_loop_echoes_its_do_clause_from_the_stream ... ok
+test dispatch::tests::identity_hash_answers_a_number_that_follows_the_handle ... ok
+test tests::a_hash_lookup_sends_the_identical_indexs_equality ... ok
+test tests::a_builtins_stream_survives_collections_while_its_table_holds_it ... ok
+test dispatch::tests::identity_hash_answers_every_receiver_kind_as_the_oracle_does ... ok
+test sim::tests::a_knob_leaves_the_other_streams_draws ... ok
+test dispatch::tests::a_hash_collection_forwards_a_missing_name_to_its_own_unknown ... ok
+test run::tests::routines::a_stream_builtins_name_survives_a_collection_at_every_allocation ... ok
+test scheduler::tests::a_stream_a_builtin_builds_defers_the_slice_under_the_switch_mode ... ok
+test sim::tests::a_child_gets_a_seed_from_the_children_stream ... ok
+test sim::tests::a_recorded_trace_replays_to_the_same_output_and_hash ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 1226 filtered out; finished in 0.11s
+
+
+running 1 test
+test a_stream_builtins_values_survive_a_pinned_yield ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 78 filtered out; finished in 0.13s
+
