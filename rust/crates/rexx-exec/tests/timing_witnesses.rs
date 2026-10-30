@@ -49,7 +49,7 @@ fn removing_each_wait_breaks_the_logical_observation() {
     for (name, from, to) in [
         ("sleep", "    call SysSleep 1", "    nop"),
         ("semaphore", "    .sem~wait", "    nop"),
-        ("guard", "::method append\n", "::method append unguarded\n"),
+        ("guard", "::method hold\n", "::method hold unguarded\n"),
     ] {
         assert!(source.contains(from), "{name} mutation anchor");
         let text = source.replacen(from, to, 1);
