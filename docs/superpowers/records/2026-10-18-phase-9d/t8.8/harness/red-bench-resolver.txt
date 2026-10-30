@@ -49,7 +49,7 @@ assertion `left == right` failed
   left: ["/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench/../../target/release/rexx", "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench/../../target/debug/rexx"]
  right: ["/custom/release/rexx", "/custom/debug/rexx"]
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-test binary::tests::executable_location_preserves_alternate_targets_and_deps ... 
+test binary::tests::executable_location_preserves_alternate_targets_and_deps ...
 thread 'binary::tests::explicit_target_directories_do_not_fall_back_to_workspace_artifacts' (296423) panicked at crates/rexx-bench/src/bin/rexx-bench-suite/binary/tests.rs:10:5:
 assertion `left == right` failed
   left: ["/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench/../../target/release/rexx", "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench/../../target/debug/rexx"]
