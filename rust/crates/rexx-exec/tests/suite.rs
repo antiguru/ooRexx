@@ -1736,4 +1736,9 @@ mod row_checks {
 
 /// The harness's own behaviour, on the groups under `tests/suite/fixtures/`
 /// with the real framework copied around them.
-mod fixtures;
+mod fixtures {
+    use super::*;
+
+    #[cfg(test)]
+    mod tests;
+}
