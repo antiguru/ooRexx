@@ -379,3 +379,12 @@ Moritz answered the explicit recommendation to retain ITEMS 0 and record the ora
 ## Task 8.8 readiness audit after Deviation 84
 
 Read-only inventory audit independently reproduced all 35 unassigned triage selections and accounted for all 54 preflight items plus five reconciliation rows. Root checked the current inventory rows: only Task 10 gate 466 and the two original SysFileTree/stderr flakes retain 9d ownership. The permanent hash-equality-reentry fixture pins removed 1/items 0, and the semantic-boundary harness compares normal and allocation-stress outcomes. Commit f71de0d63 reconciles the current queue/report references with approved Deviation 84, while final performance acceptance, broad gates and whole-8.8 review remain pending.
+
+
+## Profiling complete, whole-source review running, decisions pending
+
+Root verified all 32 handoff file hashes and committed final measured records at fae299b53. The complete 1,485-profile verifier exited zero, Q/P passes all 33 programs, and cross-source Q/original BASE has 12 OVERs with alloc +0.73785973%, while Q/original e2 has parse +0.17209251%. Moritz has been asked explicitly to accept the residuals or require further optimization, with no answer yet. A separate user decision is pending on skipping only the inaccessible systemd process entry during byte-preserving relocation of the retained prerequisite cache, whose original path and contents remain untouched.
+
+The final gate preparation was retained at 9ace68a51, with exact runner corrections and four explicit test-name mappings checked by root, but no final gate or freeze has run. Root started the single whole-8.8 read-only source review on Astra/high in t88_whole_source_review, using the brief and generated full/source-only packages beside this handoff. Reviewed range0c2ff21ae..9ace68a51 has the same Rust tree as runtimecd418bd304; later fae299b53 adds measurements only. The review runs while user decisions are pending and cannot establish final test/budget readiness.
+
+Scratch space is approximately56MB free after all profiles, so builds must wait for the cache-space remedy. Relocation driver /tmp/codex-p9d-t88-relocate-prereq-cache.py and manifests /tmp/codex-p9d-t88-prereq-cache-relocation/ retain the failed permission check without moving anything. Resume original t88_final_gate_plan for authorized relocation or final-gate execution after user response. Pending final gates, two original flakes and Tasks9/10 distinctions remain as above.
