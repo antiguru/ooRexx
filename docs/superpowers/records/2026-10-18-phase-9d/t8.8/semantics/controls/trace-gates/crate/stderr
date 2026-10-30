@@ -1,0 +1,14 @@
+     6 *-* v = o
+       >>>   "NAME"
+     7 *-* trace off
+    10 *-* s.tail = o
+       >V>   O => "NAME"
+       >>>   "NAME"
+       >C>   S.TAIL => "S.TAIL"
+       >=>   S.TAIL <= "NAME"
+    11 *-* trace off
+    14 *-* s. = o
+       >V>   O => "NAME"
+       >>>   "NAME"
+       >=>   S. <= "NAME"
+    15 *-* trace off

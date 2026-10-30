@@ -56,7 +56,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-04-send-site-cache-self-customization.md	perf	-	phase:9.1	design note with ranked items; no probe	phase:9.1
 2026-10-05-call-on-notready-stdin-eof.md	divergence	queued-probes/ntstdin/ntstdin.rex:1	closed:probe agrees	own probe from the text: the handler runs, rc 0 on both	closed:probe agrees
 2026-10-05-stdin-chars-after-drain.md	divergence	queued-probes/stdindrain/stdindrain.rex:1	closed:probe agrees	probe still differs: chars() and .stdin~chars answer 1 here and 0 on the oracle	closed:probe agrees
-2026-10-05-stream-fifo-terminal-seek.md	divergence	queued-probes/fifo/fifo.rex:1	9d	probe still differs: CHARIN on a FIFO answers [] ERROR here and [abc] READY on the oracle	9d
+2026-10-05-stream-fifo-terminal-seek.md	divergence	queued-probes/fifo/fifo.rex:1	closed:3979b7e31	probe still differs: CHARIN on a FIFO answers [] ERROR here and [abc] READY on the oracle	closed:3979b7e31
 2026-10-05-two-interpreters-signal-race.md	design	-	phase:10	the second interpreter instance is row 10's; no probe	phase:10
 2026-10-07-debug-input-does-not-reach-pauses.md	divergence	queued-probes/di/di.rex:1	closed:probe agrees	typed then after on both; TRACE TEST_TRACE_NUMERIC_DEBUG passed at the 9c close	closed:probe agrees
 2026-10-07-debug-pause-skipped-after-flowed-clause.md	divergence	queued-probes/pa/pa.rex:1	closed:probe agrees	c1 p1 p2 c3 p3 c4 on both	closed:probe agrees
@@ -270,13 +270,13 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b
 2026-10-29-native-buffer-bytes-uncharged.md	defect	-	after 9d	native Buffer storage not charged to the byte trigger	after 9d
 2026-10-29-perf-round-codex-agenda.md	perf	-	after 9d	perf round agenda from the external review	after 9d
 2026-10-29-unary-integer-specialization.md	perf	-	after 9d	prefix + and - on a small integer take the general decimal path (+a 65.8 ns, oracle 13.2)	after 9d
-2026-10-29-hash-collection-messages-sent.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/primframe/f4.rex	9d	hash collections send HASHCODE twice or scan with == where the oracle hashes once	9d
-2026-10-29-trace-assignment-rendered-once.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/dn/dn7.rex	9d	TRACE renders an assignment once for >>> and >=>	9d
-2026-10-29-stdout-query-size-position-file.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/stdinq/q5.rex	9d	.STDOUT QUERY SIZE/POSITION on a regular file answer the null string	9d
+2026-10-29-hash-collection-messages-sent.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/primframe/f4.rex	closed:3979b7e31	hash collections send HASHCODE twice or scan with == where the oracle hashes once	closed:3979b7e31
+2026-10-29-trace-assignment-rendered-once.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/dn/dn7.rex	closed:3979b7e31	TRACE renders an assignment once for >>> and >=>	closed:3979b7e31
+2026-10-29-stdout-query-size-position-file.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/probes/stdinq/q5.rex	closed:3979b7e31	.STDOUT QUERY SIZE/POSITION on a regular file answer the null string	closed:3979b7e31
 2026-10-29-debug-typed-exit.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/fix-r2/probes/off/ex.rex	11.1	a typed EXIT at a debug pause is ignored, the oracle ends the program	phase:11.1
 2026-10-29-suite-fixture-stderr-refusal-load-flake.md	process	-	9d	suite fixtures stderr-refusal test failed once under load	9d
-2026-10-29-stem-index-string-values.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/review-probes-rr1/r1c/d.rex	9d	Stem [] does not take its indexes' string values	9d
+2026-10-29-stem-index-string-values.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/review-probes-rr1/r1c/d.rex	closed:3979b7e31	Stem [] does not take its indexes' string values	closed:3979b7e31
 2026-10-29-grandchild-sleeps-process-wide.md	process	-	closed:ecce67dad	suite grandchild_sleeps scans every process	closed:ecce67dad
-2026-10-30-raise-description-unsent.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/review-probes-rr2/n2b/q9.rex	9d	RAISE DESCRIPTION object stored unsent; timing needs a ruling	9d
-2026-10-30-number-max-object-argument.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/review-probes-rr2/ld/l20.rex	9d	Number max/min object argument not its string value	9d
-2026-10-30-parse-pattern-conversion-raise.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/review-probes-rr2/c2/onceparse.rex	9d	PARSE pattern rendering drops a raising conversion	9d
+2026-10-30-raise-description-unsent.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/review-probes-rr2/n2b/q9.rex	closed:3979b7e31	RAISE DESCRIPTION object stored unsent; timing needs a ruling	closed:3979b7e31
+2026-10-30-number-max-object-argument.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/review-probes-rr2/ld/l20.rex	closed:3979b7e31	Number max/min object argument not its string value	closed:3979b7e31
+2026-10-30-parse-pattern-conversion-raise.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/review-probes-rr2/c2/onceparse.rex	closed:3979b7e31	PARSE pattern rendering drops a raising conversion	closed:3979b7e31

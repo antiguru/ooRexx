@@ -1,0 +1,5 @@
+warm [abc]
+NOTREADY /tmp/t88f-fifo/oracle-r4/pipe ERROR:4 Interrupted system call
+read []
+HALT ERROR:4 Interrupted system call
+description ERROR:4 Interrupted system call

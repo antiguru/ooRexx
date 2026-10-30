@@ -1,0 +1,23 @@
+stored 1
+stored 0
+[left ][ right]
+[LEFT ][ RIGHT]
+7 7
+%SRCG%COUNT 17
+%SRCG%Lk = .key~new
+%SRCG%Ls.[k, k] = 'stored'
+%SRCG%Lsay s.[k, k] s.~hasIndex(k, k)
+%SRCG%Lsay s.~remove(k, k) s.~hasIndex(k, k)
+%SRCG%Lparse value 'left pattern-long-enough-for-the-heap right' with before (k) after
+%SRCG%Lsay '['before']['after']'
+%SRCG%Lparse caseless value 'LEFT PATTERN-LONG-ENOUGH-FOR-THE-HEAP RIGHT' with before (k) after
+%SRCG%Lsay '['before']['after']'
+%SRCG%Ln = .numberKey~new
+%SRCG%Lsay 5~max(n) 9~min(n)
+%SRCG%Lexit
+%SRCG%L::class key
+%SRCG%L::method makeString
+%SRCG%L  return 'pattern-long-enough-for-the-heap'
+%SRCG%L::class numberKey
+%SRCG%L::method makeString
+%SRCG%L  return ' 7 '

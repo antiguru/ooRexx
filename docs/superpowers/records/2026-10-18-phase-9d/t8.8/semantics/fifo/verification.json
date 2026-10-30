@@ -1,0 +1,30 @@
+[
+  {
+    "name": "crate-r4",
+    "status": 0,
+    "elapsed": 0.14009507501032203,
+    "stdout": "warm [abc]\nNOTREADY /tmp/t88f-fifo/crate-r4/pipe ERROR:4 Interrupted system call\nread []\nHALT ERROR:4 Interrupted system call\ndescription ERROR:4 Interrupted system call\n",
+    "checks": "EINTR, no retry/unblock, empty result, NOTREADY before HALT, owned tasks reaped"
+  },
+  {
+    "name": "oracle-r4",
+    "status": 0,
+    "elapsed": 0.046005784010048956,
+    "stdout": "warm [abc]\nNOTREADY /tmp/t88f-fifo/oracle-r4/pipe ERROR:4 Interrupted system call\nread []\nHALT ERROR:4 Interrupted system call\ndescription ERROR:4 Interrupted system call\n",
+    "checks": "EINTR, no retry/unblock, empty result, NOTREADY before HALT, owned tasks reaped"
+  },
+  {
+    "name": "partial-crate-r1",
+    "status": 0,
+    "elapsed": 0.18160145496949553,
+    "stdout": "warm [abc]\nNOTREADY /tmp/t88f-fifo/partial-crate-r1/pipe ERROR:4 Interrupted system call\nHALT ERROR:4 Interrupted system call\nread []\ndescription ERROR:4 Interrupted system call\n",
+    "checks": "EINTR, no retry/unblock, empty result, NOTREADY before HALT, owned tasks reaped"
+  },
+  {
+    "name": "partial-oracle-r1",
+    "status": 0,
+    "elapsed": 0.045685453980695456,
+    "stdout": "warm [abc]\nNOTREADY /tmp/t88f-fifo/partial-oracle-r1/pipe ERROR:4 Interrupted system call\nread []\nHALT ERROR:4 Interrupted system call\ndescription ERROR:4 Interrupted system call\n",
+    "checks": "EINTR, no retry/unblock, empty result, NOTREADY before HALT, owned tasks reaped"
+  }
+]

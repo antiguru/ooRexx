@@ -3094,6 +3094,28 @@ DEVIATIONS -- permanent, chosen
      Witnessed by tests::a_stems_string_sends_string_to_its_default_and_a_trace_line_names_it
      (rust/crates/rexx-exec/src/tests.rs).
 
+ 82. CLOSING LINEOUT PRESERVES FIFO BYTES (Phase 9d). OWNER: none.
+
+     Ruled by Moritz 2026-10-30: "Follow your recommendation on both."
+     The FIFO recommendation was to preserve queued bytes and close normally.
+     A closing LINEOUT writes no text and does not consume input. The oracle
+     instead attempts a seek, gets ESPIPE, and consumes the first byte of
+     hello before close. This crate closes normally and leaves hello intact.
+     Witness: t8.8/semantics/fifo-close, with the original syscall evidence
+     in t8.8 runtime evidence referenced by task-8.8e1-report.md.
+
+ 83. RAISE DESCRIPTION TAKES ITS REQUIRED STRING AT RAISE (Phase 9d).
+     OWNER: none.
+
+     Ruled by Moritz 2026-10-30: "Follow your recommendation on both."
+     The DESCRIPTION recommendation was to obtain its required string when
+     RAISE evaluates DESCRIPTION, as rexxref instrc.xml:2866-2874 specifies.
+     This crate stores that string, so CONDITION(D) does not reconvert it.
+     The oracle defers conversion until CONDITION(D), and repeats conversion
+     on repeat reads. A conversion that raises fails at RAISE in this crate.
+     Witness: t8.8/semantics/probes/description-timing.rex and the complete
+     ruled raise_untraced_renders_nothing.rex in tests/semantic_boundaries.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 

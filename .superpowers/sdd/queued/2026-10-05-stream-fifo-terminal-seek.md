@@ -1,4 +1,4 @@
-**PARTIAL 2026-10-30 by Phase 9d Task 8.8e1.** FIFO ordinary transfer and bounded raw PTY read/write agree. Dynamic EINTR remains unprobed, and the oracle closing-LINEOUT error path consumes a byte after ESPIPE. Controller owns the remaining scope judgement.
+**CLOSED 2026-10-30 by Phase 9d Task 8.8f (3979b7e31).** FIFO read, terminal and closing-LINEOUT subparts are verified under the recorded rulings.
 
 # Named FIFOs and terminals do not work through the stream class
 
@@ -17,3 +17,7 @@ read (DEVIATIONS 12) unless P60 is extended. Full scenario: `.superpowers/sdd/20
 ## Task 8.8e1 evidence
 
 The bounded PTY control reads abc and writes xyz with matching descriptors and terminal bytes. Closing LINEOUT differs with or without a state query, and through the Stream method itself. The oracle syscall trace shows ESPIPE followed by a one-byte read that removes h from hello before close. This is an error-path side effect, not evidence that LINEOUT should consume FIFO data, and Deviation 46 is not broadened. See `task-8.8e1-report.md` for the retained EINTR diagnostic and controller handoff.
+
+## Task 8.8f evidence
+
+Named transient reads propagate EINTR and discard accumulated partial data from the failed operation. Owned blocked-thread traces verify ERROR:4, no retry or writer unblock, and NOTREADY before HALT. HALT placement relative to the outer read-result print varies with timer posting, preserving the existing clause-boundary policy and Deviation 12. Closing LINEOUT preserves bytes and closes normally under approved Deviation 82, and the raw PTY control agrees. See `.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-report.md` and `docs/superpowers/records/2026-10-18-phase-9d/t8.8/semantics/`.

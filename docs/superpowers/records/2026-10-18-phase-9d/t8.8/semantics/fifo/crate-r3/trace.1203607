@@ -1,0 +1,13 @@
+17:44:53.524704 rt_sigprocmask(SIG_SETMASK, [INT TERM CHLD], NULL, 8) = 0 <0.000005>
+17:44:53.524776 rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0 <0.000005>
+17:44:53.524796 rt_sigaction(SIGTSTP, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000005>
+17:44:53.524816 rt_sigaction(SIGTTIN, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000004>
+17:44:53.524832 rt_sigaction(SIGTTOU, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000005>
+17:44:53.524858 rt_sigaction(SIGHUP, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000005>
+17:44:53.524873 rt_sigaction(SIGILL, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000005>
+17:44:53.524889 rt_sigaction(SIGTRAP, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000004>
+17:44:53.524904 rt_sigprocmask(SIG_BLOCK, ~[], [], 8) = 0 <0.000006>
+17:44:53.524924 rt_sigaction(SIGABRT, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000005>
+17:44:53.524940 rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0 <0.000004>
+17:44:53.524954 rt_sigaction(SIGFPE, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000005>
+17:44:53.524970 rt_sigaction(SIGBUS, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}

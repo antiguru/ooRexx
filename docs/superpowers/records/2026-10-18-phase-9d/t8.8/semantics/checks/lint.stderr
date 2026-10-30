@@ -1,0 +1,25 @@
+    Checking rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+error: empty line after doc comment
+   --> crates/rexx-exec/src/dispatch/hash.rs:942:1
+    |
+942 | / /// chain, answering the item it held.
+943 | | // ---- `Directory`'s method table ----
+944 | |
+    | |_^
+...
+947 |   fn method_store(interp: &mut Interp, receiver: ObjRef) -> Result<Option<Store>, Failure> {
+    |   --------------- the comment documents this function
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#empty_line_after_doc_comments
+    = note: `-D clippy::empty-line-after-doc-comments` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::empty_line_after_doc_comments)]`
+    = help: if the empty line is unintentional, remove it
+help: if the doc comment should not document function `method_store` then comment it out
+    |
+941 ~ // /// `HashContents::remove`: unlinks the entry and returns its slot to the free
+942 ~ // /// chain, answering the item it held.
+    |
+
+error: could not compile `rexx-exec` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `rexx-exec` (lib test) due to 1 previous error

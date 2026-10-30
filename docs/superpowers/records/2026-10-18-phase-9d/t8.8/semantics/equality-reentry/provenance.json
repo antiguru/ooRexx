@@ -1,0 +1,11 @@
+{
+  "oracle": "/home/moritz/dev/repos/ooRexx/build/bin/rexx",
+  "e2": "/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+  "e2_sha256": "00e29fde4456ee4845a76941263f495b827c083af35363cb54eb3ac8c6b7c733",
+  "f_before_source": "12d160b9e",
+  "f_before_sha256": "9dc5ee58544acf603847a16ebd583f4b35399ea895e82d8599326a6a4c3e3ccf",
+  "wrapper": "fresh tempfile cwd, timeout -k 5 20; oracle RLIMIT_AS=1073741824 and LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib; crate memcap 2G",
+  "fixed_source": "3979b7e3135a05da4ef9372bc20e10773bde6efa",
+  "fixed_sha256": "0c9fb8371ab3d6dcea780194e02c112ed7981447f7f396e606e5f418975583f0",
+  "fixed_cwd": "/tmp/t88f-control-ahpzqjm_"
+}

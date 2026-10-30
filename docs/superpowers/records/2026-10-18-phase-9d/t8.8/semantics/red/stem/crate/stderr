@@ -1,0 +1,4 @@
+       *-* Compiled method "[]=" with scope "Stem".
+     9 *-* s.[,'x'] = 'omitted'
+Error 93 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/semantics/probes/stem.rex line 9:  Incorrect call to method.
+Error 93.903:  Missing argument in method; argument 1 is required.

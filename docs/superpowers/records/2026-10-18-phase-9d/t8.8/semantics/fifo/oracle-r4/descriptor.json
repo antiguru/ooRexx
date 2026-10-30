@@ -1,0 +1,51 @@
+{
+  "command": [
+    "strace",
+    "-ff",
+    "-tt",
+    "-T",
+    "-yy",
+    "-e",
+    "trace=read,write,openat,close,lseek,rt_sigaction,rt_sigprocmask,rt_sigreturn",
+    "-o",
+    "/tmp/t88f-fifo/oracle-r4/trace",
+    "/home/moritz/dev/repos/ooRexx/build/bin/rexx",
+    "/tmp/t88f-fifo/oracle-r4/probe.rex"
+  ],
+  "cwd": "/tmp/t88f-fifo/oracle-r4",
+  "tracer": {
+    "pid": 1213254,
+    "starttime": "37796606",
+    "exe": "/usr/bin/strace"
+  },
+  "source_sha256": "0387dd166527e6e7fac543428ca6b8d64a73e6a7cd1f7a548c69910180b9e06b",
+  "events": [
+    {
+      "event": "tgkill SIGINT",
+      "elapsed": 0.03523390501504764,
+      "tgid": 1213256,
+      "tid": 1213256,
+      "result": 0
+    }
+  ],
+  "rlimit_as": 1073741824,
+  "LD_LIBRARY_PATH": "/home/moritz/dev/repos/ooRexx/build/lib",
+  "target": {
+    "pid": 1213256,
+    "starttime": "37796606",
+    "exe": "/home/moritz/dev/repos/ooRexx/build/bin/rexx"
+  },
+  "blocked_before_signal": {
+    "tgid": 1213256,
+    "tid": 1213256,
+    "fd": 5,
+    "fd_link": "/tmp/t88f-fifo/oracle-r4/pipe",
+    "syscall": "0 0x5 0x559ea212ff00 0x1000 0x0 0x0 0x0 0x7ffce0608d50 0x7fd882a9ba02",
+    "status": "Name:\trexx\nUmask:\t0002\nState:\tS (sleeping)\nTgid:\t1213256\nNgid:\t0\nPid:\t1213256\nPPid:\t1213254\nTracerPid:\t1213254\nUid:\t1000\t1000\t1000\t1000\nGid:\t1000\t1000\t1000\t1000\nFDSize:\t64\nGroups:\t24 25 27 29 30 44 46 100 101 991 999 1000 2000 \nNStgid:\t1213256\nNSpid:\t1213256\nNSpgid:\t1213192\nNSsid:\t1213186\nKthread:\t0\nVmPeak:\t   30568 kB\nVmSize:\t   30568 kB\nVmLck:\t       0 kB\nVmPin:\t       0 kB\nVmHWM:\t    8672 kB\nVmRSS:\t    8672 kB\nRssAnon:\t    2800 kB\nRssFile:\t    5872 kB\nRssShmem:\t       0 kB\nVmData:\t   21508 kB\nVmStk:\t     132 kB\nVmExe:\t       4 kB\nVmLib:\t    4696 kB\nVmPTE:\t      72 kB\nVmSwap:\t       0 kB\nHugetlbPages:\t       0 kB\nCoreDumping:\t0\nTHP_enabled:\t1\nuntag_mask:\t0xffffffffffffffff\nThreads:\t1\nSigQ:\t10/509620\nSigPnd:\t0000000000000000\nShdPnd:\t0000000000000000\nSigBlk:\t0000000000000000\nSigIgn:\t0000000000001000\nSigCgt:\t0000000000004003\nCapInh:\t0000000000000000\nCapPrm:\t0000000000000000\nCapEff:\t0000000000000000\nCapBnd:\t000001ffffffffff\nCapAmb:\t0000000000000000\nNoNewPrivs:\t0\nSeccomp:\t0\nSeccomp_filters:\t0\nSpeculation_Store_Bypass:\tthread vulnerable\nSpeculationIndirectBranch:\tconditional enabled\nCpus_allowed:\tffffffff\nCpus_allowed_list:\t0-31\nMems_allowed:\t00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001\nMems_allowed_list:\t0\nvoluntary_ctxt_switches:\t1550\nnonvoluntary_ctxt_switches:\t1\nx86_Thread_features:\t\nx86_Thread_features_locked:\t\n",
+    "comm": "rexx"
+  },
+  "ready_hex": "52454144590a",
+  "observation": "exited after signal without writer unblock",
+  "status": 0,
+  "elapsed": 0.046005784010048956
+}

@@ -1,0 +1,116 @@
+[
+  {
+    "probe": "description",
+    "different_descriptors": [
+      "stdout"
+    ],
+    "deviation": "83",
+    "status": 0
+  },
+  {
+    "probe": "description-timing",
+    "different_descriptors": [
+      "stdout"
+    ],
+    "deviation": "83",
+    "status": 0
+  },
+  {
+    "probe": "hash-collision",
+    "different_descriptors": [],
+    "deviation": null,
+    "status": 0
+  },
+  {
+    "probe": "hash-controls",
+    "different_descriptors": [
+      "stdout"
+    ],
+    "deviation": "78",
+    "status": 0
+  },
+  {
+    "probe": "hash-messages",
+    "different_descriptors": [],
+    "deviation": null,
+    "status": 0
+  },
+  {
+    "probe": "hash-raises",
+    "different_descriptors": [],
+    "deviation": null,
+    "status": 0
+  },
+  {
+    "probe": "hash-reentry",
+    "different_descriptors": [],
+    "deviation": null,
+    "status": 0
+  },
+  {
+    "probe": "max-controls",
+    "different_descriptors": [
+      "stdout"
+    ],
+    "deviation": "44",
+    "status": 0
+  },
+  {
+    "probe": "max-lostdigits",
+    "different_descriptors": [
+      "stdout"
+    ],
+    "deviation": "44",
+    "status": 0
+  },
+  {
+    "probe": "max-references",
+    "different_descriptors": [],
+    "deviation": null,
+    "status": 0
+  },
+  {
+    "probe": "nostring",
+    "different_descriptors": [],
+    "deviation": null,
+    "status": 0
+  },
+  {
+    "probe": "parse-make",
+    "different_descriptors": [],
+    "deviation": null,
+    "status": 0
+  },
+  {
+    "probe": "parse-raise",
+    "different_descriptors": [],
+    "deviation": null,
+    "status": 0
+  },
+  {
+    "probe": "stdout",
+    "different_descriptors": [],
+    "deviation": null,
+    "status": 0
+  },
+  {
+    "probe": "stem",
+    "different_descriptors": [
+      "stdout"
+    ],
+    "deviation": "72/77",
+    "status": 0
+  },
+  {
+    "probe": "trace-gates",
+    "different_descriptors": [],
+    "deviation": null,
+    "status": 0
+  },
+  {
+    "probe": "trace-raise",
+    "different_descriptors": [],
+    "deviation": null,
+    "status": 0
+  }
+]

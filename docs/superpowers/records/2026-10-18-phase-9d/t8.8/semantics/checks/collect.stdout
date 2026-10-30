@@ -1,0 +1,7 @@
+
+running 1 test
+test the_l0_subset_passes_again_under_collect_on_every_allocation has been running for over 60 seconds
+test the_l0_subset_passes_again_under_collect_on_every_allocation ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 78 filtered out; finished in 255.13s
+

@@ -1,0 +1,85 @@
+17:44:53.372094 rt_sigprocmask(SIG_SETMASK, [INT TERM CHLD], NULL, 8) = 0 <0.000006>
+17:44:53.372221 close(255</home/moritz/.local/bin/memcap>) = 0 <0.000031>
+17:44:53.372310 rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0 <0.000030>
+17:44:53.372361 rt_sigaction(SIGTSTP, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000004>
+17:44:53.372378 rt_sigaction(SIGTTIN, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000005>
+17:44:53.372396 rt_sigaction(SIGTTOU, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000005>
+17:44:53.372421 rt_sigaction(SIGINT, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000005>
+17:44:53.372439 rt_sigaction(SIGQUIT, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_IGN, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000005>
+17:44:53.372457 rt_sigaction(SIGCHLD, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7fd69ebe06b0}, {sa_handler=0x55cf658ba9b0, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000005>
+17:44:53.372475 rt_sigaction(SIGCHLD, {sa_handler=0x55cf658ba9b0, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000005>
+17:44:53.372493 rt_sigaction(SIGINT, {sa_handler=0x55cf658e25d0, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000005>
+17:44:53.372531 close(4<pipe:[99345452]>) = 0 <0.000005>
+17:44:53.372549 close(3<pipe:[99345452]>) = 0 <0.000005>
+17:44:53.372601 rt_sigprocmask(SIG_BLOCK, NULL, [], 8) = 0 <0.000005>
+17:44:53.372965 rt_sigaction(SIGINT, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=0x55cf658e25d0, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000005>
+17:44:53.372986 rt_sigaction(SIGQUIT, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000005>
+17:44:53.373004 rt_sigaction(SIGCHLD, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7fd69ebe06b0}, {sa_handler=0x55cf658ba9b0, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000005>
+17:44:53.374075 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/home/moritz/dev/repos/ooRexx/build/lib/glibc-hwcaps/x86-64-v4/libselinux.so.1", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000012>
+17:44:53.374136 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/home/moritz/dev/repos/ooRexx/build/lib/glibc-hwcaps/x86-64-v3/libselinux.so.1", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000007>
+17:44:53.374171 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/home/moritz/dev/repos/ooRexx/build/lib/glibc-hwcaps/x86-64-v2/libselinux.so.1", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000006>
+17:44:53.374205 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/home/moritz/dev/repos/ooRexx/build/lib/libselinux.so.1", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000017>
+17:44:53.374251 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3</etc/ld.so.cache> <0.000028>
+17:44:53.374332 close(3</etc/ld.so.cache>) = 0 <0.000006>
+17:44:53.374360 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/x86_64-linux-gnu/libselinux.so.1", O_RDONLY|O_CLOEXEC) = 3</usr/lib/x86_64-linux-gnu/libselinux.so.1> <0.000009>
+17:44:53.374391 read(3</usr/lib/x86_64-linux-gnu/libselinux.so.1>, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0"..., 832) = 832 <0.000008>
+17:44:53.374542 close(3</usr/lib/x86_64-linux-gnu/libselinux.so.1>) = 0 <0.000006>
+17:44:53.374567 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/home/moritz/dev/repos/ooRexx/build/lib/libc.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000009>
+17:44:53.374595 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/x86_64-linux-gnu/libc.so.6", O_RDONLY|O_CLOEXEC) = 3</usr/lib/x86_64-linux-gnu/libc.so.6> <0.000007>
+17:44:53.374620 read(3</usr/lib/x86_64-linux-gnu/libc.so.6>, "\177ELF\2\1\1\3\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\340\241\2\0\0\0\0\0"..., 832) = 832 <0.000007>
+17:44:53.374802 close(3</usr/lib/x86_64-linux-gnu/libc.so.6>) = 0 <0.000006>
+17:44:53.374826 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/home/moritz/dev/repos/ooRexx/build/lib/libpcre2-8.so.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000022>
+17:44:53.374869 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/x86_64-linux-gnu/libpcre2-8.so.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/x86_64-linux-gnu/libpcre2-8.so.0.16.0> <0.000009>
+17:44:53.374896 read(3</usr/lib/x86_64-linux-gnu/libpcre2-8.so.0.16.0>, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0"..., 832) = 832 <0.000007>
+17:44:53.375021 close(3</usr/lib/x86_64-linux-gnu/libpcre2-8.so.0.16.0>) = 0 <0.000006>
+17:44:53.375605 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/proc/filesystems", O_RDONLY|O_CLOEXEC) = 3</proc/filesystems> <0.000013>
+17:44:53.375662 read(3</proc/filesystems>, "nodev\tsysfs\nnodev\ttmpfs\nnodev\tpr"..., 1024) = 387 <0.000009>
+17:44:53.375691 read(3</proc/filesystems>, "", 1024) = 0 <0.000006>
+17:44:53.375712 close(3</proc/filesystems>) = 0 <0.000007>
+17:44:53.375763 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/locale-archive", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/locale-archive> <0.000009>
+17:44:53.375830 close(3</usr/lib/locale/locale-archive>) = 0 <0.000006>
+17:44:53.375851 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/share/locale/locale.alias", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000009>
+17:44:53.375878 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.UTF-8/LC_IDENTIFICATION", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000007>
+17:44:53.375899 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.utf8/LC_IDENTIFICATION", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_IDENTIFICATION> <0.000008>
+17:44:53.375951 close(3</usr/lib/locale/C.utf8/LC_IDENTIFICATION>) = 0 <0.000006>
+17:44:53.375974 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache", O_RDONLY|O_CLOEXEC) = 3</usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache> <0.000009>
+17:44:53.376029 close(3</usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache>) = 0 <0.000006>
+17:44:53.376071 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.UTF-8/LC_MEASUREMENT", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000007>
+17:44:53.376091 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.utf8/LC_MEASUREMENT", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_MEASUREMENT> <0.000008>
+17:44:53.376146 close(3</usr/lib/locale/C.utf8/LC_MEASUREMENT>) = 0 <0.000006>
+17:44:53.376169 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.UTF-8/LC_TELEPHONE", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000007>
+17:44:53.376190 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.utf8/LC_TELEPHONE", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_TELEPHONE> <0.000008>
+17:44:53.376243 close(3</usr/lib/locale/C.utf8/LC_TELEPHONE>) = 0 <0.000006>
+17:44:53.376264 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.UTF-8/LC_ADDRESS", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000007>
+17:44:53.376285 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.utf8/LC_ADDRESS", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_ADDRESS> <0.000008>
+17:44:53.376340 close(3</usr/lib/locale/C.utf8/LC_ADDRESS>) = 0 <0.000006>
+17:44:53.376362 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.UTF-8/LC_NAME", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000007>
+17:44:53.376383 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.utf8/LC_NAME", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_NAME> <0.000007>
+17:44:53.376434 close(3</usr/lib/locale/C.utf8/LC_NAME>) = 0 <0.000005>
+17:44:53.376456 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.UTF-8/LC_PAPER", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000006>
+17:44:53.376475 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.utf8/LC_PAPER", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_PAPER> <0.000008>
+17:44:53.376527 close(3</usr/lib/locale/C.utf8/LC_PAPER>) = 0 <0.000006>
+17:44:53.376549 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.UTF-8/LC_MESSAGES", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000007>
+17:44:53.376570 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.utf8/LC_MESSAGES", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_MESSAGES> <0.000008>
+17:44:53.376607 close(3</usr/lib/locale/C.utf8/LC_MESSAGES>) = 0 <0.000007>
+17:44:53.376628 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.utf8/LC_MESSAGES/SYS_LC_MESSAGES", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_MESSAGES/SYS_LC_MESSAGES> <0.000008>
+17:44:53.376679 close(3</usr/lib/locale/C.utf8/LC_MESSAGES/SYS_LC_MESSAGES>) = 0 <0.000006>
+17:44:53.376702 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.UTF-8/LC_MONETARY", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000007>
+17:44:53.376723 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.utf8/LC_MONETARY", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_MONETARY> <0.000099>
+17:44:53.376868 close(3</usr/lib/locale/C.utf8/LC_MONETARY>) = 0 <0.000005>
+17:44:53.376894 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.UTF-8/LC_COLLATE", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000007>
+17:44:53.376916 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.utf8/LC_COLLATE", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_COLLATE> <0.000008>
+17:44:53.376969 close(3</usr/lib/locale/C.utf8/LC_COLLATE>) = 0 <0.000005>
+17:44:53.376990 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.UTF-8/LC_TIME", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000007>
+17:44:53.377010 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.utf8/LC_TIME", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_TIME> <0.000007>
+17:44:53.377060 close(3</usr/lib/locale/C.utf8/LC_TIME>) = 0 <0.000005>
+17:44:53.377082 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.UTF-8/LC_NUMERIC", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000006>
+17:44:53.377102 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.utf8/LC_NUMERIC", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_NUMERIC> <0.000008>
+17:44:53.377152 close(3</usr/lib/locale/C.utf8/LC_NUMERIC>) = 0 <0.000005>
+17:44:53.377173 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.UTF-8/LC_CTYPE", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000007>
+17:44:53.377193 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/locale/C.utf8/LC_CTYPE", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_CTYPE> <0.000007>
+17:44:53.377243 close(3</usr/lib/locale/C.utf8/LC_CTYPE>) = 0 <0.000005>
+17:44:53.377317 write(1<pipe:[99345452]>, "1000\n", 5) = 5 <0.000010>
+17:44:53.377366 close(1<pipe:[99345452]>) = 0 <0.000025>
+17:44:53.377405 close(2</tmp/t88f-fifo/crate-r3/stderr>) = 0 <0.000028>
+17:44:53.377812 +++ exited with 0 +++

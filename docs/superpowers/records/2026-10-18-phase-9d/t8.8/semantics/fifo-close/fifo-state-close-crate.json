@@ -1,0 +1,24 @@
+{
+  "name": "fifo-state-close",
+  "side": "crate",
+  "command": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/t88f-fifo/rexx-frozen",
+    "/tmp/t88e1-probes-fb0srth_/fifo-state-close-crate/probe.rex"
+  ],
+  "cwd": "/tmp/t88e1-probes-fb0srth_/fifo-state-close-crate",
+  "source": "say 'write' lineout('/tmp/t88e1-probes-fb0srth_/fifo-state-close-crate/pipe','hello')\nsay 'state' stream('/tmp/t88e1-probes-fb0srth_/fifo-state-close-crate/pipe','S')\nsay 'close' lineout('/tmp/t88e1-probes-fb0srth_/fifo-state-close-crate/pipe')\n",
+  "status": 0,
+  "stdout_hex": "777269746520300a73746174652052454144590a636c6f736520300a",
+  "stderr_hex": "",
+  "payload_hex": "68656c6c6f0a",
+  "elapsed": 0.06830240396084264,
+  "terminal_raw": false,
+  "input_hex": "",
+  "crate_artifact": "/tmp/t88f-fifo/rexx-frozen"
+}

@@ -1,0 +1,88 @@
+17:46:45.776271 rt_sigprocmask(SIG_SETMASK, [INT TERM CHLD], NULL, 8) = 0 <0.000006>
+17:46:45.776327 rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0 <0.000003>
+17:46:45.776342 rt_sigaction(SIGTSTP, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, 8) = 0 <0.000003>
+17:46:45.776360 rt_sigaction(SIGTTIN, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, 8) = 0 <0.000004>
+17:46:45.776374 rt_sigaction(SIGTTOU, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, 8) = 0 <0.000004>
+17:46:45.776391 rt_sigaction(SIGHUP, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, NULL, 8) = 0 <0.000004>
+17:46:45.776405 rt_sigaction(SIGILL, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, NULL, 8) = 0 <0.000004>
+17:46:45.776417 rt_sigaction(SIGTRAP, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, NULL, 8) = 0 <0.000004>
+17:46:45.776430 rt_sigprocmask(SIG_BLOCK, ~[], [], 8) = 0 <0.000004>
+17:46:45.776448 rt_sigaction(SIGABRT, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, NULL, 8) = 0 <0.000004>
+17:46:45.776460 rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0 <0.000004>
+17:46:45.776472 rt_sigaction(SIGFPE, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, NULL, 8) = 0 <0.000004>
+17:46:45.776485 rt_sigaction(SIGBUS, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, NULL, 8) = 0 <0.000004>
+17:46:45.776499 rt_sigaction(SIGSEGV, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, NULL, 8) = 0 <0.000004>
+17:46:45.776513 rt_sigaction(SIGSYS, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, NULL, 8) = 0 <0.000004>
+17:46:45.776525 rt_sigaction(SIGPIPE, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, NULL, 8) = 0 <0.000005>
+17:46:45.776540 rt_sigaction(SIGALRM, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, NULL, 8) = 0 <0.000004>
+17:46:45.776552 rt_sigaction(SIGTERM, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, NULL, 8) = 0 <0.000004>
+17:46:45.776565 rt_sigaction(SIGXCPU, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, NULL, 8) = 0 <0.000004>
+17:46:45.776578 rt_sigaction(SIGXFSZ, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, NULL, 8) = 0 <0.000004>
+17:46:45.776591 rt_sigaction(SIGVTALRM, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, NULL, 8) = 0 <0.000004>
+17:46:45.776604 rt_sigaction(SIGUSR1, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, NULL, 8) = 0 <0.000004>
+17:46:45.776616 rt_sigaction(SIGUSR2, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, NULL, 8) = 0 <0.000004>
+17:46:45.776629 rt_sigaction(SIGINT, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, {sa_handler=0x558e160f05d0, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, 8) = 0 <0.000004>
+17:46:45.776645 rt_sigaction(SIGQUIT, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, 8) = 0 <0.000004>
+17:46:45.776659 rt_sigaction(SIGCHLD, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7f1e040016b0}, {sa_handler=0x558e160c89b0, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7f1e040016b0}, 8) = 0 <0.000004>
+17:46:45.776722 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/dev/null", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 3</dev/null<char 1:3>> <0.000022>
+17:46:45.776821 close(3</dev/null<char 1:3>>) = 0 <0.000004>
+17:46:45.777435 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/home/moritz/dev/repos/ooRexx/build/lib/glibc-hwcaps/x86-64-v4/libc.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000012>
+17:46:45.777492 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/home/moritz/dev/repos/ooRexx/build/lib/glibc-hwcaps/x86-64-v3/libc.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000005>
+17:46:45.777521 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/home/moritz/dev/repos/ooRexx/build/lib/glibc-hwcaps/x86-64-v2/libc.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000005>
+17:46:45.777546 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/home/moritz/dev/repos/ooRexx/build/lib/libc.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000006>
+17:46:45.777575 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3</etc/ld.so.cache> <0.000019>
+17:46:45.777638 close(3</etc/ld.so.cache>) = 0 <0.000005>
+17:46:45.777680 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/x86_64-linux-gnu/libc.so.6", O_RDONLY|O_CLOEXEC) = 3</usr/lib/x86_64-linux-gnu/libc.so.6> <0.000013>
+17:46:45.777739 read(3</usr/lib/x86_64-linux-gnu/libc.so.6>, "\177ELF\2\1\1\3\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\340\241\2\0\0\0\0\0"..., 832) = 832 <0.000008>
+17:46:45.777894 close(3</usr/lib/x86_64-linux-gnu/libc.so.6>) = 0 <0.000005>
+17:46:45.778328 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/locale-archive", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/locale-archive> <0.000015>
+17:46:45.778423 close(3</usr/lib/locale/locale-archive>) = 0 <0.000005>
+17:46:45.778451 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/share/locale/locale.alias", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000008>
+17:46:45.778481 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.UTF-8/LC_IDENTIFICATION", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000005>
+17:46:45.778499 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.utf8/LC_IDENTIFICATION", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_IDENTIFICATION> <0.000007>
+17:46:45.778546 close(3</usr/lib/locale/C.utf8/LC_IDENTIFICATION>) = 0 <0.000004>
+17:46:45.778565 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache", O_RDONLY|O_CLOEXEC) = 3</usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache> <0.000007>
+17:46:45.778613 close(3</usr/lib/x86_64-linux-gnu/gconv/gconv-modules.cache>) = 0 <0.000004>
+17:46:45.778648 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.UTF-8/LC_MEASUREMENT", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000006>
+17:46:45.778667 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.utf8/LC_MEASUREMENT", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_MEASUREMENT> <0.000007>
+17:46:45.778711 close(3</usr/lib/locale/C.utf8/LC_MEASUREMENT>) = 0 <0.000004>
+17:46:45.778729 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.UTF-8/LC_TELEPHONE", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000006>
+17:46:45.778747 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.utf8/LC_TELEPHONE", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_TELEPHONE> <0.000006>
+17:46:45.778788 close(3</usr/lib/locale/C.utf8/LC_TELEPHONE>) = 0 <0.000004>
+17:46:45.778806 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.UTF-8/LC_ADDRESS", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000006>
+17:46:45.778823 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.utf8/LC_ADDRESS", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_ADDRESS> <0.000006>
+17:46:45.778879 close(3</usr/lib/locale/C.utf8/LC_ADDRESS>) = 0 <0.000004>
+17:46:45.778900 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.UTF-8/LC_NAME", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000005>
+17:46:45.778918 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.utf8/LC_NAME", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_NAME> <0.000006>
+17:46:45.778978 close(3</usr/lib/locale/C.utf8/LC_NAME>) = 0 <0.000004>
+17:46:45.778996 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.UTF-8/LC_PAPER", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000007>
+17:46:45.779015 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.utf8/LC_PAPER", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_PAPER> <0.000006>
+17:46:45.779056 close(3</usr/lib/locale/C.utf8/LC_PAPER>) = 0 <0.000004>
+17:46:45.779074 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.UTF-8/LC_MESSAGES", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000005>
+17:46:45.779090 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.utf8/LC_MESSAGES", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_MESSAGES> <0.000007>
+17:46:45.779123 close(3</usr/lib/locale/C.utf8/LC_MESSAGES>) = 0 <0.000006>
+17:46:45.779139 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.utf8/LC_MESSAGES/SYS_LC_MESSAGES", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_MESSAGES/SYS_LC_MESSAGES> <0.000006>
+17:46:45.779184 close(3</usr/lib/locale/C.utf8/LC_MESSAGES/SYS_LC_MESSAGES>) = 0 <0.000004>
+17:46:45.779201 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.UTF-8/LC_MONETARY", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000005>
+17:46:45.779218 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.utf8/LC_MONETARY", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_MONETARY> <0.000007>
+17:46:45.779262 close(3</usr/lib/locale/C.utf8/LC_MONETARY>) = 0 <0.000004>
+17:46:45.779280 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.UTF-8/LC_COLLATE", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000005>
+17:46:45.779296 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.utf8/LC_COLLATE", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_COLLATE> <0.000006>
+17:46:45.779337 close(3</usr/lib/locale/C.utf8/LC_COLLATE>) = 0 <0.000004>
+17:46:45.779355 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.UTF-8/LC_TIME", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000005>
+17:46:45.779372 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.utf8/LC_TIME", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_TIME> <0.000006>
+17:46:45.779413 close(3</usr/lib/locale/C.utf8/LC_TIME>) = 0 <0.000004>
+17:46:45.779432 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.UTF-8/LC_NUMERIC", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000006>
+17:46:45.779450 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.utf8/LC_NUMERIC", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_NUMERIC> <0.000006>
+17:46:45.779492 close(3</usr/lib/locale/C.utf8/LC_NUMERIC>) = 0 <0.000004>
+17:46:45.779510 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.UTF-8/LC_CTYPE", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000005>
+17:46:45.779527 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/usr/lib/locale/C.utf8/LC_CTYPE", O_RDONLY|O_CLOEXEC) = 3</usr/lib/locale/C.utf8/LC_CTYPE> <0.000006>
+17:46:45.779568 close(3</usr/lib/locale/C.utf8/LC_CTYPE>) = 0 <0.000004>
+17:46:45.779610 openat(AT_FDCWD</tmp/t88f-fifo/crate-r4>, "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/memcap-1213236/memory.peak", O_RDONLY) = 3</sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/memcap-1213236/memory.peak> <0.000036>
+17:46:45.779711 read(3</sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/memcap-1213236/memory.peak>, "15863808\n", 262144) = 9 <0.000013>
+17:46:45.779741 write(1<pipe:[99385083]>, "15863808\n", 9) = 9 <0.000009>
+17:46:45.779773 read(3</sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/memcap-1213236/memory.peak>, "", 262144) = 0 <0.000008>
+17:46:45.779815 close(3</sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/memcap-1213236/memory.peak>) = 0 <0.000009>
+17:46:45.779839 close(1<pipe:[99385083]>) = 0 <0.000004>
+17:46:45.779860 close(2</dev/null<char 1:3>>) = 0 <0.000005>
+17:46:45.780022 +++ exited with 0 +++

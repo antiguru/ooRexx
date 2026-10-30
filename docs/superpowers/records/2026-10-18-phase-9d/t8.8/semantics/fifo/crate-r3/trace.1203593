@@ -1,0 +1,81 @@
+17:44:53.394175 rt_sigprocmask(SIG_SETMASK, [INT TERM CHLD], NULL, 8) = 0 <0.000006>
+17:44:53.394287 close(255</home/moritz/.local/bin/memcap>) = 0 <0.000032>
+17:44:53.394369 rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0 <0.000022>
+17:44:53.394407 rt_sigaction(SIGTSTP, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000016>
+17:44:53.394835 rt_sigaction(SIGTTIN, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000028>
+17:44:53.394887 rt_sigaction(SIGTTOU, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000011>
+17:44:53.394928 rt_sigaction(SIGHUP, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000007>
+17:44:53.394947 rt_sigaction(SIGILL, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000006>
+17:44:53.394966 rt_sigaction(SIGTRAP, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000006>
+17:44:53.394983 rt_sigprocmask(SIG_BLOCK, ~[], [], 8) = 0 <0.000005>
+17:44:53.395003 rt_sigaction(SIGABRT, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000005>
+17:44:53.395019 rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0 <0.000005>
+17:44:53.395034 rt_sigaction(SIGFPE, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000004>
+17:44:53.395049 rt_sigaction(SIGBUS, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000004>
+17:44:53.395064 rt_sigaction(SIGSEGV, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000005>
+17:44:53.395080 rt_sigaction(SIGSYS, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000004>
+17:44:53.395095 rt_sigaction(SIGPIPE, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000004>
+17:44:53.395111 rt_sigaction(SIGALRM, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000004>
+17:44:53.395137 rt_sigaction(SIGTERM, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000005>
+17:44:53.395152 rt_sigaction(SIGXCPU, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000005>
+17:44:53.395169 rt_sigaction(SIGXFSZ, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000004>
+17:44:53.395184 rt_sigaction(SIGVTALRM, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000004>
+17:44:53.395200 rt_sigaction(SIGUSR1, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000004>
+17:44:53.395215 rt_sigaction(SIGUSR2, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, NULL, 8) = 0 <0.000004>
+17:44:53.395231 rt_sigaction(SIGINT, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=0x55cf658e25d0, sa_mask=[HUP INT ILL TRAP ABRT BUS FPE USR1 SEGV USR2 PIPE ALRM TERM XCPU XFSZ VTALRM SYS], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000004>
+17:44:53.395248 rt_sigaction(SIGQUIT, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_IGN, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000004>
+17:44:53.395265 rt_sigaction(SIGCHLD, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7fd69ebe06b0}, {sa_handler=0x55cf658ba9b0, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000004>
+17:44:53.395288 rt_sigaction(SIGINT, {sa_handler=0x55cf658e25d0, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000004>
+17:44:53.395305 rt_sigaction(SIGCHLD, {sa_handler=0x55cf658ba9b0, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000004>
+17:44:53.395322 rt_sigprocmask(SIG_BLOCK, [CHLD], [], 8) = 0 <0.000004>
+17:44:53.395338 rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0 <0.000004>
+17:44:53.395367 rt_sigprocmask(SIG_BLOCK, [CHLD], [], 8) = 0 <0.000004>
+17:44:53.395382 rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0 <0.000004>
+17:44:53.395489 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/memcap-1203578/cgroup.procs", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 3</sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/memcap-1203578/cgroup.procs> <0.000027>
+17:44:53.395606 close(3</sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/memcap-1203578/cgroup.procs>) = 0 <0.000004>
+17:44:53.395643 write(1</sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/memcap-1203578/cgroup.procs>, "1203593\n", 8) = 8 <0.038116>
+17:44:53.433869 close(10</tmp/t88f-fifo/crate-r3/stdout>) = 0 <0.000008>
+17:44:53.433988 rt_sigaction(SIGINT, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=0x55cf658e25d0, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000007>
+17:44:53.434031 rt_sigaction(SIGQUIT, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000007>
+17:44:53.434052 rt_sigaction(SIGCHLD, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7fd69ebe06b0}, {sa_handler=0x55cf658ba9b0, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7fd69ebe06b0}, 8) = 0 <0.000007>
+17:44:53.434737 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/home/moritz/dev/repos/ooRexx/build/lib/glibc-hwcaps/x86-64-v4/libgcc_s.so.1", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000015>
+17:44:53.434822 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/home/moritz/dev/repos/ooRexx/build/lib/glibc-hwcaps/x86-64-v3/libgcc_s.so.1", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000007>
+17:44:53.434993 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/home/moritz/dev/repos/ooRexx/build/lib/glibc-hwcaps/x86-64-v2/libgcc_s.so.1", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000007>
+17:44:53.435033 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/home/moritz/dev/repos/ooRexx/build/lib/libgcc_s.so.1", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000006>
+17:44:53.435069 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3</etc/ld.so.cache> <0.000025>
+17:44:53.435153 close(3</etc/ld.so.cache>) = 0 <0.000005>
+17:44:53.435184 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1", O_RDONLY|O_CLOEXEC) = 3</usr/lib/x86_64-linux-gnu/libgcc_s.so.1> <0.000008>
+17:44:53.435211 read(3</usr/lib/x86_64-linux-gnu/libgcc_s.so.1>, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0"..., 832) = 832 <0.000007>
+17:44:53.435348 close(3</usr/lib/x86_64-linux-gnu/libgcc_s.so.1>) = 0 <0.000005>
+17:44:53.435375 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/home/moritz/dev/repos/ooRexx/build/lib/libc.so.6", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory) <0.000009>
+17:44:53.435403 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/usr/lib/x86_64-linux-gnu/libc.so.6", O_RDONLY|O_CLOEXEC) = 3</usr/lib/x86_64-linux-gnu/libc.so.6> <0.000008>
+17:44:53.435429 read(3</usr/lib/x86_64-linux-gnu/libc.so.6>, "\177ELF\2\1\1\3\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\340\241\2\0\0\0\0\0"..., 832) = 832 <0.000006>
+17:44:53.435617 close(3</usr/lib/x86_64-linux-gnu/libc.so.6>) = 0 <0.000005>
+17:44:53.436249 rt_sigaction(SIGPIPE, {sa_handler=SIG_IGN, sa_mask=[PIPE], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7fcec84556b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0 <0.000007>
+17:44:53.436331 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/proc/self/maps", O_RDONLY|O_CLOEXEC) = 3</proc/1203593/maps> <0.000026>
+17:44:53.436424 read(3</proc/1203593/maps>, "55a850ad9000-55a850be5000 r--p 0"..., 1024) = 1024 <0.000020>
+17:44:53.436474 read(3</proc/1203593/maps>, "              /usr/lib/x86_64-li"..., 1024) = 1024 <0.000014>
+17:44:53.436506 read(3</proc/1203593/maps>, "         /usr/lib/x86_64-linux-g"..., 1024) = 666 <0.000010>
+17:44:53.436534 close(3</proc/1203593/maps>) = 0 <0.000009>
+17:44:53.436575 rt_sigaction(SIGSEGV, NULL, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0 <0.000006>
+17:44:53.436684 rt_sigaction(SIGSEGV, {sa_handler=0x55a850f7d290, sa_mask=[], sa_flags=SA_RESTORER|SA_ONSTACK|SA_SIGINFO, sa_restorer=0x7fcec84556b0}, NULL, 8) = 0 <0.000006>
+17:44:53.436704 rt_sigaction(SIGBUS, NULL, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0 <0.000006>
+17:44:53.436722 rt_sigaction(SIGBUS, {sa_handler=0x55a850f7d290, sa_mask=[], sa_flags=SA_RESTORER|SA_ONSTACK|SA_SIGINFO, sa_restorer=0x7fcec84556b0}, NULL, 8) = 0 <0.000006>
+17:44:53.436830 rt_sigaction(SIGINT, NULL, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0 <0.000005>
+17:44:53.436848 rt_sigaction(SIGINT, {sa_handler=0x55a850eee4f0, sa_mask=~[RTMIN RT_1], sa_flags=SA_RESTORER, sa_restorer=0x7fcec84556b0}, NULL, 8) = 0 <0.000005>
+17:44:53.436866 rt_sigaction(SIGTERM, NULL, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0 <0.000005>
+17:44:53.436884 rt_sigaction(SIGTERM, {sa_handler=0x55a850eee4f0, sa_mask=~[RTMIN RT_1], sa_flags=SA_RESTORER, sa_restorer=0x7fcec84556b0}, NULL, 8) = 0 <0.000006>
+17:44:53.436902 rt_sigaction(SIGHUP, NULL, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0 <0.000005>
+17:44:53.436919 rt_sigaction(SIGHUP, {sa_handler=0x55a850eee4f0, sa_mask=~[RTMIN RT_1], sa_flags=SA_RESTORER, sa_restorer=0x7fcec84556b0}, NULL, 8) = 0 <0.000006>
+17:44:53.436937 rt_sigaction(SIGPIPE, {sa_handler=SIG_IGN, sa_mask=[PIPE], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7fcec84556b0}, {sa_handler=SIG_IGN, sa_mask=[PIPE], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7fcec84556b0}, 8) = 0 <0.000005>
+17:44:53.436960 rt_sigprocmask(SIG_BLOCK, [HUP INT TERM], [], 8) = 0 <0.000006>
+17:44:53.437174 openat(AT_FDCWD</tmp/t88f-fifo/crate-r3>, "/tmp/t88f-fifo/crate-r3/probe.rex", O_RDONLY|O_CLOEXEC) = 6</tmp/t88f-fifo/crate-r3/probe.rex> <0.000009>
+17:44:53.437225 read(6</tmp/t88f-fifo/crate-r3/probe.rex>, "f = '/tmp/t88f-fifo/crate-r3/pip"..., 572) = 572 <0.000007>
+17:44:53.437248 read(6</tmp/t88f-fifo/crate-r3/probe.rex>, "", 32) = 0 <0.000006>
+17:44:53.437267 close(6</tmp/t88f-fifo/crate-r3/probe.rex>) = 0 <0.000007>
+17:44:53.437295 rt_sigaction(SIGRT_1, {sa_handler=0x7fcec84a7640, sa_mask=[], sa_flags=SA_RESTORER|SA_ONSTACK|SA_RESTART|SA_SIGINFO, sa_restorer=0x7fcec84556b0}, NULL, 8) = 0 <0.000006>
+17:44:53.437316 rt_sigprocmask(SIG_UNBLOCK, [RTMIN RT_1], NULL, 8) = 0 <0.000005>
+17:44:53.437377 rt_sigprocmask(SIG_BLOCK, ~[], [HUP INT TERM], 8) = 0 <0.000005>
+17:44:53.437513 rt_sigprocmask(SIG_SETMASK, [HUP INT TERM], NULL, 8) = 0 <0.000012>
+17:44:53.516576 write(1</tmp/t88f-fifo/crate-r3/stdout>, "warm [abc]\nNOTREADY /tmp/t88f-fi"..., 170) = 170 <0.000029>
+17:44:53.519233 +++ exited with 0 +++

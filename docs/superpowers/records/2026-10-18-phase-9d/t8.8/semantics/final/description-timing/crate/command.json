@@ -1,0 +1,1 @@
+{"cmd": ["memcap", "2G", "timeout", "-k", "5", "20", "/tmp/codex-p9d-t88-pins/8.8f-rexx", "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/semantics/probes/description-timing.rex"], "cwd": "/tmp/t88f-1_yo1f4s", "oracle_as": null}

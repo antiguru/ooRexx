@@ -1,0 +1,4 @@
+open READY:
+read [abc]
+write 0
+close READY:

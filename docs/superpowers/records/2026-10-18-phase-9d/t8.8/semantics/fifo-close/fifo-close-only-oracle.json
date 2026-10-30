@@ -1,0 +1,19 @@
+{
+  "name": "fifo-close-only",
+  "side": "oracle",
+  "command": [
+    "bash",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/diagnostics/fixed-rechecks/oracle.sh",
+    "/tmp/t88e1-probes-fb0srth_/fifo-close-only-oracle/probe.rex"
+  ],
+  "cwd": "/tmp/t88e1-probes-fb0srth_/fifo-close-only-oracle",
+  "source": "say 'write' lineout('/tmp/t88e1-probes-fb0srth_/fifo-close-only-oracle/pipe','hello')\nsay 'close' lineout('/tmp/t88e1-probes-fb0srth_/fifo-close-only-oracle/pipe')\n",
+  "status": 0,
+  "stdout_hex": "777269746520300a636c6f736520310a",
+  "stderr_hex": "",
+  "payload_hex": "656c6c6f0a",
+  "elapsed": 0.011021012032870203,
+  "terminal_raw": false,
+  "input_hex": "",
+  "crate_artifact": "/tmp/t88f-fifo/rexx-frozen"
+}

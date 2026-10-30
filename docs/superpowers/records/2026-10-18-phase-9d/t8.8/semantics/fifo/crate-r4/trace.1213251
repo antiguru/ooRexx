@@ -1,0 +1,28 @@
+17:46:45.781165 rt_sigprocmask(SIG_SETMASK, [INT TERM CHLD], NULL, 8) = 0 <0.000004>
+17:46:45.781245 close(255</home/moritz/.local/bin/memcap>) = 0 <0.000004>
+17:46:45.781288 rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0 <0.000004>
+17:46:45.781303 rt_sigaction(SIGTSTP, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, 8) = 0 <0.000004>
+17:46:45.781319 rt_sigaction(SIGTTIN, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, 8) = 0 <0.000004>
+17:46:45.781333 rt_sigaction(SIGTTOU, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, 8) = 0 <0.000004>
+17:46:45.781351 rt_sigaction(SIGINT, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, {sa_handler=0x558e160f05d0, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, 8) = 0 <0.000004>
+17:46:45.781366 rt_sigaction(SIGQUIT, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, {sa_handler=SIG_IGN, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, 8) = 0 <0.000004>
+17:46:45.781380 rt_sigaction(SIGCHLD, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7f1e040016b0}, {sa_handler=0x558e160c89b0, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7f1e040016b0}, 8) = 0 <0.000004>
+17:46:45.781396 rt_sigaction(SIGCHLD, {sa_handler=0x558e160c89b0, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7f1e040016b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x7f1e040016b0}, 8) = 0 <0.000004>
+17:46:45.781411 rt_sigaction(SIGINT, {sa_handler=0x558e160f05d0, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, 8) = 0 <0.000004>
+17:46:45.781440 close(4<pipe:[99398736]>) = 0 <0.000004>
+17:46:45.781458 close(3<pipe:[99398736]>) = 0 <0.000004>
+17:46:45.781505 rt_sigprocmask(SIG_BLOCK, NULL, [], 8) = 0 <0.000004>
+17:46:45.781809 rt_sigprocmask(SIG_BLOCK, NULL, [], 8) = 0 <0.000004>
+17:46:45.781827 rt_sigprocmask(SIG_BLOCK, [INT TERM CHLD], [], 8) = 0 <0.000004>
+17:46:45.781841 rt_sigprocmask(SIG_BLOCK, ~[], [INT TERM CHLD], 8) = 0 <0.000004>
+17:46:45.782033 rt_sigprocmask(SIG_SETMASK, [INT TERM CHLD], NULL, 8) = 0 <0.000006>
+17:46:45.782058 rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0 <0.000017>
+17:46:45.782099 rt_sigprocmask(SIG_BLOCK, [CHLD], [], 8) = 0 <0.000005>
+17:46:45.782120 rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0 <0.000029>
+17:46:45.782162 rt_sigprocmask(SIG_BLOCK, [CHLD], [], 8) = 0 <0.000007>
+17:46:45.782188 rt_sigaction(SIGINT, {sa_handler=0x558e160c5680, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, {sa_handler=0x558e160f05d0, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, 8) = 0 <0.000005>
+17:46:45.785206 rt_sigaction(SIGINT, {sa_handler=0x558e160f05d0, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, {sa_handler=0x558e160c5680, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7f1e040016b0}, 8) = 0 <0.000007>
+17:46:45.785237 rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0 <0.000006>
+17:46:45.785258 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=1213252, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+17:46:45.785286 rt_sigreturn({mask=[]}) = 0 <0.000006>
+17:46:45.785485 +++ exited with 0 +++

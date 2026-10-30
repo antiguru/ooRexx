@@ -1,0 +1,6 @@
+17:46:46.076880 rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0 <0.000006>
+17:46:46.077114 rt_sigprocmask(SIG_BLOCK, [HUP INT TERM], [], 8) = 0 <0.000006>
+17:46:46.147484 read(5<anon_inode:[timerfd]>, 0x7fb8ae29eb80, 8) = -1 EAGAIN (Resource temporarily unavailable) <0.000026>
+17:46:46.150160 read(5<anon_inode:[timerfd]>, 0x7fb8ae29eb80, 8) = -1 EAGAIN (Resource temporarily unavailable) <0.000008>
+17:46:46.150356 rt_sigprocmask(SIG_BLOCK, ~[RT_1], NULL, 8) = 0 <0.000009>
+17:46:46.150495 +++ exited with 0 +++

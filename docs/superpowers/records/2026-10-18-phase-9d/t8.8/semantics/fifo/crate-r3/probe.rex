@@ -1,0 +1,21 @@
+f = '/tmp/t88f-fifo/crate-r3/pipe'
+log = '/tmp/t88f-fifo/crate-r3/events'
+call on halt name h
+call on notready name nr
+say 'warm ['charin(f,,3)']'
+call lineout '/tmp/t88f-fifo/crate-r3/ready', 'READY'
+call stream '/tmp/t88f-fifo/crate-r3/ready', 'c', 'close'
+x = charin(f,,1)
+say 'read [' || x || ']'
+say 'description' stream(f,'d')
+exit 0
+nr:
+say 'NOTREADY' condition('d') stream(f,'d')
+call lineout log, 'NOTREADY 'stream(f,'d')
+call stream log, 'c', 'close'
+return
+h:
+say 'HALT' stream(f,'d')
+call lineout log, 'HALT 'stream(f,'d')
+call stream log, 'c', 'close'
+return

@@ -1,0 +1,14 @@
+{
+  "source_commit": "3979b7e31",
+  "closed": [
+    "2026-10-05-stream-fifo-terminal-seek.md",
+    "2026-10-29-hash-collection-messages-sent.md",
+    "2026-10-29-trace-assignment-rendered-once.md",
+    "2026-10-29-stdout-query-size-position-file.md",
+    "2026-10-29-stem-index-string-values.md",
+    "2026-10-30-raise-description-unsent.md",
+    "2026-10-30-number-max-object-argument.md",
+    "2026-10-30-parse-pattern-conversion-raise.md"
+  ],
+  "historical_fields_preserved": true
+}

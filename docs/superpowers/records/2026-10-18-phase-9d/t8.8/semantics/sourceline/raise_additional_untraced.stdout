@@ -1,0 +1,38 @@
+s1 98.939
+s2 98.900 boom.
+USER
+after o
+s3 98.939
+USER
+after q
+%SRCG%COUNT 30
+%SRCG%L/* Untraced ADDITIONAL renders nothing for a trace line. A SYNTAX code uses
+%SRCG%L   the RC value's string value. */
+%SRCG%Lo = .bad~new
+%SRCG%Lq = .noisy~new
+%SRCG%Lcall on user zz name u
+%SRCG%Lsignal on syntax name s1
+%SRCG%Lraise syntax 93.900 additional (o)
+%SRCG%Ls1: say 's1' condition('o')~code
+%SRCG%Lsignal on syntax name s2
+%SRCG%Lraise syntax (o)
+%SRCG%Ls2: say 's2' condition('o')~code condition('o')~message
+%SRCG%Lcall ru 'additional', o
+%SRCG%Lsay 'after o'
+%SRCG%Lsignal on syntax name s3
+%SRCG%Lraise syntax 93.900 additional (q)
+%SRCG%Ls3: say 's3' condition('o')~code
+%SRCG%Lcall ru 'additional', q
+%SRCG%Lsay 'after q'
+%SRCG%Lexit
+%SRCG%Lu: say 'USER'; return
+%SRCG%Lru:
+%SRCG%L  parse arg how
+%SRCG%L  raise user zz additional (arg(2)) return
+%SRCG%L::class bad
+%SRCG%L::method defaultname
+%SRCG%L  raise syntax 98.900 array('boom')
+%SRCG%L::class noisy
+%SRCG%L::method defaultname
+%SRCG%L  say '    (noisy dn sent)'
+%SRCG%L  return 'NOISY'

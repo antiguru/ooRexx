@@ -1,0 +1,26 @@
+17:46:46.076279 rt_sigprocmask(SIG_SETMASK, [HUP INT TERM], NULL, 8) = 0 <0.000005>
+17:46:46.076475 rt_sigprocmask(SIG_UNBLOCK, [HUP INT TERM], [HUP INT TERM], 8) = 0 <0.000004>
+17:46:46.076705 rt_sigprocmask(SIG_BLOCK, ~[], [], 8) = 0 <0.000005>
+17:46:46.076821 rt_sigprocmask(SIG_SETMASK, [], NULL, 8) = 0 <0.000006>
+17:46:46.076929 close(6</dev/null<char 1:3>>) = 0 <0.000007>
+17:46:46.103158 openat(AT_FDCWD</tmp/t88f-fifo/partial-crate-r1>, "/proc/sys/vm/overcommit_memory", O_RDONLY|O_CLOEXEC) = 6</proc/sys/vm/overcommit_memory> <0.000020>
+17:46:46.103268 read(6</proc/sys/vm/overcommit_memory>, "0", 1) = 1 <0.000009>
+17:46:46.103295 close(6</proc/sys/vm/overcommit_memory>) = 0 <0.000007>
+17:46:46.135744 openat(AT_FDCWD</tmp/t88f-fifo/partial-crate-r1>, "/tmp/t88f-fifo/partial-crate-r1/pipe", O_RDWR|O_CLOEXEC) = 6</tmp/t88f-fifo/partial-crate-r1/pipe> <0.000028>
+17:46:46.135938 read(6</tmp/t88f-fifo/partial-crate-r1/pipe>, "abc", 3) = 3 <0.000008>
+17:46:46.136030 openat(AT_FDCWD</tmp/t88f-fifo/partial-crate-r1>, "/tmp/t88f-fifo/partial-crate-r1/ready", O_RDWR|O_CREAT|O_CLOEXEC, 0666) = 7</tmp/t88f-fifo/partial-crate-r1/ready> <0.000042>
+17:46:46.136305 lseek(7</tmp/t88f-fifo/partial-crate-r1/ready>, 0, SEEK_SET) = 0 <0.000006>
+17:46:46.136343 write(7</tmp/t88f-fifo/partial-crate-r1/ready>, "READY\n", 6) = 6 <0.000018>
+17:46:46.136380 close(7</tmp/t88f-fifo/partial-crate-r1/ready>) = 0 <0.000010>
+17:46:46.136418 read(6</tmp/t88f-fifo/partial-crate-r1/pipe>, "P", 2) = 1 <0.009308>
+17:46:46.145791 read(6</tmp/t88f-fifo/partial-crate-r1/pipe>, 0x7fb8ce2985c8, 1) = ? ERESTARTSYS (To be restarted if SA_RESTART is set) <0.001358>
+17:46:46.147243 --- SIGINT {si_signo=SIGINT, si_code=SI_TKILL, si_pid=1213277, si_uid=1000} ---
+17:46:46.147273 write(4<UNIX-STREAM:[99392971->99392970]>, "\0", 1) = 1 <0.000023>
+17:46:46.147472 rt_sigreturn({mask=[]}) = -1 EINTR (Interrupted system call) <0.000073>
+17:46:46.147940 openat(AT_FDCWD</tmp/t88f-fifo/partial-crate-r1>, "/tmp/t88f-fifo/partial-crate-r1/events", O_RDWR|O_CREAT|O_CLOEXEC, 0666) = 7</tmp/t88f-fifo/partial-crate-r1/events> <0.000041>
+17:46:46.148137 lseek(7</tmp/t88f-fifo/partial-crate-r1/events>, 0, SEEK_SET) = 0 <0.000006>
+17:46:46.148160 write(7</tmp/t88f-fifo/partial-crate-r1/events>, "NOTREADY ERROR:4 Interrupted sys"..., 78) = 78 <0.000019>
+17:46:46.148196 close(7</tmp/t88f-fifo/partial-crate-r1/events>) = 0 <0.000007>
+17:46:46.148280 close(6</tmp/t88f-fifo/partial-crate-r1/pipe>) = 0 <0.000006>
+17:46:46.157303 rt_sigprocmask(SIG_BLOCK, ~[RT_1], NULL, 8) = 0 <0.000009>
+17:46:46.157482 +++ exited with 0 +++

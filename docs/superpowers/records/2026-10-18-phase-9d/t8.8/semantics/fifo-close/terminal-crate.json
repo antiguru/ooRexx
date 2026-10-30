@@ -1,0 +1,24 @@
+{
+  "name": "terminal",
+  "side": "crate",
+  "command": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/t88f-fifo/rexx-frozen",
+    "/tmp/t88e1-probes-fb0srth_/terminal-crate/probe.rex"
+  ],
+  "cwd": "/tmp/t88e1-probes-fb0srth_/terminal-crate",
+  "source": "say 'open' stream('/dev/pts/13','C','OPEN BOTH')\nsay 'read' '['charin('/dev/pts/13',,3)']'\nsay 'write' lineout('/dev/pts/13','xyz')\nsay 'close' stream('/dev/pts/13','C','CLOSE')\n",
+  "status": 0,
+  "stdout_hex": "6f70656e2052454144593a0a72656164205b6162635d0a777269746520300a636c6f73652052454144593a0a",
+  "stderr_hex": "",
+  "payload_hex": "78797a0a",
+  "elapsed": 0.07958349998807535,
+  "terminal_raw": true,
+  "input_hex": "616263",
+  "crate_artifact": "/tmp/t88f-fifo/rexx-frozen"
+}

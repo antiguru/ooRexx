@@ -1,0 +1,57 @@
+{
+  "command": [
+    "strace",
+    "-ff",
+    "-tt",
+    "-T",
+    "-yy",
+    "-e",
+    "trace=read,write,openat,close,lseek,rt_sigaction,rt_sigprocmask,rt_sigreturn",
+    "-o",
+    "/tmp/t88f-fifo/partial-crate-r1/trace",
+    "memcap",
+    "2G",
+    "/tmp/t88f-fifo/rexx-frozen",
+    "/tmp/t88f-fifo/partial-crate-r1/probe.rex"
+  ],
+  "cwd": "/tmp/t88f-fifo/partial-crate-r1",
+  "tracer": {
+    "pid": 1213280,
+    "starttime": "37796626",
+    "exe": "/usr/bin/strace"
+  },
+  "source_sha256": "8758b21d4853dc77c62b161fcd41dd3753458c1c3ea47e6cc28b710d3905cd80",
+  "events": [
+    {
+      "event": "partial writer P",
+      "elapsed": 0.13756057596765459
+    },
+    {
+      "event": "tgkill SIGINT",
+      "elapsed": 0.13902868499280885,
+      "tgid": 1213286,
+      "tid": 1213289,
+      "result": 0
+    }
+  ],
+  "rlimit_as": null,
+  "LD_LIBRARY_PATH": "/home/moritz/dev/repos/ooRexx/build/lib",
+  "target": {
+    "pid": 1213286,
+    "starttime": "37796629",
+    "exe": "/tmp/t88f-fifo/rexx-frozen"
+  },
+  "blocked_before_signal": {
+    "tgid": 1213286,
+    "tid": 1213289,
+    "fd": 6,
+    "fd_link": "/tmp/t88f-fifo/partial-crate-r1/pipe",
+    "syscall": "0 0x6 0x7fb8ce2985c8 0x1 0x0 0x0 0x0 0x7fb8ce298528 0x7fb8ce340efe",
+    "status": "Name:\trexx-interp\nUmask:\t0002\nState:\tS (sleeping)\nTgid:\t1213286\nNgid:\t0\nPid:\t1213289\nPPid:\t1213282\nTracerPid:\t1213280\nUid:\t1000\t1000\t1000\t1000\nGid:\t1000\t1000\t1000\t1000\nFDSize:\t256\nGroups:\t24 25 27 29 30 44 46 100 101 991 999 1000 2000 \nNStgid:\t1213286\nNSpid:\t1213289\nNSpgid:\t1213273\nNSsid:\t1213267\nKthread:\t0\nVmPeak:\t  730668 kB\nVmSize:\t  665416 kB\nVmLck:\t       0 kB\nVmPin:\t       0 kB\nVmHWM:\t   20580 kB\nVmRSS:\t   20580 kB\nRssAnon:\t   14512 kB\nRssFile:\t    1788 kB\nRssShmem:\t    4280 kB\nVmData:\t  542108 kB\nVmStk:\t     132 kB\nVmExe:\t    3724 kB\nVmLib:\t    1756 kB\nVmPTE:\t     100 kB\nVmSwap:\t       0 kB\nHugetlbPages:\t       0 kB\nCoreDumping:\t0\nTHP_enabled:\t1\nuntag_mask:\t0xffffffffffffffff\nThreads:\t3\nSigQ:\t10/509620\nSigPnd:\t0000000000000000\nShdPnd:\t0000000000000000\nSigBlk:\t0000000000000000\nSigIgn:\t0000000000001000\nSigCgt:\t0000000100004443\nCapInh:\t0000000000000000\nCapPrm:\t0000000000000000\nCapEff:\t0000000000000000\nCapBnd:\t000001ffffffffff\nCapAmb:\t0000000000000000\nNoNewPrivs:\t0\nSeccomp:\t0\nSeccomp_filters:\t0\nSpeculation_Store_Bypass:\tthread vulnerable\nSpeculationIndirectBranch:\tconditional enabled\nCpus_allowed:\tffffffff\nCpus_allowed_list:\t0-31\nMems_allowed:\t00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001\nMems_allowed_list:\t0\nvoluntary_ctxt_switches:\t5685\nnonvoluntary_ctxt_switches:\t1\nx86_Thread_features:\t\nx86_Thread_features_locked:\t\n",
+    "comm": "rexx-interp"
+  },
+  "ready_hex": "52454144590a",
+  "observation": "exited after signal without writer unblock",
+  "status": 0,
+  "elapsed": 0.18160145496949553
+}

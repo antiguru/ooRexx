@@ -1,0 +1,17 @@
+hash 1
+hash 1
+table value 0
+hash 1
+hash 1
+equal
+set 1 0
+hash 1
+hash 1
+hash 1
+all 2
+hash 1
+count 2
+hash 1
+has 1
+hash 1
+remove first 1
