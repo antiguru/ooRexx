@@ -42,10 +42,15 @@ fn calibration() {
     ] {
         rows.push(blank(&format!("{PROGRAMS}{program}"), "program", knobs));
     }
+    if let Ok(only) = std::env::var(ONLY_ENV) {
+        let (group, part) = only.split_once(':').map_or((only.as_str(), None), |(group, part)| (group, Some(part)));
+        rows = read_table().into_iter().filter(|row| row.group == group && part.is_none_or(|part| row.part == part)).collect();
+        assert!(!rows.is_empty(), "{ONLY_ENV}: no calibration rows for {only}");
+    }
     let lines = in_jobs(&rows, |at, row| {
         let mut row = row.clone();
         let mut out = String::new();
-        let mut refusing: Vec<String> = Vec::new();
+        let mut refusing = row.left_out.clone();
         loop {
             let dir = scratch("sim-calibration", at);
             let mode = row.mode(seed(&row.group, &row.part, 0), "fifo");
