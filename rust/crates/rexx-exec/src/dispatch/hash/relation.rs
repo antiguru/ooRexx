@@ -17,19 +17,52 @@ use super::{
     not_this_task, owns, pairs, same_index, slot_at, store_of, take, walk,
 };
 
-/// Every slot whose index matches, in chain order.
-fn slots_for(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Result<Vec<usize>, Failure> {
+/// Every matching slot in chain order, paired with the store it belongs to.
+fn slots_for(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    index: ObjRef,
+) -> Result<(super::Store, Vec<usize>), Failure> {
     let keys = keys_of(interp, receiver);
     let hash = super::hash_of(interp, keys, index)?;
-    let store = store_of(interp, receiver)?;
-    let bucket = (hash % store.buckets as u64) as usize;
-    let mut found = Vec::new();
-    for (slot, _) in super::entries_in(interp, &store, Some(bucket))? {
-        if same_index(interp, &store, keys, slot, index)? {
-            found.push(slot);
+    'search: loop {
+        let store = store_of(interp, receiver)?;
+        let bucket = (hash % store.buckets as u64) as usize;
+        let entries = super::entries_in(interp, &store, Some(bucket))?;
+        let mut indexes = Vec::with_capacity(entries.len());
+        for &(slot, _) in &entries {
+            let held = slot_at(interp, store.indexes, slot)?;
+            if let Some(held) = held {
+                interp.roots.activity_mut().push_temp(held);
+            }
+            indexes.push(held);
         }
+        let mut found = Vec::new();
+        for &(slot, _) in &entries {
+            let writes = interp.store_writes;
+            let generation = interp.store_generation;
+            let matches = same_index(interp, &store, keys, slot, index)?;
+            // Equality can replace arrays or change an earlier collision
+            // entry. Validate the whole saved chain before retaining slots.
+            if writes != interp.store_writes || generation != interp.store_generation {
+                let current = store_of(interp, receiver)?;
+                if current != store
+                    || super::entries_in(interp, &current, Some(bucket))? != entries
+                {
+                    continue 'search;
+                }
+                for (&(saved, _), &held) in entries.iter().zip(&indexes) {
+                    if slot_at(interp, current.indexes, saved)? != held {
+                        continue 'search;
+                    }
+                }
+            }
+            if matches {
+                found.push(slot);
+            }
+        }
+        return Ok((store, found));
     }
-    Ok(found)
 }
 
 /// `RelationClass::allAt(index)`: every item under that index, newest first.
@@ -49,9 +82,9 @@ fn native_relation_all_at(
     // `at()` and `remove()` report `Missing argument; argument index is
     // required.`
     let index = super::collection::item_argument(args)?;
-    let store = store_of(interp, receiver)?;
+    let (store, slots) = slots_for(interp, receiver, index)?;
     let mut items = Vec::new();
-    for slot in slots_for(interp, receiver, index)? {
+    for slot in slots {
         items.push(slot_at(interp, store.items, slot)?.unwrap_or(ObjRef::NIL));
     }
     Ok(Some(super::collection::array_of(interp, items)))
@@ -126,7 +159,7 @@ fn native_relation_items(
         return Err(not_this_task(interp, receiver, b"ITEMS"));
     }
     let count = match args.first().copied().flatten() {
-        Some(index) => slots_for(interp, receiver, index)?.len(),
+        Some(index) => slots_for(interp, receiver, index)?.1.len(),
         None => walk(interp, receiver)?.len(),
     };
     Ok(Some(interp.counted(count)))
@@ -173,10 +206,10 @@ fn native_relation_supplier(
     let Some(index) = args.first().copied().flatten() else {
         return native_hash_supplier(interp, cleared, receiver, &[]);
     };
-    let store = store_of(interp, receiver)?;
+    let (store, slots) = slots_for(interp, receiver, index)?;
     let mut items = Vec::new();
     let mut indexes = Vec::new();
-    for slot in slots_for(interp, receiver, index)? {
+    for slot in slots {
         items.push(slot_at(interp, store.items, slot)?.unwrap_or(ObjRef::NIL));
         indexes.push(slot_at(interp, store.indexes, slot)?.unwrap_or(ObjRef::NIL));
     }
