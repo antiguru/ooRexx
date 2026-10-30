@@ -27,7 +27,7 @@ use rexx_bench::child::{Counted, Counters, ORACLE_ROOT, Side, Wrapper, parse_cou
 #[path = "rexx-bench-suite/report.rs"]
 mod report;
 
-#[path = "rexx-bench-suite/binary.rs"]
+#[path = "rexx-bench-suite/binary/mod.rs"]
 mod binary;
 use binary::rust_binary_candidates;
 

@@ -34,6 +34,7 @@ use std::time::{Duration, Instant};
 
 mod process;
 use process::wait_with_deadline;
+#[allow(unused_imports)]
 pub use process::write_and_wait;
 
 use rexx_exec::Outcome;

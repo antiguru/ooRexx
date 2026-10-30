@@ -22,9 +22,9 @@
 //! timeout or the memory cap ends has its last started test renamed out, and
 //! runs again.
 
-#[path = "suite/selection.rs"]
+#[path = "suite/selection/mod.rs"]
 mod selection;
-#[path = "suite/process_ownership.rs"]
+#[path = "suite/process_ownership/mod.rs"]
 mod process_ownership;
 #[path = "support/group_runner.rs"]
 mod group_runner;

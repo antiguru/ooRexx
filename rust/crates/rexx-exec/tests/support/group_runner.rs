@@ -37,6 +37,7 @@
 // Pulled in by more than one test binary, each of which uses part of it.
 #![allow(dead_code)]
 
+#[path = "group_runner/bytes/mod.rs"]
 mod bytes;
 use bytes::contains;
 pub use bytes::renamed;
