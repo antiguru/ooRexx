@@ -1,0 +1,146 @@
+[
+  {
+    "side": "oracle",
+    "pair": -2,
+    "wall_seconds": 0.006099338992498815,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "side": "rust",
+    "pair": -2,
+    "wall_seconds": 0.024485942965839058,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "side": "rust",
+    "pair": -1,
+    "wall_seconds": 0.021330481977201998,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "side": "oracle",
+    "pair": -1,
+    "wall_seconds": 0.00788716902025044,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "side": "oracle",
+    "pair": 0,
+    "wall_seconds": 0.0039409290184266865,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "side": "rust",
+    "pair": 0,
+    "wall_seconds": 0.020658201014157385,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "side": "rust",
+    "pair": 1,
+    "wall_seconds": 0.02076054801000282,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "side": "oracle",
+    "pair": 1,
+    "wall_seconds": 0.005056628957390785,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "side": "oracle",
+    "pair": 2,
+    "wall_seconds": 0.003744955000001937,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "side": "rust",
+    "pair": 2,
+    "wall_seconds": 0.020878563984297216,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "side": "rust",
+    "pair": 3,
+    "wall_seconds": 0.021338541992008686,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "side": "oracle",
+    "pair": 3,
+    "wall_seconds": 0.005975982989184558,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "side": "oracle",
+    "pair": 4,
+    "wall_seconds": 0.004859843989834189,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "side": "rust",
+    "pair": 4,
+    "wall_seconds": 0.021151227003429085,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "side": "rust",
+    "pair": 5,
+    "wall_seconds": 0.019918320991564542,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "side": "oracle",
+    "pair": 5,
+    "wall_seconds": 0.005215864046476781,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "side": "oracle",
+    "pair": 6,
+    "wall_seconds": 0.006182448007166386,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "side": "rust",
+    "pair": 6,
+    "wall_seconds": 0.027109669987112284,
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+]

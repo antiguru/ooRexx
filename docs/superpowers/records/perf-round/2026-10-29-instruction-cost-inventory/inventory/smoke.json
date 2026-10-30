@@ -1,0 +1,3892 @@
+[
+  {
+    "id": "nop",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005850136047229171,
+        "internal_seconds": 2.7e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022747710987459868,
+        "internal_seconds": 3.2e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "if-true",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005836426047608256,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023857090971432626,
+        "internal_seconds": 3.9e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "if-false",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0058205859968438745,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022821361024398357,
+        "internal_seconds": 3.9e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "do-group",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005776408012025058,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022527948021888733,
+        "internal_seconds": 3.4e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "do-repeat",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005354959983378649,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022366893012076616,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "loop-repeat",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005727529001887888,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022098270012065768,
+        "internal_seconds": 3.5e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "do-controlled",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005382799019571394,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02240195102058351,
+        "internal_seconds": 3.5e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "loop-controlled",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005491206014994532,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022996935003902763,
+        "internal_seconds": 4.1e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "do-while",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.00530839100247249,
+        "internal_seconds": 3.4e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02276363200508058,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "loop-while",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005067427991889417,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.021960434038192034,
+        "internal_seconds": 3.9e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "do-until",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0049488910008221865,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02249779796693474,
+        "internal_seconds": 4.6e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "loop-until",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006117598037235439,
+        "internal_seconds": 3.2e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022945277043618262,
+        "internal_seconds": 4.4e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "do-over",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005458767001982778,
+        "internal_seconds": 3.1e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02486900199437514,
+        "internal_seconds": 3.8e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "loop-over",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005655650980770588,
+        "internal_seconds": 3.3e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02262636600062251,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "select-hit",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005555083975195885,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.021992883004713804,
+        "internal_seconds": 4.1e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "select-otherwise",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0055449449573643506,
+        "internal_seconds": 3.1e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0227783810114488,
+        "internal_seconds": 3.9e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "select-case-hit",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005590603046584874,
+        "internal_seconds": 3.3e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.024653297965414822,
+        "internal_seconds": 4.2e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "select-case-otherwise",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006938664999324828,
+        "internal_seconds": 3.9e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.024915041052736342,
+        "internal_seconds": 4.9e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "leave",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006370021030306816,
+        "internal_seconds": 3.6e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023612148012034595,
+        "internal_seconds": 4.1e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "iterate",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005604062986094505,
+        "internal_seconds": 3.3e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02266766398679465,
+        "internal_seconds": 4.2e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "leave-named",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.00535364099778235,
+        "internal_seconds": 3.3e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02251233800780028,
+        "internal_seconds": 4.1e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "iterate-named",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006011810968630016,
+        "internal_seconds": 3.3e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023579747998155653,
+        "internal_seconds": 4.8e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "internal-call-return",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005374329979531467,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.021943735016975552,
+        "internal_seconds": 4.2e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "internal-function-return",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.007015532988589257,
+        "internal_seconds": 3.1e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02595352102071047,
+        "internal_seconds": 4.2e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "procedure-use-arg",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005779888015240431,
+        "internal_seconds": 3.6e-05,
+        "stdout_bytes": 30,
+        "stdout_sha256": "43a6990d132192624383b81bd43f244f9fac497f0eadf3b0a1fe2336fafef790",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023399102967232466,
+        "internal_seconds": 5e-05,
+        "stdout_bytes": 30,
+        "stdout_sha256": "43a6990d132192624383b81bd43f244f9fac497f0eadf3b0a1fe2336fafef790",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "procedure-expose",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0058784360298886895,
+        "internal_seconds": 3.4e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02343729295535013,
+        "internal_seconds": 5.3e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arg-routine",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006364392000250518,
+        "internal_seconds": 4.2e-05,
+        "stdout_bytes": 34,
+        "stdout_sha256": "c0c010bf4d49c6b47e309da85a15245adaafef090370f86f7bac6fcc6f4b6b65",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0223000849946402,
+        "internal_seconds": 5.2e-05,
+        "stdout_bytes": 34,
+        "stdout_sha256": "c0c010bf4d49c6b47e309da85a15245adaafef090370f86f7bac6fcc6f4b6b65",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "directive-routine",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005585653998423368,
+        "internal_seconds": 3.3e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022871777997352183,
+        "internal_seconds": 4.9e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "message-send-return",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005845305975526571,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023308116011321545,
+        "internal_seconds": 5.5e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "method-use-expose",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005479926010593772,
+        "internal_seconds": 3.2e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022369981976225972,
+        "internal_seconds": 5e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "method-guard-toggle",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006431279995013028,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02277548098936677,
+        "internal_seconds": 5.4e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "method-forward",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0054317680187523365,
+        "internal_seconds": 3.2e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023040672997012734,
+        "internal_seconds": 5.7e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "method-reply-last",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.15691396803595126,
+        "internal_seconds": 0.150747,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.024182362016290426,
+        "internal_seconds": 0.000138,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "signal-label-routine",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005257963028270751,
+        "internal_seconds": 3.4e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02340652298880741,
+        "internal_seconds": 4.7e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "raise-signal-trap",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005570654000621289,
+        "internal_seconds": 0.000162,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.025619991996791214,
+        "internal_seconds": 0.000228,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_integer_plus",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005268172011710703,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "70a3c12cf24150f95b7b15e02f7820e6ca73f071622df4b26596e85ba990b845",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02265371399698779,
+        "internal_seconds": 3.6e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "70a3c12cf24150f95b7b15e02f7820e6ca73f071622df4b26596e85ba990b845",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_integer_subtract",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0054365870309993625,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "0a5dcd86db1c7f561b4d113bfbb1059874d45af656a356f67fe9673bbe35b1fc",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02329328702762723,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "0a5dcd86db1c7f561b4d113bfbb1059874d45af656a356f67fe9673bbe35b1fc",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_integer_multiply",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005709149001631886,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "61ec1378986de56b2a11aa57dc9b6b14fbf9b40f514cf66242231f8259a92463",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022969176003243774,
+        "internal_seconds": 3.7e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "61ec1378986de56b2a11aa57dc9b6b14fbf9b40f514cf66242231f8259a92463",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_integer_divide",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.00579012802336365,
+        "internal_seconds": 3.4e-05,
+        "stdout_bytes": 38,
+        "stdout_sha256": "2313253152ba46f72a2a0d9782d1574c02cab9fe8aaeef56020e757d3cbc8aa6",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02392517903354019,
+        "internal_seconds": 4.4e-05,
+        "stdout_bytes": 38,
+        "stdout_sha256": "2313253152ba46f72a2a0d9782d1574c02cab9fe8aaeef56020e757d3cbc8aa6",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_integer_integer_divide",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0051311259740032256,
+        "internal_seconds": 2.7e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "04bf04e4d0802416eaae571364b2defa66e59375ef2ca54402a5970a6bf5e919",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02265317499404773,
+        "internal_seconds": 3.6e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "04bf04e4d0802416eaae571364b2defa66e59375ef2ca54402a5970a6bf5e919",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_integer_remainder",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005598923016805202,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "d9a2b30b7a5a57574314c9086b6518588f927ce9de3ae8fa3e7bd1d1670d8447",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023696265008766204,
+        "internal_seconds": 3.7e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "d9a2b30b7a5a57574314c9086b6518588f927ce9de3ae8fa3e7bd1d1670d8447",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_integer_power",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0058274160255678,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "684b147f3b11ffc939c555c63840e8a8180f26c24742d706345e7e67fb82aade",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02343697304604575,
+        "internal_seconds": 3.5e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "684b147f3b11ffc939c555c63840e8a8180f26c24742d706345e7e67fb82aade",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_decimal_plus",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005550553963985294,
+        "internal_seconds": 3.1e-05,
+        "stdout_bytes": 35,
+        "stdout_sha256": "93a3f11953b2b20bf2f8f9f4b951d69a38bf8b0b22b656c8aa50a74d985d5394",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.024203980981837958,
+        "internal_seconds": 4.3e-05,
+        "stdout_bytes": 35,
+        "stdout_sha256": "93a3f11953b2b20bf2f8f9f4b951d69a38bf8b0b22b656c8aa50a74d985d5394",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_decimal_subtract",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005878134979866445,
+        "internal_seconds": 3.1e-05,
+        "stdout_bytes": 35,
+        "stdout_sha256": "93303fb2275a4c6ee618df1c9dbf85a976d124cb4cd6a83d77b54484e58bd11f",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02318807999836281,
+        "internal_seconds": 4.7e-05,
+        "stdout_bytes": 35,
+        "stdout_sha256": "93303fb2275a4c6ee618df1c9dbf85a976d124cb4cd6a83d77b54484e58bd11f",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_decimal_multiply",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006140618002973497,
+        "internal_seconds": 3.6e-05,
+        "stdout_bytes": 37,
+        "stdout_sha256": "3fee00fae9969325e2d4dc2919f95a7f5c444a96974d119f36fadc9645d3039d",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023326836002524942,
+        "internal_seconds": 4.2e-05,
+        "stdout_bytes": 37,
+        "stdout_sha256": "3fee00fae9969325e2d4dc2919f95a7f5c444a96974d119f36fadc9645d3039d",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_decimal_divide",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005629902007058263,
+        "internal_seconds": 3.6e-05,
+        "stdout_bytes": 38,
+        "stdout_sha256": "4523a344e4c6f52f5de55469beed275275bc66c65ef4c95dc89d642e3cfe4f30",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.024596970004495233,
+        "internal_seconds": 4.6e-05,
+        "stdout_bytes": 38,
+        "stdout_sha256": "4523a344e4c6f52f5de55469beed275275bc66c65ef4c95dc89d642e3cfe4f30",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_decimal_integer_divide",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005387348996009678,
+        "internal_seconds": 3.2e-05,
+        "stdout_bytes": 30,
+        "stdout_sha256": "115f576a6b63eadf4f7402f6618676feb9880ab3cfc9926ec8873ff80b44249c",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022672604012768716,
+        "internal_seconds": 3.7e-05,
+        "stdout_bytes": 30,
+        "stdout_sha256": "115f576a6b63eadf4f7402f6618676feb9880ab3cfc9926ec8873ff80b44249c",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_decimal_remainder",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005394129024352878,
+        "internal_seconds": 3.4e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "76136de3bb6de283a86d84d2fc3733b408f0fed024a26a7416e6bad8698add9f",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02257380698574707,
+        "internal_seconds": 4.8e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "76136de3bb6de283a86d84d2fc3733b408f0fed024a26a7416e6bad8698add9f",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_decimal_power",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006167297018691897,
+        "internal_seconds": 3.9e-05,
+        "stdout_bytes": 37,
+        "stdout_sha256": "6343a7e4325a4681ad07350adfd10a12b2833228b706202ba6f4445ae5f24999",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023628026945516467,
+        "internal_seconds": 4.5e-05,
+        "stdout_bytes": 37,
+        "stdout_sha256": "6343a7e4325a4681ad07350adfd10a12b2833228b706202ba6f4445ae5f24999",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "concat_abuttal",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005259783007204533,
+        "internal_seconds": 2.6e-05,
+        "stdout_bytes": 44,
+        "stdout_sha256": "304d5bb28877b527f3030120ea81aa10abfe57bc59fbb8e7b1276d283bd6e561",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023294017009902745,
+        "internal_seconds": 3.7e-05,
+        "stdout_bytes": 44,
+        "stdout_sha256": "304d5bb28877b527f3030120ea81aa10abfe57bc59fbb8e7b1276d283bd6e561",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "concat_explicit",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005864225036930293,
+        "internal_seconds": 2.7e-05,
+        "stdout_bytes": 44,
+        "stdout_sha256": "304d5bb28877b527f3030120ea81aa10abfe57bc59fbb8e7b1276d283bd6e561",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0237352839903906,
+        "internal_seconds": 4.1e-05,
+        "stdout_bytes": 44,
+        "stdout_sha256": "304d5bb28877b527f3030120ea81aa10abfe57bc59fbb8e7b1276d283bd6e561",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "concat_blank",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.00578862801194191,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 45,
+        "stdout_sha256": "2fc3f203297cf30efb3a5bc8e39f74d35edd707162ad86a6cb92164c0f532160",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.025148954999167472,
+        "internal_seconds": 5.1e-05,
+        "stdout_bytes": 45,
+        "stdout_sha256": "2fc3f203297cf30efb3a5bc8e39f74d35edd707162ad86a6cb92164c0f532160",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare_equal",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.00558520300546661,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023968027962837368,
+        "internal_seconds": 3.8e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare_not_equal",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005206473986618221,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.024495692981872708,
+        "internal_seconds": 5.3e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare_greater",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.00612228800309822,
+        "internal_seconds": 3.1e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.024381986004300416,
+        "internal_seconds": 5.2e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare_less_equal",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006242294970434159,
+        "internal_seconds": 6.4e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.025453936017584056,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare_less",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005075047956779599,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02327607700135559,
+        "internal_seconds": 4.5e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare_greater_equal",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005714380007702857,
+        "internal_seconds": 3.2e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023055493948049843,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare_strict_equal",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005712169979233295,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.024105674005113542,
+        "internal_seconds": 5.6e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare_strict_not_equal",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0057641679886728525,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.024569839995820075,
+        "internal_seconds": 3.9e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare_strict_greater",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006042461027391255,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02386096998816356,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare_strict_less_equal",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005897184018976986,
+        "internal_seconds": 3.1e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023393463983666152,
+        "internal_seconds": 9.6e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare_strict_less",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005728418997023255,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.024003766011446714,
+        "internal_seconds": 3.7e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare_strict_greater_equal",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.00558887398801744,
+        "internal_seconds": 3.1e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023554899031296372,
+        "internal_seconds": 3.9e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "logical_and",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0057835979969240725,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022673432948067784,
+        "internal_seconds": 3.9e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "logical_or",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005211153998970985,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02308458200423047,
+        "internal_seconds": 3.8e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "logical_xor",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005985542025882751,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023381133971270174,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "prefix_plus",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005573953036218882,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02369963499950245,
+        "internal_seconds": 3.8e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "prefix_minus",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005387359007727355,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 34,
+        "stdout_sha256": "e296d0a05eab1f565b37c5179be305506f22b13ff6a43192e48e12b01556d67b",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023469412000849843,
+        "internal_seconds": 5.4e-05,
+        "stdout_bytes": 34,
+        "stdout_sha256": "e296d0a05eab1f565b37c5179be305506f22b13ff6a43192e48e12b01556d67b",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "prefix_not",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0054176789708435535,
+        "internal_seconds": 3.2e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0245244920370169,
+        "internal_seconds": 3.8e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "prefix_plus_decimal",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006221645046025515,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 35,
+        "stdout_sha256": "d2223fb002b894d6dcf51cece1c060bc84efaa18062b51a8d0a4b097de2b8d56",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023623368004336953,
+        "internal_seconds": 3.9e-05,
+        "stdout_bytes": 35,
+        "stdout_sha256": "d2223fb002b894d6dcf51cece1c060bc84efaa18062b51a8d0a4b097de2b8d56",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "prefix_minus_decimal",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0056871609995141625,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 36,
+        "stdout_sha256": "0e217ebb1fbb7614752eed7c9a0de1f7538c4746b932d1e30d665377a6fdc51d",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02232948300661519,
+        "internal_seconds": 3.9e-05,
+        "stdout_bytes": 36,
+        "stdout_sha256": "0e217ebb1fbb7614752eed7c9a0de1f7538c4746b932d1e30d665377a6fdc51d",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "assign_constant",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0056459419429302216,
+        "internal_seconds": 2.6e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022947287012357265,
+        "internal_seconds": 3.5e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "assign_simple_read",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0056811110116541386,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023138181015383452,
+        "internal_seconds": 3.9e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "assign_compound_literal_tail",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005841245991177857,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022892337990924716,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "assign_compound_variable_tail",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005343009019270539,
+        "internal_seconds": 3.2e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022813060029875487,
+        "internal_seconds": 3.8e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "assign_compound_write",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006022521003615111,
+        "internal_seconds": 3.2e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02293497696518898,
+        "internal_seconds": 3.7e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "assign_stem_default",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005612171953544021,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022417602012865245,
+        "internal_seconds": 3.6e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "read_stem_default",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005685190029907972,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.024781575019005686,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "read_dot_variable",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005502996034920216,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022900867043063045,
+        "internal_seconds": 3.7e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "drop_simple_reset",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0062764029717072845,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023842721013352275,
+        "internal_seconds": 4.2e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "drop_compound_reset",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005631781998090446,
+        "internal_seconds": 3.1e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022943775984458625,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "drop_stem_reset",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005783317959867418,
+        "internal_seconds": 3.1e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023374235024675727,
+        "internal_seconds": 3.8e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "3f7d2d68c79bb1725b72974b45c1b51950b385c0048b81cb66b81d08db23da3a",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "numeric_digits9",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005683311028406024,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "8cd156bca7982420af296798eb074893235ad1d425baa2d2bf38ee1b31a922cc",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02344628202263266,
+        "internal_seconds": 3.5e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "8cd156bca7982420af296798eb074893235ad1d425baa2d2bf38ee1b31a922cc",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "numeric_digits20",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005798847007099539,
+        "internal_seconds": 3.1e-05,
+        "stdout_bytes": 30,
+        "stdout_sha256": "45cb546d704d10fe10ebbc1a1bd45833ed6c365f8f4cdecc6a8e192fc49b050c",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.024601839017122984,
+        "internal_seconds": 3.5e-05,
+        "stdout_bytes": 30,
+        "stdout_sha256": "45cb546d704d10fe10ebbc1a1bd45833ed6c365f8f4cdecc6a8e192fc49b050c",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "numeric_fuzz0",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.00574443896766752,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02351879101479426,
+        "internal_seconds": 3.5e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "numeric_fuzz2",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005944064003415406,
+        "internal_seconds": 3.8e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "ac01d162df437d8a5943a8439e00c15b7294f28ac05e06421ee0bcd878f61079",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02442525397054851,
+        "internal_seconds": 4.7e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "ac01d162df437d8a5943a8439e00c15b7294f28ac05e06421ee0bcd878f61079",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "numeric_scientific",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0056927999830804765,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 38,
+        "stdout_sha256": "55f42f0f0bc83ea6acf6e6c0eb38401be2eb483b77611b8c82dc957e394869a2",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.025409847032278776,
+        "internal_seconds": 4.5e-05,
+        "stdout_bytes": 38,
+        "stdout_sha256": "55f42f0f0bc83ea6acf6e6c0eb38401be2eb483b77611b8c82dc957e394869a2",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "numeric_engineering",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005476585996802896,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 39,
+        "stdout_sha256": "f1d1c6c33d9ff788c2423b36ab82236600da40bec4f2a289803a66e74ff356ef",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023283266986254603,
+        "internal_seconds": 4.3e-05,
+        "stdout_bytes": 39,
+        "stdout_sha256": "f1d1c6c33d9ff788c2423b36ab82236600da40bec4f2a289803a66e74ff356ef",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "trace_off",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005662441020831466,
+        "internal_seconds": 3.1e-05,
+        "stdout_bytes": 40,
+        "stdout_sha256": "f0309500f64131bbbe2ccc41af1fc5ab2650949ab24b46c1429f4a0a7485dfe5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023896330036222935,
+        "internal_seconds": 4.4e-05,
+        "stdout_bytes": 40,
+        "stdout_sha256": "f0309500f64131bbbe2ccc41af1fc5ab2650949ab24b46c1429f4a0a7485dfe5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "options_constant",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006020951026584953,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 38,
+        "stdout_sha256": "17269d2bca29291725d85d214d5f595f70bdc64daaeecaf5802b9d9015e3c23e",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02256359701277688,
+        "internal_seconds": 3.7e-05,
+        "stdout_bytes": 38,
+        "stdout_sha256": "17269d2bca29291725d85d214d5f595f70bdc64daaeecaf5802b9d9015e3c23e",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "interpret_constant",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005537113989703357,
+        "internal_seconds": 5.2e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023773244000039995,
+        "internal_seconds": 0.000195,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "parse_words",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006264053983613849,
+        "internal_seconds": 3.1e-05,
+        "stdout_bytes": 44,
+        "stdout_sha256": "be1d5b8c4d6bed6d75b3d2ee28bdb46c7de6482953be0de8cbbb84c8bec99d4b",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02291701699141413,
+        "internal_seconds": 3.8e-05,
+        "stdout_bytes": 44,
+        "stdout_sha256": "be1d5b8c4d6bed6d75b3d2ee28bdb46c7de6482953be0de8cbbb84c8bec99d4b",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "parse_literal",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005964872951153666,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 44,
+        "stdout_sha256": "be1d5b8c4d6bed6d75b3d2ee28bdb46c7de6482953be0de8cbbb84c8bec99d4b",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023193918983452022,
+        "internal_seconds": 4.1e-05,
+        "stdout_bytes": 44,
+        "stdout_sha256": "be1d5b8c4d6bed6d75b3d2ee28bdb46c7de6482953be0de8cbbb84c8bec99d4b",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "parse_variable_pattern",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006062429980374873,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 44,
+        "stdout_sha256": "be1d5b8c4d6bed6d75b3d2ee28bdb46c7de6482953be0de8cbbb84c8bec99d4b",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.024630099011119455,
+        "internal_seconds": 6e-05,
+        "stdout_bytes": 44,
+        "stdout_sha256": "be1d5b8c4d6bed6d75b3d2ee28bdb46c7de6482953be0de8cbbb84c8bec99d4b",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "parse_absolute",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0060430399607867,
+        "internal_seconds": 5e-05,
+        "stdout_bytes": 46,
+        "stdout_sha256": "62852484988f93917c20a3dac635ffa33134565836f4945fc066656feebd550c",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02360449801199138,
+        "internal_seconds": 4.3e-05,
+        "stdout_bytes": 46,
+        "stdout_sha256": "62852484988f93917c20a3dac635ffa33134565836f4945fc066656feebd550c",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "parse_relative",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006085789005737752,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 46,
+        "stdout_sha256": "62852484988f93917c20a3dac635ffa33134565836f4945fc066656feebd550c",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023803013027645648,
+        "internal_seconds": 3.9e-05,
+        "stdout_bytes": 46,
+        "stdout_sha256": "62852484988f93917c20a3dac635ffa33134565836f4945fc066656feebd550c",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "parse_value",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005475425976328552,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 44,
+        "stdout_sha256": "be1d5b8c4d6bed6d75b3d2ee28bdb46c7de6482953be0de8cbbb84c8bec99d4b",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023060913023073226,
+        "internal_seconds": 4.1e-05,
+        "stdout_bytes": 44,
+        "stdout_sha256": "be1d5b8c4d6bed6d75b3d2ee28bdb46c7de6482953be0de8cbbb84c8bec99d4b",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "parse_upper",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005150746030267328,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 44,
+        "stdout_sha256": "99381cb11729a5bacbeba1809ce99a0e472f1b73fb833b15530ff89a7f349b47",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023257377033587545,
+        "internal_seconds": 4.4e-05,
+        "stdout_bytes": 44,
+        "stdout_sha256": "99381cb11729a5bacbeba1809ce99a0e472f1b73fb833b15530ff89a7f349b47",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "parse_lower",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005926783022005111,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 44,
+        "stdout_sha256": "be1d5b8c4d6bed6d75b3d2ee28bdb46c7de6482953be0de8cbbb84c8bec99d4b",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02290433697635308,
+        "internal_seconds": 4.1e-05,
+        "stdout_bytes": 44,
+        "stdout_sha256": "be1d5b8c4d6bed6d75b3d2ee28bdb46c7de6482953be0de8cbbb84c8bec99d4b",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "builtin_length",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005453866964671761,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 30,
+        "stdout_sha256": "2cfb4b914993bc5b7914725fa951a2488aa12d0fed331bb226c9fa1ed4be72ed",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02330881601665169,
+        "internal_seconds": 3.6e-05,
+        "stdout_bytes": 30,
+        "stdout_sha256": "2cfb4b914993bc5b7914725fa951a2488aa12d0fed331bb226c9fa1ed4be72ed",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "builtin_substr",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005586982995737344,
+        "internal_seconds": 5.3e-05,
+        "stdout_bytes": 36,
+        "stdout_sha256": "019b9514495969fae7da04e8ef0326320a6a316b169c81293396c5ba2b672d6a",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02240767201874405,
+        "internal_seconds": 3.9e-05,
+        "stdout_bytes": 36,
+        "stdout_sha256": "019b9514495969fae7da04e8ef0326320a6a316b169c81293396c5ba2b672d6a",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "builtin_word",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005570443987380713,
+        "internal_seconds": 3.6e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "13474ab025a8a9764cb686d81e3f14d31920f1b7d28dca630800c43926241288",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023468571016564965,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "13474ab025a8a9764cb686d81e3f14d31920f1b7d28dca630800c43926241288",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "increment",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005436866951640695,
+        "internal_seconds": 2.7e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "44cf4311530b54bcc2e82c9281bbb35635f6f28738c92a8e30be49aea373bde7",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02236603299388662,
+        "internal_seconds": 3.5e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "44cf4311530b54bcc2e82c9281bbb35635f6f28738c92a8e30be49aea373bde7",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "divide-exact-integer",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005345690005924553,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "57ad2fd5481abad7892f602e2220e1444a4cedea87543dcc09b190bca24717c2",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023617986997123808,
+        "internal_seconds": 5.3e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "57ad2fd5481abad7892f602e2220e1444a4cedea87543dcc09b190bca24717c2",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "address-constant",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.007319814991205931,
+        "internal_seconds": 4.8e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022629394952673465,
+        "internal_seconds": 4.2e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "address-value",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005389318976085633,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022340893978253007,
+        "internal_seconds": 4.3e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "address-toggle",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006032161007169634,
+        "internal_seconds": 2.7e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023172290006186813,
+        "internal_seconds": 3.4e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "push-pull",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005946613033302128,
+        "internal_seconds": 0.000222,
+        "stdout_bytes": 38,
+        "stdout_sha256": "5ccd28a3dc94628582c2b7440ba5bee0f497125a526f0f388901560401aec0a4",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022734463040251285,
+        "internal_seconds": 4.1e-05,
+        "stdout_bytes": 38,
+        "stdout_sha256": "5ccd28a3dc94628582c2b7440ba5bee0f497125a526f0f388901560401aec0a4",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "queue-pull",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005588664032984525,
+        "internal_seconds": 0.000197,
+        "stdout_bytes": 38,
+        "stdout_sha256": "5ccd28a3dc94628582c2b7440ba5bee0f497125a526f0f388901560401aec0a4",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02318316901801154,
+        "internal_seconds": 3.5e-05,
+        "stdout_bytes": 38,
+        "stdout_sha256": "5ccd28a3dc94628582c2b7440ba5bee0f497125a526f0f388901560401aec0a4",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "push-parse-pull",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005447887000627816,
+        "internal_seconds": 0.000219,
+        "stdout_bytes": 38,
+        "stdout_sha256": "24f5abe6579d417406801b5f4cb00084199db1b7953171c5981f4a20b519b548",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022978974971920252,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 38,
+        "stdout_sha256": "24f5abe6579d417406801b5f4cb00084199db1b7953171c5981f4a20b519b548",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "say-eight-bytes",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006166666047647595,
+        "internal_seconds": 6.1e-05,
+        "stdout_bytes": 59,
+        "stdout_sha256": "224386e4b124afd4b8a0e47e5eeb73939f5c68107f311f440a567bcb4b836c5b",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02592763298889622,
+        "internal_seconds": 4.2e-05,
+        "stdout_bytes": 59,
+        "stdout_sha256": "224386e4b124afd4b8a0e47e5eeb73939f5c68107f311f440a567bcb4b836c5b",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "command-shell-noop",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.011233945027925074,
+        "internal_seconds": 0.00226,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.028060443000867963,
+        "internal_seconds": 0.003446,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "address-command-noop",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.008093163021840155,
+        "internal_seconds": 0.00221,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.027705962012987584,
+        "internal_seconds": 0.00365,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "signal-trap-install-off",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005582582962233573,
+        "internal_seconds": 3.6e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02504719700664282,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "call-trap-install-off",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.00520266400417313,
+        "internal_seconds": 3.1e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022079661022871733,
+        "internal_seconds": 3.6e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "procedure-bare",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005136745981872082,
+        "internal_seconds": 3.3e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02265624498249963,
+        "internal_seconds": 4.4e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "use-strict-arg",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005386379023548216,
+        "internal_seconds": 3.2e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02320531796431169,
+        "internal_seconds": 4.6e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "guard-when-true",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005755938997026533,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023673235962633044,
+        "internal_seconds": 6.6e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "54abd25e29da9258a2fa33acea7b75bda83fe52096a2a3480e05e2dcccbed5d5",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "forward-continue",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.006201535987202078,
+        "internal_seconds": 3.2e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023970167036168277,
+        "internal_seconds": 7.7e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "4a62d978828b700fb3407a5c81692ba5c4681325ce60e295614f7cadfa38b2ec",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare-alias-ne-angle",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005942133022472262,
+        "internal_seconds": 3.2e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02392908895853907,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare-alias-ne-reverse",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005451227014418691,
+        "internal_seconds": 3.1e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02352265000808984,
+        "internal_seconds": 4.7e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare-alias-not-greater",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0060081619885750115,
+        "internal_seconds": 3.1e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022205026994924992,
+        "internal_seconds": 3.6e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare-alias-not-less",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005337949958629906,
+        "internal_seconds": 3.5e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.021878397034015507,
+        "internal_seconds": 3.5e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare-alias-strict-not-greater",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0052957209991291165,
+        "internal_seconds": 2.9e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022644734010100365,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c12fe54d72a8367b32e9790ef28fc275e579a72809e721bdaab61f41fd64c9e",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "compare-alias-strict-not-less",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005578843003604561,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.022374142019543797,
+        "internal_seconds": 3.9e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "3c8b8315b8e547df336157f97bf88054954d2aed3afb4185378d9582ee64e275",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_tagged_plus",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005831355985719711,
+        "internal_seconds": 2.7e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "70a3c12cf24150f95b7b15e02f7820e6ca73f071622df4b26596e85ba990b845",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02266848395811394,
+        "internal_seconds": 3.4e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "70a3c12cf24150f95b7b15e02f7820e6ca73f071622df4b26596e85ba990b845",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_tagged_subtract",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005584694037679583,
+        "internal_seconds": 3.6e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "0a5dcd86db1c7f561b4d113bfbb1059874d45af656a356f67fe9673bbe35b1fc",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023106962034944445,
+        "internal_seconds": 3.7e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "0a5dcd86db1c7f561b4d113bfbb1059874d45af656a356f67fe9673bbe35b1fc",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_tagged_multiply",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005271602014545351,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "61ec1378986de56b2a11aa57dc9b6b14fbf9b40f514cf66242231f8259a92463",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02203477203147486,
+        "internal_seconds": 3.4e-05,
+        "stdout_bytes": 33,
+        "stdout_sha256": "61ec1378986de56b2a11aa57dc9b6b14fbf9b40f514cf66242231f8259a92463",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_tagged_divide",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005028179031796753,
+        "internal_seconds": 3.5e-05,
+        "stdout_bytes": 38,
+        "stdout_sha256": "2313253152ba46f72a2a0d9782d1574c02cab9fe8aaeef56020e757d3cbc8aa6",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02305415295995772,
+        "internal_seconds": 4e-05,
+        "stdout_bytes": 38,
+        "stdout_sha256": "2313253152ba46f72a2a0d9782d1574c02cab9fe8aaeef56020e757d3cbc8aa6",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_tagged_integer_divide",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005442906985990703,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "04bf04e4d0802416eaae571364b2defa66e59375ef2ca54402a5970a6bf5e919",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.0219370549893938,
+        "internal_seconds": 3.5e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "04bf04e4d0802416eaae571364b2defa66e59375ef2ca54402a5970a6bf5e919",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_tagged_remainder",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005806916975416243,
+        "internal_seconds": 2.8e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "d9a2b30b7a5a57574314c9086b6518588f927ce9de3ae8fa3e7bd1d1670d8447",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.02369741501752287,
+        "internal_seconds": 3.4e-05,
+        "stdout_bytes": 29,
+        "stdout_sha256": "d9a2b30b7a5a57574314c9086b6518588f927ce9de3ae8fa3e7bd1d1670d8447",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "arith_tagged_power",
+    "status": "pass",
+    "reason": "",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.005654922046232969,
+        "internal_seconds": 3e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "684b147f3b11ffc939c555c63840e8a8180f26c24742d706345e7e67fb82aade",
+        "stderr": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 0,
+        "wall_seconds": 0.023497910995502025,
+        "internal_seconds": 4.1e-05,
+        "stdout_bytes": 32,
+        "stdout_sha256": "684b147f3b11ffc939c555c63840e8a8180f26c24742d706345e7e67fb82aade",
+        "stderr": ""
+      }
+    ]
+  },
+  {
+    "id": "label",
+    "status": "failed",
+    "reason": "execution failure",
+    "rows": [
+      {
+        "side": "oracle",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 209,
+        "wall_seconds": 0.0057859880034811795,
+        "internal_seconds": null,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr": "5 *-* bench_label_0:\nError 47 running /tmp/codex-rexxcps-3aszbfcr/inventory/label/smoke.rex line 5:  Unexpected label.\nError 47.2:  Labels are not allowed within a DO/LOOP block; found \"BENCH_LABEL_0\".",
+        "error": "missing elapsed marker",
+        "stdout": ""
+      },
+      {
+        "side": "rust",
+        "tag": "smoke",
+        "event": null,
+        "exit_code": 209,
+        "wall_seconds": 0.001949025026988238,
+        "internal_seconds": null,
+        "stdout_bytes": 0,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stderr": "5 *-* bench_label_0:\nError 47 running /tmp/codex-rexxcps-3aszbfcr/inventory/label/smoke.rex line 5:  Unexpected label.\nError 47.2:  Labels are not allowed within a DO/LOOP block; found \"BENCH_LABEL_0\".",
+        "error": "missing elapsed marker",
+        "stdout": ""
+      }
+    ]
+  }
+]

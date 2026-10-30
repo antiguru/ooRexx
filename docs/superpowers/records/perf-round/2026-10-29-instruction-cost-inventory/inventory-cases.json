@@ -1,0 +1,1831 @@
+[
+  {
+    "id": "nop",
+    "group": "control",
+    "covers": [
+      "Nop"
+    ],
+    "setup": "",
+    "body": "nop",
+    "tail": "say 'done'",
+    "unit": "body execution",
+    "units_per_body": 1,
+    "notes": ""
+  },
+  {
+    "id": "if-true",
+    "group": "control",
+    "covers": [
+      "If",
+      "Then",
+      "Else"
+    ],
+    "setup": "bench_flag=1",
+    "body": "if bench_flag then nop; else nop",
+    "tail": "say 'done'",
+    "unit": "body execution",
+    "units_per_body": 1,
+    "notes": "Composite conditional dispatch and NOP, true arm."
+  },
+  {
+    "id": "if-false",
+    "group": "control",
+    "covers": [
+      "If",
+      "Then",
+      "Else"
+    ],
+    "setup": "bench_flag=0",
+    "body": "if bench_flag then nop; else nop",
+    "tail": "say 'done'",
+    "unit": "body execution",
+    "units_per_body": 1,
+    "notes": "Composite conditional dispatch and NOP, false arm."
+  },
+  {
+    "id": "do-group",
+    "group": "control",
+    "covers": [
+      "Do",
+      "End"
+    ],
+    "setup": "",
+    "body": "do; nop; end",
+    "tail": "say 'done'",
+    "unit": "body execution",
+    "units_per_body": 1,
+    "notes": "Composite simple DO grouping, NOP, END."
+  },
+  {
+    "id": "do-repeat",
+    "group": "control",
+    "covers": [
+      "Do",
+      "End"
+    ],
+    "setup": "",
+    "body": "do 4; nop; end",
+    "tail": "say 'done'",
+    "unit": "inner iteration",
+    "units_per_body": 4,
+    "notes": "Composite four-iteration repeated DO with NOP."
+  },
+  {
+    "id": "loop-repeat",
+    "group": "control",
+    "covers": [
+      "Loop",
+      "End"
+    ],
+    "setup": "",
+    "body": "loop 4; nop; end",
+    "tail": "say 'done'",
+    "unit": "inner iteration",
+    "units_per_body": 4,
+    "notes": "Composite four-iteration repeated LOOP with NOP."
+  },
+  {
+    "id": "do-controlled",
+    "group": "control",
+    "covers": [
+      "Do",
+      "End"
+    ],
+    "setup": "",
+    "body": "do bench_i=1 to 4; nop; end",
+    "tail": "say 'done'",
+    "unit": "inner iteration",
+    "units_per_body": 4,
+    "notes": "Composite controlled DO with NOP."
+  },
+  {
+    "id": "loop-controlled",
+    "group": "control",
+    "covers": [
+      "Loop",
+      "End"
+    ],
+    "setup": "",
+    "body": "loop bench_i=1 to 4; nop; end",
+    "tail": "say 'done'",
+    "unit": "inner iteration",
+    "units_per_body": 4,
+    "notes": "Composite controlled LOOP with NOP."
+  },
+  {
+    "id": "do-while",
+    "group": "control",
+    "covers": [
+      "Do",
+      "End"
+    ],
+    "setup": "",
+    "body": "bench_i=0; do while bench_i<4; bench_i=bench_i+1; end",
+    "tail": "say 'done'",
+    "unit": "inner iteration",
+    "units_per_body": 4,
+    "notes": "Composite initialization, predicate, increment, and loop control."
+  },
+  {
+    "id": "loop-while",
+    "group": "control",
+    "covers": [
+      "Loop",
+      "End"
+    ],
+    "setup": "",
+    "body": "bench_i=0; loop while bench_i<4; bench_i=bench_i+1; end",
+    "tail": "say 'done'",
+    "unit": "inner iteration",
+    "units_per_body": 4,
+    "notes": "Composite initialization, predicate, increment, and loop control."
+  },
+  {
+    "id": "do-until",
+    "group": "control",
+    "covers": [
+      "Do",
+      "End"
+    ],
+    "setup": "",
+    "body": "bench_i=0; do until bench_i=4; bench_i=bench_i+1; end",
+    "tail": "say 'done'",
+    "unit": "inner iteration",
+    "units_per_body": 4,
+    "notes": "Composite initialization, predicate, increment, and loop control."
+  },
+  {
+    "id": "loop-until",
+    "group": "control",
+    "covers": [
+      "Loop",
+      "End"
+    ],
+    "setup": "",
+    "body": "bench_i=0; loop until bench_i=4; bench_i=bench_i+1; end",
+    "tail": "say 'done'",
+    "unit": "inner iteration",
+    "units_per_body": 4,
+    "notes": "Composite initialization, predicate, increment, and loop control."
+  },
+  {
+    "id": "do-over",
+    "group": "control",
+    "covers": [
+      "Do",
+      "End"
+    ],
+    "setup": "bench_items=.array~of(1,2,3,4)",
+    "body": "do bench_item over bench_items; nop; end",
+    "tail": "say 'done'",
+    "unit": "inner iteration",
+    "units_per_body": 4,
+    "notes": "Composite iteration over prebuilt Array and NOP."
+  },
+  {
+    "id": "loop-over",
+    "group": "control",
+    "covers": [
+      "Loop",
+      "End"
+    ],
+    "setup": "bench_items=.array~of(1,2,3,4)",
+    "body": "loop bench_item over bench_items; nop; end",
+    "tail": "say 'done'",
+    "unit": "inner iteration",
+    "units_per_body": 4,
+    "notes": "Composite iteration over prebuilt Array and NOP."
+  },
+  {
+    "id": "select-hit",
+    "group": "control",
+    "covers": [
+      "Select",
+      "When",
+      "Then",
+      "End"
+    ],
+    "setup": "bench_flag=1",
+    "body": "select; when bench_flag=0 then nop; when bench_flag=1 then nop; otherwise nop; end",
+    "tail": "say 'done'",
+    "unit": "body execution",
+    "units_per_body": 1,
+    "notes": "Composite plain SELECT with first miss and second hit."
+  },
+  {
+    "id": "select-otherwise",
+    "group": "control",
+    "covers": [
+      "Select",
+      "When",
+      "Otherwise",
+      "End"
+    ],
+    "setup": "bench_flag=1",
+    "body": "select; when bench_flag=0 then nop; otherwise nop; end",
+    "tail": "say 'done'",
+    "unit": "body execution",
+    "units_per_body": 1,
+    "notes": "Composite plain SELECT taking OTHERWISE."
+  },
+  {
+    "id": "select-case-hit",
+    "group": "control",
+    "covers": [
+      "Select",
+      "WhenCase",
+      "Then",
+      "End"
+    ],
+    "setup": "bench_flag=1",
+    "body": "select case bench_flag; when 0 then nop; when 1,2 then nop; otherwise nop; end",
+    "tail": "say 'done'",
+    "unit": "body execution",
+    "units_per_body": 1,
+    "notes": "Composite SELECT CASE with first miss and second hit."
+  },
+  {
+    "id": "select-case-otherwise",
+    "group": "control",
+    "covers": [
+      "Select",
+      "WhenCase",
+      "Otherwise",
+      "End"
+    ],
+    "setup": "bench_flag=1",
+    "body": "select case bench_flag; when 0 then nop; otherwise nop; end",
+    "tail": "say 'done'",
+    "unit": "body execution",
+    "units_per_body": 1,
+    "notes": "Composite SELECT CASE taking OTHERWISE."
+  },
+  {
+    "id": "leave",
+    "group": "control",
+    "covers": [
+      "Do",
+      "Leave",
+      "End"
+    ],
+    "setup": "",
+    "body": "do 4; leave; end",
+    "tail": "say 'done'",
+    "unit": "body execution",
+    "units_per_body": 1,
+    "notes": "Composite repeated DO entered then immediately left."
+  },
+  {
+    "id": "iterate",
+    "group": "control",
+    "covers": [
+      "Do",
+      "Iterate",
+      "End"
+    ],
+    "setup": "",
+    "body": "do bench_i=1 to 4; iterate; end",
+    "tail": "say 'done'",
+    "unit": "inner iteration",
+    "units_per_body": 4,
+    "notes": "Composite controlled DO and ITERATE on each iteration."
+  },
+  {
+    "id": "leave-named",
+    "group": "control",
+    "covers": [
+      "Do",
+      "Leave",
+      "End"
+    ],
+    "setup": "",
+    "body": "do bench_i=1 to 4; do 2; leave bench_i; end; end",
+    "tail": "say 'done'",
+    "unit": "body execution",
+    "units_per_body": 1,
+    "notes": "Composite nested DO, named LEAVE of outer loop on first iteration."
+  },
+  {
+    "id": "iterate-named",
+    "group": "control",
+    "covers": [
+      "Do",
+      "Iterate",
+      "End"
+    ],
+    "setup": "",
+    "body": "do bench_i=1 to 4; do 2; iterate bench_i; end; end",
+    "tail": "say 'done'",
+    "unit": "inner iteration",
+    "units_per_body": 4,
+    "notes": "Composite nested DO, named ITERATE of outer loop on each iteration."
+  },
+  {
+    "id": "internal-call-return",
+    "group": "call-context",
+    "covers": [
+      "Call",
+      "Return"
+    ],
+    "setup": "",
+    "body": "call bench_sub",
+    "tail": "say 'done'\nexit\nbench_sub:\nreturn",
+    "unit": "call and return",
+    "units_per_body": 1,
+    "notes": "Composite internal CALL with no arguments and bare RETURN."
+  },
+  {
+    "id": "internal-function-return",
+    "group": "call-context",
+    "covers": [
+      "Return"
+    ],
+    "setup": "",
+    "body": "bench_answer=bench_fn()",
+    "tail": "say bench_answer\nexit\nbench_fn:\nreturn 7",
+    "unit": "function and return",
+    "units_per_body": 1,
+    "notes": "Composite internal function expression, value RETURN, and assignment. Function calls are expressions, not InstructionKind::Call."
+  },
+  {
+    "id": "procedure-use-arg",
+    "group": "call-context",
+    "covers": [
+      "Call",
+      "Procedure",
+      "Use",
+      "Return"
+    ],
+    "setup": "",
+    "body": "call bench_sub 7,8",
+    "tail": "say result\nexit\nbench_sub: procedure\nuse arg bench_a,bench_b\nreturn bench_a+bench_b",
+    "unit": "call and return",
+    "units_per_body": 1,
+    "notes": "Composite internal CALL, isolated PROCEDURE activation, USE ARG binding, addition, RETURN."
+  },
+  {
+    "id": "procedure-expose",
+    "group": "call-context",
+    "covers": [
+      "Call",
+      "Procedure",
+      "Return"
+    ],
+    "setup": "bench_state=7",
+    "body": "call bench_sub",
+    "tail": "say bench_state\nexit\nbench_sub: procedure expose bench_state\nbench_state=7\nreturn",
+    "unit": "call and return",
+    "units_per_body": 1,
+    "notes": "Composite internal CALL, PROCEDURE EXPOSE binding, assignment, bare RETURN."
+  },
+  {
+    "id": "arg-routine",
+    "group": "call-context",
+    "covers": [
+      "Call",
+      "Procedure",
+      "Arg",
+      "Return"
+    ],
+    "setup": "",
+    "body": "call bench_sub abc,def",
+    "tail": "say result\nexit\nbench_sub: procedure\narg bench_a,bench_b\nreturn bench_a||bench_b",
+    "unit": "call and return",
+    "units_per_body": 1,
+    "notes": "Composite internal CALL, PROCEDURE, ARG parsing, concatenation, RETURN."
+  },
+  {
+    "id": "directive-routine",
+    "group": "call-context",
+    "covers": [
+      "Call",
+      "Use",
+      "Return"
+    ],
+    "setup": "",
+    "body": "call bench_external 7",
+    "tail": "say result\nexit\n::routine bench_external\nuse arg bench_arg\nreturn bench_arg",
+    "unit": "call and return",
+    "units_per_body": 1,
+    "notes": "Composite call to same-package ::ROUTINE, USE ARG, and RETURN."
+  },
+  {
+    "id": "message-send-return",
+    "group": "call-context",
+    "covers": [
+      "Message",
+      "Return"
+    ],
+    "setup": "bench_receiver=.Bench~new",
+    "body": "bench_receiver~ping",
+    "tail": "say 'done'\nexit\n::class Bench\n::method ping\nreturn 7",
+    "unit": "send and return",
+    "units_per_body": 1,
+    "notes": "Composite standalone message send, default guarded method entry, RETURN."
+  },
+  {
+    "id": "method-use-expose",
+    "group": "call-context",
+    "covers": [
+      "Use",
+      "Expose",
+      "Return"
+    ],
+    "setup": "bench_receiver=.Bench~new",
+    "body": "bench_answer=bench_receiver~ping(7)",
+    "tail": "say bench_answer\nexit\n::class Bench\n::method ping\nexpose bench_state\nuse arg bench_arg\nbench_state=bench_arg\nreturn bench_state",
+    "unit": "send and return",
+    "units_per_body": 1,
+    "notes": "Composite method expression, EXPOSE, USE ARG, object variable store/load, RETURN, assignment."
+  },
+  {
+    "id": "method-guard-toggle",
+    "group": "call-context",
+    "covers": [
+      "Message",
+      "Guard",
+      "Return"
+    ],
+    "setup": "bench_receiver=.Bench~new",
+    "body": "bench_receiver~ping",
+    "tail": "say 'done'\nexit\n::class Bench\n::method ping\nguard off\nguard on\nreturn",
+    "unit": "send with guard pair",
+    "units_per_body": 1,
+    "notes": "Composite guarded method entry, uncontended GUARD OFF/ON, bare RETURN. No contention or waiting measured."
+  },
+  {
+    "id": "method-forward",
+    "group": "call-context",
+    "covers": [
+      "Forward",
+      "Return"
+    ],
+    "setup": "bench_receiver=.Bench~new",
+    "body": "bench_answer=bench_receiver~ping",
+    "tail": "say bench_answer\nexit\n::class Bench\n::method ping\nforward message('pong')\n::method pong\nreturn 7",
+    "unit": "forwarding send",
+    "units_per_body": 1,
+    "notes": "Composite method send, non-continuing FORWARD to another message on self, final RETURN and assignment."
+  },
+  {
+    "id": "method-reply-last",
+    "group": "call-context",
+    "covers": [
+      "Reply"
+    ],
+    "setup": "bench_receiver=.Bench~new",
+    "body": "bench_answer=bench_receiver~ping",
+    "tail": "say bench_answer\nexit\n::class Bench\n::method ping\nreply 7",
+    "unit": "replying send",
+    "units_per_body": 1,
+    "notes": "Composite send and REPLY as final clause, with continuation scheduling and result assignment. Activities finish at method end. Scheduler behavior is part of this kernel. Smaller fixed workload limits oracle native-thread pressure. Primary timing includes process completion.",
+    "calibration_count": 20,
+    "max_count": 500
+  },
+  {
+    "id": "signal-label-routine",
+    "group": "call-context",
+    "covers": [
+      "Call",
+      "Signal",
+      "Label",
+      "Return"
+    ],
+    "setup": "",
+    "body": "call bench_sub",
+    "tail": "say result\nexit\nbench_sub: procedure\nsignal bench_target\nbench_target:\nreturn 7",
+    "unit": "call with signal",
+    "units_per_body": 1,
+    "notes": "Composite internal CALL, PROCEDURE, SIGNAL to unique routine-local source label, and RETURN. Labels occur once in source, outside repeated body."
+  },
+  {
+    "id": "raise-signal-trap",
+    "group": "call-context",
+    "covers": [
+      "Call",
+      "Signal",
+      "Raise",
+      "Label",
+      "Return"
+    ],
+    "setup": "",
+    "body": "call bench_sub",
+    "tail": "say result\nexit\nbench_sub: procedure\nsignal on user bench_condition name bench_caught\ncall bench_raise\nbench_caught:\nreturn 7\nbench_raise:\nraise user bench_condition return",
+    "unit": "trapped raise call",
+    "units_per_body": 1,
+    "notes": "Composite CALL, PROCEDURE, USER trap installation, nested raiser CALL, RAISE RETURN to caller, SIGNAL transfer and RETURN."
+  },
+  {
+    "id": "arith_integer_plus",
+    "group": "arithmetic_integer",
+    "covers": [
+      "Plus"
+    ],
+    "setup": "bench_left = 12345\nbench_right = 7",
+    "body": "bench_result = bench_left + bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed integer operands 12345 and 7. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth."
+  },
+  {
+    "id": "arith_integer_subtract",
+    "group": "arithmetic_integer",
+    "covers": [
+      "Subtract"
+    ],
+    "setup": "bench_left = 12345\nbench_right = 7",
+    "body": "bench_result = bench_left - bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed integer operands 12345 and 7. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth."
+  },
+  {
+    "id": "arith_integer_multiply",
+    "group": "arithmetic_integer",
+    "covers": [
+      "Multiply"
+    ],
+    "setup": "bench_left = 12345\nbench_right = 7",
+    "body": "bench_result = bench_left * bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed integer operands 12345 and 7. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth."
+  },
+  {
+    "id": "arith_integer_divide",
+    "group": "arithmetic_integer",
+    "covers": [
+      "Divide"
+    ],
+    "setup": "bench_left = 12345\nbench_right = 7",
+    "body": "bench_result = bench_left / bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed integer operands 12345 and 7. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth."
+  },
+  {
+    "id": "arith_integer_integer_divide",
+    "group": "arithmetic_integer",
+    "covers": [
+      "IntDiv"
+    ],
+    "setup": "bench_left = 12345\nbench_right = 7",
+    "body": "bench_result = bench_left % bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed integer operands 12345 and 7. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth."
+  },
+  {
+    "id": "arith_integer_remainder",
+    "group": "arithmetic_integer",
+    "covers": [
+      "Remainder"
+    ],
+    "setup": "bench_left = 12345\nbench_right = 7",
+    "body": "bench_result = bench_left // bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed integer operands 12345 and 7. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth."
+  },
+  {
+    "id": "arith_integer_power",
+    "group": "arithmetic_integer",
+    "covers": [
+      "Power"
+    ],
+    "setup": "bench_left = 12\nbench_right = 3",
+    "body": "bench_result = bench_left ** bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed integer operands 12345 and 3. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth. Result 1728 stays inside the tagged integer precision path."
+  },
+  {
+    "id": "arith_decimal_plus",
+    "group": "arithmetic_decimal",
+    "covers": [
+      "Plus"
+    ],
+    "setup": "bench_left = 123.456\nbench_right = 7.25",
+    "body": "bench_result = bench_left + bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed decimal operands 123.456 and 7.25. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth."
+  },
+  {
+    "id": "arith_decimal_subtract",
+    "group": "arithmetic_decimal",
+    "covers": [
+      "Subtract"
+    ],
+    "setup": "bench_left = 123.456\nbench_right = 7.25",
+    "body": "bench_result = bench_left - bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed decimal operands 123.456 and 7.25. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth."
+  },
+  {
+    "id": "arith_decimal_multiply",
+    "group": "arithmetic_decimal",
+    "covers": [
+      "Multiply"
+    ],
+    "setup": "bench_left = 123.456\nbench_right = 7.25",
+    "body": "bench_result = bench_left * bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed decimal operands 123.456 and 7.25. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth."
+  },
+  {
+    "id": "arith_decimal_divide",
+    "group": "arithmetic_decimal",
+    "covers": [
+      "Divide"
+    ],
+    "setup": "bench_left = 123.456\nbench_right = 7.25",
+    "body": "bench_result = bench_left / bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed decimal operands 123.456 and 7.25. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth."
+  },
+  {
+    "id": "arith_decimal_integer_divide",
+    "group": "arithmetic_decimal",
+    "covers": [
+      "IntDiv"
+    ],
+    "setup": "bench_left = 123.456\nbench_right = 7.25",
+    "body": "bench_result = bench_left % bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed decimal operands 123.456 and 7.25. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth."
+  },
+  {
+    "id": "arith_decimal_remainder",
+    "group": "arithmetic_decimal",
+    "covers": [
+      "Remainder"
+    ],
+    "setup": "bench_left = 123.456\nbench_right = 7.25",
+    "body": "bench_result = bench_left // bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed decimal operands 123.456 and 7.25. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth."
+  },
+  {
+    "id": "arith_decimal_power",
+    "group": "arithmetic_decimal",
+    "covers": [
+      "Power"
+    ],
+    "setup": "bench_left = 123.456\nbench_right = 3",
+    "body": "bench_result = bench_left ** bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed decimal operands 123.456 and 3. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth."
+  },
+  {
+    "id": "concat_abuttal",
+    "group": "concatenation",
+    "covers": [
+      "Abuttal"
+    ],
+    "setup": "bench_left = 'abcdefgh'\nbench_right = 'ijklmnop'",
+    "body": "bench_result = (bench_left)(bench_right)",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Two fixed eight-byte text operands. Result 16 bytes, or 17 bytes with blank. Includes destination assignment. Parentheses force expression abuttal without lexical symbol merging."
+  },
+  {
+    "id": "concat_explicit",
+    "group": "concatenation",
+    "covers": [
+      "Concatenate"
+    ],
+    "setup": "bench_left = 'abcdefgh'\nbench_right = 'ijklmnop'",
+    "body": "bench_result = bench_left || bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Two fixed eight-byte text operands. Result 16 bytes, or 17 bytes with blank. Includes destination assignment. Parentheses force expression abuttal without lexical symbol merging."
+  },
+  {
+    "id": "concat_blank",
+    "group": "concatenation",
+    "covers": [
+      "Blank"
+    ],
+    "setup": "bench_left = 'abcdefgh'\nbench_right = 'ijklmnop'",
+    "body": "bench_result = bench_left bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Two fixed eight-byte text operands. Result 16 bytes, or 17 bytes with blank. Includes destination assignment. Parentheses force expression abuttal without lexical symbol merging."
+  },
+  {
+    "id": "compare_equal",
+    "group": "comparison",
+    "covers": [
+      "Equal"
+    ],
+    "setup": "bench_left = '123.450'\nbench_right = '123.46'",
+    "body": "bench_result = bench_left = bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Fixed seven/six-byte text operands. Ordinary comparisons use numeric semantics; strict comparisons use byte semantics. covers groups semantic aliases, only the operator spelling in body is timed."
+  },
+  {
+    "id": "compare_not_equal",
+    "group": "comparison",
+    "covers": [
+      "BackslashEqual",
+      "LessThanGreaterThan",
+      "GreaterThanLessThan"
+    ],
+    "setup": "bench_left = '123.450'\nbench_right = '123.46'",
+    "body": "bench_result = bench_left \\= bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Fixed seven/six-byte text operands. Ordinary comparisons use numeric semantics; strict comparisons use byte semantics. covers groups semantic aliases, only the operator spelling in body is timed."
+  },
+  {
+    "id": "compare_greater",
+    "group": "comparison",
+    "covers": [
+      "GreaterThan"
+    ],
+    "setup": "bench_left = '123.450'\nbench_right = '123.46'",
+    "body": "bench_result = bench_left > bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Fixed seven/six-byte text operands. Ordinary comparisons use numeric semantics; strict comparisons use byte semantics. covers groups semantic aliases, only the operator spelling in body is timed."
+  },
+  {
+    "id": "compare_less_equal",
+    "group": "comparison",
+    "covers": [
+      "BackslashGreaterThan",
+      "LessThanEqual"
+    ],
+    "setup": "bench_left = '123.450'\nbench_right = '123.46'",
+    "body": "bench_result = bench_left <= bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Fixed seven/six-byte text operands. Ordinary comparisons use numeric semantics; strict comparisons use byte semantics. covers groups semantic aliases, only the operator spelling in body is timed."
+  },
+  {
+    "id": "compare_less",
+    "group": "comparison",
+    "covers": [
+      "LessThan"
+    ],
+    "setup": "bench_left = '123.450'\nbench_right = '123.46'",
+    "body": "bench_result = bench_left < bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Fixed seven/six-byte text operands. Ordinary comparisons use numeric semantics; strict comparisons use byte semantics. covers groups semantic aliases, only the operator spelling in body is timed."
+  },
+  {
+    "id": "compare_greater_equal",
+    "group": "comparison",
+    "covers": [
+      "BackslashLessThan",
+      "GreaterThanEqual"
+    ],
+    "setup": "bench_left = '123.450'\nbench_right = '123.46'",
+    "body": "bench_result = bench_left >= bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Fixed seven/six-byte text operands. Ordinary comparisons use numeric semantics; strict comparisons use byte semantics. covers groups semantic aliases, only the operator spelling in body is timed."
+  },
+  {
+    "id": "compare_strict_equal",
+    "group": "comparison",
+    "covers": [
+      "StrictEqual"
+    ],
+    "setup": "bench_left = '123.450'\nbench_right = '123.46'",
+    "body": "bench_result = bench_left == bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Fixed seven/six-byte text operands. Ordinary comparisons use numeric semantics; strict comparisons use byte semantics. covers groups semantic aliases, only the operator spelling in body is timed."
+  },
+  {
+    "id": "compare_strict_not_equal",
+    "group": "comparison",
+    "covers": [
+      "StrictBackslashEqual"
+    ],
+    "setup": "bench_left = '123.450'\nbench_right = '123.46'",
+    "body": "bench_result = bench_left \\== bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Fixed seven/six-byte text operands. Ordinary comparisons use numeric semantics; strict comparisons use byte semantics. covers groups semantic aliases, only the operator spelling in body is timed."
+  },
+  {
+    "id": "compare_strict_greater",
+    "group": "comparison",
+    "covers": [
+      "StrictGreaterThan"
+    ],
+    "setup": "bench_left = '123.450'\nbench_right = '123.46'",
+    "body": "bench_result = bench_left >> bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Fixed seven/six-byte text operands. Ordinary comparisons use numeric semantics; strict comparisons use byte semantics. covers groups semantic aliases, only the operator spelling in body is timed."
+  },
+  {
+    "id": "compare_strict_less_equal",
+    "group": "comparison",
+    "covers": [
+      "StrictBackslashGreaterThan",
+      "StrictLessThanEqual"
+    ],
+    "setup": "bench_left = '123.450'\nbench_right = '123.46'",
+    "body": "bench_result = bench_left <<= bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Fixed seven/six-byte text operands. Ordinary comparisons use numeric semantics; strict comparisons use byte semantics. covers groups semantic aliases, only the operator spelling in body is timed."
+  },
+  {
+    "id": "compare_strict_less",
+    "group": "comparison",
+    "covers": [
+      "StrictLessThan"
+    ],
+    "setup": "bench_left = '123.450'\nbench_right = '123.46'",
+    "body": "bench_result = bench_left << bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Fixed seven/six-byte text operands. Ordinary comparisons use numeric semantics; strict comparisons use byte semantics. covers groups semantic aliases, only the operator spelling in body is timed."
+  },
+  {
+    "id": "compare_strict_greater_equal",
+    "group": "comparison",
+    "covers": [
+      "StrictBackslashLessThan",
+      "StrictGreaterThanEqual"
+    ],
+    "setup": "bench_left = '123.450'\nbench_right = '123.46'",
+    "body": "bench_result = bench_left >>= bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Fixed seven/six-byte text operands. Ordinary comparisons use numeric semantics; strict comparisons use byte semantics. covers groups semantic aliases, only the operator spelling in body is timed."
+  },
+  {
+    "id": "logical_and",
+    "group": "logical",
+    "covers": [
+      "And"
+    ],
+    "setup": "bench_left = 1\nbench_right = 0",
+    "body": "bench_result = bench_left & bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Fixed logical operands 1 and 0. Includes destination assignment."
+  },
+  {
+    "id": "logical_or",
+    "group": "logical",
+    "covers": [
+      "Or"
+    ],
+    "setup": "bench_left = 1\nbench_right = 0",
+    "body": "bench_result = bench_left | bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Fixed logical operands 1 and 0. Includes destination assignment."
+  },
+  {
+    "id": "logical_xor",
+    "group": "logical",
+    "covers": [
+      "Xor"
+    ],
+    "setup": "bench_left = 1\nbench_right = 0",
+    "body": "bench_result = bench_left && bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Fixed logical operands 1 and 0. Includes destination assignment."
+  },
+  {
+    "id": "prefix_plus",
+    "group": "prefix",
+    "covers": [
+      "PrefixOp::Plus"
+    ],
+    "setup": "bench_operand = 12345",
+    "body": "bench_result = +bench_operand",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9, fixed operand 12345. Prefix Not is the scanner Operator::Backslash token. Includes destination assignment."
+  },
+  {
+    "id": "prefix_minus",
+    "group": "prefix",
+    "covers": [
+      "PrefixOp::Minus"
+    ],
+    "setup": "bench_operand = 12345",
+    "body": "bench_result = -bench_operand",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9, fixed operand 12345. Prefix Not is the scanner Operator::Backslash token. Includes destination assignment."
+  },
+  {
+    "id": "prefix_not",
+    "group": "prefix",
+    "covers": [
+      "PrefixOp::Not",
+      "Backslash"
+    ],
+    "setup": "bench_operand = 0",
+    "body": "bench_result = \\bench_operand",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9, fixed operand 0. Prefix Not is the scanner Operator::Backslash token. Includes destination assignment."
+  },
+  {
+    "id": "prefix_plus_decimal",
+    "group": "prefix",
+    "covers": [
+      "PrefixOp::Plus"
+    ],
+    "setup": "bench_operand = 123.456",
+    "body": "bench_result = +bench_operand",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9, fixed operand 123.456. Prefix Not is the scanner Operator::Backslash token. Includes destination assignment."
+  },
+  {
+    "id": "prefix_minus_decimal",
+    "group": "prefix",
+    "covers": [
+      "PrefixOp::Minus"
+    ],
+    "setup": "bench_operand = 123.456",
+    "body": "bench_result = -bench_operand",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9, fixed operand 123.456. Prefix Not is the scanner Operator::Backslash token. Includes destination assignment."
+  },
+  {
+    "id": "assign_constant",
+    "group": "assignment",
+    "covers": [
+      "Assignment"
+    ],
+    "setup": "bench_result = 0",
+    "body": "bench_result = 12345",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "One canonical five-digit integer constant assignment."
+  },
+  {
+    "id": "assign_simple_read",
+    "group": "assignment",
+    "covers": [
+      "Assignment"
+    ],
+    "setup": "bench_source = 12345",
+    "body": "bench_result = bench_source",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "One simple-variable read and one simple-variable write."
+  },
+  {
+    "id": "assign_compound_literal_tail",
+    "group": "assignment",
+    "covers": [
+      "Assignment"
+    ],
+    "setup": "bench_stem. = 0\nbench_stem.1 = 12345",
+    "body": "bench_result = bench_stem.1",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "One fixed literal compound-tail read and simple destination write."
+  },
+  {
+    "id": "assign_compound_variable_tail",
+    "group": "assignment",
+    "covers": [
+      "Assignment"
+    ],
+    "setup": "bench_tail = 7\nbench_stem. = 0\nbench_stem.7 = 12345",
+    "body": "bench_result = bench_stem.bench_tail",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "One variable-resolved compound-tail read and simple destination write. Fixed tail value."
+  },
+  {
+    "id": "assign_compound_write",
+    "group": "assignment",
+    "covers": [
+      "Assignment"
+    ],
+    "setup": "bench_tail = 7\nbench_stem. = 0",
+    "body": "bench_stem.bench_tail = 12345",
+    "tail": "say bench_stem.bench_tail",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "One existing-or-new compound-tail write. First body creates tail, later bodies replace it. Bounded one-tail live set."
+  },
+  {
+    "id": "assign_stem_default",
+    "group": "assignment",
+    "covers": [
+      "Assignment"
+    ],
+    "setup": "bench_stem. = 0",
+    "body": "bench_stem. = 12345",
+    "tail": "say bench_stem.",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Whole-stem assignment to fixed default. No preexisting explicit tails, so no accumulating work."
+  },
+  {
+    "id": "read_stem_default",
+    "group": "assignment",
+    "covers": [
+      "Assignment"
+    ],
+    "setup": "bench_stem. = 12345",
+    "body": "bench_result = bench_stem.",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Reads stem value into simple variable. Final SAY observes stem default."
+  },
+  {
+    "id": "read_dot_variable",
+    "group": "assignment",
+    "covers": [
+      "Assignment"
+    ],
+    "setup": "",
+    "body": "bench_result = .true",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "Stable .true environment-symbol read and destination write. Avoids nondeterministic stream/object rendering."
+  },
+  {
+    "id": "drop_simple_reset",
+    "group": "drop",
+    "covers": [
+      "Drop",
+      "Assignment"
+    ],
+    "setup": "bench_drop = 12345",
+    "body": "drop bench_drop\nbench_drop = 12345",
+    "tail": "say bench_drop",
+    "unit": "drop_reset_pairs",
+    "units_per_body": 1,
+    "notes": "Composite DROP plus resetting assignment, two clauses per body. Keeps value defined between bodies."
+  },
+  {
+    "id": "drop_compound_reset",
+    "group": "drop",
+    "covers": [
+      "Drop",
+      "Assignment"
+    ],
+    "setup": "bench_stem. = 0\nbench_stem.7 = 12345",
+    "body": "drop bench_stem.7\nbench_stem.7 = 12345",
+    "tail": "say bench_stem.7",
+    "unit": "drop_reset_pairs",
+    "units_per_body": 1,
+    "notes": "Composite DROP fixed compound tail plus resetting assignment, two clauses per body. Bounded one-tail live set."
+  },
+  {
+    "id": "drop_stem_reset",
+    "group": "drop",
+    "covers": [
+      "Drop",
+      "Assignment"
+    ],
+    "setup": "bench_stem. = 12345",
+    "body": "drop bench_stem.\nbench_stem. = 12345",
+    "tail": "say bench_stem.",
+    "unit": "drop_reset_pairs",
+    "units_per_body": 1,
+    "notes": "Composite DROP whole stem plus resetting default assignment. No explicit tails. Two clauses per body."
+  },
+  {
+    "id": "numeric_digits9",
+    "group": "numeric_setting",
+    "covers": [
+      "Numeric"
+    ],
+    "setup": "",
+    "body": "numeric digits 9",
+    "tail": "say digits()",
+    "unit": "statements",
+    "units_per_body": 1,
+    "notes": "Idempotent numeric setting. Harness starts DIGITS 9; FUZZ 2 remains below DIGITS. Only the named setting statement is timed. Final builtin query is outside body."
+  },
+  {
+    "id": "numeric_digits20",
+    "group": "numeric_setting",
+    "covers": [
+      "Numeric"
+    ],
+    "setup": "",
+    "body": "numeric digits 20",
+    "tail": "say digits()",
+    "unit": "statements",
+    "units_per_body": 1,
+    "notes": "Idempotent numeric setting. Harness starts DIGITS 9; FUZZ 2 remains below DIGITS. Only the named setting statement is timed. Final builtin query is outside body."
+  },
+  {
+    "id": "numeric_fuzz0",
+    "group": "numeric_setting",
+    "covers": [
+      "Numeric"
+    ],
+    "setup": "",
+    "body": "numeric fuzz 0",
+    "tail": "say fuzz()",
+    "unit": "statements",
+    "units_per_body": 1,
+    "notes": "Idempotent numeric setting. Harness starts DIGITS 9; FUZZ 2 remains below DIGITS. Only the named setting statement is timed. Final builtin query is outside body."
+  },
+  {
+    "id": "numeric_fuzz2",
+    "group": "numeric_setting",
+    "covers": [
+      "Numeric"
+    ],
+    "setup": "",
+    "body": "numeric fuzz 2",
+    "tail": "say fuzz()",
+    "unit": "statements",
+    "units_per_body": 1,
+    "notes": "Idempotent numeric setting. Harness starts DIGITS 9; FUZZ 2 remains below DIGITS. Only the named setting statement is timed. Final builtin query is outside body. Keep harness COUNT below 10^7 because FUZZ changes enclosing controlled-loop comparison precision."
+  },
+  {
+    "id": "numeric_scientific",
+    "group": "numeric_setting",
+    "covers": [
+      "Numeric"
+    ],
+    "setup": "",
+    "body": "numeric form scientific",
+    "tail": "say form()",
+    "unit": "statements",
+    "units_per_body": 1,
+    "notes": "Idempotent numeric setting. Harness starts DIGITS 9; FUZZ 2 remains below DIGITS. Only the named setting statement is timed. Final builtin query is outside body."
+  },
+  {
+    "id": "numeric_engineering",
+    "group": "numeric_setting",
+    "covers": [
+      "Numeric"
+    ],
+    "setup": "",
+    "body": "numeric form engineering",
+    "tail": "say form()",
+    "unit": "statements",
+    "units_per_body": 1,
+    "notes": "Idempotent numeric setting. Harness starts DIGITS 9; FUZZ 2 remains below DIGITS. Only the named setting statement is timed. Final builtin query is outside body."
+  },
+  {
+    "id": "trace_off",
+    "group": "trace",
+    "covers": [
+      "Trace"
+    ],
+    "setup": "",
+    "body": "trace off",
+    "tail": "say 'trace-off-ok'",
+    "unit": "statements",
+    "units_per_body": 1,
+    "notes": "Idempotent TRACE OFF. No timed output. Final sentinel does not prove internal trace state independently."
+  },
+  {
+    "id": "options_constant",
+    "group": "options",
+    "covers": [
+      "Options"
+    ],
+    "setup": "",
+    "body": "options 'NOCOMMANDS'",
+    "tail": "say 'options-ok'",
+    "unit": "statements",
+    "units_per_body": 1,
+    "notes": "OPTIONS instruction, not ::OPTIONS directive. Committed run.rs:1287 evaluates/converts/traces expression and applies no setting, matching cited oracle contract. Constant string is safe and repeatable; smoke comparison required."
+  },
+  {
+    "id": "interpret_constant",
+    "group": "interpret",
+    "covers": [
+      "Interpret"
+    ],
+    "setup": "bench_result = 0",
+    "body": "interpret 'bench_result = 7'",
+    "tail": "say bench_result",
+    "unit": "interpretations",
+    "units_per_body": 1,
+    "notes": "Fixed 16-byte source fragment. Compiles/evaluates one assignment per body. No source cache assumed; bounded resulting value. Includes INTERPRET parsing and execution."
+  },
+  {
+    "id": "parse_words",
+    "group": "parse",
+    "covers": [
+      "Parse"
+    ],
+    "setup": "bench_source = 'alpha beta gamma'",
+    "body": "parse var bench_source bench_a bench_b bench_c",
+    "tail": "say bench_a || '|' || bench_b || '|' || bench_c",
+    "unit": "templates",
+    "units_per_body": 1,
+    "notes": "Fixed 16-byte source. Three targets. Pattern type words. No input/output in body; final joined target values observe each result."
+  },
+  {
+    "id": "parse_literal",
+    "group": "parse",
+    "covers": [
+      "Parse"
+    ],
+    "setup": "bench_source = 'alpha:beta:gamma'",
+    "body": "parse var bench_source bench_a ':' bench_b ':' bench_c",
+    "tail": "say bench_a || '|' || bench_b || '|' || bench_c",
+    "unit": "templates",
+    "units_per_body": 1,
+    "notes": "Fixed 16-byte source. Three targets. Pattern type literal. No input/output in body; final joined target values observe each result."
+  },
+  {
+    "id": "parse_variable_pattern",
+    "group": "parse",
+    "covers": [
+      "Parse"
+    ],
+    "setup": "bench_source = 'alpha:beta:gamma'\nbench_delim = ':'",
+    "body": "parse var bench_source bench_a (bench_delim) bench_b (bench_delim) bench_c",
+    "tail": "say bench_a || '|' || bench_b || '|' || bench_c",
+    "unit": "templates",
+    "units_per_body": 1,
+    "notes": "Fixed 16-byte source. Three targets. Pattern type variable_pattern. No input/output in body; final joined target values observe each result."
+  },
+  {
+    "id": "parse_absolute",
+    "group": "parse",
+    "covers": [
+      "Parse"
+    ],
+    "setup": "bench_source = 'abcdefghijklmnop'",
+    "body": "parse var bench_source bench_a 5 bench_b 10 bench_c",
+    "tail": "say bench_a || '|' || bench_b || '|' || bench_c",
+    "unit": "templates",
+    "units_per_body": 1,
+    "notes": "Fixed 16-byte source. Three targets. Pattern type absolute. No input/output in body; final joined target values observe each result."
+  },
+  {
+    "id": "parse_relative",
+    "group": "parse",
+    "covers": [
+      "Parse"
+    ],
+    "setup": "bench_source = 'abcdefghijklmnop'",
+    "body": "parse var bench_source bench_a +4 bench_b +5 bench_c",
+    "tail": "say bench_a || '|' || bench_b || '|' || bench_c",
+    "unit": "templates",
+    "units_per_body": 1,
+    "notes": "Fixed 16-byte source. Three targets. Pattern type relative. No input/output in body; final joined target values observe each result."
+  },
+  {
+    "id": "parse_value",
+    "group": "parse",
+    "covers": [
+      "Parse"
+    ],
+    "setup": "bench_source = 'alpha beta gamma'",
+    "body": "parse value bench_source with bench_a bench_b bench_c",
+    "tail": "say bench_a || '|' || bench_b || '|' || bench_c",
+    "unit": "templates",
+    "units_per_body": 1,
+    "notes": "Fixed 16-byte source. Three targets. Pattern type value. No input/output in body; final joined target values observe each result."
+  },
+  {
+    "id": "parse_upper",
+    "group": "parse",
+    "covers": [
+      "Parse"
+    ],
+    "setup": "bench_source = 'Alpha Beta Gamma'",
+    "body": "parse upper var bench_source bench_a bench_b bench_c",
+    "tail": "say bench_a || '|' || bench_b || '|' || bench_c",
+    "unit": "templates",
+    "units_per_body": 1,
+    "notes": "Fixed 16-byte source. Three targets. Pattern type upper. No input/output in body; final joined target values observe each result."
+  },
+  {
+    "id": "parse_lower",
+    "group": "parse",
+    "covers": [
+      "Parse"
+    ],
+    "setup": "bench_source = 'Alpha Beta Gamma'",
+    "body": "parse lower var bench_source bench_a bench_b bench_c",
+    "tail": "say bench_a || '|' || bench_b || '|' || bench_c",
+    "unit": "templates",
+    "units_per_body": 1,
+    "notes": "Fixed 16-byte source. Three targets. Pattern type lower. No input/output in body; final joined target values observe each result."
+  },
+  {
+    "id": "builtin_length",
+    "group": "builtin_extra",
+    "covers": [
+      "Assignment"
+    ],
+    "setup": "bench_source = 'alpha beta gamma'",
+    "body": "bench_result = length(bench_source)",
+    "tail": "say bench_result",
+    "unit": "builtin_calls",
+    "units_per_body": 1,
+    "notes": "Expression extra: LENGTH builtin family, not an additional InstructionKind. Fixed 16-byte source. Includes builtin call and destination assignment. SUBSTR result eight bytes; WORD result four bytes."
+  },
+  {
+    "id": "builtin_substr",
+    "group": "builtin_extra",
+    "covers": [
+      "Assignment"
+    ],
+    "setup": "bench_source = 'alpha beta gamma'",
+    "body": "bench_result = substr(bench_source, 4, 8)",
+    "tail": "say bench_result",
+    "unit": "builtin_calls",
+    "units_per_body": 1,
+    "notes": "Expression extra: SUBSTR builtin family, not an additional InstructionKind. Fixed 16-byte source. Includes builtin call and destination assignment. SUBSTR result eight bytes; WORD result four bytes."
+  },
+  {
+    "id": "builtin_word",
+    "group": "builtin_extra",
+    "covers": [
+      "Assignment"
+    ],
+    "setup": "bench_source = 'alpha beta gamma'",
+    "body": "bench_result = word(bench_source, 2)",
+    "tail": "say bench_result",
+    "unit": "builtin_calls",
+    "units_per_body": 1,
+    "notes": "Expression extra: WORD builtin family, not an additional InstructionKind. Fixed 16-byte source. Includes builtin call and destination assignment. SUBSTR result eight bytes; WORD result four bytes."
+  },
+  {
+    "id": "increment",
+    "group": "arithmetic-integer",
+    "covers": [
+      "Assignment",
+      "Plus"
+    ],
+    "setup": "bench_i=0",
+    "body": "bench_i=bench_i+1",
+    "tail": "say bench_i",
+    "unit": "kernel execution",
+    "units_per_body": 1,
+    "notes": "Increment tagged integer within DIGITS 9."
+  },
+  {
+    "id": "divide-exact-integer",
+    "group": "arithmetic-integer",
+    "covers": [
+      "Divide"
+    ],
+    "setup": "bench_a=12348\nbench_b=7",
+    "body": "bench_answer=bench_a/bench_b",
+    "tail": "say bench_answer",
+    "unit": "kernel execution",
+    "units_per_body": 1,
+    "notes": "Integer division with integral result, unlike nonintegral division row."
+  },
+  {
+    "id": "address-constant",
+    "group": "settings",
+    "covers": [
+      "Address"
+    ],
+    "setup": "",
+    "body": "address system",
+    "tail": "say 'done'",
+    "unit": "kernel execution",
+    "units_per_body": 1,
+    "notes": "Sets command environment without executing commands."
+  },
+  {
+    "id": "address-value",
+    "group": "settings",
+    "covers": [
+      "Address"
+    ],
+    "setup": "bench_env='SYSTEM'",
+    "body": "address value bench_env",
+    "tail": "say 'done'",
+    "unit": "kernel execution",
+    "units_per_body": 1,
+    "notes": "Computed command environment, no command execution."
+  },
+  {
+    "id": "address-toggle",
+    "group": "settings",
+    "covers": [
+      "Address"
+    ],
+    "setup": "address system\naddress command",
+    "body": "address",
+    "tail": "say 'done'",
+    "unit": "kernel execution",
+    "units_per_body": 1,
+    "notes": "Alternates between two installed command environments, without executing a command."
+  },
+  {
+    "id": "push-pull",
+    "group": "queue",
+    "covers": [
+      "Push",
+      "Pull"
+    ],
+    "setup": "bench_line='alpha beta'",
+    "body": "push bench_line\npull bench_got",
+    "tail": "say bench_got",
+    "unit": "kernel execution",
+    "units_per_body": 1,
+    "notes": "Composite LIFO push and uppercase PULL, balanced queue."
+  },
+  {
+    "id": "queue-pull",
+    "group": "queue",
+    "covers": [
+      "Queue",
+      "Pull"
+    ],
+    "setup": "bench_line='alpha beta'",
+    "body": "queue bench_line\npull bench_got",
+    "tail": "say bench_got",
+    "unit": "kernel execution",
+    "units_per_body": 1,
+    "notes": "Composite FIFO queue and uppercase PULL, balanced queue."
+  },
+  {
+    "id": "push-parse-pull",
+    "group": "queue",
+    "covers": [
+      "Push",
+      "Parse"
+    ],
+    "setup": "bench_line='alpha beta'",
+    "body": "push bench_line\nparse pull bench_got",
+    "tail": "say bench_got",
+    "unit": "kernel execution",
+    "units_per_body": 1,
+    "notes": "Composite push and case-preserving PARSE PULL, balanced queue."
+  },
+  {
+    "id": "say-eight-bytes",
+    "group": "io",
+    "covers": [
+      "Say"
+    ],
+    "setup": "bench_line='abcdefgh'",
+    "body": "say bench_line",
+    "tail": "say 'done'",
+    "unit": "kernel execution",
+    "units_per_body": 1,
+    "notes": "SAY writes 8 bytes plus newline to /dev/null during timing. Process output sink cost included.",
+    "sink": "devnull"
+  },
+  {
+    "id": "command-shell-noop",
+    "group": "io",
+    "covers": [
+      "Command"
+    ],
+    "setup": "address system",
+    "body": "':'",
+    "tail": "say 'done'",
+    "unit": "kernel execution",
+    "units_per_body": 1,
+    "notes": "Composite standalone command through SYSTEM shell. Includes shell/process overhead.",
+    "max_count": 10000
+  },
+  {
+    "id": "address-command-noop",
+    "group": "io",
+    "covers": [
+      "Address"
+    ],
+    "setup": "",
+    "body": "address system ':'",
+    "tail": "say 'done'",
+    "unit": "kernel execution",
+    "units_per_body": 1,
+    "notes": "Composite one-shot ADDRESS command through SYSTEM shell. Includes shell/process overhead.",
+    "max_count": 10000
+  },
+  {
+    "id": "signal-trap-install-off",
+    "group": "conditions",
+    "covers": [
+      "Signal"
+    ],
+    "setup": "",
+    "body": "signal on syntax name bench_caught\nsignal off syntax",
+    "tail": "say 'done'\nexit\nbench_caught: exit 1",
+    "unit": "kernel execution",
+    "units_per_body": 1,
+    "notes": "Composite trap installation and removal, handler never invoked."
+  },
+  {
+    "id": "call-trap-install-off",
+    "group": "conditions",
+    "covers": [
+      "Call"
+    ],
+    "setup": "",
+    "body": "call on error name bench_caught\ncall off error",
+    "tail": "say 'done'\nexit\nbench_caught: return",
+    "unit": "kernel execution",
+    "units_per_body": 1,
+    "notes": "Composite CALL ON trap installation and removal, handler never invoked."
+  },
+  {
+    "id": "procedure-bare",
+    "group": "call-context",
+    "covers": [
+      "Call",
+      "Procedure",
+      "Return"
+    ],
+    "setup": "",
+    "body": "call bench_sub",
+    "tail": "say 'done'\nexit\nbench_sub: procedure\nreturn",
+    "unit": "kernel execution",
+    "units_per_body": 1,
+    "notes": "Composite CALL, PROCEDURE and bare RETURN; compare internal-call-return."
+  },
+  {
+    "id": "use-strict-arg",
+    "group": "call-context",
+    "covers": [
+      "Call",
+      "Use",
+      "Return"
+    ],
+    "setup": "",
+    "body": "call bench_sub 7",
+    "tail": "say result\nexit\nbench_sub: procedure\nuse strict arg bench_a\nreturn bench_a",
+    "unit": "kernel execution",
+    "units_per_body": 1,
+    "notes": "Composite CALL, PROCEDURE, USE STRICT ARG and RETURN."
+  },
+  {
+    "id": "guard-when-true",
+    "group": "call-context",
+    "covers": [
+      "Message",
+      "Guard",
+      "Expose",
+      "Return"
+    ],
+    "setup": "bench_receiver=.Bench~new",
+    "body": "bench_receiver~ping",
+    "tail": "say 'done'\nexit\n::class Bench\n::method ping\nexpose bench_v\nbench_v=1\nguard off\nguard on when bench_v=1\nreturn",
+    "unit": "kernel execution",
+    "units_per_body": 1,
+    "notes": "Composite method send, EXPOSE, assignment and uncontended GUARD ON WHEN."
+  },
+  {
+    "id": "forward-continue",
+    "group": "call-context",
+    "covers": [
+      "Message",
+      "Forward",
+      "Return"
+    ],
+    "setup": "bench_receiver=.Bench~new",
+    "body": "bench_answer=bench_receiver~ping",
+    "tail": "say bench_answer\nexit\n::class Bench\n::method ping\nforward message('pong') continue\nreturn result\n::method pong\nreturn 7",
+    "unit": "kernel execution",
+    "units_per_body": 1,
+    "notes": "Composite send, FORWARD CONTINUE and two returns."
+  },
+  {
+    "id": "compare-alias-ne-angle",
+    "group": "comparison-alias",
+    "covers": [
+      "LessThanGreaterThan"
+    ],
+    "setup": "bench_left='123.450'\nbench_right='123.46'",
+    "body": "bench_result=bench_left <> bench_right",
+    "tail": "say bench_result",
+    "unit": "comparison and assignment",
+    "units_per_body": 1,
+    "notes": "Explicit alias spelling measured separately. Operands are numeric strings."
+  },
+  {
+    "id": "compare-alias-ne-reverse",
+    "group": "comparison-alias",
+    "covers": [
+      "GreaterThanLessThan"
+    ],
+    "setup": "bench_left='123.450'\nbench_right='123.46'",
+    "body": "bench_result=bench_left >< bench_right",
+    "tail": "say bench_result",
+    "unit": "comparison and assignment",
+    "units_per_body": 1,
+    "notes": "Explicit alias spelling measured separately. Operands are numeric strings."
+  },
+  {
+    "id": "compare-alias-not-greater",
+    "group": "comparison-alias",
+    "covers": [
+      "BackslashGreaterThan"
+    ],
+    "setup": "bench_left='123.450'\nbench_right='123.46'",
+    "body": "bench_result=bench_left \\> bench_right",
+    "tail": "say bench_result",
+    "unit": "comparison and assignment",
+    "units_per_body": 1,
+    "notes": "Explicit alias spelling measured separately. Operands are numeric strings."
+  },
+  {
+    "id": "compare-alias-not-less",
+    "group": "comparison-alias",
+    "covers": [
+      "BackslashLessThan"
+    ],
+    "setup": "bench_left='123.450'\nbench_right='123.46'",
+    "body": "bench_result=bench_left \\< bench_right",
+    "tail": "say bench_result",
+    "unit": "comparison and assignment",
+    "units_per_body": 1,
+    "notes": "Explicit alias spelling measured separately. Operands are numeric strings."
+  },
+  {
+    "id": "compare-alias-strict-not-greater",
+    "group": "comparison-alias",
+    "covers": [
+      "StrictBackslashGreaterThan"
+    ],
+    "setup": "bench_left='123.450'\nbench_right='123.46'",
+    "body": "bench_result=bench_left \\>> bench_right",
+    "tail": "say bench_result",
+    "unit": "comparison and assignment",
+    "units_per_body": 1,
+    "notes": "Explicit alias spelling measured separately. Operands are numeric strings."
+  },
+  {
+    "id": "compare-alias-strict-not-less",
+    "group": "comparison-alias",
+    "covers": [
+      "StrictBackslashLessThan"
+    ],
+    "setup": "bench_left='123.450'\nbench_right='123.46'",
+    "body": "bench_result=bench_left \\<< bench_right",
+    "tail": "say bench_result",
+    "unit": "comparison and assignment",
+    "units_per_body": 1,
+    "notes": "Explicit alias spelling measured separately. Operands are numeric strings."
+  },
+  {
+    "id": "arith_tagged_plus",
+    "group": "arithmetic-computed-integer",
+    "covers": [
+      "Plus"
+    ],
+    "setup": "bench_left = 12345 + 0\nbench_right = 7 + 0",
+    "body": "bench_result = bench_left + bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed integer operands 12345 and 7. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth. Operands initialized through arithmetic, so Rust stores computed tagged integers rather than inline numeric spellings."
+  },
+  {
+    "id": "arith_tagged_subtract",
+    "group": "arithmetic-computed-integer",
+    "covers": [
+      "Subtract"
+    ],
+    "setup": "bench_left = 12345 + 0\nbench_right = 7 + 0",
+    "body": "bench_result = bench_left - bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed integer operands 12345 and 7. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth. Operands initialized through arithmetic, so Rust stores computed tagged integers rather than inline numeric spellings."
+  },
+  {
+    "id": "arith_tagged_multiply",
+    "group": "arithmetic-computed-integer",
+    "covers": [
+      "Multiply"
+    ],
+    "setup": "bench_left = 12345 + 0\nbench_right = 7 + 0",
+    "body": "bench_result = bench_left * bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed integer operands 12345 and 7. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth. Operands initialized through arithmetic, so Rust stores computed tagged integers rather than inline numeric spellings."
+  },
+  {
+    "id": "arith_tagged_divide",
+    "group": "arithmetic-computed-integer",
+    "covers": [
+      "Divide"
+    ],
+    "setup": "bench_left = 12345 + 0\nbench_right = 7 + 0",
+    "body": "bench_result = bench_left / bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed integer operands 12345 and 7. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth. Operands initialized through arithmetic, so Rust stores computed tagged integers rather than inline numeric spellings."
+  },
+  {
+    "id": "arith_tagged_integer_divide",
+    "group": "arithmetic-computed-integer",
+    "covers": [
+      "IntDiv"
+    ],
+    "setup": "bench_left = 12345 + 0\nbench_right = 7 + 0",
+    "body": "bench_result = bench_left % bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed integer operands 12345 and 7. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth. Operands initialized through arithmetic, so Rust stores computed tagged integers rather than inline numeric spellings."
+  },
+  {
+    "id": "arith_tagged_remainder",
+    "group": "arithmetic-computed-integer",
+    "covers": [
+      "Remainder"
+    ],
+    "setup": "bench_left = 12345 + 0\nbench_right = 7 + 0",
+    "body": "bench_result = bench_left // bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed integer operands 12345 and 7. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth. Operands initialized through arithmetic, so Rust stores computed tagged integers rather than inline numeric spellings."
+  },
+  {
+    "id": "arith_tagged_power",
+    "group": "arithmetic-computed-integer",
+    "covers": [
+      "Power"
+    ],
+    "setup": "bench_left = 12 + 0\nbench_right = 3 + 0",
+    "body": "bench_result = bench_left ** bench_right",
+    "tail": "say bench_result",
+    "unit": "operations",
+    "units_per_body": 1,
+    "notes": "DIGITS 9. Fixed integer operands 12345 and 3. Assignment plus one arithmetic operation. Integer-operand division may produce decimal result. Power uses integer exponent. No accumulated growth. Result 1728 stays inside the tagged integer precision path. Operands initialized through arithmetic, so Rust stores computed tagged integers rather than inline numeric spellings."
+  },
+  {
+    "id": "label",
+    "group": "control",
+    "covers": [
+      "Label"
+    ],
+    "setup": "",
+    "body": "bench_label_{BENCH_SITE}:",
+    "tail": "say 'done'",
+    "unit": "label clause",
+    "units_per_body": 1,
+    "notes": "Distinct source labels, reached sequentially within the repeated loop. Names vary per unrolled site."
+  }
+]

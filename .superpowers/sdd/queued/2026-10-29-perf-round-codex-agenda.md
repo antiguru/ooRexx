@@ -23,7 +23,7 @@ Bookkeeping is delayed only until its first possible observer (GC, a condition h
 
 ## Instruction-cost inventory (Codex, pasted by Moritz 2026-10-30)
 
-Codex's per-instruction cost experiment, under /home/moritz/dev/reviews/ooRexx-rust-rewrite/2026-10-29-instruction-costs/ (not present on this machine on 2026-10-30; ask Moritz where it lives):
+Codex's per-instruction cost experiment, extracted from rexx-instruction-cost-inventory.zip (sha256 b7aa471a96c83498b85e1b2001c7eab19affd293cd16b615ef9c1485a847a651) into docs/superpowers/records/perf-round/2026-10-29-instruction-cost-inventory/. Rust binary from around 9af69058d, revision unverified; oracle a version-matched -O3 LTO build:
 * inventory.py: workload generation, paired timings, correctness checks, perf counters.
 * inventory-cases.json: workload definitions.
 * publish-inventory.py: report generation.
@@ -31,3 +31,5 @@ Codex's per-instruction cost experiment, under /home/moritz/dev/reviews/ooRexx-r
 * inventory/report.html: existing results.
 
 Experiment scripts: interpreter paths, CPU 13 and its sibling CPU 29 are hardcoded, and the runner expects an unpacked rust-rexx (the preserved executable is rust-rexx.gz). Parameterize those and use fresh output directories. Keep the qualifications: queue cases lack equivalent RXAPI integration; REPLY has no valid isolated cost; EXIT measures the whole process. Use inventory/instruction-coverage.json; the root coverage file has stale Label metadata.
+
+First read (controller): 126 comparable kernels, median Rust/oracle 1.53, Rust faster on 19 (integer arithmetic, 0.39 to 0.63). The slowest rows (NUMERIC DIGITS/FUZZ/FORM, OPTIONS, prefix +, ADDRESS VALUE, 3.6x to 6.9x) all land near 65 ns or 24 ns here against 6 to 16 ns there; a shared cost is a hypothesis to test, not a finding.

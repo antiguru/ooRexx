@@ -1,0 +1,438 @@
+[
+  {
+    "instruction": "Assignment",
+    "case_ids": [
+      "assign_constant",
+      "assign_simple_read",
+      "assign_compound_literal_tail",
+      "assign_compound_variable_tail",
+      "assign_compound_write",
+      "assign_stem_default",
+      "read_stem_default",
+      "read_dot_variable",
+      "drop_simple_reset",
+      "drop_compound_reset",
+      "drop_stem_reset",
+      "builtin_length",
+      "builtin_substr",
+      "builtin_word",
+      "increment"
+    ],
+    "classification": "direct",
+    "notes": "Constant, variable, compound and stem assignment kernels. Some cases include expression operators or builtins. Their full timings are not isolated assignment costs. Message assignment and every target form are not exhaustively covered."
+  },
+  {
+    "instruction": "Label",
+    "case_ids": [
+      "signal-label-routine",
+      "raise-signal-trap",
+      "label"
+    ],
+    "classification": "direct",
+    "notes": "Standalone label fixture is supplemental and supplied by parent. Other cases reach labels through internal calls or SIGNAL. This does not cover every label spelling or entry route."
+  },
+  {
+    "instruction": "Message",
+    "case_ids": [
+      "message-send-return",
+      "method-guard-toggle",
+      "guard-when-true",
+      "forward-continue"
+    ],
+    "classification": "composite",
+    "notes": "Standalone message sends measured with method entry and return, guard or forwarding context. Message expressions also occur in other kernels. Message assignment, every argument form, multidimensional sends and asynchronous START are not exhaustively covered."
+  },
+  {
+    "instruction": "Command",
+    "case_ids": [
+      "command-shell-noop"
+    ],
+    "classification": "composite",
+    "notes": "SYSTEM shell no-op includes command evaluation, dispatch, shell creation and process waiting. It is an end-to-end command composite, not isolated interpreter dispatch."
+  },
+  {
+    "instruction": "Do",
+    "case_ids": [
+      "do-group",
+      "do-repeat",
+      "do-controlled",
+      "do-while",
+      "do-until",
+      "do-over",
+      "leave",
+      "iterate",
+      "leave-named",
+      "iterate-named"
+    ],
+    "classification": "composite",
+    "notes": "Simple groups and repeated, controlled, WHILE, UNTIL and OVER loops, with bounded bodies. Units may count inner iterations. Combined loop controls, supplier variants and every DO spelling are not exhaustively covered."
+  },
+  {
+    "instruction": "Loop",
+    "case_ids": [
+      "loop-repeat",
+      "loop-controlled",
+      "loop-while",
+      "loop-until",
+      "loop-over"
+    ],
+    "classification": "composite",
+    "notes": "Repeated, controlled, WHILE, UNTIL and OVER loops with bounded bodies. Units may count inner iterations. Combined controls and every LOOP spelling are not exhaustively covered."
+  },
+  {
+    "instruction": "If",
+    "case_ids": [
+      "if-true",
+      "if-false"
+    ],
+    "classification": "composite",
+    "notes": "True and false arms include condition evaluation, branch markers and NOP bodies. Nested branches and object-valued conditions are not exhaustively covered."
+  },
+  {
+    "instruction": "Then",
+    "case_ids": [
+      "if-true",
+      "if-false",
+      "select-hit",
+      "select-case-hit"
+    ],
+    "classification": "marker-in-context",
+    "notes": "Marker executed in IF or SELECT context. No independent THEN timing is claimed."
+  },
+  {
+    "instruction": "Else",
+    "case_ids": [
+      "if-true",
+      "if-false"
+    ],
+    "classification": "marker-in-context",
+    "notes": "Marker in true/false IF kernels. Branch dispatch and arm execution are included. No independent ELSE timing is claimed."
+  },
+  {
+    "instruction": "Select",
+    "case_ids": [
+      "select-hit",
+      "select-otherwise",
+      "select-case-hit",
+      "select-case-otherwise"
+    ],
+    "classification": "composite",
+    "notes": "Plain SELECT and SELECT CASE, hit and OTHERWISE kernels. Includes WHEN evaluation and selected body. Named and every nested SELECT form are not exhaustively covered."
+  },
+  {
+    "instruction": "When",
+    "case_ids": [
+      "select-hit",
+      "select-otherwise"
+    ],
+    "classification": "composite",
+    "notes": "Plain SELECT with failed and successful WHEN predicates. Includes surrounding SELECT and selected branch. No isolated WHEN cost."
+  },
+  {
+    "instruction": "WhenCase",
+    "case_ids": [
+      "select-case-hit",
+      "select-case-otherwise"
+    ],
+    "classification": "composite",
+    "notes": "SELECT CASE with failed and successful comparisons, including multiple values. Includes case dispatch and selected branch. Object comparison overloads are not covered."
+  },
+  {
+    "instruction": "Otherwise",
+    "case_ids": [
+      "select-otherwise",
+      "select-case-otherwise"
+    ],
+    "classification": "marker-in-context",
+    "notes": "Marker in plain SELECT and SELECT CASE fallback kernels. No independent OTHERWISE timing is claimed."
+  },
+  {
+    "instruction": "Leave",
+    "case_ids": [
+      "leave",
+      "leave-named"
+    ],
+    "classification": "composite",
+    "notes": "Unqualified and named LEAVE inside bounded loops. Loop entry and nesting are included. Every named block form is not exhaustively covered."
+  },
+  {
+    "instruction": "Iterate",
+    "case_ids": [
+      "iterate",
+      "iterate-named"
+    ],
+    "classification": "composite",
+    "notes": "Unqualified and named ITERATE inside bounded loops. Control-variable update and nesting are included. No isolated ITERATE cost."
+  },
+  {
+    "instruction": "End",
+    "case_ids": [
+      "do-group",
+      "do-repeat",
+      "loop-repeat",
+      "do-controlled",
+      "loop-controlled",
+      "do-while",
+      "loop-while",
+      "do-until",
+      "loop-until",
+      "do-over",
+      "loop-over",
+      "select-hit",
+      "select-otherwise",
+      "select-case-hit",
+      "select-case-otherwise",
+      "leave",
+      "iterate",
+      "leave-named",
+      "iterate-named"
+    ],
+    "classification": "marker-in-context",
+    "notes": "Marker in loop and SELECT kernels. Loop continuation or termination and selected-body execution are included. No independent END timing is claimed."
+  },
+  {
+    "instruction": "Drop",
+    "case_ids": [
+      "drop_simple_reset",
+      "drop_compound_reset",
+      "drop_stem_reset"
+    ],
+    "classification": "composite",
+    "notes": "Simple, compound and whole-stem DROP paired with resetting assignment to keep repeated bodies valid. Indirect names, alias state and every list form are not exhaustively covered."
+  },
+  {
+    "instruction": "Expose",
+    "case_ids": [
+      "method-use-expose",
+      "guard-when-true"
+    ],
+    "classification": "composite",
+    "notes": "Method sends with EXPOSE and object-variable access. Not isolated binding cost. Indirect lists, stem aliases and inherited scope combinations are not exhaustively covered."
+  },
+  {
+    "instruction": "Parse",
+    "case_ids": [
+      "parse_words",
+      "parse_literal",
+      "parse_variable_pattern",
+      "parse_absolute",
+      "parse_relative",
+      "parse_value",
+      "parse_upper",
+      "parse_lower",
+      "push-parse-pull"
+    ],
+    "classification": "direct",
+    "notes": "Fixed-source word, literal, variable-pattern, absolute/relative position, VALUE, UPPER and LOWER templates. Balanced PARSE PULL adds queue work. ARG/SOURCE/VERSION/LINEIN and every template form are not exhaustively covered."
+  },
+  {
+    "instruction": "Arg",
+    "case_ids": [
+      "arg-routine"
+    ],
+    "classification": "composite",
+    "notes": "ARG parsing inside CALL/PROCEDURE/RETURN kernel. Case conversion, argument parsing and concatenation are included. Not isolated ARG cost."
+  },
+  {
+    "instruction": "Pull",
+    "case_ids": [
+      "push-pull",
+      "queue-pull"
+    ],
+    "classification": "composite",
+    "notes": "Balanced PUSH/PULL and QUEUE/PULL kernels include uppercase parsing and queue operations. Standard-input fallback, blocking input and redirection are not covered."
+  },
+  {
+    "instruction": "Push",
+    "case_ids": [
+      "push-pull",
+      "push-parse-pull"
+    ],
+    "classification": "composite",
+    "notes": "Balanced PUSH/PULL or PUSH/PARSE PULL kernels include removal and parsing. No isolated insertion cost or unbounded queue-growth claim."
+  },
+  {
+    "instruction": "Queue",
+    "case_ids": [
+      "queue-pull"
+    ],
+    "classification": "composite",
+    "notes": "Balanced QUEUE/PULL kernel includes removal and uppercase parsing. No isolated FIFO insertion cost or unbounded queue-growth claim."
+  },
+  {
+    "instruction": "Say",
+    "case_ids": [
+      "say-eight-bytes"
+    ],
+    "classification": "direct",
+    "notes": "Fixed eight-byte value plus newline sent to /dev/null during timing. Includes output sink costs. Terminal, redirected object and large-output behavior are not covered."
+  },
+  {
+    "instruction": "Call",
+    "case_ids": [
+      "internal-call-return",
+      "procedure-use-arg",
+      "procedure-expose",
+      "arg-routine",
+      "directive-routine",
+      "signal-label-routine",
+      "raise-signal-trap",
+      "call-trap-install-off",
+      "procedure-bare",
+      "use-strict-arg"
+    ],
+    "classification": "composite",
+    "notes": "Internal and same-package directive routine calls, argument binding and returns, plus CALL ON/OFF registration. Function expressions are separate expression behavior. External native calls and every CALL target form are not exhaustively covered."
+  },
+  {
+    "instruction": "Return",
+    "case_ids": [
+      "internal-call-return",
+      "internal-function-return",
+      "procedure-use-arg",
+      "procedure-expose",
+      "arg-routine",
+      "directive-routine",
+      "message-send-return",
+      "method-use-expose",
+      "method-guard-toggle",
+      "method-forward",
+      "signal-label-routine",
+      "raise-signal-trap",
+      "procedure-bare",
+      "use-strict-arg",
+      "guard-when-true",
+      "forward-continue"
+    ],
+    "classification": "composite",
+    "notes": "Bare and value RETURN occur inside routine or method call composites. Caller activation, dispatch and assignment may be included. RETURN is not independently repeatable in the harness body."
+  },
+  {
+    "instruction": "Procedure",
+    "case_ids": [
+      "procedure-use-arg",
+      "procedure-expose",
+      "arg-routine",
+      "procedure-bare"
+    ],
+    "classification": "composite",
+    "notes": "Bare PROCEDURE, PROCEDURE EXPOSE and argument-binding routines measured with CALL/RETURN. Activation creation and teardown are included. All expose forms are not covered."
+  },
+  {
+    "instruction": "Signal",
+    "case_ids": [
+      "signal-label-routine",
+      "raise-signal-trap",
+      "signal-trap-install-off"
+    ],
+    "classification": "composite",
+    "notes": "Label transfer in a called routine, trapped USER condition transfer and trap installation/removal. CALL/RETURN or registration work is included. Every trap kind and computed target form are not exhaustively covered."
+  },
+  {
+    "instruction": "Exit",
+    "case_ids": [],
+    "classification": "end-to-end-only",
+    "notes": "Not independently repeatable in the harness loop. Parent supplies a separate process-level EXIT row. EXIT statements in fixture tails are outside repeated bodies and do not constitute isolated EXIT measurements."
+  },
+  {
+    "instruction": "Interpret",
+    "case_ids": [
+      "interpret_constant"
+    ],
+    "classification": "composite",
+    "notes": "Fixed source fragment is parsed and executed per body. Includes translation and assignment. Dynamic-source diversity, nesting and cache behavior are not independently measured."
+  },
+  {
+    "instruction": "Guard",
+    "case_ids": [
+      "method-guard-toggle",
+      "guard-when-true"
+    ],
+    "classification": "composite",
+    "notes": "Uncontended GUARD OFF/ON and GUARD ON WHEN already true, inside method sends. Contention, sleeping, wakeups, false predicates and cross-activity fairness are not covered."
+  },
+  {
+    "instruction": "Reply",
+    "case_ids": [
+      "method-reply-last"
+    ],
+    "classification": "composite",
+    "notes": "REPLY as the final method clause includes send, early result delivery, continuation scheduling and assignment. Long-running continuations, contention and every reply/error interaction are not covered."
+  },
+  {
+    "instruction": "Forward",
+    "case_ids": [
+      "method-forward",
+      "forward-continue"
+    ],
+    "classification": "composite",
+    "notes": "Non-continuing FORWARD and FORWARD CONTINUE measured in method-send composites. Includes delegated dispatch and returns. Every TO/CLASS/ARGUMENTS/ARRAY form and error path is not covered."
+  },
+  {
+    "instruction": "Raise",
+    "case_ids": [
+      "raise-signal-trap"
+    ],
+    "classification": "composite",
+    "notes": "USER RAISE RETURN delivered to caller SIGNAL trap in call-context composite. Includes trap installation and transfers. SYNTAX construction, PROPAGATE, EXIT and every RAISE option are not exhaustively covered."
+  },
+  {
+    "instruction": "Use",
+    "case_ids": [
+      "procedure-use-arg",
+      "directive-routine",
+      "method-use-expose",
+      "use-strict-arg"
+    ],
+    "classification": "composite",
+    "notes": "USE ARG and USE STRICT ARG inside call or method composites. Includes activation and return. USE LOCAL, reference aliases, omitted/default/variadic arguments and every strict error path are not exhaustively covered."
+  },
+  {
+    "instruction": "Numeric",
+    "case_ids": [
+      "numeric_digits9",
+      "numeric_digits20",
+      "numeric_fuzz0",
+      "numeric_fuzz2",
+      "numeric_scientific",
+      "numeric_engineering"
+    ],
+    "classification": "direct",
+    "notes": "Idempotent DIGITS, FUZZ and FORM settings. Numeric arithmetic consequences are measured separately where fixtures state operands. Dynamic expressions and every validation path are not covered."
+  },
+  {
+    "instruction": "Address",
+    "case_ids": [
+      "address-constant",
+      "address-value",
+      "address-toggle",
+      "address-command-noop"
+    ],
+    "classification": "direct",
+    "notes": "Constant, VALUE and toggle environment selection; separate one-shot SYSTEM shell command composite also listed. ADDRESS WITH redirection, handlers and every environment form are not exhaustively covered."
+  },
+  {
+    "instruction": "Trace",
+    "case_ids": [
+      "trace_off"
+    ],
+    "classification": "direct",
+    "notes": "TRACE OFF repeated without trace output. Other trace modes, interactive debugging, formatting and output costs are not covered."
+  },
+  {
+    "instruction": "Options",
+    "case_ids": [
+      "options_constant"
+    ],
+    "classification": "direct",
+    "notes": "Constant OPTIONS expression evaluation and conversion. This is not a ::OPTIONS directive measurement or proof that any supplied option changes interpreter settings."
+  },
+  {
+    "instruction": "Nop",
+    "case_ids": [
+      "nop"
+    ],
+    "classification": "direct",
+    "notes": "Standalone NOP body. Harness loop, startup and unrolling treatment belong to parent measurement methodology."
+  }
+]

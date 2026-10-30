@@ -1,0 +1,20 @@
+{
+  "catalog_rows": 134,
+  "normal_positive_kernels": 132,
+  "unresolved_rows": [
+    "method-reply-last"
+  ],
+  "instruction_families": 40,
+  "different_backend_rows": [
+    "push-pull",
+    "queue-pull",
+    "push-parse-pull"
+  ],
+  "noisy_rows": 22,
+  "sibling_busy_rows": 33,
+  "excluded_probe": {
+    "id": "label",
+    "reason": "Both implementations reject labels within DO/LOOP with 47.2. Covered contextually instead."
+  },
+  "comparable_fixed_kernels": 126
+}
