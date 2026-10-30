@@ -121,10 +121,21 @@ fn truth_array_conversion(parts: usize) {
     // leave one future receiver across the second element's allocation.
     let elements = vec![".part~new"; parts].join(", ");
     let text = format!("signal on syntax\na = .array~of(.comp~new)\nsay a~hasItem(.comp~new)\nexit\nsyntax:\nsay condition('O')~code condition('O')~additional[1]\n::class comp\n::method '=='\nreturn .array~of({elements})\n::class part\n::method objectName\nx = copies('x', 100)\nreturn 'A'\n").into_bytes();
-    let plain = crate::run_program("/tmp/rooted-truth.rex", text.clone(), crate::Invocation::none());
+    let plain = crate::run_program(
+        "/tmp/rooted-truth.rex",
+        text.clone(),
+        crate::Invocation::none(),
+    );
     assert_eq!(plain.exit_code, 0);
-    assert_eq!(plain.stdout, format!("34.901 {}\n", vec!["A"; parts].join("\n")).as_bytes());
-    let stressed = crate::run_program_collect_every_alloc("/tmp/rooted-truth.rex", text, crate::Invocation::none());
+    assert_eq!(
+        plain.stdout,
+        format!("34.901 {}\n", vec!["A"; parts].join("\n")).as_bytes()
+    );
+    let stressed = crate::run_program_collect_every_alloc(
+        "/tmp/rooted-truth.rex",
+        text,
+        crate::Invocation::none(),
+    );
     assert!(stressed.collections > 0);
     assert_eq!(stressed.stdout, plain.stdout);
     assert_eq!(stressed.stderr, plain.stderr);

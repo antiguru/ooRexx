@@ -48,13 +48,20 @@ fn calibration() {
             .map_or((only.as_str(), None), |(group, part)| (group, Some(part)));
         rows = read_table()
             .into_iter()
-            .filter(|row| (group == "*" || row.group == group) && part.is_none_or(|part| row.part == part))
+            .filter(|row| {
+                (group == "*" || row.group == group) && part.is_none_or(|part| row.part == part)
+            })
             .collect();
         assert!(
             !rows.is_empty(),
             "{ONLY_ENV}: no calibration rows for {only}"
         );
     }
+    eprintln!(
+        "calibration: profile={} rows={} policy=fifo seed-index=0",
+        profile(),
+        rows.len()
+    );
     let lines = in_jobs(&rows, |at, row| {
         let mut row = row.clone();
         let mut out = String::new();
@@ -65,8 +72,10 @@ fn calibration() {
             let ran = run_here(&row, &derived, &dir, &mode, CALIBRATION_DEADLINE);
             remove(&dir);
             let mine = compared(&ran.run);
-            let line = sim_line(&ran.run.stderr).unwrap_or_default();
-            let contended = sim_field(&line, "contended").unwrap_or("0");
+            let line =
+                sim_line(&ran.run.stderr).expect("a calibration run produced a simulation report");
+            let contended =
+                sim_field(&line, "contended").expect("a simulation report counts contended steps");
             let _ = writeln!(
                 out,
                 "{}\t{}\t{contended}\t{}\t{}\t{}\t{:?}\t{}",
