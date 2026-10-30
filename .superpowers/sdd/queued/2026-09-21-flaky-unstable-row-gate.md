@@ -1,3 +1,5 @@
+**CLOSED 2026-10-30 by Phase 9d Task 8.8c (949a7806b).**
+
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe; tests/support/arity.rs:616-618 still judges a row stable from two oracle runs.
 
 # Defect: `every_unstable_row_is_really_unstable` can redden by coincidence
@@ -56,3 +58,9 @@ outcomes and only one of them restores the gate.
 The test exists because a marker that is wrong in the other direction hides a
 real comparison. Keep the check that a row marked `UNSTABLE` is not silently
 comparable; only the evidence standard is wrong.
+
+## Task 8.8c evidence
+
+The marker now classifies only Object/hashCode/instance and Object/identityHash/instance by their identity contracts. A held receiver repeats its hash, and held distinct receivers have distinct identityHash values without printing those values. String/hashCode and other unclassified markers fail rather than silently suppress comparison, while a constant identityHash override fails the property control. Complete collection and introspection arity targets pass, and no cross-process inequality or probability claim remains.
+
+Evidence: `.superpowers/sdd/2026-10-18-phase-9d/task-8.8c-report.md` and `docs/superpowers/records/2026-10-18-phase-9d/t8.8/timing/`.

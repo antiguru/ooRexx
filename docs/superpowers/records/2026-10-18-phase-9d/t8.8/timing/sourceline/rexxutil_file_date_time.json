@@ -1,0 +1,11 @@
+{
+  "command": [
+    "bash",
+    "/tmp/p9d-t88-dst-20261030-a/oracle.sh",
+    "/tmp/t88c-sourceline-fq9tfn4r/srclines.rex",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/rexxutil_file_date_time.rex"
+  ],
+  "cwd": "/tmp/t88c-sourceline-fq9tfn4r",
+  "status": 0,
+  "elapsed": 0.059103329956997186
+}

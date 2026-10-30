@@ -1,3 +1,5 @@
+**CLOSED 2026-10-30 by Phase 9d Task 8.8c (949a7806b).**
+
 **OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe; gate rows time out under load and none of the three directions is chosen, which the Phase 9 close gates meet.
 
 # Queued: a gate verdict that depends on machine load
@@ -87,3 +89,9 @@ inference from non-repeating rows; it has a negative control.
 
 This also fixes the asymmetry stated above in place: green at low load is the
 reading that means something, and it is now on record for `f9ffe9a8b`.
+
+## Task 8.8c evidence
+
+The controller selected a hard wall deadline with load recorded at timeout. Child-wait and output-drain diagnostics name their probe, configured budget, elapsed duration and load snapshot, while the original single-invocation controls still pass. Pure formatting controls cover available and unavailable load data, and the external retained-log assertion confirms the actual path and phase associations. No retry or load-based pass policy was added, and this closure does not claim a before/after environment history.
+
+Evidence: `.superpowers/sdd/2026-10-18-phase-9d/task-8.8c-report.md` and `docs/superpowers/records/2026-10-18-phase-9d/t8.8/timing/`.

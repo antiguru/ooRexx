@@ -1,0 +1,34 @@
+{
+  "status": "passed",
+  "contexts": [
+    {
+      "probe": "/tmp/codex-p9d-t88-target/tmp/oracle-deadline-366110-1793370250835338598/pipe.rex",
+      "phase": "child wait",
+      "configured": "500ms",
+      "elapsed": "502.092773ms",
+      "loadavg": "3.83 3.24 2.92 11/4674 366203"
+    },
+    {
+      "probe": "/tmp/codex-p9d-t88-target/tmp/oracle-deadline-366110-1793370250835298609/hang.rex",
+      "phase": "child wait",
+      "configured": "10s",
+      "elapsed": "10.004511617s",
+      "loadavg": "3.78 3.24 2.92 5/4676 366415"
+    },
+    {
+      "probe": "/tmp/codex-p9d-t88-target/tmp/oracle-deadline-366110-1793370250835726937/pipe.rex",
+      "phase": "child wait",
+      "configured": "10s",
+      "elapsed": "10.003993122s",
+      "loadavg": "3.78 3.24 2.92 3/4671 366415"
+    },
+    {
+      "probe": "/tmp/codex-p9d-t88-target/tmp/oracle-deadline-366110-1793370250835230521/orphan.rex",
+      "phase": "output drain",
+      "configured": "10s",
+      "elapsed": "10.000078403s",
+      "loadavg": "3.78 3.24 2.92 2/4665 366415"
+    }
+  ],
+  "single_invocation_controls": "Both original controls asserted oracle.invocations() == 1 and passed in final-affected-targets.txt; no retry was added."
+}

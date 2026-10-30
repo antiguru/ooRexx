@@ -1,0 +1,4 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 python3 /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/timing/verify_context.py
+Deadline path/phase/budget/load associations and single invocation controls: passed
+
+exit=0 elapsed=0.032s

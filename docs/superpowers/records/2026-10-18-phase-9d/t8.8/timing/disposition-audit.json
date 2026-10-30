@@ -1,0 +1,23 @@
+{
+  "status": "passed",
+  "changed_inventory_rows": [
+    "2026-09-17-oracle-deadline-is-wall-clock.md",
+    "2026-09-21-flaky-unstable-row-gate.md",
+    "2026-10-21-redirected-target-timed-line-flake.md",
+    "2026-10-21-quick-native-calls-wall-bound-flake.md",
+    "2026-10-26-file-date-time-dst-dependent.md",
+    "2026-10-26-redirected-target-waits-timing-flake.md",
+    "2026-10-27-reaped-child-test-load-flake.md"
+  ],
+  "preserved_columns": [
+    1,
+    2,
+    3,
+    5
+  ],
+  "unresolved": [
+    "SysFileTree",
+    "stderr-refusal fixture"
+  ],
+  "redirected_phase9_and_collector_inclusion": true
+}

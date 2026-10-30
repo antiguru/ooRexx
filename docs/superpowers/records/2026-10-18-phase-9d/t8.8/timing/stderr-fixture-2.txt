@@ -1,0 +1,15 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 REXX_SUITE_DIAGNOSTICS=/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/timing/stderr cargo test -j 4 -p rexx-exec --test suite a_child_refusing_on_the_inherited_stderr -- --nocapture
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.08s
+     Running tests/suite.rs (/tmp/codex-p9d-t88-target/debug/deps/suite-eac85036d724489e)
+
+running 1 test
+test fixtures::tests::a_child_refusing_on_the_inherited_stderr_leaves_the_run_ended_normally ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 64 filtered out; finished in 0.25s
+
+
+exit=0 elapsed=0.364s

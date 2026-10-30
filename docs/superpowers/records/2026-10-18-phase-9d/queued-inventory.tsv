@@ -2,11 +2,11 @@ item	kind	probe	proposed	reason	ruled
 2026-09-15-file-split.md	process	-	closed:9956c0ac6	2026-09-15-file-split/progress.md ends "File-split plan complete" at the final-review fix 9956c0ac6	closed:9956c0ac6
 2026-09-16-worktree-build-precondition.md	process	-	9d	a test-harness path like arity-harness-ignores-target-dir; dispatch/library/tests.rs:26 canonicalizes ../../../build/lib	9d
 2026-09-17-crexx-derived-candidates.md	perf	-	phase:9.1	unsized performance candidates; no probe	phase:9.1
-2026-09-17-oracle-deadline-is-wall-clock.md	process	-	9d	no probe; gate rows time out under load and none of the three directions is chosen, which the Phase 9 close gates meet	9d
+2026-09-17-oracle-deadline-is-wall-clock.md	process	-	closed:949a7806b	no probe; gate rows time out under load and none of the three directions is chosen, which the Phase 9 close gates meet	closed:949a7806b
 2026-09-19-driver-control-flow-spike.md	perf	-	closed:rejected 2026-09-19	its own "Spike result" section; report .superpowers/sdd/2026-09-19-driver-control-flow-spike-report.md	closed:rejected 2026-09-19
 2026-09-20-instructions-per-op.md	perf	-	phase:9.1	a measurement record behind the performance to-do; no probe	phase:9.1
 2026-09-20-performance-todo.md	perf	-	phase:9.1	the open performance queue; no probe	phase:9.1
-2026-09-21-flaky-unstable-row-gate.md	process	-	9d	no probe; tests/support/arity.rs:616-618 still judges a row stable from two oracle runs	9d
+2026-09-21-flaky-unstable-row-gate.md	process	-	closed:949a7806b	no probe; tests/support/arity.rs:616-618 still judges a row stable from two oracle runs	closed:949a7806b
 2026-09-21-parse-message-target-unimplemented.md	divergence	queued-probes/pmt/pmt.rex:1	closed:probe agrees	closed 2026-09-28 by Phase 8 surface Task 8; the witness agrees on all three descriptors	closed:probe agrees
 2026-09-22-clause-shape-distribution.md	perf	-	phase:9.1	static op-shape evidence for superinstructions; no probe	phase:9.1
 2026-09-22-driver-frame-pressure.md	perf	-	phase:9.1	unrun outlining variant; no probe	phase:9.1
@@ -225,8 +225,8 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b
 2026-10-20-call-on-delayed-reraise.md	divergence	-	closed:918e67f90	a CALL ON condition raised again while delayed runs the handler twice	closed:918e67f90
 2026-10-20-collect-stress-raise-additional-array.md	defect	-	closed:fb86ce94f	collect_stress panics: a live value freed on the RAISE ADDITIONAL path	closed:fb86ce94f
 2026-10-21-stdin-linein-then-charin.md	divergence	-	closed:3cd8cff5c	its own CLOSED line; Task 6.15 fix round 4 gives a file standard input one read position, and a start on a piped one is 93.958 on both sides	closed:3cd8cff5c
-2026-10-21-redirected-target-timed-line-flake.md	process	-	9d	flaky timed line in a gated corpus program	9d
-2026-10-21-quick-native-calls-wall-bound-flake.md	process	-	9d	lib test bounded by 1 ms wall time flakes under load	9d
+2026-10-21-redirected-target-timed-line-flake.md	process	-	closed:949a7806b	flaky timed line in a gated corpus program	closed:949a7806b
+2026-10-21-quick-native-calls-wall-bound-flake.md	process	-	closed:949a7806b	lib test bounded by 1 ms wall time flakes under load	closed:949a7806b
 2026-10-21-routine-new-call-frames.md	divergence	-	closed:68e7f15d5	frames of .Routine~new(...)~call name the wrong executable	closed:68e7f15d5
 2026-10-21-main-program-executable-annotations.md	divergence	-	closed:68e7f15d5	.context~executable~annotations refuses from the main program	closed:68e7f15d5
 2026-10-21-lineout-nil-names-file.md	divergence	-	closed:12ef5a35c	.stdout~lineout(.nil) renders with the running file	closed:12ef5a35c
@@ -242,13 +242,13 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b
 2026-10-22-live-frames-omit-nested-primitives.md	divergence	-	closed:5053fbd9b	live stackFrames omit RUN, SORT, HASITEM, REQUEST and PUT frames the oracle lists	closed:5053fbd9b
 2026-10-22-executable-at-quadratic-depth.md	defect	-	closed:5053fbd9b	executable_at walks the frame chain once per level, quadratic at the depth cap	closed:5053fbd9b
 2026-10-22-collect-stress-zero-collection-drift.md	process	-	9d	collect_stress zero-collection list drifted before Task 8.3; pruned, cause open	9d
-2026-10-26-file-date-time-dst-dependent.md	process	-	9d	rexxutil_file_date_time line 9 differs across the DST change, at base too	9d
-2026-10-26-redirected-target-waits-timing-flake.md	process	-	9d	collect_stress l0 subset flakes on a time(e) > 0.9 check	9d
+2026-10-26-file-date-time-dst-dependent.md	process	-	closed:949a7806b	rexxutil_file_date_time line 9 differs across the DST change, at base too	closed:949a7806b
+2026-10-26-redirected-target-waits-timing-flake.md	process	-	closed:949a7806b	collect_stress l0 subset flakes on a time(e) > 0.9 check	closed:949a7806b
 2026-10-26-main-program-level-during-requires-install.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/constant/probes/f1.rex	closed:5053fbd9b	the main PROGRAM level is missing from frames while its own ::REQUIRES install	closed:5053fbd9b
 2026-10-26-compile-failure-condition-names-caller.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/naming/probes/compile-condition/m.rex	closed:5053fbd9b	a compile failure condition names the caller package, the oracle the translated file	closed:5053fbd9b
 2026-10-26-library-rxmath-error-number.md	divergence	-	closed:probe agrees	LIBRARY rxmath raises 98.903, the oracle 90.998/90.999	closed:probe agrees
 2026-10-27-deadlock-report-shape.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/r2/probes/d2.rex	closed:probe agrees	a guard deadlock prints two reports here, one on the oracle; echoes differ	closed:probe agrees
-2026-10-27-reaped-child-test-load-flake.md	process	-	9d	a SysWait witness fails under workspace load, passes alone	9d
+2026-10-27-reaped-child-test-load-flake.md	process	-	closed:949a7806b	a SysWait witness fails under workspace load, passes alone	closed:949a7806b
 2026-10-27-varref-operator-traceback-line.md	divergence	-	closed:e620097f0	an operator on a variable reference omits the Compiled method traceback line	closed:e620097f0
 2026-10-27-string-equals-makestring-argument.md	divergence	-	closed:030af45a1	String~equals ignores a makeString argument here, converts it on the oracle	closed:030af45a1
 2026-10-27-stem-default-arithmetic-nostring.md	divergence	-	closed:6da312e62	a stem with a non-string default names the stem in arithmetic NOSTRING, the oracle the default	closed:6da312e62

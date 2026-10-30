@@ -1,0 +1,11 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 cargo test -j 4 -p rexx-exec --test timing_witnesses redirected_targets -- --nocapture
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.03s
+     Running tests/timing_witnesses.rs (/tmp/codex-p9d-t88-target/debug/deps/timing_witnesses-2a16a2a610bd2e43)
+
+running 1 test
+test redirected_targets_preserve_wait_order_and_all_output ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 25 filtered out; finished in 33.89s
+
+
+exit=0 elapsed=33.985s

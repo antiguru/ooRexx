@@ -1,0 +1,256 @@
+[2020-03-04] [05:06:07]            0 2020-03-04 05:06:07 2020-03-04 05:06:07
+[2020-03-29] [02:30:00]            0 2020-03-29 03:30:00 2020-03-29 03:30:00
+  1585445400
+[2020-03-29] [01:59:59]            0 2020-03-29 01:59:59 2020-03-29 01:59:59
+  1585443599
+[2020-03-29] [03:00:00]            0 2020-03-29 03:00:00 2020-03-29 03:00:00
+  1585443600
+[2020-10-25] [02:30:00]            0 2020-10-25 02:30:00 2020-10-25 02:30:00
+  valid overlap 1 1
+[2020-10-25] [01:59:59]            0 2020-10-25 01:59:59 2020-10-25 01:59:59
+  1603583999
+[2020-10-25] [03:00:00]            0 2020-10-25 03:00:00 2020-10-25 03:00:00
+  1603591200
+[2020-03-08] [02:30:00]            0 2020-03-08 02:30:00 2020-03-08 02:30:00
+  1583631000
+[2020-11-01] [01:30:00]            0 2020-11-01 01:30:00 2020-11-01 01:30:00
+  valid overlap 1 1
+[2020-07-01] [12:00:00]            0 2020-07-01 12:00:00 2020-07-01 12:00:00
+  1593597600
+[2020-13-01] [00:00:00]            0 2021-01-01 00:00:00 2021-01-01 00:00:00
+[2020-02-30] [00:00:00]            0 2020-03-01 00:00:00 2020-03-01 00:00:00
+[2020-00-00] [00:00:00]            0 2019-11-30 00:00:00 2019-11-30 00:00:00
+[2020-01-01] [24:00:00]            0 2020-01-02 00:00:00 2020-01-02 00:00:00
+[2020-01-01] [99:99:99]            0 2020-01-05 04:40:39 2020-01-05 04:40:39
+[2020-1-2] [3:4:5]                 0 2020-01-02 03:04:05 2020-01-02 03:04:05
+[ 2020-01-02] [ 3: 4: 5]           0 2020-01-02 03:04:05 2020-01-02 03:04:05
+[2020-01-02junk] [03:04:05junk]    0 2020-01-02 03:04:05 2020-01-02 03:04:05
+[20200-01-01] [00:00:00]           -1 2020-01-02 03:04:05 2020-01-02 03:04:05
+[+2020-01-01] [00:00:00]           -1 2020-01-02 03:04:05 2020-01-02 03:04:05
+[+202-01-01] [00:00:00]            0  202-01-01 00:00:00  202-01-01 00:00:00
+[-202-01-01] [00:00:00]            0 -202-01-01 00:00:00 -202-01-01 00:00:00
+  -68541640448
+[1800-01-01] [00:00:00]            0 1800-01-01 00:00:00 1800-01-01 00:00:00
+  -5364664448
+[0999-05-06] [00:00:00]            0  999-05-06 00:00:00  999-05-06 00:00:00
+[1969-12-31] [23:59:59]            0 1969-12-31 23:59:59 1969-12-31 23:59:59
+  -3601
+[2020-01-01] [05:06]               -1 1969-12-31 23:59:59 1969-12-31 23:59:59
+[] []                              -1 1969-12-31 23:59:59 1969-12-31 23:59:59
+[2021-06-07] []                    -1 1969-12-31 23:59:59 1969-12-31 23:59:59
+[2021-06-08] []                    0 2021-06-08 23:59:59 2021-06-08 23:59:59
+[] [11:12:13]                      0 2021-06-08 11:12:13 2021-06-08 11:12:13
+[2020-1-1] [1:2:3?x]               0 2020-01-01 01:02:03 2020-01-01 01:02:03
+[2020-1-1?x] [1:2:3]               0 2020-01-01 01:02:03 2020-01-01 01:02:03
+[a020-01-01] [00:00:00]            -1 2020-01-01 01:02:03 2020-01-01 01:02:03
+[2020-01-01] [00:00:-1]            0 2019-12-31 23:59:59 2019-12-31 23:59:59
+[2020-01-01] [-1:00:00]            0 2019-12-31 23:00:00 2019-12-31 23:00:00
+[2020-01-01] [+1:+2:+3]            0 2020-01-01 01:02:03 2020-01-01 01:02:03
+[2020-01-01] [1: 2:3]              0 2020-01-01 01:02:03 2020-01-01 01:02:03
+[2020-01-01] [1 :2:3]              -1 2020-01-01 01:02:03 2020-01-01 01:02:03
+[2020-01-01] [1:2:]                -1 2020-01-01 01:02:03 2020-01-01 01:02:03
+[2020-01-01] [-:2:3]               -1 2020-01-01 01:02:03 2020-01-01 01:02:03
+keeps access 0
+1000000000 1323782116
+now          0 1
+1000000000
+selectors    2002-02-02 02:02:02 2002-02-02 02:02:02 2001-09-09 03:46:40 2001-09-09 03:46:40
+link         0 2003-03-03 03:03:03
+dangling     -1 -1
+directory    0 2004-04-04 04:04:04 2004-04-04 04:04:04
+blank, utf8  0 0 2005-05-05 05:05:05
+missing      -1 -1 -1 -1 -1
+closed       -1 -1
+error call SysGetFileDateTime | 88.901 Missing argument; argument 1 is required.
+error call SysGetFileDateTime f, '' | 40.920 SysGetFileDateTime argument time selector must be one of 'A' or 'W'; found "".
+error call SysGetFileDateTime f, 'x' | 40.920 SysGetFileDateTime argument time selector must be one of 'A' or 'W'; found "x".
+error call SysGetFileDateTime d'/none', 'x' | 40.920 SysGetFileDateTime argument time selector must be one of 'A' or 'W'; found "x".
+error call SysGetFileDateTime f, .nil | 88.909 Argument 2 must have a string value.
+error call SysGetFileDateTime f, 'w', 'x' | 88.922 Too many arguments in invocation; 2 expected.
+error call SysSetFileDateTime | 88.901 Missing argument; argument 1 is required.
+error call SysSetFileDateTime f, .nil | 88.909 Argument 2 must have a string value.
+error call SysSetFileDateTime f, , .nil | 88.909 Argument 3 must have a string value.
+error call SysSetFileDateTime f, 1, 2, 3 | 88.922 Too many arguments in invocation; 3 expected.
+returned 0
+ok    r = SysSetFileDateTime(f, '2020-01-01'); say 'returned' r
+[2020-03-29] [01:30:00]            0 2020-03-29 00:30:00 2020-03-29 00:30:00
+  1585441800
+[2020-03-29] [00:59:59]            0 2020-03-29 00:59:59 2020-03-29 00:59:59
+  1585443599
+[2020-03-29] [02:00:00]            0 2020-03-29 02:00:00 2020-03-29 02:00:00
+  1585443600
+[2020-10-25] [01:30:00]            0 2020-10-25 01:30:00 2020-10-25 01:30:00
+  valid overlap 1 1
+[2021-03-28] [01:30:00]            0 2021-03-28 00:30:00 2021-03-28 00:30:00
+  1616891400
+[2045-03-26] [01:30:00]            0 2045-03-26 00:30:00 2045-03-26 00:30:00
+  2374101000
+[2020-06-01] [12:00:00]            0 2020-06-01 12:00:00 2020-06-01 12:00:00
+  1591012800
+kolkata      2020-06-01 17:30:00
+[2020-06-01] [12:00:00]            0 2020-06-01 12:00:00 2020-06-01 12:00:00
+  1590993000
+[2020-03-29] [01:30:00]            0 2020-03-29 00:30:00 2020-03-29 00:30:00
+  1585441800
+[2020-07-01] [12:00:00]            0 2020-07-01 12:00:00 2020-07-01 12:00:00
+  1593601200
+[2020-03-29] [02:30:00]            0 2020-03-29 03:30:00 2020-03-29 03:30:00
+  1585445400
+[2020-07-01] [12:00:00]            0 2020-07-01 12:00:00 2020-07-01 12:00:00
+  1593604800
+[2020-07-01] [12:00:00]            0 2020-07-01 12:00:00 2020-07-01 12:00:00
+  1593604800
+%SRCG%COUNT 153
+%SRCG%L/* SysSetFileDateTime and SysGetFileDateTime: dates and times that scan and
+%SRCG%L   ones that do not, fields past their range carrying into the next, a
+%SRCG%L   reading the local zone skips and one it repeats (each also as seconds
+%SRCG%L   since the epoch for ordinary and skipped readings, and a validity
+%SRCG%L   property for the two allowed instants of a repeated reading), years
+%SRCG%L   before 1000 and before 1970, the access time a set keeps,
+%SRCG%L   either half omitted, links, a directory, names that resolve to nothing,
+%SRCG%L   and the argument errors. The daylight-saving lines are the zone's own
+%SRCG%L   transitions in Europe and in North America. Last, TZ is set by the
+%SRCG%L   program itself, to zones including one whose daylight saving is winter
+%SRCG%L   time, a POSIX rule, an empty value and a name no file has. Everything is
+%SRCG%L   made under a directory this program makes and removes. */
+%SRCG%Ld = 'datetime.d'
+%SRCG%Lcall SysMkDir d
+%SRCG%Lf = d'/a.txt'
+%SRCG%Lcall lineout f, 'x'
+%SRCG%Lcall lineout f
+%SRCG%Lcall s '2020-03-04', '05:06:07'
+%SRCG%Lcall s '2020-03-29', '02:30:00', 'epoch'
+%SRCG%Lcall s '2020-03-29', '01:59:59', 'epoch'
+%SRCG%Lcall s '2020-03-29', '03:00:00', 'epoch'
+%SRCG%Lcall overlap 'Europe/Zurich', '2020-10-25', '02:30:00', '1603585800 1603589400'
+%SRCG%Lcall s '2020-10-25', '01:59:59', 'epoch'
+%SRCG%Lcall s '2020-10-25', '03:00:00', 'epoch'
+%SRCG%Lcall s '2020-03-08', '02:30:00', 'epoch'
+%SRCG%Lcall overlap 'America/New_York', '2020-11-01', '01:30:00', '1604208600 1604212200'
+%SRCG%Lcall s '2020-07-01', '12:00:00', 'epoch'
+%SRCG%Lcall s '2020-13-01', '00:00:00'
+%SRCG%Lcall s '2020-02-30', '00:00:00'
+%SRCG%Lcall s '2020-00-00', '00:00:00'
+%SRCG%Lcall s '2020-01-01', '24:00:00'
+%SRCG%Lcall s '2020-01-01', '99:99:99'
+%SRCG%Lcall s '2020-1-2', '3:4:5'
+%SRCG%Lcall s ' 2020-01-02', ' 3: 4: 5'
+%SRCG%Lcall s '2020-01-02junk', '03:04:05junk'
+%SRCG%Lcall s '20200-01-01', '00:00:00'
+%SRCG%Lcall s '+2020-01-01', '00:00:00'
+%SRCG%Lcall s '+202-01-01', '00:00:00'
+%SRCG%Lcall s '-202-01-01', '00:00:00', 'epoch'
+%SRCG%Lcall s '1800-01-01', '00:00:00', 'epoch'
+%SRCG%Lcall s '0999-05-06', '00:00:00'
+%SRCG%Lcall s '1969-12-31', '23:59:59', 'epoch'
+%SRCG%Lcall s '2020-01-01', '05:06'
+%SRCG%Lcall s '', ''
+%SRCG%Lcall s '2021-06-07', ''
+%SRCG%Lcall s '2021-06-08'
+%SRCG%Lcall s , '11:12:13'
+%SRCG%Lcall s '2020-1-1', '1:2:3' || '00'x || 'x'
+%SRCG%Lcall s '2020-1-1' || '00'x || 'x', '1:2:3'
+%SRCG%Lcall s 'a020-01-01', '00:00:00'
+%SRCG%Lcall s '2020-01-01', '00:00:-1'
+%SRCG%Lcall s '2020-01-01', '-1:00:00'
+%SRCG%Lcall s '2020-01-01', '+1:+2:+3'
+%SRCG%Lcall s '2020-01-01', '1: 2:3'
+%SRCG%Lcall s '2020-01-01', '1 :2:3'
+%SRCG%Lcall s '2020-01-01', '1:2:'
+%SRCG%Lcall s '2020-01-01', '-:2:3'
+%SRCG%L'touch -a -d @1000000000' f
+%SRCG%Lsay 'keeps access' SysSetFileDateTime(f, '2011-12-13', '14:15:16')
+%SRCG%L'stat -c "%X %Y"' f
+%SRCG%Lsay 'now         ' SysSetFileDateTime(f) (left(SysGetFileDateTime(f), 10) == date('I'))
+%SRCG%L'stat -c "%X"' f
+%SRCG%Lcall SysSetFileDateTime f, '2002-02-02', '02:02:02'
+%SRCG%Lsay 'selectors   ' SysGetFileDateTime(f, 'w') SysGetFileDateTime(f, 'Write') ,
+%SRCG%L  SysGetFileDateTime(f, 'axe') SysGetFileDateTime(f, 'A' || '00'x)
+%SRCG%L'ln -s a.txt' d'/link'
+%SRCG%L'ln -s nowhere' d'/dangling'
+%SRCG%Lsay 'link        ' SysSetFileDateTime(d'/link', '2003-03-03', '03:03:03') SysGetFileDateTime(f)
+%SRCG%Lsay 'dangling    ' SysSetFileDateTime(d'/dangling', '2003-03-03', '03:03:03') SysGetFileDateTime(d'/dangling')
+%SRCG%Lsay 'directory   ' SysSetFileDateTime(d, '2004-04-04', '04:04:04') SysGetFileDateTime(d) SysGetFileDateTime(d'/')
+%SRCG%Lsay 'blank, utf8 ' SysFileCopy(f, d'/a b' || 'c3a9ff'x) SysSetFileDateTime(d'/a b' || 'c3a9ff'x, '2005-05-05', '05:05:05') ,
+%SRCG%L  SysGetFileDateTime(d'/a b' || 'c3a9ff'x)
+%SRCG%Lsay 'missing     ' SysSetFileDateTime(d'/none', '2020-01-01', '00:00:00') SysSetFileDateTime(d'/none') ,
+%SRCG%L  SysGetFileDateTime(d'/none') SysGetFileDateTime('') SysSetFileDateTime('')
+%SRCG%Lcall SysMkDir d'/closed'
+%SRCG%Lcall SysFileCopy f, d'/closed/in.txt'
+%SRCG%L'chmod 000' d'/closed'
+%SRCG%Lsay 'closed      ' SysGetFileDateTime(d'/closed/in.txt') SysSetFileDateTime(d'/closed/in.txt', '2006-06-06')
+%SRCG%L'chmod 700' d'/closed'
+%SRCG%Lcall t "call SysGetFileDateTime"
+%SRCG%Lcall t "call SysGetFileDateTime f, ''"
+%SRCG%Lcall t "call SysGetFileDateTime f, 'x'"
+%SRCG%Lcall t "call SysGetFileDateTime d'/none', 'x'"
+%SRCG%Lcall t "call SysGetFileDateTime f, .nil"
+%SRCG%Lcall t "call SysGetFileDateTime f, 'w', 'x'"
+%SRCG%Lcall t "call SysSetFileDateTime"
+%SRCG%Lcall t "call SysSetFileDateTime f, .nil"
+%SRCG%Lcall t "call SysSetFileDateTime f, , .nil"
+%SRCG%Lcall t "call SysSetFileDateTime f, 1, 2, 3"
+%SRCG%Lcall t "r = SysSetFileDateTime(f, '2020-01-01'); say 'returned' r"
+%SRCG%L-- the program's own TZ, set through the environment, is the zone both read
+%SRCG%Lcall value 'TZ', 'Europe/Dublin', 'ENVIRONMENT'
+%SRCG%Lcall s '2020-03-29', '01:30:00', 'epoch'
+%SRCG%Lcall s '2020-03-29', '00:59:59', 'epoch'
+%SRCG%Lcall s '2020-03-29', '02:00:00', 'epoch'
+%SRCG%Lcall overlap 'Europe/Dublin', '2020-10-25', '01:30:00', '1603585800 1603589400'
+%SRCG%Lcall s '2021-03-28', '01:30:00', 'epoch'
+%SRCG%Lcall s '2045-03-26', '01:30:00', 'epoch'
+%SRCG%Lcall value 'TZ', 'UTC', 'ENVIRONMENT'
+%SRCG%Lcall s '2020-06-01', '12:00:00', 'epoch'
+%SRCG%Lcall value 'TZ', 'Asia/Kolkata', 'ENVIRONMENT'
+%SRCG%Lsay 'kolkata     ' SysGetFileDateTime(f)
+%SRCG%Lcall s '2020-06-01', '12:00:00', 'epoch'
+%SRCG%Lcall value 'TZ', 'IST-1GMT0,M10.5.0,M3.5.0/1', 'ENVIRONMENT'
+%SRCG%Lcall s '2020-03-29', '01:30:00', 'epoch'
+%SRCG%Lcall s '2020-07-01', '12:00:00', 'epoch'
+%SRCG%Lcall value 'TZ', ':Europe/Zurich', 'ENVIRONMENT'
+%SRCG%Lcall s '2020-03-29', '02:30:00', 'epoch'
+%SRCG%Lcall value 'TZ', '', 'ENVIRONMENT'
+%SRCG%Lcall s '2020-07-01', '12:00:00', 'epoch'
+%SRCG%Lcall value 'TZ', 'No/Such_Zone', 'ENVIRONMENT'
+%SRCG%Lcall s '2020-07-01', '12:00:00', 'epoch'
+%SRCG%L'rm -rf' d
+%SRCG%Lcall SysGetFileDateTime f, 'Q'
+%SRCG%Lexit
+%SRCG%L
+%SRCG%Ls: procedure expose f
+%SRCG%L  if arg(1, 'e') & arg(2, 'e') then r = SysSetFileDateTime(f, arg(1), arg(2))
+%SRCG%L  else if arg(1, 'e') then r = SysSetFileDateTime(f, arg(1))
+%SRCG%L  else r = SysSetFileDateTime(f, , arg(2))
+%SRCG%L  say left('['translate(arg(1), '?', '00'x)'] ['translate(arg(2), '?', '00'x)']', 34) r ,
+%SRCG%L    SysGetFileDateTime(f) SysGetFileDateTime(f, 'W')
+%SRCG%L  if arg(3) == 'epoch' then 'stat -c "  %Y"' f
+%SRCG%L  if arg(3) == 'overlap' then do
+%SRCG%L    address system 'stat -c %Y' f with output stem epoch.
+%SRCG%L    say '  valid overlap' (wordpos(strip(epoch.1), arg(4)) > 0) ,
+%SRCG%L      (SysGetFileDateTime(f) == arg(1)' 'arg(2))
+%SRCG%L  end
+%SRCG%L  return
+%SRCG%L
+%SRCG%L-- The reference does not select one occurrence of a repeated local reading.
+%SRCG%L-- A named zone fixes the allowed pair without depending on prior file atime.
+%SRCG%Loverlap: procedure expose f
+%SRCG%L  use arg zone, day, clock, candidates
+%SRCG%L  address system 'if test "${TZ+x}" = x; then echo present; else echo absent; fi' with output stem presence.
+%SRCG%L  saved = value('TZ', , 'ENVIRONMENT')
+%SRCG%L  -- An absent setting uses the host zone, while an empty setting means UTC.
+%SRCG%L  if presence.1 == 'absent' then saved = .nil
+%SRCG%L  call value 'TZ', zone, 'ENVIRONMENT'
+%SRCG%L  call s day, clock, 'overlap', candidates
+%SRCG%L  call value 'TZ', saved, 'ENVIRONMENT'
+%SRCG%L  return
+%SRCG%L
+%SRCG%Lt: procedure expose f d
+%SRCG%L  parse arg code
+%SRCG%L  signal on syntax name bad
+%SRCG%L  interpret code
+%SRCG%L  say 'ok   ' code
+%SRCG%L  return
+%SRCG%Lbad:
+%SRCG%L  c = condition('O')
+%SRCG%L  say 'error' code '|' c~code c~message
+%SRCG%L  return

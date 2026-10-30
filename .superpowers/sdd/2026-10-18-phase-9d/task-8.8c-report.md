@@ -1,0 +1,59 @@
+# Task 8.8c: Timing, environment and classification
+
+The selected P2 repairs are implemented at `949a7806b`, from BASE `b300b9c2541cc70c40c62b861438efe415e3c526`. Named-zone overlap checks accept the valid local-time epoch pair, timeout diagnostics retain load context, and identity markers use documented properties. Redirected-target, native-completion and child-wait controls preserve their functional claims without requiring one wall-time threshold or race winner. SysFileTree and the stderr-refusal fixture remain open because the bounded diagnoses did not reproduce a failing assertion. Whole Task 8.8 and its controller-owned batch gates remain open.
+
+## Dispositions
+
+| Queued item | Disposition | Evidence |
+| --- | --- | --- |
+| 2026-09-17-oracle-deadline-is-wall-clock | Closed `949a7806b` | Hard wall deadline retained, with probe, phase, configured/elapsed duration and timeout-time load diagnostics. Missing-load formatter control and actual retained path/phase assertions pass. |
+| 2026-09-21-flaky-unstable-row-gate | Closed `949a7806b` | Explicit Object/hashCode/instance and Object/identityHash/instance classification, within-process contract probes, unknown-marker rejection and a constant-identity negative control. |
+| 2026-10-21-redirected-target-timed-line-flake | Closed `949a7806b` | Callback readiness, completion flags and guard ownership replace elapsed predicates. Positive ordinary/stress/sim/oracle transcript and omission controls pass. |
+| 2026-10-26-redirected-target-waits-timing-flake | Closed `949a7806b` | Same witness repair, separately closed. Collection-on-every-allocation control confirms actual collections and the complete callback transcript. |
+| 2026-10-21-quick-native-calls-wall-bound-flake | Closed `949a7806b` | Functional repeats supply the completed-watch outcome. Supplied timeout refusal, actual stalled-native refusal and minimum block parsing remain covered. |
+| 2026-10-26-file-date-time-dst-dependent | Closed `949a7806b` | Accepted overlap contract, valid-pair/local-readback properties, exact ordinary/gap descriptors, cross-zone distinction and absent/empty/present TZ restoration controls. |
+| 2026-10-27-reaped-child-test-load-flake | Closed `949a7806b` | Exact-child external waitpid deterministically exercises ECHILD/127/FAILURE. One bounded integration attempt accepts either valid winner, with separate owned-child controls. |
+| 2026-10-18-sysfiletree-tree-directory-flaky | Open | Original and privately instrumented group runs passed on both sides. No failed field or cause was established, so no licence was added. |
+| 2026-10-29-suite-fixture-stderr-refusal-load-flake | Open | Independent bounded reproductions passed with complete GroupRun, raw descriptors, child source and path identity retained. No cause or missing pass was reproduced. |
+
+## Contract and regression evidence
+
+The accepted [DST diagnosis](task-8.8-dst-diagnosis.md) establishes that native overlap choice follows prior access-time conversion history, including access refreshed by a later file copy. The local SysSetFileDateTime reference specifies no choice between repeated local readings, so the controller accepted a fixture property without changing runtime make_time or adding a Deviation. Zurich, New York and Dublin overlap rows use their valid epoch pair and retain local readback, while ordinary and gap rows still compare exact epochs and the two-zone witness still requires distinct output. Named overlap probes now preserve both the presence and value of TZ, because the committed restoration regression showed absent TZ becoming an empty setting and changing a subsequent ordinary epoch. The corrected absent, empty and named-zone controls agree with the oracle and each prints `same ordinary epoch 1`.
+
+The timeout change implements the controller's reporting option rather than a contention policy. Pure formatting controls cover available load bytes and an unavailable source, while captured child stdout and stderr retain their existing contracts. The existing never-finishing and pipe-holder controls still assert one oracle invocation and classify TimedOut, and an external assertion verifies exactly one hang.rex child-wait diagnostic and one orphan.rex output-drain diagnostic with the correct budget and load context. The closure records timeout-time context only, without claiming a before/after environment history, retries or a load threshold that excuses failures.
+
+The identity classification follows Object's hashCode repeatability and identityHash uniqueness contracts in `oodocs/rexxref/en-US/fundclasses.xml:2792-2883`. The current Object receiver has no override of either method, and only its classified instance rows exclude identity-derived bytes from exact cross-process comparison. The property probe keeps receivers live, requires repeated sends to agree, requires distinct identityHash values, and permits hashCode collisions. Pure classification controls reject String/hashCode and unknown keys, a constant identityHash override produces VALUE 0, and arity still compares setup, completion, status and other descriptors.
+
+The redirected-target transcript observes alarm completion after sleep, a callback-started poster before wait completion, and release of a ready guard holder before guarded callbacks enter. The positive control preserves command status, callback counts and all output under ordinary mode, allocation stress and seeded fifo/uniform/pct simulation, with oracle agreement across the retained runs. Sleep and semaphore omission controls break their corresponding observations, while an unguarded holder removes the actual guard-ownership precondition and prints released 0. An earlier append-unguarded control survived because guarded calls accessors still acquired the holder's guard, so it was an ineffective setup mutation rather than evidence against guard waiting. That distinction is retained in the failed logs and the corrected control.
+
+The native completion control supplies a test-only logical result at the existing watch boundary, preserving output and native-exit assertions under deterministic scheduling. Its supplied timeout counterpart refuses, the real SockAccept stall still exercises the wall watch, and the existing parser control still accepts block=0.001 while rejecting smaller bounds. Reaped-child mapping uses a real exact-PID external waitpid before the existing collector runs, with no command-wait injection or retry loop. A process-isolated exec control preserves the child's ownership for SysWait raw status 1280, and retained integration runs exhibit both valid race winners. The final losing-waiter run returns wait 1280, failure 127 and cmd rc 127 with unrelated normal RC tracing explicitly disabled in that fixture.
+
+## Bounded open diagnoses
+
+The original SysFileTree group passed its selected tests on both sides, and its per-test rows match the preceding `t8.7c/fix-r4/suite/tests.tsv` for that group. A second run uses a private source copy that traces setup metadata, assertion option/path, expected metadata, actual line, cwd, TZ and teardown, and also passes TEST_TREE_DIRECTORY on both sides. Raw stdout/stderr and complete GroupRun records are retained under `timing/sysfiletree/` and `timing/sysfiletree-trace/`, with the selected-row comparison in `sysfiletree/delta.json`. No collision or metadata cause was established, so no concurrent stress escalation, runtime fix or Flaky licence was justified. The next owner is the controller running the pending full suite with REXX_SUITE_DIAGNOSTICS set, then reducing a retained failed field through the explicit ignored diagnostic if it recurs.
+
+The stderr-refusal fixture passed independent bounded runs, each retained second run reporting TEST_A started and passed, normal exit 0 and no failure or blocking state. The optional diagnostic capture stores raw stdout/stderr, complete GroupRun fields, generated child.rex, started marker and canonical run/group/interpreter paths before cleanup. The normal summary coexists with the expected child's stderr refusal, preserving the existing end_reason policy and fixture expectations. The complete fixture target also passes, but no missing-pass class or causal relationship to the earlier grandchild fix was established. This item remains assigned to the controller's pending full-suite/workspace reproduction with diagnostics enabled, without a known-flake entry.
+
+## Verification and boundaries
+
+[command-status.tsv](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/timing/command-status.tsv) and `commands.jsonl` record the actual bounded commands and exit statuses, including unsuccessful attempts. The committed DST and TZ-restoration controls fail behaviorally before their fixes, while the initial new helper controls fail compilation for their absent APIs. Retained failed implementation checks also show an unqualified filesystem read, Rexx expression precedence, module-root resolution, the ineffective guard mutation and the fixture's normal RC trace. The first sourceline launch used a readable script without executable mode, and the controller accepted invoking that script with bash without changing permissions. Source and generated fixtures were committed before the corresponding checks, and no source changed while a check ran.
+
+| Focused check | Actual result |
+| --- | --- |
+| Complete collection_arity, introspection_arity, oracle_deadline and timing_witnesses targets | Exit 0, respectively 29, 31, 33 and 27 tests passed |
+| Final datetime_zone target | Exit 0, 28 tests passed, including absent/empty/present restoration |
+| Command collector mapping and existing command tests | Exit 0, 8 tests passed |
+| Minimum simulation block parsing | Exit 0, existing configuration control passed |
+| Final native tests | Exit 0, 16 tests passed, including actual stalled-native refusal |
+| Final rexxutil_process target | Exit 0, 4 tests passed, including losing-waiter 127 outcome |
+| Complete fixture target | Exit 0, 18 tests passed, explicit SysFileTree diagnostic ignored and separately run |
+| Original and instrumented SysFileTree diagnoses | Exit 0, TEST_TREE_DIRECTORY and the other started tests passed on both sides |
+| Bounded stderr-refusal reproductions | Exit 0, retained second runs passed TEST_A |
+| Documented oracle sourceline generation and source-fixture check | Exit 0, generated expectations refreshed and check passed |
+| Final cargo fmt --all --check | Exit 0 |
+| Final rexx-exec/rexx-parse clippy --all-targets with warnings denied | Exit 0 |
+| External timeout path/phase/budget/load assertion | Exit 0, original one-invocation controls confirmed |
+
+Pure responsibility moves separate arity classification, native watch handling, command tests and suite fixture checks while preserving useful comments. Large test modules use ordinary cfg(test) mod tests with adjacent tests.rs, and the fixture support module has an explicit mod.rs root shared by compiler and formatter. No unsafe site, dependency, numeric-id side map or language-semantic rule was added. The native watch extraction and its production single-variant representation still touch the sim run path, so no performance exemption is asserted despite the logical outcome seam being cfg(test). The controller retains the all-program own-BASE performance obligation against this slice's recorded BASE, plus full corpus, coverage, collect-stress, policy/refusal, full-suite delta and workspace batch gates.
+
+The source range is `b300b9c25..949a7806b`, with the final environment repair at `56af137ff` and its generated fixture at `949a7806b`. Queue closures reference the final source revision, and both unresolved diagnoses retain their open inventory dispositions. RAISE DESCRIPTION and P3/P4/P5/P6/P7 were not changed. Tasks 9/10 and Phase 9/10 closure remain outside this slice.
