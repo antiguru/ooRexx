@@ -105,7 +105,9 @@ and the probe path), 2026-10-22-collect-stress-zero-collection-drift.md,
 2026-10-26-file-date-time-dst-dependent.md, 2026-10-26-redirected-target-waits-timing-flake.md, 2026-10-27-reaped-child-test-load-flake.md,
 2026-10-29-suite-fixture-stderr-refusal-load-flake.md, 2026-10-29-oracle-harness-stdin-deadlock.md, 2026-10-29-pow-integral-exponent-overflow.md,
 2026-10-29-hash-collection-messages-sent.md, 2026-10-29-trace-assignment-rendered-once.md, 2026-10-29-stdout-query-size-position-file.md,
-2026-10-29-stem-index-string-values.md and 2026-10-29-grandchild-sleeps-process-wide.md.
+2026-10-29-stem-index-string-values.md, 2026-10-29-grandchild-sleeps-process-wide.md,
+2026-10-30-raise-description-unsent.md, 2026-10-30-number-max-object-argument.md
+and 2026-10-30-parse-pattern-conversion-raise.md.
 
 Also in 8.8: reconcile queued-inventory.tsv, every row whose queued file's first line is CLOSED but whose
 columns 4 and 6 still read 9d gets `closed:<sha>` from that line (controller pre-dispatch check, 2026-10-28).
