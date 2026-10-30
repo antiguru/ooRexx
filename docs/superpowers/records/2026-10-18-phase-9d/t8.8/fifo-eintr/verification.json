@@ -1,0 +1,56 @@
+{
+  "frozen_executable_sha256": "434d6567458248fdb804eebe9edb715a54ddb9ded650fcca994eed6c4b691e06",
+  "runtime_source": "1d8b03220",
+  "source_hashes": {
+    "rust/crates/rexx-exec/src/dispatch/stream.rs": "a78d0e88949d9952ab1e198facfa25c23988cd76b3d3dff18a78ac465e2c2739",
+    "rust/crates/rexx-exec/src/lines.rs": "08191d509617fb50c35a51910a59aae04f3c78d176c4e2ad29e5961570b1b520",
+    "rust/crates/rexx-exec/src/signal.rs": "dde03a27915e57c61cf053c27a819f50c13cc5833e8e26363df6dc43229d00d4"
+  },
+  "rows": {
+    "crate-r2": {
+      "status": 0,
+      "elapsed": 0.1582741839811206,
+      "stdout": "warm [abc]\nread [Z]\nHALT READY:\ndescription READY:\n",
+      "read_lines": [
+        "16:58:03.344616 read(6</tmp/t88-fifo-eintr-20261030-1H/crate-r2/pipe>, \"abc\", 3) = 3 <0.000008>",
+        "16:58:03.344975 read(6</tmp/t88-fifo-eintr-20261030-1H/crate-r2/pipe>, 0x7fb61c4a0660, 1) = ? ERESTARTSYS (To be restarted if SA_RESTART is set) <0.009788>",
+        "16:58:03.355086 read(6</tmp/t88-fifo-eintr-20261030-1H/crate-r2/pipe>, \"Z\", 1) = 1 <0.000335>"
+      ],
+      "reading_trace": "/tmp/t88-fifo-eintr-20261030-1H/crate-r2/trace.1020958"
+    },
+    "oracle-r3": {
+      "status": 0,
+      "elapsed": 0.0455013049650006,
+      "stdout": "warm [abc]\nNOTREADY /tmp/t88-fifo-eintr-20261030-1H/oracle-r3/pipe ERROR:4 Interrupted system call\nread []\nHALT ERROR:4 Interrupted system call\ndescription ERROR:4 Interrupted system call\n",
+      "read_lines": [
+        "16:58:13.093478 read(5</tmp/t88-fifo-eintr-20261030-1H/oracle-r3/pipe>, \"abc\", 4096) = 3 <0.000007>",
+        "16:58:13.093804 read(5</tmp/t88-fifo-eintr-20261030-1H/oracle-r3/pipe>, 0x55f3ffc06f00, 4096) = ? ERESTARTSYS (To be restarted if SA_RESTART is set) <0.004968>"
+      ],
+      "reading_trace": "/tmp/t88-fifo-eintr-20261030-1H/oracle-r3/trace.1021451"
+    },
+    "partial-crate-r1": {
+      "status": 0,
+      "elapsed": 0.19057602196699008,
+      "stdout": "warm [abc]\nread [PZ]\nHALT READY:\ndescription READY:\n",
+      "read_lines": [
+        "17:00:18.610223 read(6</tmp/t88-fifo-eintr-20261030-1H/partial-crate-r1/pipe>, \"abc\", 3) = 3 <0.000008>",
+        "17:00:18.610681 read(6</tmp/t88-fifo-eintr-20261030-1H/partial-crate-r1/pipe>, \"P\", 2) = 1 <0.008266>",
+        "17:00:18.619022 read(6</tmp/t88-fifo-eintr-20261030-1H/partial-crate-r1/pipe>, 0x7fd3bc446cc1, 1) = ? ERESTARTSYS (To be restarted if SA_RESTART is set) <0.001200>",
+        "17:00:18.620489 read(6</tmp/t88-fifo-eintr-20261030-1H/partial-crate-r1/pipe>, \"Z\", 1) = 1 <0.010884>"
+      ],
+      "reading_trace": "/tmp/t88-fifo-eintr-20261030-1H/partial-crate-r1/trace.1028057"
+    },
+    "partial-oracle-r1": {
+      "status": 0,
+      "elapsed": 0.04517014097655192,
+      "stdout": "warm [abc]\nNOTREADY /tmp/t88-fifo-eintr-20261030-1H/partial-oracle-r1/pipe ERROR:4 Interrupted system call\nread []\nHALT ERROR:4 Interrupted system call\ndescription ERROR:4 Interrupted system call\n",
+      "read_lines": [
+        "17:00:18.688054 read(5</tmp/t88-fifo-eintr-20261030-1H/partial-oracle-r1/pipe>, \"abc\", 4096) = 3 <0.000006>",
+        "17:00:18.688352 read(5</tmp/t88-fifo-eintr-20261030-1H/partial-oracle-r1/pipe>, \"P\", 4096) = 1 <0.009871>",
+        "17:00:18.698288 read(5</tmp/t88-fifo-eintr-20261030-1H/partial-oracle-r1/pipe>, 0x55d9d2c3cf00, 4096) = ? ERESTARTSYS (To be restarted if SA_RESTART is set) <0.000811>"
+      ],
+      "reading_trace": "/tmp/t88-fifo-eintr-20261030-1H/partial-oracle-r1/trace.1028068"
+    }
+  },
+  "owned_trace_pids_remaining": []
+}

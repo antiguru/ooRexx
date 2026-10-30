@@ -17,10 +17,14 @@ The original flags probe still fails when FOO is redefined or removed before the
 
 Distinguish configured inline mode and test-only fixed saturation from an actual OS thread-spawn failure. Preserve the former policies and propagate the latter as the documented system-service failure, using the existing huge-stack failure seam where faithful. Native calls, commands and stdin are separate consumers and all require explicit proof. A missing worker must not make a blocking job run inline while holding the baton.
 
+Read `task-8.8-pool-design.md` for the audited ownership and continuation paths. The controller selects its reserve-before-command-spawn design, retaining ordinary process-group behavior and using a command-specific guard to return any unused worker through the existing no-op job mechanism. The documented simultaneous thread/exec-failure precedence cost is accepted after argument and pipe validation. Native failure must resume the existing parked continuation as unstarted, and stdin failure must preserve unrelated posts and input state.
+
 * Derive the error contract from the local reference and existing error catalogue before choosing the construction.
 * Check ownership and cleanup when reservation fails. In particular, determine whether a command child already exists and ensure that returning the error leaves no owned running child or blocked pipe reader.
 * Preserve pin/baton/caller state, input ownership and future progress after a trapped failure. Use bounded actual spawn failure rather than host resource exhaustion or a broad injection framework.
 * Keep production-root and cancellation invariants intact, with no new unsafe site or dependency.
+* Use the existing cold 48.1 service construction and distinguish a genuinely left native call from an unstarted frame. Unstarted cleanup must use `pop_native_frame`/`end_native_frame` to release kept values and lent buffers.
+* Establish actual spawn failure before counting a seam as effective. A subprocess address-space limit above normal interpreter needs and below the huge requested stack is allowed alongside the normal resident-memory cap. These limits measure different quantities, and no host resource-exhaustion test is authorized.
 
 ## Non-class method scope
 

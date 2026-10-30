@@ -1,0 +1,10 @@
+{
+  "source": "/tmp/t88-fifo-eintr-20261030-1H",
+  "archive_root": "t88-fifo-eintr-20261030-1H",
+  "omitted_executables": [
+    {
+      "path": "rexx-frozen",
+      "sha256": "434d6567458248fdb804eebe9edb715a54ddb9ded650fcca994eed6c4b691e06"
+    }
+  ]
+}
