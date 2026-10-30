@@ -121,6 +121,10 @@ fn an_owned_child_keeps_its_status_and_error_mapping() {
 }
 
 #[test]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "waits for real pool workers to return"
+)]
 fn unused_command_worker_returns_after_drop_unwind_and_exec_failure() {
     let mut interp = Interp::new();
     interp.pool = crate::scheduler::Pool::new(1 << 20, 1);

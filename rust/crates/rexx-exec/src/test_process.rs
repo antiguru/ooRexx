@@ -7,6 +7,10 @@ pub(crate) fn isolated(name: &str) -> bool {
     isolated_with_input(name, None)
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "bounds the isolated test process using real time"
+)]
 pub(crate) fn isolated_with_input(name: &str, input: Option<&[u8]>) -> bool {
     const CHILD: &str = "REXX_POOL_FAILURE_CHILD";
     if std::env::var(CHILD).as_deref() == Ok(name) {
