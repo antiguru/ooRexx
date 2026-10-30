@@ -8,7 +8,14 @@ fn enhanced_metaclass_nil_entry_keeps_its_registered_method_through_gc() {
         .run(program)
         .expect("class construction")
         .expect("class result");
-    interp.roots.activity_mut().push_temp(receiver);
+    interp.roots.add_global("gate481 class receiver", receiver);
+    // Clear the prior program's exit root without retaining a reflected
+    // Method or Supplier. Only the class owns the enhanced Method here.
+    let harmless = rexx_parse::parse_program(b"return 0\n".to_vec()).expect("harmless program");
+    assert_eq!(
+        interp.run(harmless).expect("overwrite exit root"),
+        ObjRef::small_int(0)
+    );
     let selection = receiver_selection(&mut interp, receiver).expect("real receiver selection");
     assert!(matches!(selection, Selection::ClassSide(class) if class == receiver));
     assert!(interp.own_method_entry(receiver, b"PING").is_none());
