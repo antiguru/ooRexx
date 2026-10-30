@@ -1,0 +1,23 @@
+{
+  "changed_fn_names_removed": [
+    "write_through",
+    "drop",
+    "native_hash_empty",
+    "owned_standard_output"
+  ],
+  "changed_fn_names_added": [
+    "write_through",
+    "drop",
+    "owned_stdout_alias",
+    "ensure_owned_stdout_file",
+    "owned_stdout_position_is_empty_before_open_and_after_close",
+    "owned_stdout_aliases_keep_their_buffered_positions",
+    "check_owned_stdout"
+  ],
+  "removed_doc_fence_lines": [],
+  "new_test_functions": [
+    "owned_stdout_position_is_empty_before_open_and_after_close",
+    "owned_stdout_aliases_keep_their_buffered_positions"
+  ],
+  "existing_explicit_renames_unchanged": true
+}

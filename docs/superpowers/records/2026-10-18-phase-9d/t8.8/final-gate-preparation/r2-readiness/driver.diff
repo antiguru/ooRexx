@@ -1,0 +1,114 @@
+--- /tmp/codex-p9d-t88-final-gate-before-r2-readiness.py
++++ /tmp/codex-p9d-t88-final-gate-draft.py
+@@ -17,6 +17,7 @@
+ OUT = Path('/tmp/codex-p9d-t88-final-gates')
+ TARGET = '/tmp/codex-p9d-t88-target'
+ BASE = ROOT / 'docs/superpowers/records/2026-10-18-phase-9d/t8.8/prerequisites'
++RELEASE_PIN_PROVENANCE = ROOT / 'docs/superpowers/records/2026-10-18-phase-9d/t8.8/final-review/fix-r1/release-pin.json'
+ ADDED_TARGETS = {('rexx-exec', 'semantic_boundaries', ('test',), ('bin',)):
+                  'Task 8.8f adds semantic boundary integration coverage after the prerequisite enumeration'}
+ RENAMED_TESTS = {
+@@ -37,7 +38,7 @@
+ PIN = CONFIG['source_commit']
+ ENV = {k: v for k, v in os.environ.items() if not k.startswith('REXX_')}
+ for key_name in list(ENV):
+-    if key_name in {'RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'RUSTDOCFLAGS', 'CARGO_BUILD_TARGET'} or key_name.startswith('CARGO_PROFILE_') or (key_name.startswith('CARGO_TARGET_') and key_name.endswith(('_RUNNER', '_RUSTFLAGS', '_LINKER'))):
++    if key_name in {'RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'RUSTDOCFLAGS', 'CARGO_ENCODED_RUSTDOCFLAGS', 'CARGO_BUILD_RUSTFLAGS', 'CARGO_BUILD_RUSTDOCFLAGS', 'CARGO_BUILD_TARGET'} or key_name.startswith('CARGO_PROFILE_') or (key_name.startswith('CARGO_TARGET_') and key_name.endswith(('_RUNNER', '_RUSTFLAGS', '_RUSTDOCFLAGS', '_LINKER'))):
+         ENV.pop(key_name)
+ ENV.update(CARGO_INCREMENTAL='0', CARGO_TARGET_DIR=TARGET, CARGO_BUILD_JOBS='4')
+ ENV.update(REXX_CORPUS_GATE='1', REXX_SUITE_DIAGNOSTICS=str(OUT / 'debug-diagnostics'))
+@@ -77,6 +78,49 @@
+ 
+ def digest(path):
+     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
++
++
++def release_provenance():
++    provenance = json.loads(RELEASE_PIN_PROVENANCE.read_text())
++    assert provenance['pin'] == CONFIG['release_binary']
++    assert provenance['sha256'] == provenance['build_sha256'] == CONFIG['release_binary_sha256']
++    runtime_tree = git_output('rev-parse', provenance['source_commit'] + ':rust').decode().strip()
++    assert runtime_tree == git_output('rev-parse', PIN + ':rust').decode().strip(), 'Pinned runtime Rust tree differs from gate source'
++    for path, expected in provenance['source_hashes'].items():
++        assert digest(ROOT / path) == expected, f'Pinned source hash changed: {path}'
++    build_record = RELEASE_PIN_PROVENANCE.parent / provenance['build_record']
++    assert digest(build_record) == provenance['build_record_sha256'], 'Pin build provenance changed'
++    return {'path': str(RELEASE_PIN_PROVENANCE), 'sha256': digest(RELEASE_PIN_PROVENANCE),
++            'runtime_source_commit': provenance['source_commit'], 'rust_tree': runtime_tree}
++
++
++def release_artifacts(log_path, required_tests):
++    selected = {}
++    for line in log_path.read_text(errors='replace').splitlines():
++        try:
++            item = json.loads(line)
++        except json.JSONDecodeError:
++            continue
++        if not isinstance(item, dict) or item.get('reason') != 'compiler-artifact' or not item.get('executable'):
++            continue
++        if Path(item['manifest_path']) != RUST / 'crates/rexx-exec/Cargo.toml':
++            continue
++        selected[item['executable']] = item
++    cli = [item for item in selected.values() if item['target']['kind'] == ['bin'] and item['target']['name'] == 'rexx' and not item['profile']['test']]
++    assert len(cli) == 1, 'Fresh Cargo CLI artifact missing or ambiguous'
++    cli = cli[0]
++    assert Path(cli['executable']).resolve() == (Path(TARGET) / 'release/rexx').resolve()
++    assert Path(cli['target']['src_path']) == RUST / 'crates/rexx-exec/src/bin/rexx.rs'
++    assert not cli['features'] and not cli['profile']['debug_assertions'] and not cli['profile']['overflow_checks']
++    cli_sha256 = digest(cli['executable'])
++    assert cli_sha256 == CONFIG['release_binary_sha256'] == digest(CONFIG['release_binary']), 'Fresh Cargo CLI differs from immutable final pin'
++    tests = {item['target']['name']: item for item in selected.values() if item['target']['kind'] == ['test'] and item['profile']['test']}
++    assert set(tests) == set(required_tests), 'Release test artifact population differs'
++    for item in tests.values():
++        assert not item['features'] and not item['profile']['debug_assertions'] and not item['profile']['overflow_checks']
++    return {'source_commit': PIN, 'pin_provenance': release_provenance(),
++            'cli': {'executable': cli['executable'], 'sha256': cli_sha256, 'profile': cli['profile']},
++            'tests': {name: {'executable': item['executable'], 'sha256': digest(item['executable']), 'profile': item['profile']} for name, item in tests.items()}}
+ 
+ 
+ ACTIVE = None
+@@ -175,9 +219,11 @@
+     check_source()
+     assert not git_output('diff', '--cached', '--name-only', '-z'), 'Index must begin unstaged'
+     assert digest(CONFIG['release_binary']) == CONFIG['release_binary_sha256'], 'Final release pin mismatch'
++    provenance = release_provenance()
+     with (OUT / 'input-freeze.json').open('x') as output:
+         json.dump({'source_commit': PIN, 'authorized_evidence_outputs': [],
+                    'config_sha256': digest(CONFIG_PATH),
++                   'release_pin_provenance': provenance,
+                    'profiling_completion_record': str(completion_path), 'profiling_completion': completion,
+                    'index_staging_sha256': hashlib.sha256(git_output('ls-files', '--stage', '-z')).hexdigest(),
+                    }, output, indent=2)
+@@ -190,8 +236,8 @@
+         'fmt': ['cargo', 'fmt', '--all', '--check'],
+         'clippy': ['cargo', 'clippy', '--workspace', '--all-targets', '--locked', '-j4', '--', '-D', 'warnings'],
+         'release-build': ['python3', 'scripts/test_preflight.py', '--', 'cargo', 'test', '--release', '--locked', '-j4', '-p', 'rexx-exec', '--test', 'corpus', '--test', 'suite', '--no-run', '--message-format=json'],
+-        'release-corpus': ['cargo', 'test', '--release', '--locked', '-j4', '-p', 'rexx-exec', '--test', 'corpus', '--', '--test-threads=1', '--nocapture'],
+-        'release-suite': ['cargo', 'test', '--release', '--locked', '-j4', '-p', 'rexx-exec', '--test', 'suite', 'l3_core_suite', '--', '--exact', '--test-threads=1', '--nocapture'],
++        'release-corpus': ['cargo', 'test', '--release', '--locked', '-j4', '-p', 'rexx-exec', '--test', 'corpus', '--message-format=json', '--', '--test-threads=1', '--nocapture'],
++        'release-suite': ['cargo', 'test', '--release', '--locked', '-j4', '-p', 'rexx-exec', '--test', 'suite', 'l3_core_suite', '--message-format=json', '--', '--exact', '--test-threads=1', '--nocapture'],
+         'suite-delta': ['python3', '/tmp/codex-p9d-t88-final-suite-delta.py'],
+         'sysfiletree-diagnostic': ['cargo', 'test', '--release', '--locked', '-j4', '-p', 'rexx-exec', '--test', 'suite', 'fixtures::tests::sysfiletree_group_retains_assertion_and_metadata_context', '--', '--exact', '--ignored', '--test-threads=1', '--nocapture'],
+         'pinning': ['cargo', 'test', '--locked', '-j4', '-p', 'rexx-exec', '--lib', '--features', 'pinning', 'scheduler::tests::mutants::', '--', '--test-threads=1', '--nocapture'],
+@@ -202,7 +248,21 @@
+         env.update(REXX_SUITE_GATE='1', REXX_SUITE_TABLE=str(OUT / 'suite/table.tsv'), REXX_SUITE_DIAGNOSTICS=str(OUT / 'suite-diagnostics'))
+     elif mode == 'sysfiletree-diagnostic':
+         env['REXX_SUITE_DIAGNOSTICS'] = str(OUT / 'sysfiletree-diagnostic')
++    if mode in {'release-corpus', 'release-suite'}:
++        prior = json.loads((OUT / 'release-artifacts-verified.json').read_text())
++        assert prior['source_commit'] == PIN and prior['pin_provenance'] == release_provenance()
++        assert digest(prior['cli']['executable']) == prior['cli']['sha256'] == CONFIG['release_binary_sha256']
++        selected_test = mode.removeprefix('release-')
++        assert digest(prior['tests'][selected_test]['executable']) == prior['tests'][selected_test]['sha256']
+     result = run(mode, commands[mode], RUST, env, 525)
++    if mode == 'release-build':
++        assert result['returncode'] == 0 and not result['timed_out'], result
++        verified = release_artifacts(OUT / 'release-build.stdout', {'corpus', 'suite'})
++        (OUT / 'release-artifacts-verified.json').write_text(json.dumps(verified, indent=2) + '\n')
++    elif mode in {'release-corpus', 'release-suite'}:
++        fresh = release_artifacts(OUT / (mode + '.stdout'), {selected_test})
++        assert fresh['cli'] == prior['cli'] and fresh['tests'][selected_test] == prior['tests'][selected_test], 'Actual release command artifacts changed'
++        (OUT / (mode + '-artifacts.json')).write_text(json.dumps(fresh, indent=2) + '\n')
+     if mode == 'pinning':
+         text = (OUT / 'pinning.stdout').read_text(errors='replace')
+         expected = {'scheduler::tests::mutants::' + name for name in re.findall(r'#\[test\]\s*fn\s+(\w+)\(', (RUST / 'crates/rexx-exec/src/scheduler/tests/mutants.rs').read_text())}

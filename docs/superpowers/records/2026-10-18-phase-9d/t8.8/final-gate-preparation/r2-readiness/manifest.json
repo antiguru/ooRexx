@@ -1,0 +1,18 @@
+{
+  "before_driver": {
+    "path": "/tmp/codex-p9d-t88-final-gate-before-r2-readiness.py",
+    "sha256": "597d740f665097a00c404131bf8291f15c51419829740754d8ec012331f98a2c"
+  },
+  "after_driver": {
+    "path": "/tmp/codex-p9d-t88-final-gate-draft.py",
+    "sha256": "d5afb5d99b4e861104a0e902e56894fafa7aa544c3331edc1cae29f3b1ccb321"
+  },
+  "supplied_final_pin": {
+    "path": "/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx",
+    "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145"
+  },
+  "config_exists": false,
+  "freeze_exists": false,
+  "driver_syntax_parsed_only": true,
+  "builds_tests_or_gate_actions_executed": false
+}

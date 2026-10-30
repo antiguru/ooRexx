@@ -1,0 +1,23 @@
+# Final gate readiness on reviewed r2
+
+No config, completion record, freeze, build, or test action was started. Read-only inspection used HEAD `e1c1cda8c60730dc0306d2e743f100f17d9f70a2`, with supplied runtime source `9d919b7c3832c55edc3a0a07974309f092102201`. The immutable `/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx` hashes to the supplied `d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145`. Profiling completion, committed metrics, final metadata HEAD, performance acceptance, and execution authorization remain parent-owned.
+
+## Source population
+
+The latest Rust diff removes no test function and no doctest fence. OpenFile, StreamQuery, and EMPTY extraction code contains no relocated test or doctest block, and `semantic_boundaries` adds `owned_stdout_position_is_empty_before_open_and_after_close` and `owned_stdout_aliases_keep_their_buffered_positions` within its existing target. The retained fixture sweeps discover the added `.rex` cases, including the owned-stdout fixture directory. The four existing explicit test-name reconciliations remain unchanged, while fresh metadata/artifacts must still derive the historical target population plus `semantic_boundaries` without a blind cardinality assertion.
+
+## Confirmed environment gap
+
+Installed Cargo is `1.99.0 (5f94df478 2026-08-27)`, with its primary documentation under `/home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/share/doc/rust/html/cargo/reference/`. That documentation explicitly identifies `CARGO_BUILD_RUSTFLAGS`, `CARGO_BUILD_RUSTDOCFLAGS`, and `CARGO_ENCODED_RUSTDOCFLAGS` as compiler/documentation flag sources. The same local `config.html#targettriplerustdocflags` also documents `CARGO_TARGET_<triple>_RUSTDOCFLAGS`, which the previous suffix filter omitted. The narrow patch removes those exact sources in the existing sanitizer, without broad environment serialization or another configuration framework.
+
+## Release artifact provenance
+
+The earlier immutable-pin check did not prove which mutable Cargo CLI or integration harness a gate selected. The patch now checks fresh release Cargo JSON for the normal `rexx` binary, requires its path and source target to match this checkout, and requires its SHA256 to equal the supplied immutable pin. The durable `final-review/fix-r1/release-pin.json` must agree with that pin, its build-record hash and recorded source hashes must match, and the full `rust` tree at its source commit must equal the later frozen validation commit's `rust` tree. `release-build` records both release integration harness paths, hashes, empty features, and actual release profile data only after those checks succeed.
+
+Both release gate commands now retain Cargo JSON too, with fresh CLI/harness identities checked against the build record after each command before crediting the result. Before either command starts, the driver requires the verified build marker and unchanged CLI/selected-harness hashes. The corpus executes its runtime in-process, so its harness identity and source-tree proof are retained separately from the CLI used through `CARGO_BIN_EXE_rexx` by suite support. A missing artifact, profile mismatch, source mismatch, or byte mismatch blocks credit and preserves the command record rather than treating the immutable pin's own hash as sufficient.
+
+## Prepared artifacts and remaining verification
+
+The exact previous driver is `/tmp/codex-p9d-t88-final-gate-before-r2-readiness.py`, SHA256 `597d740f665097a00c404131bf8291f15c51419829740754d8ec012331f98a2c`. The prepared driver is `/tmp/codex-p9d-t88-final-gate-draft.py`, SHA256 `d5afb5d99b4e861104a0e902e56894fafa7aa544c3331edc1cae29f3b1ccb321`. This directory retains `driver.diff`, `manifest.json`, local Cargo documentation references, and `source-inspection.json`, while the delta helper is unchanged. Root can commit the prepared files before freeze, and every later execution command remains plain `memcap 8G python3 /tmp/codex-p9d-t88-final-gate-draft.py ACTION` with the existing bounds, freeze, exact environment whitelist, default-dispatch parity, M6 feature action, and Cargo doctest guards.
+
+Only Python syntax was parsed after editing, without importing or executing the configured driver. Fresh Cargo JSON, CLI byte identity under the release-test build, direct-dispatch parity, actual final populations, and gate statuses remain unmeasured. The source, index, tracked evidence, and retained raw profiles were unchanged, and inspected `/tmp` availability was 16,618,414,080 bytes. Actual execution still requires root authorization after the new profiling cohort and metric commits settle.
