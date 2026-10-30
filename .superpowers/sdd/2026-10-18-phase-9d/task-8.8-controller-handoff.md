@@ -59,3 +59,8 @@ M6 test-onlysliceef81bfc3e scoped-reviewapproved; compiledcatch andRETURNtwinpro
 ## Current Q candidate approved; final profiling/gates next
 
 Current runtimecd418bd304/evidence51cedf7cb approvedbytask-8.8f-perf-r2-review.md. Qpin22c317baa3ed111935a6577ac33097e428a53b64eb64b4697af2b85664e3f8eb, path8.8f-perf-r2-rexx. Runtimeworktreeclean,noimplementeractive. Profiler completed1287allverified;numeric33pass,Pfailsparse+.34815/rexxcps+.08962; finalpairedP→Q198nextafterrootstagesrecords. No data/cachecleanup; /tmp1.6GBfree. IfQpasses, sourcecanfreezeaftercurrentmetadata/metricscommitted, configurefinalgateJSONwithfinalfullSHA/profilecompletion/pin, runpreflight/build/dispatch/eachbinary/doc/audit+releasecorpus/suite/delta. Gateplanfreshpopulationaddssemantic_boundaries, emittedcommandsmustplainmemcap8GPythononly. Whole8.8finalreviewstillrequired. User84unansweredandHresidualbudget/twoflakesopen;donotdeclareTask8.8/phasecomplete.
+
+
+## Deviation 84 approved and Q profiling resumed
+
+Moritz answered the explicit recommendation to retain ITEMS 0 and record the oracle count defect as Deviation 84 with the exact reply, "Yes, 0." The numbered exclusion and equality-reentry ruling record now capture that authorization. The historical pending-ruling statements above are superseded by this approval. Root verified metadata commit c5243a5c6 and clean tracked worktree, then released the profiler for the approved P-to-Q 198-profile cohort; final gates remain pending.

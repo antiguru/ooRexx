@@ -3116,6 +3116,18 @@ DEVIATIONS -- permanent, chosen
      Witness: t8.8/semantics/probes/description-timing.rex and the complete
      ruled raise_untraced_renders_nothing.rex in tests/semantic_boundaries.
 
+ 84. REENTRANT TABLE REMOVAL KEEPS AN EMPTY COUNT AT ZERO (Phase 9d).
+     OWNER: none.
+
+     Ruled by Moritz 2026-10-30: "Yes, 0."
+     The approved recommendation keeps ITEMS at 0 when an index's equality
+     method empties its Table during REMOVE, and records the oracle defect.
+     ITEMS is the number of items in the collection (rexxref
+     collclasses.xml:464-477), so an emptied Table has zero items. Both
+     runtimes return .nil, but the oracle subsequently reports ITEMS -1.
+     Witness: t8.8/semantics/equality-reentry/probe.rex, with two retained
+     oracle runs and the crate's before/fixed descriptor records beside it.
+
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
 

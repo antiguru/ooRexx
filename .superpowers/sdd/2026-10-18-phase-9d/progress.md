@@ -369,3 +369,8 @@ Fperformance round1 fullmedianPARSE+0.34815184% againstA isconfirmed; exactselfd
 Fperformance round2 sourcecd418bd304/evidence51cedf7cb: scoped spec/quality approved, no findings. Separate priorRendered String/Mixed flow restored, duplicatepush skipped onlyforalready-rooted equalhandle; roots/lifetime proofchecked. Semanticstress3, PARSE/TRACE69+recorded1, fmt/clippy/release and5triple-sidedprobes pass. Qpin8.8f-perf-r2-rexx SHA25622c317baa3ed111935a6577ac33097e428a53b64eb64b4697af2b85664e3f8eb acceptedforfullP→Q198profiling, notbudgetacceptanceyet. Nootherplannedruntimeedits pendingQmeasurements.
 
 Profiler completed/verifies1287records throughH/A/P: numericH→A passes33/33, P failsparse+0.34815184% andrexxcps+0.08961594%, noSPREAD/output/statuserrors. OldfailuresandHlookupresidualpreserved. Qcomparisonlastacceptedcohortbeforefinalsourcefreeze; disk~1.6GBfree requiresfreshchecksandnoprofile/cachedeletion. Finalgateplan/draft readybutunexecuted, commandsplainmemcapPythoncapturingenv/timeouts/internally.84rulingunanswered;2originalflakesstillrequirefinaldiagnostics/disposition; finalwhole-reviewnotrun.
+
+
+## Deviation 84 approved and Q profiling resumed
+
+Moritz answered the explicit recommendation to retain ITEMS 0 and record the oracle count defect as Deviation 84 with the exact reply, "Yes, 0." The numbered exclusion and equality-reentry ruling record now capture that authorization. The historical pending-ruling statements above are superseded by this approval. Root verified metadata commit c5243a5c6 and clean tracked worktree, then released the profiler for the approved P-to-Q 198-profile cohort; final gates remain pending.
