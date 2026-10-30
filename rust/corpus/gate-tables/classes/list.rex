@@ -3,7 +3,7 @@
    and then the questions the class surface is wired by: ~id, ~class,
    ~superClass, ~superClasses, ~metaClass and ~isA(.Class). Derived
    from corpus/docs/class-set.txt by
-   crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on
+   crates/rexx-exec/tests/table_c/probes.rs, which re-derives this file on
    every run and compares it in both directions. */
 say 'entry' .List
 say 'class-of-entry' .List~class~id

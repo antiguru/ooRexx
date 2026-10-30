@@ -5,7 +5,7 @@
    program for this class, and carrying one is what `covered` claims.
    `::routine r` below the readbacks is that row's `directives` field,
    which is what the expression reads.
-   Derived by crates/rexx-exec/tests/gate_table_c.rs, which re-derives
+   Derived by crates/rexx-exec/tests/table_c/probes.rs, which re-derives
    this file on every run and compares it in both directions. */
 o = .routines~r
 say 'instance' o~hasMethod("[]")

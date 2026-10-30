@@ -96,7 +96,11 @@ fn a_fractional_deadline_is_not_truncated_to_whole_seconds() {
         Duration::from_millis(1700),
     );
     assert!(started.contains(&"TEST_B".to_string()), "{started:?}");
-    assert!(process.took >= Duration::from_millis(1550), "{:?}", process.took);
+    assert!(
+        process.took >= Duration::from_millis(1550),
+        "{:?}",
+        process.took
+    );
     let _ = fs::remove_dir_all(run);
 }
 

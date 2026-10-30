@@ -3,7 +3,7 @@
    instance `.Alarm~new(99999, .Message~new(.Object~new, 'STRING'))~~cancel` answers, in the row set's own order. That
    expression is corpus/docs/class-set.txt's committed construction
    program for this class, and carrying one is what `covered` claims.
-   Derived by crates/rexx-exec/tests/gate_table_c.rs, which re-derives
+   Derived by crates/rexx-exec/tests/table_c/probes.rs, which re-derives
    this file on every run and compares it in both directions. */
 o = .Alarm~new(99999, .Message~new(.Object~new, 'STRING'))~~cancel
 say 'instance' o~hasMethod("attachment")

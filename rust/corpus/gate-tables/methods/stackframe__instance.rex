@@ -3,7 +3,7 @@
    no construction program is committed; the reference says the user cannot create one and names a Rexx-level route instead -- utilityclasses.xml:9407 "StackFrame instances cannot be directly created by the user.".
    So ~new raises and no line below it is reached; the row's evidence
    is that raise, which is what the row set says there is to have.
-   Derived by crates/rexx-exec/tests/gate_table_c.rs, which re-derives
+   Derived by crates/rexx-exec/tests/table_c/probes.rs, which re-derives
    this file on every run and compares it in both directions. */
 o = .StackFrame~new
 say 'instance' o~hasMethod("arguments")

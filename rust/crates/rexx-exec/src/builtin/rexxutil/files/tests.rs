@@ -60,9 +60,8 @@ fn a_move_across_file_systems_copies_and_unlinks() {
     let here = Scratch::new(&std::env::temp_dir());
     let there = Scratch::new(&std::env::temp_dir());
 
-    let cross_device_move = |from: &Path, to: &Path| {
-        finish_move(bytes(from), bytes(to), Err(rustix::io::Errno::XDEV))
-    };
+    let cross_device_move =
+        |from: &Path, to: &Path| finish_move(bytes(from), bytes(to), Err(rustix::io::Errno::XDEV));
 
     let from = here.join("f.txt");
     fs::write(&from, b"data").expect("the source");
@@ -113,9 +112,15 @@ fn a_move_on_one_file_system_renames_without_copying() {
     assert_eq!(move_file(bytes(&from), bytes(&to)), 0);
     assert!(!from.exists());
     assert_eq!(fs::read(&to).expect("target"), b"renamed");
-    assert_eq!(fs::metadata(&to).expect("target metadata").ino(), before.ino());
+    assert_eq!(
+        fs::metadata(&to).expect("target metadata").ino(),
+        before.ino()
+    );
     fs::write(&from, b"kept").expect("second source");
     assert_eq!(move_file(bytes(&from), bytes(&to)), EEXIST);
     assert_eq!(fs::read(&from).expect("source remains"), b"kept");
-    assert_eq!(finish_move(bytes(&from), bytes(&to), Err(rustix::io::Errno::ACCESS)), 13);
+    assert_eq!(
+        finish_move(bytes(&from), bytes(&to), Err(rustix::io::Errno::ACCESS)),
+        13
+    );
 }

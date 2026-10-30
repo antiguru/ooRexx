@@ -233,8 +233,7 @@ fn run(source: &str, pool_stack: Option<usize>) -> Ran {
 /// [`run`] with what `shape` gives, answering whether the interpreter
 /// thread panicked.
 pub(super) fn run_shaped(source: &str, shape: Shape) -> std::thread::Result<Ran> {
-    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../build/lib");
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../build/lib");
     let invocation = Invocation::none()
         .with_deadline(shape.deadline)
         .with_environment(vec![
