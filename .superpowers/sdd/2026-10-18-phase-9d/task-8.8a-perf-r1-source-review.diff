@@ -1,0 +1,140 @@
+ddea7bdd0 docs: record power exponent performance repair proof
+f56dfd25e perf: reuse plain integer conversion for power exponents
+b16b854c0 test: cover scaled power exponent bounds and sign
+ .../task-8.8a-perf-fix-report.md                   |  33 +++
+ .../t8.8/pow/perf-fix-r1/clippy.command.json       |  25 ++
+ .../t8.8/pow/perf-fix-r1/clippy.status             |   1 +
+ .../t8.8/pow/perf-fix-r1/clippy.stderr             |   2 +
+ .../t8.8/pow/perf-fix-r1/clippy.stdout             |   0
+ .../t8.8/pow/perf-fix-r1/crate-power.command.json  |  13 +
+ .../t8.8/pow/perf-fix-r1/crate-power.status        |   1 +
+ .../t8.8/pow/perf-fix-r1/crate-power.stderr        |   0
+ .../t8.8/pow/perf-fix-r1/crate-power.stdout        |  13 +
+ .../t8.8/pow/perf-fix-r1/fmt.command.json          |  18 ++
+ .../t8.8/pow/perf-fix-r1/fmt.status                |   1 +
+ .../t8.8/pow/perf-fix-r1/fmt.stderr                |   0
+ .../t8.8/pow/perf-fix-r1/fmt.stdout                |   0
+ .../t8.8/pow/perf-fix-r1/oracle-power.command.json |  15 ++
+ .../t8.8/pow/perf-fix-r1/oracle-power.status       |   1 +
+ .../t8.8/pow/perf-fix-r1/oracle-power.stderr       |   0
+ .../t8.8/pow/perf-fix-r1/oracle-power.stdout       |  13 +
+ .../t8.8/pow/perf-fix-r1/pin-provenance.json       |  20 ++
+ .../pow/perf-fix-r1/release-build.command.json     |  24 ++
+ .../t8.8/pow/perf-fix-r1/release-build.status      |   1 +
+ .../t8.8/pow/perf-fix-r1/release-build.stderr      |   7 +
+ .../t8.8/pow/perf-fix-r1/release-build.stdout      |   0
+ .../rexx-num-tests-sandbox-failure.status          |   1 +
+ .../rexx-num-tests-sandbox-failure.stderr          |   2 +
+ .../rexx-num-tests-sandbox-failure.stdout          |   0
+ .../pow/perf-fix-r1/rexx-num-tests.command.json    |  21 ++
+ .../t8.8/pow/perf-fix-r1/rexx-num-tests.status     |   1 +
+ .../t8.8/pow/perf-fix-r1/rexx-num-tests.stderr     |  21 ++
+ .../t8.8/pow/perf-fix-r1/rexx-num-tests.stdout     | 294 +++++++++++++++++++++
+ .../t8.8/pow/perf-fix-r1/t88a-perf-driver.py       |  33 +++
+ .../t8.8/pow/perf-fix-r1/t88a-pin-witness.py       |  61 +++++
+ .../t8.8/pow/perf-fix-r1/verification-summary.json |  48 ++++
+ rust/crates/rexx-num/src/pow.rs                    |   6 +-
+ rust/crates/rexx-num/tests/pow.rs                  |  14 +
+ 34 files changed, 689 insertions(+), 1 deletion(-)
+diff --git a/.superpowers/sdd/2026-10-18-phase-9d/task-8.8a-perf-fix-report.md b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8a-perf-fix-report.md
+new file mode 100644
+index 000000000..3f3ebd586
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8a-perf-fix-report.md
+@@ -0,0 +1,33 @@
++# Task 8.8a: Performance fix round 1
++
++`pow.rs::as_whole` now reuses `plain_integer(ARGUMENT_DIGITS as u64)` when the rounded exponent is nonnegative. The existing rounding, zero, DIGITS width and integrality guards precede this choice. Fractional-zero spellings retain `whole_value(ARGUMENT_DIGITS)`. The change targets the outlined conversion attributed in the brief to the original arithmetic regression of +0.34824337%, whose measurements remain preserved.
++
++## Equivalence and coverage
++
++For a nonzero canonical coefficient of length `L` and nonnegative decimal exponent `E`, the integer width is `L + E`. With `ARGUMENT_DIGITS = 18`, `plain_integer(18)` rejects exactly widths above 18 and otherwise accumulates a magnitude at most `999999999999999999`, then applies the sign. `whole_value(18)` accepts the same widths, since its direct path uses `unsigned_value` with that width and magnitude bound, while its longer-coefficient path truncates to 18 digits and increases `E` by the omitted length, preserving the rejected width. No carry can reduce that width, and accepted magnitudes fit in `i64`, so the signed results agree.
++
++The test commit adds scaled coefficients at the accepted width, their negative counterparts, rejected scaled and machine-width integers, and a rounding carry across the width boundary. The zero base distinguishes an accepted positive exponent from an accepted negative exponent through the existing underflow error. Existing tests retain fractional trailing zeros, rejected nonzero fractions, DIGITS rounding, negative powers, zero, huge precision and overflow coverage. The original semantic regressions were already committed and historically red, as recorded in `task-8.8a-report.md`, and this repair introduces no Deviation.
++
++## Commits and verification
++
++The worktree was `plan/rust-rewrite` at `15ee94dd3d65de95466ae76a43a00276500cca2a`, with clean Rust source. Test commit `b16b854c03132fb51f31a462eb1a633121914566` preceded implementation commit `f56dfd25e4394ca32c7cfb18733d640a4f584ed9`. All successful checks measured the committed implementation with source frozen. Parent-owned performance records and the untracked archive were excluded from staging.
++
++Durable evidence is in `docs/superpowers/records/2026-10-18-phase-9d/t8.8/pow/perf-fix-r1/`. Each command JSON records the exact child command, working directory and environment, and the corresponding `.stdout`, `.stderr` and `.status` files retain separate descriptors. The Python drivers are archived there under their original basenames. Cargo checks used `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target`, an outer `memcap 8G`, and `timeout -k 5 540`.
++
++| Command from `rust/` | Status | Observed output |
++| --- | --- | --- |
++| `memcap 8G python3 /tmp/t88a-perf-driver.py rexx-num-tests` runs `cargo test -j 4 --locked -p rexx-num` | 0 | 196 passed, 0 failed, 3 ignored. Power target: 12 passed. |
++| `memcap 8G python3 /tmp/t88a-perf-driver.py fmt` runs `cargo fmt --all --check` | 0 | No output. |
++| `memcap 8G python3 /tmp/t88a-perf-driver.py clippy` runs `cargo clippy -j 4 --locked -p rexx-num --all-targets -- -D warnings` | 0 | Finished `dev` profile. |
++| `memcap 8G python3 /tmp/t88a-perf-driver.py release-build` runs `cargo build -j 4 --locked --release -p rexx-exec --bin rexx` | 0 | Finished release profile in 1m 33s. |
++| `python3 /tmp/t88a-pin-witness.py oracle` | 0 | Existing power corpus witness, output below. |
++| `memcap 2G python3 /tmp/t88a-pin-witness.py crate` | 0 | Same witness output, empty stderr. |
++| Separate `cmp` commands for oracle/crate stdout, stderr and status | 0 each | No output. Exact absolute commands are in `verification-summary.json`. |
++
++The initial sandboxed test launch exited 1 before Cargo because `memcap` could not create its cgroup. Its output remains in `rexx-num-tests-sandbox-failure.*`, while the redirected escalated retry stayed pending until interrupted and produced no successful check. The successful retries used plain approved `memcap` invocations with Python capturing descriptors internally. No check or approval remains live.
++
++The existing `power_integral_exponent.rex` witness ran from separate fresh directories documented in the command JSON files. The oracle child applied the documented 1 GiB address-space bound through `setrlimit(RLIMIT_AS)` before `timeout -k 5 20`, with the reference library path, after reading `rust/corpus/oracle-crashes.txt`. The crate used the preserved release pin under `memcap 2G` and the same timeout and library path. Both printed `2`, `2`, `8`, `0.5`, `8`, `1`, `1`, `8`, `8`, `8`, `2`, `2`, `2.306488E+301029995`, one value per line, with empty stderr and status 0.
++
++## Preserved pins and handoff
++
++The pre-repair pin `/tmp/codex-p9d-t88-pins/8.8e2-perf-r1-rexx` was rehashed and preserved, with SHA-256 `470dcb41db61ab7a4d64f3276ce28e539d5686d130be245a4ec7b30e6d6725ac` and recorded source `1233b81da730142057fcf810e324d10d0e55c109`. The new pin `/tmp/codex-p9d-t88-pins/8.8a-perf-r1-rexx` has SHA-256 `ecb06e984ed736233ce0e2ef779b74941488ae64fdec10333dfb2215c309198a`, matching the release build output, at source `f56dfd25e4394ca32c7cfb18733d640a4f584ed9` and Rust tree `68a291ee5089d9357b51b238056aaefcfac1500f`. `pin-provenance.json` records source-file hashes and compiler SHA-256 `f3834d26669b03f6855fa54bd2381443123e860167bc0c7a8dd137e5cf6e5e4f`, with `rustc 1.99.0 (b940084d7 2026-09-28)` and the exact build command in `release-build.command.json`. Scoped review, the matched all-program performance comparison and broad final gates remain controller-owned obligations, so this report makes no performance acceptance claim.
+diff --git a/rust/crates/rexx-num/src/pow.rs b/rust/crates/rexx-num/src/pow.rs
+index b0c3e833f..80863d3a4 100644
+--- a/rust/crates/rexx-num/src/pow.rs
++++ b/rust/crates/rexx-num/src/pow.rs
+@@ -47,21 +47,25 @@ impl Number {
+             // Any digit past the decimal point makes it non-whole.
+             let frac = (-self_.exponent) as usize;
+             if frac >= self_.digits.len()
+                 || self_.digits[self_.digits.len() - frac..]
+                     .iter()
+                     .any(|d| *d != 0)
+             {
+                 return None;
+             }
+         }
+-        self_.whole_value(crate::ARGUMENT_DIGITS)
++        if self_.exponent >= 0 {
++            self_.plain_integer(crate::ARGUMENT_DIGITS as u64)
++        } else {
++            self_.whole_value(crate::ARGUMENT_DIGITS)
++        }
+     }
+ 
+     pub fn pow(&self, exponent: &Number, digits: u64) -> Result<Number, ArithError> {
+         // `additional()` renders 26.008's substitution from `exponent` at
+         // its own full precision, which is the closest this crate can get
+         // to the interpreter's "as originally written" text -- see
+         // `ArithError::message`'s doc comment.
+         let power = exponent
+             .as_whole(digits)
+             .ok_or_else(|| ArithError::PowerExponentNotWhole {
+diff --git a/rust/crates/rexx-num/tests/pow.rs b/rust/crates/rexx-num/tests/pow.rs
+index 2976e4497..c32046e5d 100644
+--- a/rust/crates/rexx-num/tests/pow.rs
++++ b/rust/crates/rexx-num/tests/pow.rs
+@@ -115,10 +115,24 @@ fn an_integral_exponent_ignores_trailing_fraction_zeros_before_conversion() {
+ 
+ #[test]
+ fn a_power_exponent_obeys_the_platform_whole_number_limit() {
+     for exponent in ["999999999999999999", "-999999999999999999"] {
+         assert_eq!(pow("1", exponent, 30).unwrap(), "1");
+     }
+     for exponent in ["1000000000000000000", "-1000000000000000000", "1e18"] {
+         assert_eq!(pow("1", exponent, 30), Err(26));
+     }
+ }
++
++#[test]
++fn a_scaled_integer_exponent_keeps_its_width_limit_and_sign() {
++    for exponent in ["1e17", "99999999999999999e1"] {
++        assert_eq!(pow("0", exponent, 30).unwrap(), "0");
++    }
++    for exponent in ["-1e17", "-99999999999999999e1"] {
++        assert_eq!(pow("0", exponent, 30), Err(42));
++    }
++    for exponent in ["1e18", "-1e18", "9223372036854775807"] {
++        assert_eq!(pow("0", exponent, 30), Err(26));
++    }
++    assert_eq!(pow("0", "999999999999999999", 17), Err(26));
++}
+$ git log --oneline 15ee94dd3d65de95466ae76a43a00276500cca2a..ddea7bdd0e0ffe76a395ea68e083d3bf0ecb806b
+$ git diff --stat 15ee94dd3d65de95466ae76a43a00276500cca2a..ddea7bdd0e0ffe76a395ea68e083d3bf0ecb806b
+$ git diff -U10 15ee94dd3d65de95466ae76a43a00276500cca2a..ddea7bdd0e0ffe76a395ea68e083d3bf0ecb806b -- rust .superpowers/sdd/2026-10-18-phase-9d/task-8.8a-perf-fix-report.md
