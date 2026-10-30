@@ -12,6 +12,7 @@
 use super::*;
 
 impl Interp {
+    /// Evaluates one trigger's operand, if it has one, and moves the cursor.
     pub(super) fn apply_trigger(
         &mut self,
         code: &Code<'_>,

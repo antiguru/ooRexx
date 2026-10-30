@@ -715,7 +715,6 @@ impl Interp {
         }
     }
 
-    /// Evaluates one trigger's operand, if it has one, and moves the cursor.
     /// Carves the current section into this trigger's targets: a blank
     /// delimited word each, and the whole remainder for the last one.
     fn assign_targets(

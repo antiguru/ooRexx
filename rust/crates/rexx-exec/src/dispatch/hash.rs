@@ -938,8 +938,6 @@ fn insert_in(
     Ok(())
 }
 
-/// `HashContents::remove`: unlinks the entry and returns its slot to the free
-/// chain, answering the item it held.
 // ---- `Directory`'s method table ----
 
 /// The method table's store, or `None` when `setMethod` has never been sent

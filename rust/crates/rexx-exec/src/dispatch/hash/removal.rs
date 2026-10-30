@@ -11,6 +11,8 @@
 
 use super::*;
 
+/// `HashContents::remove`: unlinks the entry and returns its slot to the free
+/// chain, answering the item it held.
 pub(super) fn take(
     interp: &mut Interp,
     receiver: ObjRef,
