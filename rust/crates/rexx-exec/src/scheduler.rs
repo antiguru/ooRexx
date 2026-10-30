@@ -1101,7 +1101,6 @@ impl Interp {
             table.idle[outgoing.0 as usize] = Some(idle);
         }
         // A slice belongs to the activity it was set for.
-        self.timer.requests().clear(SLICE);
         self.slice_deferred = false;
         if self.activities.ready.is_empty() && self.activities.in_flight == 0 {
             self.timer.disarm();
