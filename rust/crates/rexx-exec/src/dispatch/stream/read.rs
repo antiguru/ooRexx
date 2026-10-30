@@ -28,9 +28,17 @@ pub(super) fn read_at(open: &mut rexx_core::OpenFile, position: u64, len: usize)
         out.push(byte);
         len -= 1;
     }
-    open.flushed()
-        .take(u64::try_from(len).unwrap_or(u64::MAX))
-        .read_to_end(&mut out)?;
+    let mut chunk = [0; CHUNK];
+    let file = open.flushed();
+    while len > 0 {
+        let wanted = len.min(chunk.len());
+        let read = file.read(&mut chunk[..wanted])?;
+        if read == 0 {
+            break;
+        }
+        out.extend_from_slice(&chunk[..read]);
+        len -= read;
+    }
     Ok(out)
 }
 

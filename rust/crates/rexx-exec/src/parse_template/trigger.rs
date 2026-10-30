@@ -52,22 +52,22 @@ impl Interp {
         // made -- one per trigger, on a program whose templates are mostly
         // numeric triggers that never look at the bytes at all.
         if self.trace_mode().results {
-            let rendered = self.to_text(value).to_vec();
+            let rendered = self.traced_string_value_text(value)?;
             self.trace_result(indent, &rendered);
         }
         match trigger.kind {
-            // **The needle is rendered before the source slice is taken**, not
-            // after: `render` can allocate, and the borrow below may not
-            // outlive an allocation. `Rendered` re-derives its own bytes for
-            // the same reason [`SourceText`] does.
+            // Convert before borrowing the source because conversion can allocate.
+            // Both source and needle bytes are borrowed only for the search.
             TriggerKind::String => {
-                let needle = self.render(value);
-                cursor.search(source.bytes(self), needle.text(self));
+                let needle = self.required_string_value(value)?;
+                self.roots.activity_mut().push_temp(needle);
+                cursor.search(source.bytes(self), &self.to_text(needle));
                 Ok(())
             }
             TriggerKind::Mixed => {
-                let needle = self.render(value);
-                cursor.caseless_search(source.bytes(self), needle.text(self));
+                let needle = self.required_string_value(value)?;
+                self.roots.activity_mut().push_temp(needle);
+                cursor.caseless_search(source.bytes(self), &self.to_text(needle));
                 Ok(())
             }
             _ => {

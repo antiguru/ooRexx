@@ -81,6 +81,8 @@ impl Interp {
                 let traced = self.traced_string_value_text(value)?;
                 self.trace_keyword(indent, "DESCRIPTION", &traced);
             }
+            let value = self.required_string_value(value)?;
+            self.roots.activity_mut().push_temp(value);
             description = Some(self.to_text(value).to_vec());
         }
         // `ADDITIONAL expr` and `ARRAY (a, b)` produce the identical

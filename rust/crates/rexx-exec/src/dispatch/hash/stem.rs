@@ -613,13 +613,14 @@ fn native_stem_is_empty(
 fn stem_tail(interp: &mut Interp, args: &[Option<ObjRef>]) -> Result<Vec<u8>, Failure> {
     let mut tail = Vec::new();
     for (at, argument) in args.iter().enumerate() {
-        let Some(argument) = *argument else {
-            return Err(Raised::missing_method_argument(at + 1).into());
-        };
-        if !tail.is_empty() {
+        if at > 0 {
             tail.push(b'.');
         }
-        tail.extend_from_slice(&interp.to_text(argument));
+        if let Some(argument) = *argument {
+            let value = interp.required_string_value(argument)?;
+            interp.roots.activity_mut().push_temp(value);
+            tail.extend_from_slice(&interp.to_text(value));
+        }
     }
     Ok(tail)
 }
