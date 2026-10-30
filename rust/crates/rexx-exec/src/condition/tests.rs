@@ -109,3 +109,13 @@ fn a_truth_conversion_keeps_the_fresh_array_answer() {
     assert_eq!(stressed.stderr, plain.stderr);
     assert_eq!(stressed.exit_code, plain.exit_code);
 }
+
+#[test]
+fn zero_collection_allocation_attribution_probe() {
+    for name in ["call_trace_nested", "do_ctrl_class", "do_to_class", "message_assignment_form", "message_send_scope_override", "message_send_unknown_method", "message_send_unknown_method_on_a_number", "message_send_unknown_method_on_nil", "mutation_controlled_order", "trace_numeric_request", "trace_output", "trace_results", "options"] {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/lang").join(format!("{name}.rex"));
+        let run = crate::run_program_collect_every_alloc(path.to_str().unwrap(), std::fs::read(&path).unwrap(), crate::Invocation::none());
+        println!("ALLOCATION_COUNT {name} {} rc={}", run.collections, run.exit_code);
+        if name == "options" { assert_eq!(run.collections, 0); }
+    }
+}
