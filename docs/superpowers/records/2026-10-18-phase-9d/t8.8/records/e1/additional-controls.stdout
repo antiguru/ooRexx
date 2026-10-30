@@ -1,0 +1,10 @@
+terminal crate 0 b'open READY:\nread [abc]\nwrite 0\nclose READY:\n' b'' b'xyz\n'
+terminal oracle 0 b'open READY:\nread [abc]\nwrite 0\nclose READY:\n' b'' b'xyz\n'
+fifo-close-only crate 0 b'write 0\nclose 0\n' b'' b'hello\n'
+fifo-close-only oracle 0 b'write 0\nclose 1\n' b'' b'ello\n'
+fifo-state-close crate 0 b'write 0\nstate READY\nclose 0\n' b'' b'hello\n'
+fifo-state-close oracle 0 b'write 0\nstate READY\nclose 1\n' b'' b'ello\n'
+fifo-method-close crate 0 b'write 0\nclose 0\n' b'' b'hello\n'
+fifo-method-close oracle 0 b'write 0\nclose 1\n' b'' b'ello\n'
+Rust test prerequisites present in /home/moritz/dev/repos/ooRexx-rust-rewrite
+fresh preflight refuses before Cargo and populated checkout passes

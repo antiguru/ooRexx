@@ -1,0 +1,11 @@
+
+running 1 test
+test fixtures::tests::a_fractional_deadline_is_not_truncated_to_whole_seconds ... FAILED
+
+failures:
+
+failures:
+    fixtures::tests::a_fractional_deadline_is_not_truncated_to_whole_seconds
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 67 filtered out; finished in 1.03s
+

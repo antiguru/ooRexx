@@ -1,0 +1,31 @@
+{
+  "closed_file_open_9d_discrepancies": [],
+  "updates": {
+    "2026-10-02-trace-entry-after-expose.md": "closed:fcb358fd7",
+    "2026-10-02-traced-init-routed-sink-silent-exit.md": "closed:fcb358fd7",
+    "2026-10-02-triggered-exit-trace-line-unrouted.md": "closed:fcb358fd7",
+    "2026-10-18-max-integer-unrounded.md": "closed:009fd1978",
+    "2026-10-18-fuzz-comparison-lostdigits.md": "closed:009fd1978",
+    "2026-09-25-pos-window-doc-pointers.md": "closed:1d8b03220",
+    "2026-09-25-table-c-derivation-literals.md": "closed:1d8b03220",
+    "2026-09-16-worktree-build-precondition.md": "closed:1d8b03220",
+    "2026-10-13-phase-9b-carry-in.md": "closed:1d8b03220",
+    "2026-10-05-stdin-chars-after-drain.md": "closed:probe agrees",
+    "2026-10-10-trace-c-command-echo.md": "closed:probe agrees",
+    "2026-10-13-named-semaphores-design.md": "closed:probe agrees",
+    "2026-10-13-sysfork-design.md": "closed:probe agrees",
+    "2026-10-13-yaml-pass-boundary-guard.md": "closed:probe agrees",
+    "2026-10-18-class-methods-no-argument.md": "closed:probe agrees",
+    "gate:phase-9a-gate.md:456": "closed:1d8b03220",
+    "gate:phase-9a-gate.md:459": "closed:1d8b03220",
+    "gate:phase-9a-gate.md:461": "closed:1d8b03220",
+    "gate:phase-9a-gate.md:483": "closed:1d8b03220",
+    "gate:phase-9a-gate.md:474": "closed:probe agrees",
+    "gate:phase-9a-gate.md:488": "closed:probe agrees",
+    "gate:phase-9b1-gate.md:121": "closed:probe agrees",
+    "gate:phase-9a-gate.md:476": "phase:10"
+  },
+  "closure_record_provenance": {
+    "fcb358fd7": "Task 6.10 closure-record commit, not asserted as source implementation commit"
+  }
+}

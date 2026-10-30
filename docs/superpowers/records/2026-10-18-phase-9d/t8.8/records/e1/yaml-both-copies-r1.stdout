@@ -1,0 +1,5 @@
+installed extensions/yaml/yaml	TEST35_DIRECTIVES	-	passed	passed
+installed extensions/yaml/yaml	TEST47_MULTILINEFLOWCOLLECTIONS	-	passed	passed
+repository extensions/yaml/yaml	TEST35_DIRECTIVES	-	passed	passed
+repository extensions/yaml/yaml	TEST47_MULTILINEFLOWCOLLECTIONS	-	passed	passed
+Both actual named yaml methods pass in the full yaml group against both class copies.

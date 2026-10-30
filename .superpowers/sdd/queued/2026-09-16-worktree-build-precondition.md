@@ -1,4 +1,4 @@
-**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** a test-harness path like arity-harness-ignores-target-dir; dispatch/library/tests.rs:26 canonicalizes ../../../build/lib.
+**CLOSED 2026-10-30 by Phase 9d Task 8.8e1 (1d8b03220).**
 
 # Queued: the suite passes only in a checkout that has built `build/lib`
 
@@ -58,3 +58,8 @@ by grep and not by running. The count beyond `rexx-exec` is unknown. Derive it b
 running, not by grepping, before the work is scoped: the first task is to
 enumerate every test that cannot run in a fresh checkout, and the enumeration is
 the deliverable, not a sample of it.
+
+
+## Task 8.8e1 evidence
+
+The completed fresh enumeration remains unchanged. The preflight refuses before Cargo with native, ooTest and reference paths, and its native recipe was built in an owned temporary out-of-source build. See `.superpowers/sdd/2026-10-18-phase-9d/task-8.8e1-report.md` and `docs/superpowers/records/2026-10-18-phase-9d/t8.8/records/e1/`.

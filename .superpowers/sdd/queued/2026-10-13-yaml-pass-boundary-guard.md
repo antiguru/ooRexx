@@ -1,4 +1,4 @@
-**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe of its own; Task 4 consumes it (ruling 2), yaml TEST35_DIRECTIVES was blocked on this refusal at the 9c close.
+**CLOSED 2026-10-30 by Phase 9d Task 8.8e1 (probe agrees).**
 
 # yaml.cls reaches the op_not_driven GUARD
 
@@ -9,3 +9,8 @@ Phase 9a base; 9a's unblocking exposed it, and the extensions group's Phase 10 E
 from the suite gate. It is an IR driver defect, not an extension one.
 
 Owner: Phase 9d (engine divergence), unless 9b/9c reach it first.
+
+
+## Task 8.8e1 evidence
+
+Both reductions agree, and TEST35_DIRECTIVES and TEST47_MULTILINEFLOWCOLLECTIONS pass in the full YAML group with both class copies. The private suite harness overlay changes only the selected crate-side yaml.cls source. See `.superpowers/sdd/2026-10-18-phase-9d/task-8.8e1-report.md` and `docs/superpowers/records/2026-10-18-phase-9d/t8.8/records/e1/`.

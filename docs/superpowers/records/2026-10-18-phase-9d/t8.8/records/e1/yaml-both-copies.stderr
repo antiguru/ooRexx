@@ -1,0 +1,12 @@
+error: the generated executable for the input file "/tmp/t88e1-yaml-harness/suite.rs" conflicts with the existing directory "/tmp/t88e1-yaml-harness/suite"
+
+error: aborting due to 1 previous error
+
+Traceback (most recent call last):
+  File "/tmp/t88e1-yaml-harness.py", line 32, in <module>
+    subprocess.run(command,env=env,check=True,timeout=120)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['rustc', '--edition=2024', '--test', '-C', 'opt-level=3', '/tmp/t88e1-yaml-harness/suite.rs', '-L', 'dependency=/tmp/codex-p9d-t88-target/debug/deps', '-o', '/tmp/t88e1-yaml-harness/suite', '--extern', 'rexx_exec=/tmp/codex-p9d-t88-target/debug/deps/librexx_exec-189ea4fde2a57910.rlib', '--extern', 'rexx_extract=/tmp/codex-p9d-t88-target/debug/deps/librexx_extract-e4a84ec8c62c9174.rlib', '--extern', 'rexx_parse=/tmp/codex-p9d-t88-target/debug/deps/librexx_parse-153463532f22a5ce.rlib', '--extern', 'rexx_api=/tmp/codex-p9d-t88-target/debug/deps/librexx_api-a1bc2f54b7d6a589.rlib', '--extern', 'rexx_core=/tmp/codex-p9d-t88-target/debug/deps/librexx_core-0027e46e524b27b7.rlib', '--extern', 'rustix=/tmp/codex-p9d-t88-target/debug/deps/librustix-f0ec9552f49e145c.rlib', '--extern', 'rayon=/tmp/codex-p9d-t88-target/debug/deps/librayon-219e367ee3c6356a.rlib', '--extern', 'libc=/tmp/codex-p9d-t88-target/debug/deps/liblibc-3abc232e60c5851e.rlib', '--extern', 'num_traits=/tmp/codex-p9d-t88-target/debug/deps/libnum_traits-50b2b13b96289392.rlib']' returned non-zero exit status 1.

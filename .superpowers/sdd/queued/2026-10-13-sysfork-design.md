@@ -1,4 +1,4 @@
-**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal.
+**CLOSED 2026-10-30 by Phase 9d Task 8.8e1 (probe agrees).**
 
 # SysFork: fork with helper threads
 
@@ -16,3 +16,8 @@ program needs:
 Oracle behaviour: a plain fork works (3/3); with a second activity the child hangs (5/5,
 oracle-crashes entry 46). No ooTest file mentions SysFork. Records:
 .superpowers/sdd/2026-10-13-phase-9b/task-7-report.md.
+
+
+## Task 8.8e1 evidence
+
+SysFork refuses at status 120 with Deviation 42. No oracle fork or implementation is claimed. See `.superpowers/sdd/2026-10-18-phase-9d/task-8.8e1-report.md` and `docs/superpowers/records/2026-10-18-phase-9d/t8.8/records/e1/`.

@@ -1,0 +1,7 @@
+0 b'write 0\nclose 1\n' b'' b'ello\n'
+952478 lseek(5</tmp/t88e1-fifo-strace-or31au5k/pipe>, 0, SEEK_SET) = -1 ESPIPE (Illegal seek)
+952478 write(5</tmp/t88e1-fifo-strace-or31au5k/pipe>, "hello\n", 6) = 6
+952478 lseek(5</tmp/t88e1-fifo-strace-or31au5k/pipe>, 0, SEEK_SET) = -1 ESPIPE (Illegal seek)
+952478 read(5</tmp/t88e1-fifo-strace-or31au5k/pipe>, "h", 1) = 1
+952478 lseek(5</tmp/t88e1-fifo-strace-or31au5k/pipe>, 1, 0xffffffff /* SEEK_??? */) = -1 EINVAL (Invalid argument)
+952478 close(5</tmp/t88e1-fifo-strace-or31au5k/pipe>) = 0

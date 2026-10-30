@@ -1,0 +1,28 @@
+{
+  "base": "dedfab2ea41aa419d993aca1d78bc1749a623620",
+  "built_revision": "7c6e12e84",
+  "final_source_revision": "1d8b03220",
+  "runtime_source_equivalence": "git diff 7c6e12e84 1d8b03220 -- rust/crates/{rexx-exec,rexx-parse,rexx-api}/src is empty",
+  "artifacts": [
+    {
+      "path": "/tmp/codex-p9d-t88-pins/8.8e1-rexx",
+      "sha256": "434d6567458248fdb804eebe9edb715a54ddb9ded650fcca994eed6c4b691e06",
+      "bytes": 67179976
+    },
+    {
+      "path": "/tmp/codex-p9d-t88-pins/8.8e1-rexxc",
+      "sha256": "11286b31ee5d2ad0c28b94883d7544f58ed503b9510879588319f3d673f2f3ea",
+      "bytes": 66849752
+    }
+  ],
+  "diagnostic_binaries": [
+    {
+      "path": "/tmp/codex-p9d-t88-target/debug/rexx",
+      "sha256": "3cd216bd7e2500a567287c585663516b1e08ede53b44bc75037060d1bacebd3e"
+    },
+    {
+      "path": "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+      "sha256": "c52dce960bacae58e9f7fff86342a64df1dc177dbbe4c80a82690633e02cf722"
+    }
+  ]
+}

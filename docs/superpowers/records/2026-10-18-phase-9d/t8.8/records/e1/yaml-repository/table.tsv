@@ -1,0 +1,4 @@
+# ootest revision 13178
+group	side	expected	started	passed	failed	blocked	blocked at load	ended before a test	iterations	ended normally	cap	tests ran
+extensions/yaml/yaml	oracle	50	50	50			-	-	1	yes	ulimit -v 1048576	50
+extensions/yaml/yaml	crate	50	50	50			-	-	1	yes	memcap 2G	50

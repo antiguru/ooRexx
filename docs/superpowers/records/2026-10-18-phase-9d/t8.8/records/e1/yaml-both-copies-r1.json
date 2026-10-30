@@ -1,0 +1,14 @@
+{
+  "command": [
+    "python3",
+    "/tmp/t88e1-yaml-harness.py"
+  ],
+  "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite",
+  "status": 0,
+  "elapsed": 8.856994130997919,
+  "bound": 450.0,
+  "environment": {
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_TARGET_DIR": "/tmp/codex-p9d-t88-target"
+  }
+}

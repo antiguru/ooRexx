@@ -1,0 +1,132 @@
+-- CMake version is 4.3.4
+-- The C compiler identification is GNU 16.2.0
+-- The CXX compiler identification is GNU 16.2.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Building for a 64-bit architecture
+-- OOREXX_SHEBANG_PROGRAM: "/usr/bin/env rexx" (default)
+-- Found Subversion: /usr/bin/svn (found version "1.14.5")
+-- Revision Number is 0
+-- XALAN_EXECUTABLE is XALAN_EXECUTABLE-NOTFOUND
+-- CMAKE_INSTALL_PREFIX is /usr/local
+-- INSTALL_LIB_DIR is lib
+-- IPO is supported and enabled
+-- -- determine available header files --
+-- Looking for malloc.h
+-- Looking for malloc.h - found
+-- Looking for stdint.h
+-- Looking for stdint.h - found
+-- Looking for xlocale.h
+-- Looking for xlocale.h - not found
+-- Looking for features.h
+-- Looking for features.h - found
+-- Looking for ifaddrs.h
+-- Looking for ifaddrs.h - found
+-- Looking for nl_types.h
+-- Looking for nl_types.h - found
+-- Looking for pthread_np.h
+-- Looking for pthread_np.h - not found
+-- Looking for strings.h
+-- Looking for strings.h - found
+-- Looking for sys/filio.h
+-- Looking for sys/filio.h - not found
+-- Looking for sys/ldr.h
+-- Looking for sys/ldr.h - not found
+-- Looking for sys/resource.h
+-- Looking for sys/resource.h - found
+-- Looking for sys/select.h
+-- Looking for sys/select.h - found
+-- Looking for sys/sem.h
+-- Looking for sys/sem.h - found
+-- Looking for sys/signal.h
+-- Looking for sys/signal.h - found
+-- Looking for sys/xattr.h
+-- Looking for sys/xattr.h - found
+-- Looking for wordexp.h
+-- Looking for wordexp.h - found
+-- Looking for wsyncup in /usr/lib/x86_64-linux-gnu/libcurses.so
+-- Looking for wsyncup in /usr/lib/x86_64-linux-gnu/libcurses.so - found
+-- Looking for cbreak in /usr/lib/x86_64-linux-gnu/libncurses.so
+-- Looking for cbreak in /usr/lib/x86_64-linux-gnu/libncurses.so - found
+-- Looking for nodelay in /usr/lib/x86_64-linux-gnu/libncurses.so
+-- Looking for nodelay in /usr/lib/x86_64-linux-gnu/libncurses.so - found
+-- Found Curses: /usr/lib/x86_64-linux-gnu/libncurses.so
+-- CURSES_HAVE_NCURSES_H is /usr/include/ncurses.h
+-- CURSES_HAVE_NCURSES_NCURSES_H is CURSES_HAVE_NCURSES_NCURSES_H-NOTFOUND
+-- -- determine available libraries --
+-- Looking for nanosleep in rt
+-- Looking for nanosleep in rt - found
+-- Looking for pthread_create in pthread
+-- Looking for pthread_create in pthread - found
+-- Looking for crypt in crypt
+-- Looking for crypt in crypt - not found
+-- Looking for getaddrinfo in socket
+-- Looking for getaddrinfo in socket - not found
+-- Looking for gethostbyname in nsl
+-- Looking for gethostbyname in nsl - not found
+-- Looking for hstrerror in resolv
+-- Looking for hstrerror in resolv - found
+-- -- determine available functions --
+-- Looking for catopen
+-- Looking for catopen - found
+-- Looking for crypt
+-- Looking for crypt - not found
+-- Looking for dladdr
+-- Looking for dladdr - found
+-- Looking for euidaccess
+-- Looking for euidaccess - found
+-- Looking for getifaddrs
+-- Looking for getifaddrs - found
+-- Looking for nanosleep
+-- Looking for nanosleep - found
+-- Looking for nsleep
+-- Looking for nsleep - not found
+-- Looking for pthread_mutex_timedlock
+-- Looking for pthread_mutex_timedlock - found
+-- Looking for pthread_getattr_np
+-- Looking for pthread_getattr_np - found
+-- Looking for pthread_attr_get_np
+-- Looking for pthread_attr_get_np - not found
+-- Looking for pthread_stackseg_np
+-- Looking for pthread_stackseg_np - not found
+-- Looking for pthread_get_stacksize_np
+-- Looking for pthread_get_stacksize_np - not found
+-- Looking for wordexp
+-- Looking for wordexp - found
+-- Looking for _PC_CASE_SENSITIVE
+-- Looking for _PC_CASE_SENSITIVE - not found
+-- Looking for FNM_CASEFOLD
+-- Looking for FNM_CASEFOLD - found
+-- Looking for KDMKTONE
+-- Looking for KDMKTONE - found
+-- Looking for FS_CASEFOLD_FL
+-- Looking for FS_CASEFOLD_FL - found
+-- Looking for _NSGetExecutablePath
+-- Looking for _NSGetExecutablePath - not found
+-- Looking for getexecname
+-- Looking for getexecname - not found
+-- Looking for KERN_PROC_PATHNAME
+-- Looking for KERN_PROC_PATHNAME - not found
+-- Looking for KERN_PROC_ARGV
+-- Looking for KERN_PROC_ARGV - not found
+-- Performing Test HAVE_STAT_ST_MTIM
+-- Performing Test HAVE_STAT_ST_MTIM - Success
+-- Performing Test HAVE_STAT_ST_MTIMESPEC
+-- Performing Test HAVE_STAT_ST_MTIMESPEC - Failed
+-- -- determine available pragmas --
+-- Performing Test HAVE_PRAGMA_GCC_STRINGOPOVERFLOW
+-- Performing Test HAVE_PRAGMA_GCC_STRINGOPOVERFLOW - Success
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Configuring done (4.5s)
+-- Generating done (0.1s)
+-- Build files have been written to: /tmp/codex-t88e1-native

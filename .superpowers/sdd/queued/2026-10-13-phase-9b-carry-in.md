@@ -1,4 +1,4 @@
-**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** N1 native-frame memcpy cost is phase:9.1; the unchecked minors m1, m3, m4 are 9d.
+**CLOSED 2026-10-30 by Phase 9d Task 8.8e1 (9d minors) (1d8b03220).**
 
 # Phase 9b carry-in from the Phase 9a final review
 
@@ -34,3 +34,8 @@ Source: `.superpowers/sdd/2026-10-11-phase-9a/final-review.md`, `final-rereview.
 * "/tmp is not durable here": the perf pin and any artifact a later phase needs live outside /tmp.
   The pin is rebuilt from a98238be5 into /home/moritz/dev/repos/ooRexx-p9-pin/ (outside the
   worktree, not tracked) before the Phase 9 close.
+
+
+## Task 8.8e1 evidence
+
+The 9d minors are covered by the debug repeated-miss/write test, the already-correct objname mapping and the existing reused-class metaclass refusal witness. N1 remains Phase 9.1, and the whole-process budget belongs to the Phase 9 close owner. m2, samples and the SysSleep licence retain their existing dispositions. See `.superpowers/sdd/2026-10-18-phase-9d/task-8.8e1-report.md` and `docs/superpowers/records/2026-10-18-phase-9d/t8.8/records/e1/`.

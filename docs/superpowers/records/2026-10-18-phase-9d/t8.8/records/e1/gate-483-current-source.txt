@@ -1,0 +1,150 @@
+base/rexxutil/SysSleep	TEST_SLEEP_CONCURRENT	Flaky	common.txt: SYSSLEEP.testGroup/TEST_SLEEP_CONCURRENT
+base/rexxutil/SysSleep	TEST_SLEEP_DURATION	Flaky	common.txt: SYSSLEEP.testGroup/TEST_SLEEP_DURATION
+
+fn row_in_both_modes(
+        oracle: &oracle::Oracle,
+        run: &Path,
+        file: &str,
+        test: &str,
+    ) -> ((String, String), (String, bool), Vec<String>) {
+        let (dir, group) = file
+            .trim_end_matches(".testGroup")
+            .rsplit_once('/')
+            .expect("a group below a directory");
+        let one = &[test.to_string()];
+        // The runner asserts that the oracle finishes within the deadline; a
+        // test it outlasts is recorded as such.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            run_tests(oracle, run, dir, group, one, SwitchMode::None, None)
+        }));
+        let normal = match result {
+            Ok(results) => cell(&results[0].outcome),
+            Err(payload) => {
+                let deadline = payload
+                    .downcast_ref::<String>()
+                    .is_some_and(|m| m.starts_with("the oracle did not finish"));
+                if !deadline {
+                    std::panic::resume_unwind(payload);
+                }
+                ("oracle did not finish".to_string(), String::new())
+            }
+        };
+        if reaching_rxapi(dir, &[group]).contains(&format!("{group}.{test}")) {
+            return (normal, ("not run".to_string(), true), Vec::new());
+        }
+        let row = format!("{file} {test}");
+        let judge = || {
+            let group_path = group_file(run, dir, group);
+            let args = ["-f", group_path.as_str(), "-U", "-V", VERBOSITY, "-t", test];
+            fresh_copy(run, dir);
+            let shipped = run_crate(run, &args, SwitchMode::None);
+            fresh_copy(run, dir);
+            let every = run_crate(run, &args, SwitchMode::EveryOpportunity);
+            let raced = row == EVERY_FORCES_THE_RACE
+                && normal.0 == "pass"
+                && shipped.status == Some(0)
+                && !inverted(&shipped)
+                && every.status.is_none()
+                && !inverted(&every);
+            let mut hung = Vec::new();
+            if raced {
+                let modes = (
+                    "every mode forces the test's own race; the oracle hangs in the \
+                     same interleaving (P46)"
+                        .to_string(),
+                    true,
+                );
+                return (modes, hung);
+            }
+            for (name, ours) in [("normal", &shipped), ("every", &every)] {
+                if inverted(ours) || ours.status.is_none() {
+                    hung.push(format!("{row}: {name}"));
+                }
+            }
+            (compare_modes(&row, &shipped, &every), hung)
+        };
+        let (mut judged, mut hung) = judge();
+        if (!judged.1 || !hung.is_empty()) && WALL_CLOCK.contains(&row.as_str()) {
+            eprintln!("P48 rerun: {row}: {} {hung:?}", judged.0);
+            (judged, hung) = judge();
+            judged.0.push_str(" (P48 rerun)");
+        }
+        (normal, judged, hung)
+    }
+
+    /// The `TRACE_TraceObject` tests that pass; the table printed beside
+    /// them names what each of the others waits on.
+    const TRACE_OBJECT_PASSING: &[&str] = &[
+        "TEST_SETMAKESTRING_WITH_METHOD_OBJECT",
+        "TEST_TRACEOBJECT_OPTION",
+        "TEST_TRACEOBJECT_OPTION_INVALID",
+    ];
+
+    #[test]
+    fn the_outcome_table_of_the_trace_object_group() {
+        if !gate_mode() {
+            eprintln!("group_runs: skipped without {GATE_ENV}");
+            return;
+        }
+        let results = outcome_table(
+            "trace-object-table",
+            "base/keyword",
+            "TRACE_TraceObject",
+            "REXX_TRACE_OBJECT_TABLE",
+            SwitchMode::None,
+            |_| true,
+        );
+        let passing: Vec<&str> = results
+            .iter()
+            .filter(|row| matches!(row.outcome, Outcome::Pass))
+            .map(|row| row.test.as_str())
+            .collect();
+        assert_eq!(passing, TRACE_OBJECT_PASSING);
+    }
+
+    /// Each group file of criterion 1's derived list in one run on the
+    /// oracle and on this crate in both modes, whole and with only its tests
+    /// of the derived list, the tests reaching rxapi renamed out of both.
+    /// Gate-only.
+    mod whole_groups {
+        use std::collections::BTreeSet;
+        use std::path::{Path, PathBuf};
+        use std::time::{Duration, Instant};
+
+        use super::super::group_runner::{
+            GATE_ENV, Run, SwitchMode, VERBOSITY, agree, failing, first_difference, fresh_copy,
+            gate_mode, group_file, mark_starts, masked, outcome, reaching_rxapi, read_lossy,
+            refusal, rows_in_parallel, run_crate_within, run_oracle_within, skip, started,
+        };
+        use super::super::support::oracle;
+        use super::{WALL_CLOCK, inverted};
+
+        /// Where the table is written when set.
+        const TABLE_ENV: &str = "REXX_WHOLE_GROUPS_TABLE";
+
+        /// A directory each run's descriptors are written to when set.
+        const DUMP_ENV: &str = "REXX_WHOLE_GROUPS_DUMP";
+
+        /// Where the tests each run here started are written when set.
+        const STARTED_ENV: &str = "REXX_WHOLE_GROUPS_STARTED";
+
+        /// A comma-separated list of group files (`base/class/Message.testGroup`)
+        /// to run alone when set, for re-deriving their rows.
+        const ONLY_ENV: &str = "REXX_WHOLE_GROUPS_ONLY";
+
+        /// Oracle runs per group, and per group whose oracle outcome varies or
+        /// differs from ours (ruling P83).
+        const ORACLE_RUNS: usize = 5;
+        const ORACLE_RUNS_UNSETTLED: usize = 30;
+
+        /// How many runs of one group run at once.
+        const RUNS_AT_ONCE: usize = 5;
+
+        /// The bound on one oracle run: `base/bif/TIME` whole takes about
+        /// 94 s.
+        const ORACLE_DEADLINE: Duration = Duration::from_secs(300);
+
+        /// The bound on one run here: the oracle's slowest run times
+        /// `CRATE_FACTOR`, and at least `CRATE_FLOOR`.
+        const CRATE_FACTOR: u32 = 4;
+        const CRATE_FLOOR:

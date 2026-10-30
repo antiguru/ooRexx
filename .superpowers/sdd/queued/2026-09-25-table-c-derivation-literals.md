@@ -1,4 +1,4 @@
-**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe; corpus/gate-tables/classes/*.rex line 6 still names tests/gate_table_c.rs.
+**CLOSED 2026-10-30 by Phase 9d Task 8.8e1 (1d8b03220).**
 
 # Probe-text literals name gate_table_c.rs for code now in tests/table_c/
 
@@ -11,3 +11,8 @@ still name the old file; they read true only as the test target's name.
 Re-word the literal and re-derive the probes in one commit. Also:
 `corpus/gate-tables/README.md:95` names `tests/table_c/probes.rs` without the
 `crates/rexx-exec/` prefix line 28 of the same file uses.
+
+
+## Task 8.8e1 evidence
+
+Regenerated probe comments through the existing Table C derivation, verified the path-only diff, and passed the existing Table C checks. See `.superpowers/sdd/2026-10-18-phase-9d/task-8.8e1-report.md` and `docs/superpowers/records/2026-10-18-phase-9d/t8.8/records/e1/`.

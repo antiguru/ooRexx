@@ -1,0 +1,24 @@
+{
+  "name": "fifo-method-close",
+  "side": "crate",
+  "command": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+    "/tmp/t88e1-probes-iphssopn/fifo-method-close-crate/probe.rex"
+  ],
+  "cwd": "/tmp/t88e1-probes-iphssopn/fifo-method-close-crate",
+  "source": "s=.Stream~new('/tmp/t88e1-probes-iphssopn/fifo-method-close-crate/pipe')\nsay 'write' s~lineout('hello')\nsay 'close' s~lineout\n",
+  "status": 0,
+  "stdout_hex": "777269746520300a636c6f736520300a",
+  "stderr_hex": "",
+  "payload_hex": "68656c6c6f0a",
+  "elapsed": 0.21342709701275453,
+  "terminal_raw": false,
+  "input_hex": "",
+  "crate_artifact": "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen"
+}

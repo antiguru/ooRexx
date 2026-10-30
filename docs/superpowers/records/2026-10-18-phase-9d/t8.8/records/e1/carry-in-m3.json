@@ -1,0 +1,28 @@
+{
+  "mapping_commit": "0368229d12fd940900a1e292008de4716049c5e8 Phase 9b Task 1: the 9a carry-in",
+  "source_call_line": 10,
+  "source_routine_lines": [
+    25,
+    26
+  ],
+  "oracle_output_line": 8,
+  "oracle_value": "long",
+  "files": [
+    {
+      "path": "docs/superpowers/records/2026-10-11-phase-9a/deviation-probes/README.md",
+      "sha256": "df5d8beb774ec20af1afd30c0aa7fed2b3508387570a301880d314b81ead8a2e"
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-11-phase-9a/deviation-probes/objname-table.rex",
+      "sha256": "157e76db9cea7d926c2defb58618e0d382a9cd15b92e22ed9e6fc3099266a24c"
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-11-phase-9a/deviation-probes/objname4.rex",
+      "sha256": "a24a5b837a5955a7fc13240faa54ef4eb1064e68fb278cbdc36a1a8bf3841d13"
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-11-phase-9a/deviation-probes/objname4.oracle.out",
+      "sha256": "e333741730b397549e1898725a4eb060689229a1982c90b4713e45ca9d617335"
+    }
+  ]
+}

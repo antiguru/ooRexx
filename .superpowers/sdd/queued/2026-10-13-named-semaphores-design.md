@@ -1,4 +1,4 @@
-**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** Deviation ruled by Moritz 2026-10-17; open until Task 5 relabels the refusal.
+**CLOSED 2026-10-30 by Phase 9d Task 8.8e1 (probe agrees).**
 
 # Named RexxUtil semaphores: POSIX sem_open
 
@@ -12,3 +12,8 @@ Design when built: one module of libc sem_* calls (sem_open, sem_post, sem_timed
 each unsafe site with a SAFETY note and listed in unsafe_sites. It interoperates with oracle processes.
 Witnesses are cross-process (two rexx-run processes) and clean up /dev/shm. rustix 1.1.4 has no
 sem_open. No ooTest test uses SysOpenEventSem/SysOpenMutexSem or a named create.
+
+
+## Task 8.8e1 evidence
+
+Named event and mutex create/open all refuse at status 120 with Deviation 43. The unsupported ruling is unchanged. See `.superpowers/sdd/2026-10-18-phase-9d/task-8.8e1-report.md` and `docs/superpowers/records/2026-10-18-phase-9d/t8.8/records/e1/`.

@@ -1,0 +1,6 @@
+{
+  "source": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/suite.rs",
+  "old": "fs::copy(&file, &to).unwrap_or_else(|e| panic!(\"cannot copy {}: {e}\", file.display()));",
+  "new": "let chosen = if file.file_name().is_some_and(|name| name == \"yaml.cls\") {\n                PathBuf::from(std::env::var_os(\"REXX_DIAGNOSTIC_YAML\").expect(\"explicit yaml copy\"))\n            } else { file.clone() };\n            fs::copy(&chosen, &to).unwrap_or_else(|e| panic!(\"cannot copy {}: {e}\", chosen.display()));",
+  "base_sha256": "00ca0e2aa04fc917beab6c7953db8140affde98a83fdc445f144283ae6bd9252"
+}

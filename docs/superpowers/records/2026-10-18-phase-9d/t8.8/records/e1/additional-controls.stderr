@@ -1,0 +1,28 @@
+Rust test prerequisites missing in /tmp/codex-p9d-t88-prereq:
+  /tmp/codex-p9d-t88-prereq/build/lib/librexx.so
+  /tmp/codex-p9d-t88-prereq/build/lib/librexxapi.so
+  /tmp/codex-p9d-t88-prereq/build/lib/librxregexp.so
+  /tmp/codex-p9d-t88-prereq/build/lib/librxmath.so
+  /tmp/codex-p9d-t88-prereq/build/lib/liborxmethod.so
+  /tmp/codex-p9d-t88-prereq/build/lib/liborxfunction.so
+  /tmp/codex-p9d-t88-prereq/build/lib/librxsock.so
+  /tmp/codex-p9d-t88-prereq/ootest/ooTest.frm
+  /tmp/codex-p9d-t88-prereq/ootest/framework/OOREXXUNIT.CLS
+  /tmp/codex-p9d-t88-prereq/ootest/testOORexx.rex
+  /tmp/codex-p9d-t88-prereq/ootest/worker.rex
+  /tmp/codex-p9d-t88-prereq/oodocs/rexxref/en-US/provide.xml
+  /tmp/codex-p9d-t88-prereq/oodocs/rexxref/en-US/fundclasses.xml
+  /tmp/codex-p9d-t88-prereq/oodocs/rexxref/en-US/collclasses.xml
+  /tmp/codex-p9d-t88-prereq/oodocs/rexxref/en-US/utilityclasses.xml
+  /tmp/codex-p9d-t88-prereq/oodocs/rexxref/en-US/streamclasses.xml
+  /tmp/codex-p9d-t88-prereq/ootest/ooRexx/base/expressions
+  /tmp/codex-p9d-t88-prereq/ootest/ooRexx/base/keyword
+  /tmp/codex-p9d-t88-prereq/ootest/ooRexx/base/bif
+  /tmp/codex-p9d-t88-prereq/ootest/ooRexx/API
+Run from the checkout root:
+  memcap 8G cmake -S . -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Release
+  memcap 8G cmake --build build --target rxregexp rxmath orxmethod orxfunction rxsock -j4
+  svn checkout -r 13178 https://svn.code.sf.net/p/oorexx/code-0/test/trunk ootest
+  svn checkout -r 13198 https://svn.code.sf.net/p/oorexx/code-0/docs/trunk/rexxref oodocs/rexxref
+Keep these checkout-local libraries separate from the read-only oracle build.
+Then rerun: python3 rust/scripts/test_preflight.py

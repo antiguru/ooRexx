@@ -1,0 +1,11 @@
+{
+  "status": 0,
+  "source": "/home/moritz/dev/repos/ooRexx/build/bin/yaml.cls",
+  "sha256": "b64563162e32aae6237ca8e1ff23fae58e0187235863b6e705bd887fda318a4f",
+  "environment": {
+    "REXX_DIAGNOSTIC_YAML": "/home/moritz/dev/repos/ooRexx/build/bin/yaml.cls",
+    "REXX_SUITE_GATE": "1",
+    "REXX_SUITE_GROUPS": "extensions/yaml/yaml",
+    "REXX_SUITE_TABLE": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/records/e1/yaml-installed/table.tsv"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "command": [
+    "strace",
+    "-f",
+    "-yy",
+    "-e",
+    "trace=read,write,lseek,close",
+    "-o",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/records/e1/fifo-oracle.trace",
+    "bash",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/diagnostics/fixed-rechecks/oracle.sh",
+    "/tmp/t88e1-fifo-strace-or31au5k/probe.rex"
+  ],
+  "cwd": "/tmp/t88e1-fifo-strace-or31au5k",
+  "status": 0,
+  "payload_hex": "656c6c6f0a"
+}

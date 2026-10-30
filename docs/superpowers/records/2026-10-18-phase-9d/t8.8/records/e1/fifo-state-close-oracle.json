@@ -1,0 +1,19 @@
+{
+  "name": "fifo-state-close",
+  "side": "oracle",
+  "command": [
+    "bash",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/diagnostics/fixed-rechecks/oracle.sh",
+    "/tmp/t88e1-probes-iphssopn/fifo-state-close-oracle/probe.rex"
+  ],
+  "cwd": "/tmp/t88e1-probes-iphssopn/fifo-state-close-oracle",
+  "source": "say 'write' lineout('/tmp/t88e1-probes-iphssopn/fifo-state-close-oracle/pipe','hello')\nsay 'state' stream('/tmp/t88e1-probes-iphssopn/fifo-state-close-oracle/pipe','S')\nsay 'close' lineout('/tmp/t88e1-probes-iphssopn/fifo-state-close-oracle/pipe')\n",
+  "status": 0,
+  "stdout_hex": "777269746520300a73746174652052454144590a636c6f736520310a",
+  "stderr_hex": "",
+  "payload_hex": "656c6c6f0a",
+  "elapsed": 0.011387771985027939,
+  "terminal_raw": false,
+  "input_hex": "",
+  "crate_artifact": "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen"
+}

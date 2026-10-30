@@ -1,0 +1,25 @@
+
+running 20 tests
+test fixtures::tests::a_command_the_crate_side_runs_finds_its_rexx_and_rexxc ... ok
+test fixtures::tests::a_command_a_test_leaves_running_is_killed_with_the_run ... ok
+test fixtures::tests::a_refusal_at_load_is_blocked_at_load_after_one_run ... ok
+test fixtures::tests::a_child_refusing_on_the_inherited_stderr_leaves_the_run_ended_normally ... ok
+test fixtures::tests::a_refusal_ends_the_run_and_the_next_run_goes_past_it ... ok
+test fixtures::tests::discovery_finds_groups_at_every_depth_in_path_order ... ok
+test fixtures::tests::sysfiletree_group_retains_assertion_and_metadata_context ... ignored, bounded SysFileTree diagnosis, run explicitly with retained records
+test fixtures::tests::the_crate_floor_is_read_from_its_variable ... ok
+test fixtures::tests::a_run_that_starts_no_test_after_an_earlier_one_did_is_not_blocked_at_load ... ok
+test fixtures::tests::the_crate_side_bin_holds_the_oracle_bins_class_files_and_no_other_binary ... ok
+test fixtures::tests::the_expected_set_follows_test_classes_through_the_file_as_the_framework_does ... ok
+test fixtures::tests::the_expected_set_is_what_the_framework_starts_whatever_the_file_comments_or_quotes ... ok
+test fixtures::tests::the_crate_side_finds_its_own_rexx_and_rexxc ... ok
+test fixtures::tests::the_recorded_suite_revision_is_a_revision_number ... ok
+test fixtures::tests::the_relative_path_tests_pass_on_the_oracle_with_their_neighbours_copied ... ok
+test fixtures::tests::a_fractional_deadline_is_not_truncated_to_whole_seconds ... ok
+test fixtures::tests::without_memcap_the_crate_run_is_under_the_ulimit_fallback ... ok
+test fixtures::tests::a_test_that_hangs_is_renamed_out_and_the_next_run_proceeds ... ok
+test fixtures::tests::the_marker_file_names_the_test_a_kill_at_the_bound_ended_in ... ok
+test fixtures::tests::the_run_cap_stops_a_group_that_hangs_on_every_test ... ok
+
+test result: ok. 19 passed; 0 failed; 1 ignored; 0 measured; 48 filtered out; finished in 11.11s
+

@@ -1,0 +1,139 @@
+[
+  {
+    "name": "stdin-original",
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true,
+    "stdout_multiset": false
+  },
+  {
+    "name": "stdin-one-line",
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true,
+    "stdout_multiset": false
+  },
+  {
+    "name": "stdin-multi-line",
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true,
+    "stdout_multiset": false
+  },
+  {
+    "name": "stdin-arrayin",
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true,
+    "stdout_multiset": false
+  },
+  {
+    "name": "stdin-fixed-chars",
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true,
+    "stdout_multiset": false
+  },
+  {
+    "name": "stdin-empty-eof",
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true,
+    "stdout_multiset": false
+  },
+  {
+    "name": "stdin-live-empty",
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true,
+    "stdout_multiset": false
+  },
+  {
+    "name": "trace-c",
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true,
+    "stdout_multiset": false
+  },
+  {
+    "name": "methods-original-counts",
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true,
+    "stdout_multiset": false
+  },
+  {
+    "name": "class-method-name-multisets",
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true,
+    "stdout_multiset": true
+  },
+  {
+    "name": "instance-method-name-multisets",
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true,
+    "stdout_multiset": true
+  },
+  {
+    "name": "instance-classobject-multiset",
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true,
+    "stdout_multiset": true
+  },
+  {
+    "name": "instance-existing-identity",
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true,
+    "stdout_multiset": false
+  },
+  {
+    "name": "package-copy-name",
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true,
+    "stdout_multiset": false
+  },
+  {
+    "name": "package-copy-lookups",
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true,
+    "stdout_multiset": false
+  },
+  {
+    "name": "rexx-routine-frame-executable",
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true,
+    "stdout_multiset": false
+  },
+  {
+    "name": "sysfork",
+    "status": 120,
+    "deviation": "42"
+  },
+  {
+    "name": "named-event-create",
+    "status": 120,
+    "deviation": "43"
+  },
+  {
+    "name": "named-event-open",
+    "status": 120,
+    "deviation": "43"
+  },
+  {
+    "name": "named-mutex-create",
+    "status": 120,
+    "deviation": "43"
+  },
+  {
+    "name": "named-mutex-open",
+    "status": 120,
+    "deviation": "43"
+  }
+]

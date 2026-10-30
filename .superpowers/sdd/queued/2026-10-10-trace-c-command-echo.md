@@ -1,4 +1,4 @@
-**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** probe still lacks the 3 *-* address command 'false' echo here.
+**CLOSED 2026-10-30 by Phase 9d Task 8.8e1 (probe agrees).**
 
 # `trace c` omits the clause echo of an ADDRESS instruction's command
 
@@ -33,3 +33,8 @@ This crate (`rexx-run` at `6a87cd616`), rc 0:
            +++   "RC(1)"
 
 Suspected site: the command trace for `ADDRESS env command` (`command.rs` / the ADDRESS instruction in `run.rs`), which traces the `>>>` value without the clause.
+
+
+## Task 8.8e1 evidence
+
+The original ADDRESS COMMAND false shape agrees, including the clause echo and RC trace on raw stderr. See `.superpowers/sdd/2026-10-18-phase-9d/task-8.8e1-report.md` and `docs/superpowers/records/2026-10-18-phase-9d/t8.8/records/e1/`.

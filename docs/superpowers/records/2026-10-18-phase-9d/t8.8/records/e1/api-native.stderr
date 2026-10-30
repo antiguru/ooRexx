@@ -1,0 +1,5 @@
+   Compiling rexx-api v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api)
+    Finished `test` profile [optimized + debuginfo] target(s) in 1.35s
+     Running tests/context.rs (/tmp/codex-p9d-t88-target/debug/deps/context-dea855826d590228)
+     Running tests/invoke.rs (/tmp/codex-p9d-t88-target/debug/deps/invoke-bb4d5151e6859880)
+     Running tests/load.rs (/tmp/codex-p9d-t88-target/debug/deps/load-3c1f02ff68216563)
