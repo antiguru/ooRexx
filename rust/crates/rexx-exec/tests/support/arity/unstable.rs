@@ -57,15 +57,21 @@ pub fn invalid_identity_markers(layout: &Layout) -> Vec<String> {
             continue;
         }
         let Some(property) = identity_property(&class, &method, &arm) else {
-            invalid.push(format!("{class}~{method} ({arm}) has an unclassified {UNSTABLE} marker"));
+            invalid.push(format!(
+                "{class}~{method} ({arm}) has an unclassified {UNSTABLE} marker"
+            ));
             continue;
         };
-        let receiver = receivers.get(&(class.clone(), arm.clone()))
+        let receiver = receivers
+            .get(&(class.clone(), arm.clone()))
             .unwrap_or_else(|| panic!("{} has no setup for {class} ({arm})", layout.receivers));
-        fs::write(&path, property_program(receiver, &method, property)).expect("the probe is writable");
+        fs::write(&path, property_program(receiver, &method, property))
+            .expect("the probe is writable");
         let answer = run(&mut oracle_command(&oracle, &path, &dir));
         if !property_holds(&answer) {
-            invalid.push(format!("{class}~{method} ({arm}) identity property failed: {answer:?}"));
+            invalid.push(format!(
+                "{class}~{method} ({arm}) identity property failed: {answer:?}"
+            ));
         }
     }
     fs::remove_dir_all(dir).expect("remove identity probes");

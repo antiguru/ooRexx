@@ -426,8 +426,10 @@ pub fn measured(layout: &Layout) -> Vec<(Row, String)> {
             .get(&(class.clone(), arm.clone()))
             .unwrap_or_else(|| panic!("{} has no setup for {class} ({arm})", layout.receivers));
         let unstable = list.starts_with(UNSTABLE);
-        assert!(!unstable || unstable::classified(&class, &method, &arm),
-            "{class}~{method} ({arm}) has an unclassified {UNSTABLE} marker");
+        assert!(
+            !unstable || unstable::classified(&class, &method, &arm),
+            "{class}~{method} ({arm}) has an unclassified {UNSTABLE} marker"
+        );
         let list = if list.starts_with(REFUSED) || unstable {
             NONE.to_string()
         } else {
@@ -470,7 +472,10 @@ fn classify(cpp: &Three, ir: &Three, unstable: bool) -> (String, String) {
         if unstable {
             return (
                 "unstable".into(),
-                format!("rc{}, identity-derived value checked by its documented property", cpp.0),
+                format!(
+                    "rc{}, identity-derived value checked by its documented property",
+                    cpp.0
+                ),
             );
         }
         if cpp.1.contains("NORESULT") {

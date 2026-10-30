@@ -404,7 +404,6 @@ fn the_suite_revision_is_the_recorded_one() {
     super::suite_revision();
 }
 
-
 /// A bounded diagnostic of the original group, with metadata traces added
 /// only to a private source copy. Passing this does not close the queued flake.
 #[test]
@@ -419,8 +418,17 @@ fn sysfiletree_group_retains_assertion_and_metadata_context() {
     text = text.replace("::method remove class\n  expose allFiles root current", "::method remove class\n  expose allFiles root current\n  .error~say('SFT teardown cwd='directory())");
     fs::write(private.join("SysFileTree.testGroup"), text).unwrap();
     let oracle = run_group_on_oracle_from(&private, "", "SysFileTree", &BTreeSet::new());
-    let settings = CrateSettings { root: private.clone(), ..settings() };
-    let ours = run_group_on_crate_within(&settings, "", "SysFileTree", &BTreeSet::new(), Duration::from_secs(60));
+    let settings = CrateSettings {
+        root: private.clone(),
+        ..settings()
+    };
+    let ours = run_group_on_crate_within(
+        &settings,
+        "",
+        "SysFileTree",
+        &BTreeSet::new(),
+        Duration::from_secs(60),
+    );
     eprintln!("SysFileTree oracle={oracle:#?} crate={ours:#?}");
     assert!(oracle.failed.is_empty(), "{oracle:#?}");
     assert!(ours.failed.is_empty(), "{ours:#?}");

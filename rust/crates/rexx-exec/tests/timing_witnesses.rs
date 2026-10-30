@@ -2,19 +2,31 @@
 
 mod support;
 
-use std::path::Path;
 use rexx_exec::{SimConfig, SwitchMode, run_program, run_program_collect_every_alloc};
+use std::path::Path;
 
 const EXPECTED: &[u8] = b"O:a slept 1\nO:b slept 0\nO:c slept 0\nsleep 0 3\nO:a waited 1\nO:b waited 0\nO:c waited 0\nsemaphore 0 3\nholding\nreleased\nO:a released 1\nO:b released 1\nO:c released 1\nguard 0 3 released 1\n";
 
 #[test]
 fn redirected_targets_preserve_wait_order_and_all_output() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/lang/command_redirected_target_waits_elsewhere.rex").canonicalize().unwrap();
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../corpus/lang/command_redirected_target_waits_elsewhere.rex")
+        .canonicalize()
+        .unwrap();
     let source = std::fs::read(&path).unwrap();
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("redirected-timing");
     std::fs::create_dir_all(&dir).unwrap();
-    let invocation = || support::sidecar::invocation(&dir, &[], None).with_deadline(std::time::Duration::from_secs(30));
-    for (mode, stress) in [(None, false), (None, true), (Some("sim:1"), false), (Some("sim:2,uniform:0.2"), false), (Some("sim:3,pct:3,k=40"), true)] {
+    let invocation = || {
+        support::sidecar::invocation(&dir, &[], None)
+            .with_deadline(std::time::Duration::from_secs(30))
+    };
+    for (mode, stress) in [
+        (None, false),
+        (None, true),
+        (Some("sim:1"), false),
+        (Some("sim:2,uniform:0.2"), false),
+        (Some("sim:3,pct:3,k=40"), true),
+    ] {
         let mut invoke = invocation();
         if let Some(mode) = mode {
             invoke = invoke.with_switch_mode(SwitchMode::Sim(SimConfig::parse(mode).unwrap()));
@@ -24,27 +36,64 @@ fn redirected_targets_preserve_wait_order_and_all_output() {
         } else {
             run_program(path.to_str().unwrap(), source.clone(), invoke)
         };
-        eprintln!("mode={mode:?} stress={stress} status={} stdout={} stderr={:?}", run.exit_code, String::from_utf8_lossy(&run.stdout), String::from_utf8_lossy(&run.stderr));
-        assert_eq!(run.exit_code, 0, "{mode:?} stress={stress}: {:?}", String::from_utf8_lossy(&run.stderr));
-        assert_eq!(run.stdout, EXPECTED, "{mode:?} stress={stress}: {}", String::from_utf8_lossy(&run.stdout));
-        assert!(run.stderr.is_empty(), "{:?}", String::from_utf8_lossy(&run.stderr));
-        if stress { assert!(run.collections > 0); }
+        eprintln!(
+            "mode={mode:?} stress={stress} status={} stdout={} stderr={:?}",
+            run.exit_code,
+            String::from_utf8_lossy(&run.stdout),
+            String::from_utf8_lossy(&run.stderr)
+        );
+        assert_eq!(
+            run.exit_code,
+            0,
+            "{mode:?} stress={stress}: {:?}",
+            String::from_utf8_lossy(&run.stderr)
+        );
+        assert_eq!(
+            run.stdout,
+            EXPECTED,
+            "{mode:?} stress={stress}: {}",
+            String::from_utf8_lossy(&run.stdout)
+        );
+        assert!(
+            run.stderr.is_empty(),
+            "{:?}",
+            String::from_utf8_lossy(&run.stderr)
+        );
+        if stress {
+            assert!(run.collections > 0);
+        }
     }
     let oracle = support::oracle::locate();
-    for _ in 0..8 {
-        let run = oracle.run_in(&path, &dir, &[]);
-        eprintln!("oracle status={:?} stdout={} stderr={:?}", run.termination, String::from_utf8_lossy(&run.stdout), String::from_utf8_lossy(&run.stderr));
+    for index in 0..8 {
+        let oracle_dir = dir.join(format!("oracle-{index}"));
+        std::fs::create_dir(&oracle_dir).unwrap();
+        let run = oracle.run_in(&path, &oracle_dir, &[]);
+        eprintln!(
+            "oracle status={:?} stdout={} stderr={:?}",
+            run.termination,
+            String::from_utf8_lossy(&run.stdout),
+            String::from_utf8_lossy(&run.stderr)
+        );
         assert_eq!(run.termination, support::oracle::Termination::Exited(0));
-        assert_eq!(run.stdout, EXPECTED, "{}", String::from_utf8_lossy(&run.stdout));
-        assert!(run.stderr.is_empty(), "{:?}", String::from_utf8_lossy(&run.stderr));
+        assert_eq!(
+            run.stdout,
+            EXPECTED,
+            "{}",
+            String::from_utf8_lossy(&run.stdout)
+        );
+        assert!(
+            run.stderr.is_empty(),
+            "{:?}",
+            String::from_utf8_lossy(&run.stderr)
+        );
     }
     std::fs::remove_dir_all(dir).unwrap();
 }
 
-
 #[test]
 fn removing_each_wait_breaks_the_logical_observation() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/lang/command_redirected_target_waits_elsewhere.rex");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../corpus/lang/command_redirected_target_waits_elsewhere.rex");
     let source = std::fs::read_to_string(&path).unwrap();
     for (name, from, to) in [
         ("sleep", "    call SysSleep 1", "    nop"),
@@ -57,7 +106,12 @@ fn removing_each_wait_breaks_the_logical_observation() {
             .with_deadline(std::time::Duration::from_secs(30))
             .with_switch_mode(SwitchMode::Sim(SimConfig::parse("sim:1").unwrap()));
         let run = run_program(path.to_str().unwrap(), text.into_bytes(), invocation);
-        assert_eq!(run.exit_code, 0, "{name}: {}", String::from_utf8_lossy(&run.stderr));
+        assert_eq!(
+            run.exit_code,
+            0,
+            "{name}: {}",
+            String::from_utf8_lossy(&run.stderr)
+        );
         assert_ne!(run.stdout, EXPECTED, "{name} omission escaped the witness");
         eprintln!("{name} omission: {}", String::from_utf8_lossy(&run.stdout));
     }

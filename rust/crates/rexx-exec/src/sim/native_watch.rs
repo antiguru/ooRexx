@@ -62,5 +62,4 @@ impl Interp {
             sim.blocked_native |= fired;
         }
     }
-
 }

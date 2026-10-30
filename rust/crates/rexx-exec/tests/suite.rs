@@ -22,6 +22,8 @@
 //! timeout or the memory cap ends has its last started test renamed out, and
 //! runs again.
 
+#[path = "suite/diagnostics.rs"]
+mod diagnostics;
 #[path = "support/group_runner.rs"]
 mod group_runner;
 #[path = "suite/process_ownership/mod.rs"]
@@ -31,8 +33,6 @@ mod selection;
 #[path = "support/suite_rows.rs"]
 mod suite_rows;
 mod support;
-#[path = "suite/diagnostics.rs"]
-mod diagnostics;
 mod watchdog;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -1736,9 +1736,5 @@ mod row_checks {
 
 /// The harness's own behaviour, on the groups under `tests/suite/fixtures/`
 /// with the real framework copied around them.
-mod fixtures {
-    use super::*;
-
-    #[cfg(test)]
-    mod tests;
-}
+#[path = "suite/fixtures/mod.rs"]
+mod fixtures;

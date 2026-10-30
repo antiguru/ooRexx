@@ -142,12 +142,18 @@ fn timeout_context(
         Ok(bytes) => String::from_utf8_lossy(bytes).trim().to_string(),
         Err(error) => format!("unavailable ({error})"),
     };
-    format!("oracle timeout: probe={} phase={phase} configured={deadline:?} elapsed={elapsed:?} loadavg={load}", path.display())
+    format!(
+        "oracle timeout: probe={} phase={phase} configured={deadline:?} elapsed={elapsed:?} loadavg={load}",
+        path.display()
+    )
 }
 
 fn report_timeout(path: &Path, phase: &str, deadline: Duration, elapsed: Duration) {
     let load = std::fs::read("/proc/loadavg");
-    eprintln!("{}", timeout_context(path, phase, deadline, elapsed, load.as_deref()));
+    eprintln!(
+        "{}",
+        timeout_context(path, phase, deadline, elapsed, load.as_deref())
+    );
 }
 
 #[cfg(test)]

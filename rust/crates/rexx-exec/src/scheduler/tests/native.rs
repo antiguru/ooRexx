@@ -42,7 +42,12 @@ fn counted(source: &str, stress: bool, invocation: Invocation) -> Counted {
     counted_watch(source, stress, invocation, None)
 }
 
-fn counted_watch(source: &str, stress: bool, invocation: Invocation, watch_result: Option<bool>) -> Counted {
+fn counted_watch(
+    source: &str,
+    stress: bool,
+    invocation: Invocation,
+    watch_result: Option<bool>,
+) -> Counted {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../build/lib")
         .canonicalize()
@@ -370,7 +375,7 @@ fn completed_native_calls_repeat_independently_of_host_descheduling() {
             source,
             false,
             bounded().with_switch_mode(SwitchMode::Sim(config.clone())),
-        Some(false),
+            Some(false),
         );
         assert_eq!(
             (run.outcome.exit_code, run.stdout(), run.stderr()),
@@ -434,17 +439,27 @@ fn a_failure_ending_a_native_park_abandons_the_call() {
     assert_eq!(run.exits, 1);
 }
 
-
 #[test]
 fn only_a_timed_out_native_watch_refuses_a_completed_call() {
     let source = "t = .t~new~start('idle')\nsay RxCalcSqrt(4, 4) t~result\n::requires 'rxmath' LIBRARY\n::class t\n::method idle\nreturn 'idle'\n";
     for fired in [false, true] {
         let config = crate::SimConfig::parse("sim:1,block=0.001").unwrap();
-        let run = counted_watch(source, false, bounded().with_switch_mode(SwitchMode::Sim(config)), Some(fired));
+        let run = counted_watch(
+            source,
+            false,
+            bounded().with_switch_mode(SwitchMode::Sim(config)),
+            Some(fired),
+        );
         assert_eq!(run.exits, 1);
         if fired {
             assert_eq!(run.outcome.exit_code, 120);
-            assert!(run.stderr().contains("a native call in the simulation mode that runs longer than its bound"), "{}", run.stderr());
+            assert!(
+                run.stderr().contains(
+                    "a native call in the simulation mode that runs longer than its bound"
+                ),
+                "{}",
+                run.stderr()
+            );
         } else {
             assert_eq!(run.outcome.exit_code, 0, "{}", run.stderr());
             assert_eq!(run.stdout(), "2 idle\n");

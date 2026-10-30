@@ -111,14 +111,25 @@ fn competing_child_waiters_accept_either_valid_winner() {
         .arg(dir.join("p.rex"))
         .current_dir(&dir)
         .stdin(std::process::Stdio::null())
-        .output().expect("timeout runs rexx");
-    eprintln!("waiter race: ready={} status={:?} stdout={:?} stderr={:?}", dir.join("started").exists(), output.status, String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        .output()
+        .expect("timeout runs rexx");
+    eprintln!(
+        "waiter race: ready={} status={:?} stdout={:?} stderr={:?}",
+        dir.join("started").exists(),
+        output.status,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
     assert!(output.status.success(), "{output:?}");
     assert!(output.stderr.is_empty(), "{output:?}");
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut lines: Vec<&str> = stdout.lines().collect();
     lines.sort_unstable();
-    assert!(lines == ["cmd rc 127", "failure 127", "ready 1", "wait 1280"] || lines == ["cmd rc 5", "ready 1", "wait -1"], "{stdout}");
+    assert!(
+        lines == ["cmd rc 127", "failure 127", "ready 1", "wait 1280"]
+            || lines == ["cmd rc 5", "ready 1", "wait -1"],
+        "{stdout}"
+    );
     std::fs::remove_dir_all(dir).expect("remove race fixture");
 }
 
