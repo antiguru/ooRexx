@@ -210,19 +210,18 @@ fn native_relation_has_item(
     let store = store_of(interp, receiver)?;
     let bucket = hash.map(|hash| (hash % store.buckets as u64) as usize);
     for (slot, _) in super::entries_in(interp, &store, bucket)? {
+        if let Some(index) = under
+            && !same_index(interp, &store, keys, slot, index)?
+        {
+            continue;
+        }
         let Some(item) = slot_at(interp, store.items, slot)? else {
             continue;
         };
         if !super::collection::same_item(interp, wanted, item)? {
             continue;
         }
-        match under {
-            None => return Ok(Some(crate::eval::logical(true))),
-            Some(index) if same_index(interp, &store, keys, slot, index)? => {
-                return Ok(Some(crate::eval::logical(true)));
-            }
-            Some(_) => {}
-        }
+        return Ok(Some(crate::eval::logical(true)));
     }
     Ok(Some(crate::eval::logical(false)))
 }
@@ -251,20 +250,19 @@ fn native_relation_remove_item(
     let store = store_of(interp, receiver)?;
     let bucket = hash.map(|hash| (hash % store.buckets as u64) as usize);
     for (slot, previous) in super::entries_in(interp, &store, bucket)? {
+        if let Some(index) = under
+            && !same_index(interp, &store, keys, slot, index)?
+        {
+            continue;
+        }
         let Some(item) = slot_at(interp, store.items, slot)? else {
             continue;
         };
         if !super::collection::same_item(interp, wanted, item)? {
             continue;
         }
-        let matches = match under {
-            None => true,
-            Some(index) => same_index(interp, &store, keys, slot, index)?,
-        };
-        if matches {
-            super::take_at(interp, receiver, &store, slot, previous)?;
-            return Ok(Some(item));
-        }
+        super::take_at(interp, receiver, &store, slot, previous)?;
+        return Ok(Some(item));
     }
     Ok(Some(ObjRef::NIL))
 }

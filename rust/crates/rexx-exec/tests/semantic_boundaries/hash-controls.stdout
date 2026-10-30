@@ -19,7 +19,9 @@ equal
 count 2
 hash 1
 equal
+equal
 has 1
 hash 1
+equal
 equal
 remove first 1
