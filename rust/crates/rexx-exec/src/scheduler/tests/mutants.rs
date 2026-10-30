@@ -219,7 +219,10 @@ fn a_dropped_failed_send_retains_its_condition_across_settlement_collection() {
     assert_eq!(run.settlements.len(), 1, "{:?}", run.settlements);
     let observed = &run.settlements[0];
     eprintln!("{observed:?}");
-    assert!(observed.message.1 < u32::MAX, "{observed:?}");
+    if let Some(replacement) = observed.replacement {
+        assert_eq!(replacement.0, observed.message.0, "{observed:?}");
+        assert_ne!(replacement.1, observed.message.1, "{observed:?}");
+    }
     assert!(observed.collections > 0, "{observed:?}");
     assert!(observed.replacement_unchanged, "{observed:?}");
     assert!(observed.alive && observed.attached, "{observed:?}");
