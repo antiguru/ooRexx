@@ -1,0 +1,26 @@
+{
+  "name": "instance-existing-identity",
+  "side": "crate",
+  "cmd": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+    "/tmp/p9d-t88-fixed-20261030-a/instance-existing-identity.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/instance-existing-identity-crate",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/instance-existing-identity.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/instance-existing-identity-crate",
+  "status": 0,
+  "elapsed": 0.13458267599344254,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/instance-existing-identity-crate/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/instance-existing-identity-crate/stderr",
+  "helper": null,
+  "yaml": null
+}

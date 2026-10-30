@@ -1,0 +1,163 @@
+[
+  {
+    "name": "version",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "stdin-original",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "stdin-one-line",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "stdin-multi-line",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "stdin-arrayin",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "stdin-fixed-chars",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "stdin-empty-eof",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "stdin-live-empty",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "fifo-read",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "fifo-write",
+    "status_equal": true,
+    "stdout_equal": false,
+    "stdout_multiset_equal": false,
+    "stderr_equal": true
+  },
+  {
+    "name": "trace-c",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "methods-original-counts",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "class-method-name-multisets",
+    "status_equal": true,
+    "stdout_equal": false,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "instance-method-name-multisets",
+    "status_equal": true,
+    "stdout_equal": false,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "instance-existing-identity",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "flags-replace",
+    "status_equal": true,
+    "stdout_equal": false,
+    "stdout_multiset_equal": false,
+    "stderr_equal": true
+  },
+  {
+    "name": "flags-remove",
+    "status_equal": true,
+    "stdout_equal": false,
+    "stdout_multiset_equal": false,
+    "stderr_equal": true
+  },
+  {
+    "name": "flags-replace-source",
+    "status_equal": true,
+    "stdout_equal": false,
+    "stdout_multiset_equal": false,
+    "stderr_equal": true
+  },
+  {
+    "name": "package-copy-name",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "package-copy-lookups",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "rexx-routine-frame-executable",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "yaml-repro-oracle",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "yaml-repro-repo",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  }
+]

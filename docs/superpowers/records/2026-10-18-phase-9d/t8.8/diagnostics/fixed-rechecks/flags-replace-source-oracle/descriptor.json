@@ -1,0 +1,21 @@
+{
+  "name": "flags-replace-source",
+  "side": "oracle",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-fixed-20261030-a/flags-replace-source.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/flags-replace-source-oracle",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/flags-replace-source.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/flags-replace-source-oracle",
+  "status": 0,
+  "elapsed": 0.009454555984120816,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/flags-replace-source-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/flags-replace-source-oracle/stderr",
+  "helper": null,
+  "yaml": null
+}

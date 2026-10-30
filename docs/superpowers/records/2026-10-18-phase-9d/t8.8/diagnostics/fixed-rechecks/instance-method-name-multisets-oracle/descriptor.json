@@ -1,0 +1,21 @@
+{
+  "name": "instance-method-name-multisets",
+  "side": "oracle",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-fixed-20261030-a/instance-method-name-multisets.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/instance-method-name-multisets-oracle",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/instance-method-name-multisets.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/instance-method-name-multisets-oracle",
+  "status": 0,
+  "elapsed": 0.009561792016029358,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/instance-method-name-multisets-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/instance-method-name-multisets-oracle/stderr",
+  "helper": null,
+  "yaml": null
+}

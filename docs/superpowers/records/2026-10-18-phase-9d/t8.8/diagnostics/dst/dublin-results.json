@@ -1,0 +1,198 @@
+[
+  {
+    "side": "crate",
+    "seed": "winter",
+    "TZ": "Europe/Dublin",
+    "cmd": [
+      "memcap",
+      "2G",
+      "timeout",
+      "-k",
+      "2s",
+      "15s",
+      "/tmp/p9d-t88-dst-20261030-a/rexx-frozen",
+      "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-winter-crate/probe.rex"
+    ],
+    "initial": {
+      "atime": 1577880000000000000,
+      "mtime": 1577880000000000000
+    },
+    "final": {
+      "atime": 1577880000000000000,
+      "mtime": 1603585800000000000
+    },
+    "elapsed": 0.10417060501640663,
+    "status": 0,
+    "stdout": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-winter-crate/stdout",
+    "stderr": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-winter-crate/stderr"
+  },
+  {
+    "side": "oracle",
+    "seed": "winter",
+    "TZ": "Europe/Dublin",
+    "cmd": [
+      "bash",
+      "/tmp/p9d-t88-dst-20261030-a/oracle.sh",
+      "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-winter-oracle/probe.rex"
+    ],
+    "initial": {
+      "atime": 1577880000000000000,
+      "mtime": 1577880000000000000
+    },
+    "final": {
+      "atime": 1577880000000000000,
+      "mtime": 1603589400000000000
+    },
+    "elapsed": 0.00874819402815774,
+    "status": 0,
+    "stdout": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-winter-oracle/stdout",
+    "stderr": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-winter-oracle/stderr"
+  },
+  {
+    "side": "crate",
+    "seed": "summer",
+    "TZ": "Europe/Dublin",
+    "cmd": [
+      "memcap",
+      "2G",
+      "timeout",
+      "-k",
+      "2s",
+      "15s",
+      "/tmp/p9d-t88-dst-20261030-a/rexx-frozen",
+      "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-summer-crate/probe.rex"
+    ],
+    "initial": {
+      "atime": 1593604800000000000,
+      "mtime": 1593604800000000000
+    },
+    "final": {
+      "atime": 1593604800000000000,
+      "mtime": 1603585800000000000
+    },
+    "elapsed": 0.12978005298646167,
+    "status": 0,
+    "stdout": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-summer-crate/stdout",
+    "stderr": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-summer-crate/stderr"
+  },
+  {
+    "side": "oracle",
+    "seed": "summer",
+    "TZ": "Europe/Dublin",
+    "cmd": [
+      "bash",
+      "/tmp/p9d-t88-dst-20261030-a/oracle.sh",
+      "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-summer-oracle/probe.rex"
+    ],
+    "initial": {
+      "atime": 1593604800000000000,
+      "mtime": 1593604800000000000
+    },
+    "final": {
+      "atime": 1593604800000000000,
+      "mtime": 1603585800000000000
+    },
+    "elapsed": 0.008792412001639605,
+    "status": 0,
+    "stdout": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-summer-oracle/stdout",
+    "stderr": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-summer-oracle/stderr"
+  },
+  {
+    "side": "crate",
+    "seed": "at_winter_mt_summer",
+    "TZ": "Europe/Dublin",
+    "cmd": [
+      "memcap",
+      "2G",
+      "timeout",
+      "-k",
+      "2s",
+      "15s",
+      "/tmp/p9d-t88-dst-20261030-a/rexx-frozen",
+      "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-at_winter_mt_summer-crate/probe.rex"
+    ],
+    "initial": {
+      "atime": 1577880000000000000,
+      "mtime": 1593604800000000000
+    },
+    "final": {
+      "atime": 1577880000000000000,
+      "mtime": 1603585800000000000
+    },
+    "elapsed": 0.13721043296391144,
+    "status": 0,
+    "stdout": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-at_winter_mt_summer-crate/stdout",
+    "stderr": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-at_winter_mt_summer-crate/stderr"
+  },
+  {
+    "side": "oracle",
+    "seed": "at_winter_mt_summer",
+    "TZ": "Europe/Dublin",
+    "cmd": [
+      "bash",
+      "/tmp/p9d-t88-dst-20261030-a/oracle.sh",
+      "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-at_winter_mt_summer-oracle/probe.rex"
+    ],
+    "initial": {
+      "atime": 1577880000000000000,
+      "mtime": 1593604800000000000
+    },
+    "final": {
+      "atime": 1577880000000000000,
+      "mtime": 1603589400000000000
+    },
+    "elapsed": 0.00876545300707221,
+    "status": 0,
+    "stdout": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-at_winter_mt_summer-oracle/stdout",
+    "stderr": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-at_winter_mt_summer-oracle/stderr"
+  },
+  {
+    "side": "crate",
+    "seed": "at_summer_mt_winter",
+    "TZ": "Europe/Dublin",
+    "cmd": [
+      "memcap",
+      "2G",
+      "timeout",
+      "-k",
+      "2s",
+      "15s",
+      "/tmp/p9d-t88-dst-20261030-a/rexx-frozen",
+      "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-at_summer_mt_winter-crate/probe.rex"
+    ],
+    "initial": {
+      "atime": 1593604800000000000,
+      "mtime": 1577880000000000000
+    },
+    "final": {
+      "atime": 1593604800000000000,
+      "mtime": 1603585800000000000
+    },
+    "elapsed": 0.1382753939833492,
+    "status": 0,
+    "stdout": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-at_summer_mt_winter-crate/stdout",
+    "stderr": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-at_summer_mt_winter-crate/stderr"
+  },
+  {
+    "side": "oracle",
+    "seed": "at_summer_mt_winter",
+    "TZ": "Europe/Dublin",
+    "cmd": [
+      "bash",
+      "/tmp/p9d-t88-dst-20261030-a/oracle.sh",
+      "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-at_summer_mt_winter-oracle/probe.rex"
+    ],
+    "initial": {
+      "atime": 1593604800000000000,
+      "mtime": 1577880000000000000
+    },
+    "final": {
+      "atime": 1593604800000000000,
+      "mtime": 1603585800000000000
+    },
+    "elapsed": 0.00846499198814854,
+    "status": 0,
+    "stdout": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-at_summer_mt_winter-oracle/stdout",
+    "stderr": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-at_summer_mt_winter-oracle/stderr"
+  }
+]

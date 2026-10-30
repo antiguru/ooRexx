@@ -1,0 +1,21 @@
+{
+  "name": "stdin-live-empty",
+  "side": "oracle",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-fixed-20261030-a/stdin-live-empty.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/stdin-live-empty-oracle",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/stdin-live-empty.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/stdin-live-empty-oracle",
+  "status": 0,
+  "elapsed": 0.009028488013427705,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": true,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/stdin-live-empty-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/stdin-live-empty-oracle/stderr",
+  "helper": null,
+  "yaml": null
+}

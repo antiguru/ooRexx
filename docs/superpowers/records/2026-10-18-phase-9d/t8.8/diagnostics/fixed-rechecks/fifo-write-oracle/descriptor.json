@@ -1,0 +1,34 @@
+{
+  "name": "fifo-write",
+  "side": "oracle",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-fixed-20261030-a/fifo-write.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-oracle",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/fifo-write.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-oracle",
+  "status": 0,
+  "elapsed": 12.002861942979507,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-oracle/stderr",
+  "helper": {
+    "cmd": [
+      "timeout",
+      "-k",
+      "1s",
+      "12s",
+      "python3",
+      "/tmp/p9d-t88-fixed-20261030-a/fifo-helper.py",
+      "/tmp/p9d-t88-fixed-20261030-a/fifo-write-oracle/ff1",
+      "read",
+      "/tmp/p9d-t88-fixed-20261030-a/fifo-write-oracle/fifo-payload"
+    ],
+    "status": 124
+  },
+  "yaml": null
+}

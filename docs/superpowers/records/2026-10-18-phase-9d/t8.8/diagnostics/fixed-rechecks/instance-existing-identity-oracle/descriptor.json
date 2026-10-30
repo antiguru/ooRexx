@@ -1,0 +1,21 @@
+{
+  "name": "instance-existing-identity",
+  "side": "oracle",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-fixed-20261030-a/instance-existing-identity.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/instance-existing-identity-oracle",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/instance-existing-identity.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/instance-existing-identity-oracle",
+  "status": 0,
+  "elapsed": 0.008871102007105947,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/instance-existing-identity-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/instance-existing-identity-oracle/stderr",
+  "helper": null,
+  "yaml": null
+}

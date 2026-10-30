@@ -1,0 +1,4 @@
+       *-* Compiled routine "SYSGETFILEDATETIME".
+   115 *-* call SysGetFileDateTime f, 'Q'
+Error 40 running /tmp/p9d-t88-dst-20261030-a/new_york-full-winter-crate/probe.rex line 115:  Incorrect call to routine.
+Error 40.920:  SysGetFileDateTime argument time selector must be one of 'A' or 'W'; found "Q".

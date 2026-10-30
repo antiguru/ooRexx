@@ -1,0 +1,21 @@
+{
+  "name": "trace-c",
+  "side": "oracle",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-fixed-20261030-a/trace-c.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/trace-c-oracle",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/trace-c.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/trace-c-oracle",
+  "status": 0,
+  "elapsed": 0.009189493022859097,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/trace-c-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/trace-c-oracle/stderr",
+  "helper": null,
+  "yaml": null
+}

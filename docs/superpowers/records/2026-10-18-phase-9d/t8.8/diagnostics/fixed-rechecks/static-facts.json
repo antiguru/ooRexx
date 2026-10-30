@@ -1,0 +1,79 @@
+{
+  "production_refusal_rows": [
+    {
+      "file": "docs/superpowers/plans/phase-9-exclusions.txt",
+      "line": 230,
+      "group": "base/bif/LINEOUT",
+      "test": "TEST_QUEUE",
+      "owner": "Phase 10 Rxapi",
+      "reason": "refusal: rexx-exec: environment symbol \".STDQUE\" is not implemented (Phase 10 Rxapi)",
+      "source": "/home/moritz/dev/repos/ooRexx-rust-rewrite/ootest/ooRexx/base/bif/LINEOUT.testGroup",
+      "source_line": 99,
+      "method_excerpt": "::method test_queue\n  .stdque~empty\n  call lineout \"queue:\", \"line\"\n  call lineout \"QUEUE:\", \"\"\n  call lineout \"QUEUE:\"                -- \"close\" does nothing\n  self~assertSame(2, .stdque~queued)\n  self~assertSame(\"line\", .stdque~linein)\n  self~assertSame(\"\", .stdque~linein)\n\n-- writing to an invalid file raises NOTREADY",
+      "source_sha256": "e0bbf3cd8f1107c0a501bb4b09d3c2fdb5d8a44d6420542c98639e89c9bf53cb"
+    },
+    {
+      "file": "docs/superpowers/plans/phase-9-exclusions.txt",
+      "line": 249,
+      "group": "base/class/RexxQueue",
+      "test": "TEST_BUG_1379",
+      "owner": "Phase 10 Rxapi",
+      "reason": "refusal: rexx-exec: the LIBRARY REXX entry point \"rexx_query_queue\" is not implemented (Phase 10 Rxapi)",
+      "source": "/home/moritz/dev/repos/ooRexx-rust-rewrite/ootest/ooRexx/base/class/RexxQueue.testGroup",
+      "source_line": 621,
+      "method_excerpt": "::method test_bug_1379\n  self~expectSyntax(98.901) -- Object \"a C\" was not correctly initialized\n  say .c~new~queued\n",
+      "source_sha256": "3572108b1fb1491e0bd9c74677345f555fafe24412623f7d9233ef3aaa661134"
+    },
+    {
+      "file": "docs/superpowers/plans/phase-9-exclusions.txt",
+      "line": 297,
+      "group": "base/directives/ROUTINE",
+      "test": "TESTEXTERNALREGISTEREDBADLIBRARYNAME",
+      "owner": "Phase 10 Rxapi",
+      "reason": "refusal: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)",
+      "source": "/home/moritz/dev/repos/ooRexx-rust-rewrite/ootest/ooRexx/base/directives/ROUTINE.testGroup",
+      "source_line": 145,
+      "method_excerpt": "::method testExternalRegisteredBadLibraryName\n  self~assertSyntaxError(90.999, \"::routine foo external 'REGISTERED rxmathxxxxx RxCalxPi'\")\n",
+      "source_sha256": "56d796794312fb4a1408d486c47c9cfe33934b1a1d8b7f2a7dde583c2fa7c1b6"
+    },
+    {
+      "file": "docs/superpowers/plans/phase-9-exclusions.txt",
+      "line": 298,
+      "group": "base/directives/ROUTINE",
+      "test": "TESTEXTERNALREGISTEREDBADNAME",
+      "owner": "Phase 10 Rxapi",
+      "reason": "refusal: rexx-exec: ::ROUTINE EXTERNAL naming REGISTERED is not implemented (Phase 10 Rxapi)",
+      "source": "/home/moritz/dev/repos/ooRexx-rust-rewrite/ootest/ooRexx/base/directives/ROUTINE.testGroup",
+      "source_line": 142,
+      "method_excerpt": "::method testExternalRegisteredBadName\n  self~assertSyntaxError(90.999, \"::routine foo external 'REGISTERED rxmath RxCalxPiXXXXXX'\")\n",
+      "source_sha256": "56d796794312fb4a1408d486c47c9cfe33934b1a1d8b7f2a7dde583c2fa7c1b6"
+    },
+    {
+      "file": "docs/superpowers/plans/phase-9-exclusions.txt",
+      "line": 300,
+      "group": "base/keyword/SIGNAL",
+      "test": "TEST_SIGNAL_ANY_CONDITION_HALT",
+      "owner": "Phase 10 Extension",
+      "reason": "refusal: rexx-exec: ADDRESS environment \"hostemu\" a native package loader registers is not implemented (Phase 10 Extension)",
+      "source": "/home/moritz/dev/repos/ooRexx-rust-rewrite/ootest/ooRexx/base/keyword/SIGNAL.testGroup",
+      "source_line": 197,
+      "method_excerpt": "::method test_signal_any_condition_halt\n  self~expectCondition(\"HALT\")\n  signal on any\n  address \"hostemu\" \"HI\"     -- raises HALT\n  return\n  any: raise propagate",
+      "source_sha256": "2915669d68abc949f09db54ea02622071804a1b7e7a7b8246be13bd30a1e0929"
+    }
+  ],
+  "suite_files": [
+    "docs/superpowers/plans/phase-9-exclusions.txt",
+    "rust/corpus/suite-licences.txt",
+    "rust/corpus/suite-not-run.txt"
+  ],
+  "licence_rows": [
+    {
+      "line": 31,
+      "text": "base/rexxutil/SysSleep\tTEST_SLEEP_CONCURRENT\tFlaky\tcommon.txt: SYSSLEEP.testGroup/TEST_SLEEP_CONCURRENT"
+    },
+    {
+      "line": 32,
+      "text": "base/rexxutil/SysSleep\tTEST_SLEEP_DURATION\tFlaky\tcommon.txt: SYSSLEEP.testGroup/TEST_SLEEP_DURATION"
+    }
+  ]
+}

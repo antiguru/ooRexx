@@ -1,0 +1,64 @@
+[
+  {
+    "side": "crate",
+    "TZ": "Europe/Zurich",
+    "cmd": [
+      "memcap",
+      "2G",
+      "timeout",
+      "-k",
+      "2s",
+      "15s",
+      "/tmp/p9d-t88-dst-20261030-a/rexx-frozen",
+      "/tmp/p9d-t88-dst-20261030-a/full-metadata-trace.rex"
+    ],
+    "status": 216,
+    "source": "/tmp/p9d-t88-dst-20261030-a/full-metadata-trace.rex",
+    "stdout": "/tmp/p9d-t88-dst-20261030-a/zurich-full-metadata-crate/stdout",
+    "stderr": "/tmp/p9d-t88-dst-20261030-a/zurich-full-metadata-crate/stderr"
+  },
+  {
+    "side": "oracle",
+    "TZ": "Europe/Zurich",
+    "cmd": [
+      "bash",
+      "/tmp/p9d-t88-dst-20261030-a/oracle.sh",
+      "/tmp/p9d-t88-dst-20261030-a/full-metadata-trace.rex"
+    ],
+    "status": 216,
+    "source": "/tmp/p9d-t88-dst-20261030-a/full-metadata-trace.rex",
+    "stdout": "/tmp/p9d-t88-dst-20261030-a/zurich-full-metadata-oracle/stdout",
+    "stderr": "/tmp/p9d-t88-dst-20261030-a/zurich-full-metadata-oracle/stderr"
+  },
+  {
+    "side": "crate",
+    "TZ": "America/New_York",
+    "cmd": [
+      "memcap",
+      "2G",
+      "timeout",
+      "-k",
+      "2s",
+      "15s",
+      "/tmp/p9d-t88-dst-20261030-a/rexx-frozen",
+      "/tmp/p9d-t88-dst-20261030-a/full-metadata-trace.rex"
+    ],
+    "status": 216,
+    "source": "/tmp/p9d-t88-dst-20261030-a/full-metadata-trace.rex",
+    "stdout": "/tmp/p9d-t88-dst-20261030-a/new_york-full-metadata-crate/stdout",
+    "stderr": "/tmp/p9d-t88-dst-20261030-a/new_york-full-metadata-crate/stderr"
+  },
+  {
+    "side": "oracle",
+    "TZ": "America/New_York",
+    "cmd": [
+      "bash",
+      "/tmp/p9d-t88-dst-20261030-a/oracle.sh",
+      "/tmp/p9d-t88-dst-20261030-a/full-metadata-trace.rex"
+    ],
+    "status": 216,
+    "source": "/tmp/p9d-t88-dst-20261030-a/full-metadata-trace.rex",
+    "stdout": "/tmp/p9d-t88-dst-20261030-a/new_york-full-metadata-oracle/stdout",
+    "stderr": "/tmp/p9d-t88-dst-20261030-a/new_york-full-metadata-oracle/stderr"
+  }
+]

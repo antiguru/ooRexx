@@ -1,0 +1,26 @@
+{
+  "name": "named-event-create",
+  "side": "crate",
+  "cmd": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+    "/tmp/p9d-t88-fixed-20261030-a/named-event-create.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/named-event-create-crate",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/named-event-create.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/named-event-create-crate",
+  "status": 120,
+  "elapsed": 0.12820839404594153,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/named-event-create-crate/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/named-event-create-crate/stderr",
+  "helper": null,
+  "yaml": null
+}

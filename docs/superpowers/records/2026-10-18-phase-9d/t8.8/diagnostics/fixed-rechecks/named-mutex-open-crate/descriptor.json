@@ -1,0 +1,26 @@
+{
+  "name": "named-mutex-open",
+  "side": "crate",
+  "cmd": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+    "/tmp/p9d-t88-fixed-20261030-a/named-mutex-open.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/named-mutex-open-crate",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/named-mutex-open.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/named-mutex-open-crate",
+  "status": 120,
+  "elapsed": 0.13781883602496237,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/named-mutex-open-crate/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/named-mutex-open-crate/stderr",
+  "helper": null,
+  "yaml": null
+}

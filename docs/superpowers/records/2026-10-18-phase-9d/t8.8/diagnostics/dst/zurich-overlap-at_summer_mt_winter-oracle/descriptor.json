@@ -1,0 +1,29 @@
+{
+  "name": "zurich-overlap-at_summer_mt_winter",
+  "side": "oracle",
+  "TZ": "Europe/Zurich",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-dst-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-dst-20261030-a/zurich-overlap-at_summer_mt_winter-oracle/probe.rex"
+  ],
+  "initial": {
+    "target": {
+      "atime": 1593604800000000000,
+      "mtime": 1577880000000000000
+    },
+    "other": {
+      "atime": 1593604800000000000,
+      "mtime": 1577880000000000000
+    }
+  },
+  "final": {
+    "atime": 1593604800000000000,
+    "mtime": 1603585800000000000
+  },
+  "elapsed": 0.006867205956950784,
+  "status": 0,
+  "source": "/tmp/p9d-t88-dst-20261030-a/zurich-overlap-at_summer_mt_winter-oracle/probe.rex",
+  "stdout": "/tmp/p9d-t88-dst-20261030-a/zurich-overlap-at_summer_mt_winter-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-dst-20261030-a/zurich-overlap-at_summer_mt_winter-oracle/stderr"
+}

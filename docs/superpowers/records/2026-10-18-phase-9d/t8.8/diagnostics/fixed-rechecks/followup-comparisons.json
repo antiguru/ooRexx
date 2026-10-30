@@ -1,0 +1,44 @@
+[
+  {
+    "name": "fifo-write-reader-ready",
+    "status_equal": true,
+    "stdout_equal": false,
+    "stdout_multiset_equal": false,
+    "stderr_equal": true
+  },
+  {
+    "name": "fifo-write-explicit-close",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "instance-classobject-multiset",
+    "status_equal": true,
+    "stdout_equal": false,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  },
+  {
+    "name": "flags-identity-after-only",
+    "status_equal": true,
+    "stdout_equal": false,
+    "stdout_multiset_equal": false,
+    "stderr_equal": true
+  },
+  {
+    "name": "flags-identity-prefetch-installed",
+    "status_equal": true,
+    "stdout_equal": false,
+    "stdout_multiset_equal": false,
+    "stderr_equal": true
+  },
+  {
+    "name": "flags-identity-ask-before",
+    "status_equal": true,
+    "stdout_equal": true,
+    "stdout_multiset_equal": true,
+    "stderr_equal": true
+  }
+]

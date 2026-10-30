@@ -1,0 +1,21 @@
+{
+  "name": "flags-remove",
+  "side": "oracle",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-fixed-20261030-a/flags-remove.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/flags-remove-oracle",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/flags-remove.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/flags-remove-oracle",
+  "status": 0,
+  "elapsed": 0.008768764033447951,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/flags-remove-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/flags-remove-oracle/stderr",
+  "helper": null,
+  "yaml": null
+}

@@ -1,0 +1,13 @@
+{
+  "side": "oracle",
+  "TZ": "Europe/Zurich",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-dst-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-dst-20261030-a/full-metadata-trace.rex"
+  ],
+  "status": 216,
+  "source": "/tmp/p9d-t88-dst-20261030-a/full-metadata-trace.rex",
+  "stdout": "/tmp/p9d-t88-dst-20261030-a/zurich-full-metadata-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-dst-20261030-a/zurich-full-metadata-oracle/stderr"
+}

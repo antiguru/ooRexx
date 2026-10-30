@@ -1,0 +1,26 @@
+{
+  "name": "version",
+  "side": "crate",
+  "cmd": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+    "/tmp/p9d-t88-fixed-20261030-a/version.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/version-crate",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/version.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/version-crate",
+  "status": 0,
+  "elapsed": 0.12601808598265052,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/version-crate/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/version-crate/stderr",
+  "helper": null,
+  "yaml": null
+}

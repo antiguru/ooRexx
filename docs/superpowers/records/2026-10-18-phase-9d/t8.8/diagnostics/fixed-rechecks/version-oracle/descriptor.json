@@ -1,0 +1,21 @@
+{
+  "name": "version",
+  "side": "oracle",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-fixed-20261030-a/version.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/version-oracle",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/version.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/version-oracle",
+  "status": 0,
+  "elapsed": 0.007918599003460258,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/version-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/version-oracle/stderr",
+  "helper": null,
+  "yaml": null
+}

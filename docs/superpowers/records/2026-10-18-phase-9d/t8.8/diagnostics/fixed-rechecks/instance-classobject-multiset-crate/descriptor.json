@@ -1,0 +1,23 @@
+{
+  "name": "instance-classobject-multiset",
+  "side": "crate",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/instance-classobject-multiset.rex",
+  "cmd": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+    "/tmp/p9d-t88-fixed-20261030-a/instance-classobject-multiset.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/instance-classobject-multiset-crate",
+  "TZ": "UTC",
+  "status": 0,
+  "elapsed": 0.14994247700087726,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/instance-classobject-multiset-crate/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/instance-classobject-multiset-crate/stderr",
+  "reader_open_before_interpreter": false,
+  "fifo_payload_hex": null
+}

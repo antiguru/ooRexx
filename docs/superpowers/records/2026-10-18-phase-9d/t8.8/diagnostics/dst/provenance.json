@@ -1,0 +1,20 @@
+{
+  "recorded_at": 1793365318.9345548,
+  "repo_head": "813aba49a0c040f10d9c2d52e9310d8d3d4db7a2",
+  "oracle_tree_head": "2e9a8470cf58680c56e8117ea097f0c76f5a0d7e",
+  "crate": {
+    "path": "/tmp/p9d-t88-dst-20261030-a/rexx-frozen",
+    "bytes": 67675296,
+    "sha256": "c52dce960bacae58e9f7fff86342a64df1dc177dbbe4c80a82690633e02cf722"
+  },
+  "oracle": {
+    "path": "/home/moritz/dev/repos/ooRexx/build/bin/rexx",
+    "bytes": 62600,
+    "sha256": "bb5bb8ccbb96c376e329b91aafdad891f975ba06c941dbceba82c3848fa13019"
+  },
+  "oracle_lib": {
+    "path": "/home/moritz/dev/repos/ooRexx/build/lib/librexx.so.4",
+    "bytes": 17853856,
+    "sha256": "42136c4038004fe2d5104181e06873301f032ced97c54a0fe84042e006d9b6fb"
+  }
+}

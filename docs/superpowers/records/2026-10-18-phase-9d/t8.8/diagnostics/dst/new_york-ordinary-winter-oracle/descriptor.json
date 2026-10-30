@@ -1,0 +1,29 @@
+{
+  "name": "new_york-ordinary-winter",
+  "side": "oracle",
+  "TZ": "America/New_York",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-dst-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-dst-20261030-a/new_york-ordinary-winter-oracle/probe.rex"
+  ],
+  "initial": {
+    "target": {
+      "atime": 1577880000000000000,
+      "mtime": 1577880000000000000
+    },
+    "other": {
+      "atime": 1577880000000000000,
+      "mtime": 1577880000000000000
+    }
+  },
+  "final": {
+    "atime": 1577880000000000000,
+    "mtime": 1591029296000000000
+  },
+  "elapsed": 0.008223607030231506,
+  "status": 0,
+  "source": "/tmp/p9d-t88-dst-20261030-a/new_york-ordinary-winter-oracle/probe.rex",
+  "stdout": "/tmp/p9d-t88-dst-20261030-a/new_york-ordinary-winter-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-dst-20261030-a/new_york-ordinary-winter-oracle/stderr"
+}

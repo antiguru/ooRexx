@@ -1,0 +1,27 @@
+{
+  "side": "crate",
+  "seed": "at_summer_mt_winter",
+  "TZ": "Europe/Dublin",
+  "cmd": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "15s",
+    "/tmp/p9d-t88-dst-20261030-a/rexx-frozen",
+    "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-at_summer_mt_winter-crate/probe.rex"
+  ],
+  "initial": {
+    "atime": 1593604800000000000,
+    "mtime": 1577880000000000000
+  },
+  "final": {
+    "atime": 1593604800000000000,
+    "mtime": 1603585800000000000
+  },
+  "elapsed": 0.1382753939833492,
+  "status": 0,
+  "stdout": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-at_summer_mt_winter-crate/stdout",
+  "stderr": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-at_summer_mt_winter-crate/stderr"
+}

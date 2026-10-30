@@ -1,0 +1,204 @@
+rust/crates/rexx-exec/tests/concurrency_tests.rs:2230
+2230: 
+2231:     /// The rows whose outcome on this crate depends on a wall-clock boundary or
+2232:     /// a sleep's duration, each with the lines that make it so: a failing check
+2233:     /// on one is run again once, and only a second failure counts (ruling P48).
+2234:     const WALL_CLOCK: &[&str] = &[
+2235:         // STREAM.testGroup:866-876
+2236:         "base/bif/STREAM.testGroup TEST_QUERYDIR_EXISTS",
+2237:         // DateTime.testGroup:593-596
+2238:         "base/class/DateTime.testGroup TEST_ELAPSED1",
+2239:         // SysSleep.testGroup:83-84, :107-113
+2240:         "base/rexxutil/SysSleep.testGroup TEST_SLEEP_DURATION",
+2241:         // SysSleep.testGroup:91-99
+2242:         "base/rexxutil/SysSleep.testGroup TEST_SLEEP_CONCURRENT",
+2243:         // EventSemaphore.testGroup:151-155, :162
+
+rust/crates/rexx-exec/tests/concurrency_tests.rs:2487
+2487:             .expect("a group below a directory");
+2488:         let one = &[test.to_string()];
+2489:         // The runner asserts that the oracle finishes within the deadline; a
+2490:         // test it outlasts is recorded as such.
+2491:         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+2492:             run_tests(oracle, run, dir, group, one, SwitchMode::None, None)
+2493:         }));
+2494:         let normal = match result {
+2495:             Ok(results) => cell(&results[0].outcome),
+2496:             Err(payload) => {
+2497:                 let deadline = payload
+2498:                     .downcast_ref::<String>()
+2499:                     .is_some_and(|m| m.starts_with("the oracle did not finish"));
+2500:                 if !deadline {
+2501:                     std::panic::resume_unwind(payload);
+2502:                 }
+2503:                 ("oracle did not finish".to_string(), String::new())
+2504:             }
+2505:         };
+2506:         if reaching_rxapi(dir, &[group]).contains(&format!("{group}.{test}")) {
+2507:             return (normal, ("not run".to_string(), true), Vec::new());
+2508:         }
+2509:         let row = format!("{file} {test}");
+2510:         let judge = || {
+2511:             let group_path = group_file(run, dir, group);
+2512:             let args = ["-f", group_path.as_str(), "-U", "-V", VERBOSITY, "-t", test];
+2513:             fresh_copy(run, dir);
+2514:             let shipped = run_crate(run, &args, SwitchMode::None);
+2515:             fresh_copy(run, dir);
+2516:             let every = run_crate(run, &args, SwitchMode::EveryOpportunity);
+2517:             let raced = row == EVERY_FORCES_THE_RACE
+2518:                 && normal.0 == "pass"
+2519:                 && shipped.status == Some(0)
+2520:                 && !inverted(&shipped)
+2521:                 && every.status.is_none()
+2522:                 && !inverted(&every);
+2523:             let mut hung = Vec::new();
+2524:             if raced {
+2525:                 let modes = (
+2526:                     "every mode forces the test's own race; the oracle hangs in the \
+2527:                      same interleaving (P46)"
+2528:                         .to_string(),
+2529:                     true,
+2530:                 );
+2531:                 return (modes, hung);
+2532:             }
+2533:             for (name, ours) in [("normal", &shipped), ("every", &every)] {
+2534:                 if inverted(ours) || ours.status.is_none() {
+2535:                     hung.push(format!("{row}: {name}"));
+2536:                 }
+2537:             }
+2538:             (compare_modes(&row, &shipped, &every), hung)
+2539:         };
+2540:         let (mut judged, mut hung) = judge();
+2541:         if (!judged.1 || !hung.is_empty()) && WALL_CLOCK.contains(&row.as_str()) {
+2542:             eprintln!("P48 rerun: {row}: {} {hung:?}", judged.0);
+2543:             (judged, hung) = judge();
+2544:             judged.0.push_str(" (P48 rerun)");
+2545:         }
+2546:         (normal, judged, hung)
+2547:     }
+2548: 
+2549:     /// The `TRACE_TraceObject` tests that pass; the table printed beside
+
+rust/crates/rexx-exec/tests/support/suite_rows.rs:385
+385:         };
+386:         if line.len() - trimmed.len() <= 2
+387:             && !number.is_empty()
+388:             && number.bytes().all(|byte| byte.is_ascii_digit())
+389:             && !rest.starts_with("WITHDRAWN")
+390:         {
+391:             numbers.insert(number.parse().expect("a number"));
+392:         }
+393:     }
+394:     numbers
+395: }
+396: 
+397: /// The `GROUP.testGroup/TEST` entries of a known-failures file, upper case.
+398: pub fn common_failures(text: &str) -> BTreeSet<String> {
+399:     text.lines()
+400:         .map(str::trim)
+401:         .filter(|line| !line.is_empty() && !line.starts_with('#'))
+402:         .map(str::to_ascii_uppercase)
+403:         .collect()
+404: }
+405: 
+406: /// The `ooTestTypes` constants of `ooTest.frm`'s `text` that its
+407: /// `defaultTestSet` leaves out, upper case.
+408: pub fn skipped_types(text: &str) -> BTreeSet<String> {
+409:     let mut in_types = false;
+410:     let mut types = BTreeSet::new();
+411:     for line in text.lines() {
+412:         let lower = line.trim_start().to_ascii_lowercase();
+413:         if lower.starts_with("::class") {
+414:             in_types = lower.contains("'ootesttypes'");
+415:         } else if in_types
+416:             && let Some(rest) = lower.strip_prefix("::constant")
+417:             && let Some(name) = rest.split_whitespace().next()
+418:             && name.ends_with("_test")
+419:         {
+420:             types.insert(name.to_ascii_uppercase());
+421:         }
+422:     }
+423:     let start = text
+424:         .find("tests = .set~of(")
+425:         .expect("ooTest.frm's defaultTestSet");
+426:     let end = start + text[start..].find(")\n").expect("the end of the set");
+427:     let default: BTreeSet<String> = text[start..end]
+428:         .split("self~")
+429:         .skip(1)
+430:         .map(|word| {
+431:             word.trim_end_matches([',', ' ', '-', '\n', '\r'])
+432:                 .trim()
+433:                 .to_ascii_uppercase()
+434:         })
+435:         .collect();
+436:     assert!(!default.is_empty(), "defaultTestSet names no type");
+437:     types.retain(|name| !default.contains(name));
+438:     types
+439: }
+440: 
+441: /// What is wrong with `rows` against `context`: each row's owner check, a
+442: /// test with more than one row, and the Rxapi rows against
+443: /// `reaching_rxapi`'s output.
+444: pub fn check_rows(rows: &[Row], context: &Context) -> Vec<String> {
+445:     let mut problems = Vec::new();
+446:     let mut seen: BTreeMap<(&str, &str), &Row> = BTreeMap::new();
+447:     for row in rows {
+448:         if let Some(first) = seen.insert((&row.group, &row.test), row) {
+449:             problems.push(format!(
+450:                 "{}: {} {} has a row at {} too",
+
+oodocs/rexxref/en-US/utilityclasses.xml:7653
+7653: <section id="mthRexxContextExecutable"><title>executable</title>
+7654: <indexterm><primary>executable method</primary>
+7655: <secondary>of RexxContext class</secondary></indexterm>
+7656: <indexterm><primary>method</primary>
+7657: <secondary>executable method</secondary>
+7658: <tertiary>of RexxContext class</tertiary></indexterm>
+7659: 
+7660: <mediaobject>
+7661: <imageobject>
+7662: <imagedata fileref="images/classes/rexxcontext_executable.svg" scale="55" />
+7663: </imageobject>
+7664: </mediaobject>
+7665: 
+7666: <para>Returns the current executable object for the current context.
+7667: The executable will be either a
+7668: <xref linkend="clsRoutine" xrefstyle="template:Routine object"/> or a
+7669: <xref linkend="clsMethod" xrefstyle="template:Method object"/>,
+7670: depending on the type of the active context.
+7671: </para>
+7672: </section>
+
+oodocs/rexxref/en-US/fundclasses.xml:320
+320: <section id="mthClassDefine"><title>define</title>
+321: <indexterm><primary>define method</primary>
+322: <secondary>of Class class</secondary></indexterm>
+323: <indexterm><primary>method</primary>
+324: <secondary>define method</secondary>
+325: <tertiary>of Class class</tertiary></indexterm>
+326: 
+327: <mediaobject>
+328: <imageobject>
+329: <imagedata fileref="images/classes/class_define.svg" scale="55" />
+330: </imageobject>
+331: </mediaobject>
+332: 
+333: <para>Incorporates the method object <emphasis role="italic">method</emphasis>
+334: in the receiver class's collection of instance methods. The
+335: method name <emphasis role="italic">methodname</emphasis> is translated
+336: to uppercase. Using the <methodname>define</methodname>
+337: method replaces any existing definition for
+338: <emphasis role="italic">methodname</emphasis> in the receiver class.</para>
+339: <para>If you omit <emphasis role="italic">method</emphasis>, the method name
+340: <emphasis role="italic">methodname</emphasis> is made
+341: unavailable for the receiver class. Sending a message of that name
+342: to an instance of the class causes the
+343: <methodname>unknown</methodname> method (if any) to be run.</para>
+344: <para>The <emphasis role="italic">method</emphasis> argument can be a string
+345: containing a method source line instead of a method object. Alternatively, you
+346: can pass an array of strings containing individual method lines. Either way,
+347: <methodname>define</methodname> creates an equivalent method object.
+348: </para>
+349: 
+350: <para><emphasis role="bold">Notes:</emphasis></para>
+351: <orderedlist>

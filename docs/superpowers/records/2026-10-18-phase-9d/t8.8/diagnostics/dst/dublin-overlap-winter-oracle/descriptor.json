@@ -1,0 +1,22 @@
+{
+  "side": "oracle",
+  "seed": "winter",
+  "TZ": "Europe/Dublin",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-dst-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-winter-oracle/probe.rex"
+  ],
+  "initial": {
+    "atime": 1577880000000000000,
+    "mtime": 1577880000000000000
+  },
+  "final": {
+    "atime": 1577880000000000000,
+    "mtime": 1603589400000000000
+  },
+  "elapsed": 0.00874819402815774,
+  "status": 0,
+  "stdout": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-winter-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-winter-oracle/stderr"
+}

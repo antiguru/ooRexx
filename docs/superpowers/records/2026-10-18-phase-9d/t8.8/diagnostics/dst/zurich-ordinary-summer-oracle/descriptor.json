@@ -1,0 +1,29 @@
+{
+  "name": "zurich-ordinary-summer",
+  "side": "oracle",
+  "TZ": "Europe/Zurich",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-dst-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-dst-20261030-a/zurich-ordinary-summer-oracle/probe.rex"
+  ],
+  "initial": {
+    "target": {
+      "atime": 1593604800000000000,
+      "mtime": 1593604800000000000
+    },
+    "other": {
+      "atime": 1593604800000000000,
+      "mtime": 1593604800000000000
+    }
+  },
+  "final": {
+    "atime": 1593604800000000000,
+    "mtime": 1591007696000000000
+  },
+  "elapsed": 0.009298316959757358,
+  "status": 0,
+  "source": "/tmp/p9d-t88-dst-20261030-a/zurich-ordinary-summer-oracle/probe.rex",
+  "stdout": "/tmp/p9d-t88-dst-20261030-a/zurich-ordinary-summer-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-dst-20261030-a/zurich-ordinary-summer-oracle/stderr"
+}

@@ -1,0 +1,21 @@
+{
+  "name": "methods-original-counts",
+  "side": "oracle",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-fixed-20261030-a/methods-original-counts.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/methods-original-counts-oracle",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/methods-original-counts.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/methods-original-counts-oracle",
+  "status": 0,
+  "elapsed": 0.009008867025841027,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/methods-original-counts-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/methods-original-counts-oracle/stderr",
+  "helper": null,
+  "yaml": null
+}

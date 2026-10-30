@@ -1,0 +1,39 @@
+{
+  "name": "fifo-write",
+  "side": "crate",
+  "cmd": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+    "/tmp/p9d-t88-fixed-20261030-a/fifo-write.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-crate",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/fifo-write.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-crate",
+  "status": 0,
+  "elapsed": 0.1288650660426356,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-crate/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-crate/stderr",
+  "helper": {
+    "cmd": [
+      "timeout",
+      "-k",
+      "1s",
+      "12s",
+      "python3",
+      "/tmp/p9d-t88-fixed-20261030-a/fifo-helper.py",
+      "/tmp/p9d-t88-fixed-20261030-a/fifo-write-crate/ff1",
+      "read",
+      "/tmp/p9d-t88-fixed-20261030-a/fifo-write-crate/fifo-payload"
+    ],
+    "status": 0
+  },
+  "yaml": null
+}

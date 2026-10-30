@@ -1,0 +1,26 @@
+{
+  "name": "flags-replace",
+  "side": "crate",
+  "cmd": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+    "/tmp/p9d-t88-fixed-20261030-a/flags-replace.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/flags-replace-crate",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/flags-replace.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/flags-replace-crate",
+  "status": 0,
+  "elapsed": 0.12781487504253164,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/flags-replace-crate/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/flags-replace-crate/stderr",
+  "helper": null,
+  "yaml": null
+}

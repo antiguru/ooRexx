@@ -1,0 +1,18 @@
+{
+  "name": "fifo-write-reader-ready",
+  "side": "oracle",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-reader-ready.rex",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-fixed-20261030-a/fifo-write-reader-ready.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-reader-ready-oracle",
+  "TZ": "UTC",
+  "status": 0,
+  "elapsed": 0.009702509036287665,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-reader-ready-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-reader-ready-oracle/stderr",
+  "reader_open_before_interpreter": true,
+  "fifo_payload_hex": "656c6c6f0a"
+}

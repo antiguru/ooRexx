@@ -1,0 +1,21 @@
+{
+  "name": "rexx-routine-frame-executable",
+  "side": "oracle",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-fixed-20261030-a/rexx-routine-frame-executable.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/rexx-routine-frame-executable-oracle",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/rexx-routine-frame-executable.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/rexx-routine-frame-executable-oracle",
+  "status": 0,
+  "elapsed": 0.00990586297120899,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/rexx-routine-frame-executable-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/rexx-routine-frame-executable-oracle/stderr",
+  "helper": null,
+  "yaml": null
+}

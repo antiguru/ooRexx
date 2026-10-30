@@ -1,0 +1,26 @@
+{
+  "name": "stdin-empty-eof",
+  "side": "crate",
+  "cmd": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+    "/tmp/p9d-t88-fixed-20261030-a/stdin-empty-eof.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/stdin-empty-eof-crate",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/stdin-empty-eof.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/stdin-empty-eof-crate",
+  "status": 0,
+  "elapsed": 0.13118159194709733,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/stdin-empty-eof-crate/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/stdin-empty-eof-crate/stderr",
+  "helper": null,
+  "yaml": null
+}

@@ -1,0 +1,21 @@
+{
+  "name": "stdin-fixed-chars",
+  "side": "oracle",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-fixed-20261030-a/stdin-fixed-chars.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/stdin-fixed-chars-oracle",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/stdin-fixed-chars.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/stdin-fixed-chars-oracle",
+  "status": 0,
+  "elapsed": 0.008537550980690867,
+  "stdin_hex": "616263",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/stdin-fixed-chars-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/stdin-fixed-chars-oracle/stderr",
+  "helper": null,
+  "yaml": null
+}

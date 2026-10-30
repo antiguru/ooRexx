@@ -1,0 +1,36 @@
+
+ROW docs/superpowers/plans/phase-9-exclusions.txt:230 base/bif/LINEOUT TEST_QUEUE
+::method test_queue
+  .stdque~empty
+  call lineout "queue:", "line"
+  call lineout "QUEUE:", ""
+  call lineout "QUEUE:"                -- "close" does nothing
+  self~assertSame(2, .stdque~queued)
+  self~assertSame("line", .stdque~linein)
+  self~assertSame("", .stdque~linein)
+
+-- writing to an invalid file raises NOTREADY
+
+ROW docs/superpowers/plans/phase-9-exclusions.txt:249 base/class/RexxQueue TEST_BUG_1379
+::method test_bug_1379
+  self~expectSyntax(98.901) -- Object "a C" was not correctly initialized
+  say .c~new~queued
+
+
+ROW docs/superpowers/plans/phase-9-exclusions.txt:297 base/directives/ROUTINE TESTEXTERNALREGISTEREDBADLIBRARYNAME
+::method testExternalRegisteredBadLibraryName
+  self~assertSyntaxError(90.999, "::routine foo external 'REGISTERED rxmathxxxxx RxCalxPi'")
+
+
+ROW docs/superpowers/plans/phase-9-exclusions.txt:298 base/directives/ROUTINE TESTEXTERNALREGISTEREDBADNAME
+::method testExternalRegisteredBadName
+  self~assertSyntaxError(90.999, "::routine foo external 'REGISTERED rxmath RxCalxPiXXXXXX'")
+
+
+ROW docs/superpowers/plans/phase-9-exclusions.txt:300 base/keyword/SIGNAL TEST_SIGNAL_ANY_CONDITION_HALT
+::method test_signal_any_condition_halt
+  self~expectCondition("HALT")
+  signal on any
+  address "hostemu" "HI"     -- raises HALT
+  return
+  any: raise propagate

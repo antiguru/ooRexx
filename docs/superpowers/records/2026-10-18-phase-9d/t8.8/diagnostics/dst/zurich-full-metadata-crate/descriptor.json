@@ -1,0 +1,18 @@
+{
+  "side": "crate",
+  "TZ": "Europe/Zurich",
+  "cmd": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "15s",
+    "/tmp/p9d-t88-dst-20261030-a/rexx-frozen",
+    "/tmp/p9d-t88-dst-20261030-a/full-metadata-trace.rex"
+  ],
+  "status": 216,
+  "source": "/tmp/p9d-t88-dst-20261030-a/full-metadata-trace.rex",
+  "stdout": "/tmp/p9d-t88-dst-20261030-a/zurich-full-metadata-crate/stdout",
+  "stderr": "/tmp/p9d-t88-dst-20261030-a/zurich-full-metadata-crate/stderr"
+}

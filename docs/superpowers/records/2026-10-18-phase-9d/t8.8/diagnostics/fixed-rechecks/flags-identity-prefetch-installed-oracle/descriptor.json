@@ -1,0 +1,18 @@
+{
+  "name": "flags-identity-prefetch-installed",
+  "side": "oracle",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed.rex",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed-oracle",
+  "TZ": "UTC",
+  "status": 0,
+  "elapsed": 0.009915472997818142,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed-oracle/stderr",
+  "reader_open_before_interpreter": false,
+  "fifo_payload_hex": null
+}

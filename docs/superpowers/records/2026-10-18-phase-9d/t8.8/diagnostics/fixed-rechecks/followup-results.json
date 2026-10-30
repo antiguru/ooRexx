@@ -1,0 +1,248 @@
+[
+  {
+    "name": "fifo-write-reader-ready",
+    "side": "crate",
+    "source": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-reader-ready.rex",
+    "cmd": [
+      "memcap",
+      "2G",
+      "timeout",
+      "-k",
+      "2s",
+      "20s",
+      "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+      "/tmp/p9d-t88-fixed-20261030-a/fifo-write-reader-ready.rex"
+    ],
+    "cwd": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-reader-ready-crate",
+    "TZ": "UTC",
+    "status": 0,
+    "elapsed": 0.11057087796507403,
+    "stdout": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-reader-ready-crate/stdout",
+    "stderr": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-reader-ready-crate/stderr",
+    "reader_open_before_interpreter": true,
+    "fifo_payload_hex": "68656c6c6f0a"
+  },
+  {
+    "name": "fifo-write-reader-ready",
+    "side": "oracle",
+    "source": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-reader-ready.rex",
+    "cmd": [
+      "bash",
+      "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+      "/tmp/p9d-t88-fixed-20261030-a/fifo-write-reader-ready.rex"
+    ],
+    "cwd": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-reader-ready-oracle",
+    "TZ": "UTC",
+    "status": 0,
+    "elapsed": 0.009702509036287665,
+    "stdout": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-reader-ready-oracle/stdout",
+    "stderr": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-reader-ready-oracle/stderr",
+    "reader_open_before_interpreter": true,
+    "fifo_payload_hex": "656c6c6f0a"
+  },
+  {
+    "name": "fifo-write-explicit-close",
+    "side": "crate",
+    "source": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-explicit-close.rex",
+    "cmd": [
+      "memcap",
+      "2G",
+      "timeout",
+      "-k",
+      "2s",
+      "20s",
+      "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+      "/tmp/p9d-t88-fixed-20261030-a/fifo-write-explicit-close.rex"
+    ],
+    "cwd": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-explicit-close-crate",
+    "TZ": "UTC",
+    "status": 0,
+    "elapsed": 0.13307985896244645,
+    "stdout": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-explicit-close-crate/stdout",
+    "stderr": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-explicit-close-crate/stderr",
+    "reader_open_before_interpreter": true,
+    "fifo_payload_hex": "68656c6c6f0a"
+  },
+  {
+    "name": "fifo-write-explicit-close",
+    "side": "oracle",
+    "source": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-explicit-close.rex",
+    "cmd": [
+      "bash",
+      "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+      "/tmp/p9d-t88-fixed-20261030-a/fifo-write-explicit-close.rex"
+    ],
+    "cwd": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-explicit-close-oracle",
+    "TZ": "UTC",
+    "status": 0,
+    "elapsed": 0.009546962974127382,
+    "stdout": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-explicit-close-oracle/stdout",
+    "stderr": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-explicit-close-oracle/stderr",
+    "reader_open_before_interpreter": true,
+    "fifo_payload_hex": "68656c6c6f0a"
+  },
+  {
+    "name": "instance-classobject-multiset",
+    "side": "crate",
+    "source": "/tmp/p9d-t88-fixed-20261030-a/instance-classobject-multiset.rex",
+    "cmd": [
+      "memcap",
+      "2G",
+      "timeout",
+      "-k",
+      "2s",
+      "20s",
+      "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+      "/tmp/p9d-t88-fixed-20261030-a/instance-classobject-multiset.rex"
+    ],
+    "cwd": "/tmp/p9d-t88-fixed-20261030-a/instance-classobject-multiset-crate",
+    "TZ": "UTC",
+    "status": 0,
+    "elapsed": 0.14994247700087726,
+    "stdout": "/tmp/p9d-t88-fixed-20261030-a/instance-classobject-multiset-crate/stdout",
+    "stderr": "/tmp/p9d-t88-fixed-20261030-a/instance-classobject-multiset-crate/stderr",
+    "reader_open_before_interpreter": false,
+    "fifo_payload_hex": null
+  },
+  {
+    "name": "instance-classobject-multiset",
+    "side": "oracle",
+    "source": "/tmp/p9d-t88-fixed-20261030-a/instance-classobject-multiset.rex",
+    "cmd": [
+      "bash",
+      "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+      "/tmp/p9d-t88-fixed-20261030-a/instance-classobject-multiset.rex"
+    ],
+    "cwd": "/tmp/p9d-t88-fixed-20261030-a/instance-classobject-multiset-oracle",
+    "TZ": "UTC",
+    "status": 0,
+    "elapsed": 0.009702518989797682,
+    "stdout": "/tmp/p9d-t88-fixed-20261030-a/instance-classobject-multiset-oracle/stdout",
+    "stderr": "/tmp/p9d-t88-fixed-20261030-a/instance-classobject-multiset-oracle/stderr",
+    "reader_open_before_interpreter": false,
+    "fifo_payload_hex": null
+  },
+  {
+    "name": "flags-identity-after-only",
+    "side": "crate",
+    "source": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only.rex",
+    "cmd": [
+      "memcap",
+      "2G",
+      "timeout",
+      "-k",
+      "2s",
+      "20s",
+      "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+      "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only.rex"
+    ],
+    "cwd": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only-crate",
+    "TZ": "UTC",
+    "status": 0,
+    "elapsed": 0.13396153401117772,
+    "stdout": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only-crate/stdout",
+    "stderr": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only-crate/stderr",
+    "reader_open_before_interpreter": false,
+    "fifo_payload_hex": null
+  },
+  {
+    "name": "flags-identity-after-only",
+    "side": "oracle",
+    "source": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only.rex",
+    "cmd": [
+      "bash",
+      "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+      "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only.rex"
+    ],
+    "cwd": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only-oracle",
+    "TZ": "UTC",
+    "status": 0,
+    "elapsed": 0.008933820005040616,
+    "stdout": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only-oracle/stdout",
+    "stderr": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only-oracle/stderr",
+    "reader_open_before_interpreter": false,
+    "fifo_payload_hex": null
+  },
+  {
+    "name": "flags-identity-prefetch-installed",
+    "side": "crate",
+    "source": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed.rex",
+    "cmd": [
+      "memcap",
+      "2G",
+      "timeout",
+      "-k",
+      "2s",
+      "20s",
+      "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+      "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed.rex"
+    ],
+    "cwd": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed-crate",
+    "TZ": "UTC",
+    "status": 0,
+    "elapsed": 0.12539424299029633,
+    "stdout": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed-crate/stdout",
+    "stderr": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed-crate/stderr",
+    "reader_open_before_interpreter": false,
+    "fifo_payload_hex": null
+  },
+  {
+    "name": "flags-identity-prefetch-installed",
+    "side": "oracle",
+    "source": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed.rex",
+    "cmd": [
+      "bash",
+      "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+      "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed.rex"
+    ],
+    "cwd": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed-oracle",
+    "TZ": "UTC",
+    "status": 0,
+    "elapsed": 0.009915472997818142,
+    "stdout": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed-oracle/stdout",
+    "stderr": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed-oracle/stderr",
+    "reader_open_before_interpreter": false,
+    "fifo_payload_hex": null
+  },
+  {
+    "name": "flags-identity-ask-before",
+    "side": "crate",
+    "source": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-ask-before.rex",
+    "cmd": [
+      "memcap",
+      "2G",
+      "timeout",
+      "-k",
+      "2s",
+      "20s",
+      "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+      "/tmp/p9d-t88-fixed-20261030-a/flags-identity-ask-before.rex"
+    ],
+    "cwd": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-ask-before-crate",
+    "TZ": "UTC",
+    "status": 0,
+    "elapsed": 0.13433645403711125,
+    "stdout": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-ask-before-crate/stdout",
+    "stderr": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-ask-before-crate/stderr",
+    "reader_open_before_interpreter": false,
+    "fifo_payload_hex": null
+  },
+  {
+    "name": "flags-identity-ask-before",
+    "side": "oracle",
+    "source": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-ask-before.rex",
+    "cmd": [
+      "bash",
+      "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+      "/tmp/p9d-t88-fixed-20261030-a/flags-identity-ask-before.rex"
+    ],
+    "cwd": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-ask-before-oracle",
+    "TZ": "UTC",
+    "status": 0,
+    "elapsed": 0.009667359001468867,
+    "stdout": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-ask-before-oracle/stdout",
+    "stderr": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-ask-before-oracle/stderr",
+    "reader_open_before_interpreter": false,
+    "fifo_payload_hex": null
+  }
+]

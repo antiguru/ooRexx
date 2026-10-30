@@ -1,0 +1,1 @@
+rexx-exec: routine "SYSOPENMUTEXSEM" with a named semaphore, a POSIX sem_open semaphore shared between processes, is not supported (Deviation 43)

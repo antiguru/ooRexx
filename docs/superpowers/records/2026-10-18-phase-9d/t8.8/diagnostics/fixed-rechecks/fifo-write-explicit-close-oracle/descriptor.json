@@ -1,0 +1,18 @@
+{
+  "name": "fifo-write-explicit-close",
+  "side": "oracle",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-explicit-close.rex",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-fixed-20261030-a/fifo-write-explicit-close.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-explicit-close-oracle",
+  "TZ": "UTC",
+  "status": 0,
+  "elapsed": 0.009546962974127382,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-explicit-close-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/fifo-write-explicit-close-oracle/stderr",
+  "reader_open_before_interpreter": true,
+  "fifo_payload_hex": "68656c6c6f0a"
+}

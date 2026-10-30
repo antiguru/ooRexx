@@ -1,0 +1,26 @@
+{
+  "name": "rexx-routine-frame-executable",
+  "side": "crate",
+  "cmd": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+    "/tmp/p9d-t88-fixed-20261030-a/rexx-routine-frame-executable.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/rexx-routine-frame-executable-crate",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/rexx-routine-frame-executable.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/rexx-routine-frame-executable-crate",
+  "status": 0,
+  "elapsed": 0.1199053360032849,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/rexx-routine-frame-executable-crate/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/rexx-routine-frame-executable-crate/stderr",
+  "helper": null,
+  "yaml": null
+}

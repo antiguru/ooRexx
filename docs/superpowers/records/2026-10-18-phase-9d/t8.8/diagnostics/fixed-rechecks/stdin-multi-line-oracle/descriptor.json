@@ -1,0 +1,21 @@
+{
+  "name": "stdin-multi-line",
+  "side": "oracle",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-fixed-20261030-a/stdin-multi-line.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/stdin-multi-line-oracle",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/stdin-multi-line.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/stdin-multi-line-oracle",
+  "status": 0,
+  "elapsed": 0.008096373989246786,
+  "stdin_hex": "610a620a630a",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/stdin-multi-line-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/stdin-multi-line-oracle/stderr",
+  "helper": null,
+  "yaml": null
+}

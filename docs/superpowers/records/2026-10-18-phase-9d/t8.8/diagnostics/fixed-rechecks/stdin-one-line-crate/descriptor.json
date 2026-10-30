@@ -1,0 +1,26 @@
+{
+  "name": "stdin-one-line",
+  "side": "crate",
+  "cmd": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+    "/tmp/p9d-t88-fixed-20261030-a/stdin-one-line.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/stdin-one-line-crate",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/stdin-one-line.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/stdin-one-line-crate",
+  "status": 0,
+  "elapsed": 0.1251924390089698,
+  "stdin_hex": "610a",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/stdin-one-line-crate/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/stdin-one-line-crate/stderr",
+  "helper": null,
+  "yaml": null
+}

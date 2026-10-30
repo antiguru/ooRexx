@@ -1,0 +1,27 @@
+{
+  "crate": {
+    "path": "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+    "bytes": 67675296,
+    "sha256": "c52dce960bacae58e9f7fff86342a64df1dc177dbbe4c80a82690633e02cf722"
+  },
+  "oracle": {
+    "path": "/home/moritz/dev/repos/ooRexx/build/bin/rexx",
+    "bytes": 62600,
+    "sha256": "bb5bb8ccbb96c376e329b91aafdad891f975ba06c941dbceba82c3848fa13019"
+  },
+  "librexx": {
+    "path": "/home/moritz/dev/repos/ooRexx/build/lib/librexx.so.4",
+    "bytes": 17853856,
+    "sha256": "42136c4038004fe2d5104181e06873301f032ced97c54a0fe84042e006d9b6fb"
+  },
+  "yaml-oracle": {
+    "path": "/home/moritz/dev/repos/ooRexx/build/bin/yaml.cls",
+    "bytes": 185829,
+    "sha256": "b64563162e32aae6237ca8e1ff23fae58e0187235863b6e705bd887fda318a4f"
+  },
+  "yaml-repo": {
+    "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/extensions/yaml/yaml.cls",
+    "bytes": 189151,
+    "sha256": "7cbb4bd6242b1ac4d80d0f8a88c1dca47ca3dc38fa27596cc049de893e393634"
+  }
+}

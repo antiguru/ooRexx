@@ -1,0 +1,22 @@
+{
+  "side": "oracle",
+  "seed": "summer",
+  "TZ": "Europe/Dublin",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-dst-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-summer-oracle/probe.rex"
+  ],
+  "initial": {
+    "atime": 1593604800000000000,
+    "mtime": 1593604800000000000
+  },
+  "final": {
+    "atime": 1593604800000000000,
+    "mtime": 1603585800000000000
+  },
+  "elapsed": 0.008792412001639605,
+  "status": 0,
+  "stdout": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-summer-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-dst-20261030-a/dublin-overlap-summer-oracle/stderr"
+}

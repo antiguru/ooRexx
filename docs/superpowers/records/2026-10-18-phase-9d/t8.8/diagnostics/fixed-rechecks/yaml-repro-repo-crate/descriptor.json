@@ -1,0 +1,26 @@
+{
+  "name": "yaml-repro-repo",
+  "side": "crate",
+  "cmd": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+    "/tmp/p9d-t88-fixed-20261030-a/yaml-repro-repo.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/yaml-repro-repo-crate",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/yaml-repro-repo.rex",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/p9d-t88-fixed-20261030-a/yaml-repro-repo-crate",
+  "status": 0,
+  "elapsed": 0.17589270998723805,
+  "stdin_hex": "",
+  "live_pipe_writer_held_open": false,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/yaml-repro-repo-crate/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/yaml-repro-repo-crate/stderr",
+  "helper": null,
+  "yaml": "/home/moritz/dev/repos/ooRexx-rust-rewrite/extensions/yaml/yaml.cls"
+}
