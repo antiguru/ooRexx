@@ -49,8 +49,12 @@ pub(super) fn code_lines(path: &Path) -> Vec<(usize, String)> {
 }
 
 pub(super) fn sources() -> Vec<PathBuf> {
+    sources_in(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"))
+}
+
+fn sources_in(root: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
-    let mut pending = vec![Path::new(env!("CARGO_MANIFEST_DIR")).join("src")];
+    let mut pending = vec![root.to_path_buf()];
     while let Some(directory) = pending.pop() {
         for entry in std::fs::read_dir(&directory).expect("a directory this crate compiles") {
             let path = entry.expect("a readable directory entry").path();
@@ -281,3 +285,6 @@ pub(super) fn surface(
     (surfaces, text)
 }
 
+
+#[cfg(test)]
+mod tests;
