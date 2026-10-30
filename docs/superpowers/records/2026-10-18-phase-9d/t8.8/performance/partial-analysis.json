@@ -75,9 +75,28 @@
       "original_table_status": 1
     },
     "h-a-fperf": {
-      "valid_profiles": 241,
+      "valid_profiles": 297,
       "expected_profiles": 297,
-      "complete_programs": 16,
+      "complete_programs": 33,
+      "spreads": [],
+      "original_table_command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-capped.sh",
+        "-T",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/h-a-fperf",
+        "-B",
+        "0.05",
+        "h=/tmp/codex-p9d-t88-pins/8.8e2-perf-r1-rexx",
+        "a=/tmp/codex-p9d-t88-pins/8.8a-perf-r1-rexx",
+        "p=/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx"
+      ],
+      "original_table_status": 1
+    },
+    "p-q": {
+      "valid_profiles": 69,
+      "expected_profiles": 198,
+      "complete_programs": 7,
       "spreads": []
     }
   },
@@ -198,6 +217,13 @@
       "slice": "8.8f-repair",
       "program": "parse",
       "own_delta_percent": 0.34815184454923204,
+      "base": "a",
+      "head": "p"
+    },
+    {
+      "slice": "8.8f-repair",
+      "program": "rexxcps",
+      "own_delta_percent": 0.08961593595188135,
       "base": "a",
       "head": "p"
     }

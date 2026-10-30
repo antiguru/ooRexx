@@ -1,0 +1,116 @@
+{
+  "group": "p-q",
+  "jobs": 8,
+  "driver_sha256": "9f800ff75b7f187b82c7bc40aeae887655850f9e4b85c1b6966f525b113e271b",
+  "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/9f800ff75b7f187b82c7bc40aeae887655850f9e4b85c1b6966f525b113e271b.py",
+  "driver_command": [
+    "memcap",
+    "8G",
+    "python3",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+    "run",
+    "p-q",
+    "batch-22-p-q-completion",
+    "1",
+    "8"
+  ],
+  "deadline_seconds": 525,
+  "elapsed_seconds": 79.07878029695712,
+  "completed_profiles": [
+    {
+      "group": "p-q",
+      "program": "strings",
+      "name": "q",
+      "round": 3,
+      "binary_index": 1,
+      "command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+        "-r",
+        "3",
+        "-j",
+        "8",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/p-q",
+        "-B",
+        "0.05",
+        "p=/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx",
+        "q=/tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx"
+      ],
+      "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+      "profile_environment": {
+        "PROFILE_BINARY_INDEX": "1",
+        "PROFILE_PROGRAM": "strings",
+        "PROFILE_ROUND": "3",
+        "REXX_LIB_DIR": "/home/moritz/dev/repos/ooRexx/build/lib"
+      },
+      "status": 0,
+      "batch_expired": false,
+      "elapsed_seconds": 78.44245538802352,
+      "finished_utc": "2026-10-30T21:35:01.352801+00:00",
+      "memory": {
+        "subprocess_pid": 1944360,
+        "max_tree_rss_kib": 105220,
+        "max_child_hwm_kib": 87980,
+        "peak_sample": [
+          {
+            "pid": 1944360,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/p-q -B 0.05 p=/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx q=/tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx ",
+            "rss_kib": 5508,
+            "hwm_kib": 5508
+          },
+          {
+            "pid": 1944383,
+            "command": "bash /tmp/codex-p9d-t88-performance/callgrind-one.sh -r 3 -j 8 -o /tmp/codex-p9d-t88-performance/p-q -B 0.05 p=/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx q=/tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx ",
+            "rss_kib": 2088,
+            "hwm_kib": 2088
+          },
+          {
+            "pid": 1944385,
+            "command": "bash /home/moritz/.local/bin/memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/p-q/strings.q.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/p-q/strings.q.r3.cg /tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 5596,
+            "hwm_kib": 5596
+          },
+          {
+            "pid": 1944389,
+            "command": "timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/p-q/strings.q.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/p-q/strings.q.r3.cg /tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 4048,
+            "hwm_kib": 4048
+          },
+          {
+            "pid": 1944390,
+            "command": "/usr/bin/valgrind.bin --tool=callgrind --compress-strings=no --log-file=/tmp/codex-p9d-t88-performance/p-q/strings.q.r3.vg --callgrind-out-file=/tmp/codex-p9d-t88-performance/p-q/strings.q.r3.cg /tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex ",
+            "rss_kib": 87980,
+            "hwm_kib": 87980
+          }
+        ]
+      },
+      "valid": true,
+      "interpreter_status": "0",
+      "row": [
+        "q",
+        "strings",
+        "r3",
+        "18656191265",
+        "1271705883",
+        "350717",
+        "17384134665",
+        "rc=0"
+      ],
+      "whole": 18656191265,
+      "libc": 1271705883,
+      "ld": 350717,
+      "own": 17384134665,
+      "out_sha256": "770aa431c68377532cd3810b36135c7a1ad25c1db8c992285a24af9b5a09a627",
+      "out_bytes": 10,
+      "err_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "err_bytes": 0
+    }
+  ],
+  "valid_profiles_total": 198,
+  "expected_profiles": 198,
+  "tmp_free_bytes": 89227264,
+  "memory_available": "MemAvailable:   61512628 kB",
+  "cpu_count": 32,
+  "driver_status": 0
+}

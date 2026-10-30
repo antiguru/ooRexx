@@ -1,0 +1,450 @@
+{
+  "complete_programs": 33,
+  "reference_cohorts": {
+    "base": [
+      "base-ab-c",
+      "base"
+    ],
+    "e1": [
+      "c-e1-e2",
+      "e1"
+    ],
+    "e2": [
+      "e2-f",
+      "e2"
+    ],
+    "f": [
+      "e2-f",
+      "f"
+    ],
+    "p": [
+      "p-q",
+      "p"
+    ],
+    "q": [
+      "p-q",
+      "q"
+    ]
+  },
+  "reference_pins": {
+    "base": {
+      "path": "/tmp/codex-p9d-t88-pins/8.8-base-rexx",
+      "sha256": "4913ad067898fd6a786c12a696b2a21b0d066ad6b019c73273f78e30c16f5c58"
+    },
+    "e1": {
+      "path": "/tmp/codex-p9d-t88-pins/8.8e1-rexx",
+      "sha256": "434d6567458248fdb804eebe9edb715a54ddb9ded650fcca994eed6c4b691e06"
+    },
+    "e2": {
+      "path": "/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+      "sha256": "00e29fde4456ee4845a76941263f495b827c083af35363cb54eb3ac8c6b7c733"
+    },
+    "f": {
+      "path": "/tmp/codex-p9d-t88-pins/8.8f-r1-rexx",
+      "sha256": "b695b78fe24903b4be5a2874c8cd128193bbe165f92b50a4d6a8a9956d03d3be"
+    },
+    "p": {
+      "path": "/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx",
+      "sha256": "6ed1c08eb03d54c48d1fe3947ce376f09502aaeba34ac221c334b01b1572b86e"
+    },
+    "q": {
+      "path": "/tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx",
+      "sha256": "22c317baa3ed111935a6577ac33097e428a53b64eb64b4697af2b85664e3f8eb"
+    }
+  },
+  "attribution_limits": "Q versus original e1, original e2, corrected F, and pre-8.8 BASE compares separate cohorts and complete source revisions with intervening semantic and performance changes. These residuals do not isolate method-entry lookup, PARSE, numeric handling, or another source mechanism. Each residual above +0.05% is explicitly OVER, independently of a negative direct Q/P repair delta.",
+  "residuals": {
+    "base": {
+      "over_budget": [
+        {
+          "program": "alloc",
+          "reference_cohort": "base-ab-c",
+          "q_cohort": "p-q",
+          "reference_own_median": 19953168417,
+          "q_own_median": 20100394811,
+          "q_vs_reference_percent": 0.7378597269522561,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "churn",
+          "reference_cohort": "base-ab-c",
+          "q_cohort": "p-q",
+          "reference_own_median": 377917506,
+          "q_own_median": 378564220,
+          "q_vs_reference_percent": 0.17112570593646964,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "define",
+          "reference_cohort": "base-ab-c",
+          "q_cohort": "p-q",
+          "reference_own_median": 878372730,
+          "q_own_median": 880538526,
+          "q_vs_reference_percent": 0.24656913016869272,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "dispatch",
+          "reference_cohort": "base-ab-c",
+          "q_cohort": "p-q",
+          "reference_own_median": 20683753467,
+          "q_own_median": 20708755712,
+          "q_vs_reference_percent": 0.12087866469637612,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "dispatchclass",
+          "reference_cohort": "base-ab-c",
+          "q_cohort": "p-q",
+          "reference_own_median": 15310186442,
+          "q_own_median": 15330188527,
+          "q_vs_reference_percent": 0.13064560040319853,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "hashnew",
+          "reference_cohort": "base-ab-c",
+          "q_cohort": "p-q",
+          "reference_own_median": 1575340491,
+          "q_own_median": 1579137128,
+          "q_vs_reference_percent": 0.24100421602125885,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "heapshape",
+          "reference_cohort": "base-ab-c",
+          "q_cohort": "p-q",
+          "reference_own_median": 2261606461,
+          "q_own_median": 2269679643,
+          "q_vs_reference_percent": 0.3569667021746274,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "parse",
+          "reference_cohort": "base-ab-c",
+          "q_cohort": "p-q",
+          "reference_own_median": 1545243608,
+          "q_own_median": 1547905485,
+          "q_vs_reference_percent": 0.1722626119415082,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "sendloop",
+          "reference_cohort": "base-ab-c",
+          "q_cohort": "p-q",
+          "reference_own_median": 13828061970,
+          "q_own_median": 13853064217,
+          "q_vs_reference_percent": 0.18080803408490945,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "pingguard",
+          "reference_cohort": "base-ab-c",
+          "q_cohort": "p-q",
+          "reference_own_median": 1151574817,
+          "q_own_median": 1152172438,
+          "q_vs_reference_percent": 0.051895976811726335,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "pingmsg",
+          "reference_cohort": "base-ab-c",
+          "q_cohort": "p-q",
+          "reference_own_median": 1644675133,
+          "q_own_median": 1647348190,
+          "q_vs_reference_percent": 0.1625279635087667,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "pingsem",
+          "reference_cohort": "base-ab-c",
+          "q_cohort": "p-q",
+          "reference_own_median": 1171607806,
+          "q_own_median": 1177403463,
+          "q_vs_reference_percent": 0.49467551942889665,
+          "residual_gate": "OVER"
+        }
+      ],
+      "ordinary_send": [
+        {
+          "program": "dispatch",
+          "reference_cohort": "base-ab-c",
+          "q_cohort": "p-q",
+          "reference_own_median": 20683753467,
+          "q_own_median": 20708755712,
+          "q_vs_reference_percent": 0.12087866469637612,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "dispatchclass",
+          "reference_cohort": "base-ab-c",
+          "q_cohort": "p-q",
+          "reference_own_median": 15310186442,
+          "q_own_median": 15330188527,
+          "q_vs_reference_percent": 0.13064560040319853,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "sendloop",
+          "reference_cohort": "base-ab-c",
+          "q_cohort": "p-q",
+          "reference_own_median": 13828061970,
+          "q_own_median": 13853064217,
+          "q_vs_reference_percent": 0.18080803408490945,
+          "residual_gate": "OVER"
+        }
+      ],
+      "worst": {
+        "program": "alloc",
+        "reference_cohort": "base-ab-c",
+        "q_cohort": "p-q",
+        "reference_own_median": 19953168417,
+        "q_own_median": 20100394811,
+        "q_vs_reference_percent": 0.7378597269522561,
+        "residual_gate": "OVER"
+      }
+    },
+    "e1": {
+      "over_budget": [
+        {
+          "program": "alloc",
+          "reference_cohort": "c-e1-e2",
+          "q_cohort": "p-q",
+          "reference_own_median": 19953168494,
+          "q_own_median": 20100394811,
+          "q_vs_reference_percent": 0.7378593382012063,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "churn",
+          "reference_cohort": "c-e1-e2",
+          "q_cohort": "p-q",
+          "reference_own_median": 377917583,
+          "q_own_median": 378564220,
+          "q_vs_reference_percent": 0.17110529625714715,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "define",
+          "reference_cohort": "c-e1-e2",
+          "q_cohort": "p-q",
+          "reference_own_median": 878373133,
+          "q_own_median": 880538526,
+          "q_vs_reference_percent": 0.2465231367681188,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "dispatch",
+          "reference_cohort": "c-e1-e2",
+          "q_cohort": "p-q",
+          "reference_own_median": 20683753607,
+          "q_own_median": 20708755712,
+          "q_vs_reference_percent": 0.12087798701846139,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "dispatchclass",
+          "reference_cohort": "c-e1-e2",
+          "q_cohort": "p-q",
+          "reference_own_median": 15310186503,
+          "q_own_median": 15330188527,
+          "q_vs_reference_percent": 0.13064520145512692,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "hashnew",
+          "reference_cohort": "c-e1-e2",
+          "q_cohort": "p-q",
+          "reference_own_median": 1575340562,
+          "q_own_median": 1579137128,
+          "q_vs_reference_percent": 0.24099969819732223,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "heapshape",
+          "reference_cohort": "c-e1-e2",
+          "q_cohort": "p-q",
+          "reference_own_median": 2261606453,
+          "q_own_median": 2269679643,
+          "q_vs_reference_percent": 0.3569670571681907,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "parse",
+          "reference_cohort": "c-e1-e2",
+          "q_cohort": "p-q",
+          "reference_own_median": 1545243685,
+          "q_own_median": 1547905485,
+          "q_vs_reference_percent": 0.17225762032478392,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "sendloop",
+          "reference_cohort": "c-e1-e2",
+          "q_cohort": "p-q",
+          "reference_own_median": 13828062110,
+          "q_own_median": 13853064217,
+          "q_vs_reference_percent": 0.1808070198203644,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "pingguard",
+          "reference_cohort": "c-e1-e2",
+          "q_cohort": "p-q",
+          "reference_own_median": 1151577131,
+          "q_own_median": 1152172438,
+          "q_vs_reference_percent": 0.05169493071497961,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "pingmsg",
+          "reference_cohort": "c-e1-e2",
+          "q_cohort": "p-q",
+          "reference_own_median": 1644677261,
+          "q_own_median": 1647348190,
+          "q_vs_reference_percent": 0.1623983661314814,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "pingsem",
+          "reference_cohort": "c-e1-e2",
+          "q_cohort": "p-q",
+          "reference_own_median": 1171606794,
+          "q_own_median": 1177403463,
+          "q_vs_reference_percent": 0.4947623238176613,
+          "residual_gate": "OVER"
+        }
+      ],
+      "ordinary_send": [
+        {
+          "program": "dispatch",
+          "reference_cohort": "c-e1-e2",
+          "q_cohort": "p-q",
+          "reference_own_median": 20683753607,
+          "q_own_median": 20708755712,
+          "q_vs_reference_percent": 0.12087798701846139,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "dispatchclass",
+          "reference_cohort": "c-e1-e2",
+          "q_cohort": "p-q",
+          "reference_own_median": 15310186503,
+          "q_own_median": 15330188527,
+          "q_vs_reference_percent": 0.13064520145512692,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "sendloop",
+          "reference_cohort": "c-e1-e2",
+          "q_cohort": "p-q",
+          "reference_own_median": 13828062110,
+          "q_own_median": 13853064217,
+          "q_vs_reference_percent": 0.1808070198203644,
+          "residual_gate": "OVER"
+        }
+      ],
+      "worst": {
+        "program": "alloc",
+        "reference_cohort": "c-e1-e2",
+        "q_cohort": "p-q",
+        "reference_own_median": 19953168494,
+        "q_own_median": 20100394811,
+        "q_vs_reference_percent": 0.7378593382012063,
+        "residual_gate": "OVER"
+      }
+    },
+    "e2": {
+      "over_budget": [
+        {
+          "program": "parse",
+          "reference_cohort": "e2-f",
+          "q_cohort": "p-q",
+          "reference_own_median": 1545246232,
+          "q_own_median": 1547905485,
+          "q_vs_reference_percent": 0.17209250829611472,
+          "residual_gate": "OVER"
+        }
+      ],
+      "ordinary_send": [
+        {
+          "program": "dispatch",
+          "reference_cohort": "e2-f",
+          "q_cohort": "p-q",
+          "reference_own_median": 20823756231,
+          "q_own_median": 20708755712,
+          "q_vs_reference_percent": -0.5522563639541676,
+          "residual_gate": "PASS"
+        },
+        {
+          "program": "dispatchclass",
+          "reference_cohort": "e2-f",
+          "q_cohort": "p-q",
+          "reference_own_median": 15422189066,
+          "q_own_median": 15330188527,
+          "q_vs_reference_percent": -0.5965465642152309,
+          "residual_gate": "PASS"
+        },
+        {
+          "program": "sendloop",
+          "reference_cohort": "e2-f",
+          "q_cohort": "p-q",
+          "reference_own_median": 13968064690,
+          "q_own_median": 13853064217,
+          "q_vs_reference_percent": -0.823309997141773,
+          "residual_gate": "PASS"
+        }
+      ],
+      "worst": {
+        "program": "parse",
+        "reference_cohort": "e2-f",
+        "q_cohort": "p-q",
+        "reference_own_median": 1545246232,
+        "q_own_median": 1547905485,
+        "q_vs_reference_percent": 0.17209250829611472,
+        "residual_gate": "OVER"
+      }
+    },
+    "f": {
+      "over_budget": [],
+      "ordinary_send": [
+        {
+          "program": "dispatch",
+          "reference_cohort": "e2-f",
+          "q_cohort": "p-q",
+          "reference_own_median": 20823763935,
+          "q_own_median": 20708755712,
+          "q_vs_reference_percent": -0.5522931558338375,
+          "residual_gate": "PASS"
+        },
+        {
+          "program": "dispatchclass",
+          "reference_cohort": "e2-f",
+          "q_cohort": "p-q",
+          "reference_own_median": 15422196694,
+          "q_own_median": 15330188527,
+          "q_vs_reference_percent": -0.5965957303332523,
+          "residual_gate": "PASS"
+        },
+        {
+          "program": "sendloop",
+          "reference_cohort": "e2-f",
+          "q_cohort": "p-q",
+          "reference_own_median": 13968072394,
+          "q_own_median": 13853064217,
+          "q_vs_reference_percent": -0.8233646974037869,
+          "residual_gate": "PASS"
+        }
+      ],
+      "worst": {
+        "program": "churn",
+        "reference_cohort": "e2-f",
+        "q_cohort": "p-q",
+        "reference_own_median": 378427782,
+        "q_own_median": 378564220,
+        "q_vs_reference_percent": 0.0360539068455603,
+        "residual_gate": "PASS"
+      }
+    }
+  }
+}

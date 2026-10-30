@@ -413,5 +413,71 @@
     "tmp_free_bytes": 1631584256,
     "driver_sha256": "27d6603aef56ec4d047a095472baf0fabe8d753a71fa5f26b8312286911ee93e",
     "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/27d6603aef56ec4d047a095472baf0fabe8d753a71fa5f26b8312286911ee93e.py"
+  },
+  {
+    "record": "batch-20-p-q.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "p-q",
+      "batch-20-p-q",
+      "1000",
+      "8"
+    ],
+    "status": 0,
+    "elapsed_seconds": 478.089807596989,
+    "deadline_seconds": 525,
+    "completed_profiles": 148,
+    "group": "p-q",
+    "tmp_free_bytes": 413032448,
+    "driver_sha256": "9f800ff75b7f187b82c7bc40aeae887655850f9e4b85c1b6966f525b113e271b",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/9f800ff75b7f187b82c7bc40aeae887655850f9e4b85c1b6966f525b113e271b.py"
+  },
+  {
+    "record": "batch-21-p-q.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "p-q",
+      "batch-21-p-q",
+      "1000",
+      "8"
+    ],
+    "status": 0,
+    "elapsed_seconds": 334.5148117149947,
+    "deadline_seconds": 525,
+    "completed_profiles": 49,
+    "group": "p-q",
+    "tmp_free_bytes": 125464576,
+    "driver_sha256": "9f800ff75b7f187b82c7bc40aeae887655850f9e4b85c1b6966f525b113e271b",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/9f800ff75b7f187b82c7bc40aeae887655850f9e4b85c1b6966f525b113e271b.py"
+  },
+  {
+    "record": "batch-22-p-q-completion.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "p-q",
+      "batch-22-p-q-completion",
+      "1",
+      "8"
+    ],
+    "status": 0,
+    "elapsed_seconds": 79.07878029695712,
+    "deadline_seconds": 525,
+    "completed_profiles": 1,
+    "group": "p-q",
+    "tmp_free_bytes": 89227264,
+    "driver_sha256": "9f800ff75b7f187b82c7bc40aeae887655850f9e4b85c1b6966f525b113e271b",
+    "driver_snapshot": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/9f800ff75b7f187b82c7bc40aeae887655850f9e4b85c1b6966f525b113e271b.py"
   }
 ]

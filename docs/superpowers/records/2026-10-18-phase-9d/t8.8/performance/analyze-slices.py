@@ -19,7 +19,8 @@ relations = {"base-ab-c": [("8.8a", "base", "ab"), ("8.8c", "ab", "c")],
              "c-e1-e2": [("8.8e1", "c", "e1"), ("8.8e2", "e1", "e2")],
              "e2-f": [("8.8f", "e2", "f")],
              "f-registry": [("8.8h", "f", "h")],
-             "h-a-fperf": [("8.8a-repair", "h", "a"), ("8.8f-repair", "a", "p")]}
+             "h-a-fperf": [("8.8a-repair", "h", "a"), ("8.8f-repair", "a", "p")],
+             "p-q": [("8.8f-repair-r2", "p", "q")]}
 partial = "--partial" in sys.argv
 report = {"groups": {}, "over_budget": [], "provisional_over_budget": [], "output_errors": [], "invalid_profiles": []}
 

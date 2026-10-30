@@ -1,0 +1,167 @@
+{
+  "prepared_utc": "2026-10-30T21:36:42.319121+00:00",
+  "head_observed": "9ace68a51de8bdb1b3435c9cfb3d155104f1daf1",
+  "scope": "Proposed Q metrics handoff files only. Worker staged nothing. Manifest and its checksum sidecar are excluded from their own file list.",
+  "files": [
+    {
+      "path": ".superpowers/sdd/2026-10-18-phase-9d/task-8.8-perf-report.md",
+      "sha256": "f822b9cc8754784a8bd37b91c5151d72614e9e3c260aef59178bccd5dab91c0f",
+      "bytes": 2549
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/README.md",
+      "sha256": "02d2048d54dedd79750de7606e77a063af42f67efbe227eebf5c670df121dfb5",
+      "bytes": 5325
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/analysis.json",
+      "sha256": "93f6a946bbf21c17e99e0ca0489037763bcb00ea503a3402486737872c89bfe4",
+      "bytes": 6022
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/analyze-slices.py",
+      "sha256": "8b2bf008a8ebad9f648c03cce9461f15c9c87c8418976b949a2b81ff8e8f71f9",
+      "bytes": 7603
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/batch-20-p-q.json",
+      "sha256": "70a5eb6e872d780e4e9dcfe599ec4aebfe81a3f31a4a71acc16a53d1ea23402e",
+      "bytes": 547147
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/batch-21-p-q.json",
+      "sha256": "a83f6c5d901edc7645e1be4ab56d66344eb6c27834b448030fcc3362acd0904d",
+      "bytes": 181372
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/batch-22-p-q-completion.json",
+      "sha256": "ebabbe25d0750a462902e4f7d063a02db0529ddcb99b24f2bbdd612acdb4a454",
+      "bytes": 4566
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/batch-commands.json",
+      "sha256": "6ecd772c5e6c3d115c947d3a000c17751df3bceb2b333c9b3309798acedcb309",
+      "bytes": 17359
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/orchestrators/9f800ff75b7f187b82c7bc40aeae887655850f9e4b85c1b6966f525b113e271b.py",
+      "sha256": "9f800ff75b7f187b82c7bc40aeae887655850f9e4b85c1b6966f525b113e271b",
+      "bytes": 16119
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/p-q/8.8f-repair-r2-own-delta.tsv",
+      "sha256": "1b0e7986e1fbcb1e35ce7b382fad8d414b974909fd7c030b361fdc31989636da",
+      "bytes": 3728
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/p-q/README.md",
+      "sha256": "4cde6b3a1e78bae9959d0151c864422a1473a84e3e9d5c82fcd0d45488fc268a",
+      "bytes": 4282
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/p-q/binaries.txt",
+      "sha256": "f67bff6883770a1594bd59cd989841d16ffd9686f3cef7cf7fc95f8d35640918",
+      "bytes": 325
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/p-q/matched-round-deltas.tsv",
+      "sha256": "4ab046f8682384abc073953334ab6e0c0f1a78d41120f869e442c2159bcc3d17",
+      "bytes": 6860
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/p-q/original-table.stderr",
+      "sha256": "83f6b3d3771dc385a2dca4b280698972ab2147bd32e6b97d71058e8b6861d81f",
+      "bytes": 48
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/p-q/original-table.stdout",
+      "sha256": "0c3cfba65b7b7032190aafffa39aa5c9dfe2128644d2f9a9d66bd233b8e3771b",
+      "bytes": 2794
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/p-q/output-agreement.tsv",
+      "sha256": "d3745bd9436779058ed3fb44cfc0d48dc192f5d5dc0f9a746b2a2485906e5173",
+      "bytes": 33997
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/p-q/q-vs-base-residual.tsv",
+      "sha256": "fa73ce58453a2e12442625195763d44e76f30aa2826330d109860994177a5cfc",
+      "bytes": 2428
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/p-q/q-vs-e1-residual.tsv",
+      "sha256": "118a902168be9bf2b1b92070c684d4cf7995fc6c16a278b31d1b33036e96c061",
+      "bytes": 2358
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/p-q/q-vs-e2-residual.tsv",
+      "sha256": "368057625d54184c011acc7585d886fa8f3a121fee03fa1d1f4d883d10d5de17",
+      "bytes": 2285
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/p-q/q-vs-f-residual.tsv",
+      "sha256": "00e40f666daf5690f6c16bc7719c477f10cf41933d714d0ca59876bc78126915",
+      "bytes": 2291
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/p-q/residual-analysis.json",
+      "sha256": "cd93f9ebe7d6f0db18824d463cec41bde2c2e7af6cbf0ef6c402fc331bff2450",
+      "bytes": 14283
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/p-q/space-before-batch-21.json",
+      "sha256": "ec1d6b1003f19383c5bc899c96a7cddb78023ffa2560c17acfbd9e26e1931ba1",
+      "bytes": 161
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/p-q/summary.tsv",
+      "sha256": "42d3798325fc14ca30befb253b28815485f7d24479a3c4ba6d786df84eee4498",
+      "bytes": 11382
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/partial-analysis.json",
+      "sha256": "e90f55de8b7062b6d59888476c14ae0aab1b7b9c0a69db9139e7d3662c5cb230",
+      "bytes": 5652
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/pin-provenance.json",
+      "sha256": "395a3e65639543dfa512b336c68781d7093965dfd559c2110b856eb42a75b64c",
+      "bytes": 20260
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "sha256": "9f800ff75b7f187b82c7bc40aeae887655850f9e4b85c1b6966f525b113e271b",
+      "bytes": 16119
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/q-analysis.json",
+      "sha256": "93f6a946bbf21c17e99e0ca0489037763bcb00ea503a3402486737872c89bfe4",
+      "bytes": 6022
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/q-complete-profile-manifest.tsv",
+      "sha256": "583b32c68111ce37e0141eacec04d48094e86776e6d9ebec7983e503c07ccdbd",
+      "bytes": 185998
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/q-complete-verification.json",
+      "sha256": "1c70b58e14d4c80b4864a5f7b711c3f88646d2bab47d0179d9db83ed27995179",
+      "bytes": 750
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/q-final-checks.json",
+      "sha256": "607fef406b0a91a9c8285ae319759a3bee85189f428d41abca323cb35a8553a7",
+      "bytes": 1437
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/q-inputs.json",
+      "sha256": "ed9ab4ad7b965bdea2fc18d533746710a71150691f196d9fe3b0cca06d16ccbd",
+      "bytes": 1268
+    },
+    {
+      "path": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/q-residual.py",
+      "sha256": "affca3218fb49e666b83c5e9878805d79cdb75ebae857ff671b633b7d44a787b",
+      "bytes": 2914
+    }
+  ]
+}

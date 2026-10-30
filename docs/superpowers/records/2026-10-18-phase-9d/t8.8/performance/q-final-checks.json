@@ -1,0 +1,52 @@
+{
+  "recorded_utc": "2026-10-30T21:36:42.305087+00:00",
+  "checks": [
+    {
+      "command": [
+        "memcap",
+        "8G",
+        "python3",
+        "-B",
+        "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/verify-profiles.py",
+        "q-complete",
+        "base-ab-c",
+        "c-e1-e2",
+        "e2-f",
+        "f-registry",
+        "h-a-fperf",
+        "p-q"
+      ],
+      "status": 0
+    },
+    {
+      "command": [
+        "memcap",
+        "8G",
+        "python3",
+        "-B",
+        "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/analyze-slices.py"
+      ],
+      "status": 0
+    },
+    {
+      "command": [
+        "memcap",
+        "8G",
+        "python3",
+        "-B",
+        "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/q-residual.py"
+      ],
+      "status": 0
+    }
+  ],
+  "verified_profiles": 1485,
+  "all_batches_status_zero": true,
+  "local_report_links_valid": true,
+  "all_four_residual_tables_programs": 33,
+  "profiling_complete": true,
+  "live_owned_sessions": [],
+  "pending_approvals": [],
+  "tmp_free_bytes": 56475648,
+  "budget_disposition": "Pending user decision recorded independently by root. Direct Q/P passes, but cross-source BASE/e1 have 12 OVER and original e2 has parse OVER.",
+  "staged_by_worker": false
+}
