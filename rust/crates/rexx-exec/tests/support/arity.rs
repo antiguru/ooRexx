@@ -374,7 +374,7 @@ fn oracle_command(oracle: &Path, program: &Path, dir: &Path) -> Command {
     command
         .arg("-c")
         .arg(format!(
-            "ulimit -v 1048576; exec {} {}",
+            "ulimit -v 1048576; exec timeout -k 5 20 {} {}",
             oracle.join("bin/rexx").display(),
             program.display()
         ))
