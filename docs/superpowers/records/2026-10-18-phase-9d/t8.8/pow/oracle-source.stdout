@@ -1,0 +1,40 @@
+2
+2
+8
+0.5
+8
+1
+1
+8
+8
+8
+2
+2
+2
+2.306488E+301029995
+%SRCG%COUNT 25
+%SRCG%Lnumeric digits 30
+%SRCG%Lsay 2 ** '1.00000000000000000000'
+%SRCG%Lsay 2 ** '1.0'
+%SRCG%Lsay 2 ** '3.000'
+%SRCG%Lsay 2 ** '-1.00000000000000000000'
+%SRCG%Lcall check '1.00000000000000000001', 2
+%SRCG%Lsay 1 ** '999999999999999999'
+%SRCG%Lsay 1 ** '-999999999999999999'
+%SRCG%Lcall check '1000000000000000000', 1
+%SRCG%Lcall check '-1000000000000000000', 1
+%SRCG%Lcall check '1e18', 1
+%SRCG%Lnumeric digits 9
+%SRCG%Lsay 2 ** '1.00000000000000000000'
+%SRCG%Lsay 2 ** '1.00000000000000000001'
+%SRCG%Lsay 2 ** '-0.9999999999'
+%SRCG%Lsay 2 ** 999999999
+%SRCG%Lexit
+%SRCG%Lcheck:
+%SRCG%L  use arg exponent, base
+%SRCG%L  signal on syntax name invalid
+%SRCG%L  say base ** exponent
+%SRCG%L  return
+%SRCG%Linvalid:
+%SRCG%L  say condition('E')
+%SRCG%L  return

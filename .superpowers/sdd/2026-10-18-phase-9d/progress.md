@@ -299,3 +299,5 @@ Paused per Moritz 2026-10-29: 8.8 not dispatched; waiting for his word.
 
 Moritz resumed Task 8.8 on 2026-10-30. Controller preflight: 54 entries and 5 stale inventory rows, indexed in task-8.8-preflight.md. Execute sequential bounded slices for context cost. Tasks 9 and 10 remain outside scope.
 Task 8.8a: power-integral-exponent-overflow only, BASE 0c2ff21ae, regression bfdb4520f. Controller supplied committed red evidence: rexx-num pow exit 101, 9 passed and 2 failed (fraction-zero coefficient overflow and platform digit ceiling). Ruling: named per-item checks during source slices, full batch suite and all-program performance after source slices. RAISE DESCRIPTION timing ruling remains pending.
+
+Task 8.8a: power item complete at 3148553fe, scoped review approved. Controller final witness stdout/stderr equal to oracle, both exit0; focused checks reported green. Batch verification remains open. Initial sandbox Git/cgroup failures required escalation. Task8.8b harness slice next; Tasks9/10 remain outside this resume.

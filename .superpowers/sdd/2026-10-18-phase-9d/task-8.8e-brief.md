@@ -1,0 +1,68 @@
+# Task 8.8e: Records, fixed rechecks and unclear paths
+
+This brief covers P4/P5/P6 from the [preflight](task-8.8-preflight.md), plus explicit handoffs for the close-only perf row and unfinished harness subitems. Source inspection used `3148553fe70b100f45ee64218c3da0bf0aa32054` without builds, probes, tests, source edits or commits. Existing CLOSED and RULED markers are authoritative, while triage “fixed” means a recheck is still required. Follow the [global constraints](global-constraints.md) and [batch closure rules](task-8-batches.md), keeping raw temporary builds/profiles in `/tmp` and durable summaries under records.
+
+## Record-only and pointer work
+
+| Item | Concrete files / evidence | Minimum acceptance |
+| --- | --- | --- |
+| `2026-09-25-pos-window-doc-pointers.md` | `src/builtin/string.rs::find_forward`, string/tests.rs pointers; `rexx-parse/src/block/references.rs:visit_opt/visit_list`; original text at ac15d1042^ | Restore a concise accurate POS-window explanation from history so both existing test/comment pointers are true. Replace the nonexistent for_each_variable_in_expr name with current visit_expr where it is the intended reference. Comment-only diff, no oracle-crashes.txt edit and no unrelated comment deletion. |
+| `2026-09-25-table-c-derivation-literals.md` | `tests/table_c/{probes,checks}.rs`; generated gate-tables classes/hierarchy/methods; gate-tables/README.md:28/95 | Correct source literals to the actual derivation modules, then regenerate through the existing table-C driver. Verify generated program bodies change only in the intended text and normal derivation checks agree. Fix the README relative prefix consistently; do not hand-edit generated probes to manufacture agreement. |
+| `2026-10-13-phase-9b-carry-in.md`, m1 | `src/environment.rs::package_local_entry` miss memo and debug_assert; Phase 9a final-rereview | Recheck whether an existing witness repeats a miss and invalidates it after mutation. If absent, add the narrow repeated-miss/write witness and run debug coverage, since release cannot prove a debug_assert executes. Do not claim the assertion is observed merely from release behavior. |
+| Same carry-in, m3 | `docs/superpowers/records/2026-10-11-phase-9a/deviation-probes/README.md` and objname-table.rex/objname4.rex | Current README already distinguishes the internal routine fourth line and directs the ::ROUTINE row to objname4. Verify that source mapping and current record provenance, then record agreement instead of rewriting correct prose. |
+| Same carry-in, m4 | Existing metaclass refusal test and final-rereview metatwice.rex shape, “a subclass already took” | Find current pin and show it covers the reused-new-class shape, separately from “did not build a new class.” Add only the missing refusal witness if absent, preserving the existing Deviation 32 ruling. |
+| `gate:phase-9a-gate.md:456` | `dispatch/library/tests.rs:177` says collect_stress reads phase-8.txt last and aborts first | Update the complete stale explanation to current facts without removing its useful rooting limitation. Confirm actual list/abort behavior before making a replacement claim; no runtime fix is implied. |
+
+Paths in the first table are relative to `rust/crates/rexx-exec/` unless their crate or repository prefix is explicit. The carry-in also names m2, samples and SysSleep, but those are not authorization to reopen completed earlier tasks or duplicate the fixed licence row below. N1 native-frame memcpy remains Phase 9.1, and the whole-process budget decision is recorded for its close owner. Keep a per-subpart disposition so a documentation check cannot close an unwitnessed debug assertion or missing metaclass pin.
+
+## Reconcile existing CLOSED markers
+
+| Queued filename | Current inventory | Authorized reconciliation |
+| --- | --- | --- |
+| `2026-10-02-trace-entry-after-expose.md` | proposed=ruled=9d despite Task 6.10 CLOSED first line | Both columns become closed:fcb358fd7. |
+| `2026-10-02-traced-init-routed-sink-silent-exit.md` | Same | Both columns become closed:fcb358fd7. |
+| `2026-10-02-triggered-exit-trace-line-unrouted.md` | Same | Both columns become closed:fcb358fd7. |
+| `2026-10-18-max-integer-unrounded.md` | proposed=ruled=9d despite CLOSED line citing 009fd1978 | Both columns become closed:009fd1978. |
+| `2026-10-18-fuzz-comparison-lostdigits.md` | Same | Both columns become closed:009fd1978. |
+
+The controller confirmed that fcb358fd7 exists as the Task 6.10 closure-record commit. Record that provenance explicitly, because the first three historical CLOSED lines omit a SHA and this value is not being asserted as their source implementation commit. Leave reason columns and existing CLOSED markers intact. Re-run the inventory/file-state comparison after editing to prove no CLOSED-file/open-9d discrepancy remains, without changing unrelated deferred dispositions.
+
+## Fixed rechecks
+
+Probe names p03/p04/p14/p21/p24/p26 below are triage aliases, not claims that durable files with those basenames exist. Locate their recorded source or reconstruct the minimal documented shape if a durable alias cannot be found, and retain the new source/output under t8.8e. Existing queued-probes paths are under `docs/superpowers/records/2026-10-18-phase-9d/`. Each differential compares stdout, stderr and status independently, and closes as closed:probe agrees only after the new recheck agrees.
+
+| Item / gate | Existing subject and source | Minimum acceptance and retained scope |
+| --- | --- | --- |
+| `2026-10-05-stdin-chars-after-drain.md` | queued-probes/stdindrain/stdindrain.rex and stdin.txt; triage also exercised one-line/multi-line drains, linein loop and arrayIn | Recheck chars/lines and .stdin chars/lines after EOF for the documented piped shapes. Preserve input bytes and distinguish EOF from temporarily empty live pipe. Existing OPEN wording contradicts fixed triage and is not proof of a current difference. |
+| `2026-10-05-stream-fifo-terminal-seek.md` | queued-probes/fifo/fifo.rex; triage fifow write shape; original Phase 6 task-21-rereview-3 F-2 | Recheck FIFO read and write, writer descriptors redirected so EOF is attributable to the subject. Preserve the documented EINTR/error behavior and show no seek error. Terminal behavior was never probed, so add a bounded PTY check through available safe APIs or retain that subpart for controller scope judgement rather than close the title broadly. |
+| `2026-10-10-trace-c-command-echo.md` | queued-probes/cc2/cc2.rex | Recheck the explicit ADDRESS COMMAND false clause echo, RC trace and normal result, with raw stderr where the queue demands the line. |
+| `2026-10-13-named-semaphores-design.md` | triage p03; current named semaphore refusal and Deviation 43 | Verify loud Deviation 43 refusal at the named create/open surface. No sem_open implementation, new unsafe or /dev/shm lifecycle work is authorized. |
+| `2026-10-13-sysfork-design.md` | triage p04; builtin/rexxutil/process.rs::fork; Deviation 42 | Verify loud Deviation 42 refusal with its status and text, preserving unsupported ruling. No fork implementation is authorized. |
+| `2026-10-13-yaml-pass-boundary-guard.md` and `gate:phase-9a-gate.md:488` | Phase 9a I4/p21 repro; Task 4 records; yaml TEST35_DIRECTIVES and TEST47_MULTILINEFLOWCOLLECTIONS | Recheck the reduced pass-boundary case and the named yaml tests through the existing harness. Use both the oracle-installed yaml.cls and repository extensions/yaml/yaml.cls copies as required by global review focus. One small repro agreeing cannot certify the whole yaml group. |
+| `2026-10-15-executable-flags-and-result.md` | triage p14 define shapes; Task 8b original report | Recheck isGuarded/isPrivate/isProtected for the named define forms. Treat RESULT reachability between programs as existing licensed GC timing, with explicit disposition rather than a new forced-collection semantic assertion. |
+| `2026-10-18-class-methods-no-argument.md` | refusals-probes/seeds/methods_count.rex; triage q07/methods_count; Class methods enumeration | Compare actual inherited method name multisets for no argument and .nil, beyond the agreeing counts 107/36. Preserve duplicate/name semantics rather than deduplicate arbitrarily. Respect the leading RULED 9d marker. |
+| `gate:phase-9a-gate.md:474` | triage p24, instanceMethods shadowed entries | Recheck nil and subclass shadowing shapes against actual entry multisets, not only count 32 or 66/57. Do not turn repeated entries into a bug when both sides deliberately agree. |
+| `gate:phase-9a-gate.md:476` | triage p26 REXX package copy; library routine executable subpart | Recheck reachable copy/name/executable behavior. Native library-routine executable needs RxFuncAdd/Rxapi and remains Phase 10 under the existing ruling; hand it off explicitly without inventing a Rexx-only equivalent. |
+| `gate:phase-9a-gate.md:483` | suite-licences.txt SysSleep TEST_SLEEP_DURATION; concurrency_tests.rs WALL_CLOCK includes it and documents existing P48 once-retry handling | Confirm both actual suite licence and S2 handling. Distinguish the existing P48 special timing policy from the newly chosen no-auto-retry oracle deadline policy. Do not extend either policy to other tests by analogy. |
+| `gate:phase-9b1-gate.md:121` | Duplicate SysFork/named semaphore row | Reuse the two refusal witnesses above and close the gate duplicate with its own ledger row. |
+| `gate:phase-9a-gate.md:461` | Old note about a refusal row referring to a test refused at load; triage says no such row existed | Query current source rows and refusal/licence tables for the exact shape. If still absent, record the derivation command and no-applicable-row disposition. If present, exercise its captured-load classification before changing the judge; do not create a fabricated production row just to close a note. |
+
+## Unclear paths
+
+| Item | Current source evidence | First bounded diagnostic / acceptance |
+| --- | --- | --- |
+| `2026-10-10-failed-spawn-runs-inline.md` | scheduler/pool.rs::Pool::reserve uses Builder::spawn(...).ok()?; scheduler.rs::exit_for_block returns Err(block) when reserve fails, and exit_for_call also has fallback. Pool already has a cfg(test) fixed bound that can return None with every worker busy. | Reuse the fixed-pool test seam to force reservation failure while an operation needs another activity, under the normal cap and a foreground timeout. Separately establish actual OS spawn failure maps to the same branch, since a disabled/full pool is not automatically identical policy. If inline execution can deadlock, derive the language/system-resource error before changing fallback; no 3GB resident-memory cap exception or unbounded thread-stress run is authorized. |
+| `gate:phase-9a-gate.md:481` | dispatch/introspection.rs::method_object_for returns executable_objects for recognized nil-scoped entries, otherwise ClassSide calls method_object with scope as owner; lib.rs::class_owns panics for nonclass owner. | Trace real ClassSide entry creation/installation and whether a nonclass/nil scope can reach the fallback without an executable_objects mapping. A direct internal call with an impossible fabricated Selection is not a language witness. Produce a valid source/native API construction or a closed-world invariant proof for controller judgement; do not preemptively weaken class_owns or add a guard that hides malformed state. |
+
+The pool inspection is a feasible bounded starting point, not proof that fallback currently hangs. The old queue cites a virtual address-space limit and large stack reservation, while the global interpreter cap limits resident memory through cgroups. Keep those quantities distinct in the diagnostic record. If the forced-branch test cannot faithfully cover a real spawn failure without broad injection changes, stop at a concrete unresolved scope decision.
+
+## Explicit remaining handoffs
+
+* Worktree prerequisite `2026-09-16-worktree-build-precondition.md` remains outside the initial P1 slice. It still requires broad fresh-checkout enumeration by running and one actionable prerequisite plus a rust/CLAUDE.md policy line; do not close it from grep evidence or Cargo binary selection alone.
+* Gate 459 remains partially open after its P1 empty-selector fix. Recheck minor (5) whole-second deadline truncation, (7) duplicated CapKind limit labels, (9) svn dependency during plain cargo test, and record minor (10) Ended doc's already-fine disposition. Make separate minimal corrections only where current code still violates the contract.
+* Gate 466 condition-object cost, routines-write scan, eager annotations and cumulative perf belong to the Phase 9 close owner. Record that handoff, without running the close or claiming its performance work complete.
+* Carry-in N1 remains Phase 9.1. Existing Deviation 42/43, GC timing and Phase 10 Rxapi dispositions remain intact; no new Deviation is written without the user's ruling.
+
+## Stop and proof
+
+Start with the record/pointer edits and inventory reconciliation, then group fixed probes by shared subject, finishing unclear diagnostics last. Run only checks justified by the actual changed paths plus mandatory task gates, and retain the commands/statuses in `docs/superpowers/records/2026-10-18-phase-9d/t8.8e/`. A fixed recheck should not acquire implementation edits unless it proves a real current failure, at which point the controller assigns its narrow responsible layer and performance obligations. Finish with every listed row either closed on its stated evidence or explicitly retained with a bounded next diagnostic and owner, while Phase 9d Tasks 9/10 remain out of scope.

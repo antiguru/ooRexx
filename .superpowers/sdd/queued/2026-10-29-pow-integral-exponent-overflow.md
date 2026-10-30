@@ -1,4 +1,5 @@
-**OPEN, queued 2026-10-29 by the controller from an external (codex) review of 9af69058d; Moritz 2026-10-29 "lgtm" to the placement: proposed 9d (Task 8.8).**
+**CLOSED 2026-10-30 by Phase 9d Task 8.8 (3148553fe).**
+
 
 # A whole-number power exponent with trailing fraction zeros overflows
 
