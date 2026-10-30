@@ -685,41 +685,52 @@ fn probe_in(
     if generation != interp.store_generation {
         store = store_in(interp, receiver, half)?;
     }
-    let bucket = (hash % store.buckets as u64) as usize;
-    if slot_at(interp, store.indexes, bucket)?.is_none() {
-        return Ok((
-            store,
-            Probe {
-                bucket,
-                found: None,
-                last: None,
-            },
-        ));
-    }
-    let mut slot = bucket;
-    let mut last = bucket;
-    loop {
-        if same_index(interp, &store, keys, slot, index)? {
-            return Ok((
-                store,
-                Probe {
-                    bucket,
-                    found: Some(slot),
-                    last: Some(last),
-                },
-            ));
-        }
-        last = slot;
-        slot = link_at(interp, &store, slot)?;
-        if slot >= store.total {
+    'search: loop {
+        let bucket = (hash % store.buckets as u64) as usize;
+        if slot_at(interp, store.indexes, bucket)?.is_none() {
             return Ok((
                 store,
                 Probe {
                     bucket,
                     found: None,
-                    last: Some(last),
+                    last: None,
                 },
             ));
+        }
+        let mut slot = bucket;
+        let mut last = bucket;
+        loop {
+            let generation = interp.store_generation;
+            let matches = same_index(interp, &store, keys, slot, index)?;
+            if generation != interp.store_generation {
+                let current = store_in(interp, receiver, half)?;
+                if current != store {
+                    store = current;
+                    continue 'search;
+                }
+            }
+            if matches {
+                return Ok((
+                    store,
+                    Probe {
+                        bucket,
+                        found: Some(slot),
+                        last: Some(last),
+                    },
+                ));
+            }
+            last = slot;
+            slot = link_at(interp, &store, slot)?;
+            if slot >= store.total {
+                return Ok((
+                    store,
+                    Probe {
+                        bucket,
+                        found: None,
+                        last: Some(last),
+                    },
+                ));
+            }
         }
     }
 }

@@ -50,6 +50,9 @@ pub(super) fn take_at(
     slot: usize,
     previous: Option<usize>,
 ) -> Result<Option<ObjRef>, Failure> {
+    if store_of(interp, receiver)? != *store {
+        return Ok(None);
+    }
     interp.bump_route_generation();
     remove_at(interp, receiver, CONTENTS, store, slot, previous)
 }

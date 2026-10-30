@@ -26,6 +26,17 @@ fn conversion_and_trace_boundaries() {
             continue;
         }
         let source = std::fs::read(&path).unwrap();
+        if path.file_stem().unwrap() == "raise-untraced" {
+            assert_eq!(
+                source,
+                std::fs::read("../../corpus/lang/raise_untraced_renders_nothing.rex").unwrap()
+            );
+        }
+        let stressed = rexx_exec::run_program_collect_every_alloc(
+            "probe.rex",
+            source.clone(),
+            Invocation::none().with_deadline(std::time::Duration::from_secs(10)),
+        );
         let result = watchdog::run_bounded("probe.rex", source, Invocation::none());
         let status = std::fs::read_to_string(path.with_extension("status"))
             .map(|status| status.trim().parse::<i32>().unwrap())
@@ -58,6 +69,10 @@ fn conversion_and_trace_boundaries() {
                 result.stderr
             );
         }
+        assert_eq!(stressed.exit_code, result.exit_code, "{}", path.display());
+        assert_eq!(stressed.stdout, result.stdout, "{}", path.display());
+        assert_eq!(stressed.stderr, result.stderr, "{}", path.display());
+        assert!(stressed.collections > 0, "{}", path.display());
         cases += 1;
     }
     assert!(cases > 0);
