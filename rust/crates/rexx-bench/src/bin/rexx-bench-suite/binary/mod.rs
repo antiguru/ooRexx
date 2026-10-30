@@ -11,15 +11,32 @@ pub(super) fn rust_binary_candidates() -> [PathBuf; 2] {
 }
 
 fn rust_binary_candidates_for(
-    _target_dir: Option<&std::ffi::OsStr>,
-    _cwd: &Path,
-    _exe: &Path,
-    _manifest: &Path,
+    target_dir: Option<&std::ffi::OsStr>,
+    cwd: &Path,
+    exe: &Path,
+    manifest: &Path,
 ) -> [PathBuf; 2] {
-    let target = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target");
+    let target = if let Some(target) = target_dir {
+        cwd.join(target)
+    } else {
+        let parent = exe.parent();
+        let profile = parent.and_then(|path| {
+            if path.file_name().is_some_and(|name| name == "deps") {
+                path.parent()
+            } else {
+                Some(path)
+            }
+        });
+        profile
+            .filter(|path| {
+                path.file_name()
+                    .is_some_and(|name| name == "release" || name == "debug")
+            })
+            .and_then(Path::parent)
+            .map_or_else(|| manifest.join("../../target"), Path::to_path_buf)
+    };
     [target.join("release/rexx"), target.join("debug/rexx")]
 }
-
 
 #[cfg(test)]
 mod tests;

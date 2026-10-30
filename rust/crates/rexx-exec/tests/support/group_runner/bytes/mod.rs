@@ -2,9 +2,10 @@ use std::collections::BTreeSet;
 
 /// Whether `haystack` holds `needle`.
 pub(super) fn contains(haystack: &[u8], needle: &[u8]) -> bool {
-    haystack
-        .windows(needle.len())
-        .any(|window| window == needle)
+    needle.is_empty()
+        || haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
 }
 
 /// The group file `text` with each test of `group` that `left_out` names
@@ -40,21 +41,27 @@ pub fn renamed<S: AsRef<str> + Ord>(
                     }
                 })
                 .collect();
-            let member = format!(
-                "{group}.{}",
-                String::from_utf8_lossy(&name).to_ascii_uppercase()
-            );
-            if !left_out.iter().any(|name| name.as_ref() == member) {
+            let member: Vec<u8> = group
+                .as_bytes()
+                .iter()
+                .copied()
+                .chain(std::iter::once(b'.'))
+                .chain(name.iter().map(u8::to_ascii_uppercase))
+                .collect();
+            let Some(member) = left_out
+                .iter()
+                .map(|candidate| candidate.as_ref())
+                .find(|candidate| candidate.as_bytes() == member)
+            else {
                 return line.to_vec();
-            }
-            skipped.insert(member);
+            };
+            skipped.insert(member.to_string());
             let at = line.len() - rest.len() + name_start;
             [&line[..at], b"SKIPPED_".as_slice(), &line[at..]].concat()
         })
         .collect();
     (lines.join(&b'\n'), skipped)
 }
-
 
 #[cfg(test)]
 mod tests;

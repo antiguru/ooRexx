@@ -2,19 +2,26 @@ use super::*;
 
 /// Spawns `command`, writes `bytes` to its standard input, closes it, and waits.
 pub fn write_and_wait(command: &mut Command, bytes: &[u8], path: &Path) -> std::process::Output {
-    use std::io::Write;
     let mut child = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .unwrap_or_else(|e| panic!("failed to spawn for {}: {e}", path.display()));
-    {
-        let mut sink = child.stdin.take().expect("stdin was requested as a pipe");
-        let _ = sink.write_all(bytes);
-    }
+    write_stdin(&mut child, bytes);
     child
         .wait_with_output()
         .unwrap_or_else(|e| panic!("failed to wait for {}: {e}", path.display()))
+}
+
+pub(super) fn write_stdin(child: &mut Child, bytes: &[u8]) {
+    use std::io::Write as _;
+    let mut sink = child.stdin.take().expect("stdin was requested as a pipe");
+    let bytes = bytes.to_vec();
+    // A descendant may retain stdin after the direct child exits, so the
+    // writer must not be joined by the bounded wait.
+    thread::spawn(move || {
+        let _ = sink.write_all(&bytes);
+    });
 }
 
 /// Waits for `child` under `deadline`, reading both output pipes
@@ -120,4 +127,3 @@ pub(super) fn wait_with_deadline(
         classify_termination(code, deadline_exceeded),
     )
 }
-

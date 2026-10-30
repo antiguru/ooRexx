@@ -18,13 +18,28 @@ fn sleeper_checks_only_its_fixture_directory() {
     let unrelated = root.join("unrelated");
     fs::create_dir_all(&owned).expect("owned cwd");
     fs::create_dir_all(&unrelated).expect("unrelated cwd");
-    let sleeper = |cwd: &Path| Sleeper(Command::new("sleep").arg("41.5")
-        .current_dir(cwd).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
-        .spawn().expect("sleep starts"));
+    let sleeper = |cwd: &Path| {
+        Sleeper(
+            Command::new("sleep")
+                .arg("41.5")
+                .current_dir(cwd)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("sleep starts"),
+        )
+    };
     let unrelated_child = sleeper(&unrelated);
-    assert!(!grandchild_sleeps(&owned), "another fixture's sleeper is unrelated");
+    assert!(
+        !grandchild_sleeps(&owned),
+        "another fixture's sleeper is unrelated"
+    );
     let owned_child = sleeper(&owned);
-    assert!(grandchild_sleeps(&owned), "the live owned sleeper must be detected");
+    assert!(
+        grandchild_sleeps(&owned),
+        "the live owned sleeper must be detected"
+    );
     drop(owned_child);
     assert!(!grandchild_sleeps(&owned), "the owned sleeper was reaped");
     drop(unrelated_child);

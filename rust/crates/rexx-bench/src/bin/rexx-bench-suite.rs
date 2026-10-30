@@ -248,8 +248,7 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     }
-    // Manifest-relative until here, so it does not depend on the caller's
-    // cwd; normalised now so the report names a path a reader can paste
+    // Normalised now so the report names a path a reader can paste
     // rather than one with `../..` in the middle of it.
     let rust_binary = rust_binary.canonicalize().unwrap_or(rust_binary);
 
@@ -638,15 +637,19 @@ mod tests {
     /// every axis declared `Role::SelfTimed` really does run.
     #[test]
     fn every_declared_runnability_still_holds() {
-        let binary = rust_binary_candidates()
-            .into_iter()
+        let candidates = rust_binary_candidates();
+        let binary = candidates
+            .iter()
+            .cloned()
             .find(|path| path.is_file())
             .unwrap_or_else(|| {
                 panic!(
-                    "neither target/release/rexx nor target/debug/rexx exists. This \
+                    "neither {} nor {} exists. This \
                      test runs the blocked axes through this crate, and skipping instead \
                      would let the roles below go unchecked while the run stayed green. \
-                     `cargo build -p rexx-exec --bin rexx` first."
+                     `cargo build -p rexx-exec --bin rexx` in this CARGO_TARGET_DIR first.",
+                    candidates[0].display(),
+                    candidates[1].display()
                 )
             });
         let side = Side {

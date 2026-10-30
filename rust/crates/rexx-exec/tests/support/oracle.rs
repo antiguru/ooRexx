@@ -33,9 +33,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 mod process;
-use process::wait_with_deadline;
 #[allow(unused_imports)]
 pub use process::write_and_wait;
+use process::{wait_with_deadline, write_stdin};
 
 use rexx_exec::Outcome;
 
@@ -217,9 +217,7 @@ impl Oracle {
             // A write failure is ignored deliberately -- see
             // `write_and_wait`'s doc for why an `EPIPE` here is a legitimate
             // outcome to compare rather than a harness error.
-            use std::io::Write;
-            let mut sink = child.stdin.take().expect("stdin was requested as a pipe");
-            let _ = sink.write_all(bytes);
+            write_stdin(&mut child, bytes);
         }
         let (stdout, stderr, termination) = wait_with_deadline(child, path, deadline);
         CppOutcome {
@@ -311,9 +309,7 @@ impl Oracle {
             .spawn()
             .unwrap_or_else(|e| panic!("failed to spawn the oracle for {}: {e}", path.display()));
         if let Some(bytes) = stdin {
-            use std::io::Write as _;
-            let mut pipe = child.stdin.take().expect("stdin was piped");
-            let _ = pipe.write_all(bytes);
+            write_stdin(&mut child, bytes);
         }
         let (stdout, stderr, termination) = wait_with_deadline(child, path, ORACLE_DEADLINE);
         CppOutcome {

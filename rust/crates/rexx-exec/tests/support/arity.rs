@@ -26,10 +26,10 @@ use std::process::Command;
 use super::oracle;
 
 fn interpreter_binary() -> PathBuf {
-    let binary = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/release/rexx");
+    let binary = PathBuf::from(env!("CARGO_BIN_EXE_rexx"));
     assert!(
         binary.is_file(),
-        "this test compares the release binary; build it first ({})",
+        "arity interpreter is missing at {}; run cargo build -p rexx-exec --bin rexx in this target directory",
         binary.display()
     );
     binary
@@ -822,12 +822,20 @@ mod tests {
 mod binary_selection_tests {
     #[test]
     fn arity_runs_the_cargo_owned_binary() {
-        let selected = super::interpreter_binary().canonicalize().expect("selected interpreter");
+        let selected = super::interpreter_binary()
+            .canonicalize()
+            .expect("selected interpreter");
         let cargo_binary = std::path::Path::new(env!("CARGO_BIN_EXE_rexx"))
-            .canonicalize().expect("Cargo interpreter");
+            .canonicalize()
+            .expect("Cargo interpreter");
         assert_eq!(selected, cargo_binary);
-        let target_profile = std::env::current_exe().expect("test executable")
-            .parent().expect("deps").parent().expect("profile").to_path_buf();
+        let target_profile = std::env::current_exe()
+            .expect("test executable")
+            .parent()
+            .expect("deps")
+            .parent()
+            .expect("profile")
+            .to_path_buf();
         assert_eq!(selected.parent(), Some(target_profile.as_path()));
     }
 }

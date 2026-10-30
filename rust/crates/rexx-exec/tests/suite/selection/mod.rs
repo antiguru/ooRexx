@@ -2,7 +2,10 @@ use super::{BTreeSet, GROUPS_ENV, group_path};
 
 /// The groups [`GROUPS_ENV`] names, each of which must be discovered, else
 /// every group.
-pub(super) fn selected(groups: Vec<(String, String)>, selector: Option<&str>) -> Vec<(String, String)> {
+pub(super) fn selected(
+    groups: Vec<(String, String)>,
+    selector: Option<&str>,
+) -> Vec<(String, String)> {
     let Some(names) = selector else {
         return groups;
     };
@@ -11,6 +14,10 @@ pub(super) fn selected(groups: Vec<(String, String)>, selector: Option<&str>) ->
         .map(str::trim)
         .filter(|name| !name.is_empty())
         .collect();
+    assert!(
+        !names.is_empty(),
+        "{GROUPS_ENV} must name at least one group"
+    );
     let chosen: Vec<(String, String)> = groups
         .into_iter()
         .filter(|(dir, group)| names.contains(group_path(dir, group).as_str()))
@@ -29,7 +36,6 @@ pub(super) fn selected(groups: Vec<(String, String)>, selector: Option<&str>) ->
     );
     chosen
 }
-
 
 #[cfg(test)]
 mod tests;

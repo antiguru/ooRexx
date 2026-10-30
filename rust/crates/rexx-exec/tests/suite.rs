@@ -22,12 +22,12 @@
 //! timeout or the memory cap ends has its last started test renamed out, and
 //! runs again.
 
-#[path = "suite/selection/mod.rs"]
-mod selection;
-#[path = "suite/process_ownership/mod.rs"]
-mod process_ownership;
 #[path = "support/group_runner.rs"]
 mod group_runner;
+#[path = "suite/process_ownership/mod.rs"]
+mod process_ownership;
+#[path = "suite/selection/mod.rs"]
+mod selection;
 #[path = "support/suite_rows.rs"]
 mod suite_rows;
 mod support;
@@ -1966,7 +1966,10 @@ mod fixtures {
         );
         assert_eq!(tests, ["TEST_A"]);
         assert_eq!(end_reason(&process, Duration::from_secs(60)), None);
-        assert!(!super::process_ownership::grandchild_sleeps(&run), "the command outlived the run");
+        assert!(
+            !super::process_ownership::grandchild_sleeps(&run),
+            "the command outlived the run"
+        );
         fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
     }
 
