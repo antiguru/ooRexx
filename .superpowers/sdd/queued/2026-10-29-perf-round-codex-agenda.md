@@ -8,7 +8,7 @@
 * Worker pool overflow is unbounded, 512 MiB stack reservation each (`scheduler/pool.rs:149`): admission rules that keep progress.
 * Measure against a version-matched -O3 oracle: wall time, instructions, allocation volume, GC pauses, one workload matrix.
 
-## Cheaper state under exclusive ownership (pasted by Moritz 2026-10-30)
+## Cheaper state under exclusive ownership (external review by Codex, pasted by Moritz 2026-10-30)
 
 Keep the single-owner interpreter and green threads; construct, copy and inspect less state while ownership is exclusive. Priority as given: a compact ordinary-call representation, then guarded scalar fast paths, then targeted inheritance sharing. Polling frequency left alone.
 
