@@ -1,0 +1,74 @@
+
+running 69 tests
+test compiled::tests::a_restored_source_is_not_traceable ... ok
+test ir::compile::tests::a_trace_op_at_the_head_of_a_clause_region_is_accepted ... ok
+test ir::golden_tests::a_traced_call_carries_its_clause_echo_in_front_of_the_call ... ok
+test ir::compile::tests::a_trace_op_after_the_regions_first_op_is_refused - should panic ... ok
+test ir::golden_tests::a_traced_exit_carries_its_clause_echo_op ... ok
+test ir::compile::tests::a_trace_op_outside_a_clause_region_is_refused - should panic ... ok
+test ir::compile::tests::a_trace_op_naming_a_neighbouring_instruction_is_refused - should panic ... ok
+test ir::golden_tests::a_traced_counted_loop_echoes_its_do_clause_from_the_stream ... ok
+test ir::golden_tests::a_traced_select_echoes_its_header_and_each_listed_when ... ok
+test ir::golden_tests::a_traced_if_carries_its_clause_echo_as_an_op_of_the_region ... ok
+test ir::trace_flow::tests::a_body_that_never_retraces_is_known_at_every_clause ... ok
+test ir::trace_flow::tests::a_debug_entry_setting_refuses_the_body ... ok
+test ir::trace_flow::tests::a_trace_after_an_unknown_setting_settles_nothing ... ok
+test ir::trace_flow::tests::a_label_answers_the_meet_over_the_whole_body ... ok
+test ir::trace_flow::tests::a_leave_carries_the_setting_from_before_the_trace_after_it ... ok
+test ir::golden_tests::one_body_under_two_trace_settings_is_two_cached_chunks ... ok
+test ir::trace_flow::tests::interpret_leaves_what_follows_it_unknown ... ok
+test ir::trace_flow::tests::the_trace_builtin_leaves_what_follows_it_unknown ... ok
+test ir::trace_flow::tests::trace_off_from_intermediates_settles_what_follows_it ... ok
+test ir::trace_flow::tests::a_trace_i_inside_a_loop_settles_the_body_and_not_its_ends ... ok
+test ir::trace_flow::tests::trace_off_from_normal_leaves_the_whole_body_known ... ok
+test ir::trace_flow::tests::a_trace_inside_a_branch_refuses_the_body ... ok
+test ir::trace_flow::tests::trace_value_leaves_what_follows_it_unknown ... ok
+test parse_template::tests::absolute_and_relative_share_the_backward_rule ... ok
+test parse_template::tests::minus_and_minus_length_differ_on_the_same_movement ... ok
+test parse_template::tests::a_relative_trigger_after_a_pattern_measures_from_the_match_start ... ok
+test parse_template::tests::string_patterns_match_at_end_when_absent ... ok
+test ir::trace_flow::tests::a_trace_off_inside_a_loop_settles_the_whole_body ... ok
+test parse_template::tests::the_version_fields_reassemble_into_the_constant ... ok
+test parse_template::tests::word_carving_keeps_leading_blanks_only_on_the_last_target ... ok
+test parse_template::tests::length_triggers_are_exact_slices ... ok
+test plan::tests::a_body_that_can_reach_the_trace_setting_is_the_one_that_says_so ... ok
+test trace::tests::a_digit_string_is_a_whole_number_and_a_letter_is_not ... ok
+test sim::tests::a_trace_path_is_refused_where_it_cannot_be_the_file_meant ... ok
+test trace::tests::every_formatter_matches_its_own_oracle_transcript ... ok
+test trace::tests::every_recognised_letter_classifies_and_unrecognised_ones_report_the_byte ... ok
+test trace::tests::off_refuses_the_debug_flag_from_either_side ... ok
+test parse_template::tests::caseless_folds_ascii_letters_only ... ok
+test run::tests::routines::nothing_is_rendered_for_a_trace_line_that_will_not_print ... ok
+test trace::tests::every_completed_trace_line_is_made_displayable ... ok
+test run::tests::loops::a_compound_control_variable_traces_its_own_c_line ... ok
+test run::tests::signal::signal_value_traces_its_own_keyword_line_and_then_searches_like_label ... ok
+test run::tests::branch::a_label_is_a_traced_no_op ... ok
+test run::tests::result::a_callees_trace_setting_does_not_survive_its_return ... ok
+test trace::tests::the_three_gates_fire_under_exactly_the_modes_that_should_show_them ... ok
+test run::tests::loops::a_comma_list_conditions_own_elements_each_trace_their_result_under_trace_r ... ok
+test run::tests::loops::a_bare_repeat_count_traces_as_for_the_same_as_an_explicit_one ... ok
+test run::tests::iterate_leave::interpret_traces_the_text_it_is_about_to_run ... ok
+test trace::tests::the_two_argument_prefixes_are_intermediates_and_the_alias_prefix_is_results ... ok
+test parse_template::tests::source_and_version_carry_their_own_strings ... ok
+test ir::drive::tests::a_body_entered_under_trace_r_echoes_its_promoted_clause_from_the_chunk ... ok
+test run::tests::result::a_returned_value_traces_in_the_callee_and_again_in_the_caller ... ok
+test tests::a_command_traced_for_its_error_prints_the_debug_banner ... ok
+test ir::drive::tests::no_trace_op_echoes_without_the_setting ... ok
+test sim::tests::a_damaged_trace_is_refused_before_the_run ... ok
+test sim::tests::a_trace_that_cannot_be_written_is_refused ... ok
+test tests::a_stems_string_sends_string_to_its_default_and_a_trace_line_names_it ... ok
+test parse_template::tests::a_template_walk_survives_a_collection_between_its_targets ... ok
+test parse_template::tests::a_late_parse_arg_template_survives_collection ... ok
+test run::tests::numeric::numeric_digits_fuzz_and_form_value_trace_k_only_with_an_expression ... ok
+test tests::a_failing_pause_line_leaves_no_traceback_level ... ok
+test condition::tests::a_traced_loop_condition_keeps_its_fresh_concatenation ... ok
+test run::tests::message::a_method_activations_trace_indents_are_the_oracles_own_and_normalisation_cannot_see_them ... ok
+test sim::tests::a_recorded_trace_replays_to_the_same_output_and_hash ... ok
+test parse_template::tests::a_positional_operand_must_be_a_whole_number_within_the_active_digits ... ok
+test builtin::state::tests::trace_reports_the_setting_it_was_given_and_not_only_its_behaviour ... ok
+test run::tests::routines::the_invocation_prefixes_are_gated_on_more_than_the_trace_letter ... ok
+test parse_template::tests::every_trigger_kind_and_source_reaches_its_own_operation ... ok
+test tests::a_constant_expressions_method_traces_its_entry_before_the_guard_wait ... ok
+
+test result: ok. 69 passed; 0 failed; 0 ignored; 0 measured; 1170 filtered out; finished in 0.72s
+

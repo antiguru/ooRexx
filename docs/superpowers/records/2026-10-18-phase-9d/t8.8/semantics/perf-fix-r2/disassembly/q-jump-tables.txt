@@ -1,0 +1,9 @@
+
+/tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx:     file format elf64-x86-64
+
+Contents of section .rodata:
+ 5446c 07c62b00 f1c72b00 07c62b00 f1c72b00  ..+...+...+...+.
+ 5447c f7c72b00 c5cc2b00 f7c72b00 6fcd2b00  ..+...+...+.o.+.
+ 5448c 44cd2b00 d1cd2b00 99cd2b00 afcd2b00  D.+...+...+...+.
+ 5449c d0c62b00 4dc82b00 d0c62b00 4dc82b00  ..+.M.+...+.M.+.
+ 544ac 53c82b00 ecce2b00 53c82b00 9bcf2b00  S.+...+.S.+...+.

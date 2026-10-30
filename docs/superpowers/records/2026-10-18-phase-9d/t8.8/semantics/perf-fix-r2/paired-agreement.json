@@ -1,0 +1,92 @@
+[
+  {
+    "case": "nostring",
+    "channel": "stdout",
+    "sha256": "072d87783949ce9d96f63ef6a9987a24ebcfb02534264509882b576010beda6b",
+    "oracle_p_q_agree": true
+  },
+  {
+    "case": "nostring",
+    "channel": "stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle_p_q_agree": true
+  },
+  {
+    "case": "nostring",
+    "channel": "status",
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "oracle_p_q_agree": true
+  },
+  {
+    "case": "parse-immediate-boundaries",
+    "channel": "stdout",
+    "sha256": "0002b65a6b48b60cbd6b08a2bc549159244c4dae62b917edd938a29790e9d133",
+    "oracle_p_q_agree": true
+  },
+  {
+    "case": "parse-immediate-boundaries",
+    "channel": "stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle_p_q_agree": true
+  },
+  {
+    "case": "parse-immediate-boundaries",
+    "channel": "status",
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "oracle_p_q_agree": true
+  },
+  {
+    "case": "parse-make",
+    "channel": "stdout",
+    "sha256": "29fb45e183e91b791ab4d71fa8203d2e38efcaeb001a2ee2945dbebb6e12215c",
+    "oracle_p_q_agree": true
+  },
+  {
+    "case": "parse-make",
+    "channel": "stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle_p_q_agree": true
+  },
+  {
+    "case": "parse-make",
+    "channel": "status",
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "oracle_p_q_agree": true
+  },
+  {
+    "case": "parse-raise",
+    "channel": "stdout",
+    "sha256": "57b6389a0c57df62b365b1e85b528d0d57f0c8076ba7fe9c49f5e6b59af22626",
+    "oracle_p_q_agree": true
+  },
+  {
+    "case": "parse-raise",
+    "channel": "stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle_p_q_agree": true
+  },
+  {
+    "case": "parse-raise",
+    "channel": "status",
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "oracle_p_q_agree": true
+  },
+  {
+    "case": "required-string-boundaries",
+    "channel": "stdout",
+    "sha256": "668a82cce2e7df0f2389aa17a835d082f68ffaf3861e1e0f9fdefcfc435b526d",
+    "oracle_p_q_agree": true
+  },
+  {
+    "case": "required-string-boundaries",
+    "channel": "stderr",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "oracle_p_q_agree": true
+  },
+  {
+    "case": "required-string-boundaries",
+    "channel": "status",
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "oracle_p_q_agree": true
+  }
+]

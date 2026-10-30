@@ -1,0 +1,68 @@
+{
+  "a": {
+    "pin": "/tmp/codex-p9d-t88-pins/8.8a-perf-r1-rexx",
+    "sha256": "ecb06e984ed736233ce0e2ef779b74941488ae64fdec10333dfb2215c309198a",
+    "symbol_command": [
+      "nm",
+      "-S",
+      "-C",
+      "/tmp/codex-p9d-t88-pins/8.8a-perf-r1-rexx"
+    ],
+    "disassembly_command": [
+      "objdump",
+      "-d",
+      "-l",
+      "-C",
+      "--start-address=3208224",
+      "--stop-address=3224703",
+      "/tmp/codex-p9d-t88-pins/8.8a-perf-r1-rexx"
+    ],
+    "start": "0x30f420",
+    "size": 16479,
+    "stack_reservation": "0x248"
+  },
+  "p": {
+    "pin": "/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx",
+    "sha256": "6ed1c08eb03d54c48d1fe3947ce376f09502aaeba34ac221c334b01b1572b86e",
+    "symbol_command": [
+      "nm",
+      "-S",
+      "-C",
+      "/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx"
+    ],
+    "disassembly_command": [
+      "objdump",
+      "-d",
+      "-l",
+      "-C",
+      "--start-address=3209408",
+      "--stop-address=3225894",
+      "/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx"
+    ],
+    "start": "0x30f8c0",
+    "size": 16486,
+    "stack_reservation": "0x298"
+  },
+  "q": {
+    "pin": "/tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx",
+    "sha256": "22c317baa3ed111935a6577ac33097e428a53b64eb64b4697af2b85664e3f8eb",
+    "symbol_command": [
+      "nm",
+      "-S",
+      "-C",
+      "/tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx"
+    ],
+    "disassembly_command": [
+      "objdump",
+      "-d",
+      "-l",
+      "-C",
+      "--start-address=3209520",
+      "--stop-address=3226358",
+      "/tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx"
+    ],
+    "start": "0x30f930",
+    "size": 16838,
+    "stack_reservation": "0x268"
+  }
+}

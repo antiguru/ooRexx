@@ -1,0 +1,18 @@
+{
+  "command": [
+    "objdump",
+    "-s",
+    "-j",
+    ".rodata",
+    "--start-address=0x5446c",
+    "--stop-address=0x544bc",
+    "/tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx"
+  ],
+  "tag_text": 3,
+  "tag_text_destinations": {
+    "0x5446c": "0x310c5d",
+    "0x5447c": "0x3111eb",
+    "0x5449c": "0x310ce9",
+    "0x544ac": "0x311447"
+  }
+}

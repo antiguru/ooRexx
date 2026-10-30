@@ -1,0 +1,1 @@
+{"cmd": ["memcap", "2G", "timeout", "-k", "5", "20", "/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx", "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/semantics/perf-fix-r2/probes/parse-make.rex"], "cwd": "/tmp/t88f-4hr5o9xn", "oracle_as": null}
