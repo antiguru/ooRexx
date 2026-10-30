@@ -477,10 +477,7 @@ fn spawn_failure_preserves_partial_input_and_requeues_other_posts() {
         };
         assert!(!stdin.reading);
         assert!(!stdin.ended);
-        assert_eq!(
-            stdin.buffered.iter().copied().collect::<Vec<_>>(),
-            b"partial"
-        );
+        assert_eq!(stdin.buffered.as_slice(), b"partial");
         assert!(interp.input.exhausted);
     }
     let posts = interp.timer.drain();
