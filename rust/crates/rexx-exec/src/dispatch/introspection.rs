@@ -350,3 +350,6 @@ fn method_object_for(
         Selection::Behaviour(_) => interp.method_object(owner, false, name, scope, record),
     }
 }
+
+#[cfg(test)]
+mod tests;
