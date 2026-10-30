@@ -1,0 +1,13 @@
+{
+  "command": [
+    "timeout",
+    "-k",
+    "5",
+    "20",
+    "/tmp/codex-p9d-t88-pins/8.8a-perf-r1-rexx",
+    "power_integral_exponent.rex"
+  ],
+  "cwd": "/tmp/codex-t88a-perf-crate-whujkkez",
+  "witness_sha256": "980036aba8328530bebb5de34f99334725ea8cb6de224c2457766ba5412cf536",
+  "LD_LIBRARY_PATH": "/home/moritz/dev/repos/ooRexx/build/lib"
+}

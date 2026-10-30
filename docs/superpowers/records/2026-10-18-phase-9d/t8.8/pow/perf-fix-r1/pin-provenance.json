@@ -1,0 +1,20 @@
+{
+  "source": "f56dfd25e4394ca32c7cfb18733d640a4f584ed9",
+  "source_tree": "68a291ee5089d9357b51b238056aaefcfac1500f",
+  "pin": "/tmp/codex-p9d-t88-pins/8.8a-perf-r1-rexx",
+  "pin_sha256": "ecb06e984ed736233ce0e2ef779b74941488ae64fdec10333dfb2215c309198a",
+  "build_binary": "/tmp/codex-p9d-t88-target/release/rexx",
+  "compiler": "/home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc",
+  "compiler_sha256": "f3834d26669b03f6855fa54bd2381443123e860167bc0c7a8dd137e5cf6e5e4f",
+  "rustc_version": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1\n",
+  "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)\n",
+  "baseline": "/tmp/codex-p9d-t88-pins/8.8e2-perf-r1-rexx",
+  "baseline_source": "1233b81da730142057fcf810e324d10d0e55c109",
+  "baseline_sha256": "470dcb41db61ab7a4d64f3276ce28e539d5686d130be245a4ec7b30e6d6725ac",
+  "matched_all_program_comparison": "Pending controller-owned all-program comparison and scoped review.",
+  "build_binary_sha256": "ecb06e984ed736233ce0e2ef779b74941488ae64fdec10333dfb2215c309198a",
+  "source_file_sha256": {
+    "rust/crates/rexx-num/src/pow.rs": "90124ea01a8970b27659e10cef26a343bd69ee2fafc38097df2e308c013e660e",
+    "rust/crates/rexx-num/tests/pow.rs": "5d831deef31d6fc45e645f93933817c1b2d6b2d32cabd239e1635126fb5d3a7f"
+  }
+}

@@ -1,0 +1,2 @@
+memcap: no writable cgroup at /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service
+memcap: expected a systemd-delegated user cgroup, or CLAUDE_JAIL_CGROUP inside claude-jail.

@@ -1,0 +1,15 @@
+{
+  "command": [
+    "timeout",
+    "-k",
+    "5",
+    "20",
+    "/home/moritz/dev/repos/ooRexx/build/bin/rexx",
+    "power_integral_exponent.rex"
+  ],
+  "cwd": "/tmp/codex-t88a-perf-oracle-mj89wf0n",
+  "witness_sha256": "980036aba8328530bebb5de34f99334725ea8cb6de224c2457766ba5412cf536",
+  "LD_LIBRARY_PATH": "/home/moritz/dev/repos/ooRexx/build/lib",
+  "RLIMIT_AS": 1073741824,
+  "crash_list_sha256": "8d0ae3340d67f94de688faafcbb7984cb554167e87ca315b8040baf6c06fbdc2"
+}

@@ -1,0 +1,48 @@
+{
+  "source": "f56dfd25e4394ca32c7cfb18733d640a4f584ed9",
+  "checks": {
+    "rexx-num-tests": 0,
+    "fmt": 0,
+    "clippy": 0,
+    "release-build": 0,
+    "oracle-power": 0,
+    "crate-power": 0
+  },
+  "tests": {
+    "passed": 196,
+    "failed": 0,
+    "ignored": 3
+  },
+  "comparisons": {
+    "stdout": {
+      "command": [
+        "cmp",
+        "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/pow/perf-fix-r1/oracle-power.stdout",
+        "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/pow/perf-fix-r1/crate-power.stdout"
+      ],
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    "stderr": {
+      "command": [
+        "cmp",
+        "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/pow/perf-fix-r1/oracle-power.stderr",
+        "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/pow/perf-fix-r1/crate-power.stderr"
+      ],
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    "status": {
+      "command": [
+        "cmp",
+        "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/pow/perf-fix-r1/oracle-power.status",
+        "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/pow/perf-fix-r1/crate-power.status"
+      ],
+      "status": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  }
+}
