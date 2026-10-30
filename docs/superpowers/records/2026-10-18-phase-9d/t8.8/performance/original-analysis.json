@@ -1,0 +1,139 @@
+{
+  "groups": {
+    "base-ab-c": {
+      "valid_profiles": 297,
+      "expected_profiles": 297,
+      "complete_programs": 33,
+      "spreads": [],
+      "original_table_command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-capped.sh",
+        "-T",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/base-ab-c",
+        "-B",
+        "0.05",
+        "base=/tmp/codex-p9d-t88-pins/8.8-base-rexx",
+        "ab=/tmp/codex-p9d-t88-pins/8.8ab-rexx",
+        "c=/tmp/codex-p9d-t88-pins/8.8c-rexx"
+      ],
+      "original_table_status": 1
+    },
+    "c-e1-e2": {
+      "valid_profiles": 297,
+      "expected_profiles": 297,
+      "complete_programs": 33,
+      "spreads": [],
+      "original_table_command": [
+        "bash",
+        "/tmp/codex-p9d-t88-performance/callgrind-capped.sh",
+        "-T",
+        "-o",
+        "/tmp/codex-p9d-t88-performance/c-e1-e2",
+        "-B",
+        "0.05",
+        "c=/tmp/codex-p9d-t88-pins/8.8c-rexx",
+        "e1=/tmp/codex-p9d-t88-pins/8.8e1-rexx",
+        "e2=/tmp/codex-p9d-t88-pins/8.8e2-rexx"
+      ],
+      "original_table_status": 1
+    }
+  },
+  "over_budget": [
+    {
+      "slice": "8.8a",
+      "program": "arith",
+      "own_delta_percent": 0.3482433694823629,
+      "base": "base",
+      "head": "ab"
+    },
+    {
+      "slice": "8.8e2",
+      "program": "alloc",
+      "own_delta_percent": 0.7367378621806571,
+      "base": "e1",
+      "head": "e2"
+    },
+    {
+      "slice": "8.8e2",
+      "program": "churn",
+      "own_delta_percent": 0.13298402154524788,
+      "base": "e1",
+      "head": "e2"
+    },
+    {
+      "slice": "8.8e2",
+      "program": "define",
+      "own_delta_percent": 0.23346786496030042,
+      "base": "e1",
+      "head": "e2"
+    },
+    {
+      "slice": "8.8e2",
+      "program": "dirread",
+      "own_delta_percent": 0.06086231462587249,
+      "base": "e1",
+      "head": "e2"
+    },
+    {
+      "slice": "8.8e2",
+      "program": "dispatch",
+      "own_delta_percent": 0.6768724219989689,
+      "base": "e1",
+      "head": "e2"
+    },
+    {
+      "slice": "8.8e2",
+      "program": "dispatchclass",
+      "own_delta_percent": 0.7315558368805849,
+      "base": "e1",
+      "head": "e2"
+    },
+    {
+      "slice": "8.8e2",
+      "program": "hashnew",
+      "own_delta_percent": 0.2382054452553352,
+      "base": "e1",
+      "head": "e2"
+    },
+    {
+      "slice": "8.8e2",
+      "program": "heapshape",
+      "own_delta_percent": 0.3553217222802114,
+      "base": "e1",
+      "head": "e2"
+    },
+    {
+      "slice": "8.8e2",
+      "program": "sendloop",
+      "own_delta_percent": 1.012452640769922,
+      "base": "e1",
+      "head": "e2"
+    },
+    {
+      "slice": "8.8e2",
+      "program": "pingguard",
+      "own_delta_percent": 0.052211873943509214,
+      "base": "e1",
+      "head": "e2"
+    },
+    {
+      "slice": "8.8e2",
+      "program": "pingmsg",
+      "own_delta_percent": 0.2396817353456436,
+      "base": "e1",
+      "head": "e2"
+    },
+    {
+      "slice": "8.8e2",
+      "program": "pingsem",
+      "own_delta_percent": 0.49532411639463403,
+      "base": "e1",
+      "head": "e2"
+    }
+  ],
+  "provisional_over_budget": [],
+  "output_errors": [],
+  "invalid_profiles": [],
+  "scope": "Original a/c/e1/e2 comparisons"
+}

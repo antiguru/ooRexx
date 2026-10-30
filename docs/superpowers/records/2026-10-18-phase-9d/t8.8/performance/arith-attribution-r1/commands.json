@@ -1,0 +1,144 @@
+[
+  {
+    "name": "base",
+    "round": 1,
+    "inclusive": "no",
+    "profile": "/tmp/codex-p9d-t88-performance/base-ab-c/arith.base.r1.cg",
+    "profile_sha256": "a0604c8db21c683645aa639f58cb1607e6511c3f21bcc2566b207225364dfc26",
+    "command": [
+      "callgrind_annotate",
+      "--auto=no",
+      "--show-percs=no",
+      "--threshold=100",
+      "--inclusive=no",
+      "/tmp/codex-p9d-t88-performance/base-ab-c/arith.base.r1.cg"
+    ],
+    "status": 0,
+    "elapsed_seconds": 0.33969918702496216,
+    "stdout": "base-inclusive-no.stdout",
+    "stderr": "base-inclusive-no.stderr"
+  },
+  {
+    "name": "base",
+    "round": 1,
+    "inclusive": "yes",
+    "profile": "/tmp/codex-p9d-t88-performance/base-ab-c/arith.base.r1.cg",
+    "profile_sha256": "a0604c8db21c683645aa639f58cb1607e6511c3f21bcc2566b207225364dfc26",
+    "command": [
+      "callgrind_annotate",
+      "--auto=no",
+      "--show-percs=no",
+      "--threshold=100",
+      "--inclusive=yes",
+      "/tmp/codex-p9d-t88-performance/base-ab-c/arith.base.r1.cg"
+    ],
+    "status": 0,
+    "elapsed_seconds": 0.3438088420080021,
+    "stdout": "base-inclusive-yes.stdout",
+    "stderr": "base-inclusive-yes.stderr"
+  },
+  {
+    "name": "base",
+    "round": 1,
+    "profile": "/tmp/codex-p9d-t88-performance/base-ab-c/arith.base.r1.cg",
+    "profile_sha256": "a0604c8db21c683645aa639f58cb1607e6511c3f21bcc2566b207225364dfc26",
+    "command": [
+      "callgrind_annotate",
+      "--auto=no",
+      "--show-percs=no",
+      "--threshold=100",
+      "--context=2",
+      "/tmp/codex-p9d-t88-performance/base-ab-c/arith.base.r1.cg",
+      "/tmp/codex-p9d-t88-perf-base/rust/crates/rexx-num/src/pow.rs",
+      "/tmp/codex-p9d-t88-perf-base/rust/crates/rexx-num/src/lib.rs",
+      "/tmp/codex-p9d-t88-perf-base/rust/crates/rexx-num/src/digits.rs"
+    ],
+    "status": 0,
+    "elapsed_seconds": 0.35382929199840873,
+    "source_files": [
+      {
+        "path": "/tmp/codex-p9d-t88-perf-base/rust/crates/rexx-num/src/pow.rs",
+        "sha256": "1cef3e1d06cb0af8f342cd11d51c6d629ed1eab314d47d6c56542311023e9fd0"
+      },
+      {
+        "path": "/tmp/codex-p9d-t88-perf-base/rust/crates/rexx-num/src/lib.rs",
+        "sha256": "8105e0d7f7567987ecadba9a0d04f22d74a4759f7f50b7a3aee78d56bc64a4d0"
+      },
+      {
+        "path": "/tmp/codex-p9d-t88-perf-base/rust/crates/rexx-num/src/digits.rs",
+        "sha256": "b8ecbf30a5132f3551a01c8adac951d6e5188ee81fd48d7ccee46811cefc8377"
+      }
+    ]
+  },
+  {
+    "name": "ab",
+    "round": 1,
+    "inclusive": "no",
+    "profile": "/tmp/codex-p9d-t88-performance/base-ab-c/arith.ab.r1.cg",
+    "profile_sha256": "e99cb69e538f802585c5329e71c0e9a0805e76dd0f05797631eef25953ebda66",
+    "command": [
+      "callgrind_annotate",
+      "--auto=no",
+      "--show-percs=no",
+      "--threshold=100",
+      "--inclusive=no",
+      "/tmp/codex-p9d-t88-performance/base-ab-c/arith.ab.r1.cg"
+    ],
+    "status": 0,
+    "elapsed_seconds": 0.32939249399350956,
+    "stdout": "ab-inclusive-no.stdout",
+    "stderr": "ab-inclusive-no.stderr"
+  },
+  {
+    "name": "ab",
+    "round": 1,
+    "inclusive": "yes",
+    "profile": "/tmp/codex-p9d-t88-performance/base-ab-c/arith.ab.r1.cg",
+    "profile_sha256": "e99cb69e538f802585c5329e71c0e9a0805e76dd0f05797631eef25953ebda66",
+    "command": [
+      "callgrind_annotate",
+      "--auto=no",
+      "--show-percs=no",
+      "--threshold=100",
+      "--inclusive=yes",
+      "/tmp/codex-p9d-t88-performance/base-ab-c/arith.ab.r1.cg"
+    ],
+    "status": 0,
+    "elapsed_seconds": 0.34568507998483256,
+    "stdout": "ab-inclusive-yes.stdout",
+    "stderr": "ab-inclusive-yes.stderr"
+  },
+  {
+    "name": "ab",
+    "round": 1,
+    "profile": "/tmp/codex-p9d-t88-performance/base-ab-c/arith.ab.r1.cg",
+    "profile_sha256": "e99cb69e538f802585c5329e71c0e9a0805e76dd0f05797631eef25953ebda66",
+    "command": [
+      "callgrind_annotate",
+      "--auto=no",
+      "--show-percs=no",
+      "--threshold=100",
+      "--context=2",
+      "/tmp/codex-p9d-t88-performance/base-ab-c/arith.ab.r1.cg",
+      "/tmp/codex-p9d-t88-perf-a/rust/crates/rexx-num/src/pow.rs",
+      "/tmp/codex-p9d-t88-perf-a/rust/crates/rexx-num/src/lib.rs",
+      "/tmp/codex-p9d-t88-perf-a/rust/crates/rexx-num/src/digits.rs"
+    ],
+    "status": 0,
+    "elapsed_seconds": 0.3417584099806845,
+    "source_files": [
+      {
+        "path": "/tmp/codex-p9d-t88-perf-a/rust/crates/rexx-num/src/pow.rs",
+        "sha256": "e927304b1122fb566d26d3bbfccccbdb29bcb58fcad5c546cb342e206a9f83ac"
+      },
+      {
+        "path": "/tmp/codex-p9d-t88-perf-a/rust/crates/rexx-num/src/lib.rs",
+        "sha256": "8105e0d7f7567987ecadba9a0d04f22d74a4759f7f50b7a3aee78d56bc64a4d0"
+      },
+      {
+        "path": "/tmp/codex-p9d-t88-perf-a/rust/crates/rexx-num/src/digits.rs",
+        "sha256": "b8ecbf30a5132f3551a01c8adac951d6e5188ee81fd48d7ccee46811cefc8377"
+      }
+    ]
+  }
+]

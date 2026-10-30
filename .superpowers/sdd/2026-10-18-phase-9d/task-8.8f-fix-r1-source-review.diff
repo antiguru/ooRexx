@@ -1,0 +1,1152 @@
+8854b1a42 docs: record reentrant collection fixes and corrected release evidence
+3e1aa9c87 fix: root saved collection stores across reentrant callbacks
+e8ff00375 test: pin reentry send counts and unindexed relation removal
+8a488e529 test: count observable sends during relation equality reentry
+75db0f64a fix: return the item removed from the validated current hash slot
+d7a279989 fix: retain validated store provenance for relation snapshots
+2beaa43cc test: guard reentrant removal against incompatible slot reuse
+ebcf44225 test: reproduce reentrant collection removal and snapshot defects
+6849449c7 docs: dispatch fixes for reentrant collection review findings
+756ceeb9d docs: hand off semantic review and targeted verification repairs
+ .superpowers/sdd/2026-10-18-phase-9d/progress.md   |    8 +
+ .../task-8.8-controller-handoff.md                 |   29 +
+ .../2026-10-18-phase-9d/task-8.8-m6-timer-proof.md |   95 +
+ .../task-8.8a-perf-fix-brief.md                    |   17 +
+ .../task-8.8e2-perf-diagnosis.md                   |   33 +
+ .../task-8.8e2-perf-fix-brief.md                   |   17 +
+ .../2026-10-18-phase-9d/task-8.8f-fix-r1-report.md |   61 +
+ .../sdd/2026-10-18-phase-9d/task-8.8f-report.md    |    6 +
+ .../sdd/2026-10-18-phase-9d/task-8.8f-review.md    |   95 +
+ .../task-8.8f-source-review.diff                   | 5765 ++++++++++++++++++++
+ .../sdd/2026-10-18-phase-9d/task-8.8g-brief.md     |   25 +
+ .../t8.8/semantics/fix-r1/check.py                 |   30 +
+ .../semantics/fix-r1/checks/boundaries-policy.json |   27 +
+ .../fix-r1/checks/boundaries-policy.stderr         |    7 +
+ .../fix-r1/checks/boundaries-policy.stdout         |   66 +
+ .../t8.8/semantics/fix-r1/checks/e2-probes.json    |   16 +
+ .../t8.8/semantics/fix-r1/checks/e2-probes.stderr  |    0
+ .../t8.8/semantics/fix-r1/checks/e2-probes.stdout  |   14 +
+ .../t8.8/semantics/fix-r1/checks/final-probes.json |   16 +
+ .../semantics/fix-r1/checks/final-probes.stderr    |    0
+ .../semantics/fix-r1/checks/final-probes.stdout    |   20 +
+ .../t8.8/semantics/fix-r1/checks/focused.json      |   20 +
+ .../t8.8/semantics/fix-r1/checks/focused.stderr    |    4 +
+ .../t8.8/semantics/fix-r1/checks/focused.stdout    | 1290 +++++
+ .../t8.8/semantics/fix-r1/checks/format-apply.json |   15 +
+ .../semantics/fix-r1/checks/format-apply.stderr    |    0
+ .../semantics/fix-r1/checks/format-apply.stdout    |    0
+ .../t8.8/semantics/fix-r1/checks/format.json       |   16 +
+ .../t8.8/semantics/fix-r1/checks/format.stderr     |    0
+ .../t8.8/semantics/fix-r1/checks/format.stdout     |    0
+ .../t8.8/semantics/fix-r1/checks/lint.json         |   21 +
+ .../t8.8/semantics/fix-r1/checks/lint.stderr       |    2 +
+ .../t8.8/semantics/fix-r1/checks/lint.stdout       |    0
+ .../t8.8/semantics/fix-r1/checks/red-probes.json   |   16 +
+ .../t8.8/semantics/fix-r1/checks/red-probes.stderr |    0
+ .../t8.8/semantics/fix-r1/checks/red-probes.stdout |   14 +
+ .../semantics/fix-r1/checks/release-final.json     |   20 +
+ .../semantics/fix-r1/checks/release-final.stderr   |    2 +
+ .../semantics/fix-r1/checks/release-final.stdout   |    0
+ .../t8.8/semantics/fix-r1/checks/release.json      |   20 +
+ .../t8.8/semantics/fix-r1/checks/release.stderr    |    2 +
+ .../t8.8/semantics/fix-r1/checks/release.stdout    |    0
+ .../semantics/fix-r1/checks/rooted-boundaries.json |   19 +
+ .../fix-r1/checks/rooted-boundaries.stderr         |    3 +
+ .../fix-r1/checks/rooted-boundaries.stdout         |    8 +
+ .../semantics/fix-r1/checks/rooted-format.json     |   16 +
+ .../semantics/fix-r1/checks/rooted-format.stderr   |    0
+ .../semantics/fix-r1/checks/rooted-format.stdout   |    0
+ .../t8.8/semantics/fix-r1/checks/rooted-lint.json  |   21 +
+ .../semantics/fix-r1/checks/rooted-lint.stderr     |    2 +
+ .../semantics/fix-r1/checks/rooted-lint.stdout     |    0
+ .../t8.8/semantics/fix-r1/counts/crate/status      |    1 +
+ .../t8.8/semantics/fix-r1/counts/crate/stderr      |    0
+ .../t8.8/semantics/fix-r1/counts/crate/stdout      |    2 +
+ .../t8.8/semantics/fix-r1/counts/oracle/status     |    1 +
+ .../t8.8/semantics/fix-r1/counts/oracle/stderr     |    0
+ .../t8.8/semantics/fix-r1/counts/oracle/stdout     |    2 +
+ .../t8.8/semantics/fix-r1/counts/provenance.json   |    7 +
+ .../e2/relation-allat-equality/crate/command.json  |    1 +
+ .../fix-r1/e2/relation-allat-equality/crate/status |    1 +
+ .../fix-r1/e2/relation-allat-equality/crate/stderr |    0
+ .../fix-r1/e2/relation-allat-equality/crate/stdout |    1 +
+ .../e2/relation-allat-equality/oracle/command.json |    1 +
+ .../e2/relation-allat-equality/oracle/status       |    1 +
+ .../e2/relation-allat-equality/oracle/stderr       |    0
+ .../e2/relation-allat-equality/oracle/stdout       |    1 +
+ .../e2/relation-removeitem/crate/command.json      |    1 +
+ .../fix-r1/e2/relation-removeitem/crate/status     |    1 +
+ .../fix-r1/e2/relation-removeitem/crate/stderr     |    0
+ .../fix-r1/e2/relation-removeitem/crate/stdout     |    1 +
+ .../e2/relation-removeitem/oracle/command.json     |    1 +
+ .../fix-r1/e2/relation-removeitem/oracle/status    |    1 +
+ .../fix-r1/e2/relation-removeitem/oracle/stderr    |    0
+ .../fix-r1/e2/relation-removeitem/oracle/stdout    |    1 +
+ .../relation-supplier-equality/crate/command.json  |    1 +
+ .../e2/relation-supplier-equality/crate/status     |    1 +
+ .../e2/relation-supplier-equality/crate/stderr     |    0
+ .../e2/relation-supplier-equality/crate/stdout     |    1 +
+ .../relation-supplier-equality/oracle/command.json |    1 +
+ .../e2/relation-supplier-equality/oracle/status    |    1 +
+ .../e2/relation-supplier-equality/oracle/stderr    |    0
+ .../e2/relation-supplier-equality/oracle/stdout    |    1 +
+ .../e2/relation-supplier-hash/crate/command.json   |    1 +
+ .../fix-r1/e2/relation-supplier-hash/crate/status  |    1 +
+ .../fix-r1/e2/relation-supplier-hash/crate/stderr  |    0
+ .../fix-r1/e2/relation-supplier-hash/crate/stdout  |    1 +
+ .../e2/relation-supplier-hash/oracle/command.json  |    1 +
+ .../fix-r1/e2/relation-supplier-hash/oracle/status |    1 +
+ .../fix-r1/e2/relation-supplier-hash/oracle/stderr |    0
+ .../fix-r1/e2/relation-supplier-hash/oracle/stdout |    1 +
+ .../e2/removeitem-overwrite/crate/command.json     |    1 +
+ .../fix-r1/e2/removeitem-overwrite/crate/status    |    1 +
+ .../fix-r1/e2/removeitem-overwrite/crate/stderr    |    0
+ .../fix-r1/e2/removeitem-overwrite/crate/stdout    |    1 +
+ .../e2/removeitem-overwrite/oracle/command.json    |    1 +
+ .../fix-r1/e2/removeitem-overwrite/oracle/status   |    1 +
+ .../fix-r1/e2/removeitem-overwrite/oracle/stderr   |    0
+ .../fix-r1/e2/removeitem-overwrite/oracle/stdout   |    1 +
+ .../fix-r1/e2/review-allat/crate/command.json      |    1 +
+ .../semantics/fix-r1/e2/review-allat/crate/status  |    1 +
+ .../semantics/fix-r1/e2/review-allat/crate/stderr  |    0
+ .../semantics/fix-r1/e2/review-allat/crate/stdout  |    1 +
+ .../fix-r1/e2/review-allat/oracle/command.json     |    1 +
+ .../semantics/fix-r1/e2/review-allat/oracle/status |    1 +
+ .../semantics/fix-r1/e2/review-allat/oracle/stderr |    0
+ .../semantics/fix-r1/e2/review-allat/oracle/stdout |    1 +
+ .../fix-r1/e2/review-removeitem/crate/command.json |    1 +
+ .../fix-r1/e2/review-removeitem/crate/status       |    1 +
+ .../fix-r1/e2/review-removeitem/crate/stderr       |    0
+ .../fix-r1/e2/review-removeitem/crate/stdout       |    1 +
+ .../e2/review-removeitem/oracle/command.json       |    1 +
+ .../fix-r1/e2/review-removeitem/oracle/status      |    1 +
+ .../fix-r1/e2/review-removeitem/oracle/stderr      |    0
+ .../fix-r1/e2/review-removeitem/oracle/stdout      |    1 +
+ .../t8.8/semantics/fix-r1/evidence-recovery.json   |    5 +
+ .../t8.8/semantics/fix-r1/final-comparison.json    |   72 +
+ .../relation-allat-equality/crate/command.json     |    1 +
+ .../final/relation-allat-equality/crate/status     |    1 +
+ .../final/relation-allat-equality/crate/stderr     |    0
+ .../final/relation-allat-equality/crate/stdout     |    1 +
+ .../relation-allat-equality/oracle/command.json    |    1 +
+ .../final/relation-allat-equality/oracle/status    |    1 +
+ .../final/relation-allat-equality/oracle/stderr    |    0
+ .../final/relation-allat-equality/oracle/stdout    |    1 +
+ .../relation-equality-counts/crate/command.json    |    1 +
+ .../final/relation-equality-counts/crate/status    |    1 +
+ .../final/relation-equality-counts/crate/stderr    |    0
+ .../final/relation-equality-counts/crate/stdout    |    2 +
+ .../relation-equality-counts/oracle/command.json   |    1 +
+ .../final/relation-equality-counts/oracle/status   |    1 +
+ .../final/relation-equality-counts/oracle/stderr   |    0
+ .../final/relation-equality-counts/oracle/stdout   |    2 +
+ .../crate/command.json                             |    1 +
+ .../relation-removeitem-unindexed/crate/status     |    1 +
+ .../relation-removeitem-unindexed/crate/stderr     |    0
+ .../relation-removeitem-unindexed/crate/stdout     |    1 +
+ .../oracle/command.json                            |    1 +
+ .../relation-removeitem-unindexed/oracle/status    |    1 +
+ .../relation-removeitem-unindexed/oracle/stderr    |    0
+ .../relation-removeitem-unindexed/oracle/stdout    |    1 +
+ .../final/relation-removeitem/crate/command.json   |    1 +
+ .../fix-r1/final/relation-removeitem/crate/status  |    1 +
+ .../fix-r1/final/relation-removeitem/crate/stderr  |    0
+ .../fix-r1/final/relation-removeitem/crate/stdout  |    1 +
+ .../final/relation-removeitem/oracle/command.json  |    1 +
+ .../fix-r1/final/relation-removeitem/oracle/status |    1 +
+ .../fix-r1/final/relation-removeitem/oracle/stderr |    0
+ .../fix-r1/final/relation-removeitem/oracle/stdout |    1 +
+ .../relation-supplier-equality/crate/command.json  |    1 +
+ .../final/relation-supplier-equality/crate/status  |    1 +
+ .../final/relation-supplier-equality/crate/stderr  |    0
+ .../final/relation-supplier-equality/crate/stdout  |    1 +
+ .../relation-supplier-equality/oracle/command.json |    1 +
+ .../final/relation-supplier-equality/oracle/status |    1 +
+ .../final/relation-supplier-equality/oracle/stderr |    0
+ .../final/relation-supplier-equality/oracle/stdout |    1 +
+ .../relation-supplier-hash/crate/command.json      |    1 +
+ .../final/relation-supplier-hash/crate/status      |    1 +
+ .../final/relation-supplier-hash/crate/stderr      |    0
+ .../final/relation-supplier-hash/crate/stdout      |    1 +
+ .../relation-supplier-hash/oracle/command.json     |    1 +
+ .../final/relation-supplier-hash/oracle/status     |    1 +
+ .../final/relation-supplier-hash/oracle/stderr     |    0
+ .../final/relation-supplier-hash/oracle/stdout     |    1 +
+ .../final/removeitem-overwrite/crate/command.json  |    1 +
+ .../fix-r1/final/removeitem-overwrite/crate/status |    1 +
+ .../fix-r1/final/removeitem-overwrite/crate/stderr |    0
+ .../fix-r1/final/removeitem-overwrite/crate/stdout |    1 +
+ .../final/removeitem-overwrite/oracle/command.json |    1 +
+ .../final/removeitem-overwrite/oracle/status       |    1 +
+ .../final/removeitem-overwrite/oracle/stderr       |    0
+ .../final/removeitem-overwrite/oracle/stdout       |    1 +
+ .../final/removeitem-reused/crate/command.json     |    1 +
+ .../fix-r1/final/removeitem-reused/crate/status    |    1 +
+ .../fix-r1/final/removeitem-reused/crate/stderr    |    0
+ .../fix-r1/final/removeitem-reused/crate/stdout    |    1 +
+ .../final/removeitem-reused/oracle/command.json    |    1 +
+ .../fix-r1/final/removeitem-reused/oracle/status   |    1 +
+ .../fix-r1/final/removeitem-reused/oracle/stderr   |    0
+ .../fix-r1/final/removeitem-reused/oracle/stdout   |    1 +
+ .../fix-r1/final/review-allat/crate/command.json   |    1 +
+ .../fix-r1/final/review-allat/crate/status         |    1 +
+ .../fix-r1/final/review-allat/crate/stderr         |    0
+ .../fix-r1/final/review-allat/crate/stdout         |    1 +
+ .../fix-r1/final/review-allat/oracle/command.json  |    1 +
+ .../fix-r1/final/review-allat/oracle/status        |    1 +
+ .../fix-r1/final/review-allat/oracle/stderr        |    0
+ .../fix-r1/final/review-allat/oracle/stdout        |    1 +
+ .../final/review-removeitem/crate/command.json     |    1 +
+ .../fix-r1/final/review-removeitem/crate/status    |    1 +
+ .../fix-r1/final/review-removeitem/crate/stderr    |    0
+ .../fix-r1/final/review-removeitem/crate/stdout    |    1 +
+ .../final/review-removeitem/oracle/command.json    |    1 +
+ .../fix-r1/final/review-removeitem/oracle/status   |    1 +
+ .../fix-r1/final/review-removeitem/oracle/stderr   |    0
+ .../fix-r1/final/review-removeitem/oracle/stdout   |    1 +
+ .../t8.8/semantics/fix-r1/probes.py                |   21 +
+ .../fix-r1/probes/relation-allat-equality.rex      |   26 +
+ .../fix-r1/probes/relation-equality-counts.rex     |   34 +
+ .../probes/relation-removeitem-unindexed.rex       |   28 +
+ .../fix-r1/probes/relation-removeitem.rex          |   28 +
+ .../fix-r1/probes/relation-supplier-equality.rex   |   26 +
+ .../fix-r1/probes/relation-supplier-hash.rex       |   26 +
+ .../fix-r1/probes/removeitem-overwrite.rex         |   28 +
+ .../semantics/fix-r1/probes/removeitem-reused.rex  |   30 +
+ .../t8.8/semantics/fix-r1/probes/review-allat.rex  |   26 +
+ .../semantics/fix-r1/probes/review-removeitem.rex  |   28 +
+ .../red/relation-allat-equality/crate/command.json |    1 +
+ .../red/relation-allat-equality/crate/status       |    1 +
+ .../red/relation-allat-equality/crate/stderr       |    0
+ .../red/relation-allat-equality/crate/stdout       |    1 +
+ .../relation-allat-equality/oracle/command.json    |    1 +
+ .../red/relation-allat-equality/oracle/status      |    1 +
+ .../red/relation-allat-equality/oracle/stderr      |    0
+ .../red/relation-allat-equality/oracle/stdout      |    1 +
+ .../red/relation-removeitem/crate/command.json     |    1 +
+ .../fix-r1/red/relation-removeitem/crate/status    |    1 +
+ .../fix-r1/red/relation-removeitem/crate/stderr    |    0
+ .../fix-r1/red/relation-removeitem/crate/stdout    |    1 +
+ .../red/relation-removeitem/oracle/command.json    |    1 +
+ .../fix-r1/red/relation-removeitem/oracle/status   |    1 +
+ .../fix-r1/red/relation-removeitem/oracle/stderr   |    0
+ .../fix-r1/red/relation-removeitem/oracle/stdout   |    1 +
+ .../relation-supplier-equality/crate/command.json  |    1 +
+ .../red/relation-supplier-equality/crate/status    |    1 +
+ .../red/relation-supplier-equality/crate/stderr    |    0
+ .../red/relation-supplier-equality/crate/stdout    |    1 +
+ .../relation-supplier-equality/oracle/command.json |    1 +
+ .../red/relation-supplier-equality/oracle/status   |    1 +
+ .../red/relation-supplier-equality/oracle/stderr   |    0
+ .../red/relation-supplier-equality/oracle/stdout   |    1 +
+ .../red/relation-supplier-hash/crate/command.json  |    1 +
+ .../fix-r1/red/relation-supplier-hash/crate/status |    1 +
+ .../fix-r1/red/relation-supplier-hash/crate/stderr |    0
+ .../fix-r1/red/relation-supplier-hash/crate/stdout |    1 +
+ .../red/relation-supplier-hash/oracle/command.json |    1 +
+ .../red/relation-supplier-hash/oracle/status       |    1 +
+ .../red/relation-supplier-hash/oracle/stderr       |    0
+ .../red/relation-supplier-hash/oracle/stdout       |    1 +
+ .../red/removeitem-overwrite/crate/command.json    |    1 +
+ .../fix-r1/red/removeitem-overwrite/crate/status   |    1 +
+ .../fix-r1/red/removeitem-overwrite/crate/stderr   |    0
+ .../fix-r1/red/removeitem-overwrite/crate/stdout   |    1 +
+ .../red/removeitem-overwrite/oracle/command.json   |    1 +
+ .../fix-r1/red/removeitem-overwrite/oracle/status  |    1 +
+ .../fix-r1/red/removeitem-overwrite/oracle/stderr  |    0
+ .../fix-r1/red/removeitem-overwrite/oracle/stdout  |    1 +
+ .../fix-r1/red/removeitem-reused/commands.json     |   25 +
+ .../fix-r1/red/removeitem-reused/crate/status      |    1 +
+ .../fix-r1/red/removeitem-reused/crate/stderr      |    0
+ .../fix-r1/red/removeitem-reused/crate/stdout      |    1 +
+ .../fix-r1/red/removeitem-reused/oracle/status     |    1 +
+ .../fix-r1/red/removeitem-reused/oracle/stderr     |    0
+ .../fix-r1/red/removeitem-reused/oracle/stdout     |    1 +
+ .../fix-r1/red/review-allat/crate/command.json     |    1 +
+ .../semantics/fix-r1/red/review-allat/crate/status |    1 +
+ .../semantics/fix-r1/red/review-allat/crate/stderr |    0
+ .../semantics/fix-r1/red/review-allat/crate/stdout |    1 +
+ .../fix-r1/red/review-allat/oracle/command.json    |    1 +
+ .../fix-r1/red/review-allat/oracle/status          |    1 +
+ .../fix-r1/red/review-allat/oracle/stderr          |    0
+ .../fix-r1/red/review-allat/oracle/stdout          |    1 +
+ .../red/review-removeitem/crate/command.json       |    1 +
+ .../fix-r1/red/review-removeitem/crate/status      |    1 +
+ .../fix-r1/red/review-removeitem/crate/stderr      |    0
+ .../fix-r1/red/review-removeitem/crate/stdout      |    1 +
+ .../red/review-removeitem/oracle/command.json      |    1 +
+ .../fix-r1/red/review-removeitem/oracle/status     |    1 +
+ .../fix-r1/red/review-removeitem/oracle/stderr     |    0
+ .../fix-r1/red/review-removeitem/oracle/stdout     |    1 +
+ .../t8.8/semantics/fix-r1/release-pin.json         |   16 +
+ .../t8.8/semantics/fix-r1/source-scope.json        |   10 +
+ .../crates/rexx-exec/src/dispatch/hash/relation.rs |  112 +-
+ rust/crates/rexx-exec/src/dispatch/hash/removal.rs |   60 +-
+ .../reentry-relation-allat-equality.rex            |   26 +
+ .../reentry-relation-allat-equality.stdout         |    1 +
+ .../reentry-relation-equality-counts.rex           |   34 +
+ .../reentry-relation-equality-counts.stdout        |    2 +
+ .../reentry-relation-removeitem-unindexed.rex      |   28 +
+ .../reentry-relation-removeitem-unindexed.stdout   |    1 +
+ .../reentry-relation-removeitem.rex                |   28 +
+ .../reentry-relation-removeitem.stdout             |    1 +
+ .../reentry-relation-supplier-equality.rex         |   26 +
+ .../reentry-relation-supplier-equality.stdout      |    1 +
+ .../reentry-relation-supplier-hash.rex             |   26 +
+ .../reentry-relation-supplier-hash.stdout          |    1 +
+ .../reentry-removeitem-overwrite.rex               |   28 +
+ .../reentry-removeitem-overwrite.stdout            |    1 +
+ .../reentry-removeitem-reused.rex                  |   30 +
+ .../reentry-removeitem-reused.stdout               |    1 +
+ .../semantic_boundaries/reentry-review-allat.rex   |   26 +
+ .../reentry-review-allat.stdout                    |    1 +
+ .../reentry-review-removeitem.rex                  |   28 +
+ .../reentry-review-removeitem.stdout               |    1 +
+ 294 files changed, 8869 insertions(+), 44 deletions(-)
+diff --git a/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-fix-r1-report.md b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-fix-r1-report.md
+new file mode 100644
+index 000000000..b91e52517
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-fix-r1-report.md
+@@ -0,0 +1,61 @@
++# Task 8.8f fix round 1: Reentrant collection consistency
++
++## Scope and commits
++
++This round addresses Important findings F1 and F2 from `task-8.8f-review.md`, using reviewed `d84ac3917` as FIX_BASE and verified dispatch HEAD `6849449c70726dc5e7077021c99971a75e2882a1`. Source changes are limited to `dispatch/hash/removal.rs` and `dispatch/hash/relation.rs`. The final source and fixture revision is `3e1aa9c879a90214bb5c680357975f58a0081abc`, with no new dependencies, unsafe code, descriptor interfaces, or scheduler changes. The original runtime pin remains unchanged, and no Deviation 84 or other new oracle departure is added.
++
++Regression commits `ebcf44225` and `2beaa43cc` precede the red pin probes. Implementation commits `d7a279989` and `75db0f64a` repair F2 and F1 respectively, before their focused verification. Commits `8a488e529` and `e8ff00375` add the explicit send-count and unindexed Relation controls, pin the measured oracle counts, and apply formatting. Commit `3e1aa9c87` additionally roots saved backing-array identities across callbacks before final stress verification. All subsequent checks and release construction use frozen runtime source, with durable records under `docs/superpowers/records/2026-10-18-phase-9d/t8.8/semantics/fix-r1/`.
++
++## F1: Return the value actually removed
++
++A successful item comparison selects a live slot, but its callback can change the free list, prepend a collision, or overwrite the value in that slot. `take_at` now verifies that the backing arrays still belong to the receiver and re-finds the slot and predecessor in its current bucket chain. Removal uses that current free-list metadata and returns the value actually taken, which callers now propagate instead of returning the captured pre-callback item. A missing current location or replaced backing arrays makes the caller restart its search, while indexed Relation removal retains its cached hash.
++
++The controller refined the boundary after paired controls showed that the oracle uses the current selected slot even when a callback changes its index. A Table overwrite returns `replacement`, and a Relation prepend or same-bucket key1-to-key2 reuse returns `extra`, because those are the values actually removed. An original-index identity restriction would instead invent a different result, so the implementation checks location provenance and current chain membership without imposing that restriction. This refinement follows the measured oracle and does not introduce a new departure or extend the pending count ruling.
++
++| Probe | Original f | Oracle and corrected release |
++| --- | --- | --- |
++| `review-removeitem` | `removed victim items 2 victim-still-present 1` | `removed victim items 1 victim-still-present 0` |
++| `removeitem-overwrite` | `removed victim items 0 victim-still-present 0` | `removed replacement items 0 victim-still-present 0` |
++| `removeitem-reused` | `removed victim items 0 victim-still-present 0` | `removed extra items 0 victim-still-present 0` |
++| `relation-removeitem` | `removed victim items 2 victim-still-present 1` | `removed extra items 1 victim-still-present 1` |
++| `relation-removeitem-unindexed` | Added covering control | `removed extra items 1 victim-still-present 1` |
++
++The e2 control reproduces the correct original Table insertion result, but its overwrite still returns the stale captured victim. On indexed Relation insertion, e2 returns NIL with both entries retained, which also differs from the oracle. These exact baseline results are retained in `e2/`, alongside separate stdout, stderr, and status descriptors. The corrected fixtures exercise both indexed and unindexed Relation removal, including current-chain changes that previously caused a skipped removal to be reported as successful.
++
++## F2: Keep slots with their validated store
++
++`slots_for` now returns the validated Store together with its selected slots, so ALLAT and indexed SUPPLIER never combine slot numbers with a pre-HASHCODE store. It computes HASHCODE once, snapshots and roots the bucket's index references, and validates the saved chain after observable equality mutates store state. Replacement arrays, changed chain links, or changed index occupants restart the search using that same hash. Saved backing arrays and captured indexes are temporary roots across callbacks, while items and supplier indexes are read after the search completes without another user callback.
++
++Both ALLAT and indexed SUPPLIER have separate HASHCODE-replacement and equality-replacement fixtures. Each original f probe prints `answer old current new items 1`, while the oracle and corrected release print `answer new current new items 1`. The explicit equality-reentry counter control records `calls 1 2` on both sides, proving one HASHCODE and the two equality sends needed across replacement. The test's initial provisional one-equality expectation was corrected to the freshly measured paired result before its automated verification.
++
++## Verification
++
++All ten added fixtures run through the existing semantic-boundary harness both normally and with collection on every allocation. Previous conversion, raised-send, trace, hash collision, and reentry fixtures remain in that same run. The first covering run passes all 1,235 library tests and all three semantic tests, and the final run adds the relevant coverage, ownership, refusal-site, and representation checks. Complete successful corpus/suite/workspace runs are not repeated in this slice, because the controller owns those final gates and all-program own-BASE performance.
++
++Every command below runs through `memcap 8G python3 /tmp/t88f-r1-check.py NAME BOUND CWD COMMAND...`, whose retained copy is `fix-r1/check.py`. It sets `CARGO_INCREMENTAL=0` and `CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target`, and all Cargo commands use `-j4` where applicable. Each command's JSON descriptor, independent stdout/stderr, status, duration, and bound are retained under `fix-r1/checks/`. Individual interpreter probes use `memcap 2G` and a 20-second timeout, while oracle runs use fresh working directories, a 1 GiB address-space cap, and the recorded oracle library path.
++
++| Record | Exact covering command after wrapper | Status and duration |
++| --- | --- | --- |
++| `red-probes` | `python3 /tmp/t88f-r1-probes.py red /tmp/codex-p9d-t88-pins/8.8f-rexx` | 0, 0.87 s; descriptor differences confirm both findings. |
++| `e2-probes` | `python3 /tmp/t88f-r1-probes.py e2 /tmp/codex-p9d-t88-pins/8.8e2-rexx` | 0, 0.97 s; retained baseline comparison. |
++| `focused` | `cargo test -j4 -p rexx-exec --lib --test semantic_boundaries` | 0, 80.85 s; 1,235 library and 3 semantic tests. |
++| `boundaries-policy` | `cargo test -j4 -p rexx-exec --test semantic_boundaries --test coverage --test refusal_sites --test owners --test representation_refusals` | 0, 40.99 s; 3, 21, 8, 6, and 3 tests respectively. |
++| `format` | `cargo fmt --all --check` | 0, 2.52 s. |
++| `lint` | `cargo clippy -j4 -p rexx-exec --all-targets -- -D warnings` | 0, 9.03 s. |
++| `rooted-boundaries` | `cargo test -j4 -p rexx-exec --test semantic_boundaries` | 0, 37.89 s; all fixtures normally and under collection on every allocation. |
++| `rooted-format` | `cargo fmt --all --check` | 0, 2.52 s. |
++| `rooted-lint` | `cargo clippy -j4 -p rexx-exec --all-targets -- -D warnings` | 0, 8.83 s. |
++| `release-final` | `cargo build -j4 --release -p rexx-exec --bin rexx` | 0, 90.70 s. |
++| `final-probes` | `python3 /tmp/t88f-r1-probes.py final /tmp/codex-p9d-t88-pins/8.8f-r1-rexx` | 0, 0.97 s; all ten stdout/stderr/status triples match the oracle exactly. |
++
++## Infrastructure recovery and handoff
++
++The first staging attempt used shell globs inside an unyielded tool batch and stalled before staging or launching its probes. The controller interrupted it after twelve minutes, and inspection confirmed unchanged HEAD and an empty index, with only fixture files created. Explicit directory/file staging calls then completed immediately, with commits and check launches separated for visibility. That attempt is an infrastructure interruption, not a red runtime or implementation failure.
++
++The copied check driver initially retained the original evidence output path and temporarily overwrote three earlier `focused` records. After the live check completed, its new records were preserved under `fix-r1/checks/`, and only the accidentally overwritten files were restored from their exact committed bytes. `evidence-recovery.json` records their SHA256 values and verifies equality against `d84ac3917`; the driver now names the explicit `fix-r1/checks` path. No successful runtime check was repeated merely to relocate those records.
++
++An initial release build passed in 93.06 seconds before a final source review added conservative roots for old array identities retained across callbacks. Commit `3e1aa9c87` adds those roots in the same two files, and its semantic stress, formatting, clippy, and release checks are recorded separately. Earlier successful library and policy checks remain valid evidence for their unchanged contracts. The final pin uses the rooted source revision.
++
++The added saved-store roots conservatively retain backing arrays across callbacks. As the controller clarified after the commit, comparing generational ObjRef identities alone does not require keeping their objects live, and stale arrays are never dereferenced after a mismatch. Current-store reads are already protected by the rooted receiver, while captured index references are retained through the snapshot validation. The explicit saved-store retention therefore remains a conservative lifetime/performance choice for scoped re-review, rather than a claim that identity comparison itself needs liveness.
++
++The original `/tmp/codex-p9d-t88-pins/8.8f-rexx` remains SHA256 `0c9fb8371ab3d6dcea780194e02c112ed7981447f7f396e606e5f418975583f0`. The corrected `/tmp/codex-p9d-t88-pins/8.8f-r1-rexx` has SHA256 `b695b78fe24903b4be5a2874c8cd128193bbe165f92b50a4d6a8a9956d03d3be`; `fix-r1/release-pin.json` records its source revision, compiler, build descriptor, and source-file hashes. The reentrant ITEMS=-1 oracle defect remains the separate pending user/controller decision documented in the original report, with no new numbered ruling here. Scoped re-review, final gates, and all-program profiling remain controller-owned handoff work.
+diff --git a/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-report.md b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-report.md
+index 20d44542b..9583c5878 100644
+--- a/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-report.md
++++ b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-report.md
+@@ -58,10 +58,16 @@ All durable artifacts are under `docs/superpowers/records/2026-10-18-phase-9d/t8
+ | `format` | `3979b7e31` | `cargo fmt --all --check` passes. |
+ | `source-policy-final` | `3979b7e31` | Workspace unsafe-site scan, granted unsafe-site policy, and SOURCELINE coverage of every corpus program pass. |
+ | `refusal-refresh` | `54c84b9c6` | Refusal refresh and 8 tests pass; generated refusal table is unchanged. |
+ | `release-probes` | `3979b7e31` | All 17 paired release probes exit 0; `final-comparison.json` pins exact descriptor agreement or the applicable existing/approved deviation. |
+ 
+ The command wrapper and exact commands, status codes, elapsed times, environment, stdout, and stderr are retained under `checks/`. The first implementation build failed with a PARSE borrow conflict and was corrected by borrowing the converted rendered needle before searching. An initial formatting invocation used the repository root instead of the Rust workspace, and the initial clippy run exposed an orphaned helper doc comment, which was moved back to its definition without dropping its contract. The FIFO observer initially raced with task disappearance after interpreter exit; its failed `crate-r3` attempt remains recorded, and the observer now treats that disappearance as completion before the successful paired reruns.
+ 
+ ## Release and handoff
+ 
+ The final release pin is `/tmp/codex-p9d-t88-pins/8.8f-rexx`, SHA256 `0c9fb8371ab3d6dcea780194e02c112ed7981447f7f396e606e5f418975583f0`, built successfully in 89.92 seconds from `3979b7e3135a05da4ef9372bc20e10773bde6efa`; `release-pin.json` records the compiler, build descriptor, and changed-source hashes. The own-BASE runtime remains `/tmp/codex-p9d-t88-pins/8.8e2-rexx`, SHA256 `00e29fde4456ee4845a76941263f495b827c083af35363cb54eb3ac8c6b7c733`. Both disposition columns of the eight assigned inventory rows are closed at `3979b7e31`, while their historical reason/probe fields and every unrelated row remain byte-for-byte unchanged. Parent-owned performance artifacts and the preexisting user ZIP remain unstaged for the controller's subsequent work.
++
++## Fix round 1 after review
++
++The scoped review identified stale removal answers and Relation snapshot store provenance defects, both addressed in `task-8.8f-fix-r1-report.md`. The round's final runtime source is `3e1aa9c879a90214bb5c680357975f58a0081abc`, with paired red/baseline witnesses and ten new normal/every-allocation fixtures under `t8.8/semantics/fix-r1/`. Exact covering commands, independent stdout/stderr/statuses, source-policy results, formatting, clippy, release provenance, and the recovered evidence-path infrastructure mistake are recorded in that report and its `checks/` records. The original f pin and evidence remain preserved, and the separate count-ruling decision remains pending without Deviation 84.
++
++The corrected pin is `/tmp/codex-p9d-t88-pins/8.8f-r1-rexx`, SHA256 `b695b78fe24903b4be5a2874c8cd128193bbe165f92b50a4d6a8a9956d03d3be`, from the final rooted source above. Its build exits 0, and all ten final paired probes agree exactly on stdout, stderr, and status. The final semantic stress, format, and affected all-target clippy checks also exit 0, with the earlier 1,235 library and focused policy checks retained in the round report. The conservative saved-store roots are explicitly described there for the controller's scoped re-review and performance assessment.
+diff --git a/rust/crates/rexx-exec/src/dispatch/hash/relation.rs b/rust/crates/rexx-exec/src/dispatch/hash/relation.rs
+index 3b0c7f961..719515d3c 100644
+--- a/rust/crates/rexx-exec/src/dispatch/hash/relation.rs
++++ b/rust/crates/rexx-exec/src/dispatch/hash/relation.rs
+@@ -10,55 +10,91 @@
+ /*----------------------------------------------------------------------------*/
+ 
+ //! `Relation`'s and `Bag`'s own primitive methods, over the store their parent
+ //! module keeps.
+ 
+ use super::{
+     Arity, Cleared, Failure, Interp, Keys, NativeMethod, ObjRef, keys_of, native_hash_supplier,
+     not_this_task, owns, pairs, same_index, slot_at, store_of, take, walk,
+ };
+ 
+-/// Every slot whose index matches, in chain order.
+-fn slots_for(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Result<Vec<usize>, Failure> {
++/// Every matching slot in chain order, paired with the store it belongs to.
++fn slots_for(
++    interp: &mut Interp,
++    receiver: ObjRef,
++    index: ObjRef,
++) -> Result<(super::Store, Vec<usize>), Failure> {
+     let keys = keys_of(interp, receiver);
+     let hash = super::hash_of(interp, keys, index)?;
+-    let store = store_of(interp, receiver)?;
+-    let bucket = (hash % store.buckets as u64) as usize;
+-    let mut found = Vec::new();
+-    for (slot, _) in super::entries_in(interp, &store, Some(bucket))? {
+-        if same_index(interp, &store, keys, slot, index)? {
+-            found.push(slot);
++    'search: loop {
++        let store = store_of(interp, receiver)?;
++        // Keep the saved array identities live across replacement callbacks.
++        for array in [store.indexes, store.items, store.next] {
++            interp.roots.activity_mut().push_temp(array);
+         }
++        let bucket = (hash % store.buckets as u64) as usize;
++        let entries = super::entries_in(interp, &store, Some(bucket))?;
++        let mut indexes = Vec::with_capacity(entries.len());
++        for &(slot, _) in &entries {
++            let held = slot_at(interp, store.indexes, slot)?;
++            if let Some(held) = held {
++                interp.roots.activity_mut().push_temp(held);
++            }
++            indexes.push(held);
++        }
++        let mut found = Vec::new();
++        for &(slot, _) in &entries {
++            let writes = interp.store_writes;
++            let generation = interp.store_generation;
++            let matches = same_index(interp, &store, keys, slot, index)?;
++            // Equality can replace arrays or change an earlier collision
++            // entry. Validate the whole saved chain before retaining slots.
++            if writes != interp.store_writes || generation != interp.store_generation {
++                let current = store_of(interp, receiver)?;
++                if current != store || super::entries_in(interp, &current, Some(bucket))? != entries
++                {
++                    continue 'search;
++                }
++                for (&(saved, _), &held) in entries.iter().zip(&indexes) {
++                    if slot_at(interp, current.indexes, saved)? != held {
++                        continue 'search;
++                    }
++                }
++            }
++            if matches {
++                found.push(slot);
++            }
++        }
++        return Ok((store, found));
+     }
+-    Ok(found)
+ }
+ 
+ /// `RelationClass::allAt(index)`: every item under that index, newest first.
+ fn native_relation_all_at(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     if !owns(interp, receiver) {
+         return Err(not_this_task(interp, receiver, b"ALLAT"));
+     }
+     // **93.903 and not 88.901.** `RelationClass`'s own methods take their
+     // index positionally where `HashCollection`'s take it as a named
+     // argument: measured on a `.Relation~new`, `allAt()` and `removeAll()`
+     // report `Missing argument in method; argument 1 is required.` where
+     // `at()` and `remove()` report `Missing argument; argument index is
+     // required.`
+     let index = super::collection::item_argument(args)?;
+-    let store = store_of(interp, receiver)?;
++    let (store, slots) = slots_for(interp, receiver, index)?;
+     let mut items = Vec::new();
+-    for slot in slots_for(interp, receiver, index)? {
++    for slot in slots {
+         items.push(slot_at(interp, store.items, slot)?.unwrap_or(ObjRef::NIL));
+     }
+     Ok(Some(super::collection::array_of(interp, items)))
+ }
+ 
+ /// `RelationClass::allIndexRexx(item)`: every index whose item matches.
+ fn native_relation_all_index(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+@@ -119,21 +155,21 @@ fn native_relation_unique_indexes(
+ fn native_relation_items(
+     interp: &mut Interp,
+     _cleared: Cleared,
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     if !owns(interp, receiver) {
+         return Err(not_this_task(interp, receiver, b"ITEMS"));
+     }
+     let count = match args.first().copied().flatten() {
+-        Some(index) => slots_for(interp, receiver, index)?.len(),
++        Some(index) => slots_for(interp, receiver, index)?.1.len(),
+         None => walk(interp, receiver)?.len(),
+     };
+     Ok(Some(interp.counted(count)))
+ }
+ 
+ /// `RelationClass::removeAll(index)`: takes every entry under that index out
+ /// and answers them as an array, newest first -- an empty `Array` for an
+ /// index the relation does not hold.
+ fn native_relation_remove_all(
+     interp: &mut Interp,
+@@ -166,24 +202,24 @@ fn native_relation_supplier(
+     cleared: Cleared,
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     if !owns(interp, receiver) {
+         return Err(not_this_task(interp, receiver, b"SUPPLIER"));
+     }
+     let Some(index) = args.first().copied().flatten() else {
+         return native_hash_supplier(interp, cleared, receiver, &[]);
+     };
+-    let store = store_of(interp, receiver)?;
++    let (store, slots) = slots_for(interp, receiver, index)?;
+     let mut items = Vec::new();
+     let mut indexes = Vec::new();
+-    for slot in slots_for(interp, receiver, index)? {
++    for slot in slots {
+         items.push(slot_at(interp, store.items, slot)?.unwrap_or(ObjRef::NIL));
+         indexes.push(slot_at(interp, store.indexes, slot)?.unwrap_or(ObjRef::NIL));
+     }
+     let items = super::collection::array_of(interp, items);
+     let indexes = super::collection::array_of(interp, indexes);
+     super::collection::new_supplier(interp, items, indexes).map(Some)
+ }
+ 
+ /// `RelationClass::hasItemRexx(item [, index])`: whether the relation holds
+ /// that item, optionally under that index. Measured, `hasItem('v1','k')` is
+@@ -240,38 +276,56 @@ fn native_relation_remove_item(
+     let wanted = super::collection::item_argument(args)?;
+     let under = args
+         .get(1)
+         .copied()
+         .flatten()
+         .or_else(|| super::index_only(interp, receiver).then_some(wanted));
+     let keys = keys_of(interp, receiver);
+     let hash = under
+         .map(|index| super::hash_of(interp, keys, index))
+         .transpose()?;
+-    let store = store_of(interp, receiver)?;
+-    let bucket = hash.map(|hash| (hash % store.buckets as u64) as usize);
+-    for (slot, previous) in super::entries_in(interp, &store, bucket)? {
+-        if let Some(index) = under
+-            && !same_index(interp, &store, keys, slot, index)?
+-        {
+-            continue;
++    'search: loop {
++        let store = store_of(interp, receiver)?;
++        // Keep the saved array identities live across replacement callbacks.
++        for array in [store.indexes, store.items, store.next] {
++            interp.roots.activity_mut().push_temp(array);
+         }
+-        let Some(item) = slot_at(interp, store.items, slot)? else {
+-            continue;
+-        };
+-        if !super::collection::same_item(interp, wanted, item)? {
+-            continue;
++        let selected = hash.map(|hash| (hash % store.buckets as u64) as usize);
++        let mut bucket = selected.unwrap_or(0);
++        for (slot, previous) in super::entries_in(interp, &store, selected)? {
++            if previous.is_none() {
++                bucket = slot;
++            }
++            if let Some(index) = under {
++                let matches = same_index(interp, &store, keys, slot, index)?;
++                if store_of(interp, receiver)? != store {
++                    continue 'search;
++                }
++                if !matches {
++                    continue;
++                }
++            }
++            let Some(item) = slot_at(interp, store.items, slot)? else {
++                continue;
++            };
++            if super::collection::same_item(interp, wanted, item)? {
++                if let Some(removed) = super::take_at(interp, receiver, &store, slot, bucket)? {
++                    return Ok(Some(removed));
++                }
++                continue 'search;
++            }
++            if store_of(interp, receiver)? != store {
++                continue 'search;
++            }
+         }
+-        super::take_at(interp, receiver, &store, slot, previous)?;
+-        return Ok(Some(item));
++        return Ok(Some(ObjRef::NIL));
+     }
+-    Ok(Some(ObjRef::NIL))
+ }
+ 
+ /// `Relation`'s and `Bag`'s primitive methods, chained into
+ /// `ObjectModel::build` beside [`super::NATIVE_METHODS`].
+ pub(in crate::dispatch) const NATIVE_METHODS: &[(&str, &str, Arity, NativeMethod)] = &[
+     // **`Relation` and `Bag` have identical native entry-point sets**, which
+     // is why they are one task: `Setup.cpp` writes `Bag`'s `AllAt`,
+     // `AllIndex`, `Items`, `RemoveAll`, `Supplier` and `UniqueIndexes` as
+     // `RelationClass::` bodies, and only `HasItem` and `RemoveItem` are
+     // `BagClass::` -- and those two answer the same thing here, because a
+diff --git a/rust/crates/rexx-exec/src/dispatch/hash/removal.rs b/rust/crates/rexx-exec/src/dispatch/hash/removal.rs
+index 8fc48cf04..25f60ab62 100644
+--- a/rust/crates/rexx-exec/src/dispatch/hash/removal.rs
++++ b/rust/crates/rexx-exec/src/dispatch/hash/removal.rs
+@@ -33,35 +33,50 @@ pub(super) fn take_in(
+         return Ok(None);
+     };
+     let (store, found) = probe_in(interp, receiver, half, store, index)?;
+     let Some(slot) = found.found else {
+         return Ok(None);
+     };
+     let previous = found.last.filter(|last| *last != slot);
+     remove_at(interp, receiver, half, &store, slot, previous)
+ }
+ 
+-/// [`take`] for an entry the caller has already found, named by its slot
+-/// rather than by its index -- what `removeItem` needs, since two entries
+-/// under one index differ only by their item.
++/// Removes an already compared slot if it is still live in its original
++/// backing arrays and bucket, answering the value actually removed.
++///
++/// `removeItem` identifies a slot rather than an index because two entries
++/// under one index can differ only by their item.
+ pub(super) fn take_at(
+     interp: &mut Interp,
+     receiver: ObjRef,
+     store: &Store,
+     slot: usize,
+-    previous: Option<usize>,
++    bucket: usize,
+ ) -> Result<Option<ObjRef>, Failure> {
+-    if store_of(interp, receiver)? != *store {
++    let current = store_of(interp, receiver)?;
++    if current.indexes != store.indexes
++        || current.items != store.items
++        || current.next != store.next
++        || current.buckets != store.buckets
++    {
+         return Ok(None);
+     }
++    // A callback can prepend a collision or overwrite the selected slot.
++    // Re-find its current predecessor and free chain without another send.
++    let Some((_, previous)) = entries_in(interp, &current, Some(bucket))?
++        .into_iter()
++        .find(|&(candidate, _)| candidate == slot)
++    else {
++        return Ok(None);
++    };
+     interp.bump_route_generation();
+-    remove_at(interp, receiver, CONTENTS, store, slot, previous)
++    remove_at(interp, receiver, CONTENTS, &current, slot, previous)
+ }
+ 
+ /// Unlinks the entry at `slot`, whose chain predecessor is `previous`, and
+ /// answers the item it held.
+ pub(super) fn remove_at(
+     interp: &mut Interp,
+     receiver: ObjRef,
+     half: Half,
+     store: &Store,
+     slot: usize,
+@@ -153,30 +168,45 @@ pub(super) fn native_hash_remove_item(
+     receiver: ObjRef,
+     args: &[Option<ObjRef>],
+ ) -> Result<Option<ObjRef>, Failure> {
+     note_routines_write(interp, receiver);
+     if !owns(interp, receiver) {
+         return Err(not_this_task(interp, receiver, b"REMOVEITEM"));
+     }
+     let wanted = super::collection::item_argument(args)?;
+     let keys = keys_of(interp, receiver);
+     if method_store(interp, receiver)?.is_none() && unknown_method(interp, receiver).is_none() {
+-        let store = store_of(interp, receiver)?;
+-        for (slot, previous) in entries_in(interp, &store, None)? {
+-            let Some(item) = item_at(interp, &store, slot)? else {
+-                continue;
+-            };
+-            if same_held_item(interp, keys, wanted, item)? {
+-                take_at(interp, receiver, &store, slot, previous)?;
+-                return Ok(Some(item));
++        'search: loop {
++            let store = store_of(interp, receiver)?;
++            // Keep the saved array identities live across replacement callbacks.
++            for array in [store.indexes, store.items, store.next] {
++                interp.roots.activity_mut().push_temp(array);
+             }
++            let mut bucket = 0;
++            for (slot, previous) in entries_in(interp, &store, None)? {
++                if previous.is_none() {
++                    bucket = slot;
++                }
++                let Some(item) = item_at(interp, &store, slot)? else {
++                    continue;
++                };
++                if same_held_item(interp, keys, wanted, item)? {
++                    if let Some(removed) = take_at(interp, receiver, &store, slot, bucket)? {
++                        return Ok(Some(removed));
++                    }
++                    continue 'search;
++                }
++                if store_of(interp, receiver)? != store {
++                    continue 'search;
++                }
++            }
++            return Ok(Some(ObjRef::NIL));
+         }
+-        return Ok(Some(ObjRef::NIL));
+     }
+     for (index, item) in pairs(interp, receiver)? {
+         if same_held_item(interp, keys, wanted, item)? {
+             take_merged(interp, receiver, index, Removal::Discarded)?;
+             return Ok(Some(item));
+         }
+     }
+     Ok(Some(ObjRef::NIL))
+ }
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-allat-equality.rex b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-allat-equality.rex
+new file mode 100644
+index 000000000..41abb5253
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-allat-equality.rex
+@@ -0,0 +1,26 @@
++r = .relation~new
++k = .key~new(r)
++r~put('old',k)
++q = .key~new(r)
++q~arm
++a = r~allAt(q)
++say 'answer' a[1] 'current' r~at(q) 'items' r~items
++exit
++::class key
++::method init
++  expose table armed
++  use arg table
++  armed = 0
++::method arm
++  expose armed
++  armed = 1
++::method hashCode
++  return 'key'
++::method '=='
++  expose table armed
++  if armed then do
++    armed = 0
++    table~empty
++    table~put('new', .key~new(table))
++  end
++  return 1
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-allat-equality.stdout b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-allat-equality.stdout
+new file mode 100644
+index 000000000..a11059975
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-allat-equality.stdout
+@@ -0,0 +1 @@
++answer new current new items 1
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-equality-counts.rex b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-equality-counts.rex
+new file mode 100644
+index 000000000..68fb19c4e
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-equality-counts.rex
+@@ -0,0 +1,34 @@
++r = .relation~new
++k = .key~new(r)
++r~put('old',k)
++q = .key~new(r)
++q~arm
++a = r~allAt(q)
++say 'calls' q~hashes q~equals
++say 'answer' a[1] 'current' r~at(q) 'items' r~items
++exit
++::class key
++::attribute hashes
++::attribute equals
++::method init
++  expose table armed hashes equals
++  use arg table
++  hashes = 0
++  equals = 0
++  armed = 0
++::method arm
++  expose armed
++  armed = 1
++::method hashCode
++  expose hashes
++  hashes += 1
++  return 'key'
++::method '=='
++  expose table armed equals
++  equals += 1
++  if armed then do
++    armed = 0
++    table~empty
++    table~put('new', .key~new(table))
++  end
++  return 1
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-equality-counts.stdout b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-equality-counts.stdout
+new file mode 100644
+index 000000000..1de44e3cf
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-equality-counts.stdout
+@@ -0,0 +1,2 @@
++calls 1 2
++answer new current new items 1
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-removeitem-unindexed.rex b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-removeitem-unindexed.rex
+new file mode 100644
+index 000000000..c664edc73
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-removeitem-unindexed.rex
+@@ -0,0 +1,28 @@
++t = .relation~new
++t~put('victim', .key~new(1))
++w = .wanted~new(t)
++say 'removed' t~removeItem(w) 'items' t~items 'victim-still-present' t~hasIndex(.key~new(1))
++exit
++::class key
++::attribute label
++::method init
++  expose label
++  use arg label
++::method hashCode
++  return 'key'
++::method '=='
++  expose label
++  use arg other
++  return label == other~label
++::class wanted
++::method init
++  expose table armed
++  use arg table
++  armed = 1
++::method '=='
++  expose table armed
++  if armed then do
++    armed = 0
++    table~put('extra', .key~new(2))
++  end
++  return 1
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-removeitem-unindexed.stdout b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-removeitem-unindexed.stdout
+new file mode 100644
+index 000000000..1eebf2d74
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-removeitem-unindexed.stdout
+@@ -0,0 +1 @@
++removed extra items 1 victim-still-present 1
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-removeitem.rex b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-removeitem.rex
+new file mode 100644
+index 000000000..76fb52d7b
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-removeitem.rex
+@@ -0,0 +1,28 @@
++t = .relation~new
++t~put('victim', .key~new(1))
++w = .wanted~new(t)
++say 'removed' t~removeItem(w, .key~new(1)) 'items' t~items 'victim-still-present' t~hasIndex(.key~new(1))
++exit
++::class key
++::attribute label
++::method init
++  expose label
++  use arg label
++::method hashCode
++  return 'key'
++::method '=='
++  expose label
++  use arg other
++  return label == other~label
++::class wanted
++::method init
++  expose table armed
++  use arg table
++  armed = 1
++::method '=='
++  expose table armed
++  if armed then do
++    armed = 0
++    table~put('extra', .key~new(2))
++  end
++  return 1
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-removeitem.stdout b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-removeitem.stdout
+new file mode 100644
+index 000000000..1eebf2d74
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-removeitem.stdout
+@@ -0,0 +1 @@
++removed extra items 1 victim-still-present 1
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-supplier-equality.rex b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-supplier-equality.rex
+new file mode 100644
+index 000000000..03a91d07b
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-supplier-equality.rex
+@@ -0,0 +1,26 @@
++r = .relation~new
++k = .key~new(r)
++r~put('old',k)
++q = .key~new(r)
++q~arm
++a = r~supplier(q)
++say 'answer' a~item 'current' r~at(q) 'items' r~items
++exit
++::class key
++::method init
++  expose table armed
++  use arg table
++  armed = 0
++::method arm
++  expose armed
++  armed = 1
++::method hashCode
++  return 'key'
++::method '=='
++  expose table armed
++  if armed then do
++    armed = 0
++    table~empty
++    table~put('new', .key~new(table))
++  end
++  return 1
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-supplier-equality.stdout b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-supplier-equality.stdout
+new file mode 100644
+index 000000000..a11059975
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-supplier-equality.stdout
+@@ -0,0 +1 @@
++answer new current new items 1
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-supplier-hash.rex b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-supplier-hash.rex
+new file mode 100644
+index 000000000..5942d38e9
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-supplier-hash.rex
+@@ -0,0 +1,26 @@
++r = .relation~new
++k = .key~new(r)
++r~put('old',k)
++q = .key~new(r)
++q~arm
++a = r~supplier(q)
++say 'answer' a~item 'current' r~at(q) 'items' r~items
++exit
++::class key
++::method init
++  expose table armed
++  use arg table
++  armed = 0
++::method arm
++  expose armed
++  armed = 1
++::method hashCode
++  expose table armed
++  if armed then do
++    armed = 0
++    table~empty
++    table~put('new', .key~new(table))
++  end
++  return 'key'
++::method '=='
++  return 1
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-supplier-hash.stdout b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-supplier-hash.stdout
+new file mode 100644
+index 000000000..a11059975
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-relation-supplier-hash.stdout
+@@ -0,0 +1 @@
++answer new current new items 1
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-removeitem-overwrite.rex b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-removeitem-overwrite.rex
+new file mode 100644
+index 000000000..66ab764ba
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-removeitem-overwrite.rex
+@@ -0,0 +1,28 @@
++t = .table~new
++t~put('victim', .key~new(1))
++w = .wanted~new(t)
++say 'removed' t~removeItem(w) 'items' t~items 'victim-still-present' t~hasIndex(.key~new(1))
++exit
++::class key
++::attribute label
++::method init
++  expose label
++  use arg label
++::method hashCode
++  return 'key'
++::method '=='
++  expose label
++  use arg other
++  return label == other~label
++::class wanted
++::method init
++  expose table armed
++  use arg table
++  armed = 1
++::method '=='
++  expose table armed
++  if armed then do
++    armed = 0
++    table~put('replacement', .key~new(1))
++  end
++  return 1
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-removeitem-overwrite.stdout b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-removeitem-overwrite.stdout
+new file mode 100644
+index 000000000..e57a02194
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-removeitem-overwrite.stdout
+@@ -0,0 +1 @@
++removed replacement items 0 victim-still-present 0
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-removeitem-reused.rex b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-removeitem-reused.rex
+new file mode 100644
+index 000000000..b711be0f0
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-removeitem-reused.rex
+@@ -0,0 +1,30 @@
++t = .table~new
++t~put('victim', .key~new(1))
++w = .wanted~new(t)
++say 'removed' t~removeItem(w) 'items' t~items 'victim-still-present' t~hasIndex(.key~new(1))
++exit
++::class key
++::attribute label
++::method init
++  expose label
++  use arg label
++::method hashCode
++  return 'key'
++::method '=='
++  expose label
++  use arg other
++  return label == other~label
++::class wanted
++::method init
++  expose table armed
++  use arg table
++  armed = 1
++::method '=='
++  expose table armed
++  use arg candidate
++  if armed then do
++    armed = 0
++    table~remove(.key~new(1))
++    table~put('extra', .key~new(2))
++  end
++  return candidate == 'victim'
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-removeitem-reused.stdout b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-removeitem-reused.stdout
+new file mode 100644
+index 000000000..457d917d8
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-removeitem-reused.stdout
+@@ -0,0 +1 @@
++removed extra items 0 victim-still-present 0
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-review-allat.rex b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-review-allat.rex
+new file mode 100644
+index 000000000..fcf24cdbb
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-review-allat.rex
+@@ -0,0 +1,26 @@
++r = .relation~new
++k = .key~new(r)
++r~put('old',k)
++q = .key~new(r)
++q~arm
++a = r~allAt(q)
++say 'answer' a[1] 'current' r~at(q) 'items' r~items
++exit
++::class key
++::method init
++  expose table armed
++  use arg table
++  armed = 0
++::method arm
++  expose armed
++  armed = 1
++::method hashCode
++  expose table armed
++  if armed then do
++    armed = 0
++    table~empty
++    table~put('new', .key~new(table))
++  end
++  return 'key'
++::method '=='
++  return 1
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-review-allat.stdout b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-review-allat.stdout
+new file mode 100644
+index 000000000..a11059975
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-review-allat.stdout
+@@ -0,0 +1 @@
++answer new current new items 1
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-review-removeitem.rex b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-review-removeitem.rex
+new file mode 100644
+index 000000000..b30f3c357
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-review-removeitem.rex
+@@ -0,0 +1,28 @@
++t = .table~new
++t~put('victim', .key~new(1))
++w = .wanted~new(t)
++say 'removed' t~removeItem(w) 'items' t~items 'victim-still-present' t~hasIndex(.key~new(1))
++exit
++::class key
++::attribute label
++::method init
++  expose label
++  use arg label
++::method hashCode
++  return 'key'
++::method '=='
++  expose label
++  use arg other
++  return label == other~label
++::class wanted
++::method init
++  expose table armed
++  use arg table
++  armed = 1
++::method '=='
++  expose table armed
++  if armed then do
++    armed = 0
++    table~put('extra', .key~new(2))
++  end
++  return 1
+diff --git a/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-review-removeitem.stdout b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-review-removeitem.stdout
+new file mode 100644
+index 000000000..8104ca300
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/semantic_boundaries/reentry-review-removeitem.stdout
+@@ -0,0 +1 @@
++removed victim items 1 victim-still-present 0
+$ git log --oneline d84ac3917..8854b1a42
+$ git diff --stat d84ac3917..8854b1a42
+$ git diff -U10 d84ac3917..8854b1a42 -- rust .superpowers/sdd/2026-10-18-phase-9d/task-8.8f-report.md .superpowers/sdd/2026-10-18-phase-9d/task-8.8f-fix-r1-report.md

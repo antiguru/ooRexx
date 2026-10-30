@@ -1,0 +1,17 @@
+{
+  "time_utc": "2026-10-30T17:58:27.766690+00:00",
+  "driver_pid": 2,
+  "owned_processes": [
+    {
+      "pid": 2,
+      "command": "python3 -c import datetime,json,pathlib,subprocess; lines=subprocess.check_output([\"ps\",\"-C\",\"python3\",\"-o\",\"pid=,args=\"],text=True).splitlines(); matches=[int(line.split(None,1)[0]) for line in lines if \"profile-slices.py run base-ab-c batch-02\" in line]; assert len(matches)==1,matches; root=matches[0]; owned=[]; queue=[root];\nwhile queue:\n pid=queue.pop(); proc=pathlib.Path(\"/proc\")/str(pid)\n try:\n  command=(proc/\"cmdline\").read_bytes().replace(b\"\\0\",b\" \").decode(); status=(proc/\"status\").read_text(); fields=dict(line.split(\":\",1) for line in status.splitlines() if \":\" in line); children=[int(value) for value in (proc/\"task\"/str(pid)/\"children\").read_text().split()]; queue.extend(children); cgroup=(proc/\"cgroup\").read_text().strip(); item={\"pid\":pid,\"command\":command,\"VmRSS\":fields.get(\"VmRSS\",\"unknown\").strip(),\"VmHWM\":fields.get(\"VmHWM\",\"unknown\").strip(),\"cgroup\":cgroup}; owned.append(item)\n except FileNotFoundError: pass\nmeminfo=pathlib.Path(\"/proc/meminfo\").read_text(); available=next(line for line in meminfo.splitlines() if line.startswith(\"MemAvailable:\")); result={\"time_utc\":datetime.datetime.now(datetime.timezone.utc).isoformat(),\"driver_pid\":root,\"owned_processes\":owned,\"memory_available\":available,\"cpu_count\":subprocess.check_output([\"getconf\",\"_NPROCESSORS_ONLN\"],text=True).strip()}; path=pathlib.Path(\"/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/concurrency-sample.json\"); path.write_text(json.dumps(result,indent=2)+\"\\n\"); print(json.dumps(result,indent=2)) ",
+      "VmRSS": "15572 kB",
+      "VmHWM": "15572 kB",
+      "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/tmux-spawn-66062bc3-120b-4f50-885d-34db8f42608a.scope"
+    }
+  ],
+  "memory_available": "MemAvailable:   22307576 kB",
+  "cpu_count": "32",
+  "valid": false,
+  "reason": "External exec call has a separate PID namespace. Selection matched the sampling command itself, not the owned profiler. Do not use this sample for concurrency decisions."
+}

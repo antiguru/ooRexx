@@ -1,0 +1,5 @@
+# 2026-10-30T18:48:14Z rounds=3 REXX_LIB_DIR=/home/moritz/dev/repos/ooRexx/build/lib
+# valgrind-3.27.1
+# c /tmp/codex-p9d-t88-pins/8.8c-rexx af52ecd6802b878e9d81be6440492f6bfdadd680628cb48b3224615c70d39a78
+# e1 /tmp/codex-p9d-t88-pins/8.8e1-rexx 434d6567458248fdb804eebe9edb715a54ddb9ded650fcca994eed6c4b691e06
+# e2 /tmp/codex-p9d-t88-pins/8.8e2-rexx 00e29fde4456ee4845a76941263f495b827c083af35363cb54eb3ac8c6b7c733

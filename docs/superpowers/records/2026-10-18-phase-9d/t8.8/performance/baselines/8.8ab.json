@@ -1,0 +1,52 @@
+{
+  "label": "8.8ab",
+  "revision": "b300b9c2541cc70c40c62b861438efe415e3c526",
+  "source_tree": "96faefe6b41f4b80cf3d53cc040eaeb73d97d25d",
+  "rust_source_tree": "96241b4b41ece8482a098901d36cf2626c0f84df",
+  "source_status_before": "",
+  "branch": "codex/p9d-t88-perf-a",
+  "worktree": "/tmp/codex-p9d-t88-perf-a",
+  "build_cwd": "/tmp/codex-p9d-t88-perf-a/rust",
+  "build_command": [
+    "cargo",
+    "build",
+    "-j4",
+    "--release",
+    "-p",
+    "rexx-exec",
+    "--bin",
+    "rexx"
+  ],
+  "driver_command": [
+    "memcap",
+    "8G",
+    "python3",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/baselines/build-pin.py",
+    "8.8ab",
+    "/tmp/codex-p9d-t88-perf-a",
+    "b300b9c2541cc70c40c62b861438efe415e3c526",
+    "8.8ab-rexx"
+  ],
+  "environment": {
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_TARGET_DIR": "/tmp/codex-p9d-t88-perf-target"
+  },
+  "rustc_version": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+  "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)\nrelease: 1.99.0\ncommit-hash: 5f94df4789f005f9a352888e8355ffc645b7ed0e\ncommit-date: 2026-08-27\nhost: x86_64-unknown-linux-gnu\nlibgit2: 1.9.6 (sys:0.21.0 vendored)\nlibcurl: 8.21.0-DEV (sys:0.4.90+curl-8.21.0 vendored ssl:OpenSSL/3.6.3)\nssl: OpenSSL 3.6.3 9 Jun 2026\nos: Debian n/a (forky) [64-bit]",
+  "memory_cap": "8G",
+  "deadline_seconds": 530,
+  "stdout": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/baselines/8.8ab.stdout",
+  "stderr": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/baselines/8.8ab.stderr",
+  "tmp_free_bytes_before": 11834789888,
+  "started_utc": "2026-10-30T17:41:21.271320+00:00",
+  "timed_out": false,
+  "build_status": 0,
+  "elapsed_seconds": 99.38974217296345,
+  "finished_utc": "2026-10-30T17:43:00.661111+00:00",
+  "source_status_after": "",
+  "revision_after": "b300b9c2541cc70c40c62b861438efe415e3c526",
+  "tmp_free_bytes_after": 11888324608,
+  "binary": "/tmp/codex-p9d-t88-pins/8.8ab-rexx",
+  "binary_size_bytes": 67248952,
+  "binary_sha256": "361392c36b1207a9174dfab7b32b2acb212d2c69e53f3e76f106e3a1cdad42dd"
+}

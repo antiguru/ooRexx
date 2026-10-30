@@ -1,0 +1,13 @@
+{
+  "sample_batch": "batch-03-memory.json",
+  "sampled_profiles": 12,
+  "max_profile_tree_rss_kib": 98748,
+  "max_child_hwm_kib": 81424,
+  "available_memory": "MemAvailable:   35019964 kB",
+  "cpu_count": 32,
+  "new_jobs": 8,
+  "driver_cap": "8G",
+  "profile_cap": "2G",
+  "caps_are_separate": true,
+  "reason": "Measured profile memory and available host memory support eight concurrent profiles. Nested memcap calls use sibling cgroups, so no aggregate eight-GiB enforcement is claimed."
+}

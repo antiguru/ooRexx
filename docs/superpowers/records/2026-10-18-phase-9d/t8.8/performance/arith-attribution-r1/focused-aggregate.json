@@ -1,0 +1,14 @@
+{
+  "base": {
+    "arith_general_body": 980585527,
+    "whole_value": 0
+  },
+  "ab": {
+    "arith_general_body": 967085527,
+    "whole_value": 53500000
+  },
+  "difference": {
+    "arith_general_body": -13500000,
+    "whole_value": 53500000
+  }
+}

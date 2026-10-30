@@ -1,0 +1,7 @@
+   Compiling rexx-num v0.1.0 (/tmp/codex-p9d-t88-perf-a/rust/crates/rexx-num)
+   Compiling rexx-core v0.1.0 (/tmp/codex-p9d-t88-perf-a/rust/crates/rexx-core)
+   Compiling rexx-parse v0.1.0 (/tmp/codex-p9d-t88-perf-a/rust/crates/rexx-parse)
+   Compiling rexx-classes v0.1.0 (/tmp/codex-p9d-t88-perf-a/rust/crates/rexx-classes)
+   Compiling rexx-api v0.1.0 (/tmp/codex-p9d-t88-perf-a/rust/crates/rexx-api)
+   Compiling rexx-exec v0.1.0 (/tmp/codex-p9d-t88-perf-a/rust/crates/rexx-exec)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1m 39s

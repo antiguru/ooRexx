@@ -1,0 +1,20 @@
+--- original/callgrind.sh
++++ owned/callgrind-capped.sh
+@@ -18,7 +18,7 @@
+ # (except on TIMED), if a whole-process spread exceeds 0.01% (flagged SPREAD), or if
+ # a whole-process delta exceeds PCT.
+ set -u
+-here=$(cd "$(dirname "$0")" && pwd)
++here=/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs
+ rounds=3 jobs=8 out= table_only= sel= budget=
+ while getopts r:j:o:p:B:T opt; do
+     case $opt in
+@@ -85,7 +85,7 @@
+ one() { # binary-index program round
+     local d name=${names[$1]} f="$out/$2.${names[$1]}.r$3"
+     d=$(mktemp -d)
+-    (cd "$d" && LD_LIBRARY_PATH=$lib valgrind --tool=callgrind --compress-strings=no \
++    (cd "$d" && LD_LIBRARY_PATH=$lib memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no \
+         --log-file="$f.vg" --callgrind-out-file="$f.cg" "${bins[$1]}" "$(prog "$2")" \
+         > "$f.out" 2> "$f.err"; echo $? > "$f.rc")
+     rmdir "$d" 2>/dev/null

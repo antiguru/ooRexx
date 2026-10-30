@@ -1,0 +1,215 @@
+{
+  "captured_utc": "2026-10-30T18:32:56.757502+00:00",
+  "records": [
+    {
+      "name": "base",
+      "source_record": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/baselines/8.8-base.json",
+      "source_record_sha256": "4f13361e5682d58954d221b03dbec86fb7f81e833890101c6cc82f441bfb9739",
+      "record": {
+        "label": "8.8-base",
+        "revision": "0c2ff21ae1844e86c1937b58fc82f080fc43b5ab",
+        "source_tree": "09a190559c304a8cdda07b4fc56751b92b9b0f04",
+        "rust_source_tree": "b9baa30462a3a783cb64535b59e84e743bf1cbd8",
+        "source_status_before": "",
+        "branch": "codex/p9d-t88-perf-base",
+        "worktree": "/tmp/codex-p9d-t88-perf-base",
+        "build_cwd": "/tmp/codex-p9d-t88-perf-base/rust",
+        "build_command": [
+          "cargo",
+          "build",
+          "-j4",
+          "--release",
+          "-p",
+          "rexx-exec",
+          "--bin",
+          "rexx"
+        ],
+        "driver_command": [
+          "memcap",
+          "8G",
+          "python3",
+          "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/baselines/build-pin.py",
+          "8.8-base",
+          "/tmp/codex-p9d-t88-perf-base",
+          "0c2ff21ae1844e86c1937b58fc82f080fc43b5ab",
+          "8.8-base-rexx"
+        ],
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/tmp/codex-p9d-t88-perf-target"
+        },
+        "rustc_version": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+        "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)\nrelease: 1.99.0\ncommit-hash: 5f94df4789f005f9a352888e8355ffc645b7ed0e\ncommit-date: 2026-08-27\nhost: x86_64-unknown-linux-gnu\nlibgit2: 1.9.6 (sys:0.21.0 vendored)\nlibcurl: 8.21.0-DEV (sys:0.4.90+curl-8.21.0 vendored ssl:OpenSSL/3.6.3)\nssl: OpenSSL 3.6.3 9 Jun 2026\nos: Debian n/a (forky) [64-bit]",
+        "memory_cap": "8G",
+        "deadline_seconds": 530,
+        "stdout": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/baselines/8.8-base.stdout",
+        "stderr": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/baselines/8.8-base.stderr",
+        "tmp_free_bytes_before": 12218544128,
+        "started_utc": "2026-10-30T17:38:25.675320+00:00",
+        "timed_out": false,
+        "build_status": 0,
+        "elapsed_seconds": 124.8290946240304,
+        "finished_utc": "2026-10-30T17:40:30.504464+00:00",
+        "source_status_after": "",
+        "revision_after": "0c2ff21ae1844e86c1937b58fc82f080fc43b5ab",
+        "tmp_free_bytes_after": 11970457600,
+        "binary": "/tmp/codex-p9d-t88-pins/8.8-base-rexx",
+        "binary_size_bytes": 67253400,
+        "binary_sha256": "4913ad067898fd6a786c12a696b2a21b0d066ad6b019c73273f78e30c16f5c58"
+      }
+    },
+    {
+      "name": "ab",
+      "source_record": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/baselines/8.8ab.json",
+      "source_record_sha256": "3415be999851f68088969971c9580acf2987306d387ae0b8b6777866aab60b4b",
+      "record": {
+        "label": "8.8ab",
+        "revision": "b300b9c2541cc70c40c62b861438efe415e3c526",
+        "source_tree": "96faefe6b41f4b80cf3d53cc040eaeb73d97d25d",
+        "rust_source_tree": "96241b4b41ece8482a098901d36cf2626c0f84df",
+        "source_status_before": "",
+        "branch": "codex/p9d-t88-perf-a",
+        "worktree": "/tmp/codex-p9d-t88-perf-a",
+        "build_cwd": "/tmp/codex-p9d-t88-perf-a/rust",
+        "build_command": [
+          "cargo",
+          "build",
+          "-j4",
+          "--release",
+          "-p",
+          "rexx-exec",
+          "--bin",
+          "rexx"
+        ],
+        "driver_command": [
+          "memcap",
+          "8G",
+          "python3",
+          "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/baselines/build-pin.py",
+          "8.8ab",
+          "/tmp/codex-p9d-t88-perf-a",
+          "b300b9c2541cc70c40c62b861438efe415e3c526",
+          "8.8ab-rexx"
+        ],
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/tmp/codex-p9d-t88-perf-target"
+        },
+        "rustc_version": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1",
+        "cargo_version": "cargo 1.99.0 (5f94df478 2026-08-27)\nrelease: 1.99.0\ncommit-hash: 5f94df4789f005f9a352888e8355ffc645b7ed0e\ncommit-date: 2026-08-27\nhost: x86_64-unknown-linux-gnu\nlibgit2: 1.9.6 (sys:0.21.0 vendored)\nlibcurl: 8.21.0-DEV (sys:0.4.90+curl-8.21.0 vendored ssl:OpenSSL/3.6.3)\nssl: OpenSSL 3.6.3 9 Jun 2026\nos: Debian n/a (forky) [64-bit]",
+        "memory_cap": "8G",
+        "deadline_seconds": 530,
+        "stdout": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/baselines/8.8ab.stdout",
+        "stderr": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/baselines/8.8ab.stderr",
+        "tmp_free_bytes_before": 11834789888,
+        "started_utc": "2026-10-30T17:41:21.271320+00:00",
+        "timed_out": false,
+        "build_status": 0,
+        "elapsed_seconds": 99.38974217296345,
+        "finished_utc": "2026-10-30T17:43:00.661111+00:00",
+        "source_status_after": "",
+        "revision_after": "b300b9c2541cc70c40c62b861438efe415e3c526",
+        "tmp_free_bytes_after": 11888324608,
+        "binary": "/tmp/codex-p9d-t88-pins/8.8ab-rexx",
+        "binary_size_bytes": 67248952,
+        "binary_sha256": "361392c36b1207a9174dfab7b32b2acb212d2c69e53f3e76f106e3a1cdad42dd"
+      }
+    },
+    {
+      "name": "c",
+      "source_record": "/tmp/codex-p9d-t88-pins/8.8c-rexx.json",
+      "source_record_sha256": "80f4879164279720ad35819443d4f7f72387c41b873c3d0ca241cacc16446eb7",
+      "record": {
+        "binary": "/tmp/codex-p9d-t88-pins/8.8c-rexx",
+        "sha256": "af52ecd6802b878e9d81be6440492f6bfdadd680628cb48b3224615c70d39a78",
+        "size": 67182240,
+        "revision": "03471cc90402bd9926583fddf9d1365cf7dfe195",
+        "source_revision": "949a7806ba5122ae1b40d0ff5d6a05ab9e4765dc",
+        "base_revision": "b300b9c2541cc70c40c62b861438efe415e3c526",
+        "build_command": [
+          "cargo",
+          "build",
+          "-j",
+          "4",
+          "--release",
+          "--locked",
+          "-p",
+          "rexx-exec",
+          "--bin",
+          "rexx"
+        ],
+        "build_cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+        "environment": {
+          "CARGO_INCREMENTAL": "0",
+          "CARGO_TARGET_DIR": "/tmp/codex-p9d-t88-target"
+        },
+        "memory_cap": "8G",
+        "deadline_seconds": 540,
+        "build_status": 0,
+        "build_log": "/tmp/codex-p9d-t88-pins/8.8c-release-build.txt",
+        "driver_command": [
+          "memcap",
+          "8G",
+          "python3",
+          "/tmp/codex-t88c-pin-build.py"
+        ]
+      }
+    },
+    {
+      "name": "e1",
+      "source_record": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/records/e1/release-pin.json",
+      "source_record_sha256": "7a76942372d1b8a07388c0d00529103082590c2263dbfd802b28b63c0d46f8fc",
+      "record": {
+        "base": "dedfab2ea41aa419d993aca1d78bc1749a623620",
+        "built_revision": "7c6e12e84",
+        "final_source_revision": "1d8b03220",
+        "runtime_source_equivalence": "git diff 7c6e12e84 1d8b03220 -- rust/crates/{rexx-exec,rexx-parse,rexx-api}/src is empty",
+        "artifacts": [
+          {
+            "path": "/tmp/codex-p9d-t88-pins/8.8e1-rexx",
+            "sha256": "434d6567458248fdb804eebe9edb715a54ddb9ded650fcca994eed6c4b691e06",
+            "bytes": 67179976
+          },
+          {
+            "path": "/tmp/codex-p9d-t88-pins/8.8e1-rexxc",
+            "sha256": "11286b31ee5d2ad0c28b94883d7544f58ed503b9510879588319f3d673f2f3ea",
+            "bytes": 66849752
+          }
+        ],
+        "diagnostic_binaries": [
+          {
+            "path": "/tmp/codex-p9d-t88-target/debug/rexx",
+            "sha256": "3cd216bd7e2500a567287c585663516b1e08ede53b44bc75037060d1bacebd3e"
+          },
+          {
+            "path": "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+            "sha256": "c52dce960bacae58e9f7fff86342a64df1dc177dbbe4c80a82690633e02cf722"
+          }
+        ]
+      }
+    },
+    {
+      "name": "e2",
+      "source_record": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/release-pin.json",
+      "source_record_sha256": "c73192b6046483ae19bf891b5c3963edb3e657cff4eef7b5945b4eeb0f655604",
+      "record": {
+        "base": "a7db381c765fafd81fe775245902d6476aefe072",
+        "built_revision": "ae6a6bd048551c66f63727421fe0ef45877d91ea",
+        "runtime_implementation": "dbbe93639",
+        "source_tree": "ef1ec657aabf2264fd12acba2c427f8cf7c652b7",
+        "build_record": "release-build.json",
+        "compiler": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1\n",
+        "artifact": {
+          "path": "/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+          "sha256": "00e29fde4456ee4845a76941263f495b827c083af35363cb54eb3ac8c6b7c733",
+          "bytes": 67237032
+        },
+        "baseline": {
+          "path": "/tmp/codex-p9d-t88-pins/8.8e1-rexx",
+          "sha256": "434d6567458248fdb804eebe9edb715a54ddb9ded650fcca994eed6c4b691e06"
+        },
+        "performance": "All-program own-BASE comparison remains controller-owned; lookup and cold-allocation costs are not assumed free."
+      }
+    }
+  ]
+}

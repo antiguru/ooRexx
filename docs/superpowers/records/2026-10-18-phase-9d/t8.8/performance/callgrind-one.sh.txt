@@ -1,0 +1,100 @@
+#!/bin/bash
+# Callgrind instruction counts per program per binary: the whole process, and the same
+# with libc.so.6 and ld-linux subtracted.
+#
+# usage: callgrind.sh [-r ROUNDS] [-j JOBS] [-o OUTDIR] [-p PROGRAMS] [-B PCT] [-T] NAME=BINARY...
+#   ROUNDS  rounds (default 3); round r starts at binary r
+#   JOBS    programs run at once (default 8)
+#   OUTDIR  output directory (default: mktemp -d)
+#   PROGRAMS  space-separated subset of PROGRAMS (default: all)
+#   PCT     budget: a whole-process delta over PCT percent fails (flagged OVER)
+#   -T      print the table for OUTDIR's summary.tsv without running
+# env: REXX_LIB_DIR  put on LD_LIBRARY_PATH (default: the oracle's build/lib)
+#
+# Table: the whole-process median per binary and its delta against the first binary,
+# which the budget judges; the libc-and-ld-subtracted median and delta; the
+# whole-process spread across rounds.
+# Exits 1 if a run exits non-zero, if its stdout differs from the first binary's
+# (except on TIMED), if a whole-process spread exceeds 0.01% (flagged SPREAD), or if
+# a whole-process delta exceeds PCT.
+set -u
+here=/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs
+rounds=3 jobs=8 out= table_only= sel= budget=
+while getopts r:j:o:p:B:T opt; do
+    case $opt in
+        r) rounds=$OPTARG ;;
+        j) jobs=$OPTARG ;;
+        o) out=$OPTARG ;;
+        p) sel=$OPTARG ;;
+        B) budget=$OPTARG ;;
+        T) table_only=1 ;;
+        *) exit 2 ;;
+    esac
+done
+shift $((OPTIND - 1))
+if [ $# -lt 1 ]; then
+    echo "usage: callgrind.sh [-r ROUNDS] [-j JOBS] [-o OUTDIR] [-p PROGRAMS] [-B PCT] [-T] NAME=BINARY..." >&2
+    exit 2
+fi
+lib=${REXX_LIB_DIR:-/home/moritz/dev/repos/ooRexx/build/lib}
+[ -f "$lib/liborxfunction.so" ] || { echo "no liborxfunction.so in $lib; set REXX_LIB_DIR" >&2; exit 2; }
+[ -n "$out" ] || out=$(mktemp -d)
+mkdir -p "$out"
+out=$(cd "$out" && pwd)
+
+# Every *.rex here, rexxcps and pingpong/*.rex; checked against the directories.
+PINGPONG="pingguard pingmsg pingsem"
+PROGRAMS="alloc alloc4c arith assign churn compound decloop decrender define dirread dispatch
+dispatchclass emptyloop extcall fibcall fibfunc hashnew heapshape intcall interpret nop parse pkglocal sayloop
+sendloop startup strings textnum varlookup rexxcps $PINGPONG"
+on_disk=$(cd "$here" && ls ./*.rex pingpong/*.rex | sed 's|^\./||; s|^pingpong/||; s|\.rex$||' | sort)
+listed=$(echo $PROGRAMS | tr ' ' '\n' | grep -vx rexxcps | sort)
+if [ "$on_disk" != "$listed" ]; then
+    echo "PROGRAMS and $here/*.rex disagree:" >&2
+    diff <(echo "$listed") <(echo "$on_disk") >&2
+    exit 2
+fi
+if [ -n "$sel" ]; then
+    for p in $sel; do
+        [[ " $(echo $PROGRAMS) " == *" $p "* ]] || { echo "not in PROGRAMS: $p" >&2; exit 2; }
+    done
+    PROGRAMS=$sel
+fi
+TIMED="heapshape rexxcps"
+prog() {
+    if [ "$1" = rexxcps ]; then echo "$here/../bench-rexxcps/rexxcps.rex"
+    elif [[ " $PINGPONG " == *" $1 "* ]]; then echo "$here/pingpong/$1.rex"
+    else echo "$here/$1.rex"; fi
+}
+
+names=() bins=()
+for arg in "$@"; do
+    names+=("${arg%%=*}")
+    bins+=("$(readlink -f "${arg#*=}")")
+    [ -x "${bins[-1]}" ] || { echo "not executable: ${arg#*=}" >&2; exit 2; }
+done
+n=${#names[@]}
+status=0
+if [ -z "$table_only" ]; then
+{
+    echo "# $(date -u +%FT%TZ) rounds=$rounds REXX_LIB_DIR=$lib"
+    echo "# $(valgrind --version)"
+    for i in "${!names[@]}"; do echo "# ${names[$i]} ${bins[$i]} $(sha256sum < "${bins[$i]}" | cut -d' ' -f1)"; done
+} > "$out/binaries.txt"
+
+one() { # binary-index program round
+    local d name=${names[$1]} f="$out/$2.${names[$1]}.r$3"
+    d=$(mktemp -d)
+    (cd "$d" && LD_LIBRARY_PATH=$lib memcap 2G timeout -k 5s 480s valgrind --tool=callgrind --compress-strings=no \
+        --log-file="$f.vg" --callgrind-out-file="$f.cg" "${bins[$1]}" "$(prog "$2")" \
+        > "$f.out" 2> "$f.err"; echo $? > "$f.rc")
+    rmdir "$d" 2>/dev/null
+    printf '%s\t%s\tr%s\t%s\trc=%s\n' "$name" "$2" "$3" "$(python3 "$here/cgsum.py" "$f.cg")" "$(cat "$f.rc")" > "$f.row"
+}
+job() { # program round: every binary in turn, starting at binary (round - 1) mod n
+    local k
+    for ((k = 0; k < n; k++)); do one $(((k + $2 - 1) % n)) "$1" "$2"; done
+}
+
+one "$PROFILE_BINARY_INDEX" "$PROFILE_PROGRAM" "$PROFILE_ROUND"
+fi

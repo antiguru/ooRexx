@@ -27,3 +27,7 @@ Root still owes final gated corpus, source/coverage/refusal/owner/representation
 ## Latest review result
 
 f review found two Important reentrant-store defects in `task-8.8f-review.md`: REMOVEITEM ignores a skipped take_at, and ALLAT/indexed SUPPLIER cross store identities after observable HASHCODE. Original f implementer resumes for fix round1 before any e2/numeric performance repair. Old f pin remains preserved, its performance cohort has zero profiles and is held, and the corrected pin must use a new path such as `8.8f-r1-rexx`. Re-review is scoped against original reviewed HEAD `d84ac3917`, with exact fixture evidence required.
+
+## Current acceptance and next owner
+
+f fix round1 is approved by task-8.8f-rereview-r1.md:2addressed/0open, source3e1aa9c87, evidence8854b1a42. Corrected pin8.8f-r1-rexx SHA256b695b78fe24903b4be5a2874c8cd128193bbe165f92b50a4d6a8a9956d03d3be is accepted; profiling worker starts its198-profile cohort after root commits originals. Original594profiles are complete and independently verified, c/e1passall33, a failsarith, e2fails12programs. Next source owner is original t88e2_runtime for performance repair round1, using prepared brief; root must read its handoff, verify status/log and scoped review before numeric repair/M6/finalgates.84stillpending, no user reply seen.

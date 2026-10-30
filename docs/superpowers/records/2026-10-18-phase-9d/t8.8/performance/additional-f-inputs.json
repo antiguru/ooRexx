@@ -1,0 +1,24 @@
+{
+  "verified_utc": "2026-10-30T18:54:06.968214+00:00",
+  "runtime_source_revision": "3e1aa9c879a90214bb5c680357975f58a0081abc",
+  "status": "CANDIDATE_PENDING_REREVIEW",
+  "profiling_authorized": false,
+  "cohort": {
+    "e2-f": [
+      "e2",
+      "f"
+    ]
+  },
+  "rounds": 3,
+  "additional_profiles": 198,
+  "pins": [
+    {
+      "name": "f",
+      "path": "/tmp/codex-p9d-t88-pins/8.8f-r1-rexx",
+      "sha256": "b695b78fe24903b4be5a2874c8cd128193bbe165f92b50a4d6a8a9956d03d3be",
+      "bytes": 67366072
+    }
+  ],
+  "existing_instrument_manifest": "inputs.json",
+  "superseded_manifest": "held-f-inputs.json"
+}

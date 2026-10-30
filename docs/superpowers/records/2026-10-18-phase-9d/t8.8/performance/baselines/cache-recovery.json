@@ -1,0 +1,33 @@
+{
+  "rejected_attempt": {
+    "reason": "Cargo reused the base binary despite changed linked production source",
+    "record": "8.8ab-rejected-cache-reuse.json",
+    "stdout": "8.8ab-rejected-cache-reuse.stdout",
+    "stderr": "8.8ab-rejected-cache-reuse.stderr",
+    "binary": "/tmp/codex-p9d-t88-pins/8.8ab-rejected-cache-reuse-rexx",
+    "sha256": "4913ad067898fd6a786c12a696b2a21b0d066ad6b019c73273f78e30c16f5c58"
+  },
+  "evidence": {
+    "dependency_file": "/tmp/codex-p9d-t88-perf-target/release/deps/rexx_num-860eb1f5d064acb2.d",
+    "dependency_path": "crates/rexx-num/src/pow.rs",
+    "base_source_mtime": "2026-10-30 18:37:35.166659060 +0100",
+    "ab_source_mtime": "2026-10-30 18:37:38.545450030 +0100",
+    "base_fingerprint_mtime": "2026-10-30 18:38:26.952219483 +0100",
+    "input_diff_command": ["git", "diff", "--name-only", "0c2ff21ae", "b300b9c25", "--", "*.rs", "*.toml", "*.lock", "*build*", ".cargo", "rust/.cargo", "rust/rust-toolchain*"],
+    "input_diff": "checked-input-diff.txt",
+    "changed_linked_production_input": "rust/crates/rexx-num/src/pow.rs"
+  },
+  "clean": {
+    "command": ["memcap", "8G", "env", "CARGO_INCREMENTAL=0", "CARGO_TARGET_DIR=/tmp/codex-p9d-t88-perf-target", "cargo", "clean", "--release", "-p", "rexx-num"],
+    "cwd": "/tmp/codex-p9d-t88-perf-a/rust",
+    "status": 0,
+    "tool_reported_wall_seconds": 0.008435433,
+    "stdout": "",
+    "stderr": "     Removed 7 files, 1.6MiB total\n"
+  },
+  "accepted_retry": {
+    "record": "8.8ab.json",
+    "rebuilt_packages": ["rexx-num", "rexx-core", "rexx-parse", "rexx-classes", "rexx-api", "rexx-exec"],
+    "sha256": "361392c36b1207a9174dfab7b32b2acb212d2c69e53f3e76f106e3a1cdad42dd"
+  }
+}

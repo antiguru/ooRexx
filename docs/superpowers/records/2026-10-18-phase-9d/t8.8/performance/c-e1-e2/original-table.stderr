@@ -1,0 +1,12 @@
+OVER alloc e2 +0.6553% > 0.05%
+OVER churn e2 +0.0804% > 0.05%
+OVER define e2 +0.1208% > 0.05%
+OVER dirread e2 +0.0512% > 0.05%
+OVER dispatch e2 +2.3555% > 0.05%
+OVER dispatchclass e2 +2.5434% > 0.05%
+OVER hashnew e2 +0.1433% > 0.05%
+OVER heapshape e2 +0.3366% > 0.05%
+OVER sendloop e2 +3.5629% > 0.05%
+OVER pingmsg e2 +0.1354% > 0.05%
+OVER pingsem e2 +0.4466% > 0.05%
+# outputs in /tmp/codex-p9d-t88-performance/c-e1-e2

@@ -1,0 +1,152 @@
+[
+  {
+    "record": "batch-01.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "base-ab-c",
+      "batch-01",
+      "9"
+    ],
+    "status": 0,
+    "elapsed_seconds": 112.8682187909726,
+    "deadline_seconds": 525
+  },
+  {
+    "record": "batch-02.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "base-ab-c",
+      "batch-02",
+      "1000"
+    ],
+    "status": 0,
+    "elapsed_seconds": 501.2383480570279,
+    "deadline_seconds": 525
+  },
+  {
+    "record": "batch-03-memory.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "c-e1-e2",
+      "batch-03-memory",
+      "12"
+    ],
+    "status": 0,
+    "elapsed_seconds": 92.2999944339972,
+    "deadline_seconds": 525
+  },
+  {
+    "record": "batch-04.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "c-e1-e2",
+      "batch-04",
+      "1000",
+      "8"
+    ],
+    "status": 0,
+    "elapsed_seconds": 493.27360080595827,
+    "deadline_seconds": 525
+  },
+  {
+    "record": "batch-05.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "base-ab-c",
+      "batch-05",
+      "1000",
+      "8"
+    ],
+    "status": 0,
+    "elapsed_seconds": 474.8534004659741,
+    "deadline_seconds": 525
+  },
+  {
+    "record": "batch-06.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "base-ab-c",
+      "batch-06",
+      "1000",
+      "8"
+    ],
+    "status": 0,
+    "elapsed_seconds": 420.2413543880102,
+    "deadline_seconds": 525
+  },
+  {
+    "record": "batch-07.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "base-ab-c",
+      "batch-07",
+      "1000",
+      "8"
+    ],
+    "status": 0,
+    "elapsed_seconds": 305.2250324699562,
+    "deadline_seconds": 525
+  },
+  {
+    "record": "batch-08.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "c-e1-e2",
+      "batch-08",
+      "1000",
+      "8"
+    ],
+    "status": 0,
+    "elapsed_seconds": 463.7290568249882,
+    "deadline_seconds": 525
+  },
+  {
+    "record": "batch-09.json",
+    "command": [
+      "memcap",
+      "8G",
+      "python3",
+      "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "run",
+      "c-e1-e2",
+      "batch-09",
+      "1000",
+      "8"
+    ],
+    "status": 0,
+    "elapsed_seconds": 365.57419005798874,
+    "deadline_seconds": 525
+  }
+]

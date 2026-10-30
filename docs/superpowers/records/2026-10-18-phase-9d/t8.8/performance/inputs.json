@@ -1,0 +1,285 @@
+{
+  "prepared_utc": "2026-10-30T17:49:25.447544+00:00",
+  "source_revision": "12d160b9e185e2ad53938668c0b0ceda87103214",
+  "programs": [
+    "alloc",
+    "alloc4c",
+    "arith",
+    "assign",
+    "churn",
+    "compound",
+    "decloop",
+    "decrender",
+    "define",
+    "dirread",
+    "dispatch",
+    "dispatchclass",
+    "emptyloop",
+    "extcall",
+    "fibcall",
+    "fibfunc",
+    "hashnew",
+    "heapshape",
+    "intcall",
+    "interpret",
+    "nop",
+    "parse",
+    "pkglocal",
+    "sayloop",
+    "sendloop",
+    "startup",
+    "strings",
+    "textnum",
+    "varlookup",
+    "rexxcps",
+    "pingguard",
+    "pingmsg",
+    "pingsem"
+  ],
+  "rounds": 3,
+  "groups": {
+    "base-ab-c": [
+      "base",
+      "ab",
+      "c"
+    ],
+    "c-e1-e2": [
+      "c",
+      "e1",
+      "e2"
+    ]
+  },
+  "files": [
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/callgrind.sh",
+      "sha256": "c5a27ff7d06fa7fe45cb1c4edd671c96796ccef9adf8d8a05b1721a2ec169796",
+      "bytes": 6654
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/cgsum.py",
+      "sha256": "b46844e2b94da2c90eb07054aaaed53497687fe0524619921510f6e85545ae18",
+      "bytes": 1065
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/alloc.rex",
+      "sha256": "151926a9a9d5db22d27fc836c1022fe86456c1c5694f010807e2b7e44689baec",
+      "bytes": 308
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/alloc4c.rex",
+      "sha256": "083af0b44102892f920f91b35faffab7b1a94652acad154c7cff5df5afd4f5ca",
+      "bytes": 2662
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/arith.rex",
+      "sha256": "2bb5688de84b76d28a119dd1f1399114c565a95e308f02b8fd0225bb247a0bb0",
+      "bytes": 333
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/assign.rex",
+      "sha256": "f90d66d0749103ba21d8d6f03bf05bf6edf0ee21c5ccc3f82e00ab50ca54ee81",
+      "bytes": 1053
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/churn.rex",
+      "sha256": "56330cec8ef39b315998760292c93db4e889f65240391893db284cb2ec642bc9",
+      "bytes": 335
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/compound.rex",
+      "sha256": "1983e9b96091fd6011733732e90a500d0d8172568da376ff1431ba827176b822",
+      "bytes": 302
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/decloop.rex",
+      "sha256": "d9d7dbc5926322da34202a1e55307df0bbb81e3b24fc663dfafac693e112b302",
+      "bytes": 175
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/decrender.rex",
+      "sha256": "38406d2a72ee74f8ead3171fd540943cb9181e63877adf46d3732a676a447859",
+      "bytes": 250
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/define.rex",
+      "sha256": "9261469d67a38ffbbbeeb72d27a2ff559a9f5170530eb00917c88c08e57772c3",
+      "bytes": 426
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/dirread.rex",
+      "sha256": "1e2e9aac4afaed669b26939e9d850d2725e60a21788e434463f3a8babf2c2cf3",
+      "bytes": 187
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/dispatch.rex",
+      "sha256": "4b6728f0743c00e8153a02e8f13dd60d7b6243349ac927e61a5fac6e1c1be4fe",
+      "bytes": 304
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/dispatchclass.rex",
+      "sha256": "7cd9d58f2e64e83686c62798090d17e59815da96a72ad5b0496231dd10819128",
+      "bytes": 690
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/emptyloop.rex",
+      "sha256": "53a7af93585dbd77ab1817b164f1465ca0f081410805353cc8c474b1ed18fe9a",
+      "bytes": 183
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/extcall.rex",
+      "sha256": "73f27e73d90859570134da345d0d24d4c1d2598f29017ad8471b9fe8ce1da6ec",
+      "bytes": 188
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/fibcall.rex",
+      "sha256": "697941030a6bf3f1d47f948d2ec019f6010c30cccc3ea3b02fd1a70db430a999",
+      "bytes": 247
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/fibfunc.rex",
+      "sha256": "99d1cd0b3dab688cba19281f4d3f8c50c014c21e2b557d90a788e1a0fa9f3997",
+      "bytes": 211
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/hashnew.rex",
+      "sha256": "c1855b6251e77937187892695f5928018328559ad20642ea5d31695adb0cc6df",
+      "bytes": 337
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/heapshape.rex",
+      "sha256": "eee9a19ce62bafc6448d8e1f6a840d0baa8519a365d9399a50dad7d14f5b3395",
+      "bytes": 2069
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/intcall.rex",
+      "sha256": "fab21d42d88ce0df5d54b9e14556841e7f32fc456234559e46d4a80fd0741ab4",
+      "bytes": 276
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/interpret.rex",
+      "sha256": "a928e2703bbaefb7d3c5eb7b5dc14ffa2da72a4c121afcef4f4943224e986dba",
+      "bytes": 264
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/nop.rex",
+      "sha256": "78f4d71848c22ec374701ff6015915ba7d19f48724139f4c9b05ef204916bbb1",
+      "bytes": 841
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/parse.rex",
+      "sha256": "41996313ca4cc464dc7815bf0637d570a2a3706f60ee99c03d854e5ecdb9e24b",
+      "bytes": 548
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pkglocal.rex",
+      "sha256": "b9967ef7b6f2d20a6f434c4ff5debfc5103a7ca7fbd2d85ac65574ebe5fe50ef",
+      "bytes": 295
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/sayloop.rex",
+      "sha256": "76f36114db08f59ba93207d14257416930d3aea2170ce8a000bed3a3aa94b71a",
+      "bytes": 817
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/sendloop.rex",
+      "sha256": "39294a7c468393a9b36b0053ac254b1c63e83fabab6f037ee4524f73b558502c",
+      "bytes": 132
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/startup.rex",
+      "sha256": "bfa2290467188ff2b7304c0241078238988aea50790f960456cf5bb1313c06c5",
+      "bytes": 81
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/strings.rex",
+      "sha256": "b776092695524f3c4672446dd5243a3f36156dba9aba2d045340d3c714187e0a",
+      "bytes": 316
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/textnum.rex",
+      "sha256": "03e4e92dd53fb98b3cf0f13aef362029bb0fb6773db88d2ba77822cf8bc9f412",
+      "bytes": 499
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/varlookup.rex",
+      "sha256": "ca0fafd76e6aa0fe0f272fcbb09b10171ffd0aa13371036bbb456234e7a06ef9",
+      "bytes": 144
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-rexxcps/rexxcps.rex",
+      "sha256": "26697c18bb5c35007496ff578b3ee6c39aa9c96b882189c9cabfc936263ad673",
+      "bytes": 4228
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pingpong/pingguard.rex",
+      "sha256": "35e3ecc4f817e73e10a8364961bee0ce378a045643c94572252c5f0e4f39e0df",
+      "bytes": 545
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pingpong/pingmsg.rex",
+      "sha256": "23526dd8978792a51e03032c9c4c8a318d243268be9000949166a40e6f0368e9",
+      "bytes": 261
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/pingpong/pingsem.rex",
+      "sha256": "d745a529884f0509d21e1cde4bbde746b2e0b2467e45964b8770d54e0b24267f",
+      "bytes": 435
+    },
+    {
+      "path": "/home/moritz/dev/repos/ooRexx/build/lib/liborxfunction.so",
+      "sha256": "77e565b3d99c0b49dd039c64fbc21b9659e3f6e1bb405276f50ebbe153c4b9e2",
+      "bytes": 203624
+    },
+    {
+      "path": "/tmp/codex-p9d-t88-performance/callgrind-capped.sh",
+      "sha256": "75b51ef5fb46f3efc975678ed932508288aa61ace29534a481444a4cdccc3db2",
+      "bytes": 6715
+    },
+    {
+      "path": "/tmp/codex-p9d-t88-performance/callgrind-one.sh",
+      "sha256": "4b9fea936e779bc9b9d1283c601ae0b4ab5a8e048acac488a5792f59f4c836ac",
+      "bytes": 4216
+    }
+  ],
+  "pins": [
+    {
+      "name": "base",
+      "path": "/tmp/codex-p9d-t88-pins/8.8-base-rexx",
+      "sha256": "4913ad067898fd6a786c12a696b2a21b0d066ad6b019c73273f78e30c16f5c58",
+      "expected_sha256": "4913ad067898fd6a786c12a696b2a21b0d066ad6b019c73273f78e30c16f5c58"
+    },
+    {
+      "name": "ab",
+      "path": "/tmp/codex-p9d-t88-pins/8.8ab-rexx",
+      "sha256": "361392c36b1207a9174dfab7b32b2acb212d2c69e53f3e76f106e3a1cdad42dd",
+      "expected_sha256": "361392c36b1207a9174dfab7b32b2acb212d2c69e53f3e76f106e3a1cdad42dd"
+    },
+    {
+      "name": "c",
+      "path": "/tmp/codex-p9d-t88-pins/8.8c-rexx",
+      "sha256": "af52ecd6802b878e9d81be6440492f6bfdadd680628cb48b3224615c70d39a78",
+      "expected_sha256": "af52ecd6802b878e9d81be6440492f6bfdadd680628cb48b3224615c70d39a78"
+    },
+    {
+      "name": "e1",
+      "path": "/tmp/codex-p9d-t88-pins/8.8e1-rexx",
+      "sha256": "434d6567458248fdb804eebe9edb715a54ddb9ded650fcca994eed6c4b691e06",
+      "expected_sha256": "434d6567458248fdb804eebe9edb715a54ddb9ded650fcca994eed6c4b691e06"
+    },
+    {
+      "name": "e2",
+      "path": "/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+      "sha256": "00e29fde4456ee4845a76941263f495b827c083af35363cb54eb3ac8c6b7c733",
+      "expected_sha256": "00e29fde4456ee4845a76941263f495b827c083af35363cb54eb3ac8c6b7c733"
+    }
+  ],
+  "valgrind_version": "valgrind-3.27.1",
+  "memory_caps": {
+    "driver": "8G",
+    "profile": "2G",
+    "jobs": 3
+  },
+  "profile_timeout_seconds": 480,
+  "batch_deadline_seconds": 525,
+  "tmp_free_bytes": 11670196224
+}

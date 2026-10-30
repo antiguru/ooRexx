@@ -1,0 +1,25 @@
+{
+  "runtime_source_revision": "3979b7e3135a05da4ef9372bc20e10773bde6efa",
+  "cohort": {
+    "e2-f": [
+      "e2",
+      "f"
+    ]
+  },
+  "rounds": 3,
+  "additional_profiles": 198,
+  "pins": [
+    {
+      "name": "f",
+      "path": "/tmp/codex-p9d-t88-pins/8.8f-rexx",
+      "sha256": "0c9fb8371ab3d6dcea780194e02c112ed7981447f7f396e606e5f418975583f0",
+      "bytes": 67320832
+    }
+  ],
+  "existing_instrument_manifest": "inputs.json",
+  "verified_utc": "2026-10-30T18:18:37.794981+00:00",
+  "status": "SUPERSEDED_UNPROFILED",
+  "reason": "Scoped f review requires repair before profiling. No e2-f profiles started.",
+  "profile_count": 0,
+  "replacement_candidate_manifest": "additional-f-inputs.json"
+}

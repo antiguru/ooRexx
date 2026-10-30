@@ -1,0 +1,8 @@
+{
+  "command": ["memcap", "8G", "python3", "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/verify-profiles.py", "original", "base-ab-c", "c-e1-e2"],
+  "status": 1,
+  "reason": "Verifier compared lexical paths instead of file identity for rexxcps",
+  "actual_profiled_program": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-programs/../bench-rexxcps/rexxcps.rex",
+  "expected_program": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/bench-rexxcps/rexxcps.rex",
+  "disposition": "Normalize both paths before checking file identity. No profile was rerun or rejected."
+}
