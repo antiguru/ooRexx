@@ -12,6 +12,7 @@ o = .Waiter~new
 address system 'echo a; sleep 0.2; echo b; sleep 0.2; echo c' with output using (o)
 say 'semaphore' rc o~calls
 .local~guardReady = .EventSemaphore~new
+.local~callbackEntered = .EventSemaphore~new
 .local~released = 0
 o = .Guarded~new
 h = o~start('hold')
@@ -31,8 +32,8 @@ exit
   slept = 0
   if line == 'a' then do
     -- The alarm starts in this callback, so command startup cannot satisfy it.
-    alarm = .Alarm~new(0.5, .Message~new(.SleepMark~new, 'mark'))
     .local~sleepMarked = 0
+    alarm = .Alarm~new(0.5, .Message~new(.SleepMark~new, 'mark'))
     call SysSleep 1
     slept = .sleepMarked
     alarm~cancel
@@ -75,10 +76,15 @@ exit
 ::method hold
   -- Readiness is outside this guarded object and is posted while it is held.
   .guardReady~post
-  call SysSleep 1
+  -- Keep the guard until a callback actually starts trying to enter it.
+  .callbackEntered~wait
   .local~released = 1
   say 'released'
-::method lineout
+::method lineout unguarded
+  use arg line
+  .callbackEntered~post
+  return self~append(line)
+::method append
   use arg line
   self~calls += 1
   say 'O:'line 'released' .released

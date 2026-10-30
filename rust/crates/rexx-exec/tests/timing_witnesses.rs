@@ -38,3 +38,25 @@ fn redirected_targets_preserve_wait_order_and_all_output() {
     }
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+
+#[test]
+fn removing_each_wait_breaks_the_logical_observation() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/lang/command_redirected_target_waits_elsewhere.rex");
+    let source = std::fs::read_to_string(&path).unwrap();
+    for (name, from, to) in [
+        ("sleep", "    call SysSleep 1", "    nop"),
+        ("semaphore", "    .sem~wait", "    nop"),
+        ("guard", "::method append\n", "::method append unguarded\n"),
+    ] {
+        assert!(source.contains(from), "{name} mutation anchor");
+        let text = source.replacen(from, to, 1);
+        let invocation = rexx_exec::Invocation::none()
+            .with_deadline(std::time::Duration::from_secs(30))
+            .with_switch_mode(SwitchMode::Sim(SimConfig::parse("sim:1").unwrap()));
+        let run = run_program(path.to_str().unwrap(), text.into_bytes(), invocation);
+        assert_eq!(run.exit_code, 0, "{name}: {}", String::from_utf8_lossy(&run.stderr));
+        assert_ne!(run.stdout, EXPECTED, "{name} omission escaped the witness");
+        eprintln!("{name} omission: {}", String::from_utf8_lossy(&run.stdout));
+    }
+}

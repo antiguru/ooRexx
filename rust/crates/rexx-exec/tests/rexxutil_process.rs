@@ -105,8 +105,8 @@ fn competing_child_waiters_accept_either_valid_winner() {
         say 'failure' rc\n\
         return\n";
     let (_, dir) = rexx("sys-wait-race", program);
-    let output = Command::new("timeout")
-        .args(["-k", "2", "30"])
+    let output = Command::new("memcap")
+        .args(["2G", "timeout", "-k", "2", "30"])
         .arg(env!("CARGO_BIN_EXE_rexx"))
         .arg(dir.join("p.rex"))
         .current_dir(&dir)
@@ -127,7 +127,7 @@ fn competing_child_waiters_accept_either_valid_winner() {
 #[test]
 fn sys_wait_returns_the_raw_status_of_an_owned_child() {
     let (_, dir) = rexx("sys-wait-owned", "say SysWait()\n");
-    let output = Command::new("timeout").args(["-k", "2", "15", "python3", "-c", "import os, subprocess, sys; subprocess.Popen(['python3', '-c', 'raise SystemExit(5)']); os.execv(sys.argv[1], sys.argv[1:])"])
+    let output = Command::new("memcap").args(["2G", "timeout", "-k", "2", "15", "python3", "-c", "import os, subprocess, sys; subprocess.Popen(['python3', '-c', 'raise SystemExit(5)']); os.execv(sys.argv[1], sys.argv[1:])"])
         .arg(env!("CARGO_BIN_EXE_rexx")).arg(dir.join("p.rex"))
         .output().expect("isolated interpreter");
     assert!(output.status.success(), "{output:?}");
