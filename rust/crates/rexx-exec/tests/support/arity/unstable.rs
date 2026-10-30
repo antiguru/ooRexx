@@ -31,3 +31,6 @@ pub fn stable_rows_marked_unstable(layout: &Layout) -> Vec<String> {
     stable
 }
 
+
+#[cfg(test)]
+mod tests;

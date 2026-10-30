@@ -127,3 +127,6 @@ pub(super) fn wait_with_deadline(
         classify_termination(code, deadline_exceeded),
     )
 }
+
+#[cfg(test)]
+mod tests;
