@@ -174,7 +174,19 @@ pub(super) fn native_hash_empty(
         return Err(not_this_task(interp, receiver, b"EMPTY"));
     }
     let store = store_of(interp, receiver)?;
-    install_store(interp, receiver, CONTENTS, store.buckets);
+    // Active lookups retain these contents through callbacks and growth.
+    // EMPTY clears that contents in place, as HashContents::empty does.
+    for slot in 0..store.total {
+        write_slot(interp, store.indexes, slot, None);
+        write_slot(interp, store.items, slot, None);
+        let next = if slot < store.buckets || slot + 1 == store.total {
+            store.no_more()
+        } else {
+            slot + 1
+        };
+        write_link(interp, &store, slot, next);
+    }
+    set_free(interp, receiver, CONTENTS, store.buckets);
     Ok(Some(receiver))
 }
 

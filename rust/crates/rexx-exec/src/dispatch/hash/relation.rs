@@ -249,68 +249,49 @@ fn native_relation_has_item(
     let hash = under
         .map(|index| super::hash_of(interp, keys, index))
         .transpose()?;
-    'search: loop {
-        let mut store = store_of(interp, receiver)?;
-        let first = hash.map_or(0, |hash| (hash % store.buckets as u64) as usize);
-        let end = if under.is_some() {
-            first + 1
-        } else {
-            store.buckets
-        };
-        for bucket in first..end {
-            let mut slot = bucket;
-            while slot < store.total && slot_at(interp, store.indexes, slot)?.is_some() {
-                let matches = match under {
-                    Some(index) => same_index(interp, &store, keys, slot, index)?,
-                    None => true,
-                };
-                if bag && matches {
-                    return Ok(Some(crate::eval::logical(true)));
-                }
-                // No saved array is dereferenced after a send. EMPTY may
-                // replace the arrays while leaving this live chain location
-                // selected, so preserve the comparison and refresh its store.
-                let Some(current) = current_has_item_slot(interp, receiver, &store, bucket, slot)?
-                else {
-                    continue 'search;
-                };
-                store = current;
-                if matches && let Some(item) = slot_at(interp, store.items, slot)? {
-                    if super::collection::same_item(interp, wanted, item)? {
-                        return Ok(Some(crate::eval::logical(true)));
-                    }
-                    let Some(current) =
-                        current_has_item_slot(interp, receiver, &store, bucket, slot)?
-                    else {
-                        continue 'search;
-                    };
-                    store = current;
-                }
-                // A false comparison can replace the collision tail too.
-                // Continue through the current chain, not a saved entry list.
-                slot = super::link_at(interp, &store, slot)?;
+    let store = store_of(interp, receiver)?;
+    // The active HashContents lookup keeps its contents through growth.
+    // These arrays are actually read after callbacks, even if expansion
+    // detached them from the receiver. EMPTY clears them in place.
+    for array in [store.indexes, store.items, store.next] {
+        interp.roots.activity_mut().push_temp(array);
+    }
+    let first = hash.map_or(0, |hash| (hash % store.buckets as u64) as usize);
+    let end = if under.is_some() {
+        first + 1
+    } else {
+        store.buckets
+    };
+    for bucket in first..end {
+        let mut slot = bucket;
+        while slot < store.total && slot_at(interp, store.indexes, slot)?.is_some() {
+            let matches = match under {
+                Some(index) => same_index(interp, &store, keys, slot, index)?,
+                None => true,
+            };
+            if bag && matches {
+                return Ok(Some(crate::eval::logical(true)));
             }
+            // A callback may empty this location or replace its value.
+            // Read the selected contents' current item only if it is live.
+            if slot_at(interp, store.indexes, slot)?.is_none() {
+                break;
+            }
+            if matches
+                && let Some(item) = slot_at(interp, store.items, slot)?
+                && super::collection::same_item(interp, wanted, item)?
+            {
+                return Ok(Some(crate::eval::logical(true)));
+            }
+            // A false comparison can replace the collision tail too.
+            // Follow its current link, never a saved entry list or a free slot.
+            if slot_at(interp, store.indexes, slot)?.is_none() {
+                break;
+            }
+            slot = super::link_at(interp, &store, slot)?;
         }
-        return Ok(Some(crate::eval::logical(false)));
     }
-}
-
-/// The current store when a compared location remains live in its bucket.
-fn current_has_item_slot(
-    interp: &mut Interp,
-    receiver: ObjRef,
-    previous: &super::Store,
-    bucket: usize,
-    slot: usize,
-) -> Result<Option<super::Store>, Failure> {
-    let current = store_of(interp, receiver)?;
-    if current.buckets != previous.buckets {
-        return Ok(None);
-    }
-    Ok(super::entries_in(interp, &current, Some(bucket))?
-        .iter()
-        .any(|&(candidate, _)| candidate == slot)
-        .then_some(current))
+    Ok(Some(crate::eval::logical(false)))
 }
 
 /// `RelationClass::removeItemRexx(item [, index])`: takes out the first entry
