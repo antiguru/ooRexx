@@ -1,0 +1,4 @@
+   0: <rexx_exec::Interp>::reference_text
+   1: <rexx_exec::Interp>::numeric_operand
+   2: <rexx_exec::Interp>::exec_numeric
+   3: <rexx_exec::Interp>::exec_flow

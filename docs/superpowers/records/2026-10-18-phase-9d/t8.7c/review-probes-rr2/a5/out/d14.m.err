@@ -1,0 +1,58 @@
+DROPPED
+   0: <rexx_exec::Interp>::reference_text
+             at /tmp/claude-1000/t87c-rr2-src-mut/rust/crates/rexx-exec/src/value.rs:526:50
+   1: <rexx_exec::Interp>::signal_to_value
+             at /tmp/claude-1000/t87c-rr2-src-mut/rust/crates/rexx-exec/src/run/condition.rs:1787:25
+   2: <rexx_exec::Interp>::ops_loop::<false, true>
+             at /tmp/claude-1000/t87c-rr2-src-mut/rust/crates/rexx-exec/src/ir/drive.rs:1101:41
+   3: <rexx_exec::Interp>::ops_loop_steady
+             at /tmp/claude-1000/t87c-rr2-src-mut/rust/crates/rexx-exec/src/ir/drive.rs:3640:14
+   4: <rexx_exec::Interp>::drive_levels
+             at /tmp/claude-1000/t87c-rr2-src-mut/rust/crates/rexx-exec/src/ir/drive.rs:2940:61
+   5: <rexx_exec::Interp>::drive_from
+             at /tmp/claude-1000/t87c-rr2-src-mut/rust/crates/rexx-exec/src/ir/drive.rs:2820:27
+   6: <rexx_exec::Interp>::run_activity_root
+             at /tmp/claude-1000/t87c-rr2-src-mut/rust/crates/rexx-exec/src/scheduler.rs:2185:27
+   7: <rexx_exec::Interp>::run_main
+             at /tmp/claude-1000/t87c-rr2-src-mut/rust/crates/rexx-exec/src/lib.rs:3008:18
+   8: <rexx_exec::Interp>::run_loaded
+             at /tmp/claude-1000/t87c-rr2-src-mut/rust/crates/rexx-exec/src/lib.rs:2805:14
+   9: <rexx_exec::Interp>::run
+             at /tmp/claude-1000/t87c-rr2-src-mut/rust/crates/rexx-exec/src/lib.rs:2500:14
+  10: rexx_exec::execute_as::{closure#0}
+             at /tmp/claude-1000/t87c-rr2-src-mut/rust/crates/rexx-exec/src/lib.rs:4265:76
+  11: <core::result::Result<(), rexx_exec::error::Failure>>::and_then::<core::option::Option<rexx_core::handle::ObjRef>, rexx_exec::execute_as::{closure#0}>
+             at /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/result.rs:1492:22
+  12: rexx_exec::execute_as
+             at /tmp/claude-1000/t87c-rr2-src-mut/rust/crates/rexx-exec/src/lib.rs:4239:45
+  13: rexx_exec::execute_on
+             at /tmp/claude-1000/t87c-rr2-src-mut/rust/crates/rexx-exec/src/lib.rs:4151:5
+  14: rexx_exec::run_program_named::{closure#0}
+             at /tmp/claude-1000/t87c-rr2-src-mut/rust/crates/rexx-exec/src/lib.rs:3854:9
+  15: rexx_exec::on_thread_of::<rexx_exec::run_program_named::{closure#0}>::{closure#0}
+             at /tmp/claude-1000/t87c-rr2-src-mut/rust/crates/rexx-exec/src/lib.rs:4053:13
+  16: std::sys::backtrace::__rust_begin_short_backtrace::<rexx_exec::on_thread_of<rexx_exec::run_program_named::{closure#0}>::{closure#0}, rexx_exec::Outcome>
+             at /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/backtrace.rs:166:18
+  17: std::thread::lifecycle::spawn_unchecked::<rexx_exec::on_thread_of<rexx_exec::run_program_named::{closure#0}>::{closure#0}, rexx_exec::Outcome>::{closure#1}::{closure#0}
+             at /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/thread/lifecycle.rs:70:13
+  18: <core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<rexx_exec::on_thread_of<rexx_exec::run_program_named::{closure#0}>::{closure#0}, rexx_exec::Outcome>::{closure#1}::{closure#0}> as core::ops::function::FnOnce<()>>::call_once
+             at /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/panic/unwind_safe.rs:275:9
+  19: std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<rexx_exec::on_thread_of<rexx_exec::run_program_named::{closure#0}>::{closure#0}, rexx_exec::Outcome>::{closure#1}::{closure#0}>, rexx_exec::Outcome>
+             at /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panicking.rs:576:43
+  20: std::panicking::catch_unwind::<rexx_exec::Outcome, core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<rexx_exec::on_thread_of<rexx_exec::run_program_named::{closure#0}>::{closure#0}, rexx_exec::Outcome>::{closure#1}::{closure#0}>>
+             at /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panicking.rs:544:19
+  21: std::panic::catch_unwind::<core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<rexx_exec::on_thread_of<rexx_exec::run_program_named::{closure#0}>::{closure#0}, rexx_exec::Outcome>::{closure#1}::{closure#0}>, rexx_exec::Outcome>
+             at /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/panic.rs:359:14
+  22: std::thread::lifecycle::spawn_unchecked::<rexx_exec::on_thread_of<rexx_exec::run_program_named::{closure#0}>::{closure#0}, rexx_exec::Outcome>::{closure#1}
+             at /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/thread/lifecycle.rs:68:26
+  23: <std::thread::lifecycle::spawn_unchecked<rexx_exec::on_thread_of<rexx_exec::run_program_named::{closure#0}>::{closure#0}, rexx_exec::Outcome>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}
+             at /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5
+  24: <alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send> as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library/alloc/src/boxed.rs:2320:9
+  25: <std::sys::thread::unix::Thread>::new::thread_start
+             at /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library/std/src/sys/thread/unix.rs:123:17
+  26: start_thread
+             at ./nptl/pthread_create.c:454:8
+  27: __GI___clone3
+             at /build/reproducible-path/glibc-2.43/misc/../sysdeps/unix/sysv/linux/x86_64/clone3.S:78:0
+

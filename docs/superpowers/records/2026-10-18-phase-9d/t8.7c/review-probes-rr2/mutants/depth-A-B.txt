@@ -1,0 +1,8 @@
+test eval::tests::a_parse_pattern_and_an_expression_share_the_eval_depth_limit ... FAILED
+thread 'eval::tests::a_parse_pattern_and_an_expression_share_the_eval_depth_limit' (3520660) panicked at crates/rexx-exec/src/eval/tests.rs:1005:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1211 filtered out; finished in 0.18s
+=== mutant A done
+test eval::tests::a_parse_pattern_and_an_expression_share_the_eval_depth_limit ... FAILED
+thread 'eval::tests::a_parse_pattern_and_an_expression_share_the_eval_depth_limit' (3520786) panicked at crates/rexx-exec/src/eval/tests.rs:1019:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1211 filtered out; finished in 0.26s
+=== mutant B done

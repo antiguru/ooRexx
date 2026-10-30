@@ -1,0 +1,5 @@
+     4 *-* raise syntax (v)
+       >V>   V => "The NIL object"
+       >K>   "SYNTAX" => "The NIL object"
+     7 *-* s:
+     7 *-* trace off;

@@ -1,0 +1,4 @@
+   0: <rexx_exec::Interp>::reference_text
+   1: rexx_exec::builtin::numeric::written_whole::{closure#1}::{closure#0}
+   2: <core::option::Option<rexx_core::handle::ObjRef>>::is_some_and::<rexx_exec::builtin::numeric::written_whole::{closure#1}::{closure#0}>
+   3: rexx_exec::builtin::numeric::written_whole::{closure#1}

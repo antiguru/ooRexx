@@ -1,0 +1,7 @@
+    40 *-* raise syntax 98.900 array('boom')
+       *-* Compiled method "OBJECTNAME" with scope "Object".
+    32 *-*   raise syntax 93.900 array(q)
+    32 *-*   interpret arg(1)
+     6 *-* call t "raise syntax 93.900 array(q)"
+Error 98 running /tmp/claude-1000/t87c-rr2-run/a2.rex line 40:  Execution error.
+Error 98.900:  boom.

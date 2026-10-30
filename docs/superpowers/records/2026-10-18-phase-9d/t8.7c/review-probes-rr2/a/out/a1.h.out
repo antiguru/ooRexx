@@ -1,0 +1,14 @@
+  (mk)
+p KMAKE
+  (dn sent)
+arr DNK
+  (dn sent)
+arrk DNK
+  (dn sent)
+str DNK
+  (mk)
+cat KMAKEx
+  (mk)
+len 5
+  (dn sent)
+done

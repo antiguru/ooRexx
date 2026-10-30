@@ -1,0 +1,5 @@
+    16 *-* raise syntax 98.900 array('boom')
+       *-* Compiled method "OBJECTNAME" with scope "Object".
+     7 *-* say 'd' condition('d');
+Error 98 running /tmp/claude-1000/t87c-rr2-run/q12.rex line 16:  Execution error.
+Error 98.900:  boom.

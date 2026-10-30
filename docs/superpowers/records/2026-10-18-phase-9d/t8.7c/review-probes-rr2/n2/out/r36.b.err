@@ -1,0 +1,5 @@
+     4 *-* raise syntax (v)
+       >V>   V => "a BAD"
+       >K>   "SYNTAX" => "a BAD"
+     7 *-* s:
+     7 *-* trace off;

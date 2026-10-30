@@ -1,0 +1,4 @@
+   0: <rexx_exec::Interp>::reference_text
+   1: <rexx_exec::Interp>::signal_to_value
+   2: <rexx_exec::Interp>::ops_loop::<false, true>
+   3: <rexx_exec::Interp>::ops_loop_steady

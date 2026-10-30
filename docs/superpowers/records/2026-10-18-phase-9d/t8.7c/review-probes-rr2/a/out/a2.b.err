@@ -1,0 +1,5 @@
+    32 *-*   raise syntax 93.900 array(q)
+    32 *-*   interpret arg(1)
+     6 *-* call t "raise syntax 93.900 array(q)"
+Error 93 running /tmp/claude-1000/t87c-rr2-run/a2.rex line 32:  Incorrect call to method.
+Error 93.900:  a BAD.

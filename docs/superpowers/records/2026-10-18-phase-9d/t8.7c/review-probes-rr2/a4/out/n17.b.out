@@ -1,0 +1,2 @@
+    (noisy dn)
+SYNTAX 26.2 Value of repetition count expression in DO or LOOP instruction must be zero or a positive whole number; found "a NOISY".

@@ -1,0 +1,3 @@
+test eval::tests::eval_raises_11_1_exactly_one_term_past_max_eval_depth ... ok
+test eval::tests::a_parse_pattern_and_an_expression_share_the_eval_depth_limit ... FAILED
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 1210 filtered out; finished in 0.27s

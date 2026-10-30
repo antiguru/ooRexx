@@ -1,0 +1,4 @@
+program	base	head	head d%	base -libc	head -libc	head -libc d%	base spread%	head spread%
+arith	12087311022	12092632527	+0.0440	11480919470	11486243543	+0.0464	0.0000	0.0000
+parse	1646663909	1647276679	+0.0372	1544633795	1545245302	+0.0396	0.0000	0.0000
+# outputs in /home/moritz/dev/repos/ooRexx-p9-pin/cg-9d/t8.7c-rr2

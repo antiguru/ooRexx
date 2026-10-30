@@ -1,0 +1,4 @@
+   0: <rexx_exec::Interp>::reference_text
+   1: rexx_exec::dispatch::stream::optional_position
+   2: rexx_exec::dispatch::stream::charin
+   3: <rexx_exec::Interp>::run_other::{closure#0}

@@ -1,0 +1,6 @@
+    (bad dn)
+   say 'abc'~left(q) -> SYNTAX 98.900 boom.
+    (bad dn)
+   say left('abc', q) -> SYNTAX 98.900 boom.
+    (bad dn)
+   x = q + 1 -> SYNTAX 98.900 boom.

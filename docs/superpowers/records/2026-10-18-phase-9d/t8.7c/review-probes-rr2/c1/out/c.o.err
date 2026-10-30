@@ -1,0 +1,11 @@
+     4 *-* z = o
+       >V>   O => "DN"
+       >>>   "DN"
+       >=>   Z <= "DN"
+     5 *-* trace r
+     6 *-* y = o
+       >>>   "DN"
+     7 *-* trace off
+    11 *-* w = b
+       >>>   "ONCE"
+    12 *-* trace off

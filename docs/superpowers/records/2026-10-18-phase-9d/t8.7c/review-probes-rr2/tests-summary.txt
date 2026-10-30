@@ -1,0 +1,11 @@
+test builtin::rexxutil::files::tests::a_move_across_file_systems_copies_and_unlinks ... FAILED
+test run::tests::branch::select_case_evaluates_its_own_expression_and_runs_exactly_the_matching_when ... ok
+test run::tests::branch::select_when_runs_exactly_the_first_matching_when ... ok
+test run::tests::iterate_leave::a_named_iterate_matching_a_select_label_raises_28_5 ... ok
+test run::tests::iterate_leave::a_named_iterate_matching_a_labelled_simple_block_raises_28_5_not_28_4 ... ok
+test result: FAILED. 1211 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.34s
+1236 of 1237 matching
+test corpus_differential ... FAILED
+test result: FAILED. 28 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 133.26s
+test an_append_stream_refuses_positions_within_a_file_over_four_gib ... ok
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s

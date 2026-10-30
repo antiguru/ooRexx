@@ -1,0 +1,50 @@
+    (bad dn)
+   say 'abc'~left(q) -> SYNTAX 98.900 boom.
+    (bad dn)
+   say left('abc', q) -> SYNTAX 98.900 boom.
+    (bad dn)
+   x = q + 1 -> SYNTAX 98.900 boom.
+    (bad dn)
+   raise syntax 93.900 array(q) -> SYNTAX 98.900 boom.
+    (bad dn)
+   say q~nosuch -> SYNTAX 98.900 boom.
+    (bad dn)
+   x = .array~new(q) -> SYNTAX 98.900 boom.
+    (bad dn)
+   a.q = 1; say 'tail ok' -> SYNTAX 98.900 boom.
+    (bad dn)
+   say c2x(q) -> SYNTAX 98.900 boom.
+   say .list~of(q)~makestring -> SYNTAX 97.1 Object "a List" does not understand message "MAKESTRING".
+    (bad dn)
+   d = .directory~new; d~x = q; say d~x~string -> SYNTAX 98.900 boom.
+   say q~request('string') -> NOSTRING The NIL object
+    (bad dn)
+   say .array~of(q)~toString -> SYNTAX 98.900 boom.
+    (bad dn)
+   say (q)~left(1) -> SYNTAX 98.900 boom.
+    (bad dn)
+   say 'x'~equals(q) -> SYNTAX 98.900 boom.
+    (bad dn)
+   say 'x' = q -> SYNTAX 98.900 boom.
+0
+   say q = 'x' -> returned
+0
+   say q == 'x' -> returned
+    (bad dn)
+   say \q -> SYNTAX 98.900 boom.
+    (bad dn)
+   if q then say 'y' -> SYNTAX 98.900 boom.
+a VariableReference
+   say q~objectname -> returned
+an Array
+   say .array~of(q)~string -> returned
+   x = 'abc'~pos(q) -> SYNTAX 88.909 Argument 1 must have a string value.
+    (bad dn)
+    (bad dn)
+   numeric digits (q) -> SYNTAX 98.900 boom.
+    (bad dn)
+    (bad dn)
+    (bad dn)
+   say 5~max(q) -> SYNTAX 98.900 boom.
+    (bad dn)
+   say 'abc'~substr(2, q) -> SYNTAX 98.900 boom.
