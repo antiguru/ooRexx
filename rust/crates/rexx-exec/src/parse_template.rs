@@ -485,7 +485,10 @@ impl Interp {
                 // it advances to the next parse string, which for `PARSE ARG`
                 // is the next argument and for every other source is the null
                 // string (`RexxTarget::next`'s own `next_argument != 1` arm).
-                cursor = Cursor::new(source.len());
+                let (next_source, next_cursor) = self.next_template(&mut strings, parse, indent)?;
+                cursor = next_cursor;
+                let spent = std::mem::replace(&mut source, next_source);
+                self.give_source(spent);
                 continue;
             };
             self.apply_trigger(code, trigger, &source, &mut cursor, indent)?;
