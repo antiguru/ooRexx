@@ -374,3 +374,8 @@ Profiler completed/verifies1287records throughH/A/P: numericH→A passes33/33, P
 ## Deviation 84 approved and Q profiling resumed
 
 Moritz answered the explicit recommendation to retain ITEMS 0 and record the oracle count defect as Deviation 84 with the exact reply, "Yes, 0." The numbered exclusion and equality-reentry ruling record now capture that authorization. The historical pending-ruling statements above are superseded by this approval. Root verified metadata commit c5243a5c6 and clean tracked worktree, then released the profiler for the approved P-to-Q 198-profile cohort; final gates remain pending.
+
+
+## Task 8.8 readiness audit after Deviation 84
+
+Read-only inventory audit independently reproduced all 35 unassigned triage selections and accounted for all 54 preflight items plus five reconciliation rows. Root checked the current inventory rows: only Task 10 gate 466 and the two original SysFileTree/stderr flakes retain 9d ownership. The permanent hash-equality-reentry fixture pins removed 1/items 0, and the semantic-boundary harness compares normal and allocation-stress outcomes. Commit f71de0d63 reconciles the current queue/report references with approved Deviation 84, while final performance acceptance, broad gates and whole-8.8 review remain pending.
