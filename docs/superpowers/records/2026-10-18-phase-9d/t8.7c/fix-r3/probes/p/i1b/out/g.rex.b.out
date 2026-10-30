@@ -1,0 +1,14 @@
+  (dn sent)
+ref DN
+  (dn sent)
+ref cat DN|
+arr a DN
+  (dn sent)
+plain DN
+  (dn sent)
+cat DNx
+  (dn sent)
+len 2
+str a DN
+  (dn sent)
+abut pDN

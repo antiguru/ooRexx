@@ -1,0 +1,7 @@
+   raise syntax 93.900 additional (o) -> SYNTAX 98.900 boom.
+   raise syntax 93.900 description (o) -> SYNTAX 98.900 boom.
+   raise user zz description (o) -> SYNTAX 98.900 boom.
+   raise syntax (o) -> SYNTAX 98.900 boom.
+    (noisy dn sent)
+   raise syntax 93.900 additional (q) -> SYNTAX 98.939 Additional information for SYNTAX errors must be a single-dimensional array of values.
+    (noisy dn sent)

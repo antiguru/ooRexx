@@ -586,3 +586,107 @@ workspace run, at `8dd9a4ae0`; outputs in `fix-r2/`.
 
 `9af69058d` (R4 as replaced, R6 narrowed, witnesses), `8dd9a4ae0` (the cold TRACE rendering wrapper, `eval`'s
 flag hook, `eval_in_parse`, its witness); records and this section in the commit after.
+
+## Fix round 3
+
+Status: DONE_WITH_CONCERNS. Code `8aa1b9049` (items 1 to 5) and `cd070fd13` (the stream state's size, Perf);
+records and this section in the commit after. Records: `docs/superpowers/records/2026-10-18-phase-9d/t8.7c/fix-r3/`
+(`probes/bin/r3.sh` the runner: `o` oracle, `b` `rexx-head-8dd9a4ae0` (the code at `d6720f350`), `h`
+`rexx-head-cd070fd13`; outputs under each probe directory's `out/`).
+
+### What changed
+
+* **N1.** `object_string_value_text` (`value.rs`) renders a reference as its referenced value's
+  `string_value_text`, so an Array join item, `r~string` and a TRACE line send that value's `DEFAULTNAME`
+  and propagate a condition it raises. `to_text`'s and `text_len_inner`'s `VarRefValue` arms send too
+  (`reference_text`); they cannot carry a condition, so one raised there is dropped and the value renders
+  unsent. An instrumented build printing a backtrace on that drop printed none over `probes/p/rm/m.rex`,
+  `i1d/k.rex`, `i1b/g.rex`, `i1f/n.rex` and `i1c/l.rex`.
+* **N2.** RAISE renders its RC, DESCRIPTION and ADDITIONAL values for a `>K>` line only under
+  `traced_mode().results` (`run/condition.rs`). With the unconditional rendering gone, `raise syntax (o)`
+  answered 33.904 where the oracle answers the 98.900 its code's conversion raises: a SYNTAX code is now
+  `required_string_value` of the RC value (`rc->requestString()`, RaiseInstruction.cpp:193).
+* **LOSTDIGITS.** An arithmetic operator's right operand is checked through its converted string value
+  (`eval.rs`), so the description is `1234567890` for an operand whose `makeString` answers it, the
+  reference to it included. The comparison and FUZZ paths already answered the oracle's (`probes/p/ld/a.rex`).
+* **M-a.** `StreamState::append_extent` is a `u64`; `qualified` is a `Box<[u8]>`, so the state stays 232
+  bytes, asserted beside the struct (Perf).
+* **M-b and concern 5.** `eval`'s comment names `eval_in_parse` as the second insertion point. Test
+  `eval::tests::a_parse_pattern_and_an_expression_share_the_eval_depth_limit`: three PARSE patterns at
+  `MAX_EVAL_DEPTH` terms then an ordinary expression at `MAX_EVAL_DEPTH` (rc 0, `max_depth` equal to the
+  limit), and a pattern one term past it (rc 245, nothing printed). Mutants of `eval_in_parse`: without its
+  depth decrement the first half fails; without `enter_eval_node` the second half fails.
+
+### Witnesses (red at `d6720f350`, green at head)
+
+| witness | o~b | o~h |
+|---|---|---|
+| `corpus/lang/reference_rendering_sends.rex` (N1: join, `~string`, TRACE `>V>`/`>>>`, plain and raising `DEFAULTNAME`) | out err | equal |
+| `corpus/lang/raise_untraced_renders_nothing.rex` (N2: ADDITIONAL, RC, DESCRIPTION untraced, USER through `RAISE ... RETURN`, traced DESCRIPTION) | out err rc | equal |
+| `corpus/lang/lostdigits_names_the_string_value.rex` (`1 + k`, `1 * >k`, `1 = k`, a blank-padded string) | out | equal |
+| `probes/p/i1d/k.rex`, `i1f/n.rex`, `i1g/p.rex`, `i1c/l.rex`, `ld/a.rex`, `rm/m.rex` (a raising `DEFAULTNAME` through a reference in every required-string position) | differ | equal |
+| `probes/p/i1b/g.rex` | out err | out (see Concerns 1) |
+| `stream_handle::an_append_stream_refuses_positions_within_a_file_over_four_gib` (crate only; `probes/p/big/b.rex` at `b`: `=4294967296` and `=5368709120` move READY, `charout` at 5000000000 answers 0 READY) | | passes |
+| `eval::tests::a_parse_pattern_and_an_expression_share_the_eval_depth_limit` | | passes; mutants above |
+
+Each new corpus program has its `sourceline_oracle` file (the module's driver, oracle wrapper) and a
+`phase-9.txt` entry. The debug `rexx` agrees with the release one on the three programs and `rm/m.rex`, `i1b/g.rex`,
+`i1d/k.rex`, `i1c/l.rex`.
+
+### Perf
+
+`fix-r3/callgrind.txt`: `bench-programs/callgrind.sh -B 0.5 -r 3 -j 6 -o .../cg-9d/t8.7c/fix3-final2
+base=.../rexx-base-97eee8a9a head=.../rexx-head-cd070fd13`, every program, status 0 (the line the run
+appended to its log); every `.vg` names one of the two binaries (99 each), every `.rc` 0; no SPREAD, OVER
+or stdout flag. Libc subtracted against base, every program at most +0.05%:
+
+| program | head -libc d% |
+|---|---|
+| arith | +0.0464 |
+| parse | +0.0396 |
+| pingsem | +0.0352 |
+| startup | +0.0201 |
+| hashnew | +0.0198 |
+| decloop | +0.0171 |
+| pingguard | +0.0010 |
+| dispatchclass | -0.1304 |
+| fibfunc | -0.1064 |
+
+The largest spread is 0.0037% (define, head). The rejected shape, `append_extent: u64` with
+`StreamState` grown to 240 bytes (`8aa1b9049`, `fix-r3/callgrind-8aa1b9049.txt`): every program within
+budget libc subtracted, but `intcall` +5.79% whole process (OVER, status 1), `interpret` +0.37% and
+`dirread` +0.10%, all in libc; boxing `qualified` restores them (`intcall` +0.0018% whole process).
+
+### Commands
+
+All from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t87c-fix3-target` but the workspace
+run, at `cd070fd13`; outputs in `fix-r3/`.
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` (`checks-fmt.txt`) | 0 |
+| `memcap 16G cargo clippy -j 4 -p rexx-exec -p rexx-core --all-targets -- -D warnings` (`checks-clippy.txt`) | 0 |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-core -p rexx-exec --lib` and round 1's touched `--test` list (`checks-touched.txt`) | 0; 1555 passed, lib 1212 |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-exec --test corpus` (`checks-corpus.txt`) | 101: 1236 of 1237 match, the known `rexxutil_file_date_time.rex` |
+| `memcap 16G cargo test -j 4 --release --no-fail-fast -p rexx-parse --test sourceline_oracle --test errors --test tiling --test variants` (`checks-parse.txt`) | 0 |
+| `memcap 16G cargo test -j 4 --release -p rexx-exec --test collect_stress` (`checks-collect-stress.txt`) | 0, 74 of 74 |
+| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../fix-r3/suite/table.tsv memcap 8G cargo test -j 4 --release -p rexx-exec --test suite l3_core_suite` (`checks-suite.txt`) | 0; `tests.tsv`, `table.tsv`, `verdicts.tsv`, `oracle-differences.tsv` byte-identical to `fix-r2/suite/` (`cmp`) |
+| `memcap 16G cargo build --release -j 4 --bin rexx` then `memcap 16G cargo test --release -j 4 --no-fail-fast --workspace`, default target dir (`close-workspace-build.txt`, `close-workspace-tests.txt`, `close-workspace-status.txt`) | build 0; tests 101, 3539 passed, 1 failed: `datetime_zone`'s `the_file_date_time_witness_reads_the_zone_the_oracle_does`, the known DST flake |
+
+### Concerns
+
+1. `i1b/g.rex` still differs from the oracle on stdout: under `trace i`, `z = r` sends `DEFAULTNAME` for
+   `>V>` and `>>>` but not for `>=>`, which reuses the `>>>` rendering (`trace_assignment`'s `rendered`,
+   every assignment site). The oracle sends a third time. It holds for any object, not only a reference
+   (`probes/p/i1b/c.rex`, `z = o`: o~h differ on stderr), and is the same at `d6720f350`. Queue candidate:
+   the `>=>` line renders its value again, and a condition that raises propagates.
+2. `to_text`'s reference arm drops a condition its send raises (it cannot carry one); no probe reaches the drop.
+3. The oracle ends the program silently, rc 0, at a top-level `raise user zz description (o)` under
+   `CALL ON USER` without RETURN, before the handler runs (found while writing the N2 witness, which uses
+   `RAISE ... RETURN` from a routine instead). This crate does the same; neither is examined.
+4. `arith` moved from +0.0403 to +0.0464 libc subtracted, within budget; not attributed.
+
+### Commits
+
+`8aa1b9049` (N1, N2, LOSTDIGITS, the extent, the eval comment and depth test, witnesses), `cd070fd13`
+(`qualified` boxed, the size assertion); records and this section in the commit after.

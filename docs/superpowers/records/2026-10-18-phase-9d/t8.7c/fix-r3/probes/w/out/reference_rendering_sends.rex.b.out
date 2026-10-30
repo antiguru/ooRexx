@@ -1,0 +1,11 @@
+arr a DN
+str a DN
+  (dn sent)
+DN
+arr a BAD
+not reached 1
+s1 97.1 Object "The NIL object" does not understand message "CODE".
+str a BAD
+not reached 2
+s2 97.1 Object "The NIL object" does not understand message "CODE".
+s3 98.900 boom.

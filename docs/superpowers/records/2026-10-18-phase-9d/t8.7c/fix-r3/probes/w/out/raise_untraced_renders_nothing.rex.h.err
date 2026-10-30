@@ -1,0 +1,5 @@
+    36 *-*       raise user zz description (arg(2)) return
+       >K>         "DESCRIPTION" => "NOISY"
+    36 *-*       raise user zz description (arg(2)) return
+    28 *-* s4:
+    28 *-* trace off;

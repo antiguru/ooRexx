@@ -1,0 +1,13 @@
+     4 *-* z = r
+       >V>   R => "a DN"
+       >>>   "a DN"
+       >=>   Z <= "a DN"
+     5 *-* trace off
+     8 *-* z = r
+       >>>   "a DN"
+     9 *-* trace off
+    12 *-* z = o
+       >V>   O => "DN"
+       >>>   "DN"
+       >=>   Z <= "DN"
+    13 *-* exit

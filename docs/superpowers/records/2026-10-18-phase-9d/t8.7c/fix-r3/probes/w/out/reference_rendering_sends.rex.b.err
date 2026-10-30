@@ -1,0 +1,8 @@
+     9 *-* say r
+       >V>   R => "a DN"
+       >>>   "DN"
+    10 *-* trace off
+    23 *-* say q
+       >V>   Q => "a BAD"
+    26 *-* s3:
+    26 *-* trace off;

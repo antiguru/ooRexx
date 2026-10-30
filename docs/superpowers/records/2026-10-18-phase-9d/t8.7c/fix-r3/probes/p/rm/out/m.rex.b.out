@@ -1,0 +1,33 @@
+   say r -> SYNTAX 98.900 boom.
+   say r || 'x' -> SYNTAX 98.900 boom.
+   say 'p'r -> SYNTAX 98.900 boom.
+   say length(r) -> SYNTAX 98.900 boom.
+   say substr(r, 1) -> SYNTAX 98.900 boom.
+   say 'abc'~pos(r) -> SYNTAX 88.909 Argument 1 must have a string value.
+   say 1 + r -> SYNTAX 98.900 boom.
+   do r; end -> SYNTAX 98.900 boom.
+a BAD
+   say r~string -> ran
+   say r~nosuch -> SYNTAX 98.900 boom.
+a BAD
+   say .array~of(r)~toString -> ran
+a BAD
+   say .array~of(r)~makestring -> ran
+a BAD
+   say .array~of(r) -> ran
+   s. = r; say s. -> SYNTAX 98.900 boom.
+   s. = r; say s.~string -> SYNTAX 98.900 boom.
+1
+an Array
+   say .array~of(1, .array~of(r))~makestring -> ran
+   say r~request('STRING') -> NOSTRING The NIL object
+0
+   say r == 'x' -> ran
+   say 'x' == r -> SYNTAX 98.900 boom.
+a BAD
+   q = .queue~of(r); say q~makearray~makestring -> ran
+a VariableReference
+   say r~objectname -> ran
+   say r~value -> SYNTAX 98.900 boom.
+   call charout , r; say -> SYNTAX 98.900 boom.
+   parse value r with v; say v -> SYNTAX 98.900 boom.

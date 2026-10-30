@@ -1,0 +1,6 @@
+    40 *-* raise syntax 98.900 array('boom')
+       *-* Compiled method "OBJECTNAME" with scope "Object".
+    34 *-*         raise user zz description (arg(2)) return
+    16 *-* call ru 'description', o
+Error 98 running /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7c/fix-r3/probes/w/raise_untraced_renders_nothing.rex line 40:  Execution error.
+Error 98.900:  boom.
