@@ -345,9 +345,14 @@ pub(crate) fn max_min_over(
 ) -> Result<ObjRef, Failure> {
     let Numeric { digits, fuzz, form } = current(interp);
     let width = digits.min(WRITTEN_WHOLE_DIGITS as u64) as u32;
-    let whole_target = whole_written(&target_text)
-        .is_some_and(|value| value.unsigned_abs() < 10u64.pow(width));
-    let converted = if whole_target && rest.iter().flatten().any(|value| needs_string(interp, *value)) {
+    let whole_target =
+        whole_written(&target_text).is_some_and(|value| value.unsigned_abs() < 10u64.pow(width));
+    let converted = if whole_target
+        && rest
+            .iter()
+            .flatten()
+            .any(|value| needs_string(interp, *value))
+    {
         convert_extreme_arguments(interp, rest)?
     } else {
         std::borrow::Cow::Borrowed(rest)

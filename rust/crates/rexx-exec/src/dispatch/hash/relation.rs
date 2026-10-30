@@ -198,11 +198,15 @@ fn native_relation_has_item(
         return Err(not_this_task(interp, receiver, b"HASITEM"));
     }
     let wanted = super::collection::item_argument(args)?;
-    let under = args.get(1).copied().flatten().or_else(|| {
-        super::index_only(interp, receiver).then_some(wanted)
-    });
+    let under = args
+        .get(1)
+        .copied()
+        .flatten()
+        .or_else(|| super::index_only(interp, receiver).then_some(wanted));
     let keys = keys_of(interp, receiver);
-    let hash = under.map(|index| super::hash_of(interp, keys, index)).transpose()?;
+    let hash = under
+        .map(|index| super::hash_of(interp, keys, index))
+        .transpose()?;
     let store = store_of(interp, receiver)?;
     let bucket = hash.map(|hash| (hash % store.buckets as u64) as usize);
     for (slot, _) in super::entries_in(interp, &store, bucket)? {
@@ -235,11 +239,15 @@ fn native_relation_remove_item(
         return Err(not_this_task(interp, receiver, b"REMOVEITEM"));
     }
     let wanted = super::collection::item_argument(args)?;
-    let under = args.get(1).copied().flatten().or_else(|| {
-        super::index_only(interp, receiver).then_some(wanted)
-    });
+    let under = args
+        .get(1)
+        .copied()
+        .flatten()
+        .or_else(|| super::index_only(interp, receiver).then_some(wanted));
     let keys = keys_of(interp, receiver);
-    let hash = under.map(|index| super::hash_of(interp, keys, index)).transpose()?;
+    let hash = under
+        .map(|index| super::hash_of(interp, keys, index))
+        .transpose()?;
     let store = store_of(interp, receiver)?;
     let bucket = hash.map(|hash| (hash % store.buckets as u64) as usize);
     for (slot, previous) in super::entries_in(interp, &store, bucket)? {

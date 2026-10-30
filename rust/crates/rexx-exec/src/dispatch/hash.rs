@@ -667,7 +667,7 @@ struct Probe {
 
 fn probe(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Result<(Store, Probe), Failure> {
     let store = store_of(interp, receiver)?;
-    probe_in(interp, receiver, store, index)
+    probe_in(interp, receiver, CONTENTS, store, index)
 }
 
 /// [`probe`] against a store the caller has already read, so that a
@@ -675,11 +675,16 @@ fn probe(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Result<(Store,
 fn probe_in(
     interp: &mut Interp,
     receiver: ObjRef,
-    store: Store,
+    half: Half,
+    mut store: Store,
     index: ObjRef,
 ) -> Result<(Store, Probe), Failure> {
     let keys = keys_of(interp, receiver);
+    let generation = interp.store_generation;
     let hash = hash_of(interp, keys, index)?;
+    if generation != interp.store_generation {
+        store = store_in(interp, receiver, half)?;
+    }
     let bucket = (hash % store.buckets as u64) as usize;
     if slot_at(interp, store.indexes, bucket)?.is_none() {
         return Ok((
@@ -740,7 +745,11 @@ fn walk_in(interp: &Interp, store: &Store) -> Result<Vec<usize>, Failure> {
 }
 
 /// Occupied entries and their predecessors, restricted to a bucket when supplied.
-fn entries_in(interp: &Interp, store: &Store, bucket: Option<usize>) -> Result<Vec<(usize, Option<usize>)>, Failure> {
+fn entries_in(
+    interp: &Interp,
+    store: &Store,
+    bucket: Option<usize>,
+) -> Result<Vec<(usize, Option<usize>)>, Failure> {
     let mut entries = Vec::new();
     let buckets = match bucket {
         Some(bucket) => bucket..bucket + 1,
@@ -908,7 +917,7 @@ fn insert_in(
         expand(interp, receiver, half)?;
     }
     let store = store_in(interp, receiver, half)?;
-    let (store, found) = probe_in(interp, receiver, store, index)?;
+    let (store, found) = probe_in(interp, receiver, half, store, index)?;
     if let Some(slot) = found.found {
         write_slot(interp, store.items, slot, item);
         return Ok(());
@@ -993,7 +1002,7 @@ fn method_table_value(
     let Some(store) = method_store(interp, receiver)? else {
         return Ok(None);
     };
-    let (store, found) = probe_in(interp, receiver, store, index)?;
+    let (store, found) = probe_in(interp, receiver, METHODS, store, index)?;
     let Some(slot) = found.found else {
         return Ok(None);
     };
@@ -1068,7 +1077,7 @@ fn merged_has_index(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Res
     let Some(store) = method_store(interp, receiver)? else {
         return Ok(false);
     };
-    let (_, found) = probe_in(interp, receiver, store, index)?;
+    let (_, found) = probe_in(interp, receiver, METHODS, store, index)?;
     Ok(found.found.is_some())
 }
 

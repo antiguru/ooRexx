@@ -2058,13 +2058,7 @@ impl Interp {
                     if let Some(rendered) = &rendered {
                         self.trace_result(indent, rendered);
                     }
-                    self.assign_expr_target(
-                        code,
-                        &target.target,
-                        value,
-                        indent,
-                        None,
-                    )
+                    self.assign_expr_target(code, &target.target, value, indent, None)
                 }
                 None if strict => Err(if in_method {
                     Raised::missing_method_argument(position).into()

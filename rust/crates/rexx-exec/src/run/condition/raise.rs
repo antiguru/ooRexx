@@ -21,7 +21,11 @@ impl Interp {
     /// RAISE other ...              \  the nearest activation not an internal
     /// RAISE other ... EXIT [e]     /  call, then its CALLER, as RETURN does
     /// ```
-    pub(in crate::run) fn exec_raise(&mut self, code: &Code<'_>, raise: &Raise) -> Result<Flow, Failure> {
+    pub(in crate::run) fn exec_raise(
+        &mut self,
+        code: &Code<'_>,
+        raise: &Raise,
+    ) -> Result<Flow, Failure> {
         if raise.propagate {
             return self.exec_raise_propagate(code, raise);
         }
@@ -643,5 +647,4 @@ impl Interp {
             (false, false) => depth - self.fragments_within(sender.top),
         }
     }
-
 }

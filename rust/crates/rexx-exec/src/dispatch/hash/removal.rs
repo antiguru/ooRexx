@@ -11,7 +11,11 @@
 
 use super::*;
 
-pub(super) fn take(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Result<Option<ObjRef>, Failure> {
+pub(super) fn take(
+    interp: &mut Interp,
+    receiver: ObjRef,
+    index: ObjRef,
+) -> Result<Option<ObjRef>, Failure> {
     take_in(interp, receiver, CONTENTS, index)
 }
 
@@ -26,7 +30,7 @@ pub(super) fn take_in(
     let Some(store) = read_store(interp, receiver, half)? else {
         return Ok(None);
     };
-    let (store, found) = probe_in(interp, receiver, store, index)?;
+    let (store, found) = probe_in(interp, receiver, half, store, index)?;
     let Some(slot) = found.found else {
         return Ok(None);
     };
@@ -153,7 +157,9 @@ pub(super) fn native_hash_remove_item(
     if method_store(interp, receiver)?.is_none() && unknown_method(interp, receiver).is_none() {
         let store = store_of(interp, receiver)?;
         for (slot, previous) in entries_in(interp, &store, None)? {
-            let Some(item) = item_at(interp, &store, slot)? else { continue };
+            let Some(item) = item_at(interp, &store, slot)? else {
+                continue;
+            };
             if same_held_item(interp, keys, wanted, item)? {
                 take_at(interp, receiver, &store, slot, previous)?;
                 return Ok(Some(item));
@@ -169,4 +175,3 @@ pub(super) fn native_hash_remove_item(
     }
     Ok(Some(ObjRef::NIL))
 }
-

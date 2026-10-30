@@ -1,0 +1,7 @@
+    40 *-* raise syntax 98.900 array('boom')
+       *-* Compiled method "OBJECTNAME" with scope "Object".
+       *-* Compiled method "STRING" with scope "Object".
+    34 *-*         raise user zz description (arg(2)) return
+    16 *-* call ru 'description', o
+Error 98 running probe.rex line 40:  Execution error.
+Error 98.900:  boom.

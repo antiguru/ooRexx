@@ -346,9 +346,14 @@ pub(super) fn query_exists(
 
 /// Whether this stream uses the embedding's owned regular-file stdout descriptor.
 fn owned_standard_output(interp: &Interp, receiver: ObjRef) -> Result<bool, Failure> {
-    Ok(require(interp, receiver)?.standard == Some(StandardStream::Out)
-        && !interp.standard_transient[1]
-        && interp.sinks.as_ref().is_some_and(|sinks| sinks.own_descriptors))
+    Ok(
+        require(interp, receiver)?.standard == Some(StandardStream::Out)
+            && !interp.standard_transient[1]
+            && interp
+                .sinks
+                .as_ref()
+                .is_some_and(|sinks| sinks.own_descriptors),
+    )
 }
 
 /// `query_size`: the byte count for a regular file, `0` for anything else

@@ -15,7 +15,11 @@ use super::*;
 /// the next ones of a transient stream, which has no position and waits
 /// until `len` arrive or its input ends (rexxref funct.xml:1329-1335). A
 /// byte [`transient_has_data`] took comes first.
-pub(super) fn read_at(open: &mut rexx_core::OpenFile, position: u64, len: usize) -> std::io::Result<Vec<u8>> {
+pub(super) fn read_at(
+    open: &mut rexx_core::OpenFile,
+    position: u64,
+    len: usize,
+) -> std::io::Result<Vec<u8>> {
     use std::io::Read;
     if !open.transient {
         return read_from(open.flushed(), position, len);
@@ -115,4 +119,3 @@ pub(super) fn read_line_from(
         }
     }
 }
-

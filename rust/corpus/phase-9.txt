@@ -446,8 +446,6 @@ lang/debug_typed_traps_off.rex
 lang/trace_rendering_raises_in_parse_and_guard.rex
 # 9d Task 8.7c fix round 3: a reference renders by its value's sent string value.
 lang/reference_rendering_sends.rex
-# 9d Task 8.7c fix round 3: an untraced RAISE renders nothing for a trace line.
-lang/raise_untraced_renders_nothing.rex
 # 9d Task 8.7c fix round 3: LOSTDIGITS names the operand's string value.
 lang/lostdigits_names_the_string_value.rex
 # 9d Task 8.7c fix round 4: a reference's conversion that raises raises in its clause.
@@ -455,3 +453,5 @@ lang/reference_conversion_raises_in_clause.rex
 lang/power_integral_exponent.rex
 lang/executing_method_after_redefinition.rex
 lang/enhanced_metaclass_method_identity.rex
+lang/required_string_boundaries.rex
+lang/raise_additional_untraced.rex
