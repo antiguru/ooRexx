@@ -36,23 +36,13 @@ impl Interp {
         // site's own copy never learned about the offset when the field was
         // added.
         let indent = self.activity.clause_state.current_value_indent;
-        // One render for both lines, and `results` is the gate because it is
-        // the weaker of the two: `>>>` is gated on `results` and `>=>` on
-        // `intermediates`, and `results` is true wherever `intermediates` is.
-        // Guarding on `intermediates` instead would drop the `>>>` line under
-        // `TRACE R`.
-        let rendered = self.result_text(value)?;
-        if let Some(rendered) = &rendered {
-            // **The entry gate, not just the setting in force.** An assignment
-            // whose expression turned tracing on owes no `>>>`, because the
-            // oracle chose the path without one before it evaluated. See
-            // `ClauseState::instructions_traced_at_entry`, which carries the
-            // measurement.
-            if self.activity.clause_state.instructions_traced_at_entry {
-                self.trace_result(indent, rendered);
-            }
+        // The entry gate excludes a result line when evaluation enabled tracing.
+        if self.activity.clause_state.instructions_traced_at_entry
+            && let Some(rendered) = self.result_text(value)?
+        {
+            self.trace_result(indent, &rendered);
         }
-        self.assign_expr_target(code, target, value, rendered.as_deref(), indent, at)
+        self.assign_expr_target(code, target, value, indent, at)
     }
 
     /// Writes `value` into the slot a plain-variable target is already bound
@@ -96,10 +86,10 @@ impl Interp {
         code: &Code<'_>,
         target: &Expr,
         value: ObjRef,
-        rendered: Option<&[u8]>,
         indent: usize,
         at: Option<usize>,
     ) -> Result<(), Failure> {
+        self.roots.activity_mut().push_temp(value);
         match &target.kind {
             ExprKind::Variable(id) => {
                 let name = code.symbols.name(*id).as_bytes();
@@ -109,8 +99,8 @@ impl Interp {
                 };
                 let frame = self.activation().frame;
                 self.set_variable(frame, slot, value);
-                if let Some(rendered) = rendered {
-                    self.trace_assignment(indent, name, rendered, value);
+                if let Some(rendered) = self.intermediate_text(value)? {
+                    self.trace_assignment(indent, name, &rendered, value);
                 }
             }
             // `stem. = expr`: replace-and-rebind (D15a), through the
@@ -130,8 +120,8 @@ impl Interp {
                 let name = code.symbols.name(*id).as_bytes();
                 let at = code.compound(*id).and_then(|entry| entry.stem_at);
                 self.stem_assign_at(name, at, value);
-                if let Some(rendered) = rendered {
-                    self.trace_assignment(indent, name, rendered, value);
+                if let Some(rendered) = self.intermediate_text(value)? {
+                    self.trace_assignment(indent, name, &rendered, value);
                 }
             }
             // `a.b = expr`: resolve the tail key the same way reading
@@ -169,7 +159,7 @@ impl Interp {
                 // it.** `trace_compound_name` returns at once unless
                 // intermediates are on, so joining the stem to the tail key
                 // ahead of that check allocated a name to discard. This is the
-                // rule `rendered` below already follows -- `trace.rs`'s own
+                // rule the value rendering below follows -- `trace.rs`'s own
                 // doc comment gives the reasoning for the value half, and the
                 // name half is the same argument.
                 if self.tracing_intermediates() {
@@ -177,8 +167,8 @@ impl Interp {
                     resolved.extend_from_slice(&key);
                     self.trace_compound_name(indent, tag, &resolved);
                 }
-                if let Some(rendered) = rendered {
-                    self.trace_assignment(indent, tag, rendered, value);
+                if let Some(rendered) = self.intermediate_text(value)? {
+                    self.trace_assignment(indent, tag, &rendered, value);
                 }
                 self.give_key_buffer(key);
             }

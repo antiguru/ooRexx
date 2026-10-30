@@ -61,13 +61,15 @@ impl Interp {
             TriggerKind::String => {
                 let needle = self.required_string_value(value)?;
                 self.roots.activity_mut().push_temp(needle);
-                cursor.search(source.bytes(self), &self.to_text(needle));
+                let needle = self.render(needle);
+                cursor.search(source.bytes(self), needle.text(self));
                 Ok(())
             }
             TriggerKind::Mixed => {
                 let needle = self.required_string_value(value)?;
                 self.roots.activity_mut().push_temp(needle);
-                cursor.caseless_search(source.bytes(self), &self.to_text(needle));
+                let needle = self.render(needle);
+                cursor.caseless_search(source.bytes(self), needle.text(self));
                 Ok(())
             }
             _ => {

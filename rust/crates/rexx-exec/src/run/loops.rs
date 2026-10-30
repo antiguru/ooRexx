@@ -2995,24 +2995,22 @@ impl Interp {
                     kind: ExprKind::Stem(control),
                     span: 0..0,
                 };
-                let rendered = self.intermediate_text(value)?;
                 // `None`, and a literal one rather than the loop's kept
                 // slot: `assign_expr_target`'s `Stem` arm finds this stem's
                 // slot on its own entry, and a value here in place of the
                 // constant costs every controlled loop 2 instructions a pass
                 // (`control_slot`'s doc has the measurement).
-                self.assign_expr_target(code, &target, value, rendered.as_deref(), indent, None)
+                self.assign_expr_target(code, &target, value, indent, None)
             }
             NameShape::Compound => {
                 let target = Expr {
                     kind: ExprKind::Compound(control),
                     span: 0..0,
                 };
-                let rendered = self.intermediate_text(value)?;
                 // `None` because a compound writes one tail through a key
                 // resolved on this pass, so the symbol's own slot is not what
                 // is written and there is none to carry.
-                self.assign_expr_target(code, &target, value, rendered.as_deref(), indent, None)
+                self.assign_expr_target(code, &target, value, indent, None)
             }
         }
     }

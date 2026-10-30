@@ -2062,7 +2062,6 @@ impl Interp {
                         code,
                         &target.target,
                         value,
-                        rendered.as_deref(),
                         indent,
                         None,
                     )
@@ -2092,17 +2091,15 @@ impl Interp {
                 // `intermediates`, so the pair is not one line's worth of
                 // conditional.
                 let indent = self.activity.clause_state.current_value_indent;
-                // `results` and not `intermediates`, though the pair below
-                // needs both: `results` is the weaker gate, true wherever
-                // `intermediates` is, so this renders for either line and
-                // drops neither.
+                // Render each result and assignment line at its emission point.
                 let rendered = self.result_text(value)?;
                 if let Some(rendered) = &rendered {
                     self.trace_result(indent, rendered);
                 }
+                self.roots.activity_mut().push_temp(value);
                 self.assign_by_name(&name, value);
-                if let Some(rendered) = &rendered {
-                    self.trace_assignment(indent, &name, rendered, value);
+                if let Some(rendered) = self.intermediate_text(value)? {
+                    self.trace_assignment(indent, &name, &rendered, value);
                 }
                 Ok(())
             }

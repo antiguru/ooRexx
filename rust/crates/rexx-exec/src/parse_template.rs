@@ -776,7 +776,7 @@ impl Interp {
                     if let Some((id, slot)) = bound {
                         self.assign_bound_variable(code, id, slot, value, rendered, indent);
                     } else {
-                        self.assign_expr_target(code, target, value, rendered, indent, None)?;
+                        self.assign_expr_target(code, target, value, indent, None)?;
                     }
                     // The `TRACE R` half of the pair -- see this module's own
                     // `exec_parse` doc for why it is a choice of prefix and
