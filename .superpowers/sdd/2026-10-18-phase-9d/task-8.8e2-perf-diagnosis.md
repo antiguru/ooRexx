@@ -1,0 +1,33 @@
+# Task 8.8e2 performance diagnosis
+
+The matched three-round medians confirm an ordinary method-entry regression against e1. The controller's `t8.8/performance/c-e1-e2/8.8e2-own-delta.tsv` reports dispatch at +0.67687242% and dispatchclass at +0.73155584% libc/ld-subtracted, without a scheduling spread or output error. This diagnosis reads those records, current source, and the existing e2 release binary without running a build, benchmark, or interpreter. The inspected method-entry, activation, and MethodRows files have no diff from verified source `ae6a6bd04`, and f retains source/index/HEAD ownership.
+
+## Attribution
+
+| Program | Additional own instructions | Repeated sends in source | Additional instructions per repeated send |
+| --- | ---: | ---: | ---: |
+| dispatch | 140002624 | 5000000 | 28.0005248 |
+| dispatchclass | 112002563 | 4000000 | 28.00064075 |
+
+The named likely cost is the unconditional `executable_objects.get(&resolution.method)` miss in `dispatch/method_entry.rs:124`. In the pinned e2 binary, method entry is inlined into `Interp::begin_invoke`, and the first-group/no-fingerprint-match miss path at addresses `0x26c7b3` through `0x26c855` executes 27 x86 instructions before skipping to `0x26c884`. It checks map occupancy, computes the Fx hash, loads and compares the control group, and detects the empty bucket, so the measured approximately 28-instruction increment per repeated send closely matches this lookup plus surrounding code generation. This is a supported attribution from matched counts and static disassembly, not a new per-branch measurement.
+
+`callee.cold_mut()` is a separate hit-only cost, with its call at `0x26c870` bypassed by the miss branch. These benchmark loops send ordinary directives without requesting their Method objects, so their new repeated cost is attributable to misses rather than per-call cold allocation. Registered methods do allocate `ActivationCold` on a fresh callee, root their executable there, and enter the existing `end_cold` path on return, which remains an additional obligation for materialized-method and alias benchmarks. The proposed miss-path repair below deliberately preserves that correctness mechanism and does not claim to eliminate its allocation cost.
+
+An explicit `executable_objects.is_empty()` guard would repeat the empty check already emitted at `0x26c7b3`. More importantly, library bootstrap uses `.methods` and `defineClassMethod` for String constants, registering Method objects before the user program starts. The global index can therefore be nonempty while the repeatedly called user directive is unregistered. Gating on `method_flag_writes`, nil scope, or changed flags would incorrectly omit observable identity for unmodified registered copies.
+
+## Narrow candidate: Reuse MethodRows for the existing weak index
+
+Replace the representation of the existing `Interp.executable_objects` registry with `MethodRows<ObjRef>`, already used by native and access-scope tables. This replaces the one authoritative weak index rather than adding a parallel numeric-id map, and leaves `ActivationCold.executable`, roots, exact identity lookup, and unregistered lazy materialization unchanged. MethodRows stores pre-seal entries in a bounded dense prefix and later high identities in its existing removable map, so an ordinary user method beyond the prefix can miss via a bounds check and an empty minted-map check. Once a program materializes runtime Methods, unmatched ids may still require the map lookup, and that remaining cost must be measured rather than hidden.
+
+Seal after the library entry program finishes, beside the existing `special_methods.seal()` in `Interp::bootstrap_library`, so bootstrap registrations do not populate the minted map. Also seal the non-library `build_object_model` path beside its existing seal, covering direct interpreter/test construction. Do not seal inside `install_object_model`, which runs before library bootstrap has registered its executable objects. The prefix ends at the highest actually registered pre-seal id, with holes left empty, and later registration of an older id within that prefix must fill its existing slot.
+
+MethodId is allocated from the interpreter's ClassRegistry-wide counter, not from separate per-class or per-program ranges. A later program on the same interpreter can have high ids, so the sealed vector must never grow to accommodate runtime churn, and deleting minted rows must permit the fast empty-map miss again. Each new interpreter owns a separate ClassRegistry and MethodRows instance, even when its numeric ids repeat values used by another interpreter. Preserve the existing no-minted-row-below-dense-prefix invariant and test both late registration below the prefix and runtime insert/remove above it.
+
+The API adaptation remains confined to this registry and its existing generic storage helper. Ordinary get/insert/remove operations already exist, with borrowed-key call sites mechanically adjusted and replacement semantics preserved. The adaptation must also cover the following existing contracts, without weakening their tests. These operations are on registration, reflection, and collection paths rather than the repeated unregistered send path.
+
+* Preserve `method_object`'s `entry(method).or_insert(object)` first-wins behavior with an insertion-if-absent operation, or a noncollecting get/insert pair.
+* Add keyed iteration yielding the original MethodId and object reference for `running_method_executable`'s minimum-id fallback, preserving its current selection rather than changing fallback policy.
+* Preserve both value-based dead-object pruning and keyed dead-program pruning, using a keyed retain helper if necessary while leaving existing MethodRows consumers' retain contract intact.
+* Adapt test-only `.values()` and indexing uses to the existing `rows()`/`get()` surface, retaining their assertions.
+
+The index remains weak: neither its dense slots nor its minted map may become collector roots. Class/object ownership and the already-entered activation continue to keep registered Methods alive, and dead-object/program cleanup removes their index entries through the same conditions. Replacement, removal, copied aliases, enhanced nil-scope methods, and collection after EXIT_VALUE_ROOT replacement retain the existing e2 witnesses and exact entry-time lookup. Evaluate the candidate only after f returns ownership, with matched dispatch/dispatchclass/sendloop and registered-method measurements plus existing GC/refusal controls, and include startup memory, prefix scanning, runtime churn, and same-interpreter repeated-program behavior in the review.
