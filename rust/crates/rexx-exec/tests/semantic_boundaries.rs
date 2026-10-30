@@ -92,12 +92,27 @@ fn buffered_invocations_do_not_query_the_hosts_stdout() {
 
 #[test]
 fn owned_stdout_queries_observe_the_redirected_file() {
+    check_owned_stdout("opened", b"call lineout 'STDERR', .stdout~query('size') .stdout~query('position') .stdout~query('position write char') .stdout~query('position sys')\ncall charout , 'abc'\ncall lineout 'STDERR', 'logical' .stdout~query('position write char')\ncall lineout 'STDERR', 'sys' .stdout~query('position sys') 'size' .stdout~query('size')\naddress system 'true'\ncall lineout 'STDERR', 'handover' .stdout~query('position write char')\n", b"abc", b"0 1 1 0\nlogical 4\nsys 3 size 3\nhandover 4\n");
+}
+
+#[test]
+fn owned_stdout_position_is_empty_before_open_and_after_close() {
+    check_owned_stdout(
+        "closed",
+        include_bytes!("semantic_boundaries_stdout/closed.rex"),
+        b"",
+        include_bytes!("semantic_boundaries_stdout/closed.stderr"),
+    );
+}
+
+fn check_owned_stdout(case: &str, source: &[u8], expected: &[u8], errors: &[u8]) {
     use std::io::{Read, Seek};
     use std::process::{Command, Stdio};
-    let directory = std::env::temp_dir().join(format!("rexx-stdout-query-{}", std::process::id()));
+    let directory =
+        std::env::temp_dir().join(format!("rexx-stdout-query-{}-{case}", std::process::id()));
     std::fs::create_dir(&directory).unwrap();
     let program = directory.join("probe.rex");
-    std::fs::write(&program, b"call lineout 'STDERR', .stdout~query('size') .stdout~query('position') .stdout~query('position write char') .stdout~query('position sys')\ncall charout , 'abc'\ncall lineout 'STDERR', 'logical' .stdout~query('position write char')\ncall lineout 'STDERR', 'sys' .stdout~query('position sys') 'size' .stdout~query('size')\naddress system 'true'\ncall lineout 'STDERR', 'handover' .stdout~query('position write char')\n").unwrap();
+    std::fs::write(&program, source).unwrap();
     let mut output = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -115,15 +130,12 @@ fn owned_stdout_queries_observe_the_redirected_file() {
         .output()
         .unwrap();
     assert!(child.status.success(), "{:?}", child.stderr);
-    assert_eq!(
-        child.stderr,
-        b"0 1 1 0\nlogical 4\nsys 3 size 3\nhandover 4\n"
-    );
-    assert_eq!(output.metadata().unwrap().len(), 3);
-    assert_eq!(output.stream_position().unwrap(), 3);
+    assert_eq!(child.stderr, errors, "{case}");
+    assert_eq!(output.metadata().unwrap().len(), expected.len() as u64);
+    assert_eq!(output.stream_position().unwrap(), expected.len() as u64);
     output.rewind().unwrap();
     let mut bytes = Vec::new();
     output.read_to_end(&mut bytes).unwrap();
-    assert_eq!(bytes, b"abc");
+    assert_eq!(bytes, expected, "{case}");
     std::fs::remove_dir_all(directory).unwrap();
 }
