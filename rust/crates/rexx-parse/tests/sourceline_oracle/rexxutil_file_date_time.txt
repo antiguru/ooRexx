@@ -1,9 +1,10 @@
-count 149
+count 153
 /* SysSetFileDateTime and SysGetFileDateTime: dates and times that scan and
    ones that do not, fields past their range carrying into the next, a
    reading the local zone skips and one it repeats (each also as seconds
    since the epoch for ordinary and skipped readings, and a validity
-   property for the two allowed instants of a repeated reading), years before 1000 and before 1970, the access time a set keeps,
+   property for the two allowed instants of a repeated reading), years
+   before 1000 and before 1970, the access time a set keeps,
    either half omitted, links, a directory, names that resolve to nothing,
    and the argument errors. The daylight-saving lines are the zone's own
    transitions in Europe and in North America. Last, TZ is set by the
@@ -132,7 +133,10 @@ s: procedure expose f
 -- A named zone fixes the allowed pair without depending on prior file atime.
 overlap: procedure expose f
   use arg zone, day, clock, candidates
+  address system 'if test "${TZ+x}" = x; then echo present; else echo absent; fi' with output stem presence.
   saved = value('TZ', , 'ENVIRONMENT')
+  -- An absent setting uses the host zone, while an empty setting means UTC.
+  if presence.1 == 'absent' then saved = .nil
   call value 'TZ', zone, 'ENVIRONMENT'
   call s day, clock, 'overlap', candidates
   call value 'TZ', saved, 'ENVIRONMENT'
