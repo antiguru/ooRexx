@@ -58,8 +58,12 @@ impl OwnedOrphan {
             return Err(format!("owned orphan {pid} changed identity"));
         }
         eprintln!("stopping owned pipe-holder PID {pid}, start time {start}, sleep limit 30s");
-        if let Err(error) = rustix::process::pidfd_send_signal(&pidfd, rustix::process::Signal::KILL) {
-            if error != rustix::io::Errno::SRCH { return Err(error.to_string()); }
+        if let Err(error) =
+            rustix::process::pidfd_send_signal(&pidfd, rustix::process::Signal::KILL)
+        {
+            if error != rustix::io::Errno::SRCH {
+                return Err(error.to_string());
+            }
         }
         let deadline = Instant::now() + Duration::from_secs(2);
         while let Ok(current) = fs::read_to_string(proc.join("stat")) {
