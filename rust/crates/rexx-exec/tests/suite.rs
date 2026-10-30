@@ -516,7 +516,7 @@ fn end_reason(process: &ProcessRun, deadline: Duration) -> Option<String> {
     }
     Some(match process.ended {
         Ended::Killed => format!("timeout: killed after {:?}", process.took),
-        Ended::Exited(124 | 137) => format!("timeout after {} s", deadline.as_secs()),
+        Ended::Exited(124 | 137) => format!("timeout after {} s", deadline.as_secs_f64()),
         Ended::Signaled(signal) => format!("crash: signal {signal}"),
         Ended::Exited(code) => {
             if let Some(line) = refusal(&process.run) {
