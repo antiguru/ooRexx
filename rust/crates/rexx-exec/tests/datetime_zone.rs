@@ -191,23 +191,32 @@ fn the_file_date_time_witness_reads_the_zone_the_oracle_does() {
     );
 }
 
-
 /// A named overlap probe restores both the presence and the value of TZ,
 /// so subsequent ordinary file-date conversions keep their original zone.
 #[test]
 fn an_overlap_probe_restores_absent_empty_and_present_timezone_settings() {
-    let witness = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../corpus/lang/rexxutil_file_date_time.rex");
+    let witness =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/lang/rexxutil_file_date_time.rex");
     let text = fs::read_to_string(witness).unwrap();
-    let routines = text.split_once("\ns: procedure expose f\n").unwrap().1
-        .split_once("\nt: procedure expose").unwrap().0;
+    let routines = text
+        .split_once("\ns: procedure expose f\n")
+        .unwrap()
+        .1
+        .split_once("\nt: procedure expose")
+        .unwrap()
+        .0;
     let oracle = locate();
     for (name, setting, state) in [
         ("absent", ".nil", "absent []"),
         ("empty", "''", "present []"),
-        ("present", "'America/New_York'", "present [America/New_York]"),
+        (
+            "present",
+            "'America/New_York'",
+            "present [America/New_York]",
+        ),
     ] {
-        let source = format!("call value 'TZ', {setting}, 'ENVIRONMENT'\n\
+        let source = format!(
+            "call value 'TZ', {setting}, 'ENVIRONMENT'\n\
             f = 'stamp.txt'\ncall lineout f, 'x'\ncall lineout f\n\
             call snapshot 'before'\n\
             call SysSetFileDateTime f, '2020-06-01', '12:34:56'\n\
@@ -220,24 +229,50 @@ fn an_overlap_probe_restores_absent_empty_and_present_timezone_settings() {
             snapshot: procedure\n\
             address system 'if test \"${{TZ+x}}\" = x; then echo present; else echo absent; fi' with output stem state.\n\
             say arg(1) state.1 '['value('TZ', , 'ENVIRONMENT')']'\nreturn\n\
-            s: procedure expose f\n{routines}");
+            s: procedure expose f\n{routines}"
+        );
         let dir = empty_dir(&format!("restore-{name}"));
         let program = dir.join("restore.rex");
         fs::write(&program, source).unwrap();
         let cpp = oracle.run_in(&program, &empty_dir(&format!("restore-oracle-{name}")), &[]);
-        let out = Command::new("memcap").args(["2G", "timeout", "-k", "2", "20"])
-            .arg(env!("CARGO_BIN_EXE_rexx")).arg(&program)
+        let out = Command::new("memcap")
+            .args(["2G", "timeout", "-k", "2", "20"])
+            .arg(env!("CARGO_BIN_EXE_rexx"))
+            .arg(&program)
             .current_dir(empty_dir(&format!("restore-crate-{name}")))
-            .output().unwrap();
-        assert_eq!(cpp.termination, Termination::Exited(0), "{name}: {:?}", String::from_utf8_lossy(&cpp.stderr));
-        assert_eq!(out.status.code(), Some(0), "{name}: {:?}", String::from_utf8_lossy(&out.stderr));
+            .output()
+            .unwrap();
+        assert_eq!(
+            cpp.termination,
+            Termination::Exited(0),
+            "{name}: {:?}",
+            String::from_utf8_lossy(&cpp.stderr)
+        );
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{name}: {:?}",
+            String::from_utf8_lossy(&out.stderr)
+        );
         assert_eq!(out.stdout, cpp.stdout, "{name}");
         assert_eq!(out.stderr, cpp.stderr, "{name}");
         let stdout = String::from_utf8_lossy(&out.stdout);
         eprintln!("{name} restoration: {stdout}");
-        assert!(stdout.lines().any(|line| line == format!("before {state}")), "{stdout}");
-        assert!(stdout.lines().any(|line| line == format!("after {state}")), "{stdout}");
-        assert!(stdout.lines().any(|line| line == "same ordinary epoch 1"), "{stdout}");
-        assert!(stdout.lines().any(|line| line == "  valid overlap 1 1"), "{stdout}");
+        assert!(
+            stdout.lines().any(|line| line == format!("before {state}")),
+            "{stdout}"
+        );
+        assert!(
+            stdout.lines().any(|line| line == format!("after {state}")),
+            "{stdout}"
+        );
+        assert!(
+            stdout.lines().any(|line| line == "same ordinary epoch 1"),
+            "{stdout}"
+        );
+        assert!(
+            stdout.lines().any(|line| line == "  valid overlap 1 1"),
+            "{stdout}"
+        );
     }
 }
