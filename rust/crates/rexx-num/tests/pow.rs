@@ -122,3 +122,17 @@ fn a_power_exponent_obeys_the_platform_whole_number_limit() {
         assert_eq!(pow("1", exponent, 30), Err(26));
     }
 }
+
+#[test]
+fn a_scaled_integer_exponent_keeps_its_width_limit_and_sign() {
+    for exponent in ["1e17", "99999999999999999e1"] {
+        assert_eq!(pow("0", exponent, 30).unwrap(), "0");
+    }
+    for exponent in ["-1e17", "-99999999999999999e1"] {
+        assert_eq!(pow("0", exponent, 30), Err(42));
+    }
+    for exponent in ["1e18", "-1e18", "9223372036854775807"] {
+        assert_eq!(pow("0", exponent, 30), Err(26));
+    }
+    assert_eq!(pow("0", "999999999999999999", 17), Err(26));
+}
