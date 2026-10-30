@@ -27,6 +27,10 @@ fn slots_for(
     let hash = super::hash_of(interp, keys, index)?;
     'search: loop {
         let store = store_of(interp, receiver)?;
+        // Keep the saved array identities live across replacement callbacks.
+        for array in [store.indexes, store.items, store.next] {
+            interp.roots.activity_mut().push_temp(array);
+        }
         let bucket = (hash % store.buckets as u64) as usize;
         let entries = super::entries_in(interp, &store, Some(bucket))?;
         let mut indexes = Vec::with_capacity(entries.len());
@@ -281,6 +285,10 @@ fn native_relation_remove_item(
         .transpose()?;
     'search: loop {
         let store = store_of(interp, receiver)?;
+        // Keep the saved array identities live across replacement callbacks.
+        for array in [store.indexes, store.items, store.next] {
+            interp.roots.activity_mut().push_temp(array);
+        }
         let selected = hash.map(|hash| (hash % store.buckets as u64) as usize);
         let mut bucket = selected.unwrap_or(0);
         for (slot, previous) in super::entries_in(interp, &store, selected)? {

@@ -177,6 +177,10 @@ pub(super) fn native_hash_remove_item(
     if method_store(interp, receiver)?.is_none() && unknown_method(interp, receiver).is_none() {
         'search: loop {
             let store = store_of(interp, receiver)?;
+            // Keep the saved array identities live across replacement callbacks.
+            for array in [store.indexes, store.items, store.next] {
+                interp.roots.activity_mut().push_temp(array);
+            }
             let mut bucket = 0;
             for (slot, previous) in entries_in(interp, &store, None)? {
                 if previous.is_none() {
