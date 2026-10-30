@@ -5,7 +5,7 @@ mod support;
 use std::path::Path;
 use rexx_exec::{SimConfig, SwitchMode, run_program, run_program_collect_every_alloc};
 
-const EXPECTED: &[u8] = b"O:a slept 1\nO:b slept 0\nO:c slept 0\nsleep 0 3\nO:a waited 1\nO:b waited 0\nO:c waited 0\nsemaphore 0 3\nreleased\nO:a released 1\nO:b released 1\nO:c released 1\nguard 0 3 released 1\n";
+const EXPECTED: &[u8] = b"O:a slept 1\nO:b slept 0\nO:c slept 0\nsleep 0 3\nO:a waited 1\nO:b waited 0\nO:c waited 0\nsemaphore 0 3\nholding\nreleased\nO:a released 1\nO:b released 1\nO:c released 1\nguard 0 3 released 1\n";
 
 #[test]
 fn redirected_targets_preserve_wait_order_and_all_output() {
@@ -24,6 +24,7 @@ fn redirected_targets_preserve_wait_order_and_all_output() {
         } else {
             run_program(path.to_str().unwrap(), source.clone(), invoke)
         };
+        eprintln!("mode={mode:?} stress={stress} status={} stdout={} stderr={:?}", run.exit_code, String::from_utf8_lossy(&run.stdout), String::from_utf8_lossy(&run.stderr));
         assert_eq!(run.exit_code, 0, "{mode:?} stress={stress}: {:?}", String::from_utf8_lossy(&run.stderr));
         assert_eq!(run.stdout, EXPECTED, "{mode:?} stress={stress}: {}", String::from_utf8_lossy(&run.stdout));
         assert!(run.stderr.is_empty(), "{:?}", String::from_utf8_lossy(&run.stderr));
@@ -32,6 +33,7 @@ fn redirected_targets_preserve_wait_order_and_all_output() {
     let oracle = support::oracle::locate();
     for _ in 0..8 {
         let run = oracle.run_in(&path, &dir, &[]);
+        eprintln!("oracle status={:?} stdout={} stderr={:?}", run.termination, String::from_utf8_lossy(&run.stdout), String::from_utf8_lossy(&run.stderr));
         assert_eq!(run.termination, support::oracle::Termination::Exited(0));
         assert_eq!(run.stdout, EXPECTED, "{}", String::from_utf8_lossy(&run.stdout));
         assert!(run.stderr.is_empty(), "{:?}", String::from_utf8_lossy(&run.stderr));

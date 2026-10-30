@@ -75,9 +75,11 @@ exit
   self~calls = 0
 ::method hold
   -- Readiness is outside this guarded object and is posted while it is held.
+  say 'holding'
   .guardReady~post
   -- Keep the guard until a callback actually starts trying to enter it.
   .callbackEntered~wait
+  call SysSleep 1
   .local~released = 1
   say 'released'
 ::method lineout unguarded
