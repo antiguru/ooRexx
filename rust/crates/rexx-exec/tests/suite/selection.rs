@@ -30,3 +30,6 @@ pub(super) fn selected(groups: Vec<(String, String)>, selector: Option<&str>) ->
     chosen
 }
 
+
+#[cfg(test)]
+mod tests;

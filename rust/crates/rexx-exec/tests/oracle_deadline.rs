@@ -186,3 +186,6 @@ fn a_background_process_holding_the_pipe_open_does_not_hang_the_run() {
     // process this test deliberately leaves running.
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[path = "oracle_deadline/pipe_io.rs"]
+mod pipe_io;

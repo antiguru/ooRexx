@@ -817,3 +817,17 @@ mod tests {
         assert!(text.starts_with("r = .K\nsay 'SETUP-OK'\n"), "{text}");
     }
 }
+
+#[cfg(test)]
+mod binary_selection_tests {
+    #[test]
+    fn arity_runs_the_cargo_owned_binary() {
+        let selected = super::interpreter_binary().canonicalize().expect("selected interpreter");
+        let cargo_binary = std::path::Path::new(env!("CARGO_BIN_EXE_rexx"))
+            .canonicalize().expect("Cargo interpreter");
+        assert_eq!(selected, cargo_binary);
+        let target_profile = std::env::current_exe().expect("test executable")
+            .parent().expect("deps").parent().expect("profile").to_path_buf();
+        assert_eq!(selected.parent(), Some(target_profile.as_path()));
+    }
+}

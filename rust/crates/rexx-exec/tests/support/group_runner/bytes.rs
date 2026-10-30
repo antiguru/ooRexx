@@ -55,3 +55,6 @@ pub fn renamed<S: AsRef<str> + Ord>(
     (lines.join(&b'\n'), skipped)
 }
 
+
+#[cfg(test)]
+mod tests;

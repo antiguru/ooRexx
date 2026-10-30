@@ -1,7 +1,8 @@
 use std::fs;
+use std::path::Path;
 
 /// Whether a process runs `sleep 41.5`, which `Grandchild`'s test starts.
-pub(super) fn grandchild_sleeps() -> bool {
+pub(super) fn grandchild_sleeps(_run: &Path) -> bool {
     fs::read_dir("/proc")
         .expect("/proc")
         .filter_map(Result::ok)
@@ -11,3 +12,6 @@ pub(super) fn grandchild_sleeps() -> bool {
         })
 }
 
+
+#[cfg(test)]
+mod tests;
