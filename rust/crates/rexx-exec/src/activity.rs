@@ -717,7 +717,6 @@ impl Activity {
         out.extend(*reraised_object);
         out.extend(*failure_frame);
         out.extend(failure_frames.iter().copied());
-        out.extend(failed_sends.iter().copied());
         match spawner {
             Some(Spawner::Frame {
                 frame: Some((frame, executable)),
