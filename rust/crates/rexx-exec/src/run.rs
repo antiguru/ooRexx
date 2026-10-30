@@ -4190,6 +4190,7 @@ impl Interp {
         // `IF`/`WHEN` included. The `?` path below leaves the pop to the outer
         // truncation, as `pop_frame`'s own doc describes.
         let frame = self.roots.activity_mut().push_frame();
+        self.roots.activity_mut().push_temp(value);
         if self.trace_mode().results {
             let text = self.to_text(value).to_vec();
             match trace {
