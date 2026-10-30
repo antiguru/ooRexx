@@ -43,3 +43,7 @@ Numeric repair sourcef56dfd25e/evidenceddea7bdd0 is scoped-review approved, no f
 ## f performance source approved and e2 round2 next
 
 f performance source4c11ee444/evidence8e16ad172 is scoped-review approved; pin6ed1c08eb03d54c48d1fe3947ce376f09502aaeba34ac221c334b01b1572b86e. Original+f+Hprofiling990 verified; Hstep noOVER but originale1ordinarysendresiduals0.12–0.18% remain. task-8.8e2-perf-r1-residual-diagnosis.md and task-8.8e2-perf-fix-r2-brief.md authorize onlyretention-block reorder after start.apply; resumeoriginale2implementernext aftermetadatahandoff. Profiler runs fixedH/A/fperf297cohort, notfutureH2. Gateplanner is correcting all example/emittedcommandprefixes to plainmemcapPythoninternalcapture to avoid actualapprovalstalls; runnerstillunexecuted. M6g notstarted;84noanswer; two originalflakesstillopen.
+
+## Rejected round2 restored; M6 next
+
+Candidate2cfd41033 rejected, explicitlyrestoredc7ceb632c/evidence1dd273ee6; rootverified netRustdiff vs4c11ee444 iszero. Use preservedf-performancepin6ed1c08e, neverbuildcache/release/rexx untilrebuilt (itcontainsrejectedcandidate). No round2profilepin. M6test-onlysourceagentnext fromtask-8.8g-brief.md; H1residualbudgetdecision remainspendingfinalcurrentruntimeprofiles. ProfilerH/A/fperf297cohort running; earlyarithresidual+0.0464%below0.05. Finalgateplan/draft invocationprefixes nowplainmemcapPythoninternalcapture, stillunexecuted.84unanswered, flakesopen.
