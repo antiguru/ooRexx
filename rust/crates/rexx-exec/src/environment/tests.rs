@@ -11,6 +11,29 @@
 
 use super::*;
 
+#[test]
+fn a_repeated_package_local_miss_is_invalidated_by_a_write() {
+    let mut interp = Interp::new();
+    let parsed = rexx_parse::parse_program(b"nop\n".to_vec()).expect("it parses");
+    let program = interp.programs.insert(std::rc::Rc::new(parsed));
+    let package = interp.held_package_object(Package::Program(program));
+    let local = interp.package_local(package);
+    for _ in 0..2 {
+        assert!(matches!(
+            interp.package_local_symbol(program, b"REPEATEDMISS"),
+            Ok(hash::DirectoryEntry::Absent)
+        ));
+    }
+    assert_eq!(interp.package_local_miss.program, Some(program));
+    assert_eq!(interp.package_local_miss.name, b"REPEATEDMISS");
+    let value = interp.text(b"found");
+    hash::directory_put(&mut interp, local, b"REPEATEDMISS", value).expect("puts");
+    assert!(matches!(
+        interp.package_local_symbol(program, b"REPEATEDMISS"),
+        Ok(hash::DirectoryEntry::Found(found)) if found == value
+    ));
+}
+
 /// The article rule, both ways round, because a version that always says
 /// `a ` renders `a Array` and one that always says `an ` renders `an
 /// StringTable`.

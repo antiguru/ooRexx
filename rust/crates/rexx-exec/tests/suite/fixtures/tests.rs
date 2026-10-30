@@ -84,6 +84,23 @@ fn a_test_that_hangs_is_renamed_out_and_the_next_run_proceeds() {
 }
 
 #[test]
+fn a_fractional_deadline_is_not_truncated_to_whole_seconds() {
+    let run = scratch_run("fractional-deadline");
+    let (process, started) = crate_run_once(
+        &root(),
+        &run,
+        "",
+        "Hangs",
+        &BTreeSet::new(),
+        None,
+        Duration::from_millis(1700),
+    );
+    assert!(started.contains(&"TEST_B".to_string()), "{started:?}");
+    assert!(process.took >= Duration::from_millis(1550), "{:?}", process.took);
+    let _ = fs::remove_dir_all(run);
+}
+
+#[test]
 fn the_marker_file_names_the_test_a_kill_at_the_bound_ended_in() {
     let run = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(format!("suite-kill-{}", std::process::id()))
