@@ -54,7 +54,11 @@ impl Number {
                 return None;
             }
         }
-        self_.whole_value(crate::ARGUMENT_DIGITS)
+        if self_.exponent >= 0 {
+            self_.plain_integer(crate::ARGUMENT_DIGITS as u64)
+        } else {
+            self_.whole_value(crate::ARGUMENT_DIGITS)
+        }
     }
 
     pub fn pow(&self, exponent: &Number, digits: u64) -> Result<Number, ArithError> {
