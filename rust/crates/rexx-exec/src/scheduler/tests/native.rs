@@ -39,6 +39,10 @@ impl Counted {
 /// Runs `source` on an interpreter thread of its own, collecting at every
 /// allocation where `stress`, with the test libraries on its library path.
 fn counted(source: &str, stress: bool, invocation: Invocation) -> Counted {
+    counted_watch(source, stress, invocation, None)
+}
+
+fn counted_watch(source: &str, stress: bool, invocation: Invocation, watch_result: Option<bool>) -> Counted {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../build/lib")
         .canonicalize()
@@ -51,6 +55,7 @@ fn counted(source: &str, stress: bool, invocation: Invocation) -> Counted {
     std::thread::Builder::new()
         .stack_size(crate::INTERPRETER_STACK_BYTES)
         .spawn(move || {
+            crate::sim::native_watch::set_test_result(watch_result);
             let outcome = crate::execute_on(
                 b"/tmp/native.rex",
                 text,
@@ -343,27 +348,29 @@ fn a_native_call_only_another_activity_can_end_is_refused_after_its_bound() {
     );
 }
 
-/// At the smallest `block=` every quick native call returns before its watch
-/// fires, run after run: 50 calls on the baton, 20 runs alike.
+/// Completed native calls repeat under a deterministic schedule. The watch
+/// outcome is supplied so host descheduling cannot change this control.
 #[test]
-fn quick_native_calls_at_the_smallest_bound_run_alike() {
+fn completed_native_calls_repeat_independently_of_host_descheduling() {
     let source = "t = .t~new~start('idle')\ns = 0\ndo i = 1 to 50\n  s = s + RxCalcSqrt(i, 4)\nend\n\
                   say s t~result\n::requires 'rxmath' LIBRARY\n::class t\n::method idle\n  \
                   call SysSleep 1\n  return 'idle'\n";
     let config = crate::SimConfig::parse("sim:1,block=0.001").expect("a sim spec");
-    let first = counted(
+    let first = counted_watch(
         source,
         false,
         bounded().with_switch_mode(SwitchMode::Sim(config.clone())),
+        Some(false),
     );
     assert_eq!(first.outcome.exit_code, 0, "{}", first.stderr());
     assert_eq!(first.exits, 50);
     assert!(first.stdout().ends_with(" idle\n"), "{}", first.stdout());
     for _ in 1..20 {
-        let run = counted(
+        let run = counted_watch(
             source,
             false,
             bounded().with_switch_mode(SwitchMode::Sim(config.clone())),
+        Some(false),
         );
         assert_eq!(
             (run.outcome.exit_code, run.stdout(), run.stderr()),
@@ -425,4 +432,22 @@ fn a_failure_ending_a_native_park_abandons_the_call() {
         "rexx-exec: directory entry \"STDQUE\" is not implemented (Phase 10 Rxapi)\n"
     );
     assert_eq!(run.exits, 1);
+}
+
+
+#[test]
+fn only_a_timed_out_native_watch_refuses_a_completed_call() {
+    let source = "t = .t~new~start('idle')\nsay RxCalcSqrt(4, 4) t~result\n::requires 'rxmath' LIBRARY\n::class t\n::method idle\nreturn 'idle'\n";
+    for fired in [false, true] {
+        let config = crate::SimConfig::parse("sim:1,block=0.001").unwrap();
+        let run = counted_watch(source, false, bounded().with_switch_mode(SwitchMode::Sim(config)), Some(fired));
+        assert_eq!(run.exits, 1);
+        if fired {
+            assert_eq!(run.outcome.exit_code, 120);
+            assert!(run.stderr().contains("a native call in the simulation mode that runs longer than its bound"), "{}", run.stderr());
+        } else {
+            assert_eq!(run.outcome.exit_code, 0, "{}", run.stderr());
+            assert_eq!(run.stdout(), "2 idle\n");
+        }
+    }
 }

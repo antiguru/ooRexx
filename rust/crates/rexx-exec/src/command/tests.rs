@@ -80,3 +80,29 @@ fn unquote_drops_quotes_and_escapes_one_byte() {
     assert_eq!(unquote(b"a\\\\b"), b"a\\b");
     assert_eq!(unquote(b"ab\\"), b"ab");
 }
+
+
+#[test]
+fn an_externally_reaped_child_maps_to_127_and_failure() {
+    use rustix::process::{Pid, WaitOptions, waitpid};
+    let running = std::process::Command::new("python3")
+        .args(["-c", "raise SystemExit(5)"])
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().expect("child");
+    let pid = Pid::from_raw(i32::try_from(running.id()).unwrap()).unwrap();
+    let (_, status) = waitpid(Some(pid), WaitOptions::empty()).expect("external reap").expect("status");
+    assert_eq!(status.exit_status(), Some(5));
+    let waited = collect(running, None, None, [true, true], None);
+    assert_eq!(waited.rc, 127);
+    assert_eq!(CommandOutcome::of(waited.rc).status.condition(), Some("FAILURE"));
+    assert!(waited.out.is_empty() && waited.err.is_empty());
+}
+
+#[test]
+fn an_owned_child_keeps_its_status_and_error_mapping() {
+    let running = std::process::Command::new("python3")
+        .args(["-c", "raise SystemExit(5)"])
+        .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().expect("child");
+    let waited = collect(running, None, None, [true, true], None);
+    assert_eq!(waited.rc, 5);
+    assert_eq!(CommandOutcome::of(waited.rc).status.condition(), Some("ERROR"));
+}
