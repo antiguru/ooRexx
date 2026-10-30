@@ -99,3 +99,27 @@ fn the_two_pow_asymmetry_rows_that_are_actually_this_crates_to_own() {
     let err = n("2").pow(&n("2.5"), 9).unwrap_err();
     assert_eq!(err.sub_code(), (26, 8));
 }
+
+#[test]
+fn an_integral_exponent_ignores_trailing_fraction_zeros_before_conversion() {
+    for (exponent, expected) in [
+        ("1.00000000000000000000", "2"),
+        ("-1.00000000000000000000", "0.5"),
+        ("3.00000000000000000000", "8"),
+    ] {
+        assert_eq!(pow("2", exponent, 30).unwrap(), expected);
+    }
+    assert_eq!(pow("2", "1.00000000000000000001", 30), Err(26));
+    assert_eq!(pow("2", "1.00000000000000000001", 9).unwrap(), "2");
+    assert_eq!(pow("2", "-0.9999999999", 9).unwrap(), "0.5");
+}
+
+#[test]
+fn a_power_exponent_obeys_the_platform_whole_number_limit() {
+    for exponent in ["999999999999999999", "-999999999999999999"] {
+        assert_eq!(pow("1", exponent, 30).unwrap(), "1");
+    }
+    for exponent in ["1000000000000000000", "-1000000000000000000", "1e18"] {
+        assert_eq!(pow("1", exponent, 30), Err(26));
+    }
+}
