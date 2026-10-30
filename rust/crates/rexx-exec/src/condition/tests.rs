@@ -104,22 +104,27 @@ fn a_traced_loop_condition_keeps_its_fresh_concatenation() {
     assert_eq!(stressed.exit_code, plain.exit_code);
 }
 
-/// A comparison's fresh array answer keeps its later elements through OBJECTNAME sends.
+/// The two-element control can retain its next element as the current receiver.
 #[test]
 fn a_truth_conversion_keeps_the_fresh_array_answer() {
-    let text = b"signal on syntax\na = .array~of(.comp~new)\nsay a~hasItem(.comp~new)\nexit\nsyntax:\nsay condition('O')~code condition('O')~additional[1]\n::class comp\n::method '=='\nreturn .array~of(.part~new, .part~new)\n::class part\n::method objectName\nx = copies('x', 100)\nreturn 'A'\n".to_vec();
-    let plain = crate::run_program(
-        "/tmp/rooted-truth.rex",
-        text.clone(),
-        crate::Invocation::none(),
-    );
+    truth_array_conversion(2);
+}
+
+/// A later element remains live after an earlier return replaces the exit-value root.
+#[test]
+fn a_truth_conversion_keeps_the_third_fresh_array_element() {
+    truth_array_conversion(3);
+}
+
+fn truth_array_conversion(parts: usize) {
+    // Each OBJECTNAME return replaces the global exit-value root. Three elements
+    // leave one future receiver across the second element's allocation.
+    let elements = vec![".part~new"; parts].join(", ");
+    let text = format!("signal on syntax\na = .array~of(.comp~new)\nsay a~hasItem(.comp~new)\nexit\nsyntax:\nsay condition('O')~code condition('O')~additional[1]\n::class comp\n::method '=='\nreturn .array~of({elements})\n::class part\n::method objectName\nx = copies('x', 100)\nreturn 'A'\n").into_bytes();
+    let plain = crate::run_program("/tmp/rooted-truth.rex", text.clone(), crate::Invocation::none());
     assert_eq!(plain.exit_code, 0);
-    assert_eq!(plain.stdout, b"34.901 A\nA\n");
-    let stressed = crate::run_program_collect_every_alloc(
-        "/tmp/rooted-truth.rex",
-        text,
-        crate::Invocation::none(),
-    );
+    assert_eq!(plain.stdout, format!("34.901 {}\n", vec!["A"; parts].join("\n")).as_bytes());
+    let stressed = crate::run_program_collect_every_alloc("/tmp/rooted-truth.rex", text, crate::Invocation::none());
     assert!(stressed.collections > 0);
     assert_eq!(stressed.stdout, plain.stdout);
     assert_eq!(stressed.stderr, plain.stderr);
