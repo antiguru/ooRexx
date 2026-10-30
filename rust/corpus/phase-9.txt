@@ -450,3 +450,5 @@ lang/reference_rendering_sends.rex
 lang/raise_untraced_renders_nothing.rex
 # 9d Task 8.7c fix round 3: LOSTDIGITS names the operand's string value.
 lang/lostdigits_names_the_string_value.rex
+# 9d Task 8.7c fix round 4: a reference's conversion that raises raises in its clause.
+lang/reference_conversion_raises_in_clause.rex
