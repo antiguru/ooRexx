@@ -46,8 +46,7 @@ fn slots_for(
             // entry. Validate the whole saved chain before retaining slots.
             if writes != interp.store_writes || generation != interp.store_generation {
                 let current = store_of(interp, receiver)?;
-                if current != store
-                    || super::entries_in(interp, &current, Some(bucket))? != entries
+                if current != store || super::entries_in(interp, &current, Some(bucket))? != entries
                 {
                     continue 'search;
                 }

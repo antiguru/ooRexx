@@ -1,7 +1,7 @@
 import json, os, pathlib, shlex, signal, subprocess, sys, time
 name, bound, cwd, *command = sys.argv[1:]
 root = pathlib.Path('/home/moritz/dev/repos/ooRexx-rust-rewrite')
-records = root / 'docs/superpowers/records/2026-10-18-phase-9d/t8.8/semantics/checks'
+records = root / 'docs/superpowers/records/2026-10-18-phase-9d/t8.8/semantics/fix-r1/checks'
 records.mkdir(parents=True, exist_ok=True)
 env = os.environ.copy()
 env.update(CARGO_INCREMENTAL='0', CARGO_TARGET_DIR='/tmp/codex-p9d-t88-target')
