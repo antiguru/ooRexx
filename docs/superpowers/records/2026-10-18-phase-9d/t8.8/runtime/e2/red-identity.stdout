@@ -1,0 +1,11 @@
+
+running 1 test
+test dispatch::method_entry::tests::registered_executable_survives_dictionary_mutation_and_collection ... FAILED
+
+failures:
+
+failures:
+    dispatch::method_entry::tests::registered_executable_survives_dictionary_mutation_and_collection
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1224 filtered out; finished in 0.03s
+

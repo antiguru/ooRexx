@@ -1,6 +1,6 @@
 # Task 8.8f: Remaining semantic residuals
 
-This brief covers the remaining P7 items except the completed integral-power fix, with RAISE DESCRIPTION listed separately pending the user's timing ruling. Static investigation used revision `813aba49a0c040f10d9c2d52e9310d8d3d4db7a2`, local rexxref, queued witnesses and existing helper contracts. No builds, oracle runs, probes, source edits or commits were performed. Execute semantic fixes serially under the [global constraints](global-constraints.md) and later [batch perf rule](task-8-batches.md), with durable evidence under the instance's records directory.
+This brief covers the remaining P7 items except the completed integral-power fix, with RAISE DESCRIPTION separately authorized by the user's timing ruling below. Static investigation used revision `813aba49a0c040f10d9c2d52e9310d8d3d4db7a2`, local rexxref, queued witnesses and existing helper contracts. No builds, oracle runs, probes, source edits or commits were performed. Execute semantic fixes serially under the [global constraints](global-constraints.md) and later [batch perf rule](task-8-batches.md), with durable evidence under the instance's records directory.
 
 ## Rules that remain authoritative
 
@@ -19,7 +19,7 @@ The shared required-string contract is `dispatch/reqstr.rs::required_string_valu
 3. TRACE assignment: rerender only when each line will be emitted, retaining the existing entry-gate and assignment-order rules.
 4. Hash collections: remove duplicate lookups and restrict index operations to the relevant bucket, preserving the ruled == behavior and reentrant-store checks.
 5. Standard-output queries: work at the actual owned-descriptor/query boundary, retaining Deviation 40 buffering and embedding behavior.
-6. RAISE DESCRIPTION only after the pending timing ruling, with its distinct observable witness.
+6. RAISE DESCRIPTION conversion at RAISE under the approved timing ruling, with its distinct observable witness and Deviation 83.
 
 ## Stem index string values
 
@@ -69,14 +69,14 @@ First reduce `t8.7c/probes/stdinq/q5.rex` to stdout-only queries redirected to a
 
 Prefer safe metadata/seek queries on the launcher-owned or safely borrowed standard-output descriptor, gated by the actual descriptor ownership contract. Reuse standard_transient and existing sink ownership information, preserving stdin's FileConsole and all ordinary stream opens. If live metadata/offset cannot be exposed through the present sink interface without a new optional query hook, identify that narrow Invocation/Sinks surface change for controller review rather than adding unsafe descriptor ownership or reopening /proc/self/fd through a general side map. Deviations 79/80 remain unchanged because this task adds query behavior and does not extend seek capability.
 
-## RAISE DESCRIPTION: Pending timing ruling
+## RAISE DESCRIPTION: Conversion at RAISE
 
-`instrc.xml:2866-2874` says a parenthesized DESCRIPTION expression is evaluated to obtain its character string value, and CONDITION(D)/the DESCRIPTION entry return that string. The queue's untraced `t8.7c/review-probes-rr2/n2c/u.rex` records no conversion send on the oracle at RAISE, while n2b/q9.rex exposes conversion when condition(D) is read. These timings are observably different when makeString/DEFAULTNAME mutates state or raises, even if the eventual string is the same. Leave implementation and closure pending the user's timing ruling.
+`instrc.xml:2866-2874` says a parenthesized DESCRIPTION expression is evaluated to obtain its character string value, and CONDITION(D)/the DESCRIPTION entry return that string. The queue's untraced `t8.7c/review-probes-rr2/n2c/u.rex` records no conversion send on the oracle at RAISE, while n2b/q9.rex exposes conversion when condition(D) is read. These timings are observably different when makeString/DEFAULTNAME mutates state or raises, even if the eventual string is the same. Moritz approved conversion at RAISE on 2026-10-30 with "Follow your recommendation on both.", referring to this recommendation and FIFO closing LINEOUT byte preservation/normal close.
 
-If the rule is conversion at RAISE, reuse required_string_value at the DESCRIPTION evaluation boundary, root the result and store its bytes in the existing raised description representation. A witness must separate before RAISE, handler entry, first CONDITION(D), repeat read and no-read handler, with one conversion at the ruled point. If the user instead chooses delayed conversion, first report the representation and lifetime changes needed to preserve the object until that read, since current condition-object materialization constructs DESCRIPTION as text. Do not silently choose the easier storage model or write a new Deviation without authorization.
+Reuse required_string_value at the DESCRIPTION evaluation boundary, root the result and store its bytes in the existing raised description representation. A witness must separate before RAISE, handler entry, first CONDITION(D), repeat read and no-read handler, with one conversion at the ruled point. Task 8.8f writes Deviation 83 for this rule and Deviation 82 for FIFO closing LINEOUT byte preservation and normal close, quoting the approval and its mapping. These authorizations do not extend to other newly discovered oracle departures.
 
 ## Performance and completion
 
 PARSE triggers, Stem keys, hash probes and MAX/MIN are hot paths, so keep ordinary string/integer fast paths and avoid unconditional Vec copies, double conversions or new scans. TRACE work stays behind actual line-emission gates, but the queued “traced performance is no target” statement does not waive the general untraced own-delta gate for shared assignment helpers. The later batch rule requires every callgrind program against this instance's own BASE, no -p subset, with scheduling SPREAD reported. Keep new error/conversion construction cold and out of line where existing contracts permit it.
 
-Each item needs its recorded red witness, changed witness output inspected, narrowly responsible fix and the mandatory corpus/suite/refusal checks, retaining surrounding ruled witnesses. Keep source comments accurate and preserve them through any necessary pure-move split of a large file. Close only the completed queued items, leaving power closed and DESCRIPTION pending until ruled. No new Deviation, Phase 9d Tasks 9/10, or Phase 9/10 closure is authorized by this brief.
+Each item needs its recorded red witness, changed witness output inspected, narrowly responsible fix and the mandatory corpus/suite/refusal checks, retaining surrounding ruled witnesses. Keep source comments accurate and preserve them through any necessary pure-move split of a large file. Close only completed queued items, leaving power closed and recording the approved DESCRIPTION rule with its witness. Only the expressly authorized Deviations 82/83 may be added under this brief, while Phase 9d Tasks 9/10 and Phase 9/10 closure remain outside scope.

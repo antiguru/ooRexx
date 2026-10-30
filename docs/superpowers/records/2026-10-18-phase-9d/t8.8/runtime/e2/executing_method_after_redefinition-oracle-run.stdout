@@ -1,0 +1,14 @@
+0 replace 1 0 1 1
+same 1
+0 remove 1 0 1 1
+same 1
+0 hide 1 0 1 1
+same 1
+1 replace 1 0 1 1
+same 1
+1 remove 1 0 1 1
+same 1
+1 hide 1 0 1 1
+same 1
+BAR 1 1 0 1
+FOO 1 0 1 1

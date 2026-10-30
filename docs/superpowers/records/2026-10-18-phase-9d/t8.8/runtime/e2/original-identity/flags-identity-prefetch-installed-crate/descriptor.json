@@ -1,0 +1,23 @@
+{
+  "name": "flags-identity-prefetch-installed",
+  "side": "crate",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed.rex",
+  "cmd": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+    "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed-crate",
+  "TZ": "UTC",
+  "status": 0,
+  "elapsed": 0.12539424299029633,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed-crate/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-prefetch-installed-crate/stderr",
+  "reader_open_before_interpreter": false,
+  "fifo_payload_hex": null
+}

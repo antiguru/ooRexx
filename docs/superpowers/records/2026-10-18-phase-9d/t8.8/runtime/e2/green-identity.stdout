@@ -1,0 +1,12 @@
+
+running 2 tests
+test dispatch::method_entry::tests::executing_copies_and_enhanced_metaclass_entries_survive_collection ... FAILED
+test dispatch::method_entry::tests::registered_executable_survives_dictionary_mutation_and_collection ... ok
+
+failures:
+
+failures:
+    dispatch::method_entry::tests::executing_copies_and_enhanced_metaclass_entries_survive_collection
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 1228 filtered out; finished in 0.14s
+

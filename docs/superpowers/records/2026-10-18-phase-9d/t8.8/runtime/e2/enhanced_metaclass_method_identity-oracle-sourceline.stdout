@@ -1,0 +1,45 @@
+entry pong 1
+inherited pong 1
+held 1 1
+listed 1 1
+found 1
+held 1 1
+listed 1 1
+found 1
+held 1 1
+listed 1 1
+found 1
+object 17 1
+ordinary ordinary 1
+%SRCG%COUNT 31
+%SRCG%L/* Nil-scoped metaclass entries retain their registered Method objects. */
+%SRCG%Lm = .method~new('PING', "return 'pong'")
+%SRCG%Ld = .directory~new
+%SRCG%Ld~ping = m
+%SRCG%Ld~install = "self~setMethod('OWN', 'return 17')"
+%SRCG%Lc = .class~enhanced(d, 'Remote')
+%SRCG%Ldrop d m
+%SRCG%Lheld = .WeakReference~new(c~instanceMethod('PING'))
+%SRCG%Lsay 'entry' c~ping (held~value~scope == .nil)
+%SRCG%Lchild = c~subclass('Child')
+%SRCG%Lsay 'inherited' child~ping (child~instanceMethod('PING') == held~value)
+%SRCG%Ldo i = 1 to 3
+%SRCG%L  a = .array~new(10)
+%SRCG%L  say 'held' (c~instanceMethod('PING') == held~value) (child~instanceMethod('PING') == held~value)
+%SRCG%L  methods = c~instanceMethods(.nil)
+%SRCG%L  found = 0
+%SRCG%L  do while methods~available
+%SRCG%L    if methods~index == 'PING' then do
+%SRCG%L      found = found + 1
+%SRCG%L      say 'listed' (methods~item == held~value) (methods~item~scope == .nil)
+%SRCG%L    end
+%SRCG%L    methods~next
+%SRCG%L  end
+%SRCG%L  say 'found' found
+%SRCG%Lend
+%SRCG%Lc~install
+%SRCG%Lsay 'object' c~own (c~instanceMethod('OWN')~scope == .nil)
+%SRCG%Lsay 'ordinary' .ordinary~ping (.ordinary~instanceMethod('PING')~scope == .ordinary)
+%SRCG%L::class ordinary
+%SRCG%L::method ping class
+%SRCG%L  return 'ordinary'

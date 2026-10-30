@@ -1,0 +1,18 @@
+{
+  "name": "flags-identity-after-only",
+  "side": "oracle",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only.rex",
+  "cmd": [
+    "bash",
+    "/tmp/p9d-t88-fixed-20261030-a/oracle.sh",
+    "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only-oracle",
+  "TZ": "UTC",
+  "status": 0,
+  "elapsed": 0.008933820005040616,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only-oracle/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only-oracle/stderr",
+  "reader_open_before_interpreter": false,
+  "fifo_payload_hex": null
+}

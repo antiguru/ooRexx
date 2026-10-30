@@ -1,0 +1,23 @@
+{
+  "command": [
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/original-identity/flags-identity-after-only.rex"
+  ],
+  "cwd": "/tmp/t88e2-release-probes-6l3rwp_2/flags-identity-after-only",
+  "status": 0,
+  "source": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/original-identity/flags-identity-after-only.rex",
+  "source_sha256": "858237d96c7b415ce9dbebdd5fe8411ce701556a970ea51387d04c68a0545981",
+  "binary_sha256": "00e29fde4456ee4845a76941263f495b827c083af35363cb54eb3ac8c6b7c733",
+  "resident_cap": "inherited memcap 2G",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/t88e2-release-probes-6l3rwp_2/flags-identity-after-only",
+  "comparison": {
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "command": [
+    "bash",
+    "/tmp/t88e2-oracle-wqtw35sc/oracle.sh",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/enhanced_metaclass_method_identity.rex"
+  ],
+  "cwd": "/tmp/t88e2-oracle-wqtw35sc/enhanced_metaclass_method_identity-run",
+  "status": 159,
+  "source_sha256": "6ed24f26a8bde5a5302c9bf2ea8f2219ed65eb7cbb2b42f2b62b1a1aa13c10ca"
+}

@@ -1,0 +1,23 @@
+{
+  "name": "flags-identity-after-only",
+  "side": "crate",
+  "source": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only.rex",
+  "cmd": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/p9d-t88-fixed-20261030-a/rexx-frozen",
+    "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only.rex"
+  ],
+  "cwd": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only-crate",
+  "TZ": "UTC",
+  "status": 0,
+  "elapsed": 0.13396153401117772,
+  "stdout": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only-crate/stdout",
+  "stderr": "/tmp/p9d-t88-fixed-20261030-a/flags-identity-after-only-crate/stderr",
+  "reader_open_before_interpreter": false,
+  "fifo_payload_hex": null
+}

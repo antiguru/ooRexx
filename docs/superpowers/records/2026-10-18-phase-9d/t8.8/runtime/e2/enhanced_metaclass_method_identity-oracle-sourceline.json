@@ -1,0 +1,11 @@
+{
+  "command": [
+    "bash",
+    "/tmp/t88e2-oracle-dl6pqkws/oracle.sh",
+    "/tmp/t88e2-oracle-dl6pqkws/srclines.rex",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/enhanced_metaclass_method_identity.rex"
+  ],
+  "cwd": "/tmp/t88e2-oracle-dl6pqkws/enhanced_metaclass_method_identity-sourceline",
+  "status": 0,
+  "source_sha256": "6dd9f80e0305f7d748a69128d5cacaa49e79efac6d6a07ab7ca7ed1965769eba"
+}

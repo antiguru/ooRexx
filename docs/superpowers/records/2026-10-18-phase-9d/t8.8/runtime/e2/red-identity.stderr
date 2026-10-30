@@ -1,0 +1,10 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `test` profile [optimized + debuginfo] target(s) in 54.67s
+     Running unittests src/lib.rs (/tmp/codex-p9d-t88-target/debug/deps/rexx_exec-aaedc271dbf1a724)
+
+thread 'dispatch::method_entry::tests::registered_executable_survives_dictionary_mutation_and_collection' (1065558) panicked at crates/rexx-exec/src/dispatch/method_entry/tests.rs:8:13:
+assertion `left == right` failed: .k~define('FOO', .k~method('OTHER')), prefetch=false
+  left: [48, 32, 49, 32, 48, 32, 49, 10]
+ right: [49, 32, 48, 32, 49, 32, 49, 10]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+error: test failed, to rerun pass `-p rexx-exec --lib`

@@ -1,0 +1,23 @@
+{
+  "command": [
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/enhanced_metaclass_method_identity.rex"
+  ],
+  "cwd": "/tmp/t88e2-release-probes-6l3rwp_2/enhanced_metaclass_method_identity",
+  "status": 0,
+  "source": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/enhanced_metaclass_method_identity.rex",
+  "source_sha256": "6dd9f80e0305f7d748a69128d5cacaa49e79efac6d6a07ab7ca7ed1965769eba",
+  "binary_sha256": "00e29fde4456ee4845a76941263f495b827c083af35363cb54eb3ac8c6b7c733",
+  "resident_cap": "inherited memcap 2G",
+  "TZ": "UTC",
+  "REXX_PATH": "/tmp/t88e2-release-probes-6l3rwp_2/enhanced_metaclass_method_identity",
+  "comparison": {
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true
+  }
+}

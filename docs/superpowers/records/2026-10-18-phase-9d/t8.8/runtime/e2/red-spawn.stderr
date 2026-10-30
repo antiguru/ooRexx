@@ -1,0 +1,22 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.03s
+     Running unittests src/lib.rs (/tmp/codex-p9d-t88-target/debug/deps/rexx_exec-aaedc271dbf1a724)
+
+thread 'scheduler::tests::spawn_failure::native_spawn_failure_reaches_main_and_started_handlers' (1068078) panicked at crates/rexx-exec/src/scheduler/tests/spawn_failure.rs:44:5:
+assertion `left == right` failed
+  left: "BODY RAN\nBODY RAN\n"
+ right: "48.1 Failure in system service: ERROR CREATING THREAD.\n48.1 Failure in system service: ERROR CREATING THREAD.\n"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'scheduler::tests::spawn_failure::command_spawn_failure_creates_no_child_and_repeats' (1068076) panicked at crates/rexx-exec/src/scheduler/tests/spawn_failure.rs:59:5:
+assertion `left == right` failed
+  left: "CHILD RAN\nCHILD RAN\nprogress\n"
+ right: "48.1\n48.1\nprogress\n"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'scheduler::tests::spawn_failure::native_spawn_failure_reaches_main_and_started_handlers' (1068073) panicked at crates/rexx-exec/src/scheduler/tests/spawn_failure.rs:29:5:
+isolated test failed: exit status: 101
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'scheduler::tests::spawn_failure::command_spawn_failure_creates_no_child_and_repeats' (1068072) panicked at crates/rexx-exec/src/scheduler/tests/spawn_failure.rs:29:5:
+isolated test failed: exit status: 101
+error: test failed, to rerun pass `-p rexx-exec --lib`

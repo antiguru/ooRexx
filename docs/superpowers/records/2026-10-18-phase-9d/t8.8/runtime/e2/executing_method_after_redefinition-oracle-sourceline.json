@@ -1,0 +1,11 @@
+{
+  "command": [
+    "bash",
+    "/tmp/t88e2-oracle-dl6pqkws/oracle.sh",
+    "/tmp/t88e2-oracle-dl6pqkws/srclines.rex",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/executing_method_after_redefinition.rex"
+  ],
+  "cwd": "/tmp/t88e2-oracle-dl6pqkws/executing_method_after_redefinition-sourceline",
+  "status": 0,
+  "source_sha256": "fcb30e97619e958a1411977a57365ee2a7879cb841efe9a3bf8d990ae047750a"
+}

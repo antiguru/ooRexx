@@ -1,0 +1,46 @@
+# Task 8.8e2: Executable identity and pool failures
+
+Status: DONE_WITH_CONCERNS. This slice starts at `a7db381c765fafd81fe775245902d6476aefe072` in the existing `plan/rust-rewrite` worktree. Runtime implementation is `dbbe93639`, with final test source at `ae6a6bd04`. Its assigned work covers executing Method identity, actual worker-spawn failure, and gate 481's supported nil-scope ownership invariant. Full corpus, ooTest suite, workspace, aggregate performance, and all other residuals remain with their assigned controller/f owners.
+
+## Executing Method identity
+
+Method entry retains an already registered executable in `ActivationCold.executable`, whose existing root traversal preserves it through collection. The implementation uses the exact resolved `MethodId` to consult the existing executable index and does not materialize ordinary unregistered methods or add an identity map. The committed red regression returned the BODY object's identity and flags after replacement, while the corrected witnesses preserve replacement, removal, hiding, first-read timing, and distinct aliases of one body. The corpus witness uses weak references and actual collection stress, so the removed copy's survival is attributable to execution rather than an externally retained reflected Method.
+
+The context contract is the executable of the invocation, as specified in `oodocs/rexxref/en-US/utilityclasses.xml` and implemented by `RexxActivation.cpp`'s method construction. The original retained after-only, prefetch-installed, and read-before evidence is copied with its descriptors under `runtime/e2/original-identity`. The extended corpus and its oracle-generated sourcelines retain exact stdout, stderr, and exit statuses in the same records directory. The old RESULT reachability observation remains the existing licensed collection-timing disposition, and this slice changes neither that rule nor its implementation.
+
+## Worker failure and cleanup
+
+`Pool::reserve` now distinguishes `Ok(None)` configured inline/fixed saturation from an actual OS thread-creation error. The cold failure constructor returns `Raised::syntax(48, 1, ["ERROR CREATING THREAD"])`, following `interpreter/platform/unix/SysActivity.cpp::create`, the local 48001 catalogue entry, and rexxref ERR48. Failed native preparation records an unstarted failure and wakes its original parked continuation before any leave, in-flight increment, baton lend, or synthetic completion. Cancellation pops and ends unstarted native frames immediately, while genuinely left calls retain the existing abandoned-frame lifetime.
+
+Commands reserve after argument handling, input setup, and explicit merged-pipe construction, before `Command::spawn`. A command-specific guard returns an unused reservation through the existing no-op job path on an OS spawn error, early return, or unwind, and successful command process-group behavior is unchanged. The controller accepted changed precedence when both worker creation and command execution would fail, and the test proves no command child is created on failed reservation while an unrelated child survives. Existing `Stdio::piped()` configuration defers the actual stdin/separate-output pipe allocation to `Command::spawn`, so that spawn-internal failure also occurs after reservation and returns the worker through the guard.
+
+Stdin propagates Failure through LINEIN/CHARIN and their Stream surfaces using existing SYNTAX delivery. Failed reservation clears only the newly set read-in-flight marker, preserving buffered bytes, EOF, exhaustion, descriptor ownership, and unrelated inbox posts. Isolated tests keep an empty pipe open to detect accidental inline reads, repeat trapped failures, and replace the failed pool on the same interpreter to prove successful pooled and deliberately inline reads. The named-stream read implementation remains unchanged apart from required stdin Failure propagation, and EINTR work remains assigned to f.
+
+The actual-failure seam requests a 64 TiB stack in an isolated unit-test subprocess with an 8 GiB address-space ceiling and the inherited normal memory cap. Each child first requires an actual reservation error with no pool thread recorded, and an unexpectedly successful reservation is returned before failing the test. Main and started native callers trap 48.1 with the exact service text, native body counters stay zero, guarded receivers make progress, and unstarted kept objects/lent storage are released. Existing real-running abandonment, fixed/disabled pool, callback, command, input, and collection controls remain covered by the library test run.
+
+## Gate 481 ownership invariant
+
+Ordinary class-side entries receive a real class scope through `ClassGraph::class_define`, while the inspected supported nil-scope producer is `install_enhancing_methods`. That producer obtains actual scoped Method objects, records them in the existing executable index, and roots them through the enhanced dummy class's owned objects before class-side cascade imports their entries. `record_executable` retains the source package, class body traversal keeps owned Methods alive, and dead-object/program pruning therefore cannot remove their live mappings. `method_object_for` returns that registered object before the class-owner reconstruction path, whose assertion remains unchanged.
+
+The executable proof constructs the enhanced class through Rexx, derives its actual `Selection::ClassSide`, confirms nil scope and no object-level entry, and collects with only the class explicitly rooted. It overwrites EXIT_VALUE_ROOT with a harmless second Rexx return and retains no reflected Method, Supplier, or active Method invocation that could mask the producer's ownership. The mapping, live Method, graph entry, and introspection answer remain identical after collection, while the separate corpus exercises inherited metaclass entries, enumeration, and supported object-level installation. This closes the supported producer/lifetime concern without claiming arbitrary internal ClassRegistry misuse is valid or relabelling any refusal as GUARD.
+
+## Verification and retained limits
+
+Checks use `memcap`, `CARGO_INCREMENTAL=0`, `/tmp/codex-p9d-t88-target`, Cargo `-j4`, and foreground bounds below 540 seconds. Exact commands, revisions, independent stdout/stderr, and statuses are retained under `docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/`. The initial alias probe mistakenly called nonexistent `setPublic`, and the first object-level control called private `setMethod` externally, with both failures retained before supported constructions replaced them. An older unit test's reconstruction-count assertion was updated because the executing nil-scope Method now correctly remains rooted, and an assertion-only clippy correction is retained in the command history.
+
+| Record | Status | Evidence |
+| --- | --- | --- |
+| red-identity / red-spawn | 101 / 101 | Executing identity was substituted; native and command bodies ran inline. |
+| green-focused / focused-final | 0 / 0 | Actual OS spawn failures and stdin preservation/recovery pass. |
+| affected-units-final | 0 | 1234 library tests pass, including native, scheduler, command, input, and collection controls. |
+| nil-invariant-final | 0 | Exact nil mapping and stress witnesses pass; identity 201 / enhanced 90 actual collections. |
+| metadata-refresh | 0 | 8 tests pass; refresh leaves refusal table unchanged. |
+| stdin-metadata | 0 | Stdin contention, owners, closed phases, phase-ten reasons, and representation checks pass. |
+| sourceline | 0 | Oracle-generated corpus sourcelines match. |
+| clippy / clippy-final | 101 / 0 | Test assertion copy lint corrected; affected-crate all-target check passes. |
+| fmt-complete / release-build | 0 / 0 | Final formatting and capped release build pass. |
+| final release differentials | 0 | Extended and original identity witnesses match oracle stdout/stderr/status separately. |
+
+The release pin and source/build/compiler hashes are recorded in `release-pin.json`. The controller's all-program own-BASE comparison must use the e1 pin `/tmp/codex-p9d-t88-pins/8.8e1-rexx`, SHA-256 `434d6567458248fdb804eebe9edb715a54ddb9ded650fcca994eed6c4b691e06`, against this runtime pin. Method-entry lookup/cold allocation and parked-native-stage costs are unmeasured obligations, rather than assumed free changes. M6 timer proof, the original flakes, FIFO EINTR, and Phase 9/10 close retain their existing owners. Moritz's new "Follow your recommendation on both." approval authorizes f to preserve FIFO closing-LINEOUT bytes/normal close as Deviation 82 and convert DESCRIPTION at RAISE as Deviation 83; the receiving dispatch and brief now record those mappings.
+
+The read-only residual-inventory audit is included unchanged for controller reconciliation, and its proposals were not applied. Only the assigned identity, failed-spawn, and gate 481 rows changed disposition, preserving their inventory reasons. Source and pin hashes establish the runtime handed to f and the batch owner, while the own-BASE performance comparison remains open. No protected reference tree, unrelated worktree, user archive, or build cache was modified or removed.

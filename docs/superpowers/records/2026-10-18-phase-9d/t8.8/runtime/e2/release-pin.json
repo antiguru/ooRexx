@@ -1,0 +1,18 @@
+{
+  "base": "a7db381c765fafd81fe775245902d6476aefe072",
+  "built_revision": "ae6a6bd048551c66f63727421fe0ef45877d91ea",
+  "runtime_implementation": "dbbe93639",
+  "source_tree": "ef1ec657aabf2264fd12acba2c427f8cf7c652b7",
+  "build_record": "release-build.json",
+  "compiler": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1\n",
+  "artifact": {
+    "path": "/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+    "sha256": "00e29fde4456ee4845a76941263f495b827c083af35363cb54eb3ac8c6b7c733",
+    "bytes": 67237032
+  },
+  "baseline": {
+    "path": "/tmp/codex-p9d-t88-pins/8.8e1-rexx",
+    "sha256": "434d6567458248fdb804eebe9edb715a54ddb9ded650fcca994eed6c4b691e06"
+  },
+  "performance": "All-program own-BASE comparison remains controller-owned; lookup and cold-allocation costs are not assumed free."
+}

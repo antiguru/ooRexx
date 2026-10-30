@@ -1,0 +1,59 @@
+0 replace 1 0 1 1
+same 1
+0 remove 1 0 1 1
+same 1
+0 hide 1 0 1 1
+same 1
+1 replace 1 0 1 1
+same 1
+1 remove 1 0 1 1
+same 1
+1 hide 1 0 1 1
+same 1
+BAR 1 1 0 1
+FOO 1 0 1 1
+%SRCG%COUNT 44
+%SRCG%L/* An executing Method survives dictionary mutation and collection. */
+%SRCG%Ldo prefetch = 0 to 1
+%SRCG%L  do change over .array~of('replace', 'remove', 'hide')
+%SRCG%L    .local~change = change
+%SRCG%L    .local~prefetch = prefetch
+%SRCG%L    .k~define('FOO', .k~method('BODY')~copy~~setPrivate~~setUnguarded)
+%SRCG%L    .local~entered = .WeakReference~new(.k~method('FOO'))
+%SRCG%L    .s~new~go
+%SRCG%L  end
+%SRCG%Lend
+%SRCG%L.k~define('FOO', .k~method('ALIASES')~copy~~setPrivate~~setUnguarded)
+%SRCG%L.k~define('BAR', .k~method('ALIASES')~copy)
+%SRCG%L.local~foo = .WeakReference~new(.k~method('FOO'))
+%SRCG%L.local~bar = .WeakReference~new(.k~method('BAR'))
+%SRCG%L.s~new~both
+%SRCG%Lexit
+%SRCG%L::class k
+%SRCG%L::method go
+%SRCG%L  self~foo
+%SRCG%L::method both
+%SRCG%L  self~foo('FOO')
+%SRCG%L::method body protected
+%SRCG%L  if .prefetch then before = .context~executable
+%SRCG%L  select
+%SRCG%L    when .change == 'replace' then .k~define('FOO', .k~method('OTHER'))
+%SRCG%L    when .change == 'remove' then .k~define('FOO')
+%SRCG%L    otherwise .k~define('FOO', .nil)
+%SRCG%L  end
+%SRCG%L  a = .array~new(10)
+%SRCG%L  m = .context~executable
+%SRCG%L  say .prefetch .change (m == .entered~value) m~isGuarded m~isPrivate m~isProtected
+%SRCG%L  say 'same' (m == .context~executable)
+%SRCG%L::method aliases protected
+%SRCG%L  use arg name
+%SRCG%L  .k~define(name)
+%SRCG%L  if name == 'FOO' then self~bar('BAR')
+%SRCG%L  a = .array~new(10)
+%SRCG%L  m = .context~executable
+%SRCG%L  if name == 'FOO' then original = .foo~value
+%SRCG%L  else original = .bar~value
+%SRCG%L  say name (m == original) m~isGuarded m~isPrivate m~isProtected
+%SRCG%L::method other
+%SRCG%L  return 17
+%SRCG%L::class s subclass k

@@ -81,7 +81,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-10-directory-setmethod-unknown-traceback-line.md	divergence	queued-probes/t4e/t4e.rex:1,queued-probes/stemunk/stemunk.rex:1	closed:a52fa561b	both probes still print an extra Compiled method "UNKNOWN" traceback line here	closed:a52fa561b
 2026-10-10-emptyloop-wall-clock.md	perf	-	phase:9.1	unattributed cycles; no probe	phase:9.1
 2026-10-10-enhanced-object-name-in-messages.md	divergence	queued-probes/t4b/t4b.rex:1	closed:70d314bac	closed by Phase 9a Task 8b; "enhanced Object" on both	closed:70d314bac
-2026-10-10-failed-spawn-runs-inline.md	divergence	-	9d	no probe run (needs a capped address space and a full pool); a hang where the oracle raises 48.1	9d
+2026-10-10-failed-spawn-runs-inline.md	divergence	-	closed:ae6a6bd04	no probe run (needs a capped address space and a full pool); a hang where the oracle raises 48.1	closed:ae6a6bd04
 2026-10-10-leave-iterate-error-not-trappable.md	divergence	queued-probes/lv4o/lv4o.rex:1	closed:4acd606e9	probe still differs: 28.3 untrapped rc 228 here, trapped 4 on the oracle	closed:4acd606e9
 2026-10-10-list-remove-copies-per-call.md	perf	queued-probes/lr2/lr2.rex:1	phase:9.1	own reduced probe: 2000 removes from a 100000-item List take over 0.5 s here and under it on the oracle	phase:9.1
 2026-10-10-misplaced-class-attribute-error.md	divergence	queued-probes/attrcls/attrcls.rex:1	9d-cluster:attribute-body-error-number	probe still differs (99.937 against 99.905); it is ATTRIBUTE TESTMISPLACEDCLASSMETHOD	9d-cluster:attribute-body-error-number
@@ -133,7 +133,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-14-native-method-frames.md	divergence	-	closed:probe agrees	names StackFrame TESTNATIVECODEFRAME, that cluster's test	closed:probe agrees
 2026-10-14-routine-start-call-panic.md	divergence	queued-probes/rstart/rstart.rex:1	closed:fb86ce94f	own probe: a panic "a live activation", rc 101, where the oracle prints 1; its file marks it PRIORITY	closed:fb86ce94f
 2026-10-15-9b1-task-8b-review-minors.md	divergence	queued-probes/m1var/m1var.rex:1,queued-probes/m4def/m4def.rex:1	9d	own probes: m1 lists Z here and A on the oracle, m4 answers the new source here and the old one on the oracle	9d
-2026-10-15-executable-flags-and-result.md	divergence	-	9d	no probe recorded; the oracle is still to be measured	9d
+2026-10-15-executable-flags-and-result.md	divergence	-	closed:ae6a6bd04	no probe recorded; the oracle is still to be measured	closed:ae6a6bd04
 2026-10-15-isguarded-copy-and-additional.md	divergence	queued-probes/isg/isg.rex:1,queued-probes/addl/addl.rex:1	closed:68e7f15d5	the review's probes still differ: isGuarded 1 against 0, additional[1] a against the whole string	closed:68e7f15d5
 2026-10-15-routines-table-silent-none.md	process	-	closed:2589e88b3	no probe; environment.rs build_package_string_table and identities.rs find_written_routine still answer Ok(None)	closed:2589e88b3
 2026-10-16-bignum-remainder-speed.md	perf	queued-probes/bignum/bignum.rex:1	phase:9.1	probe: output 78 on both, 2000 iterations under 1 s on the oracle and over it here	phase:9.1
@@ -181,7 +181,7 @@ gate:phase-9a-gate.md:477	perf	-	phase:9.1	a per-call cold block on Routine~call
 gate:phase-9a-gate.md:478	divergence	-	closed:Phase 9b1 L7	packages are collected (phase-9b1-gate.md L7)	closed:Phase 9b1 L7
 gate:phase-9a-gate.md:479	design	-	closed:Phase 9b1	a pointer to 2026-10-12-package-as-real-object.md	closed:Phase 9b1
 gate:phase-9a-gate.md:480	divergence	queued-probes/dimeth/dimeth.rex:1	closed:probe agrees	probe still differs (1 against 0); Object TEST_INSTANCEMETHOD is that cluster's	closed:probe agrees
-gate:phase-9a-gate.md:481	divergence	-	9d	no probe; a panic its ledger calls unverified	9d
+gate:phase-9a-gate.md:481	divergence	-	closed:ae6a6bd04	no probe; a panic its ledger calls unverified	closed:ae6a6bd04
 gate:phase-9a-gate.md:482	process	-	closed:03d74f029	no probe; sim calibration not re-derived, for the Phase 9 close	closed:03d74f029
 gate:phase-9a-gate.md:483	process	-	closed:1d8b03220	Moritz 2026-10-13: under the simulation clock or licensed, owner 9d; its Flaky row is in suite-licences.txt:8, the S2 list has none	closed:1d8b03220
 gate:phase-9a-gate.md:485	divergence	-	9d-cluster:redirected-command-holds-baton	TEST_MAKESTRING passed at the 9c close; scclient and sfclient are that cluster's	9d-cluster:redirected-command-holds-baton

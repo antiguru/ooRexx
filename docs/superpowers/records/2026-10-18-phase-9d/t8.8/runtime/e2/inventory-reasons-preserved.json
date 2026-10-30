@@ -1,0 +1,13 @@
+{
+  "base": "a7db381c765fafd81fe775245902d6476aefe072",
+  "changed_items": [
+    "2026-10-10-failed-spawn-runs-inline.md",
+    "2026-10-15-executable-flags-and-result.md",
+    "gate:phase-9a-gate.md:481"
+  ],
+  "changed_columns": [
+    "proposed",
+    "ruled"
+  ],
+  "other_columns_preserved": true
+}
