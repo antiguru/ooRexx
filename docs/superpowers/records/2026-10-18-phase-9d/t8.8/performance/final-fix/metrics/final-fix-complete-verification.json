@@ -1,0 +1,22 @@
+{
+  "verified_utc": "2026-10-30T23:13:40.384942+00:00",
+  "groups": [
+    "q-r"
+  ],
+  "programs_per_cohort": 33,
+  "rounds": 3,
+  "verified_profiles": 198,
+  "raw_manifest": "/home/moritz/dev/repos/ooRexx-rust-rewrite/.superpowers/cache/t88-final-fix-performance/metrics/final-fix-complete-profile-manifest.tsv",
+  "raw_manifest_sha256": "8b6202208b4ad6cb98856d39b844211ca21fa06dfefb9823c7c7e066a994d6e1",
+  "driver_diagnostics": [],
+  "checks": [
+    "program enumeration",
+    "pin and instrument hashes",
+    "successful status",
+    "row identity",
+    "libc/loader arithmetic",
+    "actual profiled argv",
+    "raw summary",
+    "independent output hashes"
+  ]
+}

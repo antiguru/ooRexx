@@ -1,0 +1,414 @@
+{
+  "complete_programs": 33,
+  "reference_cohorts": {
+    "base": [
+      "base-ab-c",
+      "base"
+    ],
+    "e1": [
+      "c-e1-e2",
+      "e1"
+    ],
+    "e2": [
+      "e2-f",
+      "e2"
+    ],
+    "f": [
+      "e2-f",
+      "f"
+    ],
+    "q": [
+      "q-r",
+      "q"
+    ],
+    "r": [
+      "q-r",
+      "r"
+    ]
+  },
+  "reference_pins": {
+    "base": {
+      "path": "/tmp/codex-p9d-t88-pins/8.8-base-rexx",
+      "sha256": "4913ad067898fd6a786c12a696b2a21b0d066ad6b019c73273f78e30c16f5c58"
+    },
+    "e1": {
+      "path": "/tmp/codex-p9d-t88-pins/8.8e1-rexx",
+      "sha256": "434d6567458248fdb804eebe9edb715a54ddb9ded650fcca994eed6c4b691e06"
+    },
+    "e2": {
+      "path": "/tmp/codex-p9d-t88-pins/8.8e2-rexx",
+      "sha256": "00e29fde4456ee4845a76941263f495b827c083af35363cb54eb3ac8c6b7c733"
+    },
+    "f": {
+      "path": "/tmp/codex-p9d-t88-pins/8.8f-r1-rexx",
+      "sha256": "b695b78fe24903b4be5a2874c8cd128193bbe165f92b50a4d6a8a9956d03d3be"
+    },
+    "q": {
+      "path": "/tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx",
+      "sha256": "22c317baa3ed111935a6577ac33097e428a53b64eb64b4697af2b85664e3f8eb"
+    },
+    "r": {
+      "path": "/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx",
+      "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145"
+    }
+  },
+  "attribution_limits": "R versus original e1, original e2, corrected F, and pre-8.8 BASE compares separate cohorts and complete source revisions with intervening semantic and performance changes. These residuals do not isolate method-entry lookup, PARSE, numeric handling, or another source mechanism. Each residual above +0.05% is explicitly OVER, independently of a negative direct R/Q repair delta.",
+  "residuals": {
+    "base": {
+      "over_budget": [
+        {
+          "program": "alloc",
+          "reference_cohort": "base-ab-c",
+          "r_cohort": "q-r",
+          "reference_own_median": 19953168417,
+          "r_own_median": 20100394007,
+          "r_vs_reference_percent": 0.7378556975170145,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "churn",
+          "reference_cohort": "base-ab-c",
+          "r_cohort": "q-r",
+          "reference_own_median": 377917506,
+          "r_own_median": 378563296,
+          "r_vs_reference_percent": 0.17088120813329033,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "dispatch",
+          "reference_cohort": "base-ab-c",
+          "r_cohort": "q-r",
+          "reference_own_median": 20683753467,
+          "r_own_median": 20708754627,
+          "r_vs_reference_percent": 0.12087341903338883,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "dispatchclass",
+          "reference_cohort": "base-ab-c",
+          "r_cohort": "q-r",
+          "reference_own_median": 15310186442,
+          "r_own_median": 15330187587,
+          "r_vs_reference_percent": 0.13063946070004365,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "heapshape",
+          "reference_cohort": "base-ab-c",
+          "r_cohort": "q-r",
+          "reference_own_median": 2261606461,
+          "r_own_median": 2269678793,
+          "r_vs_reference_percent": 0.35692911827067864,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "parse",
+          "reference_cohort": "base-ab-c",
+          "r_cohort": "q-r",
+          "reference_own_median": 1545243608,
+          "r_own_median": 1547904561,
+          "r_vs_reference_percent": 0.17220281554466718,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "sendloop",
+          "reference_cohort": "base-ab-c",
+          "r_cohort": "q-r",
+          "reference_own_median": 13828061970,
+          "r_own_median": 13853063132,
+          "r_vs_reference_percent": 0.1808001877214613,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "pingguard",
+          "reference_cohort": "base-ab-c",
+          "r_cohort": "q-r",
+          "reference_own_median": 1151574817,
+          "r_own_median": 1152183383,
+          "r_vs_reference_percent": 0.0528464144071327,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "pingmsg",
+          "reference_cohort": "base-ab-c",
+          "r_cohort": "q-r",
+          "reference_own_median": 1644675133,
+          "r_own_median": 1647344738,
+          "r_vs_reference_percent": 0.16231807403389495,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "pingsem",
+          "reference_cohort": "base-ab-c",
+          "r_cohort": "q-r",
+          "reference_own_median": 1171607806,
+          "r_own_median": 1177414581,
+          "r_vs_reference_percent": 0.4956244717952997,
+          "residual_gate": "OVER"
+        }
+      ],
+      "ordinary_send": [
+        {
+          "program": "dispatch",
+          "reference_cohort": "base-ab-c",
+          "r_cohort": "q-r",
+          "reference_own_median": 20683753467,
+          "r_own_median": 20708754627,
+          "r_vs_reference_percent": 0.12087341903338883,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "dispatchclass",
+          "reference_cohort": "base-ab-c",
+          "r_cohort": "q-r",
+          "reference_own_median": 15310186442,
+          "r_own_median": 15330187587,
+          "r_vs_reference_percent": 0.13063946070004365,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "sendloop",
+          "reference_cohort": "base-ab-c",
+          "r_cohort": "q-r",
+          "reference_own_median": 13828061970,
+          "r_own_median": 13853063132,
+          "r_vs_reference_percent": 0.1808001877214613,
+          "residual_gate": "OVER"
+        }
+      ],
+      "worst": {
+        "program": "alloc",
+        "reference_cohort": "base-ab-c",
+        "r_cohort": "q-r",
+        "reference_own_median": 19953168417,
+        "r_own_median": 20100394007,
+        "r_vs_reference_percent": 0.7378556975170145,
+        "residual_gate": "OVER"
+      }
+    },
+    "e1": {
+      "over_budget": [
+        {
+          "program": "alloc",
+          "reference_cohort": "c-e1-e2",
+          "r_cohort": "q-r",
+          "reference_own_median": 19953168494,
+          "r_own_median": 20100394007,
+          "r_vs_reference_percent": 0.7378553087659803,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "churn",
+          "reference_cohort": "c-e1-e2",
+          "r_cohort": "q-r",
+          "reference_own_median": 377917583,
+          "r_own_median": 378563296,
+          "r_vs_reference_percent": 0.17086079850378383,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "dispatch",
+          "reference_cohort": "c-e1-e2",
+          "r_cohort": "q-r",
+          "reference_own_median": 20683753607,
+          "r_own_median": 20708754627,
+          "r_vs_reference_percent": 0.12087274135550961,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "dispatchclass",
+          "reference_cohort": "c-e1-e2",
+          "r_cohort": "q-r",
+          "reference_own_median": 15310186503,
+          "r_own_median": 15330187587,
+          "r_vs_reference_percent": 0.13063906175199647,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "heapshape",
+          "reference_cohort": "c-e1-e2",
+          "r_cohort": "q-r",
+          "reference_own_median": 2261606453,
+          "r_own_median": 2269678793,
+          "r_vs_reference_percent": 0.35692947326410907,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "parse",
+          "reference_cohort": "c-e1-e2",
+          "r_cohort": "q-r",
+          "reference_own_median": 1545243685,
+          "r_own_median": 1547904561,
+          "r_vs_reference_percent": 0.1721978239309226,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "sendloop",
+          "reference_cohort": "c-e1-e2",
+          "r_cohort": "q-r",
+          "reference_own_median": 13828062110,
+          "r_own_median": 13853063132,
+          "r_vs_reference_percent": 0.1807991734569957,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "pingguard",
+          "reference_cohort": "c-e1-e2",
+          "r_cohort": "q-r",
+          "reference_own_median": 1151577131,
+          "r_own_median": 1152183383,
+          "r_vs_reference_percent": 0.05264536640055941,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "pingmsg",
+          "reference_cohort": "c-e1-e2",
+          "r_cohort": "q-r",
+          "reference_own_median": 1644677261,
+          "r_own_median": 1647344738,
+          "r_vs_reference_percent": 0.16218847692817953,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "pingsem",
+          "reference_cohort": "c-e1-e2",
+          "r_cohort": "q-r",
+          "reference_own_median": 1171606794,
+          "r_own_median": 1177414581,
+          "r_vs_reference_percent": 0.4957112770037419,
+          "residual_gate": "OVER"
+        }
+      ],
+      "ordinary_send": [
+        {
+          "program": "dispatch",
+          "reference_cohort": "c-e1-e2",
+          "r_cohort": "q-r",
+          "reference_own_median": 20683753607,
+          "r_own_median": 20708754627,
+          "r_vs_reference_percent": 0.12087274135550961,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "dispatchclass",
+          "reference_cohort": "c-e1-e2",
+          "r_cohort": "q-r",
+          "reference_own_median": 15310186503,
+          "r_own_median": 15330187587,
+          "r_vs_reference_percent": 0.13063906175199647,
+          "residual_gate": "OVER"
+        },
+        {
+          "program": "sendloop",
+          "reference_cohort": "c-e1-e2",
+          "r_cohort": "q-r",
+          "reference_own_median": 13828062110,
+          "r_own_median": 13853063132,
+          "r_vs_reference_percent": 0.1807991734569957,
+          "residual_gate": "OVER"
+        }
+      ],
+      "worst": {
+        "program": "alloc",
+        "reference_cohort": "c-e1-e2",
+        "r_cohort": "q-r",
+        "reference_own_median": 19953168494,
+        "r_own_median": 20100394007,
+        "r_vs_reference_percent": 0.7378553087659803,
+        "residual_gate": "OVER"
+      }
+    },
+    "e2": {
+      "over_budget": [
+        {
+          "program": "parse",
+          "reference_cohort": "e2-f",
+          "r_cohort": "q-r",
+          "reference_own_median": 1545246232,
+          "r_own_median": 1547904561,
+          "r_vs_reference_percent": 0.17203271200081463,
+          "residual_gate": "OVER"
+        }
+      ],
+      "ordinary_send": [
+        {
+          "program": "dispatch",
+          "reference_cohort": "e2-f",
+          "r_cohort": "q-r",
+          "reference_own_median": 20823756231,
+          "r_own_median": 20708754627,
+          "r_vs_reference_percent": -0.5522615743493909,
+          "residual_gate": "PASS"
+        },
+        {
+          "program": "dispatchclass",
+          "reference_cohort": "e2-f",
+          "r_cohort": "q-r",
+          "reference_own_median": 15422189066,
+          "r_own_median": 15330187587,
+          "r_vs_reference_percent": -0.5965526593291993,
+          "residual_gate": "PASS"
+        },
+        {
+          "program": "sendloop",
+          "reference_cohort": "e2-f",
+          "r_cohort": "q-r",
+          "reference_own_median": 13968064690,
+          "r_own_median": 13853063132,
+          "r_vs_reference_percent": -0.8233177648606667,
+          "residual_gate": "PASS"
+        }
+      ],
+      "worst": {
+        "program": "parse",
+        "reference_cohort": "e2-f",
+        "r_cohort": "q-r",
+        "reference_own_median": 1545246232,
+        "r_own_median": 1547904561,
+        "r_vs_reference_percent": 0.17203271200081463,
+        "residual_gate": "OVER"
+      }
+    },
+    "f": {
+      "over_budget": [],
+      "ordinary_send": [
+        {
+          "program": "dispatch",
+          "reference_cohort": "e2-f",
+          "r_cohort": "q-r",
+          "reference_own_median": 20823763935,
+          "r_own_median": 20708754627,
+          "r_vs_reference_percent": -0.5522983662271332,
+          "residual_gate": "PASS"
+        },
+        {
+          "program": "dispatchclass",
+          "reference_cohort": "e2-f",
+          "r_cohort": "q-r",
+          "reference_own_median": 15422196694,
+          "r_own_median": 15330187587,
+          "r_vs_reference_percent": -0.596601825444206,
+          "residual_gate": "PASS"
+        },
+        {
+          "program": "sendloop",
+          "reference_cohort": "e2-f",
+          "r_cohort": "q-r",
+          "reference_own_median": 13968072394,
+          "r_own_median": 13853063132,
+          "r_vs_reference_percent": -0.8233724651183963,
+          "residual_gate": "PASS"
+        }
+      ],
+      "worst": {
+        "program": "churn",
+        "reference_cohort": "e2-f",
+        "r_cohort": "q-r",
+        "reference_own_median": 378427782,
+        "r_own_median": 378563296,
+        "r_vs_reference_percent": 0.03580973872578943,
+        "residual_gate": "PASS"
+      }
+    }
+  }
+}

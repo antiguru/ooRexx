@@ -1,0 +1,14 @@
+{
+  "groups": {
+    "q-r": {
+      "valid_profiles": 147,
+      "expected_profiles": 198,
+      "complete_programs": 16,
+      "spreads": []
+    }
+  },
+  "over_budget": [],
+  "provisional_over_budget": [],
+  "output_errors": [],
+  "invalid_profiles": []
+}

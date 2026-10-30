@@ -1,0 +1,35 @@
+[
+  {
+    "record": "batch-23-q-final.json",
+    "actual_shell_command": "memcap 8G python3 -B .superpowers/cache/t88-final-fix-performance/q-r.py run q-r batch-23-q-final 1000 8",
+    "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite",
+    "status": 0,
+    "elapsed_seconds": 481.3927526430343,
+    "deadline_seconds": 525,
+    "completed_profiles": 147,
+    "tmp_free_bytes_after": 15093981184,
+    "driver_sha256": "c4c2f2b68401d8363489da0a9eecba4cb51ed323d1cab13d3378cec8377be747"
+  },
+  {
+    "record": "batch-24-q-final.json",
+    "actual_shell_command": "memcap 8G python3 -B .superpowers/cache/t88-final-fix-performance/q-r.py run q-r batch-24-q-final 1000 8",
+    "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite",
+    "status": 0,
+    "elapsed_seconds": 390.8164160939632,
+    "deadline_seconds": 525,
+    "completed_profiles": 48,
+    "tmp_free_bytes_after": 13924540416,
+    "driver_sha256": "c4c2f2b68401d8363489da0a9eecba4cb51ed323d1cab13d3378cec8377be747"
+  },
+  {
+    "record": "batch-25-q-final-completion.json",
+    "actual_shell_command": "memcap 8G python3 -B .superpowers/cache/t88-final-fix-performance/q-r.py run q-r batch-25-q-final-completion 3 8",
+    "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite",
+    "status": 0,
+    "elapsed_seconds": 201.6744179839734,
+    "deadline_seconds": 525,
+    "completed_profiles": 3,
+    "tmp_free_bytes_after": 13368254464,
+    "driver_sha256": "c4c2f2b68401d8363489da0a9eecba4cb51ed323d1cab13d3378cec8377be747"
+  }
+]

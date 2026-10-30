@@ -1,0 +1,34 @@
+{
+  "status": "ACCEPTED_FOR_COMPARISON",
+  "profiling_authorized": true,
+  "authorization": "Root explicit task: Scoped review passed; start Q to final. All source findings approved; use latest r2 immutable pin, run all 33 programs in 3 rotating paired rounds, preserve all prior profiles, and keep new metadata in ignored cache.",
+  "runtime_source_revision": "9d919b7c3832c55edc3a0a07974309f092102201",
+  "review_evidence_revision": "e1c1cda8c60730dc0306d2e743f100f17d9f70a2",
+  "pins": [
+    {
+      "name": "q",
+      "path": "/tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx",
+      "sha256": "22c317baa3ed111935a6577ac33097e428a53b64eb64b4697af2b85664e3f8eb"
+    },
+    {
+      "name": "r",
+      "path": "/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx",
+      "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145"
+    }
+  ],
+  "cohort": {
+    "q-r": [
+      "q",
+      "r"
+    ]
+  },
+  "rounds": 3,
+  "profiles": 198,
+  "input_evidence_revision": "f598eb1c6b806f0ed36c8b8a8aac3a1386e98deb",
+  "superseded_intermediate": {
+    "path": "/tmp/codex-p9d-t88-pins/8.8-final-fix-rexx",
+    "status": "SUPERSEDED_UNPROFILED",
+    "authorization": "Root instructed that the old R intermediate remains retained and must not be measured."
+  },
+  "authorized_utc": "2026-10-30T22:54:59.459437+00:00"
+}

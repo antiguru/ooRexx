@@ -1,0 +1,35 @@
+--- before-r2-update/r-inputs.json
++++ current/r-inputs.json
+@@ -2,7 +2,7 @@
+   "status": "PENDING_ROOT_REVIEW",
+   "profiling_authorized": false,
+   "authorization": null,
+-  "runtime_source_revision": null,
++  "runtime_source_revision": "9d919b7c3832c55edc3a0a07974309f092102201",
+   "review_evidence_revision": null,
+   "pins": [
+     {
+@@ -12,8 +12,8 @@
+     },
+     {
+       "name": "r",
+-      "path": "/tmp/codex-p9d-t88-pins/8.8-final-fix-rexx",
+-      "sha256": null
++      "path": "/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx",
++      "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145"
+     }
+   ],
+   "cohort": {
+@@ -23,5 +23,11 @@
+     ]
+   },
+   "rounds": 3,
+-  "profiles": 198
++  "profiles": 198,
++  "input_evidence_revision": "f598eb1c6b806f0ed36c8b8a8aac3a1386e98deb",
++  "superseded_intermediate": {
++    "path": "/tmp/codex-p9d-t88-pins/8.8-final-fix-rexx",
++    "status": "SUPERSEDED_UNPROFILED",
++    "authorization": "Root instructed that the old R intermediate remains retained and must not be measured."
++  }
+ }

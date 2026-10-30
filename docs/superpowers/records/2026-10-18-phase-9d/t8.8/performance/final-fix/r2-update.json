@@ -1,0 +1,18 @@
+{
+  "updated_utc": "2026-10-30T22:53:41.096890+00:00",
+  "previous_adapter_sha256": "732e32205e1af216ff7df380c8afd25cb29391a7b7165b18b3a6f547873334e6",
+  "adapter_sha256": "c4c2f2b68401d8363489da0a9eecba4cb51ed323d1cab13d3378cec8377be747",
+  "manifest_sha256": "9f4fe59172eab72b2d75847a4a5d102707a29cccb67c3e15a3304ae1b370896a",
+  "source_revision": "9d919b7c3832c55edc3a0a07974309f092102201",
+  "candidate_pin": {
+    "name": "r",
+    "path": "/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx",
+    "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145"
+  },
+  "profiling_authorized": false,
+  "review_evidence_revision": null,
+  "authorization": null,
+  "raw_q_r_directory_exists": false,
+  "profile_launches": 0,
+  "tracked_mutations": 0
+}

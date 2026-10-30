@@ -1,0 +1,77 @@
+--- owned/callgrind-capped.sh
++++ owned/callgrind-one.sh
+@@ -95,73 +95,6 @@
+     local k
+     for ((k = 0; k < n; k++)); do one $(((k + $2 - 1) % n)) "$1" "$2"; done
+ }
+-running=0
+-for ((r = 1; r <= rounds; r++)); do
+-    for p in $PROGRAMS; do
+-        job "$p" "$r" &
+-        running=$((running + 1))
+-        if [ $running -ge "$jobs" ]; then wait -n; running=$((running - 1)); fi
+-    done
+-done
+-wait
+ 
+-: > "$out/summary.tsv"
+-for p in $PROGRAMS; do
+-    for ((r = 1; r <= rounds; r++)); do
+-        for name in "${names[@]}"; do
+-            cat "$out/$p.$name.r$r.row" >> "$out/summary.tsv"
+-            if [ "$(cat "$out/$p.$name.r$r.rc")" != 0 ]; then
+-                echo "$p $name r$r exited $(cat "$out/$p.$name.r$r.rc")" >&2; status=1
+-            fi
+-            if ! [[ " $TIMED " == *" $p "* ]] && ! cmp -s "$out/$p.$name.r$r.out" "$out/$p.${names[0]}.r1.out"; then
+-                echo "$p $name r$r stdout differs from ${names[0]} r1" >&2; status=1
+-            fi
+-        done
+-    done
+-done
++one "$PROFILE_BINARY_INDEX" "$PROFILE_PROGRAM" "$PROFILE_ROUND"
+ fi
+-python3 - "$out/summary.tsv" "$budget" "${names[@]}" > "$out/table.txt" <<'EOF'
+-import statistics
+-import sys
+-whole = {}
+-less = {}
+-flagged = False
+-for line in open(sys.argv[1]):
+-    b, p, r, summ, libc, ld, ex, rc = line.rstrip("\n").split("\t")
+-    whole.setdefault((b, p), []).append(int(summ))
+-    less.setdefault((b, p), []).append(int(ex))
+-budget = float(sys.argv[2]) if sys.argv[2] else None
+-names = sys.argv[3:]
+-progs = list(dict.fromkeys(p for (_, p) in whole))
+-head = ["program"] + names + [f"{b} d%" for b in names[1:]]
+-head += [f"{b} -libc" for b in names] + [f"{b} -libc d%" for b in names[1:]]
+-head += [f"{b} spread%" for b in names]
+-print("\t".join(head))
+-for p in progs:
+-    cells = [p]
+-    deltas = {}
+-    for kind, counts in (("whole", whole), ("less", less)):
+-        mid = {b: statistics.median(counts[(b, p)]) for b in names}
+-        deltas[kind] = {b: 100 * (mid[b] - mid[names[0]]) / mid[names[0]] for b in names[1:]}
+-        cells += [f"{mid[b]:.0f}" for b in names]
+-        cells += [f"{deltas[kind][b]:+.4f}" for b in names[1:]]
+-    spread = {
+-        b: 100 * (max(whole[(b, p)]) - min(whole[(b, p)])) / statistics.median(whole[(b, p)])
+-        for b in names
+-    }
+-    cells += [f"{spread[b]:.4f}" for b in names]
+-    print("\t".join(cells))
+-    for b in names:
+-        if spread[b] > 0.01:
+-            print(f"SPREAD {p} {b} {spread[b]:.4f}%", file=sys.stderr)
+-            flagged = True
+-    for b in names[1:]:
+-        if budget is not None and deltas["whole"][b] > budget:
+-            print(f"OVER {p} {b} {deltas['whole'][b]:+.4f}% > {budget}%", file=sys.stderr)
+-            flagged = True
+-sys.exit(1 if flagged else 0)
+-EOF
+-[ $? = 0 ] || status=1
+-cat "$out/table.txt"
+-echo "# outputs in $out" >&2
+-exit $status

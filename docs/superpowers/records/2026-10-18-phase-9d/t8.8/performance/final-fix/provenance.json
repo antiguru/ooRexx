@@ -1,0 +1,22 @@
+[
+  {
+    "source": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/final-review/fix-r1/release-pin.json",
+    "copy": "provenance/release-pin.json",
+    "sha256": "dfd51f8c035fcb4cc8a9fa1d60403bf70a42acf97edac6fac68ad473550d5a5d"
+  },
+  {
+    "source": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/final-review/r1-rereview.md",
+    "copy": "provenance/r1-rereview.md",
+    "sha256": "1f9558c13b3a194e7bc0fe54f72048206f4fdc12eec12351744a542fbbc99841"
+  },
+  {
+    "source": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/q-inputs.json",
+    "copy": "provenance/q-inputs.json",
+    "sha256": "ed9ab4ad7b965bdea2fc18d533746710a71150691f196d9fe3b0cca06d16ccbd"
+  },
+  {
+    "source": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/inputs.json",
+    "copy": "provenance/inputs.json",
+    "sha256": "f1c6e438b68616bef8e22177977aa868132e958f71088e1830344f6c6fbdc243"
+  }
+]

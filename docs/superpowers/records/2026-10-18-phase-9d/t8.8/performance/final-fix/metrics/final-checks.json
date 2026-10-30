@@ -1,0 +1,58 @@
+{
+  "recorded_utc": "2026-10-30T23:16:15.868249+00:00",
+  "checks": [
+    {
+      "actual_shell_command": "memcap 8G timeout -k 5s 525s python3 -B .superpowers/cache/t88-final-fix-performance/q-r.py verify final-fix-complete",
+      "status": 0,
+      "outer_bound_seconds": 530
+    },
+    {
+      "actual_shell_command": "memcap 8G timeout -k 5s 525s python3 -B .superpowers/cache/t88-final-fix-performance/verify-all.py",
+      "status": 0,
+      "outer_bound_seconds": 530
+    },
+    {
+      "actual_shell_command": "memcap 8G timeout -k 5s 525s python3 -B .superpowers/cache/t88-final-fix-performance/q-r.py analyze",
+      "status": 0,
+      "outer_bound_seconds": 530
+    },
+    {
+      "actual_shell_command": "memcap 8G timeout -k 5s 525s python3 -B .superpowers/cache/t88-final-fix-performance/q-r.py residual",
+      "status": 0,
+      "outer_bound_seconds": 530
+    }
+  ],
+  "verified_new_profiles": 198,
+  "verified_all_profiles": 1683,
+  "full_original_history_retained": true,
+  "new_direct_over_budget": [],
+  "output_errors": [],
+  "invalid_profiles": [],
+  "spreads": [],
+  "whole_process_table_status": 1,
+  "whole_process_over": [
+    {
+      "program": "fibfunc",
+      "whole_delta_percent": 0.1203323,
+      "own_delta_percent": -8.09e-06,
+      "own_gate": "PASS"
+    }
+  ],
+  "historical_residual_over_counts": {
+    "base": 10,
+    "e1": 10,
+    "e2": 1,
+    "f": 0
+  },
+  "budget_disposition": "Pending explicit controller/user decision. Direct Q-to-final pass does not accept historical residuals.",
+  "report_links_validated": [
+    "README.md",
+    "metrics/README.md"
+  ],
+  "all_four_residual_tables_programs": 33,
+  "live_owned_sessions": [],
+  "pending_approvals": [],
+  "profile_launches_complete": true,
+  "tracked_or_git_mutations_by_worker": false,
+  "tmp_free_bytes": 12942442496
+}

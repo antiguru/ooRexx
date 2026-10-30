@@ -1,0 +1,11 @@
+--- before-r2-update/q-r.py
++++ current/q-r.py
+@@ -13,7 +13,7 @@
+ ORIGINAL = CACHE / 'originals'
+ RECORDS = Path('/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance')
+ Q_HASH = '22c317baa3ed111935a6577ac33097e428a53b64eb64b4697af2b85664e3f8eb'
+-R_PATH = Path('/tmp/codex-p9d-t88-pins/8.8-final-fix-rexx')
++R_PATH = Path('/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx')
+ 
+ 
+ def sha(path):

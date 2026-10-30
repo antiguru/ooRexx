@@ -1,0 +1,19 @@
+{
+  "medians": {
+    "q": {
+      "whole": 8571548851,
+      "own": 8051935013,
+      "libc": 519263118,
+      "ld": 350717
+    },
+    "r": {
+      "whole": 8581863193,
+      "own": 8051934362,
+      "libc": 529578119,
+      "ld": 350712
+    }
+  },
+  "whole_process_delta_percent": 0.12033230142294152,
+  "own_delta_percent": -8.085013092492032e-06,
+  "interpretation": "The retained original table flags whole-process OVER. The specified own gate subtracts libc and loader counts and passes. These categories do not establish a source-level cause."
+}

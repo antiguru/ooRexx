@@ -1,0 +1,34 @@
+{
+  "verified_utc": "2026-10-30T21:19:38.552776+00:00",
+  "status": "ACCEPTED_FOR_COMPARISON",
+  "profiling_authorized": true,
+  "authorization": "Root accepted PARSE round2 source cd418bd304 and scoped review evidence 51cedf7cb, then released staging hold and requested all 198 P-to-Q profiles.",
+  "runtime_source_revision": "cd418bd304e4bd1fedd339cb090ae861b1a460d8",
+  "pins": [
+    {
+      "name": "p",
+      "path": "/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx",
+      "sha256": "6ed1c08eb03d54c48d1fe3947ce376f09502aaeba34ac221c334b01b1572b86e",
+      "bytes": 67484520
+    },
+    {
+      "name": "q",
+      "path": "/tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx",
+      "sha256": "22c317baa3ed111935a6577ac33097e428a53b64eb64b4697af2b85664e3f8eb",
+      "bytes": 67491608
+    }
+  ],
+  "cohort": {
+    "p-q": [
+      "p",
+      "q"
+    ]
+  },
+  "rounds": 3,
+  "profiles": 198,
+  "existing_instrument_manifest": "inputs.json",
+  "provenance_record": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/semantics/perf-fix-r2/release-pin.json",
+  "provenance_sha256": "72ef650b2c045d17303d90cb3c1c7708ef948a15e1eb037a8ae09f4355d428ae",
+  "tmp_free_bytes": 1112924160,
+  "expected_profile_bytes_from_completed_pair": 722305963
+}

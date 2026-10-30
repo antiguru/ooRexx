@@ -1,0 +1,24 @@
+--- before-r2-update/prepared-inputs.json
++++ current/prepared-inputs.json
+@@ -22,16 +22,17 @@
+       "sha256": "affca3218fb49e666b83c5e9878805d79cdb75ebae857ff671b633b7d44a787b"
+     }
+   ],
+-  "adapter_sha256": "732e32205e1af216ff7df380c8afd25cb29391a7b7165b18b3a6f547873334e6",
++  "adapter_sha256": "c4c2f2b68401d8363489da0a9eecba4cb51ed323d1cab13d3378cec8377be747",
+   "original_instrument_manifest_sha256": "f1c6e438b68616bef8e22177977aa868132e958f71088e1830344f6c6fbdc243",
+   "syntax_checked_without_import_or_execution": true,
+   "original_instrument_input_hashes_verified": true,
+   "profile_launches": 0,
+   "build_launches": 0,
+-  "candidate_sha256": null,
+-  "candidate_source_revision": null,
++  "candidate_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
++  "candidate_source_revision": "9d919b7c3832c55edc3a0a07974309f092102201",
+   "programs": 33,
+   "rounds": 3,
+   "profiles": 198,
+-  "tmp_free_bytes_observed": 22595903488
++  "tmp_free_bytes_observed": 22595903488,
++  "candidate_review_status": "PENDING_ROOT_REVIEW"
+ }

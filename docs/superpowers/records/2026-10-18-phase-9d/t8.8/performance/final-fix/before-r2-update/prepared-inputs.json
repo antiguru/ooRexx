@@ -1,0 +1,37 @@
+{
+  "prepared_utc": "2026-10-30T21:52:24.304727+00:00",
+  "frozen_helpers": [
+    {
+      "path": "originals/profile-slices.py",
+      "source": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/profile-slices.py",
+      "sha256": "9f800ff75b7f187b82c7bc40aeae887655850f9e4b85c1b6966f525b113e271b"
+    },
+    {
+      "path": "originals/analyze-slices.py",
+      "source": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/analyze-slices.py",
+      "sha256": "8b2bf008a8ebad9f648c03cce9461f15c9c87c8418976b949a2b81ff8e8f71f9"
+    },
+    {
+      "path": "originals/verify-profiles.py",
+      "source": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/verify-profiles.py",
+      "sha256": "76d1a2abef35feb2d23993a4c906ce8f130d7f7fa65885ef387ed0c20e5c8c6e"
+    },
+    {
+      "path": "originals/q-residual.py",
+      "source": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/q-residual.py",
+      "sha256": "affca3218fb49e666b83c5e9878805d79cdb75ebae857ff671b633b7d44a787b"
+    }
+  ],
+  "adapter_sha256": "732e32205e1af216ff7df380c8afd25cb29391a7b7165b18b3a6f547873334e6",
+  "original_instrument_manifest_sha256": "f1c6e438b68616bef8e22177977aa868132e958f71088e1830344f6c6fbdc243",
+  "syntax_checked_without_import_or_execution": true,
+  "original_instrument_input_hashes_verified": true,
+  "profile_launches": 0,
+  "build_launches": 0,
+  "candidate_sha256": null,
+  "candidate_source_revision": null,
+  "programs": 33,
+  "rounds": 3,
+  "profiles": 198,
+  "tmp_free_bytes_observed": 22595903488
+}
