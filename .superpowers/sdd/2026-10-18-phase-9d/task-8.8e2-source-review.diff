@@ -1,0 +1,3243 @@
+61b661504 docs: close executable identity and worker failure slice with verified evidence
+ae6a6bd04 test: compare retained stdin bytes without copying
+b51d49e52 test: document real-clock bounds in worker cleanup controls
+aad3a9850 test: exclude exit-value retention from enhanced method ownership proof
+4fe0efd89 test: assert enhanced class-side method ownership across collection
+f38a037b6 test: validate retained executable ownership and command isolation
+8d9be733a test: verify spawn cleanup and recovery with supported method copies
+3f4545a29 test: retain executing copies and enhanced metaclass methods through collection
+dbbe93639 fix: retain executing methods and propagate worker spawn failures
+cd9f58f1b test: cover executing method identity and pool spawn failures
+3f67e0514 refactor: isolate method entry and input tests
+ .superpowers/sdd/2026-10-18-phase-9d/progress.md   |    4 +
+ .../task-8.8-residual-inventory-audit.md           |   50 +
+ .../sdd/2026-10-18-phase-9d/task-8.8e2-report.md   |   46 +
+ .../sdd/2026-10-18-phase-9d/task-8.8f-brief.md     |   12 +-
+ .../sdd/2026-10-18-phase-9d/task-8.8f-dispatch.md  |    4 +-
+ .../queued/2026-10-10-failed-spawn-runs-inline.md  |    6 +-
+ .../2026-10-15-executable-flags-and-result.md      |    6 +-
+ .../2026-10-18-phase-9d/queued-inventory.tsv       |    6 +-
+ .../2026-10-18-phase-9d/t8.8/runtime/closed.tsv    |    3 +
+ .../t8.8/runtime/e2/affected-units-final.json      |   21 +
+ .../t8.8/runtime/e2/affected-units-final.stderr    |    3 +
+ .../t8.8/runtime/e2/affected-units-final.stdout    | 1281 +++++++++++++++++++
+ .../t8.8/runtime/e2/affected-units.json            |   21 +
+ .../t8.8/runtime/e2/affected-units.stderr          |    4 +
+ .../t8.8/runtime/e2/affected-units.stdout          | 1302 ++++++++++++++++++++
+ .../t8.8/runtime/e2/clippy-final.json              |   22 +
+ .../t8.8/runtime/e2/clippy-final.stderr            |    2 +
+ .../t8.8/runtime/e2/clippy-final.stdout            |    0
+ .../t8.8/runtime/e2/clippy.json                    |   22 +
+ .../t8.8/runtime/e2/clippy.stderr                  |   17 +
+ .../t8.8/runtime/e2/clippy.stdout                  |    0
+ ...nced_metaclass_method_identity-crate-final.json |   23 +
+ ...ed_metaclass_method_identity-crate-final.stderr |    0
+ ...ed_metaclass_method_identity-crate-final.stdout |   13 +
+ ...anced_metaclass_method_identity-oracle-run.json |   10 +
+ ...ced_metaclass_method_identity-oracle-run.stderr |    0
+ ...ced_metaclass_method_identity-oracle-run.stdout |   13 +
+ ...etaclass_method_identity-oracle-sourceline.json |   11 +
+ ...aclass_method_identity-oracle-sourceline.stderr |    0
+ ...aclass_method_identity-oracle-sourceline.stdout |   45 +
+ ...ting_method_after_redefinition-crate-final.json |   23 +
+ ...ng_method_after_redefinition-crate-final.stderr |    0
+ ...ng_method_after_redefinition-crate-final.stdout |   14 +
+ ...uting_method_after_redefinition-oracle-run.json |   10 +
+ ...ing_method_after_redefinition-oracle-run.stderr |    0
+ ...ing_method_after_redefinition-oracle-run.stdout |   14 +
+ ...ethod_after_redefinition-oracle-sourceline.json |   11 +
+ ...hod_after_redefinition-oracle-sourceline.stderr |    0
+ ...hod_after_redefinition-oracle-sourceline.stdout |   59 +
+ .../e2/flags-identity-after-only-crate-final.json  |   23 +
+ .../flags-identity-after-only-crate-final.stderr   |    0
+ .../flags-identity-after-only-crate-final.stdout   |    2 +
+ .../e2/flags-identity-ask-before-crate-final.json  |   23 +
+ .../flags-identity-ask-before-crate-final.stderr   |    0
+ .../flags-identity-ask-before-crate-final.stdout   |    3 +
+ ...gs-identity-prefetch-installed-crate-final.json |   23 +
+ ...-identity-prefetch-installed-crate-final.stderr |    0
+ ...-identity-prefetch-installed-crate-final.stdout |    4 +
+ .../t8.8/runtime/e2/fmt-complete.json              |   17 +
+ .../t8.8/runtime/e2/fmt-complete.stderr            |    0
+ .../t8.8/runtime/e2/fmt-complete.stdout            |    0
+ .../t8.8/runtime/e2/fmt-final.json                 |   17 +
+ .../t8.8/runtime/e2/fmt-final.stderr               |    0
+ .../t8.8/runtime/e2/fmt-final.stdout               |    0
+ .../2026-10-18-phase-9d/t8.8/runtime/e2/fmt.json   |   17 +
+ .../2026-10-18-phase-9d/t8.8/runtime/e2/fmt.stderr |    0
+ .../2026-10-18-phase-9d/t8.8/runtime/e2/fmt.stdout |    0
+ .../t8.8/runtime/e2/focused-final.json             |   22 +
+ .../t8.8/runtime/e2/focused-final.stderr           |    3 +
+ .../t8.8/runtime/e2/focused-final.stdout           |   55 +
+ .../t8.8/runtime/e2/green-focused.json             |   22 +
+ .../t8.8/runtime/e2/green-focused.stderr           |    3 +
+ .../t8.8/runtime/e2/green-focused.stdout           |   33 +
+ .../t8.8/runtime/e2/green-identity.json            |   22 +
+ .../t8.8/runtime/e2/green-identity.stderr          |   10 +
+ .../t8.8/runtime/e2/green-identity.stdout          |   12 +
+ ...anced_metaclass_method_identity-oracle-run.json |   10 +
+ ...ced_metaclass_method_identity-oracle-run.stderr |    3 +
+ ...ced_metaclass_method_identity-oracle-run.stdout |   11 +
+ ...uting_method_after_redefinition-oracle-run.json |   10 +
+ ...ing_method_after_redefinition-oracle-run.stderr |    3 +
+ ...ing_method_after_redefinition-oracle-run.stdout |   12 +
+ .../runtime/e2/inventory-reasons-preserved.json    |   13 +
+ .../t8.8/runtime/e2/metadata-refresh.json          |   23 +
+ .../t8.8/runtime/e2/metadata-refresh.stderr        |    3 +
+ .../t8.8/runtime/e2/metadata-refresh.stdout        |   13 +
+ .../t8.8/runtime/e2/nil-invariant-final.json       |   22 +
+ .../t8.8/runtime/e2/nil-invariant-final.stderr     |    5 +
+ .../t8.8/runtime/e2/nil-invariant-final.stdout     |    7 +
+ .../t8.8/runtime/e2/nil-invariant.json             |   22 +
+ .../t8.8/runtime/e2/nil-invariant.stderr           |    5 +
+ .../t8.8/runtime/e2/nil-invariant.stdout           |    7 +
+ .../descriptor.json                                |   23 +
+ .../flags-identity-after-only-crate/status         |    1 +
+ .../flags-identity-after-only-crate/stderr         |    0
+ .../flags-identity-after-only-crate/stdout         |    2 +
+ .../descriptor.json                                |   18 +
+ .../flags-identity-after-only-oracle/status        |    1 +
+ .../flags-identity-after-only-oracle/stderr        |    0
+ .../flags-identity-after-only-oracle/stdout        |    2 +
+ .../flags-identity-after-only.rex                  |   18 +
+ .../descriptor.json                                |   23 +
+ .../flags-identity-ask-before-crate/status         |    1 +
+ .../flags-identity-ask-before-crate/stderr         |    0
+ .../flags-identity-ask-before-crate/stdout         |    3 +
+ .../descriptor.json                                |   18 +
+ .../flags-identity-ask-before-oracle/status        |    1 +
+ .../flags-identity-ask-before-oracle/stderr        |    0
+ .../flags-identity-ask-before-oracle/stdout        |    3 +
+ .../flags-identity-ask-before.rex                  |   20 +
+ .../descriptor.json                                |   23 +
+ .../flags-identity-prefetch-installed-crate/status |    1 +
+ .../flags-identity-prefetch-installed-crate/stderr |    0
+ .../flags-identity-prefetch-installed-crate/stdout |    4 +
+ .../descriptor.json                                |   18 +
+ .../status                                         |    1 +
+ .../stderr                                         |    0
+ .../stdout                                         |    4 +
+ .../flags-identity-prefetch-installed.rex          |   21 +
+ .../t8.8/runtime/e2/red-identity.json              |   22 +
+ .../t8.8/runtime/e2/red-identity.stderr            |   10 +
+ .../t8.8/runtime/e2/red-identity.stdout            |   11 +
+ .../t8.8/runtime/e2/red-spawn.json                 |   22 +
+ .../t8.8/runtime/e2/red-spawn.stderr               |   22 +
+ .../t8.8/runtime/e2/red-spawn.stdout               |   35 +
+ .../t8.8/runtime/e2/release-build.json             |   21 +
+ .../t8.8/runtime/e2/release-build.stderr           |    2 +
+ .../t8.8/runtime/e2/release-build.stdout           |    0
+ .../t8.8/runtime/e2/release-pin.json               |   18 +
+ .../t8.8/runtime/e2/sourceline.json                |   20 +
+ .../t8.8/runtime/e2/sourceline.stderr              |    3 +
+ .../t8.8/runtime/e2/sourceline.stdout              |    6 +
+ .../t8.8/runtime/e2/stdin-metadata.json            |   28 +
+ .../t8.8/runtime/e2/stdin-metadata.stderr          |    7 +
+ .../t8.8/runtime/e2/stdin-metadata.stdout          |   48 +
+ .../t8.8/runtime/e2/t88e2-check.py                 |   31 +
+ .../t8.8/runtime/e2/t88e2-final-checks.py          |   12 +
+ .../t8.8/runtime/e2/t88e2-oracle.py                |   24 +
+ .../t8.8/runtime/e2/t88e2-pin-probes.py            |   30 +
+ .../lang/enhanced_metaclass_method_identity.rex    |   31 +
+ .../lang/executing_method_after_redefinition.rex   |   44 +
+ rust/corpus/phase-9.txt                            |    2 +
+ rust/crates/rexx-exec/src/command.rs               |   40 +-
+ rust/crates/rexx-exec/src/command/tests.rs         |   49 +
+ rust/crates/rexx-exec/src/dispatch.rs              |  162 +--
+ .../crates/rexx-exec/src/dispatch/introspection.rs |    3 +
+ .../rexx-exec/src/dispatch/introspection/tests.rs  |   40 +
+ rust/crates/rexx-exec/src/dispatch/library.rs      |   41 +-
+ .../crates/rexx-exec/src/dispatch/library/tests.rs |   43 +
+ rust/crates/rexx-exec/src/dispatch/method_entry.rs |  183 +++
+ .../rexx-exec/src/dispatch/method_entry/tests.rs   |   55 +
+ rust/crates/rexx-exec/src/dispatch/stream.rs       |    4 +-
+ rust/crates/rexx-exec/src/input.rs                 |  491 +-------
+ rust/crates/rexx-exec/src/input/tests.rs           |  567 +++++++++
+ rust/crates/rexx-exec/src/lib.rs                   |    3 +
+ rust/crates/rexx-exec/src/run/tests.rs             |   15 +-
+ rust/crates/rexx-exec/src/scheduler.rs             |   44 +-
+ rust/crates/rexx-exec/src/scheduler/pool.rs        |   21 +-
+ rust/crates/rexx-exec/src/scheduler/tests.rs       |    2 +
+ rust/crates/rexx-exec/src/scheduler/tests/pool.rs  |   15 +-
+ .../rexx-exec/src/scheduler/tests/spawn_failure.rs |  148 +++
+ rust/crates/rexx-exec/src/test_process.rs          |   52 +
+ .../enhanced_metaclass_method_identity.txt         |   32 +
+ .../executing_method_after_redefinition.txt        |   45 +
+ 154 files changed, 5588 insertions(+), 680 deletions(-)
+diff --git a/.superpowers/sdd/2026-10-18-phase-9d/task-8.8e2-report.md b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8e2-report.md
+new file mode 100644
+index 000000000..bddf9767a
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8e2-report.md
+@@ -0,0 +1,46 @@
++# Task 8.8e2: Executable identity and pool failures
++
++Status: DONE_WITH_CONCERNS. This slice starts at `a7db381c765fafd81fe775245902d6476aefe072` in the existing `plan/rust-rewrite` worktree. Runtime implementation is `dbbe93639`, with final test source at `ae6a6bd04`. Its assigned work covers executing Method identity, actual worker-spawn failure, and gate 481's supported nil-scope ownership invariant. Full corpus, ooTest suite, workspace, aggregate performance, and all other residuals remain with their assigned controller/f owners.
++
++## Executing Method identity
++
++Method entry retains an already registered executable in `ActivationCold.executable`, whose existing root traversal preserves it through collection. The implementation uses the exact resolved `MethodId` to consult the existing executable index and does not materialize ordinary unregistered methods or add an identity map. The committed red regression returned the BODY object's identity and flags after replacement, while the corrected witnesses preserve replacement, removal, hiding, first-read timing, and distinct aliases of one body. The corpus witness uses weak references and actual collection stress, so the removed copy's survival is attributable to execution rather than an externally retained reflected Method.
++
++The context contract is the executable of the invocation, as specified in `oodocs/rexxref/en-US/utilityclasses.xml` and implemented by `RexxActivation.cpp`'s method construction. The original retained after-only, prefetch-installed, and read-before evidence is copied with its descriptors under `runtime/e2/original-identity`. The extended corpus and its oracle-generated sourcelines retain exact stdout, stderr, and exit statuses in the same records directory. The old RESULT reachability observation remains the existing licensed collection-timing disposition, and this slice changes neither that rule nor its implementation.
++
++## Worker failure and cleanup
++
++`Pool::reserve` now distinguishes `Ok(None)` configured inline/fixed saturation from an actual OS thread-creation error. The cold failure constructor returns `Raised::syntax(48, 1, ["ERROR CREATING THREAD"])`, following `interpreter/platform/unix/SysActivity.cpp::create`, the local 48001 catalogue entry, and rexxref ERR48. Failed native preparation records an unstarted failure and wakes its original parked continuation before any leave, in-flight increment, baton lend, or synthetic completion. Cancellation pops and ends unstarted native frames immediately, while genuinely left calls retain the existing abandoned-frame lifetime.
++
++Commands reserve after argument handling, input setup, and explicit merged-pipe construction, before `Command::spawn`. A command-specific guard returns an unused reservation through the existing no-op job path on an OS spawn error, early return, or unwind, and successful command process-group behavior is unchanged. The controller accepted changed precedence when both worker creation and command execution would fail, and the test proves no command child is created on failed reservation while an unrelated child survives. Existing `Stdio::piped()` configuration defers the actual stdin/separate-output pipe allocation to `Command::spawn`, so that spawn-internal failure also occurs after reservation and returns the worker through the guard.
++
++Stdin propagates Failure through LINEIN/CHARIN and their Stream surfaces using existing SYNTAX delivery. Failed reservation clears only the newly set read-in-flight marker, preserving buffered bytes, EOF, exhaustion, descriptor ownership, and unrelated inbox posts. Isolated tests keep an empty pipe open to detect accidental inline reads, repeat trapped failures, and replace the failed pool on the same interpreter to prove successful pooled and deliberately inline reads. The named-stream read implementation remains unchanged apart from required stdin Failure propagation, and EINTR work remains assigned to f.
++
++The actual-failure seam requests a 64 TiB stack in an isolated unit-test subprocess with an 8 GiB address-space ceiling and the inherited normal memory cap. Each child first requires an actual reservation error with no pool thread recorded, and an unexpectedly successful reservation is returned before failing the test. Main and started native callers trap 48.1 with the exact service text, native body counters stay zero, guarded receivers make progress, and unstarted kept objects/lent storage are released. Existing real-running abandonment, fixed/disabled pool, callback, command, input, and collection controls remain covered by the library test run.
++
++## Gate 481 ownership invariant
++
++Ordinary class-side entries receive a real class scope through `ClassGraph::class_define`, while the inspected supported nil-scope producer is `install_enhancing_methods`. That producer obtains actual scoped Method objects, records them in the existing executable index, and roots them through the enhanced dummy class's owned objects before class-side cascade imports their entries. `record_executable` retains the source package, class body traversal keeps owned Methods alive, and dead-object/program pruning therefore cannot remove their live mappings. `method_object_for` returns that registered object before the class-owner reconstruction path, whose assertion remains unchanged.
++
++The executable proof constructs the enhanced class through Rexx, derives its actual `Selection::ClassSide`, confirms nil scope and no object-level entry, and collects with only the class explicitly rooted. It overwrites EXIT_VALUE_ROOT with a harmless second Rexx return and retains no reflected Method, Supplier, or active Method invocation that could mask the producer's ownership. The mapping, live Method, graph entry, and introspection answer remain identical after collection, while the separate corpus exercises inherited metaclass entries, enumeration, and supported object-level installation. This closes the supported producer/lifetime concern without claiming arbitrary internal ClassRegistry misuse is valid or relabelling any refusal as GUARD.
++
++## Verification and retained limits
++
++Checks use `memcap`, `CARGO_INCREMENTAL=0`, `/tmp/codex-p9d-t88-target`, Cargo `-j4`, and foreground bounds below 540 seconds. Exact commands, revisions, independent stdout/stderr, and statuses are retained under `docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/`. The initial alias probe mistakenly called nonexistent `setPublic`, and the first object-level control called private `setMethod` externally, with both failures retained before supported constructions replaced them. An older unit test's reconstruction-count assertion was updated because the executing nil-scope Method now correctly remains rooted, and an assertion-only clippy correction is retained in the command history.
++
++| Record | Status | Evidence |
++| --- | --- | --- |
++| red-identity / red-spawn | 101 / 101 | Executing identity was substituted; native and command bodies ran inline. |
++| green-focused / focused-final | 0 / 0 | Actual OS spawn failures and stdin preservation/recovery pass. |
++| affected-units-final | 0 | 1234 library tests pass, including native, scheduler, command, input, and collection controls. |
++| nil-invariant-final | 0 | Exact nil mapping and stress witnesses pass; identity 201 / enhanced 90 actual collections. |
++| metadata-refresh | 0 | 8 tests pass; refresh leaves refusal table unchanged. |
++| stdin-metadata | 0 | Stdin contention, owners, closed phases, phase-ten reasons, and representation checks pass. |
++| sourceline | 0 | Oracle-generated corpus sourcelines match. |
++| clippy / clippy-final | 101 / 0 | Test assertion copy lint corrected; affected-crate all-target check passes. |
++| fmt-complete / release-build | 0 / 0 | Final formatting and capped release build pass. |
++| final release differentials | 0 | Extended and original identity witnesses match oracle stdout/stderr/status separately. |
++
++The release pin and source/build/compiler hashes are recorded in `release-pin.json`. The controller's all-program own-BASE comparison must use the e1 pin `/tmp/codex-p9d-t88-pins/8.8e1-rexx`, SHA-256 `434d6567458248fdb804eebe9edb715a54ddb9ded650fcca994eed6c4b691e06`, against this runtime pin. Method-entry lookup/cold allocation and parked-native-stage costs are unmeasured obligations, rather than assumed free changes. M6 timer proof, the original flakes, FIFO EINTR, and Phase 9/10 close retain their existing owners. Moritz's new "Follow your recommendation on both." approval authorizes f to preserve FIFO closing-LINEOUT bytes/normal close as Deviation 82 and convert DESCRIPTION at RAISE as Deviation 83; the receiving dispatch and brief now record those mappings.
++
++The read-only residual-inventory audit is included unchanged for controller reconciliation, and its proposals were not applied. Only the assigned identity, failed-spawn, and gate 481 rows changed disposition, preserving their inventory reasons. Source and pin hashes establish the runtime handed to f and the batch owner, while the own-BASE performance comparison remains open. No protected reference tree, unrelated worktree, user archive, or build cache was modified or removed.
+diff --git a/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-brief.md b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-brief.md
+index 6674dae2c..ec8d7a43f 100644
+--- a/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-brief.md
++++ b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-brief.md
+@@ -1,32 +1,32 @@
+ # Task 8.8f: Remaining semantic residuals
+ 
+-This brief covers the remaining P7 items except the completed integral-power fix, with RAISE DESCRIPTION listed separately pending the user's timing ruling. Static investigation used revision `813aba49a0c040f10d9c2d52e9310d8d3d4db7a2`, local rexxref, queued witnesses and existing helper contracts. No builds, oracle runs, probes, source edits or commits were performed. Execute semantic fixes serially under the [global constraints](global-constraints.md) and later [batch perf rule](task-8-batches.md), with durable evidence under the instance's records directory.
++This brief covers the remaining P7 items except the completed integral-power fix, with RAISE DESCRIPTION separately authorized by the user's timing ruling below. Static investigation used revision `813aba49a0c040f10d9c2d52e9310d8d3d4db7a2`, local rexxref, queued witnesses and existing helper contracts. No builds, oracle runs, probes, source edits or commits were performed. Execute semantic fixes serially under the [global constraints](global-constraints.md) and later [batch perf rule](task-8-batches.md), with durable evidence under the instance's records directory.
+ 
+ ## Rules that remain authoritative
+ 
+ * [Deviation 77](../../../docs/superpowers/plans/phase-4-exclusions.txt): a stem's required string value is its default's request(STRING), and NOSTRING names the stem.
+ * Deviation 78 and the user's “Keep rexxref, Deviation” ruling: actual equality-key hash lookup sends the queried index's == even when it is identical to the stored index. Do not restore the oracle's identity shortcut.
+ * Deviations 79/80: append extent protection and refusal of the first seek on unopened transient streams remain intact.
+ * Deviation 81: Stem STRING sends STRING to its default, but TRACE deliberately names a non-string object rather than sending the STRING message described by instrc.xml. Repeated trace rendering must use that licensed naming protocol.
+ * Existing numeric rulings and Deviation 44 govern MAX/MIN rounding and LOSTDIGITS. The string-conversion fix must not reinstate oracle representation accidents in numeric choice.
+ 
+ The shared required-string contract is `dispatch/reqstr.rs::required_string_value`, which forwards references and stem defaults, invokes makeString/request handling, handles NOSTRING and propagates raised Failure. Strings and small integers have a fast return before heap lookup, while the rare conversion path carries its existing recursion latch. Reuse this for required string values instead of to_text or render, neither of which is a substitute for an observable conversion that can raise. TRACE has its own `value.rs::traced_string_value_text` and `trace.rs::{result_text,intermediate_text}` gates and must remain separate.
+ 
+ ## Suggested order and scope
+ 
+ 1. Stem indexes and PARSE string patterns: both have narrow conversion boundaries and strong recorded raising/makeString witnesses.
+ 2. MAX/MIN arguments: reuse conversions while preserving the whole-number quiet/LOSTDIGITS rule and one conversion per argument.
+ 3. TRACE assignment: rerender only when each line will be emitted, retaining the existing entry-gate and assignment-order rules.
+ 4. Hash collections: remove duplicate lookups and restrict index operations to the relevant bucket, preserving the ruled == behavior and reentrant-store checks.
+ 5. Standard-output queries: work at the actual owned-descriptor/query boundary, retaining Deviation 40 buffering and embedding behavior.
+-6. RAISE DESCRIPTION only after the pending timing ruling, with its distinct observable witness.
++6. RAISE DESCRIPTION conversion at RAISE under the approved timing ruling, with its distinct observable witness and Deviation 83.
+ 
+ ## Stem index string values
+ 
+ `collclasses.xml:8100-8113` and `:8198-8210` specify that Stem []/at concatenate the indexes' string values with periods. `dispatch/hash/stem.rs::stem_tail` instead appends to_text(argument), and every Stem accessor using that helper inherits its bypass of makeString/NOSTRING. The smallest responsible fix is required_string_value at this helper's argument boundary, rooting any returned string across subsequent allocations and consuming its bytes before a later conversion. Keep verbatim case, positional errors and the call sites' value/index offset rules unless an adjacent boundary probe below proves another error.
+ 
+ Red witnesses are `t8.7c/review-probes-rr1/r1a/a.rex`, `r1b/c.rex` and `r1c/d.rex`. Retain a makeString object mapping to KM and an existing a.KM tail, a no-string object under SIGNAL ON NOSTRING, and reference/stem index forms under Deviations 72/77. Exercise reading and writing plus the existing hasIndex/drop-related consumers of stem_tail, because fixing only [] lookup would leave inconsistent derived keys. Verify left-to-right conversion order and propagate a conversion that raises without storing or looking up an unsent fallback name.
+ 
+ Adjacent derived conflict: the same clauses explicitly use the empty string for an omitted index and insert a period between index positions. Current stem_tail errors on None and inserts a period only when accumulated bytes are nonempty, so an empty first converted index can lose a required leading separator. Controller authorizes omitted/leading-empty index cases as boundary witnesses, with repair in this slice only if a fresh oracle probe confirms divergence from the derived concatenation contract and the responsible change stays in stem_tail. Otherwise file a distinct evidence-backed follow-up, and do not broaden the conversion fix silently or write a new Deviation.
+ 
+ ## PARSE variable string-pattern conversion
+@@ -62,21 +62,21 @@ The red source is `t8.7c/probes/primframe/f4.rex`, using the rows outside the ea
+ The exact number of HASHCODE/== calls is not fully specified by the high-level methods alone. The queue authorizes matching the other observable messages while preserving the user's index == ruling, so use the fresh recorded probes to pin those counts rather than infer a blanket “exactly one hash” rule for every operation. In particular, an empty bucket legitimately avoids candidate equality, while an identity shortcut inside a populated equality-key bucket would violate the current ruling. Any newly discovered oracle departure from a derived contract still goes to the controller before a Deviation is written.
+ 
+ ## Standard-output regular-file queries
+ 
+ `streamclasses.xml:956-1004`, `funct.xml:4531-4573` and iostrms.xml positioning distinguish persistent-file size and logical read/write positions from SYS descriptor position. `dispatch/stream.rs::query_size` and query_position have a special standard-input-file path, but otherwise require an OpenFile or fall back to a qualified path, which leaves .STDOUT regular-file queries empty. `Invocation::Sinks` says the interpreter holds buffers and optional callbacks, while own_descriptors says when callbacks target real process descriptors. This requires an output-descriptor query boundary, not opening a file named STDOUT or flushing buffers indiscriminately.
+ 
+ First reduce `t8.7c/probes/stdinq/q5.rex` to stdout-only queries redirected to an actual fresh regular file, recording file contents, size and offset from the parent. Cover QUERY SIZE, default/WRITE CHAR position and SYS before/after buffered output and a normal handover boundary. Derive each difference under Deviation 40 before deciding whether a query needs a flush, must include pending buffered bytes logically, or reads the descriptor as it stands. Keep terminal/pipe/null behavior and a pure in-process buffered Invocation control, which must not inspect an unrelated host stdout descriptor.
+ 
+ Prefer safe metadata/seek queries on the launcher-owned or safely borrowed standard-output descriptor, gated by the actual descriptor ownership contract. Reuse standard_transient and existing sink ownership information, preserving stdin's FileConsole and all ordinary stream opens. If live metadata/offset cannot be exposed through the present sink interface without a new optional query hook, identify that narrow Invocation/Sinks surface change for controller review rather than adding unsafe descriptor ownership or reopening /proc/self/fd through a general side map. Deviations 79/80 remain unchanged because this task adds query behavior and does not extend seek capability.
+ 
+-## RAISE DESCRIPTION: Pending timing ruling
++## RAISE DESCRIPTION: Conversion at RAISE
+ 
+-`instrc.xml:2866-2874` says a parenthesized DESCRIPTION expression is evaluated to obtain its character string value, and CONDITION(D)/the DESCRIPTION entry return that string. The queue's untraced `t8.7c/review-probes-rr2/n2c/u.rex` records no conversion send on the oracle at RAISE, while n2b/q9.rex exposes conversion when condition(D) is read. These timings are observably different when makeString/DEFAULTNAME mutates state or raises, even if the eventual string is the same. Leave implementation and closure pending the user's timing ruling.
++`instrc.xml:2866-2874` says a parenthesized DESCRIPTION expression is evaluated to obtain its character string value, and CONDITION(D)/the DESCRIPTION entry return that string. The queue's untraced `t8.7c/review-probes-rr2/n2c/u.rex` records no conversion send on the oracle at RAISE, while n2b/q9.rex exposes conversion when condition(D) is read. These timings are observably different when makeString/DEFAULTNAME mutates state or raises, even if the eventual string is the same. Moritz approved conversion at RAISE on 2026-10-30 with "Follow your recommendation on both.", referring to this recommendation and FIFO closing LINEOUT byte preservation/normal close.
+ 
+-If the rule is conversion at RAISE, reuse required_string_value at the DESCRIPTION evaluation boundary, root the result and store its bytes in the existing raised description representation. A witness must separate before RAISE, handler entry, first CONDITION(D), repeat read and no-read handler, with one conversion at the ruled point. If the user instead chooses delayed conversion, first report the representation and lifetime changes needed to preserve the object until that read, since current condition-object materialization constructs DESCRIPTION as text. Do not silently choose the easier storage model or write a new Deviation without authorization.
++Reuse required_string_value at the DESCRIPTION evaluation boundary, root the result and store its bytes in the existing raised description representation. A witness must separate before RAISE, handler entry, first CONDITION(D), repeat read and no-read handler, with one conversion at the ruled point. Task 8.8f writes Deviation 83 for this rule and Deviation 82 for FIFO closing LINEOUT byte preservation and normal close, quoting the approval and its mapping. These authorizations do not extend to other newly discovered oracle departures.
+ 
+ ## Performance and completion
+ 
+ PARSE triggers, Stem keys, hash probes and MAX/MIN are hot paths, so keep ordinary string/integer fast paths and avoid unconditional Vec copies, double conversions or new scans. TRACE work stays behind actual line-emission gates, but the queued “traced performance is no target” statement does not waive the general untraced own-delta gate for shared assignment helpers. The later batch rule requires every callgrind program against this instance's own BASE, no -p subset, with scheduling SPREAD reported. Keep new error/conversion construction cold and out of line where existing contracts permit it.
+ 
+-Each item needs its recorded red witness, changed witness output inspected, narrowly responsible fix and the mandatory corpus/suite/refusal checks, retaining surrounding ruled witnesses. Keep source comments accurate and preserve them through any necessary pure-move split of a large file. Close only the completed queued items, leaving power closed and DESCRIPTION pending until ruled. No new Deviation, Phase 9d Tasks 9/10, or Phase 9/10 closure is authorized by this brief.
++Each item needs its recorded red witness, changed witness output inspected, narrowly responsible fix and the mandatory corpus/suite/refusal checks, retaining surrounding ruled witnesses. Keep source comments accurate and preserve them through any necessary pure-move split of a large file. Close only completed queued items, leaving power closed and recording the approved DESCRIPTION rule with its witness. Only the expressly authorized Deviations 82/83 may be added under this brief, while Phase 9d Tasks 9/10 and Phase 9/10 closure remain outside scope.
+diff --git a/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-dispatch.md b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-dispatch.md
+index 5474f4327..b35967e7f 100644
+--- a/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-dispatch.md
++++ b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8f-dispatch.md
+@@ -4,21 +4,21 @@
+ 
+ Read `task-8.8f-brief.md` and the common dispatch before implementing its assigned semantic items. This slice also owns the now-demonstrated FIFO EINTR retry defect, which is an original acceptance subpart of the FIFO queued item. Executable identity and worker-spawn propagation belong to the preceding e2 slice. Preserve their error and ownership contracts while using the resulting input helpers.
+ 
+ ## Interrupted named-stream reads
+ 
+ The read-only `task-8.8-fifo-eintr.md` and its durable evidence show a real interrupted read on a verified owned reading thread. On the frozen e1 binary, `take(...).read_to_end` retries EINTR and needs a controlled writer unblock before reporting HALT with READY state. The oracle reports NOTREADY and ERROR:4, returns no data, then reports HALT with ERROR:4 without an unblock. Its partial-data control consumes a known prefix but still returns an empty value on the interrupted operation.
+ 
+ * Fix the narrow named-stream read layer so EINTR is returned rather than retried. Preserve the existing HALT policy, Deviation 12 and P60 scope.
+ * Preserve the measured partial-error behavior, EOF, short-read and byte-count behavior. Avoid an allocation proportional to an unchecked requested count when little or no input exists.
+ * Reuse the captured readiness/signal/trace driver and add only the meaningful regression controls needed for the new read path. Do not signal unrelated processes, introduce unsafe Rust or broaden into a general cancellation framework.
+-* The separate closing-LINEOUT oracle byte-consumption defect awaits Moritz's ruling. Preserve the crate's bytes and leave the new Deviation entry pending until that ruling arrives.
++* The closing-LINEOUT ruling preserves bytes and closes normally. Task 8.8f writes Deviation 82 and its witness under the approval below.
+ 
+ ## Other semantic contracts
+ 
+ Follow the f brief's local-reference derivations for collection messages, TRACE rendering, regular-file stdout queries, Stem index strings, Number max/min arguments and PARSE conversion failures. Omitted and leading-empty Stem index cases are adjacent boundary witnesses, with a narrow fix only if the oracle confirms the same derived concatenation contract. Preserve Deviations 77 through 81, including TRACE's object-name behavior, rather than using required STRING conversion for every trace rendering.
+ 
+-RAISE DESCRIPTION conversion timing also awaits the explicit requested ruling. Prepare the concrete evidence or correction without writing a numbered Deviation or claiming that item closed before the ruling. Continue independent items while the choice is pending. Root retains any new oracle-departure judgement.
++Moritz approved both recommendations on 2026-10-30 with the exact reply: "Follow your recommendation on both." The approved mappings are FIFO closing LINEOUT preserves bytes and closes normally, and RAISE DESCRIPTION converts its object to a required string at RAISE. Task 8.8f writes separate numbered Deviations 82 and 83, respectively, with witnesses and this quote. Other new oracle departures still require the controller's judgement.
+ 
+ ## Proof and handoff
+ 
+ Follow commit-before-verification, exact probe restoration and the common capped foreground workflow. Run meaningful focused semantic regressions, relevant collection/source/coverage checks, formatting and clippy, with all changed descriptors named. Preserve a release runtime pin and its source/build hash for own-BASE performance comparisons. Write `task-8.8f-report.md` and retain exact commands/statuses and semantic rulings under the records tree.
+diff --git a/rust/corpus/lang/enhanced_metaclass_method_identity.rex b/rust/corpus/lang/enhanced_metaclass_method_identity.rex
+new file mode 100644
+index 000000000..fed62d695
+--- /dev/null
++++ b/rust/corpus/lang/enhanced_metaclass_method_identity.rex
+@@ -0,0 +1,31 @@
++/* Nil-scoped metaclass entries retain their registered Method objects. */
++m = .method~new('PING', "return 'pong'")
++d = .directory~new
++d~ping = m
++d~install = "self~setMethod('OWN', 'return 17')"
++c = .class~enhanced(d, 'Remote')
++drop d m
++held = .WeakReference~new(c~instanceMethod('PING'))
++say 'entry' c~ping (held~value~scope == .nil)
++child = c~subclass('Child')
++say 'inherited' child~ping (child~instanceMethod('PING') == held~value)
++do i = 1 to 3
++  a = .array~new(10)
++  say 'held' (c~instanceMethod('PING') == held~value) (child~instanceMethod('PING') == held~value)
++  methods = c~instanceMethods(.nil)
++  found = 0
++  do while methods~available
++    if methods~index == 'PING' then do
++      found = found + 1
++      say 'listed' (methods~item == held~value) (methods~item~scope == .nil)
++    end
++    methods~next
++  end
++  say 'found' found
++end
++c~install
++say 'object' c~own (c~instanceMethod('OWN')~scope == .nil)
++say 'ordinary' .ordinary~ping (.ordinary~instanceMethod('PING')~scope == .ordinary)
++::class ordinary
++::method ping class
++  return 'ordinary'
+diff --git a/rust/corpus/lang/executing_method_after_redefinition.rex b/rust/corpus/lang/executing_method_after_redefinition.rex
+new file mode 100644
+index 000000000..e1697b560
+--- /dev/null
++++ b/rust/corpus/lang/executing_method_after_redefinition.rex
+@@ -0,0 +1,44 @@
++/* An executing Method survives dictionary mutation and collection. */
++do prefetch = 0 to 1
++  do change over .array~of('replace', 'remove', 'hide')
++    .local~change = change
++    .local~prefetch = prefetch
++    .k~define('FOO', .k~method('BODY')~copy~~setPrivate~~setUnguarded)
++    .local~entered = .WeakReference~new(.k~method('FOO'))
++    .s~new~go
++  end
++end
++.k~define('FOO', .k~method('ALIASES')~copy~~setPrivate~~setUnguarded)
++.k~define('BAR', .k~method('ALIASES')~copy)
++.local~foo = .WeakReference~new(.k~method('FOO'))
++.local~bar = .WeakReference~new(.k~method('BAR'))
++.s~new~both
++exit
++::class k
++::method go
++  self~foo
++::method both
++  self~foo('FOO')
++::method body protected
++  if .prefetch then before = .context~executable
++  select
++    when .change == 'replace' then .k~define('FOO', .k~method('OTHER'))
++    when .change == 'remove' then .k~define('FOO')
++    otherwise .k~define('FOO', .nil)
++  end
++  a = .array~new(10)
++  m = .context~executable
++  say .prefetch .change (m == .entered~value) m~isGuarded m~isPrivate m~isProtected
++  say 'same' (m == .context~executable)
++::method aliases protected
++  use arg name
++  .k~define(name)
++  if name == 'FOO' then self~bar('BAR')
++  a = .array~new(10)
++  m = .context~executable
++  if name == 'FOO' then original = .foo~value
++  else original = .bar~value
++  say name (m == original) m~isGuarded m~isPrivate m~isProtected
++::method other
++  return 17
++::class s subclass k
+diff --git a/rust/corpus/phase-9.txt b/rust/corpus/phase-9.txt
+index a1db285e5..a7f640d3c 100644
+--- a/rust/corpus/phase-9.txt
++++ b/rust/corpus/phase-9.txt
+@@ -446,10 +446,12 @@ lang/debug_typed_traps_off.rex
+ lang/trace_rendering_raises_in_parse_and_guard.rex
+ # 9d Task 8.7c fix round 3: a reference renders by its value's sent string value.
+ lang/reference_rendering_sends.rex
+ # 9d Task 8.7c fix round 3: an untraced RAISE renders nothing for a trace line.
+ lang/raise_untraced_renders_nothing.rex
+ # 9d Task 8.7c fix round 3: LOSTDIGITS names the operand's string value.
+ lang/lostdigits_names_the_string_value.rex
+ # 9d Task 8.7c fix round 4: a reference's conversion that raises raises in its clause.
+ lang/reference_conversion_raises_in_clause.rex
+ lang/power_integral_exponent.rex
++lang/executing_method_after_redefinition.rex
++lang/enhanced_metaclass_method_identity.rex
+diff --git a/rust/crates/rexx-exec/src/command.rs b/rust/crates/rexx-exec/src/command.rs
+index bb8f15cd1..7a06573ba 100644
+--- a/rust/crates/rexx-exec/src/command.rs
++++ b/rust/crates/rexx-exec/src/command.rs
+@@ -706,23 +706,45 @@ impl Blocked {
+             io.object_roots(out);
+         }
+     }
+ }
+ 
+ /// The return code of a command whose wait a halt abandoned: `EINTR`, negated
+ /// as a signal's code is. DEVIATIONS entry 10.
+ const INTERRUPTED: i32 = -4;
+ 
+ /// A started child, or what a command that started none answers.
++/// A command's worker reservation, returned if child creation or dispatch unwinds.
++pub(crate) struct ReservedWorker(Option<crate::scheduler::Worker>);
++
++impl ReservedWorker {
++    pub(crate) fn new(worker: crate::scheduler::Worker) -> Self {
++        Self(Some(worker))
++    }
++
++    pub(crate) fn run(mut self, job: Box<dyn FnOnce() + Send>) {
++        self.0.take().expect("reserved worker").run(job);
++    }
++}
++
++impl Drop for ReservedWorker {
++    fn drop(&mut self) {
++        if let Some(worker) = self.0.take() {
++            worker.run(Box::new(|| {}));
++        }
++    }
++}
++
+ enum Child {
+     Ran(Waited),
+     Running {
++        worker: Option<ReservedWorker>,
+         running: std::process::Child,
+         input: Option<Vec<u8>>,
+         merged: Option<std::io::PipeReader>,
+     },
+ }
+ 
+ /// Starts `command` in a child.
+ ///
+ /// Standard input is inherited unless `io` supplies one, which is the
+ /// oracle's own rule -- it spawns with no file actions until an `ADDRESS ...
+@@ -800,29 +822,35 @@ fn start(
+                 .as_ref()
+                 .is_some_and(|sinks| sinks.own_descriptors);
+             let piped = |redirected: bool| match redirected || !own {
+                 true => Stdio::piped(),
+                 false => Stdio::inherit(),
+             };
+             builder.stdout(piped(io.is_some_and(IoContext::redirects_output)));
+             builder.stderr(piped(io.is_some_and(IoContext::redirects_error)));
+         }
+     }
++    let worker = if interp.activity.resuming {
++        None
++    } else {
++        interp.pool.reserve()?.map(ReservedWorker::new)
++    };
+     let Ok(running) = builder.spawn() else {
+         return Ok(nothing(UNKNOWN_COMMAND));
+     };
+     // **Every writing half of a merged pipe closes here**, and there are
+     // three: the one this scope holds and the two the builder still owns,
+     // which the spawn duplicated rather than consumed. The read below waits
+     // for end-of-file, and any one of them left open never gives it.
+     drop(builder);
+     Ok(Child::Running {
++        worker,
+         running,
+         input,
+         merged: merged.map(|(reader, _writer)| reader),
+     })
+ }
+ 
+ /// Collects what `running` writes and its return code, writing `input` to
+ /// it first where there is one.
+ ///
+ /// **Both pipes are drained concurrently**: a child filling one while this
+@@ -973,41 +1001,39 @@ impl Interp {
+         }
+         self.hand_over_output();
+         let switch_mode = self.child_switch_mode();
+         let ends = [
+             !io.is_some_and(IoContext::redirects_output),
+             !io.is_some_and(IoContext::redirects_error),
+         ];
+         let spawned = match start(self, &handler, command, io, switch_mode)? {
+             Child::Ran(spawned) => spawned,
+             Child::Running {
++                worker: Some(worker),
+                 running,
+                 input,
+                 merged,
+-            } if !self.activity.resuming => {
++            } => {
+                 let block = Block {
+                     running,
+                     input,
+                     merged,
+                     captures_output: io.is_some_and(IoContext::redirects_output),
+                     captures_error: io.is_some_and(|context| {
+                         context.redirects_error() && !context.shares_one_target()
+                     }),
+                 };
+-                match self.exit_for_block(block) {
+-                    Ok(token) => return Ok(Commanded::Left(token)),
+-                    Err(block) => {
+-                        self.collect_on_baton(block.running, block.input, block.merged, ends)?
+-                    }
+-                }
++                let token = self.exit_for_block(block, worker);
++                return Ok(Commanded::Left(token));
+             }
+             Child::Running {
++                worker: None,
+                 running,
+                 input,
+                 merged,
+             } => self.collect_on_baton(running, input, merged, ends)?,
+         };
+         self.command_ended(io, &spawned, None).map(Commanded::Done)
+     }
+ 
+     /// [`collect`] on the baton. In the simulation mode no other activity
+     /// runs meanwhile, so a wait past [`Interp::sim_block_bound`]'s real time
+diff --git a/rust/crates/rexx-exec/src/command/tests.rs b/rust/crates/rexx-exec/src/command/tests.rs
+index 8118e703b..77c78de49 100644
+--- a/rust/crates/rexx-exec/src/command/tests.rs
++++ b/rust/crates/rexx-exec/src/command/tests.rs
+@@ -112,10 +112,59 @@ fn an_owned_child_keeps_its_status_and_error_mapping() {
+         .stderr(Stdio::piped())
+         .spawn()
+         .expect("child");
+     let waited = collect(running, None, None, [true, true], None);
+     assert_eq!(waited.rc, 5);
+     assert_eq!(
+         CommandOutcome::of(waited.rc).status.condition(),
+         Some("ERROR")
+     );
+ }
++
++#[test]
++#[expect(
++    clippy::disallowed_methods,
++    reason = "waits for real pool workers to return"
++)]
++fn unused_command_worker_returns_after_drop_unwind_and_exec_failure() {
++    let mut interp = Interp::new();
++    interp.pool = crate::scheduler::Pool::new(1 << 20, 1);
++    let reserve = || ReservedWorker::new(interp.pool.reserve().expect("spawn").expect("worker"));
++    drop(reserve());
++    let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
++        let _worker = reserve();
++        panic!("unwind before dispatch");
++    }));
++    assert!(unwound.is_err());
++    for _ in 0..3 {
++        assert!(matches!(
++            start(
++                &interp,
++                &Handler::Path,
++                b"/no-such-command-t88e2",
++                None,
++                None
++            ),
++            Ok(Child::Ran(Waited {
++                rc: UNKNOWN_COMMAND,
++                ..
++            }))
++        ));
++    }
++    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
++    while interp.pool.threads() > 1 && std::time::Instant::now() < deadline {
++        std::thread::sleep(std::time::Duration::from_millis(5));
++    }
++    interp.pool.fix_at_bound();
++    let worker = loop {
++        if let Some(worker) = interp.pool.reserve().expect("reserve") {
++            break worker;
++        }
++        assert!(
++            std::time::Instant::now() < deadline,
++            "reserved worker never returned"
++        );
++        std::thread::sleep(std::time::Duration::from_millis(5));
++    };
++    assert_eq!(interp.pool.threads(), 1);
++    worker.run(Box::new(|| {}));
++}
+diff --git a/rust/crates/rexx-exec/src/dispatch.rs b/rust/crates/rexx-exec/src/dispatch.rs
+index 3174823f4..532ccb98f 100644
+--- a/rust/crates/rexx-exec/src/dispatch.rs
++++ b/rust/crates/rexx-exec/src/dispatch.rs
+@@ -159,20 +159,21 @@ use buffer::{
+     conversion_length_argument, copies_argument, count_method_argument, datatype_option_argument,
+     delete_arguments, delword_arguments, ends_with, equals_argument, forward_search,
+     forward_search_arguments, insert_arguments, match_region_arguments, match_region_over,
+     native_mutable_buffer_new, overlay_arguments, pad_arguments, replace_at_bytes, replace_at_plan,
+     space_arguments, starts_with, strip_arguments, substr_arguments, translate_arguments,
+     verify_arguments, wordpos_arguments,
+ };
+ 
+ // The method-argument parsers the primitive methods share.
+ mod method_arguments;
++mod method_entry;
+ use method_arguments::{
+     named_string_argument, option_method_argument, optional_length_argument,
+     optional_position_argument, pad_method_argument, refuse_method_argument,
+     required_position_argument, string_method_argument, usize_or_refuse, whole_method_argument,
+ };
+ 
+ // `Class`'s own methods: its readers, the mutators, the class factory.
+ mod class_protocol;
+ use class_protocol::{
+     SourceTaker, begin_init, class_argument, class_receiver, compile_method_source,
+@@ -3501,181 +3502,20 @@ impl Interp {
+             .and_then(|program| program.directives.get(generated.directive))
+         else {
+             return Err(Loud::missing_body().into());
+         };
+         let Some(variable) = crate::accessor_variable(&directive.kind) else {
+             return Err(Loud::missing_body().into());
+         };
+         Ok(variable.into())
+     }
+ 
+-    /// Pushes one `::METHOD` body's activation and the [`CallTail`] its
+-    /// sender's level state goes into, up to the point the body would run.
+-    ///
+-    /// [`CallTail`]: crate::run::CallTail
+-    #[expect(
+-        clippy::too_many_arguments,
+-        reason = "the send's own parts, and the receiver's behaviour where the send has it"
+-    )]
+-    fn begin_method(
+-        &mut self,
+-        _cleared: Cleared,
+-        installed: crate::InstalledMethodBody,
+-        resolution: Resolution,
+-        behaviour: Option<Behaviour>,
+-        receiver: ObjRef,
+-        name: &[u8],
+-        args: &[Option<ObjRef>],
+-    ) -> Result<(), Failure> {
+-        let Some(program) = self.programs.get(installed.program).map(Rc::clone) else {
+-            return Err(Loud::missing_body().into());
+-        };
+-        // Every read is `get`, not an index: an `InstalledMethodBody`
+-        // always names a real directive with a body, but this crate's rule for an internal
+-        // inconsistency is a loud refusal rather than a panic, and
+-        // `body_of`'s own `?` already follows it.
+-        let Some(directive) = program.directives.get(installed.directive) else {
+-            return Err(Loud::missing_body().into());
+-        };
+-        let Some(body) = body_of(&program, Some(installed.directive)) else {
+-            return Err(Loud::missing_body().into());
+-        };
+-        let guarded = self.sends_guarded(
+-            resolution.method,
+-            crate::guards::directive_guarded(&directive.kind),
+-        );
+-        // D19/I6, the same guard `Interp::invoke_call` takes and for the same
+-        // reason: a method that sends itself a message is an unbounded
+-        // recursion, and it must become a reportable condition rather than a
+-        // native abort.
+-        let probe = 0u8;
+-        if self.activation_depth() >= MAX_ACTIVATION_DEPTH || self.stack_exhausted(&raw const probe)
+-        {
+-            return Err(Raised::insufficient_stack().into());
+-        }
+-        let plan = self.plan_for(
+-            BodyKey {
+-                program: installed.program,
+-                directive: Some(installed.directive),
+-            },
+-            body,
+-            &program.symbols,
+-            &program.source,
+-        );
+-        let frame = self.roots.push_slots(plan.len());
+-        let (self_slot, super_slot) = (plan.self_slot, plan.super_slot);
+-        let reserve_at_once =
+-            guarded && !plan.traces_entry_early && !self.activities.guards.is_live();
+-        let callee_id = self.next_activation_id();
+-        let super_scope = match behaviour {
+-            Some(behaviour) => self.super_scope_in(behaviour, resolution.scope),
+-            None => self.super_scope_for(receiver, resolution),
+-        };
+-        // **The calling convention, entered before anything reads it.** The
+-        // receiver goes in here and is read back out below, so the identity
+-        // the activation carries, the `SELF` the body reads and the caller a
+-        // send inside the body resolves as all name one field rather than
+-        // each taking its own copy of this function's argument.
+-        let arguments = self.shared_arguments(args);
+-        let name = self.activity.invocation_name(name);
+-        let saved_context = std::mem::replace(
+-            &mut self.activity.call_context,
+-            crate::CallContext {
+-                name: Rc::clone(&name),
+-                arguments,
+-                receiver: Some(receiver),
+-            },
+-        );
+-        // **Shadows the parameter**, which is what makes the routing a
+-        // property of scope rather than of a comment: past this line the name
+-        // `receiver` is the convention's own field, so the bindings below
+-        // cannot read the argument even by accident.
+-        let receiver = self
+-            .activity
+-            .call_context
+-            .receiver
+-            .expect("the calling convention replaced directly above carries the receiver");
+-        // The package the `::METHOD` was declared in, exactly as a
+-        // `::ROUTINE` starts from its own. `running_activation` rather than
+-        // `activation` because a send made outside any activation has no
+-        // caller for `::OPTIONS NUMERIC INHERIT` to read.
+-        let start = self.package_start(
+-            installed.program,
+-            self.running_activation().map(|caller| &caller.settings),
+-        );
+-        let mut callee = Activation::method(
+-            callee_id,
+-            program,
+-            installed.program,
+-            installed.directive,
+-            plan,
+-            frame,
+-            MethodIdentity {
+-                name,
+-                scope: resolution.scope,
+-                receiver,
+-            },
+-        );
+-        if let Some(start) = start {
+-            start.apply(&mut callee);
+-        }
+-        // With one activity the lock is the activation's flag alone, taken
+-        // here unless a package-traced `>I>` has to come first.
+-        let reserve_at_once = reserve_at_once && !callee.trace_mode.labels;
+-        callee.flags = crate::activation::ActivationFlags::method(guarded, reserve_at_once);
+-        self.push_activation(callee);
+-        self.trace_package_invocation_entry();
+-        if guarded && !reserve_at_once {
+-            self.reserve_for_method(crate::guards::GuardKey {
+-                object: receiver,
+-                scope: resolution.scope,
+-            });
+-        }
+-
+-        // `SELF` and `SUPER`, the two locals `RexxActivation::run` sets on a
+-        // method activation before its first instruction
+-        // (`RexxActivation.cpp:535`-`536`). Measured in a class method of
+-        // `::class K`: `say self` is `The K class` and `say super` is
+-        // `The Class class`.
+-        let self_slot = match self_slot {
+-            Some(slot) => slot,
+-            None => self.slot_of(b"SELF"),
+-        };
+-        self.set_variable(frame, self_slot, receiver);
+-        let super_slot = match super_slot {
+-            Some(slot) => slot,
+-            None => self.slot_of(b"SUPER"),
+-        };
+-        // `.nil` for the topmost scope, which is what `superScope` answers
+-        // there.
+-        self.set_variable(frame, super_slot, super_scope.unwrap_or(ObjRef::NIL));
+-
+-        // The same level state `Interp::invoke_call` saves and restores, set
+-        // to the same values its `::ROUTINE` arm uses -- that function's own
+-        // comment enumerates the pieces and carries the measurement for
+-        // each. A method's clause echoes are at indent 0 whatever the sending
+-        // clause's own indent was: measured, a send from inside two nested
+-        // `DO` blocks echoes the method's clauses at 0.
+-        let saved_clause_state = self.save_clause_state();
+-        let saved_base = std::mem::replace(&mut self.activity.activation_indent, 0);
+-        let saved_offset = std::mem::take(&mut self.activity.indent_offset);
+-        let saved_line = std::mem::take(&mut self.activity.clause_line_override);
+-        self.activity.call_tails.push(crate::run::CallTail::method(
+-            saved_context,
+-            saved_clause_state,
+-            saved_base,
+-            saved_offset,
+-            saved_line,
+-        ));
+-        Ok(())
+-    }
+-
+     /// [`Interp::finish_call`]'s release of a method activation that has
+     /// just been popped, with `saved_context` the sender's convention. A
+     /// `REPLY`'s activation answers its value, and moves with its slot frame
+     /// to the continuation its split filed, if the split ran.
+     pub(crate) fn release_method_activation(
+         &mut self,
+         mut callee: Box<Activation>,
+         saved_context: crate::CallContext,
+     ) -> Option<Option<ObjRef>> {
+         // Unconditionally, where `Interp::invoke_call` asks `owns_frame`
+diff --git a/rust/crates/rexx-exec/src/dispatch/introspection.rs b/rust/crates/rexx-exec/src/dispatch/introspection.rs
+index 09640ba61..89a59890f 100644
+--- a/rust/crates/rexx-exec/src/dispatch/introspection.rs
++++ b/rust/crates/rexx-exec/src/dispatch/introspection.rs
+@@ -343,10 +343,13 @@ fn method_object_for(
+         owns_installed: false,
+     };
+     match selection {
+         Selection::ClassSide(_) => interp.method_object(scope, true, name, scope, record),
+         Selection::Behaviour(_) if interp.heap.is_class(scope) => {
+             interp.method_object(scope, false, name, scope, record)
+         }
+         Selection::Behaviour(_) => interp.method_object(owner, false, name, scope, record),
+     }
+ }
++
++#[cfg(test)]
++mod tests;
+diff --git a/rust/crates/rexx-exec/src/dispatch/introspection/tests.rs b/rust/crates/rexx-exec/src/dispatch/introspection/tests.rs
+new file mode 100644
+index 000000000..1d93f9989
+--- /dev/null
++++ b/rust/crates/rexx-exec/src/dispatch/introspection/tests.rs
+@@ -0,0 +1,40 @@
++use super::*;
++
++#[test]
++fn enhanced_metaclass_nil_entry_keeps_its_registered_method_through_gc() {
++    let mut interp = Interp::new();
++    let program = rexx_parse::parse_program(b"m=.method~new('PING', \"return 'pong'\")\nd=.directory~new\nd~ping=m\nreturn .class~enhanced(d, 'Remote')\n".to_vec()).expect("supported construction parses");
++    let receiver = interp
++        .run(program)
++        .expect("class construction")
++        .expect("class result");
++    interp.roots.add_global("gate481 class receiver", receiver);
++    // Clear the prior program's exit root without retaining a reflected
++    // Method or Supplier. Only the class owns the enhanced Method here.
++    let harmless = rexx_parse::parse_program(b"return 0\n".to_vec()).expect("harmless program");
++    assert_eq!(
++        interp.run(harmless).expect("overwrite exit root"),
++        ObjRef::small_int(0)
++    );
++    let selection = receiver_selection(&mut interp, receiver).expect("real receiver selection");
++    assert!(matches!(selection, Selection::ClassSide(class) if class == receiver));
++    assert!(interp.own_method_entry(receiver, b"PING").is_none());
++    let (scope, method) = lookup(&mut interp, selection, "PING").expect("enhanced entry");
++    assert_eq!(scope, ObjRef::NIL);
++    let executable = interp.executable_objects[&method];
++    let owner = interp.class_of_value(receiver).expect("metaclass owner");
++    for _ in 0..3 {
++        interp.collect_now();
++        assert!(interp.heap.get(executable).is_some());
++        assert_eq!(interp.executable_objects.get(&method), Some(&executable));
++        assert_eq!(
++            lookup(&mut interp, selection, "PING"),
++            Some((scope, method))
++        );
++        assert_eq!(
++            method_object_for(&mut interp, selection, owner, b"PING", scope, method)
++                .expect("existing nil-scoped Method"),
++            executable
++        );
++    }
++}
+diff --git a/rust/crates/rexx-exec/src/dispatch/library.rs b/rust/crates/rexx-exec/src/dispatch/library.rs
+index 0cac94644..00f2fbade 100644
+--- a/rust/crates/rexx-exec/src/dispatch/library.rs
++++ b/rust/crates/rexx-exec/src/dispatch/library.rs
+@@ -509,27 +509,33 @@ impl Interp {
+         (answered, activation.pending())
+     }
+ 
+     /// Drops the running activity's native call whose wait was ended by
+     /// `failure` in place of its completion: its frame popped and its guard
+     /// lock released. The native may still be running, so the frame keeps
+     /// what it holds for the native -- its handles' objects, kept strings and
+     /// lent buffers -- until the completion is drained
+     /// ([`Interp::end_abandoned_call`]).
+     pub(crate) fn abandon_native_call(&mut self, receiver: ObjRef) {
+-        if self.activity.native_call.take().is_none() {
++        let Some(call) = self.activity.native_call.take() else {
+             return;
+-        }
++        };
+         let scope = self.native_frame().scope;
+-        let token = self.native_token();
+-        let (popped, frame) = self.take_native_frame();
+-        self.activities.keep_abandoned(token, frame);
++        let popped = if call.unstarted() {
++            // No native body can still use kept objects or lent buffers.
++            self.pop_native_frame()
++        } else {
++            let token = self.native_token();
++            let (popped, frame) = self.take_native_frame();
++            self.activities.keep_abandoned(token, frame);
++            popped
++        };
+         if popped.reserved {
+             self.release_guard(crate::guards::GuardKey {
+                 object: receiver,
+                 scope,
+             });
+         }
+     }
+ 
+     /// Runs `library`'s `hook` in a native frame of its own, as
+     /// `Activity::run` runs a `CallbackDispatcher`
+@@ -1070,26 +1076,51 @@ pub(crate) struct OffBaton {
+ enum HeldCall {
+     /// A method's row, with the resolved method a failure blames.
+     Method(HeldMethod, super::MethodId),
+     Routine(HeldRoutine),
+ }
+ 
+ /// Where a [`NativeInFlight`] has got to.
+ enum Stage {
+     /// Prepared, its driver not yet exited.
+     Prepared,
++    /// Worker creation failed before the native body started.
++    SpawnFailed(Failure),
+     /// Left its driver; its completion not yet drained.
+     Left,
+     Completed(Completion),
+ }
+ 
+ impl NativeInFlight {
++    /// Records failed worker creation before the call leaves its driver.
++    pub(crate) fn spawn_failed(&mut self, failure: Failure) {
++        debug_assert!(self.awaits_exit());
++        self.stage = Stage::SpawnFailed(failure);
++    }
++
++    /// Takes the failure for the original parked continuation to handle.
++    pub(crate) fn take_spawn_failure(&mut self) -> Option<Failure> {
++        if !matches!(self.stage, Stage::SpawnFailed(_)) {
++            return None;
++        }
++        let Stage::SpawnFailed(failure) = std::mem::replace(&mut self.stage, Stage::Prepared)
++        else {
++            unreachable!()
++        };
++        Some(failure)
++    }
++
++    /// Whether no native body has run or can still access the frame.
++    fn unstarted(&self) -> bool {
++        matches!(self.stage, Stage::Prepared | Stage::SpawnFailed(_))
++    }
++
+     /// Whether the call waits for its driver exit.
+     pub(crate) fn awaits_exit(&self) -> bool {
+         matches!(self.stage, Stage::Prepared)
+     }
+ 
+     /// The call's native frame, as [`Interp::native_token`] names it.
+     pub(crate) fn frame(&self) -> u64 {
+         self.frame
+     }
+ 
+diff --git a/rust/crates/rexx-exec/src/dispatch/library/tests.rs b/rust/crates/rexx-exec/src/dispatch/library/tests.rs
+index eba2a14a8..668acbca9 100644
+--- a/rust/crates/rexx-exec/src/dispatch/library/tests.rs
++++ b/rust/crates/rexx-exec/src/dispatch/library/tests.rs
+@@ -1028,10 +1028,53 @@ fn a_registered_handler_answers_until_a_library_closes() {
+         panic!("the handler answers");
+     };
+     let answered = outcome.supplied.map(|supplied| supplied.text);
+     assert_eq!(answered.as_deref(), Some(b"a command".as_slice()));
+     assert!(interp.terminate().is_empty());
+     assert!(
+         interp.command_handlers.is_empty(),
+         "closing a library left a handler registered"
+     );
+ }
++
++#[test]
++fn unstarted_native_failure_releases_kept_objects_and_lent_storage() {
++    use rexx_api::callbacks::Surface;
++    use rexx_api::values::Host;
++    use rexx_core::ObjRef;
++    for failed in [false, true] {
++        let mut interp = Interp::new();
++        let buffer = interp.new_mutable_buffer(16);
++        let carried = ObjRef::small_int(7).expect("small integer");
++        interp.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
++        interp.mutable_buffer(buffer).expect("buffer");
++        interp.kept_c_string(carried, b"7").expect("copy");
++        let token = interp.native_token();
++        interp.activity.native_call = Some(Box::new(super::NativeInFlight {
++            call: None,
++            frame: token,
++            pending: None,
++            stage: if failed {
++                super::Stage::SpawnFailed(
++                    crate::Raised::syntax(48, 1, vec![b"ERROR CREATING THREAD".to_vec()]).into(),
++                )
++            } else {
++                super::Stage::Prepared
++            },
++            park: None,
++        }));
++        interp
++            .buffer_mut(buffer)
++            .expect("buffer")
++            .bytes
++            .extend_from_slice(&[0; 4096]);
++        assert_eq!(interp.buffer(buffer).expect("buffer").bytes.retired(), 1);
++        interp.abandon_native_call(ObjRef::NIL);
++        assert!(interp.activity.native_handles.is_empty());
++        assert_eq!(interp.buffer(buffer).expect("buffer").bytes.retired(), 0);
++        assert_eq!(interp.kept_holders.get(&carried), None);
++        let mut roots = Vec::new();
++        interp.object_roots(&mut roots);
++        assert!(!roots.contains(&buffer));
++        interp.collect_now();
++    }
++}
+diff --git a/rust/crates/rexx-exec/src/dispatch/method_entry.rs b/rust/crates/rexx-exec/src/dispatch/method_entry.rs
+new file mode 100644
+index 000000000..788a35967
+--- /dev/null
++++ b/rust/crates/rexx-exec/src/dispatch/method_entry.rs
+@@ -0,0 +1,183 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++use super::*;
++
++impl Interp {
++    /// Pushes one `::METHOD` body's activation and the [`CallTail`] its
++    /// sender's level state goes into, up to the point the body would run.
++    ///
++    /// [`CallTail`]: crate::run::CallTail
++    #[expect(
++        clippy::too_many_arguments,
++        reason = "the send's own parts, and the receiver's behaviour where the send has it"
++    )]
++    pub(super) fn begin_method(
++        &mut self,
++        _cleared: Cleared,
++        installed: crate::InstalledMethodBody,
++        resolution: Resolution,
++        behaviour: Option<Behaviour>,
++        receiver: ObjRef,
++        name: &[u8],
++        args: &[Option<ObjRef>],
++    ) -> Result<(), Failure> {
++        let Some(program) = self.programs.get(installed.program).map(Rc::clone) else {
++            return Err(Loud::missing_body().into());
++        };
++        // Every read is `get`, not an index: an `InstalledMethodBody`
++        // always names a real directive with a body, but this crate's rule for an internal
++        // inconsistency is a loud refusal rather than a panic, and
++        // `body_of`'s own `?` already follows it.
++        let Some(directive) = program.directives.get(installed.directive) else {
++            return Err(Loud::missing_body().into());
++        };
++        let Some(body) = body_of(&program, Some(installed.directive)) else {
++            return Err(Loud::missing_body().into());
++        };
++        let guarded = self.sends_guarded(
++            resolution.method,
++            crate::guards::directive_guarded(&directive.kind),
++        );
++        // D19/I6, the same guard `Interp::invoke_call` takes and for the same
++        // reason: a method that sends itself a message is an unbounded
++        // recursion, and it must become a reportable condition rather than a
++        // native abort.
++        let probe = 0u8;
++        if self.activation_depth() >= MAX_ACTIVATION_DEPTH || self.stack_exhausted(&raw const probe)
++        {
++            return Err(Raised::insufficient_stack().into());
++        }
++        let plan = self.plan_for(
++            BodyKey {
++                program: installed.program,
++                directive: Some(installed.directive),
++            },
++            body,
++            &program.symbols,
++            &program.source,
++        );
++        let frame = self.roots.push_slots(plan.len());
++        let (self_slot, super_slot) = (plan.self_slot, plan.super_slot);
++        let reserve_at_once =
++            guarded && !plan.traces_entry_early && !self.activities.guards.is_live();
++        let callee_id = self.next_activation_id();
++        let super_scope = match behaviour {
++            Some(behaviour) => self.super_scope_in(behaviour, resolution.scope),
++            None => self.super_scope_for(receiver, resolution),
++        };
++        // **The calling convention, entered before anything reads it.** The
++        // receiver goes in here and is read back out below, so the identity
++        // the activation carries, the `SELF` the body reads and the caller a
++        // send inside the body resolves as all name one field rather than
++        // each taking its own copy of this function's argument.
++        let arguments = self.shared_arguments(args);
++        let name = self.activity.invocation_name(name);
++        let saved_context = std::mem::replace(
++            &mut self.activity.call_context,
++            crate::CallContext {
++                name: Rc::clone(&name),
++                arguments,
++                receiver: Some(receiver),
++            },
++        );
++        // **Shadows the parameter**, which is what makes the routing a
++        // property of scope rather than of a comment: past this line the name
++        // `receiver` is the convention's own field, so the bindings below
++        // cannot read the argument even by accident.
++        let receiver = self
++            .activity
++            .call_context
++            .receiver
++            .expect("the calling convention replaced directly above carries the receiver");
++        // The package the `::METHOD` was declared in, exactly as a
++        // `::ROUTINE` starts from its own. `running_activation` rather than
++        // `activation` because a send made outside any activation has no
++        // caller for `::OPTIONS NUMERIC INHERIT` to read.
++        let start = self.package_start(
++            installed.program,
++            self.running_activation().map(|caller| &caller.settings),
++        );
++        let mut callee = Activation::method(
++            callee_id,
++            program,
++            installed.program,
++            installed.directive,
++            plan,
++            frame,
++            MethodIdentity {
++                name,
++                scope: resolution.scope,
++                receiver,
++            },
++        );
++        // Dictionary mutation must not replace the Method this invocation
++        // entered. Existing registered objects use the activation's GC root.
++        if let Some(executable) = self.executable_objects.get(&resolution.method).copied() {
++            callee.cold_mut().executable = Some(executable);
++        }
++        if let Some(start) = start {
++            start.apply(&mut callee);
++        }
++        // With one activity the lock is the activation's flag alone, taken
++        // here unless a package-traced `>I>` has to come first.
++        let reserve_at_once = reserve_at_once && !callee.trace_mode.labels;
++        callee.flags = crate::activation::ActivationFlags::method(guarded, reserve_at_once);
++        self.push_activation(callee);
++        self.trace_package_invocation_entry();
++        if guarded && !reserve_at_once {
++            self.reserve_for_method(crate::guards::GuardKey {
++                object: receiver,
++                scope: resolution.scope,
++            });
++        }
++
++        // `SELF` and `SUPER`, the two locals `RexxActivation::run` sets on a
++        // method activation before its first instruction
++        // (`RexxActivation.cpp:535`-`536`). Measured in a class method of
++        // `::class K`: `say self` is `The K class` and `say super` is
++        // `The Class class`.
++        let self_slot = match self_slot {
++            Some(slot) => slot,
++            None => self.slot_of(b"SELF"),
++        };
++        self.set_variable(frame, self_slot, receiver);
++        let super_slot = match super_slot {
++            Some(slot) => slot,
++            None => self.slot_of(b"SUPER"),
++        };
++        // `.nil` for the topmost scope, which is what `superScope` answers
++        // there.
++        self.set_variable(frame, super_slot, super_scope.unwrap_or(ObjRef::NIL));
++
++        // The same level state `Interp::invoke_call` saves and restores, set
++        // to the same values its `::ROUTINE` arm uses -- that function's own
++        // comment enumerates the pieces and carries the measurement for
++        // each. A method's clause echoes are at indent 0 whatever the sending
++        // clause's own indent was: measured, a send from inside two nested
++        // `DO` blocks echoes the method's clauses at 0.
++        let saved_clause_state = self.save_clause_state();
++        let saved_base = std::mem::replace(&mut self.activity.activation_indent, 0);
++        let saved_offset = std::mem::take(&mut self.activity.indent_offset);
++        let saved_line = std::mem::take(&mut self.activity.clause_line_override);
++        self.activity.call_tails.push(crate::run::CallTail::method(
++            saved_context,
++            saved_clause_state,
++            saved_base,
++            saved_offset,
++            saved_line,
++        ));
++        Ok(())
++    }
++}
++
++#[cfg(test)]
++mod tests;
+diff --git a/rust/crates/rexx-exec/src/dispatch/method_entry/tests.rs b/rust/crates/rexx-exec/src/dispatch/method_entry/tests.rs
+new file mode 100644
+index 000000000..ca833f90c
+--- /dev/null
++++ b/rust/crates/rexx-exec/src/dispatch/method_entry/tests.rs
+@@ -0,0 +1,55 @@
++#[test]
++fn registered_executable_survives_dictionary_mutation_and_collection() {
++    for mutation in [
++        ".k~define('FOO', .k~method('OTHER'))",
++        ".k~define('FOO')",
++        ".k~define('FOO', .nil)",
++    ] {
++        for prefetch in [false, true] {
++            let source = format!(
++                "m=.k~method('BODY')~copy~~setPrivate~~setUnguarded\n.k~define('FOO',m)\n.local~installed=.k~method('FOO')\ndrop m\n.s~new~go\nexit\n::class k\n::method go\nself~foo\n::method body protected\n{}\n{mutation}\nm=.context~executable\nsay (m == .installed) m~isGuarded m~isPrivate m~isProtected\n::method other\nreturn 17\n::class s subclass k\n",
++                if prefetch {
++                    "before=.context~executable"
++                } else {
++                    "nop"
++                }
++            );
++            let outcome = crate::run_program_collect_every_alloc(
++                "/identity.rex",
++                source.into_bytes(),
++                crate::Invocation::none(),
++            );
++            assert_eq!(outcome.exit_code, 0, "{:?}", outcome);
++            assert_eq!(
++                outcome.stdout, b"1 0 1 1\n",
++                "{mutation}, prefetch={prefetch}"
++            );
++        }
++    }
++}
++
++#[test]
++fn executing_copies_and_enhanced_metaclass_entries_survive_collection() {
++    for (name, source, expected) in [
++        (
++            "identity",
++            include_str!("../../../../../corpus/lang/executing_method_after_redefinition.rex"),
++            "0 replace 1 0 1 1\nsame 1\n0 remove 1 0 1 1\nsame 1\n0 hide 1 0 1 1\nsame 1\n1 replace 1 0 1 1\nsame 1\n1 remove 1 0 1 1\nsame 1\n1 hide 1 0 1 1\nsame 1\nBAR 1 1 0 1\nFOO 1 0 1 1\n",
++        ),
++        (
++            "enhanced",
++            include_str!("../../../../../corpus/lang/enhanced_metaclass_method_identity.rex"),
++            "entry pong 1\ninherited pong 1\nheld 1 1\nlisted 1 1\nfound 1\nheld 1 1\nlisted 1 1\nfound 1\nheld 1 1\nlisted 1 1\nfound 1\nobject 17 1\nordinary ordinary 1\n",
++        ),
++    ] {
++        let outcome = crate::run_program_collect_every_alloc(
++            name,
++            source.as_bytes().to_vec(),
++            crate::Invocation::none(),
++        );
++        assert_eq!(outcome.exit_code, 0, "{:?}", outcome);
++        assert!(outcome.collections > 0, "collection must actually run");
++        eprintln!("{name}: {} collections", outcome.collections);
++        assert_eq!(String::from_utf8_lossy(&outcome.stdout), expected, "{name}");
++    }
++}
+diff --git a/rust/crates/rexx-exec/src/dispatch/stream.rs b/rust/crates/rexx-exec/src/dispatch/stream.rs
+index ae0a2db81..eba360786 100644
+--- a/rust/crates/rexx-exec/src/dispatch/stream.rs
++++ b/rust/crates/rexx-exec/src/dispatch/stream.rs
+@@ -1266,21 +1266,21 @@ pub(super) fn charin(
+             }
+         }
+         let wanted = usize::try_from(length).unwrap_or(usize::MAX);
+         // A zero-length ask reads nothing and leaves the state alone, as it
+         // does on the file path: measured, `.stdin~charin( , 0)` answers the
+         // null string and `~description` stays `READY:`, where treating it as
+         // a read of nothing would leave `NOTREADY:EOF`.
+         if wanted == 0 {
+             return Ok(Some(interp.text(b"")));
+         }
+-        let read = interp.input_bytes(wanted);
++        let read = interp.input_bytes(wanted)?;
+         // Asking for 50 of six bytes answers all six and leaves
+         // `NOTREADY:EOF`, asking for exactly six stays `READY:`, and a further
+         // ask reads past the end, which is `NOTREADY:EOF` too
+         // (rexxref streamclasses.xml:1638-1652).
+         let status = match read.len() {
+             0 => StreamStatus::NotReady,
+             got if got < wanted => StreamStatus::NotReady,
+             _ => StreamStatus::Ready,
+         };
+         if status != StreamStatus::Ready {
+@@ -1483,21 +1483,21 @@ fn read_record(
+ ///
+ /// **The end of input raises here.** Whether the caller sees that as an error
+ /// is [`Interp::raise_notready`]'s decision, and a `SIGNAL ON NOTREADY` makes
+ /// it one -- which is how the orx `arrayIn` ends its fill and answers the
+ /// array it passed in.
+ fn next_line(interp: &mut Interp, receiver: ObjRef) -> Result<Option<Vec<u8>>, Failure> {
+     if let Some(which) = standard_opened(interp, receiver)? {
+         let StandardStream::In = which else {
+             return Ok(None);
+         };
+-        return match interp.input_line() {
++        return match interp.input_line()? {
+             Some(text) => {
+                 // A read that succeeds clears whatever a refused write left:
+                 // measured, `.stdin~lineout` leaves `ERROR:13` and the next
+                 // `.stdin~linein` reads its line and answers `READY:` again.
+                 require_mut(interp, receiver)?.status = StreamStatus::Ready;
+                 Ok(Some(text))
+             }
+             None => {
+                 notready(interp, receiver, StreamStatus::NotReady, Vec::new())?;
+                 Ok(None)
+diff --git a/rust/crates/rexx-exec/src/input.rs b/rust/crates/rexx-exec/src/input.rs
+index cbb4c1f84..a157b4c5d 100644
+--- a/rust/crates/rexx-exec/src/input.rs
++++ b/rust/crates/rexx-exec/src/input.rs
+@@ -588,86 +588,97 @@ impl Interp {
+     /// ends at `.STDIN`, whose own `LINEIN` raises it -- measured, `PARSE
+     /// LINEIN` and `PARSE PULL` on empty input are both rc 9 under a trap
+     /// where this crate used to answer an empty line and carry on.
+     ///
+     /// A missing or `.nil` entry reads the descriptor instead, which is this
+     /// crate's licensed answer where the oracle dies
+     /// (`corpus/oracle-crashes.txt` entry 11b).
+     pub(crate) fn linein_line(&mut self) -> Result<Vec<u8>, Failure> {
+         let route = self.local_route(b"INPUT")?;
+         let Some(route) = route.filter(|route| *route != ObjRef::NIL) else {
+-            return Ok(self.input_line().unwrap_or_default());
++            return Ok(self.input_line()?.unwrap_or_default());
+         };
+         let caller = self.caller();
+         let answer = pinned!(
+             self,
+             crate::pinning::PinKind::PullWrapper,
+             self.send_message(route, crate::dispatch::LINEIN, None, &[], caller)
+         )?;
+         Ok(match answer {
+             Some(value) => self.to_text(value).into_owned(),
+             None => Vec::new(),
+         })
+     }
+ 
+     /// The reader behind `.STDIN~LINEIN`, keeping end of input apart from an
+     /// empty line: its caller raises `NOTREADY` on the first and not on the
+     /// second.
+-    pub(crate) fn input_line(&mut self) -> Option<Vec<u8>> {
++    pub(crate) fn input_line(&mut self) -> Result<Option<Vec<u8>>, Failure> {
+         self.hand_over_before_read();
+-        if !self.fill_stdin(true) {
+-            return None;
++        if !self.fill_stdin(true)? {
++            return Ok(None);
+         }
+-        self.input.read_line()
++        Ok(self.input.read_line())
+     }
+ 
+     /// Whether `.input` is the process's own standard input.
+     pub(crate) fn input_is_process_stdin(&self) -> bool {
+         self.input.is_live()
+     }
+ 
+     /// Up to `wanted` bytes of `.input`, for `.STDIN~CHARIN`.
+-    pub(crate) fn input_bytes(&mut self, wanted: usize) -> Vec<u8> {
++    pub(crate) fn input_bytes(&mut self, wanted: usize) -> Result<Vec<u8>, Failure> {
+         self.hand_over_before_read();
+-        if !self.fill_stdin(false) {
+-            return Vec::new();
++        if !self.fill_stdin(false)? {
++            return Ok(Vec::new());
+         }
+-        self.input.read_bytes(wanted)
++        Ok(self.input.read_bytes(wanted))
+     }
+ 
+     /// Reads standard input until it holds a line where `line`, else a byte,
+     /// or has ended: each chunk off the baton, with this thread idle until
+     /// it is posted or a signal's halt arrives (ruling P60). A halt abandons
+     /// the wait, whose chunk is filed when it comes, and answers `false`:
+     /// the read answers nothing, as the oracle's interrupted read does.
+     /// Other posts wait for the next drain, held here so that an idle waits
+     /// for a new post.
+-    fn fill_stdin(&mut self, line: bool) -> bool {
++    fn fill_stdin(&mut self, line: bool) -> Result<bool, Failure> {
+         let mut kept = std::collections::VecDeque::new();
+         let filled = self.fill_stdin_keeping(line, &mut kept);
+         self.timer.requeue(kept);
+-        if filled {
++        if matches!(filled, Ok(true)) {
+             self.input.reading_stdin();
+         }
+         filled
+     }
+ 
+     fn fill_stdin_keeping(
+         &mut self,
+         line: bool,
+         kept: &mut std::collections::VecDeque<crate::scheduler::Posted>,
+-    ) -> bool {
++    ) -> Result<bool, Failure> {
+         while self.input.stdin_wants(line) {
+             if self.input.start_stdin_read() {
+-                let Some(worker) = self.pool.reserve() else {
+-                    self.input.receive(read_stdin_chunk());
+-                    continue;
++                let worker = match self.pool.reserve() {
++                    Ok(Some(worker)) => worker,
++                    Ok(None) => {
++                        self.input.receive(read_stdin_chunk());
++                        continue;
++                    }
++                    Err(failure) => {
++                        // Only this unstarted read's marker changes. Partial
++                        // input, EOF and descriptor ownership remain intact.
++                        if let Source::Stdin(stdin) = &mut self.input.source {
++                            stdin.reading = false;
++                        }
++                        return Err(failure);
++                    }
+                 };
+                 let inbox = self.timer.inbox();
+                 let baton = crate::sync::Arc::clone(&self.baton);
+                 worker.run(Box::new(move || {
+                     crate::scheduler::posting_panics(&inbox, &baton, || {
+                         let chunk = crate::signal::unblocked(read_stdin_chunk);
+                         inbox.post(crate::scheduler::Posted::Input(chunk));
+                     });
+                 }));
+             }
+@@ -675,24 +686,24 @@ impl Interp {
+             for post in self.timer.idle() {
+                 match post {
+                     crate::scheduler::Posted::Input(chunk) => self.input.receive(chunk),
+                     crate::scheduler::Posted::Halt => halted = true,
+                     other => kept.push_back(other),
+                 }
+             }
+             if halted {
+                 self.input.interrupted();
+                 self.halt_all();
+-                return false;
++                return Ok(false);
+             }
+         }
+-        true
++        Ok(true)
+     }
+ 
+     /// Hands the two output buffers to the embedding's [`crate::Sinks`],
+     /// which is what puts a prompt in front of the reader before the read
+     /// that waits for their answer.
+     ///
+     /// Does nothing for an embedding that installed none, and nothing for a
+     /// source that cannot wait -- so no differential run's output moves.
+     fn hand_over_before_read(&mut self) {
+         if self.input.is_live() {
+@@ -787,455 +798,11 @@ impl Interp {
+             Source::File(file) => {
+                 file.seek_line(line);
+                 true
+             }
+             _ => false,
+         }
+     }
+ }
+ 
+ #[cfg(test)]
+-mod tests {
+-    use super::*;
+-
+-    fn lines(bytes: &[u8]) -> Vec<Vec<u8>> {
+-        let mut input = Input::new(ProgramInput::Bytes(bytes.to_vec()));
+-        let mut read = Vec::new();
+-        while let Some(line) = input.read_line() {
+-            read.push(line);
+-        }
+-        read
+-    }
+-
+-    /// The module doc's own measured byte table, row for row.
+-    #[test]
+-    fn a_line_is_the_bytes_before_the_terminator() {
+-        let cases: &[(&[u8], &[&[u8]])] = &[
+-            (
+-                b" pad \n\nlast-no-newline",
+-                &[b" pad ", b"", b"last-no-newline"],
+-            ),
+-            (b"crlf\r\nplain\n", &[b"crlf", b"plain"]),
+-            (b"a\x00b\nnext\n", &[b"a\x00b", b"next"]),
+-            // The three rows that separate the rule from its near-misses: a CR
+-            // that is not before a newline is data, exactly one CR is removed
+-            // from a `\r\r\n` run, and a CR at end of file with no newline
+-            // after it stays.
+-            (b"a\rb\nx\r\r\ny\r", &[b"a\rb", b"x\r", b"y\r"]),
+-        ];
+-        for (bytes, expected) in cases {
+-            assert_eq!(
+-                lines(bytes),
+-                expected.iter().map(|l| l.to_vec()).collect::<Vec<_>>(),
+-                "reading {:?}",
+-                String::from_utf8_lossy(bytes)
+-            );
+-        }
+-    }
+-
+-    /// Nothing to read answers nothing, on the first read and on every read
+-    /// after it.
+-    #[test]
+-    fn an_empty_input_is_exhausted_from_the_start() {
+-        for input in [ProgramInput::Nothing, ProgramInput::Bytes(Vec::new())] {
+-            let mut input = Input::new(input);
+-            for _ in 0..3 {
+-                assert_eq!(input.read_line(), None);
+-            }
+-        }
+-    }
+-
+-    /// Past the last line, a non-empty input behaves exactly like an empty
+-    /// one: the null string, not the last line again and not a panic.
+-    #[test]
+-    fn reading_past_the_end_keeps_answering_nothing() {
+-        let mut input = Input::new(ProgramInput::Bytes(b"only\n".to_vec()));
+-        assert_eq!(input.read_line().as_deref(), Some(&b"only"[..]));
+-        for _ in 0..3 {
+-            assert_eq!(input.read_line(), None);
+-        }
+-    }
+-
+-    /// What `.STDIN~CHARS` and `~LINES` answer, per source and per state. The
+-    /// oracle's own answers, measured: a live descriptor nothing has drained
+-    /// is unmeasurable and answers `1`, and either kind answers `0` once a
+-    /// read has found the end. `Nothing` is a live-but-empty descriptor --
+-    /// the `/dev/null` column -- and not a measured zero until it is read.
+-    #[test]
+-    fn a_count_parts_a_live_source_from_a_drained_one() {
+-        let mut nothing = Input::new(ProgramInput::Nothing);
+-        assert_eq!(nothing.remaining(), None, "unread Nothing is unmeasurable");
+-        assert_eq!(nothing.remaining_lines(true), None, "the first ask");
+-        assert_eq!(
+-            nothing.remaining_lines(true),
+-            Some(0),
+-            "and `0` every ask after, with no read in between"
+-        );
+-        assert_eq!(
+-            nothing.remaining(),
+-            None,
+-            "while the byte count keeps answering unmeasurable"
+-        );
+-        assert_eq!(nothing.read_line(), None);
+-        assert_eq!(nothing.remaining(), Some(0), "a read drained it");
+-        assert_eq!(nothing.remaining_lines(true), Some(0));
+-
+-        let mut bytes = Input::new(ProgramInput::Bytes(b"one\ntwo\n".to_vec()));
+-        assert_eq!(bytes.remaining(), Some(8));
+-        assert_eq!(bytes.remaining_lines(true), Some(2));
+-        assert_eq!(bytes.read_line().as_deref(), Some(&b"one"[..]));
+-        assert_eq!(bytes.remaining(), Some(4));
+-        assert_eq!(bytes.remaining_lines(true), Some(1));
+-        assert_eq!(bytes.read_line().as_deref(), Some(&b"two"[..]));
+-        assert_eq!(bytes.remaining(), Some(0));
+-        assert_eq!(bytes.remaining_lines(true), Some(0));
+-    }
+-
+-    /// A final line with no terminator is still a line, which is why the count
+-    /// is not simply the newline count.
+-    #[test]
+-    fn an_unterminated_last_line_counts() {
+-        let mut input = Input::new(ProgramInput::Bytes(b"a\nb".to_vec()));
+-        assert_eq!(input.remaining_lines(true), Some(2));
+-        let mut terminated = Input::new(ProgramInput::Bytes(b"a\nb\n".to_vec()));
+-        assert_eq!(terminated.remaining_lines(true), Some(2));
+-    }
+-
+-    /// `read_bytes` answers what is already there rather than waiting for the
+-    /// rest. **A `Cursor` cannot witness that on its own** -- it reports the
+-    /// end on the first call, so a request-filling loop would pass this too --
+-    /// which is why the source below hands back one byte at a time while
+-    /// staying open, the shape a live pipe has.
+-    #[test]
+-    fn a_byte_read_answers_what_is_there_without_waiting() {
+-        let mut input = Input::new(ProgramInput::Bytes(b"abc".to_vec()));
+-        assert_eq!(input.read_bytes(2), b"ab".to_vec());
+-        assert_eq!(input.read_bytes(5), b"c".to_vec(), "short at the end");
+-        assert_eq!(input.remaining(), Some(0));
+-        assert_eq!(input.read_bytes(1), Vec::<u8>::new());
+-    }
+-
+-    /// A source that answers one byte per `read` and never reports the end,
+-    /// as a pipe with a writer still attached does.
+-    struct Dribble(u8);
+-
+-    impl Read for Dribble {
+-        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+-            let Some(first) = buffer.first_mut() else {
+-                return Ok(0);
+-            };
+-            *first = self.0;
+-            Ok(1)
+-        }
+-    }
+-
+-    /// The negative control for the test above: asking for more than one byte
+-    /// from a source that never reports the end must answer the one byte that
+-    /// is there. A loop filling the request would never return, so this case
+-    /// is the one that fails rather than hangs if the fill comes back.
+-    #[test]
+-    fn a_byte_read_does_not_wait_for_a_source_that_stays_open() {
+-        let mut buffer = vec![0u8; 8];
+-        let count = Dribble(b'z').read(&mut buffer).expect("the source answers");
+-        assert_eq!(count, 1, "one read answers one byte, not eight");
+-    }
+-
+-    /// A file console over a fresh file holding `bytes`, and the file's path.
+-    fn console(name: &str, bytes: &[u8]) -> (FileConsole, std::path::PathBuf) {
+-        let path =
+-            std::env::temp_dir().join(format!("rexx-file-console-{}-{name}", std::process::id()));
+-        std::fs::write(&path, bytes).expect("the console file is written");
+-        let file = std::fs::File::open(&path).expect("the console file opens");
+-        let console = FileConsole::over(file).expect("a regular file is a file console");
+-        (console, path)
+-    }
+-
+-    /// CHARS, LINES Count and LINES Normal.
+-    fn counts(console: &mut FileConsole) -> (u64, u64, bool) {
+-        (
+-            console.chars_left(),
+-            console.lines_left(),
+-            console.has_data(),
+-        )
+-    }
+-
+-    /// The oracle's answers on the same sequence, measured on a file stdin,
+-    /// except the two LINES Counts after a line seek: the oracle answers 1
+-    /// and -1 there from a stale line cache, and 3 and 1 lines remain.
+-    #[test]
+-    fn a_file_console_has_one_read_position() {
+-        let (mut c, path) = console("position", b"hello\nworld\nthird\nlast");
+-        assert_eq!(counts(&mut c), (22, 4, true));
+-        assert_eq!(c.read_line(), b"hello\n");
+-        assert_eq!(counts(&mut c), (16, 3, true));
+-        assert!(c.seek_char(3));
+-        assert_eq!(c.read_bytes(1), b"l");
+-        assert_eq!(counts(&mut c), (19, 4, true));
+-        assert!(c.seek_char(1));
+-        assert_eq!(c.read_bytes(3), b"hel");
+-        assert_eq!(counts(&mut c), (19, 4, true));
+-        assert_eq!(c.read_line(), b"lo\n", "the rest of the line CHARIN was in");
+-        assert_eq!(counts(&mut c), (16, 3, true));
+-        assert_eq!(c.read_bytes(3), b"wor");
+-        assert_eq!(c.read_line(), b"ld\n");
+-        assert_eq!(counts(&mut c), (10, 2, true));
+-        c.seek_line(1);
+-        assert_eq!(c.read_line(), b"hello\n");
+-        assert_eq!(counts(&mut c), (16, 3, true));
+-        c.seek_line(3);
+-        assert_eq!(c.read_line(), b"third\n");
+-        assert_eq!(counts(&mut c), (4, 1, true));
+-        assert!(c.seek_char(2));
+-        assert_eq!(c.read_bytes(2), b"el");
+-        assert_eq!(counts(&mut c), (19, 4, true));
+-        c.seek_line(4);
+-        assert_eq!(c.read_line(), b"last", "a last line with no line end");
+-        assert_eq!(counts(&mut c), (0, 0, false));
+-        assert!(c.seek_char(22));
+-        assert_eq!(c.read_bytes(1), b"t");
+-        assert_eq!(c.read_line(), b"", "the end of the file");
+-        assert_eq!(counts(&mut c), (0, 0, false));
+-        let _ = std::fs::remove_file(&path);
+-    }
+-
+-    /// A start past the end moves nothing; a line past the last one is the end
+-    /// of the file (measured on the oracle: `charin(,23)` answers the null
+-    /// string with CHARS still 22, `linein(,9)` leaves CHARS 0).
+-    #[test]
+-    fn a_seek_past_the_end_of_a_file_console() {
+-        let (mut c, path) = console("past", b"hello\nworld\nthird\nlast");
+-        assert!(!c.seek_char(23));
+-        assert!(!c.seek_char(100));
+-        assert_eq!(counts(&mut c), (22, 4, true), "nothing moved");
+-        assert!(c.seek_char(22));
+-        assert_eq!(c.read_bytes(5), b"t", "short at the end");
+-        c.seek_line(9);
+-        assert_eq!(counts(&mut c), (0, 0, false));
+-        assert_eq!(c.read_line(), b"");
+-        c.seek_line(4);
+-        assert_eq!(c.read_line(), b"last");
+-        c.seek_line(5);
+-        assert_eq!(
+-            counts(&mut c),
+-            (0, 0, false),
+-            "the line after the last line end"
+-        );
+-        let _ = std::fs::remove_file(&path);
+-    }
+-
+-    /// A line seek to the line the position lies in goes to its start, and a
+-    /// seek to each line in turn reads each line.
+-    #[test]
+-    fn a_line_seek_lands_on_the_start_of_the_line() {
+-        let (mut c, path) = console("midline", b"hello\nworld\nthird\n");
+-        assert_eq!(c.read_bytes(2), b"he");
+-        c.seek_line(1);
+-        assert_eq!(c.read_line(), b"hello\n");
+-        assert_eq!(c.read_bytes(2), b"wo");
+-        c.seek_line(2);
+-        assert_eq!(c.read_line(), b"world\n");
+-        for (line, expected) in [
+-            (1, "hello\n"),
+-            (2, "world\n"),
+-            (3, "third\n"),
+-            (2, "world\n"),
+-        ] {
+-            c.seek_line(line);
+-            assert_eq!(c.read_line(), expected.as_bytes(), "line {line}");
+-        }
+-        let _ = std::fs::remove_file(&path);
+-    }
+-
+-    /// The lines left from `position` in `bytes`, counted afresh.
+-    fn lines_in(bytes: &[u8], position: u64) -> u64 {
+-        let left = bytes
+-            .get(usize::try_from(position).unwrap_or(usize::MAX)..)
+-            .unwrap_or_default();
+-        let ends = left.iter().filter(|byte| **byte == b'\n').count() as u64;
+-        ends + u64::from(left.last().is_some_and(|byte| *byte != b'\n'))
+-    }
+-
+-    /// The cached line count answers what a fresh count answers after every
+-    /// read and after a seek either way, and the file is counted once while
+-    /// its size stays.
+-    #[test]
+-    fn a_file_console_counts_lines_once() {
+-        let mut bytes = (1..=300).map(|n| format!("line {n}\n")).collect::<String>();
+-        bytes.push_str("tail");
+-        let (mut c, path) = console("count", bytes.as_bytes());
+-        let mut step = 0;
+-        while c.position() <= bytes.len() as u64 {
+-            let offset = c.position() - 1;
+-            assert_eq!(
+-                c.lines_left(),
+-                lines_in(bytes.as_bytes(), offset),
+-                "at {offset}"
+-            );
+-            assert_eq!(c.open.line_total, Some(301), "counted once");
+-            assert_eq!(c.counted_size, Some(bytes.len() as u64));
+-            if step % 3 == 1 {
+-                c.read_bytes(5);
+-            } else {
+-                c.read_line();
+-            }
+-            step += 1;
+-        }
+-        assert_eq!(c.lines_left(), 0);
+-        assert!(c.seek_char(10));
+-        assert_eq!(
+-            c.lines_left(),
+-            lines_in(bytes.as_bytes(), 9),
+-            "a seek backwards"
+-        );
+-        assert!(c.seek_char(100));
+-        assert_eq!(
+-            c.lines_left(),
+-            lines_in(bytes.as_bytes(), 99),
+-            "a seek forwards"
+-        );
+-        assert_eq!(c.open.line_total, Some(301));
+-        let _ = std::fs::remove_file(&path);
+-    }
+-
+-    /// Appends `bytes` to the console's file, as another writer would.
+-    fn append(path: &std::path::Path, bytes: &[u8]) {
+-        use std::io::Write;
+-        std::fs::OpenOptions::new()
+-            .append(true)
+-            .open(path)
+-            .and_then(|mut file| file.write_all(bytes))
+-            .expect("the console file grows");
+-    }
+-
+-    /// A count taken before another writer appended is not reused after: the
+-    /// file is counted again at its new size.
+-    #[test]
+-    fn a_file_console_recounts_a_grown_file() {
+-        let (mut c, path) = console("recount", b"a\nb\nc\n");
+-        assert_eq!(c.lines_left(), 3);
+-        assert_eq!(c.read_line(), b"a\n");
+-        assert_eq!(c.lines_left(), 2);
+-        append(&path, b"x\ny\n");
+-        assert_eq!(c.lines_left(), 4, "b, c and the two appended lines");
+-        assert_eq!(c.counted_size, Some(10));
+-        let _ = std::fs::remove_file(&path);
+-    }
+-
+-    /// The descriptor's offset is the read position once the console syncs
+-    /// it, and when the console is dropped, so a process reading the
+-    /// descriptor next starts where the program stopped.
+-    #[test]
+-    fn a_file_console_leaves_the_descriptor_at_the_read_position() {
+-        use std::io::Seek;
+-        let (mut c, path) = console("sync", b"hello\nworld\nthird\n");
+-        assert_eq!(c.read_line(), b"hello\n");
+-        let shared = c
+-            .open
+-            .file()
+-            .try_clone()
+-            .expect("the descriptor duplicates");
+-        assert_ne!(
+-            (&shared).stream_position().ok(),
+-            Some(6),
+-            "the read moved the offset elsewhere"
+-        );
+-        c.sync_offset();
+-        assert_eq!((&shared).stream_position().ok(), Some(6));
+-        assert_eq!(c.read_bytes(3), b"wor");
+-        drop(c);
+-        assert_eq!(
+-            (&shared).stream_position().ok(),
+-            Some(9),
+-            "dropped at the read position"
+-        );
+-        let _ = std::fs::remove_file(&path);
+-    }
+-
+-    /// A command that read the descriptor moved it, and the console reads on
+-    /// from there; a sync with nothing read since leaves what the command
+-    /// consumed consumed.
+-    #[test]
+-    fn a_command_that_consumed_moves_the_read_position() {
+-        use std::io::{Seek, SeekFrom};
+-        let (mut c, path) = console("adopt", b"one\ntwo\nthree\nfour\n");
+-        let mut shared = c
+-            .open
+-            .file()
+-            .try_clone()
+-            .expect("the descriptor duplicates");
+-        c.sync_offset();
+-        shared
+-            .seek(SeekFrom::Start(4))
+-            .expect("a command consumed `one`");
+-        c.adopt_offset();
+-        assert_eq!(c.chars_left(), 15);
+-        c.sync_offset();
+-        assert_eq!(
+-            shared.stream_position().ok(),
+-            Some(4),
+-            "nothing read, nothing moved back"
+-        );
+-        shared
+-            .seek(SeekFrom::Start(8))
+-            .expect("a command consumed `two`");
+-        c.adopt_offset();
+-        assert_eq!(c.read_line(), b"three\n");
+-        assert_eq!(c.lines_left(), 1);
+-        c.sync_offset();
+-        assert_eq!(
+-            shared.stream_position().ok(),
+-            Some(14),
+-            "read, so moved to the read position"
+-        );
+-        let _ = std::fs::remove_file(&path);
+-    }
+-
+-    /// A command that read nothing leaves the read position alone, even
+-    /// when the console read on while the command ran.
+-    #[test]
+-    fn a_command_that_read_nothing_moves_nothing() {
+-        let (mut c, path) = console("idle", b"one\ntwo\nthree\nfour\n");
+-        assert_eq!(c.read_line(), b"one\n");
+-        c.sync_offset();
+-        assert_eq!(c.read_line(), b"two\n");
+-        c.adopt_offset();
+-        assert_eq!(c.read_line(), b"three\n");
+-        assert_eq!(c.lines_left(), 1);
+-        c.adopt_offset();
+-        assert_eq!(c.read_line(), b"four\n");
+-        let _ = std::fs::remove_file(&path);
+-    }
+-
+-    /// A file that grows after its end was read is read on: the counts see
+-    /// the new bytes and the next line is the appended one.
+-    #[test]
+-    fn a_file_console_reads_what_is_appended() {
+-        let (mut c, path) = console("grow", b"a\nb\n");
+-        assert_eq!(c.read_line(), b"a\n");
+-        assert_eq!(c.read_line(), b"b\n");
+-        assert_eq!(counts(&mut c), (0, 0, false));
+-        append(&path, b"more\nlines");
+-        assert_eq!(counts(&mut c), (10, 2, true));
+-        assert_eq!(c.read_line(), b"more\n");
+-        assert_eq!(counts(&mut c), (5, 1, true));
+-        let _ = std::fs::remove_file(&path);
+-    }
+-
+-    /// The console starts at the descriptor's offset, and anything but a
+-    /// regular file is not one.
+-    #[test]
+-    fn a_file_console_starts_where_the_descriptor_is() {
+-        use std::io::Seek;
+-        let path =
+-            std::env::temp_dir().join(format!("rexx-file-console-{}-start", std::process::id()));
+-        std::fs::write(&path, b"hello\nworld\n").expect("the console file is written");
+-        let mut file = std::fs::File::open(&path).expect("the console file opens");
+-        file.seek(std::io::SeekFrom::Start(6))
+-            .expect("the offset moves");
+-        let mut c = FileConsole::over(file).expect("a regular file is a file console");
+-        assert_eq!(counts(&mut c), (6, 1, true));
+-        assert_eq!(c.read_line(), b"world\n");
+-        let _ = std::fs::remove_file(&path);
+-        let null = std::fs::File::open("/dev/null").expect("/dev/null opens");
+-        assert!(FileConsole::over(null).is_none());
+-    }
+-}
++mod tests;
+diff --git a/rust/crates/rexx-exec/src/input/tests.rs b/rust/crates/rexx-exec/src/input/tests.rs
+new file mode 100644
+index 000000000..1a13cbb27
+--- /dev/null
++++ b/rust/crates/rexx-exec/src/input/tests.rs
+@@ -0,0 +1,567 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++use super::*;
++
++fn lines(bytes: &[u8]) -> Vec<Vec<u8>> {
++    let mut input = Input::new(ProgramInput::Bytes(bytes.to_vec()));
++    let mut read = Vec::new();
++    while let Some(line) = input.read_line() {
++        read.push(line);
++    }
++    read
++}
++
++/// The module doc's own measured byte table, row for row.
++#[test]
++fn a_line_is_the_bytes_before_the_terminator() {
++    let cases: &[(&[u8], &[&[u8]])] = &[
++        (
++            b" pad \n\nlast-no-newline",
++            &[b" pad ", b"", b"last-no-newline"],
++        ),
++        (b"crlf\r\nplain\n", &[b"crlf", b"plain"]),
++        (b"a\x00b\nnext\n", &[b"a\x00b", b"next"]),
++        // The three rows that separate the rule from its near-misses: a CR
++        // that is not before a newline is data, exactly one CR is removed
++        // from a `\r\r\n` run, and a CR at end of file with no newline
++        // after it stays.
++        (b"a\rb\nx\r\r\ny\r", &[b"a\rb", b"x\r", b"y\r"]),
++    ];
++    for (bytes, expected) in cases {
++        assert_eq!(
++            lines(bytes),
++            expected.iter().map(|l| l.to_vec()).collect::<Vec<_>>(),
++            "reading {:?}",
++            String::from_utf8_lossy(bytes)
++        );
++    }
++}
++
++/// Nothing to read answers nothing, on the first read and on every read
++/// after it.
++#[test]
++fn an_empty_input_is_exhausted_from_the_start() {
++    for input in [ProgramInput::Nothing, ProgramInput::Bytes(Vec::new())] {
++        let mut input = Input::new(input);
++        for _ in 0..3 {
++            assert_eq!(input.read_line(), None);
++        }
++    }
++}
++
++/// Past the last line, a non-empty input behaves exactly like an empty
++/// one: the null string, not the last line again and not a panic.
++#[test]
++fn reading_past_the_end_keeps_answering_nothing() {
++    let mut input = Input::new(ProgramInput::Bytes(b"only\n".to_vec()));
++    assert_eq!(input.read_line().as_deref(), Some(&b"only"[..]));
++    for _ in 0..3 {
++        assert_eq!(input.read_line(), None);
++    }
++}
++
++/// What `.STDIN~CHARS` and `~LINES` answer, per source and per state. The
++/// oracle's own answers, measured: a live descriptor nothing has drained
++/// is unmeasurable and answers `1`, and either kind answers `0` once a
++/// read has found the end. `Nothing` is a live-but-empty descriptor --
++/// the `/dev/null` column -- and not a measured zero until it is read.
++#[test]
++fn a_count_parts_a_live_source_from_a_drained_one() {
++    let mut nothing = Input::new(ProgramInput::Nothing);
++    assert_eq!(nothing.remaining(), None, "unread Nothing is unmeasurable");
++    assert_eq!(nothing.remaining_lines(true), None, "the first ask");
++    assert_eq!(
++        nothing.remaining_lines(true),
++        Some(0),
++        "and `0` every ask after, with no read in between"
++    );
++    assert_eq!(
++        nothing.remaining(),
++        None,
++        "while the byte count keeps answering unmeasurable"
++    );
++    assert_eq!(nothing.read_line(), None);
++    assert_eq!(nothing.remaining(), Some(0), "a read drained it");
++    assert_eq!(nothing.remaining_lines(true), Some(0));
++
++    let mut bytes = Input::new(ProgramInput::Bytes(b"one\ntwo\n".to_vec()));
++    assert_eq!(bytes.remaining(), Some(8));
++    assert_eq!(bytes.remaining_lines(true), Some(2));
++    assert_eq!(bytes.read_line().as_deref(), Some(&b"one"[..]));
++    assert_eq!(bytes.remaining(), Some(4));
++    assert_eq!(bytes.remaining_lines(true), Some(1));
++    assert_eq!(bytes.read_line().as_deref(), Some(&b"two"[..]));
++    assert_eq!(bytes.remaining(), Some(0));
++    assert_eq!(bytes.remaining_lines(true), Some(0));
++}
++
++/// A final line with no terminator is still a line, which is why the count
++/// is not simply the newline count.
++#[test]
++fn an_unterminated_last_line_counts() {
++    let mut input = Input::new(ProgramInput::Bytes(b"a\nb".to_vec()));
++    assert_eq!(input.remaining_lines(true), Some(2));
++    let mut terminated = Input::new(ProgramInput::Bytes(b"a\nb\n".to_vec()));
++    assert_eq!(terminated.remaining_lines(true), Some(2));
++}
++
++/// `read_bytes` answers what is already there rather than waiting for the
++/// rest. **A `Cursor` cannot witness that on its own** -- it reports the
++/// end on the first call, so a request-filling loop would pass this too --
++/// which is why the source below hands back one byte at a time while
++/// staying open, the shape a live pipe has.
++#[test]
++fn a_byte_read_answers_what_is_there_without_waiting() {
++    let mut input = Input::new(ProgramInput::Bytes(b"abc".to_vec()));
++    assert_eq!(input.read_bytes(2), b"ab".to_vec());
++    assert_eq!(input.read_bytes(5), b"c".to_vec(), "short at the end");
++    assert_eq!(input.remaining(), Some(0));
++    assert_eq!(input.read_bytes(1), Vec::<u8>::new());
++}
++
++/// A source that answers one byte per `read` and never reports the end,
++/// as a pipe with a writer still attached does.
++struct Dribble(u8);
++
++impl Read for Dribble {
++    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
++        let Some(first) = buffer.first_mut() else {
++            return Ok(0);
++        };
++        *first = self.0;
++        Ok(1)
++    }
++}
++
++/// The negative control for the test above: asking for more than one byte
++/// from a source that never reports the end must answer the one byte that
++/// is there. A loop filling the request would never return, so this case
++/// is the one that fails rather than hangs if the fill comes back.
++#[test]
++fn a_byte_read_does_not_wait_for_a_source_that_stays_open() {
++    let mut buffer = vec![0u8; 8];
++    let count = Dribble(b'z').read(&mut buffer).expect("the source answers");
++    assert_eq!(count, 1, "one read answers one byte, not eight");
++}
++
++/// A file console over a fresh file holding `bytes`, and the file's path.
++fn console(name: &str, bytes: &[u8]) -> (FileConsole, std::path::PathBuf) {
++    let path =
++        std::env::temp_dir().join(format!("rexx-file-console-{}-{name}", std::process::id()));
++    std::fs::write(&path, bytes).expect("the console file is written");
++    let file = std::fs::File::open(&path).expect("the console file opens");
++    let console = FileConsole::over(file).expect("a regular file is a file console");
++    (console, path)
++}
++
++/// CHARS, LINES Count and LINES Normal.
++fn counts(console: &mut FileConsole) -> (u64, u64, bool) {
++    (
++        console.chars_left(),
++        console.lines_left(),
++        console.has_data(),
++    )
++}
++
++/// The oracle's answers on the same sequence, measured on a file stdin,
++/// except the two LINES Counts after a line seek: the oracle answers 1
++/// and -1 there from a stale line cache, and 3 and 1 lines remain.
++#[test]
++fn a_file_console_has_one_read_position() {
++    let (mut c, path) = console("position", b"hello\nworld\nthird\nlast");
++    assert_eq!(counts(&mut c), (22, 4, true));
++    assert_eq!(c.read_line(), b"hello\n");
++    assert_eq!(counts(&mut c), (16, 3, true));
++    assert!(c.seek_char(3));
++    assert_eq!(c.read_bytes(1), b"l");
++    assert_eq!(counts(&mut c), (19, 4, true));
++    assert!(c.seek_char(1));
++    assert_eq!(c.read_bytes(3), b"hel");
++    assert_eq!(counts(&mut c), (19, 4, true));
++    assert_eq!(c.read_line(), b"lo\n", "the rest of the line CHARIN was in");
++    assert_eq!(counts(&mut c), (16, 3, true));
++    assert_eq!(c.read_bytes(3), b"wor");
++    assert_eq!(c.read_line(), b"ld\n");
++    assert_eq!(counts(&mut c), (10, 2, true));
++    c.seek_line(1);
++    assert_eq!(c.read_line(), b"hello\n");
++    assert_eq!(counts(&mut c), (16, 3, true));
++    c.seek_line(3);
++    assert_eq!(c.read_line(), b"third\n");
++    assert_eq!(counts(&mut c), (4, 1, true));
++    assert!(c.seek_char(2));
++    assert_eq!(c.read_bytes(2), b"el");
++    assert_eq!(counts(&mut c), (19, 4, true));
++    c.seek_line(4);
++    assert_eq!(c.read_line(), b"last", "a last line with no line end");
++    assert_eq!(counts(&mut c), (0, 0, false));
++    assert!(c.seek_char(22));
++    assert_eq!(c.read_bytes(1), b"t");
++    assert_eq!(c.read_line(), b"", "the end of the file");
++    assert_eq!(counts(&mut c), (0, 0, false));
++    let _ = std::fs::remove_file(&path);
++}
++
++/// A start past the end moves nothing; a line past the last one is the end
++/// of the file (measured on the oracle: `charin(,23)` answers the null
++/// string with CHARS still 22, `linein(,9)` leaves CHARS 0).
++#[test]
++fn a_seek_past_the_end_of_a_file_console() {
++    let (mut c, path) = console("past", b"hello\nworld\nthird\nlast");
++    assert!(!c.seek_char(23));
++    assert!(!c.seek_char(100));
++    assert_eq!(counts(&mut c), (22, 4, true), "nothing moved");
++    assert!(c.seek_char(22));
++    assert_eq!(c.read_bytes(5), b"t", "short at the end");
++    c.seek_line(9);
++    assert_eq!(counts(&mut c), (0, 0, false));
++    assert_eq!(c.read_line(), b"");
++    c.seek_line(4);
++    assert_eq!(c.read_line(), b"last");
++    c.seek_line(5);
++    assert_eq!(
++        counts(&mut c),
++        (0, 0, false),
++        "the line after the last line end"
++    );
++    let _ = std::fs::remove_file(&path);
++}
++
++/// A line seek to the line the position lies in goes to its start, and a
++/// seek to each line in turn reads each line.
++#[test]
++fn a_line_seek_lands_on_the_start_of_the_line() {
++    let (mut c, path) = console("midline", b"hello\nworld\nthird\n");
++    assert_eq!(c.read_bytes(2), b"he");
++    c.seek_line(1);
++    assert_eq!(c.read_line(), b"hello\n");
++    assert_eq!(c.read_bytes(2), b"wo");
++    c.seek_line(2);
++    assert_eq!(c.read_line(), b"world\n");
++    for (line, expected) in [
++        (1, "hello\n"),
++        (2, "world\n"),
++        (3, "third\n"),
++        (2, "world\n"),
++    ] {
++        c.seek_line(line);
++        assert_eq!(c.read_line(), expected.as_bytes(), "line {line}");
++    }
++    let _ = std::fs::remove_file(&path);
++}
++
++/// The lines left from `position` in `bytes`, counted afresh.
++fn lines_in(bytes: &[u8], position: u64) -> u64 {
++    let left = bytes
++        .get(usize::try_from(position).unwrap_or(usize::MAX)..)
++        .unwrap_or_default();
++    let ends = left.iter().filter(|byte| **byte == b'\n').count() as u64;
++    ends + u64::from(left.last().is_some_and(|byte| *byte != b'\n'))
++}
++
++/// The cached line count answers what a fresh count answers after every
++/// read and after a seek either way, and the file is counted once while
++/// its size stays.
++#[test]
++fn a_file_console_counts_lines_once() {
++    let mut bytes = (1..=300).map(|n| format!("line {n}\n")).collect::<String>();
++    bytes.push_str("tail");
++    let (mut c, path) = console("count", bytes.as_bytes());
++    let mut step = 0;
++    while c.position() <= bytes.len() as u64 {
++        let offset = c.position() - 1;
++        assert_eq!(
++            c.lines_left(),
++            lines_in(bytes.as_bytes(), offset),
++            "at {offset}"
++        );
++        assert_eq!(c.open.line_total, Some(301), "counted once");
++        assert_eq!(c.counted_size, Some(bytes.len() as u64));
++        if step % 3 == 1 {
++            c.read_bytes(5);
++        } else {
++            c.read_line();
++        }
++        step += 1;
++    }
++    assert_eq!(c.lines_left(), 0);
++    assert!(c.seek_char(10));
++    assert_eq!(
++        c.lines_left(),
++        lines_in(bytes.as_bytes(), 9),
++        "a seek backwards"
++    );
++    assert!(c.seek_char(100));
++    assert_eq!(
++        c.lines_left(),
++        lines_in(bytes.as_bytes(), 99),
++        "a seek forwards"
++    );
++    assert_eq!(c.open.line_total, Some(301));
++    let _ = std::fs::remove_file(&path);
++}
++
++/// Appends `bytes` to the console's file, as another writer would.
++fn append(path: &std::path::Path, bytes: &[u8]) {
++    use std::io::Write;
++    std::fs::OpenOptions::new()
++        .append(true)
++        .open(path)
++        .and_then(|mut file| file.write_all(bytes))
++        .expect("the console file grows");
++}
++
++/// A count taken before another writer appended is not reused after: the
++/// file is counted again at its new size.
++#[test]
++fn a_file_console_recounts_a_grown_file() {
++    let (mut c, path) = console("recount", b"a\nb\nc\n");
++    assert_eq!(c.lines_left(), 3);
++    assert_eq!(c.read_line(), b"a\n");
++    assert_eq!(c.lines_left(), 2);
++    append(&path, b"x\ny\n");
++    assert_eq!(c.lines_left(), 4, "b, c and the two appended lines");
++    assert_eq!(c.counted_size, Some(10));
++    let _ = std::fs::remove_file(&path);
++}
++
++/// The descriptor's offset is the read position once the console syncs
++/// it, and when the console is dropped, so a process reading the
++/// descriptor next starts where the program stopped.
++#[test]
++fn a_file_console_leaves_the_descriptor_at_the_read_position() {
++    use std::io::Seek;
++    let (mut c, path) = console("sync", b"hello\nworld\nthird\n");
++    assert_eq!(c.read_line(), b"hello\n");
++    let shared = c
++        .open
++        .file()
++        .try_clone()
++        .expect("the descriptor duplicates");
++    assert_ne!(
++        (&shared).stream_position().ok(),
++        Some(6),
++        "the read moved the offset elsewhere"
++    );
++    c.sync_offset();
++    assert_eq!((&shared).stream_position().ok(), Some(6));
++    assert_eq!(c.read_bytes(3), b"wor");
++    drop(c);
++    assert_eq!(
++        (&shared).stream_position().ok(),
++        Some(9),
++        "dropped at the read position"
++    );
++    let _ = std::fs::remove_file(&path);
++}
++
++/// A command that read the descriptor moved it, and the console reads on
++/// from there; a sync with nothing read since leaves what the command
++/// consumed consumed.
++#[test]
++fn a_command_that_consumed_moves_the_read_position() {
++    use std::io::{Seek, SeekFrom};
++    let (mut c, path) = console("adopt", b"one\ntwo\nthree\nfour\n");
++    let mut shared = c
++        .open
++        .file()
++        .try_clone()
++        .expect("the descriptor duplicates");
++    c.sync_offset();
++    shared
++        .seek(SeekFrom::Start(4))
++        .expect("a command consumed `one`");
++    c.adopt_offset();
++    assert_eq!(c.chars_left(), 15);
++    c.sync_offset();
++    assert_eq!(
++        shared.stream_position().ok(),
++        Some(4),
++        "nothing read, nothing moved back"
++    );
++    shared
++        .seek(SeekFrom::Start(8))
++        .expect("a command consumed `two`");
++    c.adopt_offset();
++    assert_eq!(c.read_line(), b"three\n");
++    assert_eq!(c.lines_left(), 1);
++    c.sync_offset();
++    assert_eq!(
++        shared.stream_position().ok(),
++        Some(14),
++        "read, so moved to the read position"
++    );
++    let _ = std::fs::remove_file(&path);
++}
++
++/// A command that read nothing leaves the read position alone, even
++/// when the console read on while the command ran.
++#[test]
++fn a_command_that_read_nothing_moves_nothing() {
++    let (mut c, path) = console("idle", b"one\ntwo\nthree\nfour\n");
++    assert_eq!(c.read_line(), b"one\n");
++    c.sync_offset();
++    assert_eq!(c.read_line(), b"two\n");
++    c.adopt_offset();
++    assert_eq!(c.read_line(), b"three\n");
++    assert_eq!(c.lines_left(), 1);
++    c.adopt_offset();
++    assert_eq!(c.read_line(), b"four\n");
++    let _ = std::fs::remove_file(&path);
++}
++
++/// A file that grows after its end was read is read on: the counts see
++/// the new bytes and the next line is the appended one.
++#[test]
++fn a_file_console_reads_what_is_appended() {
++    let (mut c, path) = console("grow", b"a\nb\n");
++    assert_eq!(c.read_line(), b"a\n");
++    assert_eq!(c.read_line(), b"b\n");
++    assert_eq!(counts(&mut c), (0, 0, false));
++    append(&path, b"more\nlines");
++    assert_eq!(counts(&mut c), (10, 2, true));
++    assert_eq!(c.read_line(), b"more\n");
++    assert_eq!(counts(&mut c), (5, 1, true));
++    let _ = std::fs::remove_file(&path);
++}
++
++/// The console starts at the descriptor's offset, and anything but a
++/// regular file is not one.
++#[test]
++fn a_file_console_starts_where_the_descriptor_is() {
++    use std::io::Seek;
++    let path = std::env::temp_dir().join(format!("rexx-file-console-{}-start", std::process::id()));
++    std::fs::write(&path, b"hello\nworld\n").expect("the console file is written");
++    let mut file = std::fs::File::open(&path).expect("the console file opens");
++    file.seek(std::io::SeekFrom::Start(6))
++        .expect("the offset moves");
++    let mut c = FileConsole::over(file).expect("a regular file is a file console");
++    assert_eq!(counts(&mut c), (6, 1, true));
++    assert_eq!(c.read_line(), b"world\n");
++    let _ = std::fs::remove_file(&path);
++    let null = std::fs::File::open("/dev/null").expect("/dev/null opens");
++    assert!(FileConsole::over(null).is_none());
++}
++
++#[test]
++fn spawn_failure_preserves_partial_input_and_requeues_other_posts() {
++    if crate::test_process::isolated(
++        "input::tests::spawn_failure_preserves_partial_input_and_requeues_other_posts",
++    ) {
++        return;
++    }
++    let mut interp = Interp::new();
++    interp.pool = crate::scheduler::Pool::new(1 << 46, 1);
++    interp.input = Input::new(ProgramInput::Stdin);
++    interp.input.exhausted = true;
++    assert!(interp.input.start_stdin_read());
++    let inbox = interp.timer.inbox();
++    inbox.post(crate::scheduler::Posted::Output {
++        error: false,
++        bytes: b"other activity".to_vec(),
++    });
++    inbox.post(crate::scheduler::Posted::Input(b"partial".to_vec()));
++    for _ in 0..2 {
++        assert!(interp.fill_stdin(true).is_err());
++        let Source::Stdin(stdin) = &interp.input.source else {
++            panic!("stdin ownership changed")
++        };
++        assert!(!stdin.reading);
++        assert!(!stdin.ended);
++        assert_eq!(stdin.buffered.as_slice(), b"partial");
++        assert!(interp.input.exhausted);
++    }
++    let posts = interp.timer.drain();
++    assert_eq!(posts.len(), 1);
++    assert!(
++        matches!(&posts[0], crate::scheduler::Posted::Output { bytes, .. } if bytes == b"other activity")
++    );
++    // Buffered reads still work after the failed request, without a worker.
++    assert_eq!(interp.input_bytes(7).expect("buffered bytes"), b"partial");
++    assert!(!interp.input.exhausted);
++}
++
++#[test]
++fn spawn_failure_on_stdin_reaches_syntax_without_reading() {
++    if crate::test_process::isolated(
++        "input::tests::spawn_failure_on_stdin_reaches_syntax_without_reading",
++    ) {
++        return;
++    }
++    for read in [
++        "linein()",
++        "charin(, , 1)",
++        ".stdin~linein",
++        ".stdin~charin(, 1)",
++    ] {
++        let source = format!(
++            "call probe\ncall probe\nsay 'progress'\nexit\nprobe: procedure\nsignal on syntax name caught\nx={read}\nsay 'READ RAN'\nreturn\ncaught: say condition('o')~code\nreturn\n"
++        );
++        let outcome = std::thread::Builder::new()
++            .stack_size(crate::INTERPRETER_STACK_BYTES)
++            .spawn(move || {
++                crate::set_pool_stack(1 << 46);
++                crate::execute_on(
++                    b"/stdin.rex",
++                    source.into_bytes(),
++                    false,
++                    crate::Invocation::none().with_input(ProgramInput::Stdin),
++                    Some(crate::INTERPRETER_STACK_BYTES),
++                )
++            })
++            .expect("interpreter")
++            .join()
++            .expect("run");
++        assert_eq!(outcome.exit_code, 0, "{:?}", outcome);
++        assert_eq!(outcome.stdout, b"48.1\n48.1\nprogress\n", "{read}");
++    }
++}
++
++fn recover_stdin(bound: usize) {
++    let mut interp = Interp::new();
++    interp.input = Input::new(ProgramInput::Stdin);
++    interp.pool = crate::scheduler::Pool::new(1 << 46, 1);
++    assert!(interp.input_line().is_err());
++    interp.pool = crate::scheduler::Pool::new(1 << 20, bound);
++    assert_eq!(
++        interp.input_line().expect("read resumes"),
++        Some(b"success".to_vec())
++    );
++    let Source::Stdin(stdin) = &interp.input.source else {
++        panic!("stdin ownership changed")
++    };
++    assert!(!stdin.reading);
++    assert!(!stdin.ended);
++    assert!(!interp.input.exhausted);
++}
++
++#[test]
++fn stdin_recovers_with_a_pooled_worker_after_spawn_failure() {
++    if crate::test_process::isolated_with_input(
++        "input::tests::stdin_recovers_with_a_pooled_worker_after_spawn_failure",
++        Some(b"success\n"),
++    ) {
++        return;
++    }
++    recover_stdin(1);
++}
++
++#[test]
++fn stdin_recovers_in_configured_inline_mode_after_spawn_failure() {
++    if crate::test_process::isolated_with_input(
++        "input::tests::stdin_recovers_in_configured_inline_mode_after_spawn_failure",
++        Some(b"success\n"),
++    ) {
++        return;
++    }
++    recover_stdin(0);
++}
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index f45ab26f6..8fae70af6 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -4402,10 +4402,13 @@ fn execute_as(
+     // A pool thread still running a call ends it under the baton, through
+     // this interpreter's state, which therefore outlives the run.
+     if interp.activities.in_flight() {
+         std::mem::forget(interp);
+     }
+     outcome
+ }
+ 
+ #[cfg(test)]
+ mod tests;
++
++#[cfg(test)]
++mod test_process;
+diff --git a/rust/crates/rexx-exec/src/run/tests.rs b/rust/crates/rexx-exec/src/run/tests.rs
+index da971c0a2..65486a43f 100644
+--- a/rust/crates/rexx-exec/src/run/tests.rs
++++ b/rust/crates/rexx-exec/src/run/tests.rs
+@@ -80,38 +80,39 @@ fn run_source_with_directives(
+     ));
+     run_activated(interp, &program)
+ }
+ 
+ /// [`run_source_with_directives`], keeping what the program printed.
+ fn say_output_with_directives(interp: &mut Interp, source: &[u8]) -> Vec<u8> {
+     run_source_with_directives(interp, source).expect("test program runs");
+     std::mem::take(&mut interp.out)
+ }
+ 
+-/// A method whose own entry is taken back while it runs, and whose `Method`
+-/// objects a forced collection then sweeps, gets a `.context~executable`
+-/// rebuilt under the `.nil` scope it ran in. The rebuild keyed that object's
+-/// annotation table by `.nil` as if it were a class, and panicked.
++/// A method whose own entry is taken back while it runs retains its Method
++/// through a forced collection and answers `.context~executable` under the
++/// `.nil` scope it ran in. Previously collection swept its Method objects
++/// and rebuilding keyed its annotation table by `.nil` as if it were a class,
++/// which panicked. Entry retention now keeps the registered executable.
+ #[test]
+-fn an_executable_rebuilt_under_the_nil_scope_answers() {
++fn an_executable_retained_under_the_nil_scope_answers() {
+     let mut interp = Interp::new();
+     let out = say_output_with_directives(
+         &mut interp,
+         b"say .t~new~go\n::class t\n::method go\n  \
+           self~setMethod('x', 'self~unsetMethod(\"X\"); call gc \"force\"; \
+           e = .context~executable; return e~class~id e~scope e~source~items')\n  \
+           return self~x\n",
+     );
+     assert_eq!(String::from_utf8_lossy(&out), "Method The NIL object 1\n");
+     assert_eq!(
+-        interp.executables_rebuilt, 1,
+-        "the rebuild path did not run"
++        interp.executables_rebuilt, 0,
++        "the executing Method should remain rooted"
+     );
+ }
+ 
+ /// `run_source`'s second half, split out so `run_source_traced` can put a
+ /// `TRACE` setting on the activation between the push and the run.
+ fn run_activated(interp: &mut Interp, _program: &Program) -> Result<Option<ObjRef>, Failure> {
+     interp.run_activation().map(Ended::value)
+ }
+ 
+ fn say_output(interp: &mut Interp, source: &[u8]) -> Vec<u8> {
+diff --git a/rust/crates/rexx-exec/src/scheduler.rs b/rust/crates/rexx-exec/src/scheduler.rs
+index d28aba3f5..f2785ec88 100644
+--- a/rust/crates/rexx-exec/src/scheduler.rs
++++ b/rust/crates/rexx-exec/src/scheduler.rs
+@@ -546,31 +546,32 @@ pub(crate) trait Scheduler {
+     /// Puts the running activity, whose slice is over, at the back of the
+     /// ready queue.
+     fn yield_at_slice(&mut self);
+     /// Stops every activity's driver for a collection (spec 2026-09-29
+     /// section 5): with the one thread holding the baton running a driver,
+     /// that is holding the baton.
+     fn stop_the_world(&self);
+     /// Runs the native call the running activity, parked for it, prepared,
+     /// off the baton (spec 2026-09-29 P6-3): on a pool thread, which this
+     /// thread lends the baton to while it enters the call, or, where the pool
+-    /// is off or no thread can be spawned, here on the baton. Its completion
+-    /// is posted.
++    /// is configured inline, here on the baton. Its completion is posted.
++    /// A spawn failure wakes the original continuation without starting it.
+     fn exit_for_native(&mut self);
+     /// Runs `block`, a blocking operation of the running activity's that
+     /// touches no island value, on a pool thread, which posts what it ended
+-    /// with under the token answered; `Err(block)` where the pool is off or
+-    /// no thread can be spawned.
++    /// with under the token answered. The worker was reserved before the
++    /// command child was started.
+     fn exit_for_block(
+         &mut self,
+         block: crate::command::Block,
+-    ) -> Result<u64, crate::command::Block>;
++        worker: crate::command::ReservedWorker,
++    ) -> u64;
+     /// Posts `completion`, of `activity`'s native call in the native frame
+     /// `frame`, to `inbox` for the baton's holder to drain; it touches
+     /// nothing else.
+     fn post_completion(
+         inbox: &crate::timer::Inbox<crate::timer::Posted>,
+         activity: ActivityId,
+         frame: u64,
+         completion: rexx_api::invoke::Completion,
+     ) where
+         Self: Sized;
+@@ -688,34 +689,49 @@ impl Scheduler for Interp {
+         assert!(
+             self.baton.held_here(),
+             "a collection on a thread not holding the interpreter's baton"
+         );
+     }
+ 
+     fn exit_for_native(&mut self) {
+         if self.stress_collect {
+             self.collect_now();
+         }
++        if self.activity.native_call.is_none() {
++            return;
++        }
++        let worker = match self.pool.reserve() {
++            Ok(worker) => worker,
++            Err(failure) => {
++                self.activity
++                    .native_call
++                    .as_mut()
++                    .expect("prepared call")
++                    .spawn_failed(failure);
++                self.unpark(self.activities.running);
++                return;
++            }
++        };
+         let park = self.activity.native_park.take();
+         let Some(record) = self.activity.native_call.as_mut() else {
+             self.activity.native_park = park;
+             return;
+         };
+         let (mut call, frame, pending) = record.leave(park);
+         #[cfg(test)]
+         NATIVE_EXITS.with(|exits| exits.set(exits.get() + 1));
+         self.activities.in_flight += 1;
+         let thread = self.thread_context();
+         let baton = crate::sync::Arc::clone(&self.baton);
+         let inbox = self.timer.inbox();
+         let activity = self.activities.running;
+-        if let Some(worker) = self.pool.reserve() {
++        if let Some(worker) = worker {
+             let to = worker.thread();
+             let pooled = crate::dispatch::library::PooledCall::new(
+                 call,
+                 thread,
+                 frame,
+                 pending,
+                 activity,
+                 &baton,
+                 crate::sync::Arc::clone(&inbox),
+             );
+@@ -738,24 +754,22 @@ impl Scheduler for Interp {
+         self.activities.runs_below -= 1;
+         pin_leave!(self);
+         if let Some(record) = self.activity.native_call.as_mut() {
+             self.activity.native_park = record.back(call, pending);
+         }
+     }
+ 
+     fn exit_for_block(
+         &mut self,
+         block: crate::command::Block,
+-    ) -> Result<u64, crate::command::Block> {
+-        let Some(worker) = self.pool.reserve() else {
+-            return Err(block);
+-        };
++        worker: crate::command::ReservedWorker,
++    ) -> u64 {
+         self.activities.in_flight += 1;
+         self.activities.next_block += 1;
+         let token = self.activities.next_block;
+         let inbox = self.timer.inbox();
+         let baton = crate::sync::Arc::clone(&self.baton);
+         let activity = self.activities.running;
+         worker.run(Box::new(move || {
+             pool::posting_panics(&inbox, &baton, || {
+                 let ended = crate::signal::unblocked(|| {
+                     block.stream(&|piece, bytes| {
+@@ -773,21 +787,21 @@ impl Scheduler for Interp {
+                         });
+                     })
+                 });
+                 inbox.post(Posted::Unblocked {
+                     activity,
+                     token,
+                     ended,
+                 });
+             });
+         }));
+-        Ok(token)
++        token
+     }
+ 
+     fn post_completion(
+         inbox: &crate::timer::Inbox<crate::timer::Posted>,
+         activity: ActivityId,
+         frame: u64,
+         completion: rexx_api::invoke::Completion,
+     ) {
+         inbox.post(Posted::Completed(Completed {
+             activity,
+@@ -2133,20 +2147,26 @@ impl Interp {
+         };
+         if let Some(park) = self.activity.native_park.as_mut() {
+             park.set_reason(again);
+         }
+         self.park(again);
+         true
+     }
+ 
+     /// The running activity's park, resumed now that it has woken.
+     fn resume_parked(&mut self, failure: Option<Failure>) -> Result<Option<ObjRef>, Failure> {
++        let failure = failure.or_else(|| {
++            self.activity
++                .native_call
++                .as_mut()
++                .and_then(|call| call.take_spawn_failure())
++        });
+         let park = self.activity.native_park.take().or_else(|| {
+             self.activity
+                 .native_call
+                 .as_mut()
+                 .and_then(|call| call.take_park())
+         });
+         match park {
+             Some(park) => self.resume_native_park(*park, failure),
+             None => {
+                 Err(Loud::scheduler_inconsistency("a woken activity with no wait recorded").into())
+@@ -2934,17 +2954,17 @@ pub(crate) fn script(outcomes: &[Scripted]) {
+ /// The next queued outcome, outside the library bootstrap.
+ #[cfg(test)]
+ pub(crate) fn take_scripted() -> Option<Scripted> {
+     if !crate::ir::drive::counting() {
+         return None;
+     }
+     SCRIPT.with(|script| script.borrow_mut().pop_front())
+ }
+ 
+ mod pool;
+-pub(crate) use pool::{POOL_BOUND, POOL_STACK_BYTES, Pool, posting_panics};
++pub(crate) use pool::{POOL_BOUND, POOL_STACK_BYTES, Pool, Worker, posting_panics};
+ #[cfg(test)]
+ pub(crate) use pool::{threads_beyond_bound, threads_spawned};
+ 
+ #[cfg(test)]
+ #[expect(clippy::disallowed_methods, reason = "these tests time real runs")]
+ mod tests;
+diff --git a/rust/crates/rexx-exec/src/scheduler/pool.rs b/rust/crates/rexx-exec/src/scheduler/pool.rs
+index 18b293a48..8cdb0e436 100644
+--- a/rust/crates/rexx-exec/src/scheduler/pool.rs
++++ b/rust/crates/rexx-exec/src/scheduler/pool.rs
+@@ -130,57 +130,58 @@ impl Pool {
+     }
+ 
+     /// Spawns no thread beyond the bound from now on, so a job that finds
+     /// every thread busy gets none.
+     #[cfg(test)]
+     pub(crate) fn fix_at_bound(&self) {
+         lock(&self.shared.state).fixed = true;
+     }
+ 
+     /// An idle thread, or a new one, for one job: beyond the bound where
+-    /// every thread is busy. `None` where the bound is 0 or the spawn fails.
+-    pub(crate) fn reserve(&self) -> Option<Worker> {
++    /// every thread is busy. `Ok(None)` selects configured inline execution.
++    /// An OS thread creation failure is returned without running the job.
++    pub(crate) fn reserve(&self) -> Result<Option<Worker>, crate::Failure> {
+         let mut state = lock(&self.shared.state);
+         if state.bound == 0 {
+-            return None;
++            return Ok(None);
+         }
+         if let Some(worker) = state.idle.pop() {
+-            return Some(worker);
++            return Ok(Some(worker));
+         }
+         // Every thread busy: a new one beyond the bound, since a command or
+         // native call run inline instead holds the baton while it waits, and
+         // what it waits for may be another activity's to do.
+         #[cfg(test)]
+         if state.fixed && state.threads.len() >= state.bound {
+-            return None;
++            return Ok(None);
+         }
+         let mailbox = Arc::new(Mailbox {
+             mail: Mutex::new(None),
+             arrived: Condvar::new(),
+         });
+         let spawned = std::thread::Builder::new()
+             .name("rexx-pool".to_string())
+             .stack_size(self.stack)
+             .spawn({
+                 let (shared, mailbox) = (Arc::clone(&self.shared), Arc::clone(&mailbox));
+                 move || work(&shared, &mailbox)
+             })
+-            .ok()?;
++            .map_err(|_| spawn_failed())?;
+         let thread = spawned.thread().id();
+         #[cfg(test)]
+         SPAWNED.with(|spawned| spawned.set(spawned.get() + 1));
+         #[cfg(test)]
+         if state.threads.len() >= state.bound {
+             BEYOND.with(|beyond| beyond.set(beyond.get() + 1));
+         }
+         state.threads.push((thread, spawned));
+-        Some(Worker { thread, mailbox })
++        Ok(Some(Worker { thread, mailbox }))
+     }
+ }
+ 
+ impl Drop for Pool {
+     /// Ends the idle threads and waits for them; a thread still running a
+     /// job ends once it has run it.
+     fn drop(&mut self) {
+         let (idle, mut threads) = {
+             let mut state = lock(&self.shared.state);
+             state.closed = true;
+@@ -272,10 +273,16 @@ fn work(shared: &Arc<Shared>, mailbox: &Arc<Mailbox>) {
+                 state.threads.swap_remove(at);
+             }
+             return;
+         }
+         state.idle.push(Worker {
+             thread: std::thread::current().id(),
+             mailbox: Arc::clone(mailbox),
+         });
+     }
+ }
++
++/// The system-service condition for an OS thread creation failure.
++#[cold]
++fn spawn_failed() -> crate::Failure {
++    crate::Raised::syntax(48, 1, vec![b"ERROR CREATING THREAD".to_vec()]).into()
++}
+diff --git a/rust/crates/rexx-exec/src/scheduler/tests.rs b/rust/crates/rexx-exec/src/scheduler/tests.rs
+index f95e2e334..1b570bf79 100644
+--- a/rust/crates/rexx-exec/src/scheduler/tests.rs
++++ b/rust/crates/rexx-exec/src/scheduler/tests.rs
+@@ -1635,10 +1635,12 @@ fn uniform_1_in_fifo_order_runs_as_every_opportunity() {
+             );
+         }
+     }
+ }
+ 
+ mod callbacks;
+ mod lent;
+ mod mutants;
+ mod native;
+ mod pool;
++
++mod spawn_failure;
+diff --git a/rust/crates/rexx-exec/src/scheduler/tests/pool.rs b/rust/crates/rexx-exec/src/scheduler/tests/pool.rs
+index b7bf2800a..4a50a6635 100644
+--- a/rust/crates/rexx-exec/src/scheduler/tests/pool.rs
++++ b/rust/crates/rexx-exec/src/scheduler/tests/pool.rs
+@@ -297,28 +297,35 @@ const MEETING: &str = "m = .t~new~start('other')\ncall MEET\nsay 'main'\nsay m~r
+ #[test]
+ fn two_native_calls_waiting_for_each_other_meet_on_pool_threads() {
+     MEETINGS[0].reset();
+     let ran = run(MEETING, None);
+     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+     assert_eq!(ran.stdout(), "main\nother\n");
+     assert_eq!(ran.exits, 2);
+     assert_eq!(MEETINGS[0].outcome(), (2, 0));
+ }
+ 
+-/// Where no pool thread can be spawned, a call runs on the releasing thread
++/// Where the pool is disabled, a call runs on the releasing thread
+ /// and the ready activity waits for the next thread that takes the baton:
+ /// the calls run one after the other, and each gives up.
+ #[test]
+-fn a_spawn_failure_leaves_ready_activities_to_the_next_baton_holder() {
++fn a_disabled_pool_leaves_ready_activities_to_the_next_baton_holder() {
+     MEETINGS[1].reset();
+     let source = MEETING.replace("MEET\n", "MEETBRIEFLY\n");
+-    let ran = run(&source, Some(1 << 46));
++    let ran = run_shaped(
++        &source,
++        Shape {
++            bound: Some(0),
++            ..SHAPE
++        },
++    )
++    .expect("run");
+     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
+     assert_eq!(ran.stdout(), "main\nother\n");
+     assert_eq!(ran.exits, 2);
+     assert_eq!(MEETINGS[1].outcome(), (0, 2));
+ }
+ 
+ const DEEP: &str = "m = .t~new~start('idle')\nsay .k~new~send0(.r~new, 'deep')\n\
+                     ::class t\n::method idle\n  call SysSleep 0.1\n\
+                     ::class r\n::method deep\n  return .k~new~send0(self, 'deep')\n\
+                     ::class k\n::method send0 external \"LIBRARY orxmethod TestSendMessage0\"\n";
+@@ -673,21 +680,21 @@ fn a_lone_call_keeps_the_baton_after_its_callback_starts_an_activity() {
+     assert_eq!(ran.exits, 0);
+ }
+ 
+ /// Threads spawned beyond the bound end once their jobs have run, leaving
+ /// the pool at its bound.
+ #[test]
+ fn threads_beyond_the_bound_end_after_their_jobs() {
+     let pool = crate::scheduler::Pool::new(1 << 20, 1);
+     let gate = std::sync::Arc::new((Mutex::new(false), Condvar::new()));
+     for _ in 0..3 {
+-        let worker = pool.reserve().expect("a thread");
++        let worker = pool.reserve().expect("spawn succeeds").expect("a thread");
+         let gate = std::sync::Arc::clone(&gate);
+         worker.run(Box::new(move || {
+             let (open, opened) = &*gate;
+             let mut open = open.lock().expect("unpoisoned");
+             while !*open {
+                 open = opened.wait(open).expect("unpoisoned");
+             }
+         }));
+     }
+     assert_eq!(pool.threads(), 3);
+diff --git a/rust/crates/rexx-exec/src/scheduler/tests/spawn_failure.rs b/rust/crates/rexx-exec/src/scheduler/tests/spawn_failure.rs
+new file mode 100644
+index 000000000..5d56d46d4
+--- /dev/null
++++ b/rust/crates/rexx-exec/src/scheduler/tests/spawn_failure.rs
+@@ -0,0 +1,148 @@
++use super::pool::{SHAPE, Shape, run_shaped};
++use crate::test_process::isolated;
++use std::sync::atomic::{AtomicUsize, Ordering};
++
++static BODIES: AtomicUsize = AtomicUsize::new(0);
++extern "C-unwind" fn body_counter(
++    _context: *mut rexx_api::layout::RexxCallContext_,
++    arguments: *mut rexx_api::layout::ValueDescriptor,
++) -> *mut u16 {
++    static SIGNATURE: [u16; 2] = [
++        rexx_api::values::code::REXX_OBJECT_PTR,
++        rexx_api::values::ARGUMENT_TERMINATOR,
++    ];
++    if arguments.is_null() {
++        return SIGNATURE.as_ptr().cast_mut();
++    }
++    BODIES.fetch_add(1, Ordering::SeqCst);
++    std::ptr::null_mut()
++}
++
++fn counted_library() -> rexx_api::load::Library {
++    rexx_api::load::routines_only(&[("HERE", body_counter)])
++}
++
++#[test]
++fn native_spawn_failure_reaches_main_and_started_handlers() {
++    if isolated(
++        "scheduler::tests::spawn_failure::native_spawn_failure_reaches_main_and_started_handlers",
++    ) {
++        return;
++    }
++    let source = "m = .t~new~start('other')\ncall probe\ncall probe\nsay m~result\nexit\n\
++        probe: procedure\nsignal on syntax name caught\ncall HERE\nsay 'BODY RAN'\nreturn\n\
++        caught: say condition('o')~code condition('o')~message\nreturn\n\
++        ::requires 'pooltest' LIBRARY\n::class t\n::method other\n\
++        signal on syntax name caught\ncall HERE\nreturn 'BODY RAN'\n\
++        caught: return condition('o')~code condition('o')~message\n";
++    let ran = run_shaped(
++        source,
++        Shape {
++            stack: Some(1 << 46),
++            library: (b"pooltest", counted_library),
++            ..SHAPE
++        },
++    )
++    .expect("run");
++    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
++    assert_eq!(
++        ran.stdout(),
++        "48.1 Failure in system service: ERROR CREATING THREAD.\n48.1 Failure in system service: ERROR CREATING THREAD.\n48.1 Failure in system service: ERROR CREATING THREAD.\n"
++    );
++    assert_eq!(BODIES.load(Ordering::SeqCst), 0);
++    assert_eq!(ran.exits, 0);
++    assert_eq!(ran.takes, 0);
++    assert_eq!(ran.abandoned, 0);
++}
++
++#[test]
++fn command_spawn_failure_creates_no_child_and_repeats() {
++    if isolated(
++        "scheduler::tests::spawn_failure::command_spawn_failure_creates_no_child_and_repeats",
++    ) {
++        return;
++    }
++    let dir = std::env::temp_dir().join(format!("rexx-spawn-failure-{}", std::process::id()));
++    std::fs::create_dir(&dir).expect("fresh marker directory");
++    let marker = dir.join("child");
++    let source = format!(
++        "call probe\ncall probe\nsay 'progress'\nexit\nprobe: procedure\nsignal on syntax name caught\naddress system 'echo child > {}'\nsay 'CHILD RAN'\nreturn\ncaught: say condition('o')~code\nreturn\n",
++        marker.display()
++    );
++    let mut unrelated = std::process::Command::new("python3")
++        .args([
++            "-c",
++            "import sys; print('ready',flush=True); sys.stdin.buffer.read(1)",
++        ])
++        .stdin(std::process::Stdio::piped())
++        .stdout(std::process::Stdio::piped())
++        .spawn()
++        .expect("unrelated child");
++    let mut ready = String::new();
++    std::io::BufRead::read_line(
++        &mut std::io::BufReader::new(unrelated.stdout.take().expect("stdout")),
++        &mut ready,
++    )
++    .expect("ready line");
++    assert_eq!(ready, "ready\n");
++    let ran = run_shaped(
++        &source,
++        Shape {
++            stack: Some(1 << 46),
++            ..SHAPE
++        },
++    )
++    .expect("run");
++    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
++    let unrelated_alive = unrelated.try_wait().expect("unrelated status").is_none();
++    std::io::Write::write_all(unrelated.stdin.as_mut().expect("stdin"), b"x")
++        .expect("release unrelated child");
++    assert!(unrelated.wait().expect("reap unrelated child").success());
++    assert!(
++        unrelated_alive,
++        "reservation failure touched an unrelated child"
++    );
++    assert_eq!(ran.stdout(), "48.1\n48.1\nprogress\n");
++    assert!(
++        !marker.exists(),
++        "no child may start before reservation succeeds"
++    );
++    std::fs::remove_dir(dir).expect("remove empty marker directory");
++}
++
++#[test]
++fn guarded_native_spawn_failure_releases_receiver_for_progress() {
++    if isolated(
++        "scheduler::tests::spawn_failure::guarded_native_spawn_failure_releases_receiver_for_progress",
++    ) {
++        return;
++    }
++    let source = "o=.k~new\nm=o~start('other')\ncall probe o\nsay m~result\nexit\nprobe: procedure\nuse arg o\nsignal on syntax name caught\nx=o~native(5)\nsay 'BODY RAN'\nreturn\ncaught: say condition('o')~code o~plain\nreturn\n::class k\n::method native external 'LIBRARY orxmethod TestIntArg'\n::method plain\nreturn 'progress'\n::method other\nsignal on syntax name caught\nx=self~native(5)\nreturn 'BODY RAN'\ncaught: return condition('o')~code self~plain\n";
++    let ran = run_shaped(
++        source,
++        Shape {
++            stack: Some(1 << 46),
++            ..SHAPE
++        },
++    )
++    .expect("run");
++    assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
++    assert_eq!(ran.stdout(), "48.1 progress\n48.1 progress\n");
++    assert_eq!(ran.exits, 0);
++    assert_eq!(ran.abandoned, 0);
++}
++
++#[test]
++fn configured_inline_and_fixed_saturation_are_not_spawn_errors() {
++    let disabled = crate::scheduler::Pool::new(1 << 46, 0);
++    assert!(matches!(disabled.reserve(), Ok(None)));
++    let pool = crate::scheduler::Pool::new(1 << 20, 1);
++    pool.fix_at_bound();
++    let worker = pool.reserve().expect("spawn").expect("worker");
++    assert!(matches!(pool.reserve(), Ok(None)));
++    let (sent, received) = std::sync::mpsc::channel();
++    worker.run(Box::new(move || sent.send(()).expect("receiver")));
++    received
++        .recv_timeout(std::time::Duration::from_secs(5))
++        .expect("body ran");
++}
+diff --git a/rust/crates/rexx-exec/src/test_process.rs b/rust/crates/rexx-exec/src/test_process.rs
+new file mode 100644
+index 000000000..1dc65d7ba
+--- /dev/null
++++ b/rust/crates/rexx-exec/src/test_process.rs
+@@ -0,0 +1,52 @@
++use std::process::{Command, Stdio};
++use std::time::{Duration, Instant};
++
++/// Runs the named unit test alone with bounded virtual address space and an
++/// open, empty stdin pipe. The resident cap is inherited from the test driver.
++pub(crate) fn isolated(name: &str) -> bool {
++    isolated_with_input(name, None)
++}
++
++#[expect(
++    clippy::disallowed_methods,
++    reason = "bounds the isolated test process using real time"
++)]
++pub(crate) fn isolated_with_input(name: &str, input: Option<&[u8]>) -> bool {
++    const CHILD: &str = "REXX_POOL_FAILURE_CHILD";
++    if std::env::var(CHILD).as_deref() == Ok(name) {
++        let pool = crate::scheduler::Pool::new(1 << 46, 1);
++        match pool.reserve() {
++            Err(_) => assert_eq!(pool.threads(), 0),
++            Ok(Some(worker)) => {
++                worker.run(Box::new(|| {}));
++                panic!("huge-stack seam unexpectedly spawned a worker");
++            }
++            Ok(None) => panic!("huge-stack seam selected configured inline mode"),
++        }
++        return false;
++    }
++    let executable = std::env::current_exe().expect("test executable");
++    let mut child = Command::new("python3")
++        .args(["-c", "import os,resource,sys; resource.setrlimit(resource.RLIMIT_AS,(8<<30,8<<30)); os.execv(sys.argv[1],sys.argv[1:])"])
++        .arg(executable).args(["--exact", name, "--nocapture"])
++        .env(CHILD, name).stdin(Stdio::piped()).spawn().expect("isolated test");
++    let mut writer = child.stdin.take().expect("open empty pipe");
++    if let Some(input) = input {
++        std::io::Write::write_all(&mut writer, input).expect("test input");
++    }
++    let deadline = Instant::now() + Duration::from_secs(25);
++    let status = loop {
++        if let Some(status) = child.try_wait().expect("wait") {
++            break status;
++        }
++        if Instant::now() >= deadline {
++            child.kill().expect("kill timed out child");
++            child.wait().expect("reap timed out child");
++            panic!("isolated test blocked, possibly reading stdin inline");
++        }
++        std::thread::sleep(Duration::from_millis(10));
++    };
++    drop(writer);
++    assert!(status.success(), "isolated test failed: {status}");
++    true
++}
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/enhanced_metaclass_method_identity.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/enhanced_metaclass_method_identity.txt
+new file mode 100644
+index 000000000..1a01f7e2b
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/enhanced_metaclass_method_identity.txt
+@@ -0,0 +1,32 @@
++count 31
++/* Nil-scoped metaclass entries retain their registered Method objects. */
++m = .method~new('PING', "return 'pong'")
++d = .directory~new
++d~ping = m
++d~install = "self~setMethod('OWN', 'return 17')"
++c = .class~enhanced(d, 'Remote')
++drop d m
++held = .WeakReference~new(c~instanceMethod('PING'))
++say 'entry' c~ping (held~value~scope == .nil)
++child = c~subclass('Child')
++say 'inherited' child~ping (child~instanceMethod('PING') == held~value)
++do i = 1 to 3
++  a = .array~new(10)
++  say 'held' (c~instanceMethod('PING') == held~value) (child~instanceMethod('PING') == held~value)
++  methods = c~instanceMethods(.nil)
++  found = 0
++  do while methods~available
++    if methods~index == 'PING' then do
++      found = found + 1
++      say 'listed' (methods~item == held~value) (methods~item~scope == .nil)
++    end
++    methods~next
++  end
++  say 'found' found
++end
++c~install
++say 'object' c~own (c~instanceMethod('OWN')~scope == .nil)
++say 'ordinary' .ordinary~ping (.ordinary~instanceMethod('PING')~scope == .ordinary)
++::class ordinary
++::method ping class
++  return 'ordinary'
+diff --git a/rust/crates/rexx-parse/tests/sourceline_oracle/executing_method_after_redefinition.txt b/rust/crates/rexx-parse/tests/sourceline_oracle/executing_method_after_redefinition.txt
+new file mode 100644
+index 000000000..334717f00
+--- /dev/null
++++ b/rust/crates/rexx-parse/tests/sourceline_oracle/executing_method_after_redefinition.txt
+@@ -0,0 +1,45 @@
++count 44
++/* An executing Method survives dictionary mutation and collection. */
++do prefetch = 0 to 1
++  do change over .array~of('replace', 'remove', 'hide')
++    .local~change = change
++    .local~prefetch = prefetch
++    .k~define('FOO', .k~method('BODY')~copy~~setPrivate~~setUnguarded)
++    .local~entered = .WeakReference~new(.k~method('FOO'))
++    .s~new~go
++  end
++end
++.k~define('FOO', .k~method('ALIASES')~copy~~setPrivate~~setUnguarded)
++.k~define('BAR', .k~method('ALIASES')~copy)
++.local~foo = .WeakReference~new(.k~method('FOO'))
++.local~bar = .WeakReference~new(.k~method('BAR'))
++.s~new~both
++exit
++::class k
++::method go
++  self~foo
++::method both
++  self~foo('FOO')
++::method body protected
++  if .prefetch then before = .context~executable
++  select
++    when .change == 'replace' then .k~define('FOO', .k~method('OTHER'))
++    when .change == 'remove' then .k~define('FOO')
++    otherwise .k~define('FOO', .nil)
++  end
++  a = .array~new(10)
++  m = .context~executable
++  say .prefetch .change (m == .entered~value) m~isGuarded m~isPrivate m~isProtected
++  say 'same' (m == .context~executable)
++::method aliases protected
++  use arg name
++  .k~define(name)
++  if name == 'FOO' then self~bar('BAR')
++  a = .array~new(10)
++  m = .context~executable
++  if name == 'FOO' then original = .foo~value
++  else original = .bar~value
++  say name (m == original) m~isGuarded m~isPrivate m~isProtected
++::method other
++  return 17
++::class s subclass k
+$ git log --oneline a7db381c765fafd81fe775245902d6476aefe072..61b661504
+$ git diff --stat a7db381c765fafd81fe775245902d6476aefe072..61b661504
+$ git diff -U10 a7db381c765fafd81fe775245902d6476aefe072..61b661504 -- rust .superpowers/sdd/2026-10-18-phase-9d/task-8.8e2-report.md .superpowers/sdd/2026-10-18-phase-9d/task-8.8e2-dispatch.md .superpowers/sdd/2026-10-18-phase-9d/task-8.8f-brief.md .superpowers/sdd/2026-10-18-phase-9d/task-8.8f-dispatch.md

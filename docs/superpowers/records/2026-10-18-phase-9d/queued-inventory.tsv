@@ -132,7 +132,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-14-filespec-string-arg.md	divergence	queued-probes/fspec/fspec.rex:1	closed:030af45a1	own probe: 88.909 on the oracle, a K rc 0 here; the same fix as native-routine-arguments-not-strings	closed:030af45a1
 2026-10-14-native-method-frames.md	divergence	-	closed:probe agrees	names StackFrame TESTNATIVECODEFRAME, that cluster's test	closed:probe agrees
 2026-10-14-routine-start-call-panic.md	divergence	queued-probes/rstart/rstart.rex:1	closed:fb86ce94f	own probe: a panic "a live activation", rc 101, where the oracle prints 1; its file marks it PRIORITY	closed:fb86ce94f
-2026-10-15-9b1-task-8b-review-minors.md	divergence	queued-probes/m1var/m1var.rex:1,queued-probes/m4def/m4def.rex:1	9d	own probes: m1 lists Z here and A on the oracle, m4 answers the new source here and the old one on the oracle	9d
+2026-10-15-9b1-task-8b-review-minors.md	divergence	queued-probes/m1var/m1var.rex:1,queued-probes/m4def/m4def.rex:1	after 9d	own probes: m1 lists Z here and A on the oracle, m4 answers the new source here and the old one on the oracle	after 9d
 2026-10-15-executable-flags-and-result.md	divergence	-	closed:ae6a6bd04	no probe recorded; the oracle is still to be measured	closed:ae6a6bd04
 2026-10-15-isguarded-copy-and-additional.md	divergence	queued-probes/isg/isg.rex:1,queued-probes/addl/addl.rex:1	closed:68e7f15d5	the review's probes still differ: isGuarded 1 against 0, additional[1] a against the whole string	closed:68e7f15d5
 2026-10-15-routines-table-silent-none.md	process	-	closed:2589e88b3	no probe; environment.rs build_package_string_table and identities.rs find_written_routine still answer Ok(None)	closed:2589e88b3
@@ -171,7 +171,7 @@ gate:phase-9a-gate.md:466	perf	-	9d	no probe; each is for the Phase 9 close call
 gate:phase-9a-gate.md:468	process	-	closed:pin rebuilt	/home/moritz/dev/repos/ooRexx-p9-pin/rexx-run exists and the 9d constraints measure against it	closed:pin rebuilt
 gate:phase-9a-gate.md:469	divergence	queued-probes/exttr/exttr.rex:1,queued-probes/t4c/t4c.rex:1	closed:probe agrees	the external CALL half agrees (exttr); Routine~new's >I> package is that cluster's mechanism	closed:probe agrees
 gate:phase-9a-gate.md:470	divergence	queued-probes/memcompile/memcompile.rex:1	closed:Phase 9b1	method-source retention is flat (its own row); the gc-trigger file was closed and removed in d81bacfad	closed:Phase 9b1
-gate:phase-9a-gate.md:471	divergence	queued-probes/stemunk/stemunk.rex:1	9d	the Stem half of directory-setmethod-unknown-traceback-line; probe still differs	9d
+gate:phase-9a-gate.md:471	divergence	queued-probes/stemunk/stemunk.rex:1	closed:a52fa561b	the Stem half of directory-setmethod-unknown-traceback-line; probe still differs	closed:a52fa561b
 gate:phase-9a-gate.md:472	process	-	closed:ecce67dad	no probe; the sibling of arity-harness-ignores-target-dir, rexx-bench-suite.rs:591 still joins ../../target	closed:ecce67dad
 gate:phase-9a-gate.md:473	perf	-	phase:9.1	a pointer to 2026-10-12-buffer-copy-uncharged.md	phase:9.1
 gate:phase-9a-gate.md:474	divergence	-	closed:probe agrees	no recorded probe; own probe did not reach the repeated entries, so it is not cited	closed:probe agrees
@@ -217,7 +217,7 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b
 2026-10-19-sortwith-on-foreign-class.md	divergence	-	closed:030af45a1	gap	closed:030af45a1
 2026-10-18-class-methods-no-argument.md	divergence	-	closed:probe agrees	gap	closed:probe agrees
 2026-10-19-sigterm-in-trace-delivery.md	divergence	-	closed:fb86ce94f	gap	closed:fb86ce94f
-2026-10-19-guarded-trace-destination-spin.md	divergence	-	9d	9d if lifting the pinned-guard-wait limit is tractable, else Phase 10	9d
+2026-10-19-guarded-trace-destination-spin.md	divergence	-	phase:10	9d if lifting the pinned-guard-wait limit is tractable, else Phase 10	phase:10
 2026-10-19-trace-destination-recursion-oom.md	divergence	-	closed:fb86ce94f	Task 6.10 regression	closed:fb86ce94f
 2026-10-18-sysfiletree-tree-directory-flaky.md	process	-	9d	flaky test	9d
 2026-10-20-halt-after-signal-on-syntax.md	divergence	-	closed:918e67f90	broken report for a HALT taken at a SIGNAL ON SYNTAX label	closed:918e67f90
