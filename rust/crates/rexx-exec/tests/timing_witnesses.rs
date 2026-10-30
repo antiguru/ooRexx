@@ -1,0 +1,40 @@
+//! Scheduling-independent observations for the redirected-target witness.
+
+mod support;
+
+use std::path::Path;
+use rexx_exec::{SimConfig, SwitchMode, run_program, run_program_collect_every_alloc};
+
+const EXPECTED: &[u8] = b"O:a slept 1\nO:b slept 0\nO:c slept 0\nsleep 0 3\nO:a waited 1\nO:b waited 0\nO:c waited 0\nsemaphore 0 3\nreleased\nO:a released 1\nO:b released 1\nO:c released 1\nguard 0 3 released 1\n";
+
+#[test]
+fn redirected_targets_preserve_wait_order_and_all_output() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/lang/command_redirected_target_waits_elsewhere.rex").canonicalize().unwrap();
+    let source = std::fs::read(&path).unwrap();
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("redirected-timing");
+    std::fs::create_dir_all(&dir).unwrap();
+    let invocation = || support::sidecar::invocation(&dir, &[], None).with_deadline(std::time::Duration::from_secs(30));
+    for (mode, stress) in [(None, false), (None, true), (Some("sim:1"), false), (Some("sim:2,uniform:0.2"), false), (Some("sim:3,pct:3,k=40"), true)] {
+        let mut invoke = invocation();
+        if let Some(mode) = mode {
+            invoke = invoke.with_switch_mode(SwitchMode::Sim(SimConfig::parse(mode).unwrap()));
+        }
+        let run = if stress {
+            run_program_collect_every_alloc(path.to_str().unwrap(), source.clone(), invoke)
+        } else {
+            run_program(path.to_str().unwrap(), source.clone(), invoke)
+        };
+        assert_eq!(run.exit_code, 0, "{mode:?} stress={stress}: {:?}", String::from_utf8_lossy(&run.stderr));
+        assert_eq!(run.stdout, EXPECTED, "{mode:?} stress={stress}: {}", String::from_utf8_lossy(&run.stdout));
+        assert!(run.stderr.is_empty(), "{:?}", String::from_utf8_lossy(&run.stderr));
+        if stress { assert!(run.collections > 0); }
+    }
+    let oracle = support::oracle::locate();
+    for _ in 0..8 {
+        let run = oracle.run_in(&path, &dir, &[]);
+        assert_eq!(run.termination, support::oracle::Termination::Exited(0));
+        assert_eq!(run.stdout, EXPECTED, "{}", String::from_utf8_lossy(&run.stdout));
+        assert!(run.stderr.is_empty(), "{:?}", String::from_utf8_lossy(&run.stderr));
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}
