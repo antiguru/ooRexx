@@ -31,6 +31,11 @@ fn conversion_and_trace_boundaries() {
                 source,
                 std::fs::read("../../corpus/lang/raise_untraced_renders_nothing.rex").unwrap()
             );
+        } else if path.file_stem().unwrap() == "reference-conversion-raises-in-clause" {
+            assert_eq!(
+                source,
+                std::fs::read("../../corpus/lang/reference_conversion_raises_in_clause.rex").unwrap()
+            );
         }
         let stressed = rexx_exec::run_program_collect_every_alloc(
             "probe.rex",

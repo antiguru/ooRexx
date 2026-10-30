@@ -1,5 +1,5 @@
 /* A reference's required string value that raises raises in its clause,
-   with one send. An untraced RAISE through a reference renders nothing. */
+   with one send. DESCRIPTION converts at RAISE under Deviation 83. */
 b1 = .once~new
 q1 = >b1
 signal on syntax name s1
