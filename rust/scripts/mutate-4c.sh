@@ -534,9 +534,11 @@ run_one "4. the . placeholder consumes no field" "${PARSE_RS}" DIVERGED DIVERGED
 # after the first re-reads the first source. `PARSE ARG a, b` then binds `b`
 # from argument one rather than argument two.
 run_one "5. the comma fence does not advance to the next source" "${PARSE_RS}" DIVERGED DIVERGED \
-'                cursor = self.next_template(&mut strings, parse, indent);
-                continue;' \
-'                continue;'
+'                let (next_source, next_cursor) = self.next_template(&mut strings, parse, indent)?;
+                cursor = next_cursor;
+                let spent = std::mem::replace(&mut source, next_source);
+                self.give_source(spent);' \
+'                cursor = Cursor::new(source.len());'
 
 # --- ADDRESS (Task 9) ------------------------------------------------------
 
