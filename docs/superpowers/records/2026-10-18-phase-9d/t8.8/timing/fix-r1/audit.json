@@ -1,0 +1,20 @@
+{
+  "status": "passed",
+  "base": "9ca84d4e2",
+  "source": "d7581cc4a",
+  "changed_source_files": [
+    "rust/corpus/lang/command_redirected_target_waits_elsewhere.rex",
+    "rust/crates/rexx-exec/tests/rexxutil_process.rs",
+    "rust/crates/rexx-exec/tests/rexxutil_process/owned_child.py",
+    "rust/crates/rexx-exec/tests/timing_witnesses.rs",
+    "rust/crates/rexx-parse/tests/sourceline_oracle/command_redirected_target_waits_elsewhere.txt"
+  ],
+  "production_source_changed": false,
+  "updated_closures": [
+    "2026-10-21-redirected-target-timed-line-flake.md",
+    "2026-10-26-redirected-target-waits-timing-flake.md",
+    "2026-10-27-reaped-child-test-load-flake.md"
+  ],
+  "runtime_pin": "/tmp/codex-p9d-t88-pins/8.8c-rexx",
+  "runtime_pin_sha256": "af52ecd6802b878e9d81be6440492f6bfdadd680628cb48b3224615c70d39a78"
+}

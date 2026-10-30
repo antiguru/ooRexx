@@ -1,4 +1,4 @@
-**CLOSED 2026-10-30 by Phase 9d Task 8.8c (949a7806b).**
+**CLOSED 2026-10-30 by Phase 9d Task 8.8c (d7581cc4a).**
 
 **OPEN, queued 2026-10-21 by the controller; proposed 9d (a flaky gated corpus program).**
 
@@ -14,6 +14,6 @@ Seen again by the Task 7.1 round-3 re-review: `guard 0 3 waited 0` in 2 of 3 cor
 
 ## Task 8.8c evidence
 
-The witness now prints completion and release properties instead of elapsed-time thresholds. Callback-started controls prevent command startup from satisfying the sleep and semaphore observations, and an external readiness event establishes guard ownership before command launch. Ordinary, collection-stress and seeded simulation runs agree with the retained oracle transcript, while sleep/wait omissions and an unguarded holder break the observation. The related 2026-10-26 redirected-target item has a separate closure for the same repair.
+The witness now records callback completion only after SysSleep returns, without consulting a competing alarm. Its command transcript proves continuation and complete output across the unrelated wait, while a deterministic virtual-clock control separately distinguishes the actual sleep from its omission. A notification held on an explicit semaphore exposes the earlier race and cannot change the corrected callback result, with semaphore and guard omission controls preserved. Ordinary, collection-stress, seeded simulation and oracle transcript checks pass, and the related 2026-10-26 item retains a separate closure.
 
 Evidence: `.superpowers/sdd/2026-10-18-phase-9d/task-8.8c-report.md` and `docs/superpowers/records/2026-10-18-phase-9d/t8.8/timing/`.

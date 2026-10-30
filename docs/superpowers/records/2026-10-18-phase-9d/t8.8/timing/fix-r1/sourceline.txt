@@ -1,0 +1,14 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 cargo test -j 4 -p rexx-parse --test sourceline_oracle
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.08s
+     Running tests/sourceline_oracle.rs (/tmp/codex-p9d-t88-target/debug/deps/sourceline_oracle-60f3ec4ab0f9f6e7)
+
+running 1 test
+test sourceline_matches_the_interpreter_for_every_corpus_program ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+exit=0 elapsed=0.164s

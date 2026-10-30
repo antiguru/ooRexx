@@ -1,0 +1,102 @@
+O:a slept 1
+O:b slept 0
+O:c slept 0
+sleep 0 3
+O:a waited 1
+O:b waited 0
+O:c waited 0
+semaphore 0 3
+holding
+released
+O:a released 1
+O:b released 1
+O:c released 1
+guard 0 3 released 1
+%SRCG%COUNT 87
+%SRCG%L/* A redirect target whose method waits on something other than the command
+%SRCG%L   while the child keeps writing: a sleep runs to its end, a semaphore wait
+%SRCG%L   ends at its post, and a guard another activity holds keeps the target's
+%SRCG%L   method out until it is released. The output that arrived meanwhile reaches
+%SRCG%L   the target afterwards. */
+%SRCG%Lo = .Sleeper~new
+%SRCG%Laddress system 'echo a; sleep 0.2; echo b; sleep 0.2; echo c' with output using (o)
+%SRCG%Lsay 'sleep' rc o~calls
+%SRCG%L.local~sem = .EventSemaphore~new
+%SRCG%L.local~posted = 0
+%SRCG%Lo = .Waiter~new
+%SRCG%Laddress system 'echo a; sleep 0.2; echo b; sleep 0.2; echo c' with output using (o)
+%SRCG%Lsay 'semaphore' rc o~calls
+%SRCG%L.local~guardReady = .EventSemaphore~new
+%SRCG%L.local~callbackEntered = .EventSemaphore~new
+%SRCG%L.local~released = 0
+%SRCG%Lo = .Guarded~new
+%SRCG%Lh = o~start('hold')
+%SRCG%L.guardReady~wait
+%SRCG%Laddress system 'echo a; sleep 0.2; echo b; sleep 0.2; echo c' with output using (o)
+%SRCG%Lsay 'guard' rc o~calls 'released' .released
+%SRCG%Lh~result
+%SRCG%Lexit
+%SRCG%L
+%SRCG%L::class Sleeper subclass OutputStream
+%SRCG%L::attribute calls
+%SRCG%L::method init
+%SRCG%L  self~calls = 0
+%SRCG%L::method lineout
+%SRCG%L  use arg line
+%SRCG%L  self~calls += 1
+%SRCG%L  slept = 0
+%SRCG%L  if line == 'a' then do
+%SRCG%L    -- Record completion after the unrelated wait returns. Duration is
+%SRCG%L    -- checked separately on the deterministic simulation clock.
+%SRCG%L    call SysSleep 1
+%SRCG%L    slept = 1
+%SRCG%L  end
+%SRCG%L  say 'O:'line 'slept' slept
+%SRCG%L  return 0
+%SRCG%L
+%SRCG%L::class Waiter subclass OutputStream
+%SRCG%L::attribute calls
+%SRCG%L::method init
+%SRCG%L  self~calls = 0
+%SRCG%L::method lineout
+%SRCG%L  use arg line
+%SRCG%L  self~calls += 1
+%SRCG%L  waited = 0
+%SRCG%L  if line == 'a' then do
+%SRCG%L    -- Start the poster after entry, then observe its post before returning.
+%SRCG%L    p = .Poster~new~start('post')
+%SRCG%L    .sem~wait
+%SRCG%L    waited = .posted
+%SRCG%L    p~result
+%SRCG%L  end
+%SRCG%L  say 'O:'line 'waited' waited
+%SRCG%L  return 0
+%SRCG%L
+%SRCG%L::class Poster
+%SRCG%L::method post
+%SRCG%L  call SysSleep 1
+%SRCG%L  .local~posted = 1
+%SRCG%L  .sem~post
+%SRCG%L
+%SRCG%L::class Guarded subclass OutputStream
+%SRCG%L::attribute calls
+%SRCG%L::method init
+%SRCG%L  self~calls = 0
+%SRCG%L::method hold
+%SRCG%L  -- Readiness is outside this guarded object and is posted while it is held.
+%SRCG%L  say 'holding'
+%SRCG%L  .guardReady~post
+%SRCG%L  -- Keep the guard until a callback actually starts trying to enter it.
+%SRCG%L  .callbackEntered~wait
+%SRCG%L  call SysSleep 1
+%SRCG%L  .local~released = 1
+%SRCG%L  say 'released'
+%SRCG%L::method lineout unguarded
+%SRCG%L  use arg line
+%SRCG%L  .callbackEntered~post
+%SRCG%L  return self~append(line)
+%SRCG%L::method append
+%SRCG%L  use arg line
+%SRCG%L  self~calls += 1
+%SRCG%L  say 'O:'line 'released' .released
+%SRCG%L  return 0

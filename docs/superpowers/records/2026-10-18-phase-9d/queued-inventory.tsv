@@ -225,7 +225,7 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b
 2026-10-20-call-on-delayed-reraise.md	divergence	-	closed:918e67f90	a CALL ON condition raised again while delayed runs the handler twice	closed:918e67f90
 2026-10-20-collect-stress-raise-additional-array.md	defect	-	closed:fb86ce94f	collect_stress panics: a live value freed on the RAISE ADDITIONAL path	closed:fb86ce94f
 2026-10-21-stdin-linein-then-charin.md	divergence	-	closed:3cd8cff5c	its own CLOSED line; Task 6.15 fix round 4 gives a file standard input one read position, and a start on a piped one is 93.958 on both sides	closed:3cd8cff5c
-2026-10-21-redirected-target-timed-line-flake.md	process	-	closed:949a7806b	flaky timed line in a gated corpus program	closed:949a7806b
+2026-10-21-redirected-target-timed-line-flake.md	process	-	closed:d7581cc4a	flaky timed line in a gated corpus program	closed:d7581cc4a
 2026-10-21-quick-native-calls-wall-bound-flake.md	process	-	closed:949a7806b	lib test bounded by 1 ms wall time flakes under load	closed:949a7806b
 2026-10-21-routine-new-call-frames.md	divergence	-	closed:68e7f15d5	frames of .Routine~new(...)~call name the wrong executable	closed:68e7f15d5
 2026-10-21-main-program-executable-annotations.md	divergence	-	closed:68e7f15d5	.context~executable~annotations refuses from the main program	closed:68e7f15d5
@@ -243,12 +243,12 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b
 2026-10-22-executable-at-quadratic-depth.md	defect	-	closed:5053fbd9b	executable_at walks the frame chain once per level, quadratic at the depth cap	closed:5053fbd9b
 2026-10-22-collect-stress-zero-collection-drift.md	process	-	9d	collect_stress zero-collection list drifted before Task 8.3; pruned, cause open	9d
 2026-10-26-file-date-time-dst-dependent.md	process	-	closed:949a7806b	rexxutil_file_date_time line 9 differs across the DST change, at base too	closed:949a7806b
-2026-10-26-redirected-target-waits-timing-flake.md	process	-	closed:949a7806b	collect_stress l0 subset flakes on a time(e) > 0.9 check	closed:949a7806b
+2026-10-26-redirected-target-waits-timing-flake.md	process	-	closed:d7581cc4a	collect_stress l0 subset flakes on a time(e) > 0.9 check	closed:d7581cc4a
 2026-10-26-main-program-level-during-requires-install.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/constant/probes/f1.rex	closed:5053fbd9b	the main PROGRAM level is missing from frames while its own ::REQUIRES install	closed:5053fbd9b
 2026-10-26-compile-failure-condition-names-caller.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/naming/probes/compile-condition/m.rex	closed:5053fbd9b	a compile failure condition names the caller package, the oracle the translated file	closed:5053fbd9b
 2026-10-26-library-rxmath-error-number.md	divergence	-	closed:probe agrees	LIBRARY rxmath raises 98.903, the oracle 90.998/90.999	closed:probe agrees
 2026-10-27-deadlock-report-shape.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/r2/probes/d2.rex	closed:probe agrees	a guard deadlock prints two reports here, one on the oracle; echoes differ	closed:probe agrees
-2026-10-27-reaped-child-test-load-flake.md	process	-	closed:949a7806b	a SysWait witness fails under workspace load, passes alone	closed:949a7806b
+2026-10-27-reaped-child-test-load-flake.md	process	-	closed:d7581cc4a	a SysWait witness fails under workspace load, passes alone	closed:d7581cc4a
 2026-10-27-varref-operator-traceback-line.md	divergence	-	closed:e620097f0	an operator on a variable reference omits the Compiled method traceback line	closed:e620097f0
 2026-10-27-string-equals-makestring-argument.md	divergence	-	closed:030af45a1	String~equals ignores a makeString argument here, converts it on the oracle	closed:030af45a1
 2026-10-27-stem-default-arithmetic-nostring.md	divergence	-	closed:6da312e62	a stem with a non-string default names the stem in arithmetic NOSTRING, the oracle the default	closed:6da312e62

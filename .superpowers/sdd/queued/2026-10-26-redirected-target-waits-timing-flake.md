@@ -1,4 +1,4 @@
-**CLOSED 2026-10-30 by Phase 9d Task 8.8c (949a7806b).**
+**CLOSED 2026-10-30 by Phase 9d Task 8.8c (d7581cc4a).**
 
 **OPEN, queued 2026-10-26 by the controller; proposed 9d (Task 8.8).**
 
@@ -11,6 +11,6 @@ redirected-target flake row. Open: make the wait observable without a wall-clock
 
 ## Task 8.8c evidence
 
-The shared redirected-target witness now uses logical wait and guard-release observations. Its focused test runs collection on every allocation, verifies that collections occurred, and preserves command status and all callback lines. Ordinary mode, seeded simulation policies and oracle runs retain the same transcript, and explicit omission controls show each wait remains observable. The program remains in phase-9.txt and the collector inclusion, with the related 2026-10-21 item closed separately.
+The shared witness records completion after SysSleep returns and checks the full callback transcript under collection on every allocation. Sleep-duration discrimination now belongs to a separate deterministic virtual-clock control, which reports advancement for the real call and none for its omission. The late-notification regression, semaphore omission and guard-holder controls pass with the ordinary, stress, seeded simulation and oracle transcripts. The program remains in phase-9.txt and the collector inclusion, with the related 2026-10-21 item closed separately.
 
 Evidence: `.superpowers/sdd/2026-10-18-phase-9d/task-8.8c-report.md` and `docs/superpowers/records/2026-10-18-phase-9d/t8.8/timing/`.
