@@ -31,6 +31,8 @@ mod selection;
 #[path = "support/suite_rows.rs"]
 mod suite_rows;
 mod support;
+#[path = "suite/diagnostics.rs"]
+mod diagnostics;
 mod watchdog;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -137,6 +139,7 @@ impl CapKind {
 }
 
 /// One group on one side. A test is its upper-cased method name.
+#[derive(Debug)]
 pub struct GroupRun {
     /// `dir/group`, as `base/bif/C2X`.
     pub group: String,
@@ -619,6 +622,7 @@ pub fn run_group_on_oracle_from(
         started_in_file(&marker(&run)),
         ORACLE_DEADLINE,
     );
+    diagnostics::capture(&run, "oracle", &process, &result);
     remove_work(&work);
     result
 }
@@ -669,7 +673,9 @@ pub fn run_group_on_crate_within(
             deadline,
         );
         let last = tests.last().cloned();
-        let Some(_) = record(&mut result, &process, tests, deadline) else {
+        let reason = record(&mut result, &process, tests, deadline);
+        diagnostics::capture(&run, "crate", &process, &result);
+        let Some(_) = reason else {
             break;
         };
         let Some(last) = last else {

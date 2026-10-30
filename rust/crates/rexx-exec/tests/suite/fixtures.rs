@@ -215,8 +215,8 @@ fn a_child_refusing_on_the_inherited_stderr_leaves_the_run_ended_normally() {
     let run = crate_run(&settings(), "ChildRefuses");
     assert_eq!(run.iterations, 1);
     assert!(run.blocked.is_empty(), "{:?}", run.blocked);
-    assert_eq!(run.passed, names(&["TEST_A"]));
-    assert!(run.ended_normally);
+    assert_eq!(run.passed, names(&["TEST_A"]), "{run:#?}");
+    assert!(run.ended_normally, "{run:#?}");
 }
 
 #[test]
@@ -402,4 +402,29 @@ fn discovery_finds_groups_at_every_depth_in_path_order() {
 #[test]
 fn the_suite_revision_is_the_recorded_one() {
     super::suite_revision();
+}
+
+
+/// A bounded diagnostic of the original group, with metadata traces added
+/// only to a private source copy. Passing this does not close the queued flake.
+#[test]
+#[ignore = "bounded SysFileTree diagnosis, run explicitly with retained records"]
+fn sysfiletree_group_retains_assertion_and_metadata_context() {
+    let source = super::groups_root().join("base/rexxutil/SysFileTree.testGroup");
+    let private = scratch_run("sysfiletree-diagnostic-source");
+    fs::create_dir_all(&private).unwrap();
+    let mut text = fs::read_to_string(source).unwrap();
+    text = text.replace("  use strict arg line, typeT, typeS, file, message", "  use strict arg line, typeT, typeS, file, message\n  .error~say('SFT assert' message 'actual='line 'expected='file~absolutePath 'mtime='file~lastModified 'size='file~length 'cwd='directory() 'TZ='value('TZ', , 'ENVIRONMENT'))");
+    text = text.replace("-- will run exactly once after all tests have finished", "  .error~say('SFT setup complete cwd='directory())\n  do f over allFiles\n    .error~say('SFT metadata' f~absolutePath f~lastModified f~length)\n  end\n\n-- will run exactly once after all tests have finished");
+    text = text.replace("::method remove class\n  expose allFiles root current", "::method remove class\n  expose allFiles root current\n  .error~say('SFT teardown cwd='directory())");
+    fs::write(private.join("SysFileTree.testGroup"), text).unwrap();
+    let oracle = run_group_on_oracle_from(&private, "", "SysFileTree", &BTreeSet::new());
+    let settings = CrateSettings { root: private.clone(), ..settings() };
+    let ours = run_group_on_crate_within(&settings, "", "SysFileTree", &BTreeSet::new(), Duration::from_secs(60));
+    eprintln!("SysFileTree oracle={oracle:#?} crate={ours:#?}");
+    assert!(oracle.failed.is_empty(), "{oracle:#?}");
+    assert!(ours.failed.is_empty(), "{ours:#?}");
+    assert!(oracle.passed.contains("TEST_TREE_DIRECTORY"), "{oracle:#?}");
+    assert!(ours.passed.contains("TEST_TREE_DIRECTORY"), "{ours:#?}");
+    fs::remove_dir_all(private.parent().unwrap()).unwrap();
 }
