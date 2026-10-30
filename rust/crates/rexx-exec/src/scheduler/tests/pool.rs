@@ -234,9 +234,7 @@ fn run(source: &str, pool_stack: Option<usize>) -> Ran {
 /// thread panicked.
 pub(super) fn run_shaped(source: &str, shape: Shape) -> std::thread::Result<Ran> {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../build/lib")
-        .canonicalize()
-        .expect("the worktree's build/lib is three directories above this crate");
+        .join("../../../build/lib");
     let invocation = Invocation::none()
         .with_deadline(shape.deadline)
         .with_environment(vec![

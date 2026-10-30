@@ -14,7 +14,7 @@ use std::os::unix::ffi::OsStrExt as _;
 use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
 
-use super::{EEXIST, move_file};
+use super::{EEXIST, finish_move, move_file};
 
 fn bytes(path: &Path) -> &[u8] {
     path.as_os_str().as_bytes()
@@ -53,23 +53,16 @@ impl Drop for Scratch {
 /// link, and a target that is a dangling link answers `EEXIST`. The oracle answers an
 /// uninitialised errno here (`corpus/oracle-crashes.txt` entry 39), so this is
 /// this crate's own answer, the one this checkout's `interpreter/` gives. The
-/// two directories are this crate's target directory and the system's
-/// temporary directory, and the test first checks that a rename between them
-/// is refused with `EXDEV`, failing where they are one file system.
+/// initial rename is refused with `EXDEV`, then the production fallback runs
+/// against real files without requiring a second mounted file system.
 #[test]
 fn a_move_across_file_systems_copies_and_unlinks() {
-    let here = Scratch::new(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp"));
+    let here = Scratch::new(&std::env::temp_dir());
     let there = Scratch::new(&std::env::temp_dir());
 
-    let probe = here.join("probe");
-    fs::write(&probe, b"").expect("a probe file");
-    assert_eq!(
-        rustix::fs::rename(bytes(&probe), bytes(&there.join("probe"))),
-        Err(rustix::io::Errno::XDEV),
-        "this test needs {} and {} on different file systems",
-        here.0.display(),
-        there.0.display()
-    );
+    let cross_device_move = |from: &Path, to: &Path| {
+        finish_move(bytes(from), bytes(to), Err(rustix::io::Errno::XDEV))
+    };
 
     let from = here.join("f.txt");
     fs::write(&from, b"data").expect("the source");
@@ -81,7 +74,7 @@ fn a_move_across_file_systems_copies_and_unlinks() {
         .and_then(|file| file.set_modified(modified))
         .expect("its time");
     let to = there.join("f.txt");
-    assert_eq!(move_file(bytes(&from), bytes(&to)), 0);
+    assert_eq!(cross_device_move(&from, &to), 0);
     assert!(!from.exists(), "the source is unlinked");
     assert_eq!(fs::read(&to).expect("the target"), b"data");
     let meta = fs::metadata(&to).expect("the target");
@@ -91,7 +84,7 @@ fn a_move_across_file_systems_copies_and_unlinks() {
     let link = here.join("link");
     std::os::unix::fs::symlink("f.txt", &link).expect("a link");
     let moved = there.join("link");
-    assert_eq!(move_file(bytes(&link), bytes(&moved)), 0);
+    assert_eq!(cross_device_move(&link, &moved), 0);
     assert!(fs::symlink_metadata(&link).is_err(), "the link is unlinked");
     assert_eq!(
         fs::read_link(&moved).expect("still a link"),
@@ -102,10 +95,27 @@ fn a_move_across_file_systems_copies_and_unlinks() {
     fs::write(&second, b"more").expect("a second source");
     let dangling = there.join("dangling");
     std::os::unix::fs::symlink("nowhere", &dangling).expect("a dangling link");
-    assert_eq!(move_file(bytes(&second), bytes(&dangling)), EEXIST);
+    assert_eq!(cross_device_move(&second, &dangling), EEXIST);
     assert!(
         !there.join("nowhere").exists(),
         "nothing is written through the link"
     );
     assert_eq!(fs::read(&second).expect("the source stays"), b"more");
+}
+
+#[test]
+fn a_move_on_one_file_system_renames_without_copying() {
+    let scratch = Scratch::new(&std::env::temp_dir());
+    let from = scratch.join("from");
+    let to = scratch.join("to");
+    fs::write(&from, b"renamed").expect("source");
+    let before = fs::metadata(&from).expect("source metadata");
+    assert_eq!(move_file(bytes(&from), bytes(&to)), 0);
+    assert!(!from.exists());
+    assert_eq!(fs::read(&to).expect("target"), b"renamed");
+    assert_eq!(fs::metadata(&to).expect("target metadata").ino(), before.ino());
+    fs::write(&from, b"kept").expect("second source");
+    assert_eq!(move_file(bytes(&from), bytes(&to)), EEXIST);
+    assert_eq!(fs::read(&from).expect("source remains"), b"kept");
+    assert_eq!(finish_move(bytes(&from), bytes(&to), Err(rustix::io::Errno::ACCES)), 13);
 }

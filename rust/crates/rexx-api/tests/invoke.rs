@@ -44,22 +44,22 @@ fn repository_root() -> PathBuf {
         .expect("the repository root is three directories above this crate")
 }
 
-/// The oracle's own build of the `rxregexp` extension, which D5's amendment
-/// makes the instrument: it is loaded, never rebuilt.
+/// The checkout-local `rxregexp` extension, kept separate from the oracle
+/// build under D5's amendment: it is loaded, never rebuilt by this test.
 fn rxregexp() -> load::Library {
     let path = repository_root().join("build/lib/librxregexp.so");
     load::open_path(&path, "rxregexp")
         .expect("the extension asks for 4.0.0, which is below this interpreter")
-        .expect("the extension publishes RexxGetPackage")
+        .expect("checkout-local extension missing or invalid: run python3 rust/scripts/test_preflight.py")
 }
 
-/// The oracle's own build of the `rxmath` extension, whose routines are all
+/// The checkout-local `rxmath` extension, whose routines are all
 /// typed (`extensions/rxmath/rxmath.cpp:617-638`).
 fn rxmath() -> load::Library {
     let path = repository_root().join("build/lib/librxmath.so");
     load::open_path(&path, "rxmath")
         .expect("the extension asks for 4.0.0, which is below this interpreter")
-        .expect("the extension publishes RexxGetPackage")
+        .expect("checkout-local extension missing or invalid: run python3 rust/scripts/test_preflight.py")
 }
 
 // ------------------------------------------- what the extension called back

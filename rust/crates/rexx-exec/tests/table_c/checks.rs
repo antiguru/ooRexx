@@ -384,7 +384,7 @@ pub(crate) fn check_probe_text(
             subject: probe.to_string(),
             detail: format!(
                 "the committed probe is not what its row derives. The derivation in \
-                 gate_table_c.rs is the definition of this program, so a difference means \
+                 tests/table_c/probes.rs is the definition of this program, so a difference means \
                  the file asks something other than what its row says it asks -- which a \
                  comparison against the oracle cannot see, because a probe asking about \
                  the wrong subject agrees for the wrong reason.\n    line {at} derived:   \

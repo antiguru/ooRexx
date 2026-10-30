@@ -71,7 +71,7 @@ fn a_seed_gives_one_trace_hash_in_two_processes() {
     let lib = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../build/lib")
         .canonicalize()
-        .expect("the worktree's build/lib");
+        .expect("checkout-local build/lib missing: run python3 rust/scripts/test_preflight.py");
     let dir = std::env::temp_dir().join(format!("rexx-sim-hash-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("a directory");
     std::fs::write(dir.join("p.rex"), TIMED_NATIVE).expect("the program written");

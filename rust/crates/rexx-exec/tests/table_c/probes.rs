@@ -76,7 +76,7 @@ pub(crate) fn class_probe_text(name: &str) -> String {
          \x20  and then the questions the class surface is wired by: ~id, ~class,\n\
          \x20  ~superClass, ~superClasses, ~metaClass and ~isA(.Class). Derived\n\
          \x20  from corpus/docs/class-set.txt by\n\
-         \x20  crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on\n\
+         \x20  crates/rexx-exec/tests/table_c/probes.rs, which re-derives this file on\n\
          \x20  every run and compares it in both directions. */\n"
     );
     for line in class_probe_entry_questions(name) {
@@ -95,7 +95,7 @@ pub(crate) fn edge_probe_text(child: &str, parent: &str) -> String {
          \x20  {child} below {parent}, which claims {parent} is PRESENT IN\n\
          \x20  {child}'s ~superClasses and never that it is the whole of it.\n\
          \x20  Derived from corpus/docs/hierarchy-edges.txt by\n\
-         \x20  crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on\n\
+         \x20  crates/rexx-exec/tests/table_c/probes.rs, which re-derives this file on\n\
          \x20  every run and compares it in both directions. */\n"
     );
     text.push_str(&format!("say 'child' .{child}~id\n"));
@@ -143,7 +143,7 @@ pub(crate) fn method_probe_text(
             "/* Table C method rows: {class}, class arm -- .{class}~hasMethod(\"M\") for\n\
              \x20  every method corpus/docs/class-methods.txt documents on this arm,\n\
              \x20  one line per row and in the row set's own order. Derived by\n\
-             \x20  crates/rexx-exec/tests/gate_table_c.rs, which re-derives this file on\n\
+             \x20  crates/rexx-exec/tests/table_c/probes.rs, which re-derives this file on\n\
              \x20  every run and compares it in both directions. */\n"
         ),
         (_, Construction::Constructs { program, directive }) => {
@@ -162,7 +162,7 @@ pub(crate) fn method_probe_text(
                  \x20  expression is corpus/docs/class-set.txt's committed construction\n\
                  \x20  program for this class, and carrying one is what `covered` claims.\n\
                  {carries}\
-                 \x20  Derived by crates/rexx-exec/tests/gate_table_c.rs, which re-derives\n\
+                 \x20  Derived by crates/rexx-exec/tests/table_c/probes.rs, which re-derives\n\
                  \x20  this file on every run and compares it in both directions. */\n"
             )
         }
@@ -172,7 +172,7 @@ pub(crate) fn method_probe_text(
              \x20  {reason}.\n\
              \x20  So ~new raises and no line below it is reached; the row's evidence\n\
              \x20  is that raise, which is what the row set says there is to have.\n\
-             \x20  Derived by crates/rexx-exec/tests/gate_table_c.rs, which re-derives\n\
+             \x20  Derived by crates/rexx-exec/tests/table_c/probes.rs, which re-derives\n\
              \x20  this file on every run and compares it in both directions. */\n"
         ),
     };

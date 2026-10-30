@@ -187,14 +187,14 @@ pub(super) fn for_each_variable_name(
     }
 }
 
-/// `for_each_variable_in_expr` for an optional expression.
+/// `visit_expr` for an optional expression.
 fn visit_opt(expr: &Option<Expr>, symbols: &SymbolTable, f: &mut impl FnMut(&str)) {
     if let Some(expr) = expr {
         visit_expr(expr, symbols, f);
     }
 }
 
-/// `for_each_variable_in_expr` over an argument list, whose omitted positions
+/// `visit_expr` over an argument list, whose omitted positions
 /// hold no node.
 fn visit_list(args: &[Option<Expr>], symbols: &SymbolTable, f: &mut impl FnMut(&str)) {
     for arg in args.iter().flatten() {

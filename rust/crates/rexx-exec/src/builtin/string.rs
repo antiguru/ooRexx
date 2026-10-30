@@ -83,6 +83,16 @@ pub(crate) fn delete_range(bytes: &mut Vec<u8>, begin: usize, range: Option<usiz
 
 /// The 1-based offset of the first `needle` at or after `start` that
 /// `StringUtil::pos` finds within `range` bytes of `start`, or 0 for no match.
+/// `start` is zero-based and an empty needle never matches.
+///
+/// `StringUtil::pos` rescans after a rejected candidate with the length
+/// measured from that candidate, so the next search can reach one byte beyond
+/// the window. Thus `pos('an','axan',1,3)` is 3, but
+/// `pos('an','zxan',1,3)` is 0 because no candidate inside the window starts
+/// a rescan. The overrun does not accumulate across rejected candidates.
+/// Unlike the C++ search, this does not match the string's NUL terminator:
+/// `pos('a'||'00'x,'aa')` answers 0 under Deviation 3, since copying through
+/// that C++ match can crash `changestr` (oracle-crashes.txt entry 3).
 pub(crate) fn find_forward(haystack: &[u8], needle: &[u8], start: usize, range: usize) -> usize {
     // `haystack.len() - start` underflows for a start past the end, which is
     // exactly the case the guard below rejects; taking the saturating

@@ -45,7 +45,7 @@ fn rxregexp() -> load::Library {
     let path = repository_root().join("build/lib/librxregexp.so");
     load::open_path(&path, "rxregexp")
         .expect("the extension asks for 4.0.0, which is below this interpreter")
-        .expect("the extension publishes RexxGetPackage")
+        .expect("checkout-local extension missing or invalid: run python3 rust/scripts/test_preflight.py")
 }
 
 // --------------------------------------------------- the interpreter's side

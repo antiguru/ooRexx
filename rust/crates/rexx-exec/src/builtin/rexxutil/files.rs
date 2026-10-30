@@ -195,7 +195,11 @@ fn move_file(from: &[u8], to: &[u8]) -> i32 {
     if same_paths(from, to) || is_regular(to) {
         return EEXIST;
     }
-    match rustix::fs::rename(from, to) {
+    finish_move(from, to, rustix::fs::rename(from, to))
+}
+
+fn finish_move(from: &[u8], to: &[u8], renamed: rustix::io::Result<()>) -> i32 {
+    match renamed {
         Ok(()) => return 0,
         Err(errno) if errno != Errno::XDEV => return errno.raw_os_error(),
         Err(_) => {}

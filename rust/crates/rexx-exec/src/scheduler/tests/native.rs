@@ -51,7 +51,7 @@ fn counted_watch(
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../build/lib")
         .canonicalize()
-        .expect("the worktree's build/lib is three directories above this crate");
+        .expect("checkout-local build/lib missing: run python3 rust/scripts/test_preflight.py");
     let invocation = invocation.with_environment(vec![(
         b"LD_LIBRARY_PATH".to_vec(),
         directory.into_os_string().into_encoded_bytes(),

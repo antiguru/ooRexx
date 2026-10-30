@@ -727,7 +727,7 @@ fn a_library_backed_routine_installs_and_runs_when_it_is_called() {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../build/lib")
         .canonicalize()
-        .expect("the worktree's build/lib is three directories above this crate");
+        .expect("checkout-local build/lib missing: run python3 rust/scripts/test_preflight.py");
     let run = |source: &[u8]| {
         let invocation = crate::Invocation::none().with_environment(vec![(
             b"LD_LIBRARY_PATH".to_vec(),
@@ -766,7 +766,7 @@ fn an_extension_reading_the_instance_reaches_its_table() {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../build/lib")
         .canonicalize()
-        .expect("the worktree's build/lib is three directories above this crate");
+        .expect("checkout-local build/lib missing: run python3 rust/scripts/test_preflight.py");
     let invocation = crate::Invocation::none().with_environment(vec![(
         b"LD_LIBRARY_PATH".to_vec(),
         directory.into_os_string().into_encoded_bytes(),
@@ -798,7 +798,7 @@ fn an_extensions_raise_with_substitutions_is_the_calls_condition() {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../build/lib")
         .canonicalize()
-        .expect("the worktree's build/lib is three directories above this crate");
+        .expect("checkout-local build/lib missing: run python3 rust/scripts/test_preflight.py");
     let invocation = crate::Invocation::none().with_environment(vec![(
         b"LD_LIBRARY_PATH".to_vec(),
         directory.into_os_string().into_encoded_bytes(),
@@ -827,7 +827,7 @@ fn a_routine_a_required_library_exports_runs_rather_than_answering_43_1() {
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../build/lib")
         .canonicalize()
-        .expect("the worktree's build/lib is three directories above this crate");
+        .expect("checkout-local build/lib missing: run python3 rust/scripts/test_preflight.py");
     let run = |source: &[u8]| {
         let invocation = crate::Invocation::none().with_environment(vec![(
             b"LD_LIBRARY_PATH".to_vec(),

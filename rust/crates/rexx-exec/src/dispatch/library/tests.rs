@@ -27,17 +27,17 @@ fn worktree_library_directory() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../build/lib")
         .canonicalize()
-        .expect("the worktree's build/lib is three directories above this crate")
+        .expect("checkout-local build/lib missing: run python3 rust/scripts/test_preflight.py")
 }
 
-/// The oracle's `librxregexp.so`, opened by path.
+/// The checkout-local `librxregexp.so`, opened by path.
 fn open_rxregexp() -> rexx_api::load::Library {
     rexx_api::load::open_path(
         &worktree_library_directory().join("librxregexp.so"),
         "rxregexp",
     )
     .expect("the extension asks for 4.0.0, which is below this interpreter")
-    .expect("the extension publishes RexxGetPackage")
+    .expect("checkout-local extension missing or invalid: run python3 rust/scripts/test_preflight.py")
 }
 
 /// An interpreter started with an `LD_LIBRARY_PATH` naming that
@@ -173,9 +173,9 @@ fn a_version_refused_library_raises_once_and_is_held() {
 }
 
 /// **The end-to-end witness answers the same under a collection at every
-/// allocation as it does under none.** The stress harness cannot say this:
-/// `collect_stress` reads `phase-8.txt` last and aborts on a pre-existing
-/// panic before it gets there.
+/// allocation as it does under none.** The stress harness also reads
+/// `phase-8.txt` and `phase-9.txt` in its corpus union and compares plain and
+/// stressed outcomes. This focused test additionally pins the expected stdout.
 ///
 /// **What it does not say**, measured: with `Activity::object_roots`
 /// dropping `native_handles` entirely this still passes, because the

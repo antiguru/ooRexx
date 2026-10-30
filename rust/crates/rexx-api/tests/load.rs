@@ -9,7 +9,7 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! The loader, run against the oracle's own compiled extension.
+//! The loader, run against the checkout-local compiled extension.
 
 use rexx_api::layout::{RexxMethodEntry, RexxPackageEntry, RexxRoutineEntry};
 use rexx_api::load::{self, CURRENT_INTERPRETER_VERSION, CURRENT_LANGUAGE_LEVEL, Failure};
@@ -24,8 +24,8 @@ fn repository_root() -> PathBuf {
         .expect("the repository root is three directories above this crate")
 }
 
-/// The oracle's own build of the `rxregexp` extension, which D5's amendment
-/// makes the instrument: it is loaded, never rebuilt.
+/// The checkout-local `rxregexp` extension, kept separate from the oracle
+/// build under D5's amendment: it is loaded, never rebuilt by this test.
 fn rxregexp() -> PathBuf {
     repository_root().join("build/lib/librxregexp.so")
 }
@@ -33,7 +33,7 @@ fn rxregexp() -> PathBuf {
 fn open_rxregexp() -> load::Library {
     load::open_path(&rxregexp(), "rxregexp")
         .expect("the extension asks for 4.0.0, which is below this interpreter")
-        .expect("the extension publishes RexxGetPackage")
+        .expect("checkout-local extension missing or invalid: run python3 rust/scripts/test_preflight.py")
 }
 
 /// The style every row of `rxregexp_methods` carries, `METHOD_TYPED_STYLE`
@@ -116,7 +116,7 @@ fn a_search_directory_resolves_a_name_the_undecorated_attempt_misses() {
     );
     let found = load::open("rxregexp", &[directory])
         .expect("the extension asks for 4.0.0, which is below this interpreter")
-        .expect("the extension publishes RexxGetPackage");
+        .expect("checkout-local extension missing or invalid: run python3 rust/scripts/test_preflight.py");
     assert_eq!(found.name(), Some(b"rxregexp".as_slice()));
 }
 

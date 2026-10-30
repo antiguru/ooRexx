@@ -1,5 +1,11 @@
 # Working in this crate tree
 
+Run `python3 scripts/test_preflight.py` from `rust/` before workspace gates.
+It refuses with missing checkout-local native libraries, ooTest sources, reference sources and setup commands.
+Use `memcap 8G python3 scripts/test_preflight.py -- cargo test --workspace -j4` to check prerequisites before starting Cargo.
+Keep `CARGO_INCREMENTAL=0` and the selected target directory in the environment of that command.
+The preflight checks input paths, while the full suite gate still verifies the actual ooTest SVN revision.
+
 A clean-room Rust reimplementation of ooRexx.
 Correctness is defined **differentially**: a change is right when its output matches the C++ interpreter byte for byte, not when it looks right.
 

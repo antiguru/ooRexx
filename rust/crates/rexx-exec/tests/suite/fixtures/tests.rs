@@ -417,8 +417,10 @@ fn discovery_finds_groups_at_every_depth_in_path_order() {
 }
 
 #[test]
-fn the_suite_revision_is_the_recorded_one() {
-    super::suite_revision();
+fn the_recorded_suite_revision_is_a_revision_number() {
+    let recorded = fs::read_to_string(super::worktree().join("rust").join(super::REVISION_FILE))
+        .expect("the recorded suite revision");
+    assert!(recorded.trim().parse::<u64>().is_ok(), "{recorded:?}");
 }
 
 /// A bounded diagnostic of the original group, with metadata traces added

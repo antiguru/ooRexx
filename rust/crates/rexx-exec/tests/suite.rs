@@ -129,11 +129,11 @@ pub enum CapKind {
 }
 
 impl CapKind {
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            CapKind::Memcap => "memcap 2G",
-            CapKind::UlimitFallback => "ulimit -v 4194304 (no memcap)",
-            CapKind::OracleUlimit => "ulimit -v 1048576",
+            CapKind::Memcap => format!("memcap {CRATE_MEMORY}"),
+            CapKind::UlimitFallback => format!("ulimit -v {FALLBACK_LIMIT_KIB} (no memcap)"),
+            CapKind::OracleUlimit => format!("ulimit -v {ORACLE_MEMORY_LIMIT_KIB}"),
         }
     }
 }
@@ -728,7 +728,7 @@ pub fn crate_run_once(
         "--foreground".to_string(),
         "-s".to_string(),
         "KILL".to_string(),
-        deadline.as_secs().max(1).to_string(),
+        deadline.as_secs_f64().to_string(),
         bin.join("rexx").to_string_lossy().into_owned(),
     ];
     words.extend(driver_args(run, &group_file));
@@ -797,7 +797,7 @@ fn table_row(side: &str, run: &GroupRun) -> String {
             .unwrap_or_else(|| "-".to_string()),
         run.iterations.to_string(),
         if run.ended_normally { "yes" } else { "no" }.to_string(),
-        run.cap.label().to_string(),
+        run.cap.label(),
         run.tests_ran.clone().unwrap_or_else(|| "-".to_string()),
     ]
     .join("\t")
