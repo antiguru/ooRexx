@@ -94,3 +94,17 @@ fn runtime_candidates_use_this_build_target() {
         .expect("build rexx in the same CARGO_TARGET_DIR");
     eprintln!("selected interpreter: {}", selected.display());
 }
+
+#[test]
+fn relative_target_under_cargo_tests_uses_the_actual_executable_target() {
+    let manifest = Path::new("/workspace/crates/rexx-bench");
+    let exe = Path::new("/actual/target/release/deps/rexx-bench-suite-hash");
+    assert_eq!(
+        rust_binary_candidates_for(Some(OsStr::new("custom")), manifest, exe, manifest),
+        [PathBuf::from("/actual/target/release/rexx"), PathBuf::from("/actual/target/debug/rexx")]
+    );
+    assert_eq!(
+        rust_binary_candidates_for(Some(OsStr::new("/override")), manifest, exe, manifest),
+        [PathBuf::from("/override/release/rexx"), PathBuf::from("/override/debug/rexx")]
+    );
+}
