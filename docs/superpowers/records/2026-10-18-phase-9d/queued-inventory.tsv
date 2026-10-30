@@ -62,7 +62,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-07-debug-pause-skipped-after-flowed-clause.md	divergence	queued-probes/pa/pa.rex:1	closed:probe agrees	c1 p1 p2 c3 p3 c4 on both	closed:probe agrees
 2026-10-07-interpret-syntax-traceback-line.md	divergence	queued-probes/isyntb/isyntb.rex:1	closed:probe agrees	both print 1 *-* y=(; and "at "("" for the INTERPRET form	closed:probe agrees
 2026-10-07-seeded-random-switch-mode.md	design	-	closed:Phase 6.1	the simulation mode shipped in Phase 6.1 (crates/rexx-exec/src/sim.rs, sim:trace replay)	closed:Phase 6.1
-2026-10-07-unjudged-scheduler-mutants.md	process	-	9d	no probe; six scheduler mutants stay green and none is judged observable or not	9d
+2026-10-07-unjudged-scheduler-mutants.md	process	-	closed:3c76dbeeb	no probe; six scheduler mutants stay green and none is judged observable or not	closed:3c76dbeeb
 2026-10-09-full-pool-inline-command-hang.md	divergence	-	closed:51782fcb8	RESOLVED in its first line; not re-probed (fills a 64-thread pool); scheduler/tests/pool.rs holds its tests	closed:51782fcb8
 2026-10-09-literals-rows-need-a-test-case.md	process	-	closed:98caea3de	RESOLVED in its first line; tests/assertions.rs:208 EXEMPT is empty	closed:98caea3de
 2026-10-09-wrong-type-native-rows-name-phase-9.md	process	-	closed:ae86f4d04	RESOLVED in its first line; a_native_row_on_a_receiver_of_another_class_refuses_its_type is in dispatch/tests.rs	closed:ae86f4d04

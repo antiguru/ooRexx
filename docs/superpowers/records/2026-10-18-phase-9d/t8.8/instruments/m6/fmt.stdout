@@ -1,0 +1,19 @@
+Diff in /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/src/scheduler/tests/mutants.rs:278:
+         0,
+         "the incoming sort must not inherit the outgoing request: {pinning:?}"
+     );
+[31m-    assert_eq!(pinning.deferred_slices.values().sum::<u64>(), 0, "{pinning:?}");
+[m[31m-    assert_eq!(pinning.pinned_yields.values().sum::<u64>(), 0, "{pinning:?}");
+[m[32m+    assert_eq!(
+[m[32m+        pinning.deferred_slices.values().sum::<u64>(),
+[m[32m+        0,
+[m[32m+        "{pinning:?}"
+[m[32m+    );
+[m[32m+    assert_eq!(
+[m[32m+        pinning.pinned_yields.values().sum::<u64>(),
+[m[32m+        0,
+[m[32m+        "{pinning:?}"
+[m[32m+    );
+[m }
+ 
+ /// A terminal REPLY's slice request stays with its outgoing activity.

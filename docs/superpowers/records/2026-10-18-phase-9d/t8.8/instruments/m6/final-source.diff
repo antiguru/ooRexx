@@ -1,0 +1,82 @@
+diff --git a/rust/crates/rexx-exec/src/scheduler/tests/mutants.rs b/rust/crates/rexx-exec/src/scheduler/tests/mutants.rs
+index b868371b7..11781ee7f 100644
+--- a/rust/crates/rexx-exec/src/scheduler/tests/mutants.rs
++++ b/rust/crates/rexx-exec/src/scheduler/tests/mutants.rs
+@@ -229,3 +229,77 @@ fn a_dropped_failed_send_retains_its_condition_across_settlement_collection() {
+     assert_eq!(observed.code, b"42.3", "{observed:?}");
+     assert!(observed.replacement.is_none(), "{observed:?}");
+ }
++
++#[cfg(feature = "pinning")]
++fn assert_no_incoming_sort_slice(terminal: &str) {
++    use crate::pinning::PinKind;
++
++    let source = format!(
++        "r = .worker~new~start('replyValue')\n\
++         b = .array~of(2, 1)~start('sortWith', .cmp~new)\n\
++         c = .worker~new~start('other')\n\
++         say r~result\nsay b~result~at(1) b~result~at(2)\nsay c~result\n\
++         ::class worker\n::method replyValue unguarded\n  {terminal} 1\n\
++         ::method other unguarded\n  return 7\n\
++         ::class cmp\n::method compare unguarded\n  return arg(1) - arg(2)\n"
++    );
++    let config = SimConfig::parse("sim:1,fifo,order=fifo,floor=1000000").expect("a sim spec");
++    let outcome = crate::run_program(
++        "/tmp/incoming-sort-slice.rex",
++        source.into_bytes(),
++        Invocation::none()
++            .with_deadline(super::RUN_DEADLINE)
++            .with_switch_mode(SwitchMode::Sim(config)),
++    );
++    eprintln!(
++        "{terminal}: simulation={:?}, pinning={:?}",
++        outcome.sim, outcome.pinning
++    );
++    assert_eq!(
++        (
++            outcome.exit_code,
++            outcome.stdout.as_slice(),
++            outcome.stderr.as_slice()
++        ),
++        (0, b"1\n1 2\n7\n".as_slice(), b"".as_slice())
++    );
++    let sim = outcome.sim.expect("the simulation report");
++    assert!(sim.contended > 0 && sim.contended < 1_000_000, "{sim:?}");
++    let sorting = vec![PinKind::Native("SORTWITH".into()), PinKind::SortComparator];
++    let pinning = outcome.pinning;
++    assert_eq!(pinning.unbalanced, 0, "{pinning:?}");
++    assert_eq!(
++        pinning.pinned_yields.get(&sorting).copied().unwrap_or(0),
++        0,
++        "{pinning:?}"
++    );
++    assert_eq!(
++        pinning.deferred_slices.get(&sorting).copied().unwrap_or(0),
++        0,
++        "the incoming sort must not inherit the outgoing request: {pinning:?}"
++    );
++    assert_eq!(
++        pinning.deferred_slices.values().sum::<u64>(),
++        0,
++        "{pinning:?}"
++    );
++    assert_eq!(
++        pinning.pinned_yields.values().sum::<u64>(),
++        0,
++        "{pinning:?}"
++    );
++}
++
++/// A terminal REPLY's slice request stays with its outgoing activity.
++#[cfg(feature = "pinning")]
++#[test]
++fn a_terminal_reply_slice_is_not_attributed_to_the_incoming_sort() {
++    assert_no_incoming_sort_slice("reply");
++}
++
++/// A terminal RETURN leaves no slice request for the incoming sort.
++#[cfg(feature = "pinning")]
++#[test]
++fn a_terminal_return_leaves_no_slice_for_the_incoming_sort() {
++    assert_no_incoming_sort_slice("return");
++}

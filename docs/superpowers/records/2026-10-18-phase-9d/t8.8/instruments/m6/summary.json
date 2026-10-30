@@ -1,0 +1,90 @@
+{
+  "named_runs": [
+    {
+      "action": "baseline-reply",
+      "status": 0,
+      "selected": 1,
+      "steps": 9,
+      "contended": 6,
+      "switches": 5,
+      "sorting_deferrals": 0,
+      "total_deferrals": 0,
+      "pinned_yields": 0,
+      "unbalanced": 0
+    },
+    {
+      "action": "baseline-return",
+      "status": 0,
+      "selected": 1,
+      "steps": 9,
+      "contended": 6,
+      "switches": 4,
+      "sorting_deferrals": 0,
+      "total_deferrals": 0,
+      "pinned_yields": 0,
+      "unbalanced": 0
+    },
+    {
+      "action": "mutant-reply",
+      "status": 101,
+      "selected": 1,
+      "steps": 9,
+      "contended": 6,
+      "switches": 5,
+      "sorting_deferrals": 1,
+      "total_deferrals": 1,
+      "pinned_yields": 0,
+      "unbalanced": 0
+    },
+    {
+      "action": "mutant-return",
+      "status": 0,
+      "selected": 1,
+      "steps": 9,
+      "contended": 6,
+      "switches": 4,
+      "sorting_deferrals": 0,
+      "total_deferrals": 0,
+      "pinned_yields": 0,
+      "unbalanced": 0
+    },
+    {
+      "action": "restored-reply",
+      "status": 0,
+      "selected": 1,
+      "steps": 9,
+      "contended": 6,
+      "switches": 5,
+      "sorting_deferrals": 0,
+      "total_deferrals": 0,
+      "pinned_yields": 0,
+      "unbalanced": 0
+    },
+    {
+      "action": "restored-return",
+      "status": 0,
+      "selected": 1,
+      "steps": 9,
+      "contended": 6,
+      "switches": 4,
+      "sorting_deferrals": 0,
+      "total_deferrals": 0,
+      "pinned_yields": 0,
+      "unbalanced": 0
+    }
+  ],
+  "focused_runs_passed": 7,
+  "final_fmt_status": 0,
+  "clippy_status": 0,
+  "initial_fmt_status": 1,
+  "scheduler_matches_pre_mutation": true,
+  "scheduler_sha256": "320baed0cc7f226ec7823caf529efdc1283affac8707355a4b9e46ada1da7747",
+  "retained_rust_paths": [
+    "rust/crates/rexx-exec/src/scheduler/tests/mutants.rs"
+  ],
+  "inventory_only_columns_changed": [
+    4,
+    6
+  ],
+  "source_table_refresh": "Unnecessary: only cfg(test) module lines changed; no production sites moved."
+}

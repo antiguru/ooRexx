@@ -1,0 +1,3 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.03s
+     Running unittests src/lib.rs (/tmp/codex-p9d-t88-target/debug/deps/rexx_exec-014394b50b2e01b7)
+return: simulation=Some(SimReport { seed: 1, policy: Fifo, steps: 9, contended: 6, switches: 4, trace_hash: Some(14695981039346656037) }), pinning=PinReport { parks: {(MessageResult, []): 4}, pinned_parks: {}, late_wakes: {}, inverted: {}, deferred_slices: {}, pinned_yields: {}, inverted_yields: {}, immovable_replies: {}, unbalanced: 0 }

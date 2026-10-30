@@ -1,0 +1,6 @@
+
+running 1 test
+test scheduler::tests::mutants::a_terminal_reply_slice_is_not_attributed_to_the_incoming_sort ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1240 filtered out; finished in 0.02s
+
