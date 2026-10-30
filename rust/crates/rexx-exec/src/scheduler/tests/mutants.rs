@@ -219,7 +219,7 @@ fn a_dropped_failed_send_retains_its_condition_across_settlement_collection() {
     assert_eq!(run.settlements.len(), 1, "{:?}", run.settlements);
     let observed = &run.settlements[0];
     eprintln!("{observed:?}");
-    assert!(matches!(observed.message.decode(), rexx_core::Decoded::Heap { .. }));
+    assert!(observed.message.1 < u32::MAX, "{observed:?}");
     assert!(observed.collections > 0, "{observed:?}");
     assert!(observed.replacement_unchanged, "{observed:?}");
     assert!(observed.alive && observed.attached, "{observed:?}");

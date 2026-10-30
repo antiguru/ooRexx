@@ -81,3 +81,17 @@ fn a_call_on_handlers_condition_object_survives_a_collection_at_every_allocation
     assert_eq!(swept.stderr, plain.stderr);
     assert!(swept.collections > 0, "the stress mode did not collect");
 }
+
+/// A fresh loop condition remains readable after its trace line allocates.
+#[test]
+fn a_traced_loop_condition_keeps_its_fresh_concatenation() {
+    let text = b"signal on syntax\ntrace r\ndo while ('badvalue' || 'badvalue')\n  nop\nend\nexit\nsyntax:\ntrace off\nsay condition('O')~code condition('O')~additional[1]\n".to_vec();
+    let plain = crate::run_program("/tmp/rooted-loop.rex", text.clone(), crate::Invocation::none());
+    assert_eq!(plain.exit_code, 0);
+    assert_eq!(plain.stdout, b"34.3 badvaluebadvalue\n");
+    let stressed = crate::run_program_collect_every_alloc("/tmp/rooted-loop.rex", text, crate::Invocation::none());
+    assert!(stressed.collections > 0);
+    assert_eq!(stressed.stdout, plain.stdout);
+    assert_eq!(stressed.stderr, plain.stderr);
+    assert_eq!(stressed.exit_code, plain.exit_code);
+}

@@ -7,12 +7,12 @@ use std::cell::RefCell;
 
 #[derive(Debug)]
 pub(crate) struct Observation {
-    pub(crate) message: ObjRef,
+    pub(crate) message: (u32, u32),
     pub(crate) collections: u64,
     pub(crate) alive: bool,
     pub(crate) attached: bool,
     pub(crate) code: Vec<u8>,
-    pub(crate) replacement: Option<ObjRef>,
+    pub(crate) replacement: Option<(u32, u32)>,
     pub(crate) replacement_unchanged: bool,
 }
 
@@ -71,15 +71,22 @@ impl Settlement {
                 interp.heap.peek(*handle).is_some_and(|held| format!("{held:?}") == *before)
             });
             let observation = Observation {
-                message,
+                message: identity(message),
                 collections,
                 alive,
                 attached: attached == Some(object),
                 code,
-                replacement: replacement.map(|(handle, _)| handle),
+                replacement: replacement.map(|(handle, _)| identity(handle)),
                 replacement_unchanged,
             };
             OBSERVATIONS.with(|observations| observations.borrow_mut().push(observation));
         }
     }
+}
+
+fn identity(handle: ObjRef) -> (u32, u32) {
+    let Decoded::Heap { slot, generation } = handle.decode() else {
+        panic!("a settled Message has a heap identity");
+    };
+    (slot, generation)
 }
