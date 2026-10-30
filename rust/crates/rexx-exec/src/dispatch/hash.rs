@@ -16,7 +16,9 @@ mod probe;
 use probe::{probe, probe_in};
 
 mod removal;
-use removal::{Removal, native_hash_remove_item, take, take_at, take_in, take_merged};
+use removal::{
+    Removal, native_hash_empty, native_hash_remove_item, take, take_at, take_in, take_merged,
+};
 
 use rexx_core::Owner;
 
@@ -1236,22 +1238,6 @@ fn native_hash_is_empty(
     }
     let empty = walk(interp, receiver)?.is_empty() && method_count(interp, receiver)? == 0;
     Ok(Some(crate::eval::logical(empty)))
-}
-
-/// `HashCollection::emptyRexx`: drops every entry and answers the receiver.
-fn native_hash_empty(
-    interp: &mut Interp,
-    _cleared: Cleared,
-    receiver: ObjRef,
-    _args: &[Option<ObjRef>],
-) -> Result<Option<ObjRef>, Failure> {
-    note_routines_write(interp, receiver);
-    if !owns(interp, receiver) {
-        return Err(not_this_task(interp, receiver, b"EMPTY"));
-    }
-    let store = store_of(interp, receiver)?;
-    install_store(interp, receiver, CONTENTS, store.buckets);
-    Ok(Some(receiver))
 }
 
 fn native_hash_has_index(

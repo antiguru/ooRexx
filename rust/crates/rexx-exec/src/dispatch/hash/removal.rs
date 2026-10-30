@@ -162,6 +162,22 @@ pub(super) fn take_merged(
     Ok(old)
 }
 
+/// `HashCollection::emptyRexx`: drops every entry and answers the receiver.
+pub(super) fn native_hash_empty(
+    interp: &mut Interp,
+    _cleared: Cleared,
+    receiver: ObjRef,
+    _args: &[Option<ObjRef>],
+) -> Result<Option<ObjRef>, Failure> {
+    note_routines_write(interp, receiver);
+    if !owns(interp, receiver) {
+        return Err(not_this_task(interp, receiver, b"EMPTY"));
+    }
+    let store = store_of(interp, receiver)?;
+    install_store(interp, receiver, CONTENTS, store.buckets);
+    Ok(Some(receiver))
+}
+
 pub(super) fn native_hash_remove_item(
     interp: &mut Interp,
     _cleared: Cleared,
