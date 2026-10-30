@@ -13,6 +13,14 @@
 /// oracle's `DEFAULT_BUFFER_SIZE` (`common/platform/unix/SysFile.hpp`).
 pub const STREAM_BUFFER: usize = 4096;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WriteBuffering {
+    None,
+    Positioned,
+    StandardFirstWrite,
+    Standard,
+}
+
 /// The descriptor an open stream holds, with the logical positions one
 /// descriptor serves. The character positions are 1-based "next byte", as the
 /// oracle's are. A SEEK that would move one below 1 fails, so a write
@@ -28,10 +36,11 @@ pub const STREAM_BUFFER: usize = 4096;
 pub struct OpenFile {
     file: std::fs::File,
     /// Written bytes the file does not hold yet, which land at byte offset
-    /// `held_at` (where the file stands, on a transient stream).
+    /// `held_at` (where the file stands, on a transient stream or standard
+    /// output). Standard output retains `held_at` as its buffered position.
     held: Vec<u8>,
     held_at: u64,
-    buffered: bool,
+    buffering: WriteBuffering,
     pub read_position: i64,
     pub write_position: i64,
     /// A byte taken from a transient stream to learn whether data waits, which
@@ -66,7 +75,11 @@ impl OpenFile {
             file,
             held: Vec::new(),
             held_at: 0,
-            buffered,
+            buffering: if buffered {
+                WriteBuffering::Positioned
+            } else {
+                WriteBuffering::None
+            },
             read_position: 1,
             write_position,
             pending: None,
@@ -76,6 +89,43 @@ impl OpenFile {
             line_mark_digest: None,
             line_total_digest: None,
         }
+    }
+
+    /// An owned duplicate of a persistent standard output descriptor, with
+    /// independent logical positions and a buffer written at the shared offset.
+    pub fn standard_output(file: std::fs::File, buffered: bool) -> OpenFile {
+        let mut open = Self::new(file, 1, false, false);
+        open.reopen_standard_output(buffered);
+        open
+    }
+
+    /// Reopens already flushed standard output with its retained positions.
+    pub fn reopen_standard_output(&mut self, buffered: bool) {
+        debug_assert!(self.held.is_empty());
+        self.buffering = if buffered {
+            WriteBuffering::StandardFirstWrite
+        } else {
+            WriteBuffering::None
+        };
+    }
+
+    /// Writes standard output at its shared descriptor offset and updates this
+    /// stream's logical write position, without seeking on subsequent flushes.
+    pub fn write_standard_output(&mut self, bytes: &[u8]) -> std::io::Result<()> {
+        use std::io::{Seek, SeekFrom, Write};
+        if self.buffering == WriteBuffering::None {
+            self.file.write_all(bytes)?;
+        } else {
+            if self.buffering == WriteBuffering::StandardFirstWrite && !bytes.is_empty() {
+                // SysFile switches its first buffered write from its cached
+                // read position. Later flushes follow the shared descriptor.
+                self.file.seek(SeekFrom::Start(self.held_at))?;
+                self.buffering = WriteBuffering::Standard;
+            }
+            self.write(self.held_at + self.held.len() as u64, bytes)?;
+        }
+        self.write_position = self.offset() as i64 + 1;
+        Ok(())
     }
 
     /// The descriptor as it stands, without the writes still held: for its
@@ -106,6 +156,9 @@ impl OpenFile {
     /// writes, which have not moved the descriptor yet.
     pub fn offset(&mut self) -> u64 {
         use std::io::Seek;
+        if self.buffering == WriteBuffering::StandardFirstWrite {
+            return self.held_at;
+        }
         match self.held.is_empty() || self.transient {
             true => self.file.stream_position().unwrap_or(0),
             false => self.held_at + self.held.len() as u64,
@@ -127,7 +180,7 @@ impl OpenFile {
     /// buffer fills, and written at once, after the held bytes, when they
     /// are more than a buffer holds.
     pub fn write(&mut self, offset: u64, bytes: &[u8]) -> std::io::Result<()> {
-        if !self.buffered {
+        if self.buffering == WriteBuffering::None {
             return self.write_through(offset, bytes);
         }
         let follows = self.transient || self.held_at + self.held.len() as u64 == offset;
@@ -156,10 +209,18 @@ impl OpenFile {
 
     fn write_through(&mut self, offset: u64, bytes: &[u8]) -> std::io::Result<()> {
         use std::io::{Seek, SeekFrom, Write};
-        if !self.transient {
+        let standard = matches!(
+            self.buffering,
+            WriteBuffering::Standard | WriteBuffering::StandardFirstWrite
+        );
+        if !self.transient && !standard {
             self.file.seek(SeekFrom::Start(offset))?;
         }
-        self.file.write_all(bytes)
+        self.file.write_all(bytes)?;
+        if standard {
+            self.held_at += bytes.len() as u64;
+        }
+        Ok(())
     }
 }
 
@@ -172,4 +233,3 @@ impl Drop for OpenFile {
         }
     }
 }
-

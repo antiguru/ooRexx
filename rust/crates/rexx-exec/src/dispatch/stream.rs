@@ -539,10 +539,21 @@ pub(super) fn open(
         Some(value) => interp.to_text(value).into_owned(),
         None => Vec::new(),
     };
+    let owned_alias = owned_stdout_alias(interp, receiver)?;
     release_held(interp, receiver)?;
+    if owned_alias
+        && let Some(Err(error)) = require_mut(interp, receiver)?
+            .open
+            .as_mut()
+            .map(rexx_core::OpenFile::flush)
+    {
+        return open_failed(interp, receiver, &error);
+    }
     let state = require_mut(interp, receiver)?;
-    // A second open closes and reopens.
-    state.open = None;
+    // A second open closes and reopens. Standard output retains its positions.
+    if !owned_alias {
+        state.open = None;
+    }
     state.mode = rexx_core::OpenMode::default();
     state.status = StreamStatus::Unknown;
     // A `HANDLE:n` stream takes the options a file does and reports its name
@@ -567,6 +578,17 @@ pub(super) fn open(
                 .any(|word| word == b"NOBUFFER");
         state.qualified = state.name.as_slice().into();
         state.status = StreamStatus::Ready;
+        if owned_alias {
+            if let Some(error) = ensure_owned_stdout_file(interp, receiver)? {
+                return open_failed(interp, receiver, &error);
+            }
+            let state = require_mut(interp, receiver)?;
+            state
+                .open
+                .as_mut()
+                .unwrap()
+                .reopen_standard_output(!state.mode.nobuffer);
+        }
         return Ok(Some(interp.text(b"READY:")));
     }
     let path = crate::paths::os_path(&state.qualified).to_path_buf();
@@ -854,12 +876,45 @@ fn standard_opened(
     interp: &mut Interp,
     receiver: ObjRef,
 ) -> Result<Option<StandardStream>, Failure> {
+    let owned_alias = owned_stdout_alias(interp, receiver)?;
     let state = require_mut(interp, receiver)?;
     if state.standard.is_some() && state.handle.is_none() && state.status == StreamStatus::Unknown {
         state.status = StreamStatus::Ready;
         state.qualified = state.name.as_slice().into();
+        if owned_alias {
+            state.mode.nobuffer = false;
+            if let Some(open) = state.open.as_mut() {
+                open.reopen_standard_output(true);
+            }
+        }
     }
     Ok(state.standard)
+}
+
+/// Whether this receiver owns persistent stdout independently of the local sink.
+fn owned_stdout_alias(interp: &Interp, receiver: ObjRef) -> Result<bool, Failure> {
+    let state = require(interp, receiver)?;
+    Ok(!state.local && state.handle.is_none() && query::owned_standard_output(interp, receiver)?)
+}
+
+/// Installs the owned stdout duplicate if absent, returning an OS error to the
+/// entry point that determines the NOTREADY result.
+fn ensure_owned_stdout_file(
+    interp: &mut Interp,
+    receiver: ObjRef,
+) -> Result<Option<std::io::Error>, Failure> {
+    let state = require(interp, receiver)?;
+    if state.open.is_some() {
+        return Ok(None);
+    }
+    let buffered = !state.mode.nobuffer;
+    let file = match rustix::io::dup(std::io::stdout()) {
+        Ok(descriptor) => std::fs::File::from(descriptor),
+        Err(error) => return Ok(Some(error.into())),
+    };
+    require_mut(interp, receiver)?.open =
+        Some(rexx_core::OpenFile::standard_output(file, buffered));
+    Ok(None)
 }
 
 /// A write to a standard stream: to the sink for the two output ones, and a
@@ -880,6 +935,30 @@ fn standard_write(
             StreamStatus::Error(EACCES),
             residual.to_vec(),
         );
+    }
+    if owned_stdout_alias(interp, receiver)? {
+        // Preserve writes issued to the local sink before this alias touches
+        // the shared descriptor, including its first buffered-write seek.
+        interp.hand_over_stdout();
+        let error = match ensure_owned_stdout_file(interp, receiver)? {
+            Some(error) => Some(error),
+            None => require_mut(interp, receiver)?
+                .open
+                .as_mut()
+                .unwrap()
+                .write_standard_output(bytes)
+                .err(),
+        };
+        if let Some(error) = error {
+            return notready(
+                interp,
+                receiver,
+                StreamStatus::Error(error.raw_os_error().unwrap_or(0)),
+                residual.to_vec(),
+            );
+        }
+        require_mut(interp, receiver)?.status = StreamStatus::Ready;
+        return Ok(Some(interp.text(b"0")));
     }
     let state = require_mut(interp, receiver)?;
     state.status = StreamStatus::Ready;
@@ -934,6 +1013,10 @@ fn emit(interp: &mut Interp, which: StandardStream, bytes: &[u8]) {
 /// Hands what a buffered standard stream holds to its descriptor, as a
 /// flush, a close, a reopen and an `UNINIT` do.
 fn release_held(interp: &mut Interp, receiver: ObjRef) -> Result<(), Failure> {
+    if owned_stdout_alias(interp, receiver)? {
+        // The OpenFile flush or drop follows pending local output in order.
+        interp.hand_over_stdout();
+    }
     let state = require_mut(interp, receiver)?;
     let Some(which) = state.standard else {
         return Ok(());
@@ -2102,8 +2185,8 @@ fn invalid_seek(interp: &mut Interp, receiver: ObjRef) -> Result<Option<ObjRef>,
 /// `stream_close`: `READY:` for a stream that was open, and the null string
 /// for one that never was. Either way the state goes back to `UNKNOWN`.
 ///
-/// A standard stream has no [`rexx_core::OpenFile`] to take, so it answers
-/// from its state instead. Measured, and the three rows agree on one rule --
+/// A standard stream answers from its state instead of taking its
+/// [`rexx_core::OpenFile`], which an owned persistent stdout alias retains. Measured, and the three rows agree on one rule --
 /// anything but `UNKNOWN` closes as `READY:`: the first close answers
 /// `READY:` and the second the null string, a write after a close makes the
 /// next close `READY:` again, and an exhausted `.STDIN` sitting at `NOTREADY`
@@ -2117,6 +2200,9 @@ pub(super) fn close(
     release_held(interp, receiver)?;
     let state = require_mut(interp, receiver)?;
     let was_open = if state.standard.is_some() {
+        if let Some(open) = state.open.as_mut() {
+            let _ = open.flush();
+        }
         state.status != StreamStatus::Unknown
     } else {
         state.open.take().is_some()

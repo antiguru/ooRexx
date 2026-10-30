@@ -544,7 +544,9 @@ pub struct StreamState {
     /// (Deviation 35). `standard` is set with it.
     pub handle: Option<StandardStream>,
     pub status: StreamStatus,
-    /// `None` until something opens the stream, and again after a close.
+    /// `None` until something opens the stream, and again after a close for
+    /// named files. An owned persistent standard output keeps its duplicate
+    /// and per-stream positions across close and reopen, gated by `status`.
     pub open: Option<OpenFile>,
     pub mode: OpenMode,
     /// What a standard output or error stream opened without `NOBUFFER` has

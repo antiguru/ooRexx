@@ -58,7 +58,7 @@ pub(in crate::dispatch) fn query_exists(
 }
 
 /// Whether this stream uses the embedding's owned regular-file stdout descriptor.
-fn owned_standard_output(interp: &Interp, receiver: ObjRef) -> Result<bool, Failure> {
+pub(super) fn owned_standard_output(interp: &Interp, receiver: ObjRef) -> Result<bool, Failure> {
     Ok(
         require(interp, receiver)?.standard == Some(StandardStream::Out)
             && !interp.standard_transient[1]
@@ -81,7 +81,23 @@ pub(in crate::dispatch) fn query_size(
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
     if owned_standard_output(interp, receiver)? {
+        if unopened_standard(interp, receiver)? {
+            return Ok(Some(interp.text(b"")));
+        }
         interp.hand_over_stdout();
+        if owned_stdout_alias(interp, receiver)? {
+            if let Some(error) = ensure_owned_stdout_file(interp, receiver)? {
+                return open_failed(interp, receiver, &error);
+            }
+            let size = require_mut(interp, receiver)?
+                .open
+                .as_mut()
+                .unwrap()
+                .flushed()
+                .metadata()
+                .map_or(0, |meta| meta.len());
+            return Ok(Some(interp.text_built(size.to_string().into_bytes())));
+        }
         let size = rustix::fs::fstat(std::io::stdout()).ok().and_then(|stat| {
             (rustix::fs::FileType::from_raw_mode(stat.st_mode) == rustix::fs::FileType::RegularFile)
                 .then_some(stat.st_size)
@@ -260,7 +276,12 @@ pub(in crate::dispatch) fn query_position(
     if unopened_standard(interp, receiver)? {
         return Ok(Some(interp.text(b"")));
     }
-    if !by_line && owned_standard_output(interp, receiver)? {
+    if owned_stdout_alias(interp, receiver)? {
+        interp.hand_over_stdout();
+        if let Some(error) = ensure_owned_stdout_file(interp, receiver)? {
+            return open_failed(interp, receiver, &error);
+        }
+    } else if !by_line && owned_standard_output(interp, receiver)? {
         if sys {
             interp.hand_over_stdout();
         }
