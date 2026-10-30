@@ -86,19 +86,14 @@ fn pgid_is_the_parents_group() {
     assert_ne!(group, pid, "{text}");
 }
 
-/// A command whose child a `SysWait` on another activity reaped answers `127`
-/// with a `FAILURE`, where the oracle reads the status of its own failed
-/// `waitpid` (`corpus/oracle-crashes.txt` entry 45). The wait itself answers
-/// the child's status, `exit 5` as `1280`. The command marks that it has
-/// started, and the main activity waits for the mark before it calls
-/// `SysWait`, a bounded number of times. `timeout` kills a run that outlives
-/// its deadline. Which of the two waits takes the child is a race: a run the
-/// command's own wait won answers `rc 5` and `-1`, and the run repeats until
-/// the `SysWait` wins.
+/// The command waiter and SysWait may each reap the command's child. Either
+/// winner is valid. Deterministic ECHILD/127 mapping is covered at collect's
+/// boundary by command::tests::an_externally_reaped_child_maps_to_127_and_failure.
 #[test]
-fn a_command_whose_child_was_reaped_elsewhere_fails_with_127() {
+fn competing_child_waiters_accept_either_valid_winner() {
     let program = "a = .w~new~start('RUN')\n\
         do 400 until SysFileExists('started'); call SysSleep 0.05; end\n\
+        say 'ready' SysFileExists('started')\n\
         say 'wait' SysWait()\n\
         say 'cmd' a~result\n\
         ::class w\n\
@@ -109,30 +104,34 @@ fn a_command_whose_child_was_reaped_elsewhere_fails_with_127() {
         failed:\n\
         say 'failure' rc\n\
         return\n";
-    for attempt in 0..20 {
-        let (_, dir) = rexx(&format!("sys-wait-reaped-{attempt}"), program);
-        let output = Command::new("timeout")
-            .args(["-k", "5", "60"])
-            .arg(env!("CARGO_BIN_EXE_rexx"))
-            .arg(dir.join("p.rex"))
-            .current_dir(&dir)
-            .stdin(std::process::Stdio::null())
-            .output()
-            .expect("timeout runs rexx");
-        let _ = std::fs::remove_dir_all(&dir);
-        assert!(
-            output.status.success(),
-            "{:?}: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
-        );
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let mut lines: Vec<&str> = stdout.lines().collect();
-        lines.sort_unstable();
-        if lines == ["cmd rc 127", "failure 127", "wait 1280"] {
-            return;
-        }
-        assert_eq!(lines, ["cmd rc 5", "wait -1"], "{stdout}");
-    }
-    panic!("the SysWait never took the command's child");
+    let (_, dir) = rexx("sys-wait-race", program);
+    let output = Command::new("timeout")
+        .args(["-k", "2", "30"])
+        .arg(env!("CARGO_BIN_EXE_rexx"))
+        .arg(dir.join("p.rex"))
+        .current_dir(&dir)
+        .stdin(std::process::Stdio::null())
+        .output().expect("timeout runs rexx");
+    eprintln!("waiter race: ready={} status={:?} stdout={:?} stderr={:?}", dir.join("started").exists(), output.status, String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stderr.is_empty(), "{output:?}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut lines: Vec<&str> = stdout.lines().collect();
+    lines.sort_unstable();
+    assert!(lines == ["cmd rc 127", "failure 127", "ready 1", "wait 1280"] || lines == ["cmd rc 5", "ready 1", "wait -1"], "{stdout}");
+    std::fs::remove_dir_all(dir).expect("remove race fixture");
+}
+
+/// Exec keeps the child owned by the isolated interpreter process. SysWait
+/// must return its raw status, without racing a command's separate waiter.
+#[test]
+fn sys_wait_returns_the_raw_status_of_an_owned_child() {
+    let (_, dir) = rexx("sys-wait-owned", "say SysWait()\n");
+    let output = Command::new("timeout").args(["-k", "2", "15", "python3", "-c", "import os, subprocess, sys; subprocess.Popen(['python3', '-c', 'raise SystemExit(5)']); os.execv(sys.argv[1], sys.argv[1:])"])
+        .arg(env!("CARGO_BIN_EXE_rexx")).arg(dir.join("p.rex"))
+        .output().expect("isolated interpreter");
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(output.stdout, b"1280\n");
+    assert!(output.stderr.is_empty(), "{output:?}");
+    std::fs::remove_dir_all(dir).expect("remove owned-child fixture");
 }
