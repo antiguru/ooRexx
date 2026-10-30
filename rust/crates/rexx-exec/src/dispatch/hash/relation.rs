@@ -14,15 +14,17 @@
 
 use super::{
     Arity, Cleared, Failure, Interp, Keys, NativeMethod, ObjRef, keys_of, native_hash_supplier,
-    not_this_task, owns, pairs, same_index, slot_at, store_of, take, take_at, walk,
+    not_this_task, owns, pairs, same_index, slot_at, store_of, take, walk,
 };
 
 /// Every slot whose index matches, in chain order.
 fn slots_for(interp: &mut Interp, receiver: ObjRef, index: ObjRef) -> Result<Vec<usize>, Failure> {
-    let store = store_of(interp, receiver)?;
     let keys = keys_of(interp, receiver);
+    let hash = super::hash_of(interp, keys, index)?;
+    let store = store_of(interp, receiver)?;
+    let bucket = (hash % store.buckets as u64) as usize;
     let mut found = Vec::new();
-    for slot in walk(interp, receiver)? {
+    for (slot, _) in super::entries_in(interp, &store, Some(bucket))? {
         if same_index(interp, &store, keys, slot, index)? {
             found.push(slot);
         }
@@ -196,10 +198,14 @@ fn native_relation_has_item(
         return Err(not_this_task(interp, receiver, b"HASITEM"));
     }
     let wanted = super::collection::item_argument(args)?;
-    let under = args.get(1).copied().flatten();
-    let store = store_of(interp, receiver)?;
+    let under = args.get(1).copied().flatten().or_else(|| {
+        super::index_only(interp, receiver).then_some(wanted)
+    });
     let keys = keys_of(interp, receiver);
-    for slot in walk(interp, receiver)? {
+    let hash = under.map(|index| super::hash_of(interp, keys, index)).transpose()?;
+    let store = store_of(interp, receiver)?;
+    let bucket = hash.map(|hash| (hash % store.buckets as u64) as usize);
+    for (slot, _) in super::entries_in(interp, &store, bucket)? {
         let Some(item) = slot_at(interp, store.items, slot)? else {
             continue;
         };
@@ -229,23 +235,26 @@ fn native_relation_remove_item(
         return Err(not_this_task(interp, receiver, b"REMOVEITEM"));
     }
     let wanted = super::collection::item_argument(args)?;
-    let under = args.get(1).copied().flatten();
-    let store = store_of(interp, receiver)?;
+    let under = args.get(1).copied().flatten().or_else(|| {
+        super::index_only(interp, receiver).then_some(wanted)
+    });
     let keys = keys_of(interp, receiver);
-    for slot in walk(interp, receiver)? {
+    let hash = under.map(|index| super::hash_of(interp, keys, index)).transpose()?;
+    let store = store_of(interp, receiver)?;
+    let bucket = hash.map(|hash| (hash % store.buckets as u64) as usize);
+    for (slot, previous) in super::entries_in(interp, &store, bucket)? {
         let Some(item) = slot_at(interp, store.items, slot)? else {
             continue;
         };
         if !super::collection::same_item(interp, wanted, item)? {
             continue;
         }
-        let held = slot_at(interp, store.indexes, slot)?;
         let matches = match under {
             None => true,
             Some(index) => same_index(interp, &store, keys, slot, index)?,
         };
-        if matches && let Some(held) = held {
-            take_at(interp, receiver, held, slot)?;
+        if matches {
+            super::take_at(interp, receiver, &store, slot, previous)?;
             return Ok(Some(item));
         }
     }

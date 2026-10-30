@@ -739,6 +739,25 @@ fn walk_in(interp: &Interp, store: &Store) -> Result<Vec<usize>, Failure> {
     Ok(order)
 }
 
+/// Occupied entries and their predecessors, restricted to a bucket when supplied.
+fn entries_in(interp: &Interp, store: &Store, bucket: Option<usize>) -> Result<Vec<(usize, Option<usize>)>, Failure> {
+    let mut entries = Vec::new();
+    let buckets = match bucket {
+        Some(bucket) => bucket..bucket + 1,
+        None => 0..store.buckets,
+    };
+    for bucket in buckets {
+        let mut previous = None;
+        let mut slot = bucket;
+        while slot < store.total && slot_at(interp, store.indexes, slot)?.is_some() {
+            entries.push((slot, previous));
+            previous = Some(slot);
+            slot = link_at(interp, store, slot)?;
+        }
+    }
+    Ok(entries)
+}
+
 /// Grows the table and re-adds every entry in old bucket order --
 /// `HashCollection::expandContents` and `HashContents::reMerge`.
 fn expand(interp: &mut Interp, receiver: ObjRef, half: Half) -> Result<(), Failure> {

@@ -40,23 +40,12 @@ pub(super) fn take_in(
 pub(super) fn take_at(
     interp: &mut Interp,
     receiver: ObjRef,
-    index: ObjRef,
+    store: &Store,
     slot: usize,
+    previous: Option<usize>,
 ) -> Result<Option<ObjRef>, Failure> {
-    let store = store_of(interp, receiver)?;
-    let keys = keys_of(interp, receiver);
-    let hash = hash_of(interp, keys, index)?;
-    let bucket = (hash % store.buckets as u64) as usize;
-    let mut previous = None;
-    let mut cursor = bucket;
-    while cursor < store.total && cursor != slot {
-        previous = Some(cursor);
-        cursor = link_at(interp, &store, cursor)?;
-    }
-    if cursor != slot {
-        return Ok(None);
-    }
-    remove_at(interp, receiver, CONTENTS, &store, slot, previous)
+    interp.bump_route_generation();
+    remove_at(interp, receiver, CONTENTS, store, slot, previous)
 }
 
 /// Unlinks the entry at `slot`, whose chain predecessor is `previous`, and
@@ -125,13 +114,16 @@ pub(super) fn take_merged(
     removal: Removal,
 ) -> Result<Option<ObjRef>, Failure> {
     if method_store(interp, receiver)?.is_none() && unknown_method(interp, receiver).is_none() {
+        interp.bump_route_generation();
+        let (store, found) = probe(interp, receiver, index)?;
+        let Some(slot) = found.found else {
+            return Ok(None);
+        };
         if removal == Removal::Answered {
-            let (store, found) = probe(interp, receiver, index)?;
-            if let Some(slot) = found.found {
-                item_at(interp, &store, slot)?;
-            }
+            item_at(interp, &store, slot)?;
         }
-        return take(interp, receiver, index);
+        let previous = found.last.filter(|last| *last != slot);
+        return remove_at(interp, receiver, CONTENTS, &store, slot, previous);
     }
     // `get` runs a method only where the contents miss, so a contents entry
     // that is discarded needs no read.
@@ -158,6 +150,17 @@ pub(super) fn native_hash_remove_item(
     }
     let wanted = super::collection::item_argument(args)?;
     let keys = keys_of(interp, receiver);
+    if method_store(interp, receiver)?.is_none() && unknown_method(interp, receiver).is_none() {
+        let store = store_of(interp, receiver)?;
+        for (slot, previous) in entries_in(interp, &store, None)? {
+            let Some(item) = item_at(interp, &store, slot)? else { continue };
+            if same_held_item(interp, keys, wanted, item)? {
+                take_at(interp, receiver, &store, slot, previous)?;
+                return Ok(Some(item));
+            }
+        }
+        return Ok(Some(ObjRef::NIL));
+    }
     for (index, item) in pairs(interp, receiver)? {
         if same_held_item(interp, keys, wanted, item)? {
             take_merged(interp, receiver, index, Removal::Discarded)?;
