@@ -278,8 +278,16 @@ fn assert_no_incoming_sort_slice(terminal: &str) {
         0,
         "the incoming sort must not inherit the outgoing request: {pinning:?}"
     );
-    assert_eq!(pinning.deferred_slices.values().sum::<u64>(), 0, "{pinning:?}");
-    assert_eq!(pinning.pinned_yields.values().sum::<u64>(), 0, "{pinning:?}");
+    assert_eq!(
+        pinning.deferred_slices.values().sum::<u64>(),
+        0,
+        "{pinning:?}"
+    );
+    assert_eq!(
+        pinning.pinned_yields.values().sum::<u64>(),
+        0,
+        "{pinning:?}"
+    );
 }
 
 /// A terminal REPLY's slice request stays with its outgoing activity.
