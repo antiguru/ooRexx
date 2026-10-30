@@ -200,6 +200,8 @@ impl Interp {
         if self.activity.failed_sends.is_empty() {
             return Ok(());
         }
+        #[cfg(test)]
+        let settlement = settlement_observer::Settlement::start(self);
         let frame = self.roots.activity_mut().push_frame();
         let origin = self.activity.failure_origin;
         let object = match self.activity.reraised_object {
@@ -218,7 +220,13 @@ impl Interp {
                 self.build_condition_object_from(raised, None, false, Some(&unwound))
             }
         };
-        let attached = object.map(|object| self.attach_condition(object));
+        let attached = object.map(|object| {
+            #[cfg(test)]
+            let before = settlement.before_attach(self);
+            self.attach_condition(object);
+            #[cfg(test)]
+            settlement.finish(self, object, before);
+        });
         if attached.is_err() {
             self.activity.failed_sends.clear();
         }
@@ -758,3 +766,6 @@ impl Interp {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+pub(crate) mod settlement_observer;

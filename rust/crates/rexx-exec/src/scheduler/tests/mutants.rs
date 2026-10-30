@@ -22,6 +22,7 @@ struct Counted {
     cancelled: CancelledWaits,
     /// Every `set_native_entry` write, then those to a dead handle.
     writes: (u64, u64),
+    settlements: Vec<crate::condition::settlement_observer::Observation>,
 }
 
 impl Counted {
@@ -56,6 +57,7 @@ fn counted(source: &str, spec: &str) -> Counted {
                 outcome,
                 cancelled: crate::scheduler::cancelled_waits(),
                 writes: crate::environment::native_entry_writes(),
+                settlements: crate::condition::settlement_observer::take(),
             }
         })
         .expect("the interpreter thread")
@@ -207,4 +209,20 @@ fn a_dropped_failed_send_is_written_while_alive() {
             assert_eq!(failed.writes.1, 0, "{spec}: a write to a dead handle");
         }
     }
+}
+
+/// A dropped failed Message retains its identity and attached condition across settlement GC.
+#[test]
+fn a_dropped_failed_send_retains_its_condition_across_settlement_collection() {
+    let run = counted(&dropped_send("x = 1 / 0"), "sim:1,gc=1");
+    assert_eq!(run.stdout(), "main\n");
+    assert_eq!(run.settlements.len(), 1, "{:?}", run.settlements);
+    let observed = &run.settlements[0];
+    eprintln!("{observed:?}");
+    assert!(matches!(observed.message.decode(), rexx_core::Decoded::Heap { .. }));
+    assert!(observed.collections > 0, "{observed:?}");
+    assert!(observed.replacement_unchanged, "{observed:?}");
+    assert!(observed.alive && observed.attached, "{observed:?}");
+    assert_eq!(observed.code, b"42.3", "{observed:?}");
+    assert!(observed.replacement.is_none(), "{observed:?}");
 }

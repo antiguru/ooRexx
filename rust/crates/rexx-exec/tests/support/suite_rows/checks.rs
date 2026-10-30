@@ -17,10 +17,8 @@ pub fn check_row(row: &Row, context: &Context) -> Result<(), String> {
         return Err("no such group".to_string());
     }
     let text = read_lossy(&context.group_file(&row.group));
-    let classes = source_classes(&text);
-    let defined = classes
-        .iter()
-        .any(|class| class.methods.contains(&row.test));
+    let (dir, group) = row.group.rsplit_once('/').unwrap_or(("", &row.group));
+    let defined = source_test_names_in(&context.root, dir, group).contains(&row.test);
     if !defined {
         return Err("the group file defines no such method".to_string());
     }
