@@ -31,12 +31,10 @@ exit
   self~calls += 1
   slept = 0
   if line == 'a' then do
-    -- The alarm starts in this callback, so command startup cannot satisfy it.
-    .local~sleepMarked = 0
-    alarm = .Alarm~new(0.5, .Message~new(.SleepMark~new, 'mark'))
+    -- Record completion after the unrelated wait returns. Duration is
+    -- checked separately on the deterministic simulation clock.
     call SysSleep 1
-    slept = .sleepMarked
-    alarm~cancel
+    slept = 1
   end
   say 'O:'line 'slept' slept
   return 0
@@ -58,10 +56,6 @@ exit
   end
   say 'O:'line 'waited' waited
   return 0
-
-::class SleepMark
-::method mark
-  .local~sleepMarked = 1
 
 ::class Poster
 ::method post

@@ -14,7 +14,8 @@ def waitable_child():
 
 
 if sys.argv[1] == "retained":
-    waitable_child()
+    # Successful exec preserves this reference without running __del__.
+    child = waitable_child()
 elif sys.argv[1] == "dropped":
     child = waitable_child()
     del child
