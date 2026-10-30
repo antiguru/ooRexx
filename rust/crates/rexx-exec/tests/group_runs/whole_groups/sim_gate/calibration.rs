@@ -43,9 +43,17 @@ fn calibration() {
         rows.push(blank(&format!("{PROGRAMS}{program}"), "program", knobs));
     }
     if let Ok(only) = std::env::var(ONLY_ENV) {
-        let (group, part) = only.split_once(':').map_or((only.as_str(), None), |(group, part)| (group, Some(part)));
-        rows = read_table().into_iter().filter(|row| row.group == group && part.is_none_or(|part| row.part == part)).collect();
-        assert!(!rows.is_empty(), "{ONLY_ENV}: no calibration rows for {only}");
+        let (group, part) = only
+            .split_once(':')
+            .map_or((only.as_str(), None), |(group, part)| (group, Some(part)));
+        rows = read_table()
+            .into_iter()
+            .filter(|row| (group == "*" || row.group == group) && part.is_none_or(|part| row.part == part))
+            .collect();
+        assert!(
+            !rows.is_empty(),
+            "{ONLY_ENV}: no calibration rows for {only}"
+        );
     }
     let lines = in_jobs(&rows, |at, row| {
         let mut row = row.clone();
@@ -97,4 +105,3 @@ fn calibration() {
     });
     std::fs::write(&out, lines.concat()).expect("cannot write the calibration");
 }
-

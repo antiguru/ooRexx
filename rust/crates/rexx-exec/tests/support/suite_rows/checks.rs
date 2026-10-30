@@ -169,4 +169,3 @@ pub(super) fn check_not_run(row: &Row, text: &str, context: &Context) -> Result<
     }
     Err("the reason is not `restrictOS line N` or `test type NAME`".to_string())
 }
-

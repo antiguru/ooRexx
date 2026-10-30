@@ -86,10 +86,18 @@ fn a_call_on_handlers_condition_object_survives_a_collection_at_every_allocation
 #[test]
 fn a_traced_loop_condition_keeps_its_fresh_concatenation() {
     let text = b"signal on syntax\ntrace r\ndo while ('badvalue' || 'badvalue')\n  nop\nend\nexit\nsyntax:\ntrace off\nsay condition('O')~code condition('O')~additional[1]\n".to_vec();
-    let plain = crate::run_program("/tmp/rooted-loop.rex", text.clone(), crate::Invocation::none());
+    let plain = crate::run_program(
+        "/tmp/rooted-loop.rex",
+        text.clone(),
+        crate::Invocation::none(),
+    );
     assert_eq!(plain.exit_code, 0);
     assert_eq!(plain.stdout, b"34.3 badvaluebadvalue\n");
-    let stressed = crate::run_program_collect_every_alloc("/tmp/rooted-loop.rex", text, crate::Invocation::none());
+    let stressed = crate::run_program_collect_every_alloc(
+        "/tmp/rooted-loop.rex",
+        text,
+        crate::Invocation::none(),
+    );
     assert!(stressed.collections > 0);
     assert_eq!(stressed.stdout, plain.stdout);
     assert_eq!(stressed.stderr, plain.stderr);
@@ -100,10 +108,18 @@ fn a_traced_loop_condition_keeps_its_fresh_concatenation() {
 #[test]
 fn a_truth_conversion_keeps_the_fresh_array_answer() {
     let text = b"signal on syntax\na = .array~of(.comp~new)\nsay a~hasItem(.comp~new)\nexit\nsyntax:\nsay condition('O')~code condition('O')~additional[1]\n::class comp\n::method '=='\nreturn .array~of(.part~new, .part~new)\n::class part\n::method objectName\nx = copies('x', 100)\nreturn 'A'\n".to_vec();
-    let plain = crate::run_program("/tmp/rooted-truth.rex", text.clone(), crate::Invocation::none());
+    let plain = crate::run_program(
+        "/tmp/rooted-truth.rex",
+        text.clone(),
+        crate::Invocation::none(),
+    );
     assert_eq!(plain.exit_code, 0);
     assert_eq!(plain.stdout, b"34.901 A\nA\n");
-    let stressed = crate::run_program_collect_every_alloc("/tmp/rooted-truth.rex", text, crate::Invocation::none());
+    let stressed = crate::run_program_collect_every_alloc(
+        "/tmp/rooted-truth.rex",
+        text,
+        crate::Invocation::none(),
+    );
     assert!(stressed.collections > 0);
     assert_eq!(stressed.stdout, plain.stdout);
     assert_eq!(stressed.stderr, plain.stderr);

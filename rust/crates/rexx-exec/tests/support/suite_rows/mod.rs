@@ -477,8 +477,8 @@ pub fn check_rows(rows: &[Row], context: &Context) -> Vec<String> {
 }
 
 mod checks;
-pub use checks::check_row;
 use checks::check_not_run;
+pub use checks::check_row;
 
 /// The rows the group files alone determine, one line each as the files hold
 /// them: every test `reaching_rxapi` renames out; every other test of a

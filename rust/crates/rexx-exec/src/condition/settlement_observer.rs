@@ -39,36 +39,55 @@ impl Settlement {
 
     pub(super) fn before_attach(&self, interp: &Interp) -> Vec<Option<(ObjRef, String)>> {
         let collections = interp.heap.collections_performed() - self.collections;
-        self.messages.iter().map(|message| {
-            if interp.heap.peek(*message).is_some() {
-                return None;
-            }
-            let Decoded::Heap { slot, generation } = message.decode() else {
-                return None;
-            };
-            // A slot's generation advances only when it is swept. The interval's
-            // collection count bounds every possible reuse of this slot.
-            (1..=collections).find_map(|offset| {
-                let offset = u32::try_from(offset).expect("bounded settlement collections");
-                let replacement = ObjRef::heap(slot, generation.checked_add(offset)?);
-                interp.heap.peek(replacement).map(|held| (replacement, format!("{held:?}")))
+        self.messages
+            .iter()
+            .map(|message| {
+                if interp.heap.peek(*message).is_some() {
+                    return None;
+                }
+                let Decoded::Heap { slot, generation } = message.decode() else {
+                    return None;
+                };
+                // A slot's generation advances only when it is swept. The interval's
+                // collection count bounds every possible reuse of this slot.
+                (1..=collections).find_map(|offset| {
+                    let offset = u32::try_from(offset).expect("bounded settlement collections");
+                    let replacement = ObjRef::heap(slot, generation.checked_add(offset)?);
+                    interp
+                        .heap
+                        .peek(replacement)
+                        .map(|held| (replacement, format!("{held:?}")))
+                })
             })
-        }).collect()
+            .collect()
     }
 
-    pub(super) fn finish(self, interp: &mut Interp, object: ObjRef, before: Vec<Option<(ObjRef, String)>>) {
+    pub(super) fn finish(
+        self,
+        interp: &mut Interp,
+        object: ObjRef,
+        before: Vec<Option<(ObjRef, String)>>,
+    ) {
         let collections = interp.heap.collections_performed() - self.collections;
         for (message, replacement) in self.messages.into_iter().zip(before) {
             let alive = interp.heap.peek(message).is_some();
             let attached = interp.native_entry(message, crate::dispatch::MESSAGE_CONDITION);
-            let code = attached.and_then(|condition| {
-                match directory_get(interp, condition, Key::new(b"CODE"), None).ok()?.0 {
-                    DirectoryEntry::Found(value) => Some(interp.to_text(value).into_owned()),
-                    _ => None,
-                }
-            }).unwrap_or_default();
+            let code = attached
+                .and_then(|condition| {
+                    match directory_get(interp, condition, Key::new(b"CODE"), None)
+                        .ok()?
+                        .0
+                    {
+                        DirectoryEntry::Found(value) => Some(interp.to_text(value).into_owned()),
+                        _ => None,
+                    }
+                })
+                .unwrap_or_default();
             let replacement_unchanged = replacement.as_ref().is_none_or(|(handle, before)| {
-                interp.heap.peek(*handle).is_some_and(|held| format!("{held:?}") == *before)
+                interp
+                    .heap
+                    .peek(*handle)
+                    .is_some_and(|held| format!("{held:?}") == *before)
             });
             let observation = Observation {
                 message: identity(message),

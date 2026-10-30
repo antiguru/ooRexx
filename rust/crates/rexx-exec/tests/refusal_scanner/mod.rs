@@ -80,10 +80,18 @@ fn sources_in(root: &Path) -> Vec<PathBuf> {
                 continue;
             }
             if test_attribute
-                && let Some(name) = code.strip_prefix("pub(crate) ").or_else(|| code.strip_prefix("pub ")).unwrap_or(code).strip_prefix("mod ").and_then(|s| s.strip_suffix(';'))
+                && let Some(name) = code
+                    .strip_prefix("pub(crate) ")
+                    .or_else(|| code.strip_prefix("pub "))
+                    .unwrap_or(code)
+                    .strip_prefix("mod ")
+                    .and_then(|s| s.strip_suffix(';'))
             {
                 let parent = path.parent().unwrap();
-                let directory = if matches!(path.file_name().and_then(|s| s.to_str()), Some("lib.rs" | "mod.rs")) {
+                let directory = if matches!(
+                    path.file_name().and_then(|s| s.to_str()),
+                    Some("lib.rs" | "mod.rs")
+                ) {
                     parent.to_path_buf()
                 } else {
                     parent.join(path.file_stem().unwrap())
@@ -94,7 +102,12 @@ fn sources_in(root: &Path) -> Vec<PathBuf> {
             test_attribute = false;
         }
     }
-    found.retain(|path| !test_files.contains(path) && !test_directories.iter().any(|directory| path.starts_with(directory)));
+    found.retain(|path| {
+        !test_files.contains(path)
+            && !test_directories
+                .iter()
+                .any(|directory| path.starts_with(directory))
+    });
     found.sort();
     found
 }
@@ -335,7 +348,6 @@ pub(super) fn surface(
         .collect();
     (surfaces, text)
 }
-
 
 #[cfg(test)]
 mod tests;

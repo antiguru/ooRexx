@@ -51,7 +51,11 @@ fn owner_equality_covers_reaching_group_and_captured_refusal() {
         owner: Owner::Phase10(Deferral::Rxapi),
         reason: String::new(),
     };
-    for reason in ["reaching_rxapi", "group", "refusal: rexx-exec: queue unavailable (Phase 10 Rxapi)"] {
+    for reason in [
+        "reaching_rxapi",
+        "group",
+        "refusal: rexx-exec: queue unavailable (Phase 10 Rxapi)",
+    ] {
         row.reason = reason.to_string();
         row.owner = Owner::Phase10(Deferral::Rxapi);
         assert!(check_row(&row, &context).is_ok(), "{reason}");
