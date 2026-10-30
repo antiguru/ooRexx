@@ -141,15 +141,20 @@ fn a_background_process_holding_the_pipe_open_does_not_hang_the_run() {
 
     let dir = fresh_run_dir();
     let file = dir.join("orphan.rex");
-    fs::write(&file, b"address system 'sleep 30 &'\nsay 'done'\n")
-        .unwrap_or_else(|e| panic!("cannot write {}: {e}", file.display()));
+    fs::write(
+        &file,
+        b"address system 'sleep 30 & cat /proc/$!/stat > orphan.stat'\nsay 'done'\n",
+    )
+    .unwrap_or_else(|e| panic!("cannot write {}: {e}", file.display()));
     let abs = fs::canonicalize(&file)
         .unwrap_or_else(|e| panic!("cannot resolve {}: {e}", file.display()));
 
+    let orphan = orphan::OwnedOrphan::new(&dir);
     let oracle = support::oracle::locate();
     let started = Instant::now();
     let outcome = oracle.run(&abs);
     let elapsed = started.elapsed();
+    orphan.finish();
 
     // The bound that would fail if the read were joined unconditionally: the
     // backgrounded `sleep` runs thirty seconds, so a read joined
@@ -182,10 +187,12 @@ fn a_background_process_holding_the_pipe_open_does_not_hang_the_run() {
     );
 
     // The backgrounded `sleep` holds a pipe descriptor, not anything under
-    // `dir` itself, so removing the directory here is unrelated to the
-    // process this test deliberately leaves running.
+    // `dir` itself. The owned PID is stopped before removing the directory.
     let _ = fs::remove_dir_all(&dir);
 }
 
 #[path = "oracle_deadline/pipe_io.rs"]
 mod pipe_io;
+
+#[path = "oracle_deadline/orphan.rs"]
+mod orphan;

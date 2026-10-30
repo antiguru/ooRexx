@@ -16,24 +16,30 @@ fn rust_binary_candidates_for(
     exe: &Path,
     manifest: &Path,
 ) -> [PathBuf; 2] {
-    let target = if let Some(target) = target_dir {
-        cwd.join(target)
-    } else {
-        let parent = exe.parent();
-        let profile = parent.and_then(|path| {
-            if path.file_name().is_some_and(|name| name == "deps") {
-                path.parent()
-            } else {
-                Some(path)
-            }
-        });
-        profile
-            .filter(|path| {
-                path.file_name()
-                    .is_some_and(|name| name == "release" || name == "debug")
-            })
-            .and_then(Path::parent)
-            .map_or_else(|| manifest.join("../../target"), Path::to_path_buf)
+    let parent = exe.parent();
+    let under_deps = parent.is_some_and(|path| path.file_name().is_some_and(|name| name == "deps"));
+    let profile = parent.and_then(|path| {
+        if under_deps {
+            path.parent()
+        } else {
+            Some(path)
+        }
+    });
+    let executable_target = profile
+        .filter(|path| {
+            path.file_name()
+                .is_some_and(|name| name == "release" || name == "debug")
+        })
+        .and_then(Path::parent);
+    let target = match target_dir {
+        Some(target) if Path::new(target).is_absolute() => PathBuf::from(target),
+        // Cargo runs tests from the package directory, losing the origin
+        // against which it resolved a relative target directory.
+        Some(_) if under_deps && executable_target.is_some() => executable_target
+            .expect("recognized test profile")
+            .to_path_buf(),
+        Some(target) => cwd.join(target),
+        None => executable_target.map_or_else(|| manifest.join("../../target"), Path::to_path_buf),
     };
     [target.join("release/rexx"), target.join("debug/rexx")]
 }

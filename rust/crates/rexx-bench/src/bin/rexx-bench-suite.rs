@@ -640,8 +640,8 @@ mod tests {
         let candidates = rust_binary_candidates();
         let binary = candidates
             .iter()
-            .cloned()
             .find(|path| path.is_file())
+            .cloned()
             .unwrap_or_else(|| {
                 panic!(
                     "neither {} nor {} exists. This \
