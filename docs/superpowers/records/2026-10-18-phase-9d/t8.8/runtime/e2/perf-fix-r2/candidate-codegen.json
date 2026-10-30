@@ -1,0 +1,23 @@
+{
+  "pin": "/tmp/codex-p9d-t88-target/release/rexx",
+  "sha256": "0a9651475867a24716c080301e3421e676c04c80503342d3d936ed978eadff7a",
+  "nm_command": [
+    "nm",
+    "-S",
+    "-C",
+    "/tmp/codex-p9d-t88-target/release/rexx"
+  ],
+  "command": [
+    "objdump",
+    "-d",
+    "-C",
+    "-l",
+    "--no-show-raw-insn",
+    "--start-address=0x26c340",
+    "--stop-address=0x26e481",
+    "/tmp/codex-p9d-t88-target/release/rexx"
+  ],
+  "status": 0,
+  "address": "0x26c340",
+  "size": 8513
+}

@@ -1,0 +1,92 @@
+  26d700:	mov    $0x2,%dil
+  26d703:	cmpb   $0x1,0x1ff6(%r14)
+  26d70b:	jne    26d758 <<rexx_exec::Interp>::begin_invoke+0x1418>
+  26d758:	mov    0xe8(%rsp),%rdx
+  26d760:	mov    %rdx,0x418(%rsp)
+  26d768:	mov    0x18(%rsp),%rdx
+  26d76d:	mov    %rdx,0x3c8(%rsp)
+  26d775:	mov    %r13,0x420(%rsp)
+  26d77d:	movq   $0x1,0x330(%rsp)
+  26d789:	mov    %r12,0x338(%rsp)
+  26d791:	mov    0x38(%rsp),%rdx
+  26d796:	mov    %rdx,0x3d0(%rsp)
+  26d79e:	movdqu 0x265a32(%rip),%xmm0        # 4d31d8 <rexx_api::ffi::CALL_CONTEXT+0x17e48>
+  26d7a6:	movdqu %xmm0,0x3d8(%rsp)
+  26d7af:	movdqu 0x265a31(%rip),%xmm1        # 4d31e8 <rexx_api::ffi::CALL_CONTEXT+0x17e58>
+  26d7b7:	movdqu %xmm1,0x3e8(%rsp)
+  26d7c0:	mov    0xf0(%rsp),%r12
+  26d7c8:	mov    %r12,0x428(%rsp)
+  26d7d0:	mov    0xf8(%rsp),%r15
+  26d7d8:	mov    %r15,0x430(%rsp)
+  26d7e0:	movw   $0x1,0x4f6(%rsp)
+  26d7ea:	movb   $0x3,0x506(%rsp)
+  26d7f2:	mov    %rsi,0x438(%rsp)
+  26d7fa:	mov    0x80(%rsp),%rdx
+  26d802:	mov    %rdx,0x440(%rsp)
+  26d80a:	mov    0x30(%rsp),%rdx
+  26d80f:	mov    %rdx,0x448(%rsp)
+  26d817:	mov    0x20(%rsp),%rdx
+  26d81c:	mov    %rdx,0x450(%rsp)
+  26d824:	movq   $0x0,0x370(%rsp)
+  26d830:	movq   $0x8,0x378(%rsp)
+  26d83c:	movq   $0x0,0x380(%rsp)
+  26d848:	pxor   %xmm2,%xmm2
+  26d84c:	movdqu %xmm2,0x458(%rsp)
+  26d855:	movb   $0x0,0x507(%rsp)
+  26d85d:	movb   $0x1,0x4f8(%rsp)
+  26d865:	movq   $0x9,0x398(%rsp)
+  26d871:	movq   $0x0,0x3a0(%rsp)
+  26d87d:	movb   $0x0,0x3a8(%rsp)
+  26d885:	movl   $0x0,0x388(%rsp)
+  26d890:	movw   $0x0,0x4f4(%rsp)
+  26d89a:	movl   $0x0,0x4f0(%rsp)
+  26d8a5:	movabs $0x1000000000000,%rdx
+  26d8af:	mov    %rdx,0x4f9(%rsp)
+  26d8b7:	movb   $0x4e,0x501(%rsp)
+  26d8bf:	movq   $0x0,0x3b0(%rsp)
+  26d8cb:	movb   $0x2,0x3b8(%rsp)
+  26d8d3:	movw   $0x0,0x3c1(%rsp)
+  26d8dd:	movb   $0x0,0x3c3(%rsp)
+  26d8e5:	movq   $0x0,0x468(%rsp)
+  26d8f1:	movq   $0x0,0x478(%rsp)
+  26d8fd:	movq   $0x0,0x340(%rsp)
+  26d909:	movdqu %xmm2,0x488(%rsp)
+  26d912:	movdqu %xmm2,0x498(%rsp)
+  26d91b:	movdqu %xmm2,0x4a8(%rsp)
+  26d924:	movl   $0x30001,0x502(%rsp)
+  26d92f:	movq   $0x0,0x350(%rsp)
+  26d93b:	movq   $0x0,0x360(%rsp)
+  26d947:	movq   $0x1,0x4b8(%rsp)
+  26d953:	movl   $0x0,0x390(%rsp)
+  26d95e:	movq   $0x0,0x4e0(%rsp)
+  26d96a:	movdqu %xmm2,0x4c0(%rsp)
+  26d973:	movq   $0x0,0x4d0(%rsp)
+  26d97f:	movdqu %xmm1,0x408(%rsp)
+  26d988:	movdqu %xmm0,0x3f8(%rsp)
+  26d991:	cmp    $0x2,%dil
+  26d995:	jne    26d9a3 <<rexx_exec::Interp>::begin_invoke+0x1663>
+  26d997:	xor    %eax,%eax
+  26d999:	mov    0x70(%rsp),%r10d
+  26d99e:	jmp    26da24 <<rexx_exec::Interp>::begin_invoke+0x16e4>
+  26da24:	cmp    %rbp,0xfd8(%r14)
+  26da2b:	jbe    26da4f <<rexx_exec::Interp>::begin_invoke+0x170f>
+  26da4f:	cmpq   $0x0,0xff8(%r14)
+  26da57:	je     26db1d <<rexx_exec::Interp>::begin_invoke+0x17dd>
+  26db1d:	movzbl 0xf(%rsp),%ebp
+  26db22:	or     %al,%bpl
+  26db25:	mov    0x48(%rsp),%rax
+  26db2a:	add    %eax,%eax
+  26db2c:	mov    %ebp,%ecx
+  26db2e:	not    %cl
+  26db30:	and    $0x1,%cl
+  26db33:	shl    $0x2,%cl
+  26db36:	or     %al,%cl
+  26db38:	mov    %cl,0x507(%rsp)
+  26db3f:	lea    0x100(%rsp),%rbx
+  26db47:	lea    0x330(%rsp),%rsi
+  26db4f:	mov    $0x1d8,%edx
+  26db54:	mov    %rbx,%rdi
+  26db57:	call   *0x26a46b(%rip)        # 4d7fc8 <memcpy@GLIBC_2.14>
+  26db5d:	mov    %r14,%rdi
+  26db60:	mov    %rbx,%rsi
+  26db63:	call   25d5a0 <<rexx_exec::Interp>::push_activation>

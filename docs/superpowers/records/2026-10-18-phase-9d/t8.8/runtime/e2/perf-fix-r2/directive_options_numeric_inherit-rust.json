@@ -1,0 +1,13 @@
+{
+  "command": [
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/codex-p9d-t88-target/release/rexx",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/directive_options_numeric_inherit.rex"
+  ],
+  "cwd": "/tmp/t88e2-r2-options-r0vs9f7b/directive_options_numeric_inherit-rust",
+  "status": 0,
+  "source_sha256": "e479ec1ab3c50685e2c773c6eaf47e5fc0d5e79a4f3c9c0cbf6a0e045be7eed9"
+}

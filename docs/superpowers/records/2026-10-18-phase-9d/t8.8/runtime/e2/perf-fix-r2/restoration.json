@@ -1,0 +1,15 @@
+{
+  "restoration_revision": "c7ceb632c2c34e6a37e375182a239058587429dc",
+  "reviewed_source": "4c11ee4449a1fe7b537c2a216ee7c10b1a5b12ab",
+  "rust_tree": "9830e71cb6ef547b63e4e1b804bee8cf4598b020",
+  "reviewed_rust_tree": "9830e71cb6ef547b63e4e1b804bee8cf4598b020",
+  "rust_tree_equal": true,
+  "method_entry_sha256": "d9b58102d88d57e4823669a5977df2cea3e9688fb9a68b25b834ed9bdd31049b",
+  "reviewed_method_entry_sha256": "d9b58102d88d57e4823669a5977df2cea3e9688fb9a68b25b834ed9bdd31049b",
+  "method_entry_bytes_equal": true,
+  "rust_worktree_clean": true,
+  "preserved_pin": "/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx",
+  "pin_sha256": "6ed1c08eb03d54c48d1fe3947ce376f09502aaeba34ac221c334b01b1572b86e",
+  "rejected_candidate_source": "2cfd41033375edb95af4080710f46784e4947b02",
+  "new_round2_pin_exists": false
+}

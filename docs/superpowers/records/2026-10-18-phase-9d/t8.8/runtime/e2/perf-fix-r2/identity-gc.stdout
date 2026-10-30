@@ -1,0 +1,9 @@
+
+running 4 tests
+test dispatch::introspection::tests::enhanced_metaclass_nil_entry_keeps_its_registered_method_through_gc ... ok
+test run::tests::an_executable_retained_under_the_nil_scope_answers ... ok
+test dispatch::method_entry::tests::executing_copies_and_enhanced_metaclass_entries_survive_collection ... ok
+test dispatch::method_entry::tests::registered_executable_survives_dictionary_mutation_and_collection ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 1235 filtered out; finished in 0.14s
+

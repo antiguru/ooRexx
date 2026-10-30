@@ -1,0 +1,12 @@
+{
+  "source_revision": "2cfd41033375edb95af4080710f46784e4947b02",
+  "rust_tree": "25ac16ddc8eefd4e70fc16ba955b4760bab45e4d",
+  "binary": "/tmp/codex-p9d-t88-target/release/rexx",
+  "sha256": "0a9651475867a24716c080301e3421e676c04c80503342d3d936ed978eadff7a",
+  "compiler": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1\n",
+  "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)",
+  "cargo_lock_sha256": "ca3b38a9343c4d44502f6d15d3404ec6ddb2f970fc7561be3fd82c4d109a94a2",
+  "build_record": "release-build.json",
+  "build_record_sha256": "e91ddc83a90a228d88147d4f33daa95a8a65d282d26cfb6f525004ebf2e0100b",
+  "status": "rejected code-order experiment, source restored, no round2 runtime pin"
+}

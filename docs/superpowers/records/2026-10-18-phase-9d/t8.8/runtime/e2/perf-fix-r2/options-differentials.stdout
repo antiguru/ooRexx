@@ -1,0 +1,29 @@
+[
+  {
+    "program": "directive_options",
+    "status": 0,
+    "stdout_bytes": 99,
+    "stderr_bytes": 0,
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true
+  },
+  {
+    "program": "directive_options_numeric_inherit",
+    "status": 0,
+    "stdout_bytes": 49,
+    "stderr_bytes": 0,
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true
+  },
+  {
+    "program": "directive_options_trace_method",
+    "status": 0,
+    "stdout_bytes": 0,
+    "stderr_bytes": 541,
+    "stdout_equal": true,
+    "stderr_equal": true,
+    "status_equal": true
+  }
+]

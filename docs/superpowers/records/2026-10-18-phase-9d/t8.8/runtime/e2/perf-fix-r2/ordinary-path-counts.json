@@ -1,0 +1,37 @@
+[
+  {
+    "name": "pre-repair-codegen",
+    "start": "0x26d70b",
+    "end": "0x26db60",
+    "taken_branches": [
+      "0x26d716",
+      "0x26d99a",
+      "0x26d9c9",
+      "0x26daba"
+    ],
+    "instructions_including_calls": 89,
+    "assumptions": [
+      "no package options armed",
+      "method outside dense prefix",
+      "minted map empty",
+      "calls counted once without their bodies"
+    ]
+  },
+  {
+    "name": "candidate-codegen",
+    "start": "0x26d700",
+    "end": "0x26db63",
+    "taken_branches": [
+      "0x26d70b",
+      "0x26da2b",
+      "0x26da57"
+    ],
+    "instructions_including_calls": 92,
+    "assumptions": [
+      "no package options armed",
+      "method outside dense prefix",
+      "minted map empty",
+      "calls counted once without their bodies"
+    ]
+  }
+]

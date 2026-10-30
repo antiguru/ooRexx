@@ -1,0 +1,23 @@
+{
+  "pin": "/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx",
+  "sha256": "6ed1c08eb03d54c48d1fe3947ce376f09502aaeba34ac221c334b01b1572b86e",
+  "nm_command": [
+    "nm",
+    "-S",
+    "-C",
+    "/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx"
+  ],
+  "command": [
+    "objdump",
+    "-d",
+    "-C",
+    "-l",
+    "--no-show-raw-insn",
+    "--start-address=0x26c340",
+    "--stop-address=0x26e48e",
+    "/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx"
+  ],
+  "status": 0,
+  "address": "0x26c340",
+  "size": 8526
+}

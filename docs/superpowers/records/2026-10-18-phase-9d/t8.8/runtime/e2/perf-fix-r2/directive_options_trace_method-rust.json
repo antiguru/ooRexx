@@ -1,0 +1,13 @@
+{
+  "command": [
+    "timeout",
+    "-k",
+    "2s",
+    "20s",
+    "/tmp/codex-p9d-t88-target/release/rexx",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/directive_options_trace_method.rex"
+  ],
+  "cwd": "/tmp/t88e2-r2-options-r0vs9f7b/directive_options_trace_method-rust",
+  "status": 0,
+  "source_sha256": "aa2e12948d57d26b7d7cef5ae4613b4a2155474a14e7db3ba2069be6f585f3bb"
+}

@@ -74,3 +74,20 @@ memcap 8G python3 /tmp/t88e2-perf-check.py semantic-policy-controls 480 /home/mo
 memcap 8G python3 /tmp/t88e2-perf-check.py clippy 480 /home/moritz/dev/repos/ooRexx-rust-rewrite/rust cargo clippy -j4 -p rexx-exec --all-targets -- -D warnings
 memcap 8G python3 /tmp/t88e2-perf-check.py release-build 480 /home/moritz/dev/repos/ooRexx-rust-rewrite/rust cargo build -j4 --release -p rexx-exec --bin rexx
 ```
+
+## Performance round 2: Rejected code-order experiment
+
+The [round-2 report](task-8.8e2-perf-fix-r2-report.md) records candidate `2cfd41033`, which moved the unchanged executable-retention block immediately below package application. The emitted code retained its package tag and 472-byte callee copy, while the inspected no-options/missing-method path increased from 89 to 92 instructions with calls counted once. Identity/GC, source-policy, formatting, clippy and three isolated package-options oracle differentials all passed, but those results did not establish a performance benefit. The controller rejected the experiment, and explicit restoration commit `c7ceb632c` returns the complete Rust subtree to reviewed source `4c11ee444` with exact tree and file hashes in [restoration.json](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r2/restoration.json). No round-2 runtime pin or whole-program profile was created, and the unchanged f performance pin remains the runtime artifact.
+
+The H1 residual remains open at +0.12091429% dispatch, +0.13069467% dispatchclass and +0.18086132% sendloop against original e1. Those cross-source figures include intervening f changes and do not measure the restored f performance revision. Both candidate and baseline disassembly, the precise static paths, compiler/build provenance and all separate output channels are preserved under [perf-fix-r2](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r2/). The build-cache release binary still contains the rejected candidate until a later build and must not be mistaken for the retained pin. No additional runtime checks were required solely for the exact source restoration, and no broader optimization or semantic departure was applied.
+
+Exact bounded check invocations for the rejected candidate:
+
+```sh
+memcap 8G python3 /tmp/t88e2-r2-check.py identity-gc 480 /home/moritz/dev/repos/ooRexx-rust-rewrite/rust cargo test -j4 -p rexx-exec --lib -- dispatch::method_entry::tests dispatch::introspection::tests run::tests::an_executable_retained_under_the_nil_scope_answers --nocapture
+memcap 8G python3 /tmp/t88e2-r2-check.py fmt 120 /home/moritz/dev/repos/ooRexx-rust-rewrite/rust cargo fmt --all --check
+memcap 8G python3 /tmp/t88e2-r2-check.py source-policy 480 /home/moritz/dev/repos/ooRexx-rust-rewrite/rust cargo test -j4 -p rexx-exec --test refusal_sites --test representation_refusals
+memcap 8G python3 /tmp/t88e2-r2-check.py release-build 480 /home/moritz/dev/repos/ooRexx-rust-rewrite/rust cargo build -j4 --release -p rexx-exec --bin rexx
+memcap 2G python3 /tmp/t88e2-r2-check.py options-differentials 180 /home/moritz/dev/repos/ooRexx-rust-rewrite python3 /tmp/t88e2-r2-options.py
+memcap 8G python3 /tmp/t88e2-r2-check.py clippy 480 /home/moritz/dev/repos/ooRexx-rust-rewrite/rust cargo clippy -j4 -p rexx-exec --all-targets -- -D warnings
+```

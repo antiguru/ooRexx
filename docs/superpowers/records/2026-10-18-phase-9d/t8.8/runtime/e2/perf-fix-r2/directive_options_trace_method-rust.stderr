@@ -1,0 +1,9 @@
+     3 *-* o = .k~new
+     4 *-* o~m
+       >I> Method "M" with scope "K" in package "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/directive_options_trace_method.rex".
+    11 *-* y = 2
+    12 *-* return 3
+       <I< Method "M" with scope "K" in package "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/directive_options_trace_method.rex".
+     5 *-* call sub
+       >I> Routine "SUB" in package "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/directive_options_trace_method.rex".
+    15 *-* trace off

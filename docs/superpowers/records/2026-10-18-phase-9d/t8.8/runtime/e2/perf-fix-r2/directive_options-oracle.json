@@ -1,0 +1,10 @@
+{
+  "command": [
+    "bash",
+    "/tmp/t88e2-r2-options-r0vs9f7b/oracle.sh",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/directive_options.rex"
+  ],
+  "cwd": "/tmp/t88e2-r2-options-r0vs9f7b/directive_options-oracle",
+  "status": 0,
+  "source_sha256": "fdd78ae88e5ea93f057080d5e3280ef91c471c4ddf45f9d4f90fc45d69f89e8e"
+}
