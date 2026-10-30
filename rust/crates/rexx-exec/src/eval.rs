@@ -1617,6 +1617,7 @@ impl Interp {
         raise: fn(&[u8]) -> Raised,
     ) -> Result<bool, Failure> {
         let frame = self.roots.activity_mut().push_frame();
+        self.roots.activity_mut().push_temp(value);
         let string = self.required_string_or_nil(value)?;
         let text = self.to_text(string);
         let holds = match logical_value(&text) {
