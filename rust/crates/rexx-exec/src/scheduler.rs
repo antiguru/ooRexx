@@ -553,17 +553,18 @@ pub(crate) trait Scheduler {
     /// Runs the native call the running activity, parked for it, prepared,
     /// off the baton (spec 2026-09-29 P6-3): on a pool thread, which this
     /// thread lends the baton to while it enters the call, or, where the pool
-    /// is off or no thread can be spawned, here on the baton. Its completion
-    /// is posted.
+    /// is configured inline, here on the baton. Its completion is posted.
+    /// A spawn failure wakes the original continuation without starting it.
     fn exit_for_native(&mut self);
     /// Runs `block`, a blocking operation of the running activity's that
     /// touches no island value, on a pool thread, which posts what it ended
-    /// with under the token answered; `Err(block)` where the pool is off or
-    /// no thread can be spawned.
+    /// with under the token answered. The worker was reserved before the
+    /// command child was started.
     fn exit_for_block(
         &mut self,
         block: crate::command::Block,
-    ) -> Result<u64, crate::command::Block>;
+        worker: crate::command::ReservedWorker,
+    ) -> u64;
     /// Posts `completion`, of `activity`'s native call in the native frame
     /// `frame`, to `inbox` for the baton's holder to drain; it touches
     /// nothing else.
@@ -695,6 +696,21 @@ impl Scheduler for Interp {
         if self.stress_collect {
             self.collect_now();
         }
+        if self.activity.native_call.is_none() {
+            return;
+        }
+        let worker = match self.pool.reserve() {
+            Ok(worker) => worker,
+            Err(failure) => {
+                self.activity
+                    .native_call
+                    .as_mut()
+                    .expect("prepared call")
+                    .spawn_failed(failure);
+                self.unpark(self.activities.running);
+                return;
+            }
+        };
         let park = self.activity.native_park.take();
         let Some(record) = self.activity.native_call.as_mut() else {
             self.activity.native_park = park;
@@ -708,7 +724,7 @@ impl Scheduler for Interp {
         let baton = crate::sync::Arc::clone(&self.baton);
         let inbox = self.timer.inbox();
         let activity = self.activities.running;
-        if let Some(worker) = self.pool.reserve() {
+        if let Some(worker) = worker {
             let to = worker.thread();
             let pooled = crate::dispatch::library::PooledCall::new(
                 call,
@@ -745,10 +761,8 @@ impl Scheduler for Interp {
     fn exit_for_block(
         &mut self,
         block: crate::command::Block,
-    ) -> Result<u64, crate::command::Block> {
-        let Some(worker) = self.pool.reserve() else {
-            return Err(block);
-        };
+        worker: crate::command::ReservedWorker,
+    ) -> u64 {
         self.activities.in_flight += 1;
         self.activities.next_block += 1;
         let token = self.activities.next_block;
@@ -780,7 +794,7 @@ impl Scheduler for Interp {
                 });
             });
         }));
-        Ok(token)
+        token
     }
 
     fn post_completion(
@@ -2140,6 +2154,12 @@ impl Interp {
 
     /// The running activity's park, resumed now that it has woken.
     fn resume_parked(&mut self, failure: Option<Failure>) -> Result<Option<ObjRef>, Failure> {
+        let failure = failure.or_else(|| {
+            self.activity
+                .native_call
+                .as_mut()
+                .and_then(|call| call.take_spawn_failure())
+        });
         let park = self.activity.native_park.take().or_else(|| {
             self.activity
                 .native_call
@@ -2941,7 +2961,7 @@ pub(crate) fn take_scripted() -> Option<Scripted> {
 }
 
 mod pool;
-pub(crate) use pool::{POOL_BOUND, POOL_STACK_BYTES, Pool, posting_panics};
+pub(crate) use pool::{POOL_BOUND, POOL_STACK_BYTES, Pool, Worker, posting_panics};
 #[cfg(test)]
 pub(crate) use pool::{threads_beyond_bound, threads_spawned};
 

@@ -137,21 +137,22 @@ impl Pool {
     }
 
     /// An idle thread, or a new one, for one job: beyond the bound where
-    /// every thread is busy. `None` where the bound is 0 or the spawn fails.
-    pub(crate) fn reserve(&self) -> Option<Worker> {
+    /// every thread is busy. `Ok(None)` selects configured inline execution.
+    /// An OS thread creation failure is returned without running the job.
+    pub(crate) fn reserve(&self) -> Result<Option<Worker>, crate::Failure> {
         let mut state = lock(&self.shared.state);
         if state.bound == 0 {
-            return None;
+            return Ok(None);
         }
         if let Some(worker) = state.idle.pop() {
-            return Some(worker);
+            return Ok(Some(worker));
         }
         // Every thread busy: a new one beyond the bound, since a command or
         // native call run inline instead holds the baton while it waits, and
         // what it waits for may be another activity's to do.
         #[cfg(test)]
         if state.fixed && state.threads.len() >= state.bound {
-            return None;
+            return Ok(None);
         }
         let mailbox = Arc::new(Mailbox {
             mail: Mutex::new(None),
@@ -164,7 +165,7 @@ impl Pool {
                 let (shared, mailbox) = (Arc::clone(&self.shared), Arc::clone(&mailbox));
                 move || work(&shared, &mailbox)
             })
-            .ok()?;
+            .map_err(|_| spawn_failed())?;
         let thread = spawned.thread().id();
         #[cfg(test)]
         SPAWNED.with(|spawned| spawned.set(spawned.get() + 1));
@@ -173,7 +174,7 @@ impl Pool {
             BEYOND.with(|beyond| beyond.set(beyond.get() + 1));
         }
         state.threads.push((thread, spawned));
-        Some(Worker { thread, mailbox })
+        Ok(Some(Worker { thread, mailbox }))
     }
 }
 
@@ -278,4 +279,10 @@ fn work(shared: &Arc<Shared>, mailbox: &Arc<Mailbox>) {
             mailbox: Arc::clone(mailbox),
         });
     }
+}
+
+/// The system-service condition for an OS thread creation failure.
+#[cold]
+fn spawn_failed() -> crate::Failure {
+    crate::Raised::syntax(48, 1, vec![b"ERROR CREATING THREAD".to_vec()]).into()
 }

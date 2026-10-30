@@ -713,9 +713,31 @@ impl Blocked {
 const INTERRUPTED: i32 = -4;
 
 /// A started child, or what a command that started none answers.
+/// A command's worker reservation, returned if child creation or dispatch unwinds.
+pub(crate) struct ReservedWorker(Option<crate::scheduler::Worker>);
+
+impl ReservedWorker {
+    pub(crate) fn new(worker: crate::scheduler::Worker) -> Self {
+        Self(Some(worker))
+    }
+
+    pub(crate) fn run(mut self, job: Box<dyn FnOnce() + Send>) {
+        self.0.take().expect("reserved worker").run(job);
+    }
+}
+
+impl Drop for ReservedWorker {
+    fn drop(&mut self) {
+        if let Some(worker) = self.0.take() {
+            worker.run(Box::new(|| {}));
+        }
+    }
+}
+
 enum Child {
     Ran(Waited),
     Running {
+        worker: Option<ReservedWorker>,
         running: std::process::Child,
         input: Option<Vec<u8>>,
         merged: Option<std::io::PipeReader>,
@@ -807,6 +829,11 @@ fn start(
             builder.stderr(piped(io.is_some_and(IoContext::redirects_error)));
         }
     }
+    let worker = if interp.activity.resuming {
+        None
+    } else {
+        interp.pool.reserve()?.map(ReservedWorker::new)
+    };
     let Ok(running) = builder.spawn() else {
         return Ok(nothing(UNKNOWN_COMMAND));
     };
@@ -816,6 +843,7 @@ fn start(
     // for end-of-file, and any one of them left open never gives it.
     drop(builder);
     Ok(Child::Running {
+        worker,
         running,
         input,
         merged: merged.map(|(reader, _writer)| reader),
@@ -980,10 +1008,11 @@ impl Interp {
         let spawned = match start(self, &handler, command, io, switch_mode)? {
             Child::Ran(spawned) => spawned,
             Child::Running {
+                worker: Some(worker),
                 running,
                 input,
                 merged,
-            } if !self.activity.resuming => {
+            } => {
                 let block = Block {
                     running,
                     input,
@@ -993,14 +1022,11 @@ impl Interp {
                         context.redirects_error() && !context.shares_one_target()
                     }),
                 };
-                match self.exit_for_block(block) {
-                    Ok(token) => return Ok(Commanded::Left(token)),
-                    Err(block) => {
-                        self.collect_on_baton(block.running, block.input, block.merged, ends)?
-                    }
-                }
+                let token = self.exit_for_block(block, worker);
+                return Ok(Commanded::Left(token));
             }
             Child::Running {
+                worker: None,
                 running,
                 input,
                 merged,

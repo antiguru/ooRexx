@@ -1035,3 +1035,46 @@ fn a_registered_handler_answers_until_a_library_closes() {
         "closing a library left a handler registered"
     );
 }
+
+#[test]
+fn unstarted_native_failure_releases_kept_objects_and_lent_storage() {
+    use rexx_api::callbacks::Surface;
+    use rexx_api::values::Host;
+    use rexx_core::ObjRef;
+    for failed in [false, true] {
+        let mut interp = Interp::new();
+        let buffer = interp.new_mutable_buffer(16);
+        let carried = ObjRef::small_int(7).expect("small integer");
+        interp.push_native_frame(ObjRef::NIL, ObjRef::NIL, None, b"", &[], None);
+        interp.mutable_buffer(buffer).expect("buffer");
+        interp.kept_c_string(carried, b"7").expect("copy");
+        let token = interp.native_token();
+        interp.activity.native_call = Some(Box::new(super::NativeInFlight {
+            call: None,
+            frame: token,
+            pending: None,
+            stage: if failed {
+                super::Stage::SpawnFailed(
+                    crate::Raised::syntax(48, 1, vec![b"ERROR CREATING THREAD".to_vec()]).into(),
+                )
+            } else {
+                super::Stage::Prepared
+            },
+            park: None,
+        }));
+        interp
+            .buffer_mut(buffer)
+            .expect("buffer")
+            .bytes
+            .extend_from_slice(&[0; 4096]);
+        assert_eq!(interp.buffer(buffer).expect("buffer").bytes.retired(), 1);
+        interp.abandon_native_call(ObjRef::NIL);
+        assert!(interp.activity.native_handles.is_empty());
+        assert_eq!(interp.buffer(buffer).expect("buffer").bytes.retired(), 0);
+        assert_eq!(interp.kept_holders.get(&carried), None);
+        let mut roots = Vec::new();
+        interp.object_roots(&mut roots);
+        assert!(!roots.contains(&buffer));
+        interp.collect_now();
+    }
+}

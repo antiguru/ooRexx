@@ -119,3 +119,48 @@ fn an_owned_child_keeps_its_status_and_error_mapping() {
         Some("ERROR")
     );
 }
+
+#[test]
+fn unused_command_worker_returns_after_drop_unwind_and_exec_failure() {
+    let mut interp = Interp::new();
+    interp.pool = crate::scheduler::Pool::new(1 << 20, 1);
+    let reserve = || ReservedWorker::new(interp.pool.reserve().expect("spawn").expect("worker"));
+    drop(reserve());
+    let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _worker = reserve();
+        panic!("unwind before dispatch");
+    }));
+    assert!(unwound.is_err());
+    for _ in 0..3 {
+        assert!(matches!(
+            start(
+                &interp,
+                &Handler::Path,
+                b"/no-such-command-t88e2",
+                None,
+                None
+            ),
+            Ok(Child::Ran(Waited {
+                rc: UNKNOWN_COMMAND,
+                ..
+            }))
+        ));
+    }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while interp.pool.threads() > 1 && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    interp.pool.fix_at_bound();
+    let worker = loop {
+        if let Some(worker) = interp.pool.reserve().expect("reserve") {
+            break worker;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "reserved worker never returned"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    };
+    assert_eq!(interp.pool.threads(), 1);
+    worker.run(Box::new(|| {}));
+}

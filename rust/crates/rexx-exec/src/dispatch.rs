@@ -3509,8 +3509,6 @@ impl Interp {
         Ok(variable.into())
     }
 
-
-
     /// [`Interp::finish_call`]'s release of a method activation that has
     /// just been popped, with `saved_context` the sender's convention. A
     /// `REPLY`'s activation answers its value, and moves with its slot frame

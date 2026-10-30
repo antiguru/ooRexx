@@ -311,7 +311,14 @@ fn two_native_calls_waiting_for_each_other_meet_on_pool_threads() {
 fn a_disabled_pool_leaves_ready_activities_to_the_next_baton_holder() {
     MEETINGS[1].reset();
     let source = MEETING.replace("MEET\n", "MEETBRIEFLY\n");
-    let ran = run_shaped(&source, Shape { bound: Some(0), ..SHAPE }).expect("run");
+    let ran = run_shaped(
+        &source,
+        Shape {
+            bound: Some(0),
+            ..SHAPE
+        },
+    )
+    .expect("run");
     assert_eq!(ran.outcome.exit_code, 0, "{}", ran.stderr());
     assert_eq!(ran.stdout(), "main\nother\n");
     assert_eq!(ran.exits, 2);
@@ -680,7 +687,7 @@ fn threads_beyond_the_bound_end_after_their_jobs() {
     let pool = crate::scheduler::Pool::new(1 << 20, 1);
     let gate = std::sync::Arc::new((Mutex::new(false), Condvar::new()));
     for _ in 0..3 {
-        let worker = pool.reserve().expect("a thread");
+        let worker = pool.reserve().expect("spawn succeeds").expect("a thread");
         let gate = std::sync::Arc::clone(&gate);
         worker.run(Box::new(move || {
             let (open, opened) = &*gate;

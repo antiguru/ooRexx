@@ -595,7 +595,7 @@ impl Interp {
     pub(crate) fn linein_line(&mut self) -> Result<Vec<u8>, Failure> {
         let route = self.local_route(b"INPUT")?;
         let Some(route) = route.filter(|route| *route != ObjRef::NIL) else {
-            return Ok(self.input_line().unwrap_or_default());
+            return Ok(self.input_line()?.unwrap_or_default());
         };
         let caller = self.caller();
         let answer = pinned!(
@@ -612,12 +612,12 @@ impl Interp {
     /// The reader behind `.STDIN~LINEIN`, keeping end of input apart from an
     /// empty line: its caller raises `NOTREADY` on the first and not on the
     /// second.
-    pub(crate) fn input_line(&mut self) -> Option<Vec<u8>> {
+    pub(crate) fn input_line(&mut self) -> Result<Option<Vec<u8>>, Failure> {
         self.hand_over_before_read();
-        if !self.fill_stdin(true) {
-            return None;
+        if !self.fill_stdin(true)? {
+            return Ok(None);
         }
-        self.input.read_line()
+        Ok(self.input.read_line())
     }
 
     /// Whether `.input` is the process's own standard input.
@@ -626,12 +626,12 @@ impl Interp {
     }
 
     /// Up to `wanted` bytes of `.input`, for `.STDIN~CHARIN`.
-    pub(crate) fn input_bytes(&mut self, wanted: usize) -> Vec<u8> {
+    pub(crate) fn input_bytes(&mut self, wanted: usize) -> Result<Vec<u8>, Failure> {
         self.hand_over_before_read();
-        if !self.fill_stdin(false) {
-            return Vec::new();
+        if !self.fill_stdin(false)? {
+            return Ok(Vec::new());
         }
-        self.input.read_bytes(wanted)
+        Ok(self.input.read_bytes(wanted))
     }
 
     /// Reads standard input until it holds a line where `line`, else a byte,
@@ -641,11 +641,11 @@ impl Interp {
     /// the read answers nothing, as the oracle's interrupted read does.
     /// Other posts wait for the next drain, held here so that an idle waits
     /// for a new post.
-    fn fill_stdin(&mut self, line: bool) -> bool {
+    fn fill_stdin(&mut self, line: bool) -> Result<bool, Failure> {
         let mut kept = std::collections::VecDeque::new();
         let filled = self.fill_stdin_keeping(line, &mut kept);
         self.timer.requeue(kept);
-        if filled {
+        if matches!(filled, Ok(true)) {
             self.input.reading_stdin();
         }
         filled
@@ -655,12 +655,23 @@ impl Interp {
         &mut self,
         line: bool,
         kept: &mut std::collections::VecDeque<crate::scheduler::Posted>,
-    ) -> bool {
+    ) -> Result<bool, Failure> {
         while self.input.stdin_wants(line) {
             if self.input.start_stdin_read() {
-                let Some(worker) = self.pool.reserve() else {
-                    self.input.receive(read_stdin_chunk());
-                    continue;
+                let worker = match self.pool.reserve() {
+                    Ok(Some(worker)) => worker,
+                    Ok(None) => {
+                        self.input.receive(read_stdin_chunk());
+                        continue;
+                    }
+                    Err(failure) => {
+                        // Only this unstarted read's marker changes. Partial
+                        // input, EOF and descriptor ownership remain intact.
+                        if let Source::Stdin(stdin) = &mut self.input.source {
+                            stdin.reading = false;
+                        }
+                        return Err(failure);
+                    }
                 };
                 let inbox = self.timer.inbox();
                 let baton = crate::sync::Arc::clone(&self.baton);
@@ -682,10 +693,10 @@ impl Interp {
             if halted {
                 self.input.interrupted();
                 self.halt_all();
-                return false;
+                return Ok(false);
             }
         }
-        true
+        Ok(true)
     }
 
     /// Hands the two output buffers to the embedding's [`crate::Sinks`],

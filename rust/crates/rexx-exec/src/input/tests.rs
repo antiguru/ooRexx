@@ -439,8 +439,7 @@ fn a_file_console_reads_what_is_appended() {
 #[test]
 fn a_file_console_starts_where_the_descriptor_is() {
     use std::io::Seek;
-    let path =
-        std::env::temp_dir().join(format!("rexx-file-console-{}-start", std::process::id()));
+    let path = std::env::temp_dir().join(format!("rexx-file-console-{}-start", std::process::id()));
     std::fs::write(&path, b"hello\nworld\n").expect("the console file is written");
     let mut file = std::fs::File::open(&path).expect("the console file opens");
     file.seek(std::io::SeekFrom::Start(6))
@@ -451,4 +450,81 @@ fn a_file_console_starts_where_the_descriptor_is() {
     let _ = std::fs::remove_file(&path);
     let null = std::fs::File::open("/dev/null").expect("/dev/null opens");
     assert!(FileConsole::over(null).is_none());
+}
+
+#[test]
+fn spawn_failure_preserves_partial_input_and_requeues_other_posts() {
+    if crate::test_process::isolated(
+        "input::tests::spawn_failure_preserves_partial_input_and_requeues_other_posts",
+    ) {
+        return;
+    }
+    let mut interp = Interp::new();
+    interp.pool = crate::scheduler::Pool::new(1 << 46, 1);
+    interp.input = Input::new(ProgramInput::Stdin);
+    interp.input.exhausted = true;
+    assert!(interp.input.start_stdin_read());
+    let inbox = interp.timer.inbox();
+    inbox.post(crate::scheduler::Posted::Output {
+        error: false,
+        bytes: b"other activity".to_vec(),
+    });
+    inbox.post(crate::scheduler::Posted::Input(b"partial".to_vec()));
+    for _ in 0..2 {
+        assert!(interp.fill_stdin(true).is_err());
+        let Source::Stdin(stdin) = &interp.input.source else {
+            panic!("stdin ownership changed")
+        };
+        assert!(!stdin.reading);
+        assert!(!stdin.ended);
+        assert_eq!(
+            stdin.buffered.iter().copied().collect::<Vec<_>>(),
+            b"partial"
+        );
+        assert!(interp.input.exhausted);
+    }
+    let posts = interp.timer.drain();
+    assert_eq!(posts.len(), 1);
+    assert!(
+        matches!(&posts[0], crate::scheduler::Posted::Output { bytes, .. } if bytes == b"other activity")
+    );
+    // Buffered reads still work after the failed request, without a worker.
+    assert_eq!(interp.input_bytes(7).expect("buffered bytes"), b"partial");
+    assert!(!interp.input.exhausted);
+}
+
+#[test]
+fn spawn_failure_on_stdin_reaches_syntax_without_reading() {
+    if crate::test_process::isolated(
+        "input::tests::spawn_failure_on_stdin_reaches_syntax_without_reading",
+    ) {
+        return;
+    }
+    for read in [
+        "linein()",
+        "charin(, , 1)",
+        ".stdin~linein",
+        ".stdin~charin(, 1)",
+    ] {
+        let source = format!(
+            "call probe\ncall probe\nsay 'progress'\nexit\nprobe: procedure\nsignal on syntax name caught\nx={read}\nsay 'READ RAN'\nreturn\ncaught: say condition('o')~code\nreturn\n"
+        );
+        let outcome = std::thread::Builder::new()
+            .stack_size(crate::INTERPRETER_STACK_BYTES)
+            .spawn(move || {
+                crate::set_pool_stack(1 << 46);
+                crate::execute_on(
+                    b"/stdin.rex",
+                    source.into_bytes(),
+                    false,
+                    crate::Invocation::none().with_input(ProgramInput::Stdin),
+                    Some(crate::INTERPRETER_STACK_BYTES),
+                )
+            })
+            .expect("interpreter")
+            .join()
+            .expect("run");
+        assert_eq!(outcome.exit_code, 0, "{:?}", outcome);
+        assert_eq!(outcome.stdout, b"48.1\n48.1\nprogress\n", "{read}");
+    }
 }

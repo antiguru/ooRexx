@@ -1273,7 +1273,7 @@ pub(super) fn charin(
         if wanted == 0 {
             return Ok(Some(interp.text(b"")));
         }
-        let read = interp.input_bytes(wanted);
+        let read = interp.input_bytes(wanted)?;
         // Asking for 50 of six bytes answers all six and leaves
         // `NOTREADY:EOF`, asking for exactly six stays `READY:`, and a further
         // ask reads past the end, which is `NOTREADY:EOF` too
@@ -1490,7 +1490,7 @@ fn next_line(interp: &mut Interp, receiver: ObjRef) -> Result<Option<Vec<u8>>, F
         let StandardStream::In = which else {
             return Ok(None);
         };
-        return match interp.input_line() {
+        return match interp.input_line()? {
             Some(text) => {
                 // A read that succeeds clears whatever a refused write left:
                 // measured, `.stdin~lineout` leaves `ERROR:13` and the next

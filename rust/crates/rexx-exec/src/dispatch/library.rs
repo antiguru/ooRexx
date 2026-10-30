@@ -516,13 +516,19 @@ impl Interp {
     /// lent buffers -- until the completion is drained
     /// ([`Interp::end_abandoned_call`]).
     pub(crate) fn abandon_native_call(&mut self, receiver: ObjRef) {
-        if self.activity.native_call.take().is_none() {
+        let Some(call) = self.activity.native_call.take() else {
             return;
-        }
+        };
         let scope = self.native_frame().scope;
-        let token = self.native_token();
-        let (popped, frame) = self.take_native_frame();
-        self.activities.keep_abandoned(token, frame);
+        let popped = if call.unstarted() {
+            // No native body can still use kept objects or lent buffers.
+            self.pop_native_frame()
+        } else {
+            let token = self.native_token();
+            let (popped, frame) = self.take_native_frame();
+            self.activities.keep_abandoned(token, frame);
+            popped
+        };
         if popped.reserved {
             self.release_guard(crate::guards::GuardKey {
                 object: receiver,
@@ -1077,12 +1083,37 @@ enum HeldCall {
 enum Stage {
     /// Prepared, its driver not yet exited.
     Prepared,
+    /// Worker creation failed before the native body started.
+    SpawnFailed(Failure),
     /// Left its driver; its completion not yet drained.
     Left,
     Completed(Completion),
 }
 
 impl NativeInFlight {
+    /// Records failed worker creation before the call leaves its driver.
+    pub(crate) fn spawn_failed(&mut self, failure: Failure) {
+        debug_assert!(self.awaits_exit());
+        self.stage = Stage::SpawnFailed(failure);
+    }
+
+    /// Takes the failure for the original parked continuation to handle.
+    pub(crate) fn take_spawn_failure(&mut self) -> Option<Failure> {
+        if !matches!(self.stage, Stage::SpawnFailed(_)) {
+            return None;
+        }
+        let Stage::SpawnFailed(failure) = std::mem::replace(&mut self.stage, Stage::Prepared)
+        else {
+            unreachable!()
+        };
+        Some(failure)
+    }
+
+    /// Whether no native body has run or can still access the frame.
+    fn unstarted(&self) -> bool {
+        matches!(self.stage, Stage::Prepared | Stage::SpawnFailed(_))
+    }
+
     /// Whether the call waits for its driver exit.
     pub(crate) fn awaits_exit(&self) -> bool {
         matches!(self.stage, Stage::Prepared)
