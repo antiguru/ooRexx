@@ -13,6 +13,5 @@ call physical 'continued-bytes'
 exit
 physical: procedure
   use arg label
-  call lineout 'STDERR', label
-  address system 'stat -Lc %s /proc/self/fd/1 >&2; od -An -tx1 /proc/self/fd/1 >&2'
+  call lineout 'STDERR', label .stream~new('stdout')~query('size')
   return

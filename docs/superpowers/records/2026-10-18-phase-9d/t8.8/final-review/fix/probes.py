@@ -7,6 +7,7 @@ for probe in sorted((base/'probes').glob('*.rex')):
  for side in ['oracle','baseline','crate']:
   dest=base/label/probe.stem/side;dest.mkdir(parents=True,exist_ok=True)
   cwd=tempfile.mkdtemp(prefix='t88f-')
+  (pathlib.Path(cwd)/'stdout').symlink_to((dest/'stdout').resolve())
   env=os.environ.copy()
   if side=='oracle':
    env['LD_LIBRARY_PATH']='/home/moritz/dev/repos/ooRexx/build/lib';cmd=['timeout','-k','5','20','/home/moritz/dev/repos/ooRexx/build/bin/rexx',str(probe)]
