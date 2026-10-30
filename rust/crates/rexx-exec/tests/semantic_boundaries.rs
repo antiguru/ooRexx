@@ -74,3 +74,41 @@ fn buffered_invocations_do_not_query_the_hosts_stdout() {
     assert_eq!(result.stdout, b"[][][]\n");
     assert!(result.stderr.is_empty());
 }
+
+#[test]
+fn owned_stdout_queries_observe_the_redirected_file() {
+    use std::io::{Read, Seek};
+    use std::process::{Command, Stdio};
+    let directory = std::env::temp_dir().join(format!("rexx-stdout-query-{}", std::process::id()));
+    std::fs::create_dir(&directory).unwrap();
+    let program = directory.join("probe.rex");
+    std::fs::write(&program, b"call lineout 'STDERR', .stdout~query('size') .stdout~query('position') .stdout~query('position write char') .stdout~query('position sys')\ncall charout , 'abc'\ncall lineout 'STDERR', 'logical' .stdout~query('position write char')\ncall lineout 'STDERR', 'sys' .stdout~query('position sys') 'size' .stdout~query('size')\naddress system 'true'\ncall lineout 'STDERR', 'handover' .stdout~query('position write char')\n").unwrap();
+    let mut output = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open(directory.join("stdout"))
+        .unwrap();
+    let child = Command::new("memcap")
+        .args(["2G", "timeout", "20"])
+        .arg(env!("CARGO_BIN_EXE_rexx"))
+        .arg(&program)
+        .current_dir(&directory)
+        .stdin(Stdio::null())
+        .stdout(output.try_clone().unwrap())
+        .stderr(Stdio::piped())
+        .output()
+        .unwrap();
+    assert!(child.status.success(), "{:?}", child.stderr);
+    assert_eq!(
+        child.stderr,
+        b"0 1 1 0\nlogical 4\nsys 3 size 3\nhandover 4\n"
+    );
+    assert_eq!(output.metadata().unwrap().len(), 3);
+    assert_eq!(output.stream_position().unwrap(), 3);
+    output.rewind().unwrap();
+    let mut bytes = Vec::new();
+    output.read_to_end(&mut bytes).unwrap();
+    assert_eq!(bytes, b"abc");
+    std::fs::remove_dir_all(directory).unwrap();
+}

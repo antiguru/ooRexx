@@ -89,7 +89,6 @@ impl Interp {
         indent: usize,
         at: Option<usize>,
     ) -> Result<(), Failure> {
-        self.roots.activity_mut().push_temp(value);
         match &target.kind {
             ExprKind::Variable(id) => {
                 let name = code.symbols.name(*id).as_bytes();

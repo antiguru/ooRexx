@@ -344,21 +344,8 @@ pub(crate) fn max_min_over(
     message: bool,
 ) -> Result<ObjRef, Failure> {
     let Numeric { digits, fuzz, form } = current(interp);
-    let width = digits.min(WRITTEN_WHOLE_DIGITS as u64) as u32;
-    let whole_target =
-        whole_written(&target_text).is_some_and(|value| value.unsigned_abs() < 10u64.pow(width));
-    let converted = if whole_target
-        && rest
-            .iter()
-            .flatten()
-            .any(|value| needs_string(interp, *value))
-    {
-        convert_extreme_arguments(interp, rest)?
-    } else {
-        std::borrow::Cow::Borrowed(rest)
-    };
+    let (converted, quiet) = extreme_arguments(interp, &target_text, rest, digits)?;
     let rest = converted.as_ref();
-    let quiet = written_whole(interp, &target_text, rest, digits);
     let mut best = target.clone().into_round(digits);
     let mut best_text = target_text;
     for (index, slot) in rest.iter().enumerate() {
@@ -417,6 +404,33 @@ pub(crate) fn max_min_over(
         }
     }
     Ok(interp.number(best, saturate(digits), form))
+}
+
+/// The arguments and their whole-number quietness, retaining ordinary values in place.
+fn extreme_arguments<'a>(
+    interp: &mut Interp,
+    target: &[u8],
+    rest: &'a [Option<ObjRef>],
+    digits: u64,
+) -> Result<(std::borrow::Cow<'a, [Option<ObjRef>]>, bool), Failure> {
+    let width = digits.min(WRITTEN_WHOLE_DIGITS as u64) as u32;
+    if !whole_written(target).is_some_and(|value| value.unsigned_abs() < 10u64.pow(width)) {
+        return Ok((std::borrow::Cow::Borrowed(rest), false));
+    }
+    for slot in rest {
+        let Some(value) = slot else {
+            return Ok((std::borrow::Cow::Borrowed(rest), false));
+        };
+        if needs_string(interp, *value) {
+            let converted = convert_extreme_arguments(interp, rest)?;
+            let quiet = written_whole(interp, target, &converted, digits);
+            return Ok((converted, quiet));
+        }
+        if whole_written(&interp.to_text(*value)).is_none() {
+            return Ok((std::borrow::Cow::Borrowed(rest), false));
+        }
+    }
+    Ok((std::borrow::Cow::Borrowed(rest), true))
 }
 
 /// Whether a value needs the required-string protocol before numeric parsing.
