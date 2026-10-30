@@ -1,0 +1,101 @@
+--- /tmp/codex-p9d-t88-final-gate-before-preparation-review.py
++++ /tmp/codex-p9d-t88-final-gate-draft.py
+@@ -19,6 +19,18 @@
+ BASE = ROOT / 'docs/superpowers/records/2026-10-18-phase-9d/t8.8/prerequisites'
+ ADDED_TARGETS = {('rexx-exec', 'semantic_boundaries', ('test',), ('bin',)):
+                  'Task 8.8f adds semantic boundary integration coverage after the prerequisite enumeration'}
++RENAMED_TESTS = {
++    ('rexx-exec', 'rexx_exec', ('lib',), ('lib',)): {
++        'run::tests::an_executable_rebuilt_under_the_nil_scope_answers': 'run::tests::an_executable_retained_under_the_nil_scope_answers',
++        'scheduler::tests::pool::a_spawn_failure_leaves_ready_activities_to_the_next_baton_holder': 'scheduler::tests::pool::a_disabled_pool_leaves_ready_activities_to_the_next_baton_holder',
++    },
++    ('rexx-exec', 'suite', ('test',), ('bin',)): {
++        'fixtures::tests::the_suite_revision_is_the_recorded_one': 'fixtures::tests::the_recorded_suite_revision_is_a_revision_number',
++    },
++    ('rexx-exec', 'concurrency_tests', ('test',), ('bin',)): {
++        'group_runs::whole_groups::sim_gate::calibration': 'group_runs::whole_groups::sim_gate::calibration::calibration',
++    },
++}
+ CONFIG_PATH = Path('/tmp/codex-p9d-t88-final-gate-config.json')
+ CONFIG = json.loads(CONFIG_PATH.read_text())
+ assert set(CONFIG) == {'source_commit', 'profile_completion_record', 'release_binary', 'release_binary_sha256'}
+@@ -104,7 +116,10 @@
+             record['timed_out'] = False
+         except subprocess.TimeoutExpired:
+             record['timed_out'] = True
+-            os.killpg(proc.pid, signal.SIGTERM)
++            try:
++                os.killpg(proc.pid, signal.SIGTERM)
++            except ProcessLookupError:
++                pass
+             try:
+                 record['returncode'] = proc.wait(timeout=3)
+             except subprocess.TimeoutExpired:
+@@ -112,8 +127,13 @@
+                 record['returncode'] = proc.wait(timeout=2)
+         ACTIVE = None
+     record['elapsed_seconds'] = time.monotonic() - start
+-    guard()
+     (OUT / (name + '.json')).write_text(json.dumps(record, indent=2) + '\n')
++    try:
++        guard()
++    except Exception as error:
++        record['post_run_freeze_failure'] = str(error)
++        (OUT / (name + '.json')).write_text(json.dumps(record, indent=2) + '\n')
++        raise
+     print(json.dumps(record), flush=True)
+     return record
+ 
+@@ -163,7 +183,7 @@
+                    }, output, indent=2)
+     sys.exit(0)
+ guard()
+-if mode in {'preflight', 'fmt', 'clippy', 'release-build', 'release-corpus', 'release-suite', 'suite-delta', 'sysfiletree-diagnostic'}:
++if mode in {'preflight', 'fmt', 'clippy', 'release-build', 'release-corpus', 'release-suite', 'suite-delta', 'sysfiletree-diagnostic', 'pinning'}:
+     env = {k: v for k, v in ENV.items() if not k.startswith('REXX_')}
+     commands = {
+         'preflight': ['python3', 'scripts/test_preflight.py'],
+@@ -174,6 +194,7 @@
+         'release-suite': ['cargo', 'test', '--release', '--locked', '-j4', '-p', 'rexx-exec', '--test', 'suite', 'l3_core_suite', '--', '--exact', '--test-threads=1', '--nocapture'],
+         'suite-delta': ['python3', '/tmp/codex-p9d-t88-final-suite-delta.py'],
+         'sysfiletree-diagnostic': ['cargo', 'test', '--release', '--locked', '-j4', '-p', 'rexx-exec', '--test', 'suite', 'fixtures::tests::sysfiletree_group_retains_assertion_and_metadata_context', '--', '--exact', '--ignored', '--test-threads=1', '--nocapture'],
++        'pinning': ['cargo', 'test', '--locked', '-j4', '-p', 'rexx-exec', '--lib', '--features', 'pinning', 'scheduler::tests::mutants::', '--', '--test-threads=1', '--nocapture'],
+     }
+     if mode == 'release-corpus':
+         env['REXX_CORPUS_GATE'] = '1'
+@@ -182,6 +203,13 @@
+     elif mode == 'sysfiletree-diagnostic':
+         env['REXX_SUITE_DIAGNOSTICS'] = str(OUT / 'sysfiletree-diagnostic')
+     result = run(mode, commands[mode], RUST, env, 525)
++    if mode == 'pinning':
++        text = (OUT / 'pinning.stdout').read_text(errors='replace')
++        expected = {'scheduler::tests::mutants::' + name for name in re.findall(r'#\[test\]\s*fn\s+(\w+)\(', (RUST / 'crates/rexx-exec/src/scheduler/tests/mutants.rs').read_text())}
++        actual = dict(re.findall(r'^test (scheduler::tests::mutants::\S+) \.\.\. (ok|FAILED|ignored)', text, re.M))
++        assert expected and set(actual) == expected and all(status == 'ok' for status in actual.values()), 'Incomplete pinning mutant module'
++        assert result['returncode'] == 0 and not result['timed_out'], result
++        (OUT / 'pinning-verified.json').write_text(json.dumps({'source_commit': PIN, 'tests': sorted(actual)}, indent=2) + '\n')
+     sys.exit(0 if result['returncode'] == 0 and not result['timed_out'] else 1)
+ elif mode == 'provenance':
+     for name, args in [('rustc-version', ['rustc', '-Vv']), ('cargo-version', ['cargo', '--version']), ('git-revision', ['git', 'rev-parse', 'HEAD']), ('git-status', ['git', 'status', '--short', '--untracked-files=all'])]:
+@@ -271,7 +299,12 @@
+     assert old_target is not None or key(item) in ADDED_TARGETS
+     old_tests = [old for old in json.loads((BASE / 'tests.json').read_text()) if old_target is not None and old['target_record'] == old_target['name']]
+     old_names = {old['test_name'] for old in old_tests}
+-    population = {'added': sorted(set(names) - old_names), 'removed': sorted(old_names - set(names))}
++    renames = RENAMED_TESTS.get(key(item), {})
++    assert renames.keys() <= old_names, 'Rename has no historical source test'
++    assert not renames.keys() & set(names), 'Historical renamed name still present'
++    assert set(renames.values()) <= set(names), 'Reconciled replacement test missing'
++    expected_names = {renames.get(name, name) for name in old_names}
++    population = {'added': sorted(set(names) - expected_names), 'removed': sorted(expected_names - set(names)), 'reconciled_renames': renames}
+     (OUT / (name + '-population.json')).write_text(json.dumps(population, indent=2) + '\n')
+     assert not population['removed'], 'Removed default tests need controller reconciliation'
+     result = run(name, dispatch['argv'], dispatch['cwd'], env, 510)
+@@ -320,6 +353,7 @@
+     docs = json.loads((OUT / 'doctests.json').read_text())
+     assert docs['source_commit'] == PIN and docs['returncode'] == 0 and not docs['timed_out']
+     assert json.loads((OUT / 'doctests-verified.json').read_text())['source_commit'] == PIN
++    assert json.loads((OUT / 'pinning-verified.json').read_text())['source_commit'] == PIN
+     assert len(re.findall(r'^test .*? \.\.\. ok[^\n]*$', (OUT / 'doctests.stdout').read_text(), re.M)) == 15
+     (OUT / 'debug-completeness.json').write_text(json.dumps({'source_commit': PIN, 'population': reconciliation, 'targets': rows}, indent=2) + '\n')
+ else:

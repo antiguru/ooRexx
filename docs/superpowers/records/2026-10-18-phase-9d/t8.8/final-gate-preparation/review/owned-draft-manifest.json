@@ -1,0 +1,18 @@
+[
+  {
+    "before": "/tmp/codex-p9d-t88-final-gate-before-preparation-review.py",
+    "before_sha256": "07c11bcb0a62feeb6802e607d0c0d2e018c37e5fb0cac34821e9df82b69e2c4f",
+    "after": "/tmp/codex-p9d-t88-final-gate-draft.py",
+    "after_sha256": "597d740f665097a00c404131bf8291f15c51419829740754d8ec012331f98a2c"
+  },
+  {
+    "before": "/tmp/codex-p9d-t88-final-suite-delta-before-preparation-review.py",
+    "before_sha256": "3bab348e0106b9e53b786659f1a3d1f12eefa3a6c50062d417f19cb7768eca57",
+    "after": "/tmp/codex-p9d-t88-final-suite-delta.py",
+    "after_sha256": "d293a87767001d7acb6b918f2b719bb883c3daa07fdbc5d24013fa491977f674"
+  },
+  {
+    "pin": "/tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx",
+    "sha256": "22c317baa3ed111935a6577ac33097e428a53b64eb64b4697af2b85664e3f8eb"
+  }
+]
