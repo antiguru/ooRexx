@@ -30,7 +30,7 @@ mod group_runner;
 mod process_ownership;
 #[path = "suite/selection/mod.rs"]
 mod selection;
-#[path = "support/suite_rows.rs"]
+#[path = "support/suite_rows/mod.rs"]
 mod suite_rows;
 mod support;
 mod watchdog;

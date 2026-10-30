@@ -524,7 +524,7 @@ fn the_detector_tells_an_instruction_from_a_name_that_only_looks_like_one() {
 
 #[path = "support/group_runner.rs"]
 mod group_runner;
-#[path = "support/suite_rows.rs"]
+#[path = "support/suite_rows/mod.rs"]
 mod suite_rows;
 mod support;
 mod watchdog;
