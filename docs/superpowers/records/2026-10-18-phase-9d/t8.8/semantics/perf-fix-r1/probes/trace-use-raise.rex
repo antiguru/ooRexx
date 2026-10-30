@@ -12,7 +12,7 @@ bind:
   return
 caught:
   trace off
-  say 'assigned' (value == arg(1)) 'code' condition('o')~code
+  say 'assigned' (value~class == .once) 'code' condition('o')~code
   return
 ::class once
 ::method init
