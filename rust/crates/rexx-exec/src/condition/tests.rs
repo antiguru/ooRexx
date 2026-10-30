@@ -96,10 +96,10 @@ fn a_traced_loop_condition_keeps_its_fresh_concatenation() {
     assert_eq!(stressed.exit_code, plain.exit_code);
 }
 
-/// A comparison's fresh array answer keeps its later elements through STRING sends.
+/// A comparison's fresh array answer keeps its later elements through OBJECTNAME sends.
 #[test]
 fn a_truth_conversion_keeps_the_fresh_array_answer() {
-    let text = b"signal on syntax\na = .array~of(.comp~new)\nsay a~hasItem(.comp~new)\nexit\nsyntax:\nsay condition('O')~code condition('O')~additional[1]\n::class comp\n::method '=='\nreturn .array~of(.part~new, .part~new)\n::class part\n::method string\nx = copies('x', 100)\nreturn 'A'\n".to_vec();
+    let text = b"signal on syntax\na = .array~of(.comp~new)\nsay a~hasItem(.comp~new)\nexit\nsyntax:\nsay condition('O')~code condition('O')~additional[1]\n::class comp\n::method '=='\nreturn .array~of(.part~new, .part~new)\n::class part\n::method objectName\nx = copies('x', 100)\nreturn 'A'\n".to_vec();
     let plain = crate::run_program("/tmp/rooted-truth.rex", text.clone(), crate::Invocation::none());
     assert_eq!(plain.exit_code, 0);
     assert_eq!(plain.stdout, b"34.901 A\nA\n");

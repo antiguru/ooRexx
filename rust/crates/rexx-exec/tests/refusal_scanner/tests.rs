@@ -5,7 +5,7 @@ fn separate_test_modules_and_their_descendants_are_not_production() {
     let root = std::env::temp_dir().join(format!("refusal-modules-{}", std::process::id()));
     std::fs::create_dir_all(root.join("nested/tests")).unwrap();
     let fixtures = [
-        ("lib.rs", "mod production;\nmod nested;\n#[cfg(test)]\nmod separate;\n"),
+        ("lib.rs", "mod production;\nmod nested;\n#[cfg(test)]\npub(crate) mod separate;\n"),
         ("production.rs", "fn real() -> Loud { Loud::real() }\n"),
         ("nested.rs", "#[cfg(test)]\nmod tests;\n"),
         ("nested/tests.rs", "mod child;\nfn hidden() -> Loud { Loud::hidden() }\n"),

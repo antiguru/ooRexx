@@ -80,7 +80,7 @@ fn sources_in(root: &Path) -> Vec<PathBuf> {
                 continue;
             }
             if test_attribute
-                && let Some(name) = code.strip_prefix("mod ").and_then(|s| s.strip_suffix(';'))
+                && let Some(name) = code.strip_prefix("pub(crate) ").or_else(|| code.strip_prefix("pub ")).unwrap_or(code).strip_prefix("mod ").and_then(|s| s.strip_suffix(';'))
             {
                 let parent = path.parent().unwrap();
                 let directory = if matches!(path.file_name().and_then(|s| s.to_str()), Some("lib.rs" | "mod.rs")) {
