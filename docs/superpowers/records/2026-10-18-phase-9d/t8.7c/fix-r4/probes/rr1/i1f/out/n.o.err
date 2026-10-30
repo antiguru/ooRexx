@@ -1,0 +1,5 @@
+    13 *-*   raise syntax 93.900 description (o)
+    13 *-*   interpret arg(1)
+     4 *-* call t 'raise syntax 93.900 description (o)'
+Error 93 running /tmp/claude-1000/t87c-fix4-run/n.rex line 13:  Incorrect call to method.
+Error 93.900:  &1.

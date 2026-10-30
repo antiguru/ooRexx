@@ -1,0 +1,17 @@
+    (dn 1)
+    (dn 2)
+    (dn 3)
+s1 26.5 DIGITS value must be a positive whole number; found "ONCE".
+    (dn 1)
+    (dn 2)
+s2 16.1 Label "ONCE" not found.
+    (noisy dn)
+handler USER ZZ
+    (noisy dn)
+handler ERROR
+    (bad dn)
+handler USER ZZ
+after bd user
+    (bad dn)
+handler ERROR
+after bd error

@@ -1,0 +1,19 @@
+/* LOSTDIGITS names its operand by the operand's string value. */
+numeric digits 5
+k = .kn~new
+signal on lostdigits name h1
+say 1 + k
+h1: say 'h1' condition('d')
+signal on lostdigits name h2
+say 1 * >k
+h2: say 'h2' condition('d')
+signal on lostdigits name h3
+say 1 = k
+h3: say 'h3' condition('d')
+signal on lostdigits name h4
+say 1 + ' 1234567 '
+h4: say 'h4' condition('d')
+exit
+::class kn
+::method makestring; say '  (mk)'; return '1234567890'
+::method defaultname; say '  (kn dn sent)'; return 'DNK'
