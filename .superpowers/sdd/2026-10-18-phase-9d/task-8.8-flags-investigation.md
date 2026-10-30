@@ -1,0 +1,57 @@
+# Task 8.8 flags and executable identity investigation
+
+The reduced evidence identifies lost executing Method identity after dictionary mutation, rather than a failed flag copy. This read-only investigation used source revision `f7b66267d0092d222912394f8d7ee183ebaa341e` and the P5 agent's retained probe files under `/tmp/p9d-t88-fixed-20261030-a/`. It ran no build, interpreter, oracle or new probe and edits only this report. The b implementer retains ownership of source and Git changes.
+
+## Existing evidence
+
+| Retained probe | Crate stdout | Oracle stdout | Meaning |
+| --- | --- | --- | --- |
+| flags-identity-after-only.rex | template 0 1 1; after 1 0 1 | template 0 1 1; after 0 1 1 | Replacing FOO before first context executable read exposes the original BODY directive's flags here. |
+| flags-identity-prefetch-installed.rex | template 0 1 1; installed 0 1 1; after 1 0 1; is-installed 0 | Same template/installed; after 0 1 1; is-installed 1 | Materializing installed FOO externally is insufficient. The executing activation returns another Method, despite the correct original object remaining live in .local. |
+| flags-identity-ask-before.rex | before 0 1 1; after 0 1 1 | Same | Reading context executable before redefine fills the activation's existing cache and preserves the correct answer. |
+
+The first two probe pairs have retained status 0 on both sides. Their flags are isGuarded/isPrivate/isProtected, and FOO is installed from a BODY Method copy setPrivate/setUnguarded. The source BODY directive itself remains protected with default guarded/public settings, explaining the observed 1 0 1 fallback. Preserve the raw source, three descriptors and status records in durable t8.8 records before treating the temporary files as closure evidence.
+
+## Executing executable contract
+
+Local rexxref [utilityclasses.xml:7666](../../../oodocs/rexxref/en-US/utilityclasses.xml) defines RexxContext executable as the current executable object, a Method or Routine according to context type. The object's identity belongs to the invocation that created the context, so replacing a dictionary entry under its message name cannot change which Method that invocation runs. The local implementation source agrees: [RexxActivation.cpp:136](../../../interpreter/execution/RexxActivation.cpp) sets executable to the Method supplied at method activation construction, and its internal-call path at line 247 inherits the parent's executable. A requirement to match the current dictionary entry would contradict both this contract and the retained identity witness.
+
+## Responsible path
+
+| Source | Observed implementation |
+| --- | --- |
+| [dispatch.rs:3519](../../../rust/crates/rexx-exec/src/dispatch.rs) begin_method | Receives exact Resolution including resolution.method, computes guard state from that identity, then constructs Activation::method with program/directive and MethodIdentity{name,scope,receiver}. It does not retain the resolved Method object. |
+| [activation.rs:483](../../../rust/crates/rexx-exec/src/activation.rs) MethodIdentity and ActivationCold | MethodIdentity stores scope/name/receiver but no exact executable. ActivationCold.executable already exists for running Method/Routine objects and lazily read answers. |
+| [context.rs:486](../../../rust/crates/rexx-exec/src/dispatch/context.rs) caller_executable_at | First returns cold.executable when set. Otherwise calls running_method_executable with only scope/name/receiver and InstalledMethodBody{program,directive}, then caches that answer. |
+| [identities.rs:391](../../../rust/crates/rexx-exec/src/environment/identities.rs) running_method_executable | Resolves current own/dictionary/behaviour entries by matching source body. If those no longer match, scans executable_objects for all methods sharing program/directive and chooses the smallest MethodId. |
+| [class_protocol.rs:535](../../../rust/crates/rexx-exec/src/dispatch/class_protocol.rs) native_define and identities.rs::hold_method_object | Define replaces the dictionary entry and keyed Method object under FOO. The executing FOO copy may remain live, but its activation cannot distinguish it from BODY or another alias using the same source. |
+| [identities.rs:662](../../../rust/crates/rexx-exec/src/environment/identities.rs) clone_executable | Copies the executable record and method_flag_writes to the copied object. The correct template/installed outputs confirm this copying already works for the reduced witness. |
+
+The source-body equality test deliberately conflates Method objects that share a directive, while copies can carry different flags and identity. Selecting the smallest identity is therefore not valid preservation for a Method copy whose entry was replaced before introspection. Updating flag() or copying more flags into the reconstructed BODY object would mask the identity failure and could mutate other invocations' answers. Waiting until drop_method_object and finding activations by body has the same alias ambiguity, so the entry boundary is the narrow point with sufficient information.
+
+## Minimal recommendation using the existing object model
+
+At begin_method, if the exact resolution.method already has a live registered Method object in executable_objects, retain that ObjRef in the new callee's existing ActivationCold.executable before the first user instruction. Obtain it by exact resolved identity, not by running_method_executable's body search or the current message name. Leave ordinary never-materialized directive methods on the existing lazy path initially, because they have no independently flagged Method object to preserve and eagerly materializing every method would broaden cost and scope. This directly preserves the FOO copy in both recorded failing forms and uses an actual Method object, not a new numeric-id side map or reconstructed flag snapshot.
+
+Store the object on the activation while the caller still roots the receiver/resolved entry, and ensure the activation has been pushed before any subsequent collecting operation can lose it. Activation::object_roots already extends cold.executable at [activation.rs:1059](../../../rust/crates/rexx-exec/src/activation.rs), so the existing GC model carries the object through suspension and ordinary execution. Object~run/invoke_executable already assigns that same field after begin_invoke in object_protocol.rs:981, and Routine/constant paths use it too. Preserve those explicit assignments, internal-call inheritance and REPLY movement rather than add a second independent preservation mechanism.
+
+This is the minimum fix for the confirmed registered-copy failure. Before claiming the full contract solved, inspect any source-text/never-materialized directive alias witness that can create distinct executing identities without a registered object, because that would need retention of exact resolution identity or another existing-model refinement. Do not claim a body-based fallback can reconstruct arbitrary prior identity correctly. If such a witness fails, report its exact shape and extend the activation model narrowly, rather than use a MethodId-keyed side table.
+
+## Regression recommendation
+
+* Promote the prefetch-installed witness as the identity regression: install a modified BODY copy as FOO, keep .installed alive, invoke through the subclass, redefine FOO before the first context read, and require executable==.installed plus flags 0 1 1. This distinguishes preserving the actual executing Method from creating another Method with copied flags.
+* Keep the after-only witness, so the fix cannot depend on outside code prefetching the installed object. Require flags 0 1 1 without reading context executable before mutation.
+* Add hide/delete variants at the same replacement boundary, because native_define uses different branches for omitted and nil sources. The answer must stay the entered FOO Method where that identity is retained, while subsequent sends reflect the changed dictionary.
+* Install two copies of the same BODY under different names or classes with differing flags, then mutate one name while each invocation is active. Require the context and StackFrame executable answers to name each entered object, exposing any remaining lowest-MethodId/body match substitution.
+* Retain the read-before-redefine control and check repeated reads after a forced collection. Verify the kept executable remains live, and include a suspended/REPLY continuation only if the changed activation path warrants it, reusing existing root/movement coverage.
+* Keep ordinary directive, inherited method, Object~run and internal CALL context witnesses green. Run the existing executable-flags tests and relevant context/frame tests before the mandatory suite/corpus gates, without expanding this into a flag-policy change.
+
+Read each witness's actual stdout and preserve sourceline fixtures for new corpus programs. The original queue's RESULT reachability subpart remains licensed GC timing and is not evidence for or against this identity defect. The task must report this newly confirmed residual instead of closing the whole executable-flags queue as probe agrees. No new Deviation is suggested by the derived rule or recorded oracle behavior.
+
+## Cost, comments and limits
+
+begin_method is a dispatch hot path, and cold_mut allocates ActivationCold for calls whose executable was previously lazy. Resolution (dispatch.rs:1812) contains only scope and MethodId, not the executable ObjRef, and MethodIdentity likewise has no spare executable field. own_lookup has an ObjectMethod.executable but currently discards it when forming Resolution, so threading it through all dispatch/cache paths would be broader than the confirmed class-dictionary case. Existing ActivationCold.executable avoids a new activation representation, but adds one exact executable_objects lookup even for unregistered methods and potentially a cold box allocation plus end_cold overhead for every registered method call.
+
+Measure those costs under the later all-program own-BASE callgrind rule, including ordinary unregistered entry, registered aliases and a method loop after one context executable read. There is no evidence that an existing scalar activation field can safely be repurposed to retain the object without a lookup or box. A direct Option<ObjRef> field on MethodIdentity could remove the cold-box cost but grows the hot activation and requires its existing exhaustive root handling to be extended, so treat that as a measured alternative rather than the initial patch. Do not gate preservation only on method_flag_writes, because unmodified copies still have observable executable identity. A rare out-of-line helper can keep the preservation branch small, but correctness must not depend on method_flag_writes being nonempty because identity remains observable without flag changes. If the measured cost exceeds the budget, move preservation to another exact-identity boundary only with evidence that all aliases remain distinguishable.
+
+Preserve every existing comment and update any changed “first context read” explanation to describe entry-time retention for already registered executables. Do not change the source-body cache policy elsewhere merely for stylistic consistency. This report proves the responsible loss of information using current source and retained differential evidence, but it does not verify the proposed fix. Source implementation, command records and final verification remain with the b implementer.

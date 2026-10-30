@@ -1,0 +1,27 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 cargo test -j 4 --release -p rexx-exec --test suite selection::tests
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.03s
+     Running tests/suite.rs (/tmp/codex-p9d-t88-target/release/deps/suite-edb8ccd5504785e7)
+
+running 4 tests
+test selection::tests::empty_selectors_fail_visibly ... FAILED
+test selection::tests::absent_selector_keeps_every_group ... ok
+test selection::tests::named_groups_are_selected_in_discovery_order ... ok
+test selection::tests::unknown_groups_keep_the_named_diagnostic ... ok
+
+failures:
+
+---- selection::tests::empty_selectors_fail_visibly stdout ----
+
+thread 'selection::tests::empty_selectors_fail_visibly' (293564) panicked at crates/rexx-exec/tests/suite/selection/tests.rs:22:29:
+a present selector must name a group: []
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    selection::tests::empty_selectors_fail_visibly
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 56 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p rexx-exec --test suite`
+
+exit=101 elapsed=0.064s

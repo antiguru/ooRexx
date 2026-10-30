@@ -11,7 +11,7 @@ item	kind	probe	proposed	reason	ruled
 2026-09-22-clause-shape-distribution.md	perf	-	phase:9.1	static op-shape evidence for superinstructions; no probe	phase:9.1
 2026-09-22-driver-frame-pressure.md	perf	-	phase:9.1	unrun outlining variant; no probe	phase:9.1
 2026-09-22-tracefunction-ungated.md	perf	-	phase:9.1	no probe; both Op::TraceFunction pushes in ir/compile.rs (:1627, :1645) are still unconditional	phase:9.1
-2026-09-24-arity-harness-ignores-target-dir.md	process	-	9d	no probe; tests/support/arity.rs:399 still joins ../../target/release/rexx where group_runner uses CARGO_BIN_EXE_rexx	9d
+2026-09-24-arity-harness-ignores-target-dir.md	process	-	closed:ecce67dad	no probe; tests/support/arity.rs:399 still joins ../../target/release/rexx where group_runner uses CARGO_BIN_EXE_rexx	closed:ecce67dad
 2026-09-24-mutate-4c-stale-anchor.md	process	-	9d	no probe; scripts/mutate-4c.sh:537 still anchors on a statement parse_template.rs no longer has (:461 is a let binding)	9d
 2026-09-24-refusal-scanner-test-files.md	process	-	9d	no probe; tests/refusal_sites.rs code_lines (:73) still drops only inline #[cfg(test)] mod blocks, and Task 3 reads that table	9d
 2026-09-25-pos-window-doc-pointers.md	process	-	9d	no probe; builtin/string.rs:123 and rexx-parse block/references.rs:190,:197 still point at text that is gone	9d
@@ -158,8 +158,8 @@ store-fusion-brief.md	perf	-	closed:dispatched	a dispatched performance brief: r
 trace-emission-brief.md	perf	-	closed:dispatched	a dispatched performance brief: item 1 landed (performance-todo.md:374, 7a28f68e6 and 7fbadfecb)	closed:dispatched
 trace-quickening-brief.md	perf	-	closed:dispatched	a dispatched performance brief: item 2 built and reverted (performance-todo.md:619)	closed:dispatched
 gate:phase-9a-gate.md:456	process	-	9d	no probe; dispatch/library/tests.rs:177 still says collect_stress reads phase-8.txt last	9d
-gate:phase-9a-gate.md:457	process	-	9d	no probe; a harness minor its ledger calls not live	9d
-gate:phase-9a-gate.md:458	process	-	9d	no probe; tests/support/group_runner.rs:309 still calls windows(needle.len()), which panics on an empty needle	9d
+gate:phase-9a-gate.md:457	process	-	closed:ecce67dad	no probe; a harness minor its ledger calls not live	closed:ecce67dad
+gate:phase-9a-gate.md:458	process	-	closed:ecce67dad	no probe; tests/support/group_runner.rs:309 still calls windows(needle.len()), which panics on an empty needle	closed:ecce67dad
 gate:phase-9a-gate.md:459	process	-	9d	no probe; harness minors from 9a Task 2, not checked against the tree	9d
 gate:phase-9a-gate.md:460	process	-	9d	no probe; harness minors from 9a Task 3, not checked against the tree	9d
 gate:phase-9a-gate.md:461	process	-	9d	no probe; its ledger line says no such row exists yet	9d
@@ -172,7 +172,7 @@ gate:phase-9a-gate.md:468	process	-	closed:pin rebuilt	/home/moritz/dev/repos/oo
 gate:phase-9a-gate.md:469	divergence	queued-probes/exttr/exttr.rex:1,queued-probes/t4c/t4c.rex:1	closed:probe agrees	the external CALL half agrees (exttr); Routine~new's >I> package is that cluster's mechanism	closed:probe agrees
 gate:phase-9a-gate.md:470	divergence	queued-probes/memcompile/memcompile.rex:1	closed:Phase 9b1	method-source retention is flat (its own row); the gc-trigger file was closed and removed in d81bacfad	closed:Phase 9b1
 gate:phase-9a-gate.md:471	divergence	queued-probes/stemunk/stemunk.rex:1	9d	the Stem half of directory-setmethod-unknown-traceback-line; probe still differs	9d
-gate:phase-9a-gate.md:472	process	-	9d	no probe; the sibling of arity-harness-ignores-target-dir, rexx-bench-suite.rs:591 still joins ../../target	9d
+gate:phase-9a-gate.md:472	process	-	closed:ecce67dad	no probe; the sibling of arity-harness-ignores-target-dir, rexx-bench-suite.rs:591 still joins ../../target	closed:ecce67dad
 gate:phase-9a-gate.md:473	perf	-	phase:9.1	a pointer to 2026-10-12-buffer-copy-uncharged.md	phase:9.1
 gate:phase-9a-gate.md:474	divergence	-	9d	no recorded probe; own probe did not reach the repeated entries, so it is not cited	9d
 gate:phase-9a-gate.md:475	design	-	phase:research	a pointer to 2026-10-12-randomised-hash-iteration.md	phase:research
@@ -265,7 +265,7 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b
 2026-10-29-debug-input-traps-off.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7b/fix-r3/dp3/dp3.rex	closed:9af69058d	a condition raised while debug input is processed is delivered; rexxref Note 4 says traps are OFF then	closed:9af69058d
 2026-10-29-notready-delay-across-internal-call.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7b/review-probes/notready-internal-routine-n7.rex	closed:e620097f0	NOTREADY inside an internal routine called in a clause that queued one is not seen as delayed	closed:e620097f0
 2026-10-29-pow-integral-exponent-overflow.md	defect	docs/superpowers/records/2026-10-18-phase-9d/codex-review/pow-integral-exponent.rex	closed:3148553fe	whole-number power exponent with trailing fraction zeros overflows the i64 accumulator, 26.8	closed:3148553fe
-2026-10-29-oracle-harness-stdin-deadlock.md	process	-	9d	oracle harness writes all stdin before draining output or starting its deadline	9d
+2026-10-29-oracle-harness-stdin-deadlock.md	process	-	closed:ecce67dad	oracle harness writes all stdin before draining output or starting its deadline	closed:ecce67dad
 2026-10-29-in-flight-native-call-leaks-interpreter.md	defect	-	after 9d	a run ending with a native call in flight forgets its interpreter; needs a reproducing program	after 9d
 2026-10-29-native-buffer-bytes-uncharged.md	defect	-	after 9d	native Buffer storage not charged to the byte trigger	after 9d
 2026-10-29-perf-round-codex-agenda.md	perf	-	after 9d	perf round agenda from the external review	after 9d
@@ -276,7 +276,7 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b
 2026-10-29-debug-typed-exit.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/fix-r2/probes/off/ex.rex	11.1	a typed EXIT at a debug pause is ignored, the oracle ends the program	phase:11.1
 2026-10-29-suite-fixture-stderr-refusal-load-flake.md	process	-	9d	suite fixtures stderr-refusal test failed once under load	9d
 2026-10-29-stem-index-string-values.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/review-probes-rr1/r1c/d.rex	9d	Stem [] does not take its indexes' string values	9d
-2026-10-29-grandchild-sleeps-process-wide.md	process	-	9d	suite grandchild_sleeps scans every process	9d
+2026-10-29-grandchild-sleeps-process-wide.md	process	-	closed:ecce67dad	suite grandchild_sleeps scans every process	closed:ecce67dad
 2026-10-30-raise-description-unsent.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/review-probes-rr2/n2b/q9.rex	9d	RAISE DESCRIPTION object stored unsent; timing needs a ruling	9d
 2026-10-30-number-max-object-argument.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/review-probes-rr2/ld/l20.rex	9d	Number max/min object argument not its string value	9d
 2026-10-30-parse-pattern-conversion-raise.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.7c/review-probes-rr2/c2/onceparse.rex	9d	PARSE pattern rendering drops a raising conversion	9d

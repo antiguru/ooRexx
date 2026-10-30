@@ -1,3 +1,5 @@
+**CLOSED 2026-10-30 by Phase 9d Task 8.8b (ecce67dad).**
+
 **OPEN, queued 2026-10-29 by the controller; proposed 9d (Task 8.8).**
 
 # suite fixture grandchild check scans every process

@@ -1,0 +1,24 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 cargo test -j 4 --release -p rexx-exec --test suite process_ownership::tests
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.03s
+     Running tests/suite.rs (/tmp/codex-p9d-t88-target/release/deps/suite-edb8ccd5504785e7)
+
+running 1 test
+test process_ownership::tests::sleeper_checks_only_its_fixture_directory ... FAILED
+
+failures:
+
+---- process_ownership::tests::sleeper_checks_only_its_fixture_directory stdout ----
+
+thread 'process_ownership::tests::sleeper_checks_only_its_fixture_directory' (293592) panicked at crates/rexx-exec/tests/suite/process_ownership/tests.rs:25:5:
+another fixture's sleeper is unrelated
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    process_ownership::tests::sleeper_checks_only_its_fixture_directory
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 59 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p rexx-exec --test suite`
+
+exit=101 elapsed=0.064s

@@ -1,0 +1,12 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 env CARGO_TARGET_DIR=../../../../../../tmp/codex-p9d-t88-target cargo test -j 4 --release -p rexx-bench --bin rexx-bench-suite runtime_candidates_use_this_build_target -- --nocapture
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.03s
+     Running unittests src/bin/rexx-bench-suite.rs (../../../../../../tmp/codex-p9d-t88-target/release/deps/rexx_bench_suite-57c8da239da3c4fc)
+
+running 1 test
+selected interpreter: /tmp/codex-p9d-t88-target/release/rexx
+test binary::tests::runtime_candidates_use_this_build_target ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 14 filtered out; finished in 0.00s
+
+
+exit=0 elapsed=0.064s

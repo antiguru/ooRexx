@@ -1,0 +1,4 @@
+The successful green-oracle-deadline command also emitted this outer-wrapper diagnostic:
+memcap: left /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/memcap-300964 behind, processes are still in it
+
+Its pre-existing a_background_process_holding_the_pipe_open_does_not_hang_the_run fixture starts sleep 30 and returned after its 10-second reader budget. The fixture did not record that run's PID, so the exact PID was unavailable. Its remaining configured lifetime was approximately 20 seconds. The fixture now records its own process identity and cleans it using a pidfd. The focused green-orphan-cleanup run recorded PID 305897, start time 36392559, returned in 10.02 seconds, and produced no retained-cgroup diagnostic.

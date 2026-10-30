@@ -1,0 +1,11 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 cargo test -j 4 --release -p rexx-exec --test suite fixtures::a_command_a_test_leaves_running_is_killed_with_the_run
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.03s
+     Running tests/suite.rs (/tmp/codex-p9d-t88-target/release/deps/suite-edb8ccd5504785e7)
+
+running 1 test
+test fixtures::a_command_a_test_leaves_running_is_killed_with_the_run ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 59 filtered out; finished in 0.12s
+
+
+exit=0 elapsed=0.214s

@@ -1,0 +1,11 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 cargo test -j 4 --release -p rexx-exec --test concurrency_tests skip_changes_only_the_renamed_methods_line
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.03s
+     Running tests/concurrency_tests.rs (/tmp/codex-p9d-t88-target/release/deps/concurrency_tests-4765e34985e2f118)
+
+running 1 test
+test byte_exact_copies::skip_changes_only_the_renamed_methods_line ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 56 filtered out; finished in 0.00s
+
+
+exit=0 elapsed=0.064s
