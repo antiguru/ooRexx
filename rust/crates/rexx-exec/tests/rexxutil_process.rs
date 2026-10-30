@@ -12,8 +12,8 @@
 //! `SysWait` and `SysQueryProcess('PGID')` in a process of their own.
 
 use std::os::unix::process::CommandExt as _;
-use std::process::Command;
 use std::path::Path;
+use std::process::Command;
 
 /// `SysWait` from the main activity and from two activities started together.
 const PROGRAM: &str = "a = .w~new~start('WAIT')\nb = .w~new~start('WAIT')\n\
@@ -142,8 +142,11 @@ fn waitable_child(mode: &str) -> std::process::Output {
     let output = Command::new("memcap")
         .args(["2G", "timeout", "-k", "2", "15", "python3"])
         .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/rexxutil_process/owned_child.py"))
-        .arg(mode).arg(env!("CARGO_BIN_EXE_rexx")).arg(dir.join("p.rex"))
-        .output().expect("isolated interpreter");
+        .arg(mode)
+        .arg(env!("CARGO_BIN_EXE_rexx"))
+        .arg(dir.join("p.rex"))
+        .output()
+        .expect("isolated interpreter");
     std::fs::remove_dir_all(dir).expect("remove owned-child fixture");
     output
 }

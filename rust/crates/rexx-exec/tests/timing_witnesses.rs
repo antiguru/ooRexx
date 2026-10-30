@@ -116,18 +116,26 @@ fn removing_semaphore_wait_or_guard_ownership_breaks_the_observation() {
     }
 }
 
-
 #[test]
 fn a_late_unrelated_notification_cannot_change_callback_completion() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../corpus/lang/command_redirected_target_waits_elsewhere.rex");
     let witness = std::fs::read_to_string(path).unwrap();
-    let sleeper = witness.split_once("::class Sleeper").unwrap().1
-        .split_once("::class Waiter").unwrap().0;
+    let sleeper = witness
+        .split_once("::class Sleeper")
+        .unwrap()
+        .1
+        .split_once("::class Waiter")
+        .unwrap()
+        .0;
     // Release the old notification only after its value was read. This
     // represents delayed notification without relying on either timer's speed.
-    let sleeper = sleeper.replace("    slept = .sleepMarked", "    slept = .sleepMarked\n    .notificationRelease~post");
-    let source = format!(".local~notificationRelease = .EventSemaphore~new\n\
+    let sleeper = sleeper.replace(
+        "    slept = .sleepMarked",
+        "    slept = .sleepMarked\n    .notificationRelease~post",
+    );
+    let source = format!(
+        ".local~notificationRelease = .EventSemaphore~new\n\
         .local~notificationEntered = .EventSemaphore~new\n\
         .local~sleepMarked = 0\n\
         late = .SleepMark~new~start('mark')\n\
@@ -137,15 +145,23 @@ fn a_late_unrelated_notification_cannot_change_callback_completion() {
         .notificationRelease~post\nlate~wait\nexit\n\
         ::class Sleeper{sleeper}\n\
         ::class SleepMark\n::method mark\n\
-        .notificationEntered~post\n.notificationRelease~wait\n.local~sleepMarked = 1\n");
-    let run = run_program("/tmp/late-notification.rex", source.into_bytes(),
-        rexx_exec::Invocation::none().with_deadline(std::time::Duration::from_secs(20))
-        .with_switch_mode(SwitchMode::Sim(SimConfig::parse("sim:1").unwrap())));
+        .notificationEntered~post\n.notificationRelease~wait\n.local~sleepMarked = 1\n"
+    );
+    let run = run_program(
+        "/tmp/late-notification.rex",
+        source.into_bytes(),
+        rexx_exec::Invocation::none()
+            .with_deadline(std::time::Duration::from_secs(20))
+            .with_switch_mode(SwitchMode::Sim(SimConfig::parse("sim:1").unwrap())),
+    );
     assert_eq!(run.exit_code, 0, "{}", String::from_utf8_lossy(&run.stderr));
     assert_eq!(run.stdout, b"O:a slept 1\n");
-    assert!(run.stderr.is_empty(), "{}", String::from_utf8_lossy(&run.stderr));
+    assert!(
+        run.stderr.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
 }
-
 
 /// Duration belongs to the virtual timer control, while the command witness
 /// checks callback continuation and delivery across the unrelated wait.
@@ -154,17 +170,41 @@ fn the_callback_sleep_advances_virtual_time_before_completion() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../corpus/lang/command_redirected_target_waits_elsewhere.rex");
     let witness = std::fs::read_to_string(path).unwrap();
-    let sleeper = witness.split_once("::class Sleeper").unwrap().1
-        .split_once("::class Waiter").unwrap().0;
+    let sleeper = witness
+        .split_once("::class Sleeper")
+        .unwrap()
+        .1
+        .split_once("::class Waiter")
+        .unwrap()
+        .0;
     assert!(sleeper.contains("    call SysSleep 1"));
-    for (class, advanced) in [(sleeper.to_string(), 1), (sleeper.replace("    call SysSleep 1", "    nop"), 0)] {
-        let source = format!("o = .Sleeper~new\ncall time 'R'\no~lineout('a')\nsay 'advanced' (time('E') >= 1)\nexit\n::class Sleeper{class}");
-        let run = run_program("/tmp/callback-sleep.rex", source.into_bytes(),
-            rexx_exec::Invocation::none().with_deadline(std::time::Duration::from_secs(20))
-                .with_switch_mode(SwitchMode::Sim(SimConfig::parse("sim:1").unwrap())));
+    for (class, advanced) in [
+        (sleeper.to_string(), 1),
+        (sleeper.replace("    call SysSleep 1", "    nop"), 0),
+    ] {
+        let source = format!(
+            "o = .Sleeper~new\ncall time 'R'\no~lineout('a')\nsay 'advanced' (time('E') >= 1)\nexit\n::class Sleeper{class}"
+        );
+        let run = run_program(
+            "/tmp/callback-sleep.rex",
+            source.into_bytes(),
+            rexx_exec::Invocation::none()
+                .with_deadline(std::time::Duration::from_secs(20))
+                .with_switch_mode(SwitchMode::Sim(SimConfig::parse("sim:1").unwrap())),
+        );
         assert_eq!(run.exit_code, 0, "{}", String::from_utf8_lossy(&run.stderr));
-        assert_eq!(run.stdout, format!("O:a slept 1\nadvanced {advanced}\n").as_bytes());
-        assert!(run.stderr.is_empty(), "{}", String::from_utf8_lossy(&run.stderr));
-        eprintln!("virtual sleep control: {}", String::from_utf8_lossy(&run.stdout));
+        assert_eq!(
+            run.stdout,
+            format!("O:a slept 1\nadvanced {advanced}\n").as_bytes()
+        );
+        assert!(
+            run.stderr.is_empty(),
+            "{}",
+            String::from_utf8_lossy(&run.stderr)
+        );
+        eprintln!(
+            "virtual sleep control: {}",
+            String::from_utf8_lossy(&run.stdout)
+        );
     }
 }
