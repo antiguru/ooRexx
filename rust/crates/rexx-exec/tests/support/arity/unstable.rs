@@ -34,7 +34,7 @@ fn property_program(receiver: &Receiver, method: &str, property: IdentityPropert
         wrapper: receiver.wrapper.clone(),
         directives: receiver.directives.clone(),
     };
-    program_rendering(&receiver, method, NONE, true, predicate)
+    program_rendering(&receiver, method, NONE, true, &format!("({predicate})"))
 }
 
 fn property_holds(answer: &Three) -> bool {
