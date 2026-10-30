@@ -126,6 +126,13 @@ fn executable_registry_stays_bounded_and_weak_across_programs() {
             "library={library} prefix={prefix} capacity={capacity} bytes={}",
             capacity * std::mem::size_of::<Option<rexx_core::ObjRef>>()
         );
+        // Reflection retains the original Method through its class. Only
+        // the copies below should disappear when their exit root is cleared.
+        let original = run(&mut interp, b"return .object~method('STRING')\n");
+        run(&mut interp, b"return 0\n");
+        interp.collect_now();
+        assert!(interp.heap.get(original).is_some());
+        let retained = interp.executable_objects.extent().1;
         let mut issued = Vec::new();
         for _ in 0..4 {
             let object = run(&mut interp, b"return .object~method('STRING')~copy\n");
@@ -134,7 +141,7 @@ fn executable_registry_stays_bounded_and_weak_across_programs() {
                 .expect("copy identity");
             assert!(
                 !issued.contains(&method),
-                "later program reused a live identity"
+                "later program reused an issued identity"
             );
             issued.push(method);
             assert_eq!(interp.executable_objects.get(method), Some(&object));
@@ -150,8 +157,8 @@ fn executable_registry_stays_bounded_and_weak_across_programs() {
         }
         assert_eq!(
             interp.executable_objects.extent().1,
-            0,
-            "runtime registrations survived without owners"
+            retained,
+            "runtime registrations accumulated beyond the class-owned Method"
         );
     }
 }
