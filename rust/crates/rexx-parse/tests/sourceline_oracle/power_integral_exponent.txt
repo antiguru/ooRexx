@@ -1,0 +1,25 @@
+count 24
+numeric digits 30
+say 2 ** '1.00000000000000000000'
+say 2 ** '1.0'
+say 2 ** '3.000'
+say 2 ** '-1.00000000000000000000'
+call check '1.00000000000000000001', 2
+say 1 ** '999999999999999999'
+say 1 ** '-999999999999999999'
+call check '1000000000000000000', 1
+call check '-1000000000000000000', 1
+call check '1e18', 1
+numeric digits 9
+say 2 ** '1.00000000000000000000'
+say 2 ** '1.00000000000000000001'
+say 2 ** 999999999
+exit
+check:
+  use arg exponent, base
+  signal on syntax name invalid
+  say base ** exponent
+  return
+invalid:
+  say condition('E')
+  return

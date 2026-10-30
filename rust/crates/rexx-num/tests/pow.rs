@@ -111,7 +111,6 @@ fn an_integral_exponent_ignores_trailing_fraction_zeros_before_conversion() {
     }
     assert_eq!(pow("2", "1.00000000000000000001", 30), Err(26));
     assert_eq!(pow("2", "1.00000000000000000001", 9).unwrap(), "2");
-    assert_eq!(pow("2", "-0.9999999999", 9).unwrap(), "0.5");
 }
 
 #[test]

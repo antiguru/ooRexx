@@ -54,17 +54,7 @@ impl Number {
                 return None;
             }
         }
-        let mut value: i64 = 0;
-        for d in &self_.digits {
-            value = value.checked_mul(10)?.checked_add(*d as i64)?;
-        }
-        for _ in 0..self_.exponent.max(0) {
-            value = value.checked_mul(10)?;
-        }
-        for _ in 0..(-self_.exponent).max(0) {
-            value /= 10;
-        }
-        Some(if self_.negative { -value } else { value })
+        self_.whole_value(crate::ARGUMENT_DIGITS)
     }
 
     pub fn pow(&self, exponent: &Number, digits: u64) -> Result<Number, ArithError> {
