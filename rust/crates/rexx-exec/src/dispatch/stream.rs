@@ -344,6 +344,13 @@ pub(super) fn query_exists(
     Ok(Some(interp.text_built(answer)))
 }
 
+/// Whether this stream uses the embedding's owned regular-file stdout descriptor.
+fn owned_standard_output(interp: &Interp, receiver: ObjRef) -> Result<bool, Failure> {
+    Ok(require(interp, receiver)?.standard == Some(StandardStream::Out)
+        && !interp.standard_transient[1]
+        && interp.sinks.as_ref().is_some_and(|sinks| sinks.own_descriptors))
+}
+
 /// `query_size`: the byte count for a regular file, `0` for anything else
 /// that stats, and the null string when nothing does. Measured: a directory
 /// answers `0` here where `query_exists` answers nothing. An open stream
@@ -355,6 +362,17 @@ pub(super) fn query_size(
     receiver: ObjRef,
     _args: &[Option<ObjRef>],
 ) -> Result<Option<ObjRef>, Failure> {
+    if owned_standard_output(interp, receiver)? {
+        interp.hand_over_stdout();
+        let size = rustix::fs::fstat(std::io::stdout()).ok().and_then(|stat| {
+            (rustix::fs::FileType::from_raw_mode(stat.st_mode) == rustix::fs::FileType::RegularFile)
+                .then_some(stat.st_size)
+        });
+        return Ok(Some(match size {
+            Some(size) => interp.text_built(size.to_string().into_bytes()),
+            None => interp.text(b""),
+        }));
+    }
     let open = match standard_input_file(interp, receiver)? {
         true => interp.input_file(),
         false => require_mut(interp, receiver)?.open.as_mut(),
@@ -2314,6 +2332,23 @@ pub(super) fn query_position(
         if clash {
             return Err(Raised::syntax(93, 0, Vec::new()).into());
         }
+    }
+    if !by_line && owned_standard_output(interp, receiver)? {
+        if sys {
+            interp.hand_over_stdout();
+        }
+        let at = rustix::fs::seek(std::io::stdout(), rustix::fs::SeekFrom::Current(0)).ok();
+        let answer = if sys {
+            at
+        } else if !write {
+            Some(1)
+        } else {
+            at.map(|at| at.saturating_add(interp.out.len() as u64).saturating_add(1))
+        };
+        return Ok(Some(match answer {
+            Some(at) => interp.text_built(at.to_string().into_bytes()),
+            None => interp.text(b""),
+        }));
     }
     let mode = require(interp, receiver)?.mode;
     let mode = if standard_input_file(interp, receiver)? {

@@ -344,6 +344,15 @@ pub(crate) fn max_min_over(
     message: bool,
 ) -> Result<ObjRef, Failure> {
     let Numeric { digits, fuzz, form } = current(interp);
+    let width = digits.min(WRITTEN_WHOLE_DIGITS as u64) as u32;
+    let whole_target = whole_written(&target_text)
+        .is_some_and(|value| value.unsigned_abs() < 10u64.pow(width));
+    let converted = if whole_target && rest.iter().flatten().any(|value| needs_string(interp, *value)) {
+        convert_extreme_arguments(interp, rest)?
+    } else {
+        std::borrow::Cow::Borrowed(rest)
+    };
+    let rest = converted.as_ref();
     let quiet = written_whole(interp, &target_text, rest, digits);
     let mut best = target.clone().into_round(digits);
     let mut best_text = target_text;
@@ -356,8 +365,10 @@ pub(crate) fn max_min_over(
             }
             .into());
         };
-        let found = interp.to_text(*candidate).into_owned();
-        let Ok(number) = interp.to_number(*candidate) else {
+        let candidate = interp.required_string_value(*candidate)?;
+        interp.roots.activity_mut().push_temp(candidate);
+        let found = interp.to_text(candidate).into_owned();
+        let Ok(number) = interp.to_number(candidate) else {
             // The object rather than the conversion, which is every
             // argument message's rule -- `whole_number`'s own doc has the
             // measurement behind it.
@@ -401,6 +412,38 @@ pub(crate) fn max_min_over(
         }
     }
     Ok(interp.number(best, saturate(digits), form))
+}
+
+/// Whether a value needs the required-string protocol before numeric parsing.
+fn needs_string(interp: &Interp, value: ObjRef) -> bool {
+    match value.decode() {
+        rexx_core::Decoded::SmallInt(_) | rexx_core::Decoded::Text(_) => false,
+        _ => !matches!(
+            interp.heap.get(value).map(|object| &object.body),
+            Some(rexx_core::Body::Text { .. } | rexx_core::Body::Num { .. })
+        ),
+    }
+}
+
+/// Converts the prefix needed to decide whole-number quietness, stopping when quietness is impossible.
+#[cold]
+fn convert_extreme_arguments<'a>(
+    interp: &mut Interp,
+    rest: &'a [Option<ObjRef>],
+) -> Result<std::borrow::Cow<'a, [Option<ObjRef>]>, Failure> {
+    let mut converted = std::borrow::Cow::Borrowed(rest);
+    for (at, slot) in rest.iter().enumerate() {
+        let Some(value) = slot else { break };
+        let text = interp.required_string_value(*value)?;
+        interp.roots.activity_mut().push_temp(text);
+        if text != *value {
+            converted.to_mut()[at] = Some(text);
+        }
+        if whole_written(&interp.to_text(text)).is_none() {
+            break;
+        }
+    }
+    Ok(converted)
 }
 
 /// The widest a whole number can be written and still count as one here.
