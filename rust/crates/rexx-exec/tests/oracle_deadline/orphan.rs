@@ -60,10 +60,9 @@ impl OwnedOrphan {
         eprintln!("stopping owned pipe-holder PID {pid}, start time {start}, sleep limit 30s");
         if let Err(error) =
             rustix::process::pidfd_send_signal(&pidfd, rustix::process::Signal::KILL)
+            && error != rustix::io::Errno::SRCH
         {
-            if error != rustix::io::Errno::SRCH {
-                return Err(error.to_string());
-            }
+            return Err(error.to_string());
         }
         let deadline = Instant::now() + Duration::from_secs(2);
         while let Ok(current) = fs::read_to_string(proc.join("stat")) {
@@ -83,10 +82,11 @@ impl OwnedOrphan {
 
 impl Drop for OwnedOrphan {
     fn drop(&mut self) {
-        if !self.finished && self.directory.join("orphan.stat").is_file() {
-            if let Err(error) = self.stop() {
-                eprintln!("owned orphan cleanup failed: {error}");
-            }
+        if !self.finished
+            && self.directory.join("orphan.stat").is_file()
+            && let Err(error) = self.stop()
+        {
+            eprintln!("owned orphan cleanup failed: {error}");
         }
     }
 }
