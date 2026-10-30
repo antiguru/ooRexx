@@ -21,12 +21,15 @@ fn enhanced_metaclass_nil_entry_keeps_its_registered_method_through_gc() {
     assert!(interp.own_method_entry(receiver, b"PING").is_none());
     let (scope, method) = lookup(&mut interp, selection, "PING").expect("enhanced entry");
     assert_eq!(scope, ObjRef::NIL);
-    let executable = interp.executable_objects[&method];
+    let executable = *interp
+        .executable_objects
+        .get(method)
+        .expect("registered Method");
     let owner = interp.class_of_value(receiver).expect("metaclass owner");
     for _ in 0..3 {
         interp.collect_now();
         assert!(interp.heap.get(executable).is_some());
-        assert_eq!(interp.executable_objects.get(&method), Some(&executable));
+        assert_eq!(interp.executable_objects.get(method), Some(&executable));
         assert_eq!(
             lookup(&mut interp, selection, "PING"),
             Some((scope, method))

@@ -2863,7 +2863,7 @@ impl Interp {
         let ConstantValue::Expression(expr) = &constant.value else {
             return Err(Loud::missing_body().into());
         };
-        let executable = self.executable_objects.get(&resolution.method).copied();
+        let executable = self.executable_objects.get(resolution.method).copied();
         let run = ConstantRun {
             name,
             receiver,

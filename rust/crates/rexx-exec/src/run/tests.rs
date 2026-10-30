@@ -234,12 +234,12 @@ fn a_freed_programs_id_never_resolves_again() {
             .any(|site| matches!(site, crate::environment::Annotated::Compiled(_))),
         "a compiled method's annotation table is held by a row of its own"
     );
-    for method in interp.executable_objects.keys() {
+    for (method, _) in interp.executable_objects.entries() {
         assert!(
-            interp.method_bodies.contains_key(method)
-                || interp.generated_methods.contains_key(method)
-                || interp.native_externals.contains_key(method)
-                || interp.library_externals.contains_key(method),
+            interp.method_bodies.contains_key(&method)
+                || interp.generated_methods.contains_key(&method)
+                || interp.native_externals.contains_key(&method)
+                || interp.library_externals.contains_key(&method),
             "executable_objects names {method:?}, whose body was pruned"
         );
     }
@@ -361,7 +361,7 @@ fn a_collection_drops_the_rows_of_swept_executables_and_messages() {
         "method_flag_writes keeps a swept object"
     );
     assert!(
-        interp.executable_objects.values().all(live),
+        interp.executable_objects.rows().all(live),
         "executable_objects names a swept object"
     );
     assert!(
@@ -422,7 +422,7 @@ fn a_collection_drops_the_identity_rows_of_swept_method_copies() {
             interp.generated_methods.contains_key(&method),
             interp.special_methods.get(method).is_some(),
             interp.has_native_entry(method),
-            interp.executable_objects.contains_key(&method),
+            interp.executable_objects.get(method).is_some(),
         ]
     };
     for method in &owned {

@@ -121,7 +121,7 @@ impl Interp {
         );
         // Dictionary mutation must not replace the Method this invocation
         // entered. Existing registered objects use the activation's GC root.
-        if let Some(executable) = self.executable_objects.get(&resolution.method).copied() {
+        if let Some(executable) = self.executable_objects.get(resolution.method).copied() {
             callee.cold_mut().executable = Some(executable);
         }
         if let Some(start) = start {

@@ -1843,6 +1843,7 @@ impl Interp {
         let model = ObjectModel::bootstrap(&mut || self.heap.mint_class());
         self.install_object_model(model);
         self.special_methods.seal();
+        self.executable_objects.seal();
     }
 
     /// Stores a freshly built object model and files the access scopes of
@@ -1932,7 +1933,7 @@ impl Interp {
             {
                 continue;
             }
-            if let Some(object) = self.executable_objects.get(&method).copied() {
+            if let Some(object) = self.executable_objects.get(method).copied() {
                 self.class_disowns(class, object);
             }
         }
@@ -2619,7 +2620,7 @@ impl Interp {
         self.external_packages.remove(&method);
         self.defined_library_codes.remove(&method);
         self.guarded_externals.remove(&method);
-        self.executable_objects.remove(&method);
+        self.executable_objects.remove(method);
         self.special_methods.remove(method);
         if let Some(model) = self.object_model.as_mut() {
             model.natives.remove(method);

@@ -1587,7 +1587,7 @@ struct Interp {
     /// The `Method` object standing for each method identity one was built
     /// for, which is what `.context~executable` answers from a method no
     /// class dictionary reaches by its name.
-    executable_objects: FxHashMap<MethodId, ObjRef>,
+    executable_objects: method_rows::MethodRows<ObjRef>,
     /// What each `Method` and `Routine` object this crate has handed out
     /// reports on and runs -- see [`ExecutableRecord`].
     executable_sources: FxHashMap<ObjRef, ExecutableRecord>,
@@ -2400,7 +2400,7 @@ impl Interp {
             method_bodies: NameMap::default(),
             compiled_method_names: FxHashMap::default(),
             object_methods: false,
-            executable_objects: FxHashMap::default(),
+            executable_objects: method_rows::MethodRows::new(),
             executable_sources: FxHashMap::default(),
             stem_exposers: FxHashMap::default(),
             deliveries: Vec::new(),
@@ -2529,6 +2529,7 @@ impl Interp {
         let outcome = self.enter_library_program(entry, None);
         self.library_bootstrap = false;
         self.special_methods.seal();
+        self.executable_objects.seal();
         self.classes().keep_retired_behaviours();
         rexx_classes::remove_setup_methods(self.classes());
         if outcome.is_ok() {
@@ -3663,7 +3664,7 @@ impl Interp {
         let heap = &self.heap;
         let live = |object: &ObjRef| heap.peek(*object).is_some();
         self.method_flag_writes.retain(|object, _| live(object));
-        self.executable_objects.retain(|_, object| live(object));
+        self.executable_objects.retain(live);
         self.message_outcomes.retain(|message, _| live(message));
         self.started_messages.retain(live);
         self.unnotified_messages.retain(live);
@@ -3739,7 +3740,7 @@ impl Interp {
         });
         if !methods.is_empty() {
             self.executable_objects
-                .retain(|method, _| !methods.contains(method));
+                .retain_entries(|method, _| !methods.contains(&method));
             self.native_externals
                 .retain(|method, _| !methods.contains(method));
             self.library_externals

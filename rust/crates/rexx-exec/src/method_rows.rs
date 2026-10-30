@@ -64,6 +64,13 @@ impl<T: Copy> MethodRows<T> {
         }
     }
 
+    /// Registers a row only when its identity has no row yet.
+    pub(crate) fn insert_if_absent(&mut self, method: MethodId, row: T) {
+        if self.get(method).is_none() {
+            self.insert(method, row);
+        }
+    }
+
     pub(crate) fn remove(&mut self, method: MethodId) {
         self.debug_assert_not_minted_below(method);
         match self.dense.get_mut(method.0 as usize) {
@@ -76,12 +83,29 @@ impl<T: Copy> MethodRows<T> {
 
     /// Drops every row `keep` answers false for.
     pub(crate) fn retain(&mut self, mut keep: impl FnMut(&T) -> bool) {
-        for row in &mut self.dense {
-            if row.as_ref().is_some_and(|row| !keep(row)) {
+        self.retain_entries(|_, row| keep(row));
+    }
+
+    /// Drops every identity and row `keep` answers false for.
+    pub(crate) fn retain_entries(&mut self, mut keep: impl FnMut(MethodId, &T) -> bool) {
+        for (index, row) in self.dense.iter_mut().enumerate() {
+            if row
+                .as_ref()
+                .is_some_and(|row| !keep(MethodId(index as u32), row))
+            {
                 *row = None;
             }
         }
-        self.minted.retain(|_, row| keep(row));
+        self.minted.retain(|method, row| keep(*method, row));
+    }
+
+    /// Visits every registered identity and its row, skipping vacant slots.
+    pub(crate) fn entries(&self) -> impl Iterator<Item = (MethodId, &T)> {
+        self.dense
+            .iter()
+            .enumerate()
+            .filter_map(|(index, row)| row.as_ref().map(|row| (MethodId(index as u32), row)))
+            .chain(self.minted.iter().map(|(method, row)| (*method, row)))
     }
 
     pub(crate) fn is_empty(&self) -> bool {

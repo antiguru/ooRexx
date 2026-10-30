@@ -332,7 +332,7 @@ fn method_object_for(
     // A `.nil`-scoped entry is one `setMethod` or `Class~enhanced` installed
     // from an object of its own, which is what the oracle's behaviour holds.
     if scope == ObjRef::NIL
-        && let Some(object) = interp.executable_objects.get(&method).copied()
+        && let Some(object) = interp.executable_objects.get(method).copied()
     {
         return Ok(object);
     }

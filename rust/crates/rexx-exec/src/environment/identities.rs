@@ -264,7 +264,7 @@ impl Interp {
         let object = self.native_instance(method_class);
         self.record_executable(object, record)?;
         if let Some(method) = record.installed {
-            self.executable_objects.entry(method).or_insert(object);
+            self.executable_objects.insert_if_absent(method, object);
         }
         let held = self.heap.get_mut(object).expect("just allocated");
         let Body::Native(native) = &mut held.body else {
@@ -292,7 +292,7 @@ impl Interp {
         record: crate::ExecutableRecord,
     ) -> Result<ObjRef, Failure> {
         if let Some(method) = record.installed
-            && let Some(found) = self.executable_objects.get(&method).copied()
+            && let Some(found) = self.executable_objects.get(method).copied()
         {
             return Ok(found);
         }
@@ -379,7 +379,7 @@ impl Interp {
                 .ok();
         }
         self.executable_objects
-            .get(&method)
+            .get(method)
             .copied()
             .filter(|object| self.heap.get(*object).is_some())
     }
@@ -428,7 +428,7 @@ impl Interp {
         if let Some(resolution) = self.lookup(receiver, name, None)
             && resolution.scope == scope
             && runs(self, resolution.method)
-            && let Some(object) = self.executable_objects.get(&resolution.method).copied()
+            && let Some(object) = self.executable_objects.get(resolution.method).copied()
             && self.heap.get(object).is_some()
         {
             return Ok(object);
@@ -439,8 +439,8 @@ impl Interp {
         // shares the body.
         let standing = self
             .executable_objects
-            .iter()
-            .filter(|(method, object)| runs(self, **method) && self.heap.get(**object).is_some())
+            .entries()
+            .filter(|(method, object)| runs(self, *method) && self.heap.get(**object).is_some())
             .min_by_key(|(method, _)| method.0)
             .map(|(_, object)| *object);
         if let Some(object) = standing {
