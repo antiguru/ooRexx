@@ -1261,6 +1261,7 @@ impl Interp {
         #[cfg(test)]
         self.note_cancelled_wait();
         self.activity.when_parked = false;
+        self.activities.guards.withdraw(running);
         self.activity.guard_waits.retain(|wait| !wait.queued);
         self.activity.guarded_send = None;
         for waiters in self.activities.waiters.values_mut() {
