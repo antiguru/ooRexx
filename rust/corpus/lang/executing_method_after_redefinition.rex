@@ -9,7 +9,7 @@ do prefetch = 0 to 1
   end
 end
 .k~define('FOO', .k~method('ALIASES')~copy~~setPrivate~~setUnguarded)
-.k~define('BAR', .k~method('ALIASES')~copy~~setPublic~~setGuarded)
+.k~define('BAR', .k~method('ALIASES')~copy)
 .local~foo = .WeakReference~new(.k~method('FOO'))
 .local~bar = .WeakReference~new(.k~method('BAR'))
 .s~new~both

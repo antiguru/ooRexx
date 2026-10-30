@@ -4,6 +4,10 @@ use std::time::{Duration, Instant};
 /// Runs the named unit test alone with bounded virtual address space and an
 /// open, empty stdin pipe. The resident cap is inherited from the test driver.
 pub(crate) fn isolated(name: &str) -> bool {
+    isolated_with_input(name, None)
+}
+
+pub(crate) fn isolated_with_input(name: &str, input: Option<&[u8]>) -> bool {
     const CHILD: &str = "REXX_POOL_FAILURE_CHILD";
     if std::env::var(CHILD).as_deref() == Ok(name) {
         let pool = crate::scheduler::Pool::new(1 << 46, 1);
@@ -22,7 +26,10 @@ pub(crate) fn isolated(name: &str) -> bool {
         .args(["-c", "import os,resource,sys; resource.setrlimit(resource.RLIMIT_AS,(8<<30,8<<30)); os.execv(sys.argv[1],sys.argv[1:])"])
         .arg(executable).args(["--exact", name, "--nocapture"])
         .env(CHILD, name).stdin(Stdio::piped()).spawn().expect("isolated test");
-    let writer = child.stdin.take().expect("open empty pipe");
+    let mut writer = child.stdin.take().expect("open empty pipe");
+    if let Some(input) = input {
+        std::io::Write::write_all(&mut writer, input).expect("test input");
+    }
     let deadline = Instant::now() + Duration::from_secs(25);
     let status = loop {
         if let Some(status) = child.try_wait().expect("wait") {

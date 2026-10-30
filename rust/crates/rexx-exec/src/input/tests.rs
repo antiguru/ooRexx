@@ -528,3 +528,43 @@ fn spawn_failure_on_stdin_reaches_syntax_without_reading() {
         assert_eq!(outcome.stdout, b"48.1\n48.1\nprogress\n", "{read}");
     }
 }
+
+fn recover_stdin(bound: usize) {
+    let mut interp = Interp::new();
+    interp.input = Input::new(ProgramInput::Stdin);
+    interp.pool = crate::scheduler::Pool::new(1 << 46, 1);
+    assert!(interp.input_line().is_err());
+    interp.pool = crate::scheduler::Pool::new(1 << 20, bound);
+    assert_eq!(
+        interp.input_line().expect("read resumes"),
+        Some(b"success".to_vec())
+    );
+    let Source::Stdin(stdin) = &interp.input.source else {
+        panic!("stdin ownership changed")
+    };
+    assert!(!stdin.reading);
+    assert!(!stdin.ended);
+    assert!(!interp.input.exhausted);
+}
+
+#[test]
+fn stdin_recovers_with_a_pooled_worker_after_spawn_failure() {
+    if crate::test_process::isolated_with_input(
+        "input::tests::stdin_recovers_with_a_pooled_worker_after_spawn_failure",
+        Some(b"success\n"),
+    ) {
+        return;
+    }
+    recover_stdin(1);
+}
+
+#[test]
+fn stdin_recovers_in_configured_inline_mode_after_spawn_failure() {
+    if crate::test_process::isolated_with_input(
+        "input::tests::stdin_recovers_in_configured_inline_mode_after_spawn_failure",
+        Some(b"success\n"),
+    ) {
+        return;
+    }
+    recover_stdin(0);
+}
