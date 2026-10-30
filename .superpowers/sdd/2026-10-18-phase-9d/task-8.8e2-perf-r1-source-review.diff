@@ -1,0 +1,921 @@
+57fdbedd3 docs: record executable registry repair checks and release pin
+1233b81da test(exec): account for the class-owned Method in churn checks
+92336e8dd perf(exec): reuse bounded MethodRows for weak executable identities
+8953b1165 test(exec): pin weak executable registry storage contracts
+ce8f1e59b refactor(exec): move MethodRows tests beside the storage module
+ .../task-8.8e2-perf-fix-report.md                  |  41 ++++
+ .../sdd/2026-10-18-phase-9d/task-8.8e2-report.md   |  30 +++
+ .../t8.8/runtime/e2/perf-fix-r1/check-driver.py    |  31 +++
+ .../e2/perf-fix-r1/cleanup-worker-controls.json    |  24 +++
+ .../e2/perf-fix-r1/cleanup-worker-controls.stderr  |   2 +
+ .../e2/perf-fix-r1/cleanup-worker-controls.stdout  |  61 ++++++
+ .../t8.8/runtime/e2/perf-fix-r1/clippy.json        |  22 ++
+ .../t8.8/runtime/e2/perf-fix-r1/clippy.stderr      |   2 +
+ .../t8.8/runtime/e2/perf-fix-r1/clippy.stdout      |   0
+ .../t8.8/runtime/e2/perf-fix-r1/fmt.json           |  17 ++
+ .../t8.8/runtime/e2/perf-fix-r1/fmt.stderr         |   0
+ .../t8.8/runtime/e2/perf-fix-r1/fmt.stdout         |   0
+ .../e2/perf-fix-r1/identity-storage-final.json     |  27 +++
+ .../e2/perf-fix-r1/identity-storage-final.stderr   |  11 +
+ .../e2/perf-fix-r1/identity-storage-final.stdout   |  17 ++
+ .../runtime/e2/perf-fix-r1/method-rows-green.json  |  22 ++
+ .../e2/perf-fix-r1/method-rows-green.stderr        |  14 ++
+ .../e2/perf-fix-r1/method-rows-green.stdout        |  16 ++
+ .../runtime/e2/perf-fix-r1/method-rows-red.json    |  22 ++
+ .../runtime/e2/perf-fix-r1/method-rows-red.stderr  | 236 +++++++++++++++++++++
+ .../runtime/e2/perf-fix-r1/method-rows-red.stdout  |   0
+ .../t8.8/runtime/e2/perf-fix-r1/pre-repair.json    |   6 +
+ .../t8.8/runtime/e2/perf-fix-r1/release-build.json |  21 ++
+ .../runtime/e2/perf-fix-r1/release-build.stderr    |   2 +
+ .../runtime/e2/perf-fix-r1/release-build.stdout    |   0
+ .../t8.8/runtime/e2/perf-fix-r1/release-pin.json   |  15 ++
+ .../e2/perf-fix-r1/semantic-policy-controls.json   |  30 +++
+ .../e2/perf-fix-r1/semantic-policy-controls.stderr |   8 +
+ .../e2/perf-fix-r1/semantic-policy-controls.stdout |  63 ++++++
+ rust/crates/rexx-exec/src/dispatch.rs              |   5 +-
+ .../crates/rexx-exec/src/dispatch/introspection.rs |   2 +-
+ .../rexx-exec/src/dispatch/introspection/tests.rs  |   7 +-
+ rust/crates/rexx-exec/src/dispatch/method_entry.rs |   2 +-
+ .../crates/rexx-exec/src/environment/identities.rs |  12 +-
+ rust/crates/rexx-exec/src/install.rs               |   2 +-
+ rust/crates/rexx-exec/src/lib.rs                   |   9 +-
+ rust/crates/rexx-exec/src/method_rows.rs           |  62 +++---
+ rust/crates/rexx-exec/src/method_rows/tests.rs     | 164 ++++++++++++++
+ rust/crates/rexx-exec/src/run/tests.rs             |  14 +-
+ 39 files changed, 961 insertions(+), 58 deletions(-)
+diff --git a/.superpowers/sdd/2026-10-18-phase-9d/task-8.8e2-perf-fix-report.md b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8e2-perf-fix-report.md
+new file mode 100644
+index 000000000..61eecb0e9
+--- /dev/null
++++ b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8e2-perf-fix-report.md
+@@ -0,0 +1,41 @@
++# Task 8.8e2 performance repair round 1
++
++The repair replaces the existing weak executable registry with `MethodRows<ObjRef>` at source `1233b81da730142057fcf810e324d10d0e55c109`. The controller's completed original e2 comparison reports 12 programs over budget, with sendloop at +1.01245264%, dispatch at +0.67687242%, and dispatchclass at +0.73155584%, without spread or output errors. The [diagnosis](task-8.8e2-perf-diagnosis.md) attributes the ordinary-send increment to approximately 28 instructions per executable-index miss. This candidate removes hashing from an out-of-prefix miss when the existing minted map is empty, while preserving the exact entry-time activation root. Matched profiling and scoped review remain controller-owned acceptance steps.
++
++## Representation and ownership
++
++The authoritative registry now reuses the same storage helper as native entries and access scopes. Its vector seals after library bootstrap and at the direct object-model construction boundary, keeping later high MethodIds in the removable map while allowing older identities to fill vector holes. First-wins registration uses a noncollecting get/insert pair, and explicit replacement still overwrites the existing row. Keyed iteration preserves the minimum-identity fallback, while keyed retention removes dead-program identities and value retention removes swept objects. Neither half becomes a GC root, and the activation, class, and object ownership paths remain unchanged.
++
++The new contract tests cover duplicate insertion on both sides of the seal, keyed pruning of equal values, holes, replacement, and independent tables with overlapping ids. A 9,990-identity insert/remove loop leaves the vector length and map row count unchanged. The interpreter test runs four successive copy-producing programs under each construction path, clears EXIT_VALUE_ROOT with a harmless return, and verifies that actual collection sweeps each copy and its registry entry. MethodId allocation remains local to each interpreter's ClassRegistry, and the test creates fresh independent interpreters for the two construction paths. Existing exact replacement/removal/alias tests and the valid enhanced-metaclass nil-scope ownership proof remain intact.
++
++## Storage cost and retained limits
++
++The actual library bootstrap creates a dense prefix of 1,032 slots with capacity 1,734, allocating 27,744 bytes for its `Option<ObjRef>` elements. The direct construction path keeps an empty prefix with zero capacity. Both capacities stay fixed through the repeated-program test, and the runtime map returns to its class-owned baseline after copies are collected. This is a measured prefix allocation and bounded-churn check, not a whole-interpreter memory or startup-time comparison against the prior HashMap. Collection and keyed fallback now scan that fixed prefix, so the new footprint and scan cost remain visible tradeoffs.
++
++Registered-method calls still allocate and root through existing activation cold storage. When a program leaves runtime registry entries live, an out-of-prefix miss can still use the minted-map lookup. This slice does not claim those costs disappeared, and it adds no MethodId side map, dependency, unsafe code, refusal, or semantic departure. It changes no scheduler, native-worker, command, or stdin implementation and preserves f's semantic rulings. The controller must assess actual matched medians before accepting the performance repair.
++
++## Verification
++
++All final checks below ran against committed source `1233b81da730142057fcf810e324d10d0e55c109` with source frozen. The bounded driver records exact commands, source revisions, environment, elapsed time, separate output channels, and exit status in the [evidence directory](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/). The first green run exposed an incorrect test expectation that all runtime entries should disappear, because the reflected `Object~STRING` Method is correctly retained by `class_owns`. The corrected test keeps that independently observed class-owned baseline while still requiring every unowned copy and its identity entry to disappear. An initial formatting edit command used the repository root instead of `rust/` and returned status 1 for missing Cargo.toml, then formatting from the correct directory and the committed formatting check passed.
++
++| Record | Status | Result |
++| --- | ---: | --- |
++| method-rows-red | 101 | Expected compile red for missing keyed APIs and the old HashMap representation. |
++| method-rows-green | 101 | Five tests passed; the class-owned baseline expectation failed. |
++| identity-storage-final | 0 | 12 tests passed, including 201 identity and 90 enhanced-metaclass actual collections. |
++| cleanup-worker-controls | 0 | 14 tests passed, including isolated native/command/stdin spawn failures, recovery and unused-worker release. |
++| semantic-policy-controls | 0 | 33 tests passed, including normal/every-allocation semantic boundaries and all five selected policy integrations. |
++| fmt | 0 | Workspace formatting check passed. |
++| clippy | 0 | Affected interpreter crate, all targets, warnings denied. |
++| release-build | 0 | Capped release build passed in 91.63 seconds. |
++
++The refusal-site source check passed without any table change, so no metadata refresh was needed. The root-owned whole-suite, corpus, workspace, and all-program profile gates were not duplicated. No filesystem permission failure or approval wait occurred during this repair, and the user's archive and controller-owned performance records remain unstaged. The original e2 failed measurements and all prior pins are preserved. This handoff leaves no running command and makes no Phase 9 or Phase 10 closure claim.
++
++## Commits and release pin
++
++* `ce8f1e59b`: Pure move of the existing MethodRows tests into the adjacent test file.
++* `8953b1165`: Storage and weak-registry contract regressions, committed before red.
++* `92336e8dd`: Registry representation and compatibility adaptation, committed before green.
++* `1233b81da`: Correct the test's class-owned Method expectation before final verification.
++
++The new pin is `/tmp/codex-p9d-t88-pins/8.8e2-perf-r1-rexx`, with SHA-256 `470dcb41db61ab7a4d64f3276ce28e539d5686d130be245a4ec7b30e6d6725ac`. Its source revision is `1233b81da730142057fcf810e324d10d0e55c109`, with Rust subtree `8b6fc7672eaf5bcea5a38072043be49fc6cdd0eb`. It was built by rustc 1.99.0, commit `b940084d7eb6a299eb4bfeb8e34901bc051e7ac4`, and [release-pin.json](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/release-pin.json) records compiler, Cargo, lockfile and build-record provenance. The pre-repair pin `/tmp/codex-p9d-t88-pins/8.8f-r1-rexx` was rehashed after the build and remains `b695b78fe24903b4be5a2874c8cd128193bbe165f92b50a4d6a8a9956d03d3be`. The controller receives source/Git ownership after the evidence commit and owns scoped review plus measured acceptance.
+diff --git a/.superpowers/sdd/2026-10-18-phase-9d/task-8.8e2-report.md b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8e2-report.md
+index bddf9767a..21b0520bc 100644
+--- a/.superpowers/sdd/2026-10-18-phase-9d/task-8.8e2-report.md
++++ b/.superpowers/sdd/2026-10-18-phase-9d/task-8.8e2-report.md
+@@ -37,10 +37,40 @@ Checks use `memcap`, `CARGO_INCREMENTAL=0`, `/tmp/codex-p9d-t88-target`, Cargo `
+ | metadata-refresh | 0 | 8 tests pass; refresh leaves refusal table unchanged. |
+ | stdin-metadata | 0 | Stdin contention, owners, closed phases, phase-ten reasons, and representation checks pass. |
+ | sourceline | 0 | Oracle-generated corpus sourcelines match. |
+ | clippy / clippy-final | 101 / 0 | Test assertion copy lint corrected; affected-crate all-target check passes. |
+ | fmt-complete / release-build | 0 / 0 | Final formatting and capped release build pass. |
+ | final release differentials | 0 | Extended and original identity witnesses match oracle stdout/stderr/status separately. |
+ 
+ The release pin and source/build/compiler hashes are recorded in `release-pin.json`. The controller's all-program own-BASE comparison must use the e1 pin `/tmp/codex-p9d-t88-pins/8.8e1-rexx`, SHA-256 `434d6567458248fdb804eebe9edb715a54ddb9ded650fcca994eed6c4b691e06`, against this runtime pin. Method-entry lookup/cold allocation and parked-native-stage costs are unmeasured obligations, rather than assumed free changes. M6 timer proof, the original flakes, FIFO EINTR, and Phase 9/10 close retain their existing owners. Moritz's new "Follow your recommendation on both." approval authorizes f to preserve FIFO closing-LINEOUT bytes/normal close as Deviation 82 and convert DESCRIPTION at RAISE as Deviation 83; the receiving dispatch and brief now record those mappings.
+ 
+ The read-only residual-inventory audit is included unchanged for controller reconciliation, and its proposals were not applied. Only the assigned identity, failed-spawn, and gate 481 rows changed disposition, preserving their inventory reasons. Source and pin hashes establish the runtime handed to f and the batch owner, while the own-BASE performance comparison remains open. No protected reference tree, unrelated worktree, user archive, or build cache was modified or removed.
++
++## Performance repair round 1
++
++The controller's completed original e2 own-delta comparison found 12 programs over budget, with sendloop at +1.01245264%, dispatch at +0.67687242%, and dispatchclass at +0.73155584%. The [repair report](task-8.8e2-perf-fix-report.md) records replacement of the existing authoritative weak registry with `MethodRows<ObjRef>`, preserving activation rooting, first-wins identity, keyed fallback, weak GC cleanup, and both sealing boundaries. Final checks pass on source `1233b81da730142057fcf810e324d10d0e55c109`, including 12 identity/storage tests, 14 cleanup/failure controls, 33 semantic/policy integration tests, formatting, all-target clippy and the release build. Actual library prefix allocation is 27,744 bytes and remains fixed through repeated programs, while registered cold allocation and nonempty minted-map miss costs remain obligations for matched profiling. The new release pin and its source/compiler/hash provenance are recorded in [release-pin.json](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/release-pin.json), and the pre-repair f pin remains unchanged.
++
++Every command below used `memcap 8G`, the bounded Python driver, `CARGO_INCREMENTAL=0`, and `CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target`. The committed red control failed on missing storage APIs, and the first green test run exposed a class-owned Method that the test incorrectly expected to disappear. After correcting that ownership expectation, actual collection removed all unowned copies while retaining their class-owned source Method. The linked stdout and stderr preserve those failures and the subsequent successful checks without replacing either record. These checks do not close the root-owned matched-performance, corpus, full-suite or workspace gates.
++
++| Record | Exit | Stdout | Stderr |
++| --- | ---: | --- | --- |
++| [method-rows-red](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/method-rows-red.json) | 101 | [output](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/method-rows-red.stdout) | [errors](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/method-rows-red.stderr) |
++| [method-rows-green](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/method-rows-green.json) | 101 | [output](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/method-rows-green.stdout) | [errors](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/method-rows-green.stderr) |
++| [identity-storage-final](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/identity-storage-final.json) | 0 | [output](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/identity-storage-final.stdout) | [errors](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/identity-storage-final.stderr) |
++| [cleanup-worker-controls](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/cleanup-worker-controls.json) | 0 | [output](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/cleanup-worker-controls.stdout) | [errors](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/cleanup-worker-controls.stderr) |
++| [semantic-policy-controls](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/semantic-policy-controls.json) | 0 | [output](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/semantic-policy-controls.stdout) | [errors](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/semantic-policy-controls.stderr) |
++| [fmt](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/fmt.json) | 0 | [output](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/fmt.stdout) | [errors](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/fmt.stderr) |
++| [clippy](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/clippy.json) | 0 | [output](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/clippy.stdout) | [errors](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/clippy.stderr) |
++| [release-build](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/release-build.json) | 0 | [output](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/release-build.stdout) | [errors](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/runtime/e2/perf-fix-r1/release-build.stderr) |
++
++Exact invocations, in execution order (formatting ran independently during the final identity build):
++
++```sh
++memcap 8G python3 /tmp/t88e2-perf-check.py method-rows-red 480 /home/moritz/dev/repos/ooRexx-rust-rewrite/rust cargo test -j4 -p rexx-exec --lib method_rows::tests -- --nocapture
++memcap 8G python3 /tmp/t88e2-perf-check.py method-rows-green 480 /home/moritz/dev/repos/ooRexx-rust-rewrite/rust cargo test -j4 -p rexx-exec --lib method_rows::tests -- --nocapture
++memcap 8G python3 /tmp/t88e2-perf-check.py identity-storage-final 480 /home/moritz/dev/repos/ooRexx-rust-rewrite/rust cargo test -j4 -p rexx-exec --lib -- method_rows::tests dispatch::method_entry::tests dispatch::introspection::tests run::tests::a_freed_programs_id_never_resolves_again run::tests::a_collection_drops_the_identity_rows_of_swept_method_copies run::tests::an_executable_retained_under_the_nil_scope_answers --nocapture
++memcap 8G python3 /tmp/t88e2-perf-check.py fmt 120 /home/moritz/dev/repos/ooRexx-rust-rewrite/rust cargo fmt --all --check
++memcap 8G python3 /tmp/t88e2-perf-check.py cleanup-worker-controls 480 /home/moritz/dev/repos/ooRexx-rust-rewrite/rust cargo test -j4 -p rexx-exec --lib -- spawn_failure unused_command_worker minted_method_identities a_collection_drops
++memcap 8G python3 /tmp/t88e2-perf-check.py semantic-policy-controls 480 /home/moritz/dev/repos/ooRexx-rust-rewrite/rust cargo test -j4 -p rexx-exec --test semantic_boundaries --test owners --test closed_phases --test phase_ten_reasons --test representation_refusals --test refusal_sites
++memcap 8G python3 /tmp/t88e2-perf-check.py clippy 480 /home/moritz/dev/repos/ooRexx-rust-rewrite/rust cargo clippy -j4 -p rexx-exec --all-targets -- -D warnings
++memcap 8G python3 /tmp/t88e2-perf-check.py release-build 480 /home/moritz/dev/repos/ooRexx-rust-rewrite/rust cargo build -j4 --release -p rexx-exec --bin rexx
++```
+diff --git a/rust/crates/rexx-exec/src/dispatch.rs b/rust/crates/rexx-exec/src/dispatch.rs
+index 532ccb98f..f42ec9cb1 100644
+--- a/rust/crates/rexx-exec/src/dispatch.rs
++++ b/rust/crates/rexx-exec/src/dispatch.rs
+@@ -1836,20 +1836,21 @@ impl Interp {
+             .as_mut()
+             .expect("the object model was just installed")
+     }
+ 
+     #[cold]
+     #[inline(never)]
+     fn build_object_model(&mut self) {
+         let model = ObjectModel::bootstrap(&mut || self.heap.mint_class());
+         self.install_object_model(model);
+         self.special_methods.seal();
++        self.executable_objects.seal();
+     }
+ 
+     /// Stores a freshly built object model and files the access scopes of
+     /// the natives `Setup.cpp` declares private or protected.
+     pub(crate) fn install_object_model(&mut self, model: ObjectModel) {
+         debug_assert!(
+             self.special_methods.is_empty(),
+             "the natives' access scopes are the first rows filed, so nothing may have filed one \
+              before the model that mints them exists"
+         );
+@@ -1925,21 +1926,21 @@ impl Interp {
+         self.activity.running_bodies(&mut running);
+         self.activities.running_bodies(&mut running);
+         for (class, method) in unnamed {
+             if self
+                 .method_bodies
+                 .get(&method)
+                 .is_some_and(|body| running.contains(&(body.program, Some(body.directive))))
+             {
+                 continue;
+             }
+-            if let Some(object) = self.executable_objects.get(&method).copied() {
++            if let Some(object) = self.executable_objects.get(method).copied() {
+                 self.class_disowns(class, object);
+             }
+         }
+     }
+ 
+     /// The rendering of a handle the arena does not hold.
+     pub(crate) fn not_in_arena(&self, value: ObjRef) -> &[u8] {
+         assert!(self.heap.is_class(value), "a live value");
+         self.class_object_name(value)
+     }
+@@ -2612,21 +2613,21 @@ impl Interp {
+     /// Drops every row filed under `method`, an identity a swept `Method`
+     /// object owned.
+     pub(crate) fn forget_method_identity(&mut self, method: MethodId) {
+         self.method_bodies.remove(&method);
+         self.generated_methods.remove(&method);
+         self.native_externals.remove(&method);
+         self.library_externals.remove(&method);
+         self.external_packages.remove(&method);
+         self.defined_library_codes.remove(&method);
+         self.guarded_externals.remove(&method);
+-        self.executable_objects.remove(&method);
++        self.executable_objects.remove(method);
+         self.special_methods.remove(method);
+         if let Some(model) = self.object_model.as_mut() {
+             model.natives.remove(method);
+         }
+     }
+ 
+     /// A method scope's `~id`, [`Interp::class_id_text`]'s rendering:
+     /// measured, oracle rc 163, a primitive `setMethod` or `run` installed
+     /// under the `.nil` scope is `Compiled method "HM" with scope ".NIL"`.
+     pub(crate) fn scope_id(&mut self, scope: ObjRef) -> String {
+diff --git a/rust/crates/rexx-exec/src/dispatch/introspection.rs b/rust/crates/rexx-exec/src/dispatch/introspection.rs
+index 89a59890f..cba8ae49f 100644
+--- a/rust/crates/rexx-exec/src/dispatch/introspection.rs
++++ b/rust/crates/rexx-exec/src/dispatch/introspection.rs
+@@ -325,21 +325,21 @@ fn method_object_for(
+     interp: &mut Interp,
+     selection: Selection,
+     owner: ObjRef,
+     name: &[u8],
+     scope: ObjRef,
+     method: MethodId,
+ ) -> Result<ObjRef, Failure> {
+     // A `.nil`-scoped entry is one `setMethod` or `Class~enhanced` installed
+     // from an object of its own, which is what the oracle's behaviour holds.
+     if scope == ObjRef::NIL
+-        && let Some(object) = interp.executable_objects.get(&method).copied()
++        && let Some(object) = interp.executable_objects.get(method).copied()
+     {
+         return Ok(object);
+     }
+     let record = crate::ExecutableRecord {
+         source: interp.installed_executable_source(method),
+         installed: Some(method),
+         routine: None,
+         owns_installed: false,
+     };
+     match selection {
+diff --git a/rust/crates/rexx-exec/src/dispatch/introspection/tests.rs b/rust/crates/rexx-exec/src/dispatch/introspection/tests.rs
+index 1d93f9989..0c8ea5128 100644
+--- a/rust/crates/rexx-exec/src/dispatch/introspection/tests.rs
++++ b/rust/crates/rexx-exec/src/dispatch/introspection/tests.rs
+@@ -14,26 +14,29 @@ fn enhanced_metaclass_nil_entry_keeps_its_registered_method_through_gc() {
+     let harmless = rexx_parse::parse_program(b"return 0\n".to_vec()).expect("harmless program");
+     assert_eq!(
+         interp.run(harmless).expect("overwrite exit root"),
+         ObjRef::small_int(0)
+     );
+     let selection = receiver_selection(&mut interp, receiver).expect("real receiver selection");
+     assert!(matches!(selection, Selection::ClassSide(class) if class == receiver));
+     assert!(interp.own_method_entry(receiver, b"PING").is_none());
+     let (scope, method) = lookup(&mut interp, selection, "PING").expect("enhanced entry");
+     assert_eq!(scope, ObjRef::NIL);
+-    let executable = interp.executable_objects[&method];
++    let executable = *interp
++        .executable_objects
++        .get(method)
++        .expect("registered Method");
+     let owner = interp.class_of_value(receiver).expect("metaclass owner");
+     for _ in 0..3 {
+         interp.collect_now();
+         assert!(interp.heap.get(executable).is_some());
+-        assert_eq!(interp.executable_objects.get(&method), Some(&executable));
++        assert_eq!(interp.executable_objects.get(method), Some(&executable));
+         assert_eq!(
+             lookup(&mut interp, selection, "PING"),
+             Some((scope, method))
+         );
+         assert_eq!(
+             method_object_for(&mut interp, selection, owner, b"PING", scope, method)
+                 .expect("existing nil-scoped Method"),
+             executable
+         );
+     }
+diff --git a/rust/crates/rexx-exec/src/dispatch/method_entry.rs b/rust/crates/rexx-exec/src/dispatch/method_entry.rs
+index 788a35967..8d46e3ebc 100644
+--- a/rust/crates/rexx-exec/src/dispatch/method_entry.rs
++++ b/rust/crates/rexx-exec/src/dispatch/method_entry.rs
+@@ -114,21 +114,21 @@ impl Interp {
+             plan,
+             frame,
+             MethodIdentity {
+                 name,
+                 scope: resolution.scope,
+                 receiver,
+             },
+         );
+         // Dictionary mutation must not replace the Method this invocation
+         // entered. Existing registered objects use the activation's GC root.
+-        if let Some(executable) = self.executable_objects.get(&resolution.method).copied() {
++        if let Some(executable) = self.executable_objects.get(resolution.method).copied() {
+             callee.cold_mut().executable = Some(executable);
+         }
+         if let Some(start) = start {
+             start.apply(&mut callee);
+         }
+         // With one activity the lock is the activation's flag alone, taken
+         // here unless a package-traced `>I>` has to come first.
+         let reserve_at_once = reserve_at_once && !callee.trace_mode.labels;
+         callee.flags = crate::activation::ActivationFlags::method(guarded, reserve_at_once);
+         self.push_activation(callee);
+diff --git a/rust/crates/rexx-exec/src/environment/identities.rs b/rust/crates/rexx-exec/src/environment/identities.rs
+index 5a32ec7e3..363fc7075 100644
+--- a/rust/crates/rexx-exec/src/environment/identities.rs
++++ b/rust/crates/rexx-exec/src/environment/identities.rs
+@@ -257,21 +257,21 @@ impl Interp {
+                 return Ok(found);
+             }
+             // A method `define` has since replaced, which an instance made
+             // before the `define` still runs: the object standing for it.
+             return self.replaced_method_object(class, class_side, name, scope, record);
+         }
+         let method_class = self.method_class();
+         let object = self.native_instance(method_class);
+         self.record_executable(object, record)?;
+         if let Some(method) = record.installed {
+-            self.executable_objects.entry(method).or_insert(object);
++            self.executable_objects.insert_if_absent(method, object);
+         }
+         let held = self.heap.get_mut(object).expect("just allocated");
+         let Body::Native(native) = &mut held.body else {
+             unreachable!("allocated as Body::Native by native_instance")
+         };
+         native.set_scope(scope);
+         self.class_owns(class, object);
+         self.method_objects.insert(key, object);
+         // The dictionary entry the caller found, which is what its
+         // annotations are keyed by.
+@@ -285,21 +285,21 @@ impl Interp {
+     #[cold]
+     fn replaced_method_object(
+         &mut self,
+         class: ObjRef,
+         class_side: bool,
+         name: &[u8],
+         scope: ObjRef,
+         record: crate::ExecutableRecord,
+     ) -> Result<ObjRef, Failure> {
+         if let Some(method) = record.installed
+-            && let Some(found) = self.executable_objects.get(&method).copied()
++            && let Some(found) = self.executable_objects.get(method).copied()
+         {
+             return Ok(found);
+         }
+         let method_class = self.method_class();
+         let object = self.native_instance(method_class);
+         self.record_executable(object, record)?;
+         if let Some(method) = record.installed {
+             self.executable_objects.insert(method, object);
+         }
+         let held = self.heap.get_mut(object).expect("just allocated");
+@@ -372,21 +372,21 @@ impl Interp {
+                 source: self.installed_executable_source(method),
+                 installed: Some(method),
+                 routine: None,
+                 owns_installed: false,
+             };
+             return self
+                 .method_object(defined, false, name, defined, record)
+                 .ok();
+         }
+         self.executable_objects
+-            .get(&method)
++            .get(method)
+             .copied()
+             .filter(|object| self.heap.get(*object).is_some())
+     }
+ 
+     /// What `RexxContext~executable` answers from a method activation
+     /// running `body` for a send to `receiver` under `name` at `scope`: the
+     /// `Method` object the send ran, which is not always one a class
+     /// dictionary reaches by that name. Measured, oracle rc 0, each answers
+     /// `Method`: a body `setMethod` or `enhanced` installed, one `run` ran,
+     /// and one whose class `define` took the name back from while it ran.
+@@ -421,33 +421,33 @@ impl Interp {
+                 owns_installed: false,
+             };
+             return self.method_object(scope, false, name, scope, record);
+         }
+         // A method the receiver's own behaviour holds, as `enhanced` installs
+         // one: the object standing for that identity, which `instanceMethod`
+         // answers too.
+         if let Some(resolution) = self.lookup(receiver, name, None)
+             && resolution.scope == scope
+             && runs(self, resolution.method)
+-            && let Some(object) = self.executable_objects.get(&resolution.method).copied()
++            && let Some(object) = self.executable_objects.get(resolution.method).copied()
+             && self.heap.get(object).is_some()
+         {
+             return Ok(object);
+         }
+         // A `run`'s activation carries its own object, so what is left is a
+         // directive's body a class no longer reaches by this name: the
+         // object standing for its identity, the first minted where a copy
+         // shares the body.
+         let standing = self
+             .executable_objects
+-            .iter()
+-            .filter(|(method, object)| runs(self, **method) && self.heap.get(**object).is_some())
++            .entries()
++            .filter(|(method, object)| runs(self, *method) && self.heap.get(**object).is_some())
+             .min_by_key(|(method, _)| method.0)
+             .map(|(_, object)| *object);
+         if let Some(object) = standing {
+             return Ok(object);
+         }
+         let method = self
+             .method_bodies
+             .keys()
+             .copied()
+             .filter(|method| runs(self, *method))
+diff --git a/rust/crates/rexx-exec/src/install.rs b/rust/crates/rexx-exec/src/install.rs
+index f81f0cd08..dbd0750cd 100644
+--- a/rust/crates/rexx-exec/src/install.rs
++++ b/rust/crates/rexx-exec/src/install.rs
+@@ -2856,21 +2856,21 @@ impl Interp {
+             return Err(Loud::missing_body().into());
+         };
+         let Some(DirectiveKind::Constant(constant)) =
+             program.directives.get(generated.directive).map(|d| &d.kind)
+         else {
+             return Err(Loud::missing_body().into());
+         };
+         let ConstantValue::Expression(expr) = &constant.value else {
+             return Err(Loud::missing_body().into());
+         };
+-        let executable = self.executable_objects.get(&resolution.method).copied();
++        let executable = self.executable_objects.get(resolution.method).copied();
+         let run = ConstantRun {
+             name,
+             receiver,
+             scope: resolution.scope,
+             executable,
+             arguments: args,
+         };
+         let outer = self.install_call.take();
+         let evaluated = self.eval_constant_expression(
+             generated.program,
+diff --git a/rust/crates/rexx-exec/src/lib.rs b/rust/crates/rexx-exec/src/lib.rs
+index 8fae70af6..3dd18e8be 100644
+--- a/rust/crates/rexx-exec/src/lib.rs
++++ b/rust/crates/rexx-exec/src/lib.rs
+@@ -1580,21 +1580,21 @@ struct Interp {
+     library_programs: Vec<ProgramId>,
+     /// The name a program compiled from method source text reports under.
+     compiled_method_names: FxHashMap<ProgramId, Box<[u8]>>,
+     /// Whether any object has been given a method of its own, which is what
+     /// keeps the per-object dictionary off a send's path in a program that
+     /// never sends `SETMETHOD` -- see `Interp::own_method_entry`.
+     object_methods: bool,
+     /// The `Method` object standing for each method identity one was built
+     /// for, which is what `.context~executable` answers from a method no
+     /// class dictionary reaches by its name.
+-    executable_objects: FxHashMap<MethodId, ObjRef>,
++    executable_objects: method_rows::MethodRows<ObjRef>,
+     /// What each `Method` and `Routine` object this crate has handed out
+     /// reports on and runs -- see [`ExecutableRecord`].
+     executable_sources: FxHashMap<ObjRef, ExecutableRecord>,
+     /// For a stem some other stem's `EXPOSE` made tails of, a weak reference
+     /// to each such stem. The stems are not roots through this.
+     stem_exposers: FxHashMap<ObjRef, Vec<ObjRef>>,
+     /// The trace lines being delivered, innermost last. Kept here and not on
+     /// the activity, which every switch moves: a delivery is pinned, so
+     /// another activity's runs only inside this one's pinned yield, and the
+     /// innermost is the running activity's whenever it is routing.
+@@ -2393,21 +2393,21 @@ impl Interp {
+             method_objects: FxHashMap::default(),
+             library_bootstrap: false,
+             collections_before_program: 0,
+             #[cfg(feature = "pinning")]
+             pinning: pinning::Pinning::default(),
+             activities: scheduler::Activities::new(thread_table),
+             library_programs: Vec::new(),
+             method_bodies: NameMap::default(),
+             compiled_method_names: FxHashMap::default(),
+             object_methods: false,
+-            executable_objects: FxHashMap::default(),
++            executable_objects: method_rows::MethodRows::new(),
+             executable_sources: FxHashMap::default(),
+             stem_exposers: FxHashMap::default(),
+             deliveries: Vec::new(),
+             trace_refusal: None,
+             traced_variable: None,
+             method_flag_writes: FxHashMap::default(),
+             message_outcomes: FxHashMap::default(),
+             started_messages: rustc_hash::FxHashSet::default(),
+             unnotified_messages: rustc_hash::FxHashSet::default(),
+             generated_methods: FxHashMap::default(),
+@@ -2522,20 +2522,21 @@ impl Interp {
+         let model = dispatch::ObjectModel::bootstrap_for_library(&mut || self.heap.mint_class());
+         self.install_object_model(model);
+         self.library_bootstrap = true;
+         #[cfg(test)]
+         ir::drive::suspend_counters();
+         let entry = rexx_lib::lookup(rexx_lib::ENTRY)
+             .unwrap_or_else(|| panic!("{} is embedded", rexx_lib::ENTRY));
+         let outcome = self.enter_library_program(entry, None);
+         self.library_bootstrap = false;
+         self.special_methods.seal();
++        self.executable_objects.seal();
+         self.classes().keep_retired_behaviours();
+         rexx_classes::remove_setup_methods(self.classes());
+         if outcome.is_ok() {
+             self.mint_local_directory();
+         }
+         // **Every per-run instrument reads from here, not from process
+         // start.** `Outcome::collections` and `Outcome::chunks_refused`
+         // answer a question about the program, and so do the compiled
+         // engine's own counters; the bootstrap is the interpreter starting
+         // up. Without this, `run_program_collect_every_alloc`'s
+@@ -3656,21 +3657,21 @@ impl Interp {
+                 orphaned.push(method);
+             }
+             keep
+         });
+         for method in orphaned {
+             self.forget_method_identity(method);
+         }
+         let heap = &self.heap;
+         let live = |object: &ObjRef| heap.peek(*object).is_some();
+         self.method_flag_writes.retain(|object, _| live(object));
+-        self.executable_objects.retain(|_, object| live(object));
++        self.executable_objects.retain(live);
+         self.message_outcomes.retain(|message, _| live(message));
+         self.started_messages.retain(live);
+         self.unnotified_messages.retain(live);
+     }
+ 
+     /// Drops every row that names one of the `freed` programs.
+     #[cold]
+     #[inline(never)]
+     fn prune_program_rows(&mut self, freed: &[ProgramId]) {
+         let freed: rustc_hash::FxHashSet<ProgramId> = freed.iter().copied().collect();
+@@ -3732,21 +3733,21 @@ impl Interp {
+         });
+         self.external_packages.retain(|method, program| {
+             let keep = !dead(program);
+             if !keep {
+                 methods.insert(*method);
+             }
+             keep
+         });
+         if !methods.is_empty() {
+             self.executable_objects
+-                .retain(|method, _| !methods.contains(method));
++                .retain_entries(|method, _| !methods.contains(&method));
+             self.native_externals
+                 .retain(|method, _| !methods.contains(method));
+             self.library_externals
+                 .retain(|method, _| !methods.contains(method));
+             self.guarded_externals
+                 .retain(|method| !methods.contains(method));
+         }
+         self.special_methods
+             .retain(|scope| !matches!(scope.package, Package::Program(program) if dead(&program)));
+         self.routine_objects
+diff --git a/rust/crates/rexx-exec/src/method_rows.rs b/rust/crates/rexx-exec/src/method_rows.rs
+index 11dcbe2cf..9eedba654 100644
+--- a/rust/crates/rexx-exec/src/method_rows.rs
++++ b/rust/crates/rexx-exec/src/method_rows.rs
+@@ -57,79 +57,73 @@ impl<T: Copy> MethodRows<T> {
+         if index < self.dense.len() {
+             self.dense[index] = Some(row);
+         } else if self.sealed {
+             self.minted.insert(method, row);
+         } else {
+             self.dense.resize(index + 1, None);
+             self.dense[index] = Some(row);
+         }
+     }
+ 
++    /// Registers a row only when its identity has no row yet.
++    pub(crate) fn insert_if_absent(&mut self, method: MethodId, row: T) {
++        if self.get(method).is_none() {
++            self.insert(method, row);
++        }
++    }
++
+     pub(crate) fn remove(&mut self, method: MethodId) {
+         self.debug_assert_not_minted_below(method);
+         match self.dense.get_mut(method.0 as usize) {
+             Some(row) => *row = None,
+             None => {
+                 self.minted.remove(&method);
+             }
+         }
+     }
+ 
+     /// Drops every row `keep` answers false for.
+     pub(crate) fn retain(&mut self, mut keep: impl FnMut(&T) -> bool) {
+-        for row in &mut self.dense {
+-            if row.as_ref().is_some_and(|row| !keep(row)) {
++        self.retain_entries(|_, row| keep(row));
++    }
++
++    /// Drops every identity and row `keep` answers false for.
++    pub(crate) fn retain_entries(&mut self, mut keep: impl FnMut(MethodId, &T) -> bool) {
++        for (index, row) in self.dense.iter_mut().enumerate() {
++            if row
++                .as_ref()
++                .is_some_and(|row| !keep(MethodId(index as u32), row))
++            {
+                 *row = None;
+             }
+         }
+-        self.minted.retain(|_, row| keep(row));
++        self.minted.retain(|method, row| keep(*method, row));
++    }
++
++    /// Visits every registered identity and its row, skipping vacant slots.
++    pub(crate) fn entries(&self) -> impl Iterator<Item = (MethodId, &T)> {
++        self.dense
++            .iter()
++            .enumerate()
++            .filter_map(|(index, row)| row.as_ref().map(|row| (MethodId(index as u32), row)))
++            .chain(self.minted.iter().map(|(method, row)| (*method, row)))
+     }
+ 
+     pub(crate) fn is_empty(&self) -> bool {
+         self.minted.is_empty() && self.dense.iter().all(Option::is_none)
+     }
+ 
+     #[cfg(test)]
+     pub(crate) fn rows(&self) -> impl Iterator<Item = &T> {
+         self.dense.iter().flatten().chain(self.minted.values())
+     }
+ 
+     /// The vector's length and the map's, for the tests that pin that neither
+     /// grows with the identities a program mints and drops.
+     #[cfg(test)]
+     pub(crate) fn extent(&self) -> (usize, usize) {
+         (self.dense.len(), self.minted.len())
+     }
+ }
+ 
+ #[cfg(test)]
+-mod tests {
+-    use super::MethodRows;
+-    use rexx_classes::MethodId;
+-
+-    /// After the seal, an id the vector covers still lands in the vector,
+-    /// and one past it in the map.
+-    #[test]
+-    fn a_sealed_table_files_by_the_vectors_reach() {
+-        let mut rows = MethodRows::new();
+-        rows.insert(MethodId(3), 'a');
+-        rows.seal();
+-        rows.insert(MethodId(1), 'b');
+-        rows.insert(MethodId(9), 'c');
+-        assert_eq!(rows.extent(), (4, 1));
+-        assert_eq!(rows.get(MethodId(1)), Some(&'b'));
+-        rows.remove(MethodId(9));
+-        assert_eq!(rows.extent(), (4, 0));
+-    }
+-
+-    /// A map row below the vector's end is refused in a debug build.
+-    #[cfg(debug_assertions)]
+-    #[test]
+-    #[should_panic(expected = "sits below the vector's end")]
+-    fn a_minted_row_below_the_vector_is_refused() {
+-        let mut rows = MethodRows::new();
+-        rows.insert(MethodId(3), 'a');
+-        rows.seal();
+-        rows.minted.insert(MethodId(1), 'b');
+-        rows.get_mut(MethodId(1));
+-    }
+-}
++mod tests;
+diff --git a/rust/crates/rexx-exec/src/method_rows/tests.rs b/rust/crates/rexx-exec/src/method_rows/tests.rs
+new file mode 100644
+index 000000000..ac610b394
+--- /dev/null
++++ b/rust/crates/rexx-exec/src/method_rows/tests.rs
+@@ -0,0 +1,164 @@
++use super::MethodRows;
++use rexx_classes::MethodId;
++
++/// After the seal, an id the vector covers still lands in the vector,
++/// and one past it in the map.
++#[test]
++fn a_sealed_table_files_by_the_vectors_reach() {
++    let mut rows = MethodRows::new();
++    rows.insert(MethodId(3), 'a');
++    rows.seal();
++    rows.insert(MethodId(1), 'b');
++    rows.insert(MethodId(9), 'c');
++    assert_eq!(rows.extent(), (4, 1));
++    assert_eq!(rows.get(MethodId(1)), Some(&'b'));
++    rows.remove(MethodId(9));
++    assert_eq!(rows.extent(), (4, 0));
++}
++
++/// A map row below the vector's end is refused in a debug build.
++#[cfg(debug_assertions)]
++#[test]
++#[should_panic(expected = "sits below the vector's end")]
++fn a_minted_row_below_the_vector_is_refused() {
++    let mut rows = MethodRows::new();
++    rows.insert(MethodId(3), 'a');
++    rows.seal();
++    rows.minted.insert(MethodId(1), 'b');
++    rows.get_mut(MethodId(1));
++}
++
++/// Registering another wrapper must not replace an identity already exposed.
++#[test]
++fn first_registration_wins_on_both_sides_of_the_seal() {
++    let mut rows = MethodRows::new();
++    rows.insert_if_absent(MethodId(3), 'a');
++    rows.insert_if_absent(MethodId(3), 'b');
++    rows.seal();
++    rows.insert_if_absent(MethodId(1), 'c');
++    rows.insert_if_absent(MethodId(1), 'd');
++    rows.insert_if_absent(MethodId(9), 'e');
++    rows.insert_if_absent(MethodId(9), 'f');
++    assert_eq!(rows.get(MethodId(3)), Some(&'a'));
++    assert_eq!(rows.get(MethodId(1)), Some(&'c'));
++    assert_eq!(rows.get(MethodId(9)), Some(&'e'));
++    rows.insert(MethodId(3), 'g');
++    rows.insert(MethodId(9), 'h');
++    assert_eq!(rows.get(MethodId(3)), Some(&'g'));
++    assert_eq!(rows.get(MethodId(9)), Some(&'h'));
++    assert_eq!(rows.extent(), (4, 1));
++}
++
++/// Keyed pruning must distinguish identities with the same object value.
++#[test]
++fn entries_and_keyed_retention_preserve_identity_and_holes() {
++    let mut rows = MethodRows::new();
++    rows.insert(MethodId(3), 'a');
++    rows.seal();
++    rows.insert(MethodId(1), 'a');
++    rows.insert(MethodId(9), 'a');
++    rows.insert(MethodId(11), 'b');
++    rows.retain_entries(|method, _| method != MethodId(1) && method != MethodId(9));
++    let mut entries: Vec<_> = rows
++        .entries()
++        .map(|(method, row)| (method.0, *row))
++        .collect();
++    entries.sort_unstable();
++    assert_eq!(entries, [(3, 'a'), (11, 'b')]);
++    assert_eq!(rows.extent(), (4, 1));
++    rows.retain(|row| *row != 'a');
++    assert_eq!(
++        rows.entries()
++            .map(|(method, row)| (method.0, *row))
++            .collect::<Vec<_>>(),
++        [(11, 'b')]
++    );
++    rows.remove(MethodId(11));
++    assert!(rows.is_empty());
++    assert_eq!(rows.extent(), (4, 0));
++}
++
++/// Runtime identities must leave no growing dense prefix or live map rows.
++#[test]
++fn sealed_churn_and_independent_tables_do_not_accumulate_identities() {
++    let mut rows = MethodRows::new();
++    rows.insert(MethodId(3), 'a');
++    rows.seal();
++    let mut other = MethodRows::new();
++    other.seal();
++    other.insert_if_absent(MethodId(3), 'b');
++    for id in 10..10_000 {
++        rows.insert_if_absent(MethodId(id), 'c');
++        rows.remove(MethodId(id));
++        assert_eq!(rows.extent(), (4, 0));
++    }
++    rows.retain_entries(|_, _| false);
++    assert!(rows.is_empty());
++    assert_eq!(other.get(MethodId(3)), Some(&'b'));
++    assert_eq!(other.extent(), (0, 1));
++}
++
++/// Both object-model entry paths seal the weak registry before user churn.
++#[test]
++fn executable_registry_stays_bounded_and_weak_across_programs() {
++    fn run(interp: &mut crate::Interp, source: &[u8]) -> rexx_core::ObjRef {
++        interp
++            .run(rexx_parse::parse_program(source.to_vec()).expect("program parses"))
++            .expect("program runs")
++            .expect("program returns")
++    }
++    for library in [false, true] {
++        let mut interp = crate::Interp::new();
++        if library {
++            interp.bootstrap_library().expect("library bootstrap");
++        }
++        run(&mut interp, b"return 0\n");
++        let prefix = interp.executable_objects.extent().0;
++        if library {
++            assert!(
++                prefix > 0,
++                "bootstrap registrations did not enter the prefix"
++            );
++        }
++        assert_eq!(interp.executable_objects.extent().1, 0);
++        let capacity = interp.executable_objects.dense.capacity();
++        eprintln!(
++            "library={library} prefix={prefix} capacity={capacity} bytes={}",
++            capacity * std::mem::size_of::<Option<rexx_core::ObjRef>>()
++        );
++        // Reflection retains the original Method through its class. Only
++        // the copies below should disappear when their exit root is cleared.
++        let original = run(&mut interp, b"return .object~method('STRING')\n");
++        run(&mut interp, b"return 0\n");
++        interp.collect_now();
++        assert!(interp.heap.get(original).is_some());
++        let retained = interp.executable_objects.extent().1;
++        let mut issued = Vec::new();
++        for _ in 0..4 {
++            let object = run(&mut interp, b"return .object~method('STRING')~copy\n");
++            let method = interp.executable_sources[&object]
++                .installed
++                .expect("copy identity");
++            assert!(
++                !issued.contains(&method),
++                "later program reused an issued identity"
++            );
++            issued.push(method);
++            assert_eq!(interp.executable_objects.get(method), Some(&object));
++            run(&mut interp, b"return 0\n");
++            interp.collect_now();
++            assert!(
++                interp.heap.get(object).is_none(),
++                "weak index retained the copy"
++            );
++            assert!(interp.executable_objects.get(method).is_none());
++            assert_eq!(interp.executable_objects.extent().0, prefix);
++            assert_eq!(interp.executable_objects.dense.capacity(), capacity);
++        }
++        assert_eq!(
++            interp.executable_objects.extent().1,
++            retained,
++            "runtime registrations accumulated beyond the class-owned Method"
++        );
++    }
++}
+diff --git a/rust/crates/rexx-exec/src/run/tests.rs b/rust/crates/rexx-exec/src/run/tests.rs
+index 65486a43f..7e0b1fa5f 100644
+--- a/rust/crates/rexx-exec/src/run/tests.rs
++++ b/rust/crates/rexx-exec/src/run/tests.rs
+@@ -227,26 +227,26 @@ fn a_freed_programs_id_never_resolves_again() {
+             .any(|id| id != stale && id.slot_index() == stale.slot_index())),
+         "no freed slot was reused, so no stale id was put to the test: {issued:?}"
+     );
+     assert!(
+         !interp
+             .annotations
+             .keys()
+             .any(|site| matches!(site, crate::environment::Annotated::Compiled(_))),
+         "a compiled method's annotation table is held by a row of its own"
+     );
+-    for method in interp.executable_objects.keys() {
++    for (method, _) in interp.executable_objects.entries() {
+         assert!(
+-            interp.method_bodies.contains_key(method)
+-                || interp.generated_methods.contains_key(method)
+-                || interp.native_externals.contains_key(method)
+-                || interp.library_externals.contains_key(method),
++            interp.method_bodies.contains_key(&method)
++                || interp.generated_methods.contains_key(&method)
++                || interp.native_externals.contains_key(&method)
++                || interp.library_externals.contains_key(&method),
+             "executable_objects names {method:?}, whose body was pruned"
+         );
+     }
+     for id in &freed {
+         let suffix = format!(" of program {id}");
+         assert!(
+             !interp
+                 .roots
+                 .global_names()
+                 .any(|name| name.ends_with(&suffix)),
+@@ -354,21 +354,21 @@ fn a_collection_drops_the_rows_of_swept_executables_and_messages() {
+     let live = |object: &ObjRef| heap.peek(*object).is_some();
+     assert!(
+         interp.executable_sources.keys().all(live),
+         "executable_sources keeps a swept object"
+     );
+     assert!(
+         interp.method_flag_writes.keys().all(live),
+         "method_flag_writes keeps a swept object"
+     );
+     assert!(
+-        interp.executable_objects.values().all(live),
++        interp.executable_objects.rows().all(live),
+         "executable_objects names a swept object"
+     );
+     assert!(
+         interp.message_outcomes.keys().all(live),
+         "message_outcomes keeps a swept message"
+     );
+     assert!(
+         interp.started_messages.iter().all(live),
+         "started_messages keeps a swept message"
+     );
+@@ -415,21 +415,21 @@ fn a_collection_drops_the_identity_rows_of_swept_method_copies() {
+         .filter_map(|(object, record)| Some((*object, record.installed?)))
+         .collect();
+     assert_eq!(owners.len(), 9, "the copies' identities were not recorded");
+     let owned: Vec<_> = owners.iter().map(|(_, method)| *method).collect();
+     let rows = |interp: &mut Interp, method: rexx_classes::MethodId| {
+         [
+             interp.method_bodies.contains_key(&method),
+             interp.generated_methods.contains_key(&method),
+             interp.special_methods.get(method).is_some(),
+             interp.has_native_entry(method),
+-            interp.executable_objects.contains_key(&method),
++            interp.executable_objects.get(method).is_some(),
+         ]
+     };
+     for method in &owned {
+         assert!(
+             rows(&mut interp, *method).iter().any(|row| *row),
+             "copy identity {method:?} has no row before the collection"
+         );
+     }
+     let shared: Vec<_> = interp
+         .method_bodies
+$ git log --oneline 416d69213a6fc90f9859e28e9b72915559123fa9..57fdbedd3
+$ git diff --stat 416d69213a6fc90f9859e28e9b72915559123fa9..57fdbedd3
+$ git diff -U10 416d69213a6fc90f9859e28e9b72915559123fa9..57fdbedd3 -- rust .superpowers/sdd/2026-10-18-phase-9d/task-8.8e2-report.md .superpowers/sdd/2026-10-18-phase-9d/task-8.8e2-perf-fix-report.md
