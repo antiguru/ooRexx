@@ -1,6 +1,12 @@
 # Task 8.8 whole-review fix wave
 
-The complete whole-source review found three Important issues, retained at `docs/superpowers/records/2026-10-18-phase-9d/t8.8/final-review/review.md`. Root verified their decision points against current source and local contracts before dispatch. This is the single consolidated final-review fix wave, followed by one scoped rereview. The original f implementer owns all three corrections, with no other source or index owner active.
+## Scoped follow-up R1
+
+The scoped review at `9d7da3281` marks F1/F2/F3 addressed and identifies one fix-induced EXISTS regression, retained at `t8.8/final-review/rereview.md`. The controller amended the task-local single-wave stop in the progress ledger to finish this narrow defect under the existing correctness authorization, without another broad review. An owned stdout alias retains OpenFile across CLOSE for position state, but QUERY EXISTS must use the unopened named-file fallback while its status is UNKNOWN. Commit regressions before red execution and the narrow guard correction before green verification, preserving the retained state and already-passing alias behaviors.
+
+Cover missing and present named-file fallback for closed STDOUT and STDOUT: aliases in the existing owned-descriptor harness, with opened positive cases and related closed metadata/status controls. Use a literal path such as `./STDOUT` for the ordinary named-file fixture so reserved standard-stream names do not invalidate the observer. Reuse the established normal/stress and stream checks, and limit production edits to this status/fallback defect unless a directly related problem is demonstrated. Build a fresh immutable pin at `/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx`, preserving the previous pin, then append the R1 report and return a clean tracked handoff for scoped R1-only review.
+
+The complete whole-source review found three Important issues, retained at `docs/superpowers/records/2026-10-18-phase-9d/t8.8/final-review/review.md`. Root verified their decision points against current source and local contracts before dispatch. The initial consolidated fix wave and its scoped review are complete, with the narrow R1 follow-up authorized above. The original f implementer owns all three corrections, with no other source or index owner active.
 
 ## Findings and scope
 
