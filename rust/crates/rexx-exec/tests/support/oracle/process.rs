@@ -146,7 +146,7 @@ fn timeout_context(
 }
 
 fn report_timeout(path: &Path, phase: &str, deadline: Duration, elapsed: Duration) {
-    let load = fs::read("/proc/loadavg");
+    let load = std::fs::read("/proc/loadavg");
     eprintln!("{}", timeout_context(path, phase, deadline, elapsed, load.as_deref()));
 }
 
