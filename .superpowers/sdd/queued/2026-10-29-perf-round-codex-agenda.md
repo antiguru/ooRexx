@@ -20,3 +20,14 @@ Keep the single-owner interpreter and green threads; construct, copy and inspect
 * Guard and watch lifecycle: stores stop going through watcher machinery after the last watcher goes; possibly the single-activity guard shortcut recovered after concurrency ends. Preconditions: watch counts cover every variable and scope, posted wakeups survive cleanup; guard quiescence also accounts for parked activities, pending starts, native calls, callbacks and reply continuations.
 
 Bookkeeping is delayed only until its first possible observer (GC, a condition handler, stack inspection, native reentry), not until the next yield.
+
+## Instruction-cost inventory (Codex, pasted by Moritz 2026-10-30)
+
+Codex's per-instruction cost experiment, under /home/moritz/dev/reviews/ooRexx-rust-rewrite/2026-10-29-instruction-costs/ (not present on this machine on 2026-10-30; ask Moritz where it lives):
+* inventory.py: workload generation, paired timings, correctness checks, perf counters.
+* inventory-cases.json: workload definitions.
+* publish-inventory.py: report generation.
+* inventory/README.txt: methodology and limitations.
+* inventory/report.html: existing results.
+
+Experiment scripts: interpreter paths, CPU 13 and its sibling CPU 29 are hardcoded, and the runner expects an unpacked rust-rexx (the preserved executable is rust-rexx.gz). Parameterize those and use fresh output directories. Keep the qualifications: queue cases lack equivalent RXAPI integration; REPLY has no valid isolated cost; EXIT measures the whole process. Use inventory/instruction-coverage.json; the root coverage file has stale Label metadata.
