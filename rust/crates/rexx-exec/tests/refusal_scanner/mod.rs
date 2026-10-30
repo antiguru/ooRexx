@@ -65,6 +65,36 @@ fn sources_in(root: &Path) -> Vec<PathBuf> {
             }
         }
     }
+    let mut test_files = Vec::new();
+    let mut test_directories = Vec::new();
+    for path in &found {
+        let text = std::fs::read_to_string(path).expect("a source file this crate compiles");
+        let mut test_attribute = false;
+        for line in text.lines() {
+            let code = line.split("//").next().unwrap().trim();
+            if code == "#[cfg(test)]" {
+                test_attribute = true;
+                continue;
+            }
+            if code.is_empty() || code.starts_with("#[") {
+                continue;
+            }
+            if test_attribute
+                && let Some(name) = code.strip_prefix("mod ").and_then(|s| s.strip_suffix(';'))
+            {
+                let parent = path.parent().unwrap();
+                let directory = if matches!(path.file_name().and_then(|s| s.to_str()), Some("lib.rs" | "mod.rs")) {
+                    parent.to_path_buf()
+                } else {
+                    parent.join(path.file_stem().unwrap())
+                };
+                test_files.push(directory.join(format!("{name}.rs")));
+                test_directories.push(directory.join(name));
+            }
+            test_attribute = false;
+        }
+    }
+    found.retain(|path| !test_files.contains(path) && !test_directories.iter().any(|directory| path.starts_with(directory)));
     found.sort();
     found
 }
@@ -203,17 +233,38 @@ pub(super) fn bodies(
     found
 }
 
+/// Whether the definition belongs to an impl block in rustfmt-formatted source.
+fn defined_in_impl(files: &BTreeMap<PathBuf, Vec<(usize, String)>>, site: &str) -> bool {
+    let (path, line) = site.rsplit_once(':').expect("a definition site");
+    let line = line.parse::<usize>().expect("a source line");
+    let lines = &files[&repo_root().join(path)];
+    let mut owners = Vec::new();
+    for (number, code) in lines {
+        if *number == line {
+            return !owners.is_empty();
+        }
+        let trimmed = code.trim_start();
+        let indent = code.len() - trimmed.len();
+        if trimmed.starts_with("impl ") || trimmed.starts_with("impl<") {
+            owners.push(indent);
+        } else if trimmed == "}" && owners.last() == Some(&indent) {
+            owners.pop();
+        }
+    }
+    panic!("the definition's line is in the file");
+}
+
 /// Which surfaces a constructor's own construction sites are on, and the text
 /// of those sites.
 pub(super) fn surface(
     files: &BTreeMap<PathBuf, Vec<(usize, String)>>,
     definitions: &BTreeMap<String, (String, String)>,
 ) -> (BTreeMap<String, String>, BTreeMap<String, String>) {
-    // A constructor defined outside `error.rs` and `lib.rs` is a free
-    // function, so its call sites are spelled without a type in front.
+    // A constructor defined outside an impl is a free function, so its
+    // call sites are spelled without a type in front.
     let free: Vec<&String> = definitions
         .iter()
-        .filter(|(_, (_, at))| !at.contains("error.rs:") && !at.contains("lib.rs:"))
+        .filter(|(_, (_, at))| !defined_in_impl(files, at))
         .map(|(name, _)| name)
         .collect();
     let mut tags: BTreeMap<String, Vec<&'static str>> = BTreeMap::new();
