@@ -1,0 +1,12 @@
+Table 1 2 1 1 one,two
+reused 1 0 1
+IdentityTable 1 2 1 1 one,two
+reused 1 0 1
+Relation 1 2 1 1 one,two
+reused 1 0 1
+Bag 1 2 1 1 one,two
+reused 1 0 1
+Directory 1 2 1 1 one,two
+reused 1 0 1
+StringTable 1 2 1 1 one,two
+reused 1 0 1
