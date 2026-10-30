@@ -40,21 +40,36 @@ pub(super) fn take_in(
     remove_at(interp, receiver, half, &store, slot, previous)
 }
 
-/// [`take`] for an entry the caller has already found, named by its slot
-/// rather than by its index -- what `removeItem` needs, since two entries
-/// under one index differ only by their item.
+/// Removes an already compared slot if it is still live in its original
+/// backing arrays and bucket, answering the value actually removed.
+///
+/// `removeItem` identifies a slot rather than an index because two entries
+/// under one index can differ only by their item.
 pub(super) fn take_at(
     interp: &mut Interp,
     receiver: ObjRef,
     store: &Store,
     slot: usize,
-    previous: Option<usize>,
+    bucket: usize,
 ) -> Result<Option<ObjRef>, Failure> {
-    if store_of(interp, receiver)? != *store {
+    let current = store_of(interp, receiver)?;
+    if current.indexes != store.indexes
+        || current.items != store.items
+        || current.next != store.next
+        || current.buckets != store.buckets
+    {
         return Ok(None);
     }
+    // A callback can prepend a collision or overwrite the selected slot.
+    // Re-find its current predecessor and free chain without another send.
+    let Some((_, previous)) = entries_in(interp, &current, Some(bucket))?
+        .into_iter()
+        .find(|&(candidate, _)| candidate == slot)
+    else {
+        return Ok(None);
+    };
     interp.bump_route_generation();
-    remove_at(interp, receiver, CONTENTS, store, slot, previous)
+    remove_at(interp, receiver, CONTENTS, &current, slot, previous)
 }
 
 /// Unlinks the entry at `slot`, whose chain predecessor is `previous`, and
@@ -160,17 +175,28 @@ pub(super) fn native_hash_remove_item(
     let wanted = super::collection::item_argument(args)?;
     let keys = keys_of(interp, receiver);
     if method_store(interp, receiver)?.is_none() && unknown_method(interp, receiver).is_none() {
-        let store = store_of(interp, receiver)?;
-        for (slot, previous) in entries_in(interp, &store, None)? {
-            let Some(item) = item_at(interp, &store, slot)? else {
-                continue;
-            };
-            if same_held_item(interp, keys, wanted, item)? {
-                take_at(interp, receiver, &store, slot, previous)?;
-                return Ok(Some(item));
+        'search: loop {
+            let store = store_of(interp, receiver)?;
+            let mut bucket = 0;
+            for (slot, previous) in entries_in(interp, &store, None)? {
+                if previous.is_none() {
+                    bucket = slot;
+                }
+                let Some(item) = item_at(interp, &store, slot)? else {
+                    continue;
+                };
+                if same_held_item(interp, keys, wanted, item)? {
+                    if let Some(removed) = take_at(interp, receiver, &store, slot, bucket)? {
+                        return Ok(Some(removed));
+                    }
+                    continue 'search;
+                }
+                if store_of(interp, receiver)? != store {
+                    continue 'search;
+                }
             }
+            return Ok(Some(ObjRef::NIL));
         }
-        return Ok(Some(ObjRef::NIL));
     }
     for (index, item) in pairs(interp, receiver)? {
         if same_held_item(interp, keys, wanted, item)? {

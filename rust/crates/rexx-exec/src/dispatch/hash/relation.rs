@@ -280,24 +280,38 @@ fn native_relation_remove_item(
     let hash = under
         .map(|index| super::hash_of(interp, keys, index))
         .transpose()?;
-    let store = store_of(interp, receiver)?;
-    let bucket = hash.map(|hash| (hash % store.buckets as u64) as usize);
-    for (slot, previous) in super::entries_in(interp, &store, bucket)? {
-        if let Some(index) = under
-            && !same_index(interp, &store, keys, slot, index)?
-        {
-            continue;
+    'search: loop {
+        let store = store_of(interp, receiver)?;
+        let selected = hash.map(|hash| (hash % store.buckets as u64) as usize);
+        let mut bucket = selected.unwrap_or(0);
+        for (slot, previous) in super::entries_in(interp, &store, selected)? {
+            if previous.is_none() {
+                bucket = slot;
+            }
+            if let Some(index) = under {
+                let matches = same_index(interp, &store, keys, slot, index)?;
+                if store_of(interp, receiver)? != store {
+                    continue 'search;
+                }
+                if !matches {
+                    continue;
+                }
+            }
+            let Some(item) = slot_at(interp, store.items, slot)? else {
+                continue;
+            };
+            if super::collection::same_item(interp, wanted, item)? {
+                if let Some(removed) = super::take_at(interp, receiver, &store, slot, bucket)? {
+                    return Ok(Some(removed));
+                }
+                continue 'search;
+            }
+            if store_of(interp, receiver)? != store {
+                continue 'search;
+            }
         }
-        let Some(item) = slot_at(interp, store.items, slot)? else {
-            continue;
-        };
-        if !super::collection::same_item(interp, wanted, item)? {
-            continue;
-        }
-        super::take_at(interp, receiver, &store, slot, previous)?;
-        return Ok(Some(item));
+        return Ok(Some(ObjRef::NIL));
     }
-    Ok(Some(ObjRef::NIL))
 }
 
 /// `Relation`'s and `Bag`'s primitive methods, chained into
