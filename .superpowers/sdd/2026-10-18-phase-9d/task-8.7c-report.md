@@ -690,3 +690,83 @@ run, at `cd070fd13`; outputs in `fix-r3/`.
 
 `8aa1b9049` (N1, N2, LOSTDIGITS, the extent, the eval comment and depth test, witnesses), `cd070fd13`
 (`qualified` boxed, the size assertion); records and this section in the commit after.
+
+## Fix round 4
+
+Status: DONE. Code `d8614a7c9` (R2-1 and its witness), `7162106dc` (the
+sourceline file and the probes); records and this section in the commit after. Records:
+`docs/superpowers/records/2026-10-18-phase-9d/t8.7c/fix-r4/` (`probes/bin/r4.sh` the runner: `o` oracle,
+`b` `rexx-head-cd070fd13`, `h` `rexx-head-d8614a7c9`; outputs under each probe directory's `out/`).
+
+### What changed
+
+* **R2-1.** `to_text`'s and `text_len_inner`'s `Redirect::VarRefValue` arms render the referenced value
+  with `unsent_string_value_text` again, as at `d6720f350`, and `reference_text` is gone. This is the
+  re-reviewer's mutant `n`. The `Body::VarRef` arm round 3 added to `object_string_value_text` stays, so
+  the Array join item, `r~string` and the TRACE lines still send and propagate. `value.rs` differs from
+  `d6720f350` by that arm only (`git diff d6720f350 d8614a7c9 -- rust/crates/rexx-exec/src/value.rs`).
+  `c2/onceparse.rex` (PARSE) is left as it is.
+
+### Witnesses
+
+| witness | o~b (`cd070fd13`) | o~h |
+|---|---|---|
+| `corpus/lang/reference_conversion_raises_in_clause.rex` (`numeric digits (q)` and `signal value q` over a `DEFAULTNAME` raising on its first send, then `n2c/u.rex`'s untraced RAISE USER and ERROR through a reference) | out | equal |
+| `probes/c2/once.rex`, `probes/c2/oncesig.rex`, `probes/n2c/u.rex` | out | equal |
+| `probes/rr1/i1d/k.rex`, `i1f/n.rex`, `i1g/p.rex`, `i1c/l.rex` | equal | equal |
+| `probes/rr1/i1b/g.rex` | out | out; b and h identical (`cmp`), round 3's concern 1 |
+| round 3's corpus witnesses (`reference_rendering_sends.rex`, `raise_untraced_renders_nothing.rex`, `lostdigits_names_the_string_value.rex`) | equal | equal |
+
+Reading the oracle's stdout of the corpus witness, each path prints: `(dn 1)` then `s1 98.900 boom.`,
+`(dn 1)` then `s2 98.900 boom.`, and the four `handler` lines with `after bd user` and `after bd error`
+and no `(noisy dn)` or `(bad dn)` line. At `cd070fd13` it prints `(dn 2)`, `(dn 3)`, 26.5 and 16.1, and
+the noisy and bad sends. The new program has its `sourceline_oracle` file (the module's driver, oracle
+wrapper; identical to the source past its count line) and a `phase-9.txt` entry.
+
+### Perf
+
+`fix-r4/callgrind.txt`: `bench-programs/callgrind.sh -B 0.5 -r 3 -j 6 -o .../cg-9d/t8.7c/fix4-final
+base=.../rexx-base-97eee8a9a head=.../rexx-head-d8614a7c9`, every program, status 0; every `.vg` names
+one of the two binaries (99 each), every `.rc` 0; no SPREAD, OVER or stdout flag. Libc subtracted against
+base, every program at most +0.05%:
+
+| program | head d% | head -libc d% |
+|---|---|---|
+| arith | +0.0440 | +0.0464 |
+| parse | +0.0369 | +0.0396 |
+| pingsem | +0.0315 | +0.0352 |
+| startup | +0.0067 | +0.0203 |
+| hashnew | -0.0055 | +0.0198 |
+| decloop | +0.0163 | +0.0171 |
+| pingguard | +0.0007 | +0.0010 |
+| dispatchclass | +0.0245 | -0.1304 |
+| fibfunc | -0.0992 | -0.1064 |
+
+The largest spread is 0.0035% (define). Against `fix-r3/callgrind.txt` the libc-subtracted column
+differs on define (+0.0084 to +0.0091), startup (+0.0201 to +0.0203) and pingmsg (+0.0007 to +0.0006)
+only (`diff <(cut -f1,7 fix-r3/callgrind.txt) <(cut -f1,7 fix-r4/callgrind.txt)`).
+
+### Commands
+
+All from `rust/`, `CARGO_INCREMENTAL=0`, `CARGO_TARGET_DIR=/tmp/claude-1000/t87c-fix4-target` but the
+workspace run, at `7162106dc`; outputs in `fix-r4/`.
+
+| command | result |
+|---|---|
+| `cargo fmt --all --check` (`checks-fmt.txt`) | 0 |
+| `memcap 16G cargo clippy -j 4 -p rexx-exec --all-targets -- -D warnings` (`checks-clippy.txt`) | 0 |
+| `REXX_CORPUS_GATE=1 memcap 16G cargo test -j 4 --release --locked --no-fail-fast -p rexx-exec --lib --test stream_handle --test corpus --test coverage` (`checks-exec.txt`) | 101: lib 1212 passed, stream_handle 8, coverage 21; corpus 1237 of 1238 match, the known `rexxutil_file_date_time.rex` |
+| `memcap 16G cargo test -j 4 --release --locked --no-fail-fast -p rexx-parse --test sourceline_oracle --test errors --test tiling --test variants` (`checks-parse.txt`) | 0 |
+| `memcap 16G cargo test -j 4 --release --locked -p rexx-exec --test collect_stress` (`checks-collect-stress.txt`) | 0, 74 of 74 |
+| `REXX_SUITE_GATE=1 REXX_SUITE_TABLE=.../fix-r4/suite/table.tsv memcap 8G cargo test -j 4 --release --locked -p rexx-exec --test suite l3_core_suite` (`checks-suite.txt`) | 0; `tests.tsv`, `table.tsv`, `verdicts.tsv`, `oracle-differences.tsv` byte-identical to `fix-r3/suite/` (`cmp`) |
+| `memcap 16G cargo build --release -j 4 --locked --bin rexx` then `memcap 16G cargo test --release -j 4 --locked --no-fail-fast --workspace`, default target dir (`close-workspace-build.txt`, `close-workspace-tests.txt`, `close-workspace-status.txt`) | build 0; tests 101, 3539 passed, 1 failed: `datetime_zone`'s `the_file_date_time_witness_reads_the_zone_the_oracle_does`, the known DST flake |
+
+### Concerns
+
+1. Round 3's concern 1 (`>=>` reuses the `>>>` rendering, `i1b/g.rex`) and `c2/onceparse.rex` (PARSE's
+   pattern rendering takes no conversion that can raise) are unchanged; both are queued.
+
+### Commits
+
+`d8614a7c9` (the arms, the corpus witness, `phase-9.txt`), `7162106dc` (the sourceline file, probes);
+records and this section in the commit after.
