@@ -1,0 +1,8 @@
+STDOUT new empty UNKNOWN [][][][UNKNOWN]
+STDOUT open bare READY [0][1][1][PERSISTENT]
+STDOUT closed bare UNKNOWN [][][][UNKNOWN]
+STDOUT reopen bare READY [0][1][1][PERSISTENT]
+STDOUT: new empty UNKNOWN [][][][UNKNOWN]
+STDOUT: open bare READY [0][1][1][PERSISTENT]
+STDOUT: closed bare UNKNOWN [][][][UNKNOWN]
+STDOUT: reopen bare READY [0][1][1][PERSISTENT]

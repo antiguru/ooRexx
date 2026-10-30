@@ -1,0 +1,36 @@
+diff --git a/rust/crates/rexx-exec/src/dispatch/stream/query.rs b/rust/crates/rexx-exec/src/dispatch/stream/query.rs
+index 02d4320f8..5f726bab2 100644
+--- a/rust/crates/rexx-exec/src/dispatch/stream/query.rs
++++ b/rust/crates/rexx-exec/src/dispatch/stream/query.rs
+@@ -39,7 +39,11 @@ pub(in crate::dispatch) fn query_exists(
+     }
+     // `StreamInfo::streamExists`: an open stream answers without a lookup, a
+     // device by the name as written and anything else by its qualified name.
+-    if let Some(open) = state.open.as_ref() {
++    if let Some(open) = state
++        .open
++        .as_ref()
++        .filter(|_| state.status != StreamStatus::Unknown)
++    {
+         let answer = if is_device(open.file()) {
+             state.name.clone()
+         } else {
+@@ -47,10 +51,17 @@ pub(in crate::dispatch) fn query_exists(
+         };
+         return Ok(Some(interp.text_built(answer)));
+     }
++    // Closing an owned standard alias retains its descriptor and qualification
++    // for reopening, but EXISTS must still check the ordinary named file.
++    let retained_standard_name = state.standard.is_some() && state.open.is_some();
+     let path = qualified_path(interp, receiver)?;
+     let exists = std::fs::metadata(&path).is_ok_and(|meta| meta.is_file());
+     let answer = if exists {
+-        path.into_os_string().into_encoded_bytes()
++        if retained_standard_name {
++            require(interp, receiver)?.qualified.to_vec()
++        } else {
++            path.into_os_string().into_encoded_bytes()
++        }
+     } else {
+         Vec::new()
+     };

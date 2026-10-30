@@ -1,0 +1,7 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `test` profile [optimized + debuginfo] target(s) in 3.13s
+     Running tests/collect_policy.rs (/tmp/codex-p9d-t88-target/debug/deps/collect_policy-bdc7def185f37f0b)
+     Running tests/coverage.rs (/tmp/codex-p9d-t88-target/debug/deps/coverage-e2ee41263d8948f6)
+     Running tests/owners.rs (/tmp/codex-p9d-t88-target/debug/deps/owners-7ca35c71b0be584d)
+     Running tests/refusal_sites.rs (/tmp/codex-p9d-t88-target/debug/deps/refusal_sites-dc18bfaec179ab66)
+     Running tests/representation_refusals.rs (/tmp/codex-p9d-t88-target/debug/deps/representation_refusals-06a2a339d9449f2c)

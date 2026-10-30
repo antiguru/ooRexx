@@ -1,0 +1,21 @@
+{
+  "base": "101182a1fe9a4dd5eeabd63958a8b94150d147bc",
+  "source": "9d919b7c3832c55edc3a0a07974309f092102201",
+  "changed_rust": [
+    "rust/crates/rexx-exec/src/dispatch/stream/query.rs",
+    "rust/crates/rexx-exec/tests/semantic_boundaries_stdout/stdout-exists-missing.offset",
+    "rust/crates/rexx-exec/tests/semantic_boundaries_stdout/stdout-exists-missing.rex",
+    "rust/crates/rexx-exec/tests/semantic_boundaries_stdout/stdout-exists-missing.stderr",
+    "rust/crates/rexx-exec/tests/semantic_boundaries_stdout/stdout-exists-missing.stdout",
+    "rust/crates/rexx-exec/tests/semantic_boundaries_stdout/stdout-exists-present.offset",
+    "rust/crates/rexx-exec/tests/semantic_boundaries_stdout/stdout-exists-present.rex",
+    "rust/crates/rexx-exec/tests/semantic_boundaries_stdout/stdout-exists-present.stderr",
+    "rust/crates/rexx-exec/tests/semantic_boundaries_stdout/stdout-exists-present.stdout"
+  ],
+  "changed_runtime": [
+    "rust/crates/rexx-exec/src/dispatch/stream/query.rs"
+  ],
+  "runtime_patch_sha256": "6f86ddb79fa8a4eb5e383a8574b09aaa4cb0d4a18d027b773d7a97a9f82cb61f",
+  "other_runtime_identical_to_base": true,
+  "source_worktree_clean": true
+}

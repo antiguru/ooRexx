@@ -1,0 +1,68 @@
+[
+  {
+    "probe": "stdout-exists-missing",
+    "channel": "stdout",
+    "oracle_crate_equal": true,
+    "baseline_equal": true,
+    "sha256": {
+      "oracle": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "baseline": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "crate": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  {
+    "probe": "stdout-exists-missing",
+    "channel": "stderr",
+    "oracle_crate_equal": true,
+    "baseline_equal": false,
+    "sha256": {
+      "oracle": "aa62ef3a58db3c04b7843c1afb44cbc7d8313378f7d3adcad03b60029358277a",
+      "baseline": "3ea5893eb9b5ac43a2f317b4d809e6fca09fe155b3f18b8a1ccfa81db4e8bb66",
+      "crate": "aa62ef3a58db3c04b7843c1afb44cbc7d8313378f7d3adcad03b60029358277a"
+    }
+  },
+  {
+    "probe": "stdout-exists-missing",
+    "channel": "status",
+    "oracle_crate_equal": true,
+    "baseline_equal": true,
+    "sha256": {
+      "oracle": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "baseline": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "crate": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    }
+  },
+  {
+    "probe": "stdout-exists-present",
+    "channel": "stdout",
+    "oracle_crate_equal": true,
+    "baseline_equal": true,
+    "sha256": {
+      "oracle": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "baseline": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "crate": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  {
+    "probe": "stdout-exists-present",
+    "channel": "stderr",
+    "oracle_crate_equal": true,
+    "baseline_equal": true,
+    "sha256": {
+      "oracle": "0b5341ab2327231cc2575f29355c354dc2e7a70aa579e8b34c2a5d0a8a443879",
+      "baseline": "0b5341ab2327231cc2575f29355c354dc2e7a70aa579e8b34c2a5d0a8a443879",
+      "crate": "0b5341ab2327231cc2575f29355c354dc2e7a70aa579e8b34c2a5d0a8a443879"
+    }
+  },
+  {
+    "probe": "stdout-exists-present",
+    "channel": "status",
+    "oracle_crate_equal": true,
+    "baseline_equal": true,
+    "sha256": {
+      "oracle": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "baseline": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "crate": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    }
+  }
+]

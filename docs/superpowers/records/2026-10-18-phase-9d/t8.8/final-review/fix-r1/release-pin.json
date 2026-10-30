@@ -1,0 +1,25 @@
+{
+  "pin": "/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx",
+  "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+  "source_commit": "9d919b7c3832c55edc3a0a07974309f092102201",
+  "dispatch_head": "101182a1fe9a4dd5eeabd63958a8b94150d147bc",
+  "source_worktree_clean": true,
+  "compiler": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1\n",
+  "build_record": "checks/release.json",
+  "build_record_sha256": "23262cdc6ee4bb2a0695230692b860022ad1004d8713fa7c688f0626adb01c15",
+  "build_executable": "/tmp/codex-p9d-t88-target/release/rexx",
+  "build_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+  "source_hashes": {
+    "rust/Cargo.toml": "eb99ce602d4c7105848a33ed287d4c7e4dbb2a6ac7f4552bf47bf81f8d5b9b5d",
+    "rust/Cargo.lock": "ca3b38a9343c4d44502f6d15d3404ec6ddb2f970fc7561be3fd82c4d109a94a2",
+    "rust/crates/rexx-exec/src/dispatch/stream/query.rs": "157d369db27cd57d5377e093e4c1bf5b7afc2a336ad2075dd2e6e80e70b46481"
+  },
+  "preserved_pins": {
+    "/tmp/codex-p9d-t88-pins/8.8-final-fix-rexx": "1e528101880f326e816e85715fb8c5401e45c62382a7b172dd113c050206ff6d",
+    "/tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx": "22c317baa3ed111935a6577ac33097e428a53b64eb64b4697af2b85664e3f8eb",
+    "/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx": "6ed1c08eb03d54c48d1fe3947ce376f09502aaeba34ac221c334b01b1572b86e",
+    "/tmp/codex-p9d-t88-pins/8.8a-perf-r1-rexx": "ecb06e984ed736233ce0e2ef779b74941488ae64fdec10333dfb2215c309198a",
+    "/tmp/codex-p9d-t88-pins/8.8f-r1-rexx": "b695b78fe24903b4be5a2874c8cd128193bbe165f92b50a4d6a8a9956d03d3be",
+    "/tmp/codex-p9d-t88-pins/8.8f-rexx": "0c9fb8371ab3d6dcea780194e02c112ed7981447f7f396e606e5f418975583f0"
+  }
+}
