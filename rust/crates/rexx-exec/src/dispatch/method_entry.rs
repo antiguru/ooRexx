@@ -119,13 +119,13 @@ impl Interp {
                 receiver,
             },
         );
+        if let Some(start) = start {
+            start.apply(&mut callee);
+        }
         // Dictionary mutation must not replace the Method this invocation
         // entered. Existing registered objects use the activation's GC root.
         if let Some(executable) = self.executable_objects.get(resolution.method).copied() {
             callee.cold_mut().executable = Some(executable);
-        }
-        if let Some(start) = start {
-            start.apply(&mut callee);
         }
         // With one activity the lock is the activation's flag alone, taken
         // here unless a package-traced `>I>` has to come first.
