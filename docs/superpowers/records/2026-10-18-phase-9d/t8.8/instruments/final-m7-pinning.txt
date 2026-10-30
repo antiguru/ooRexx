@@ -1,0 +1,9 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 cargo test -j 4 -p rexx-exec --features pinning --test concurrency_tests a_slice_deferred_before_a_pinned_park_stays_with_its_activity -- --nocapture
+
+running 1 test
+test measured::a_slice_deferred_before_a_pinned_park_stays_with_its_activity ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 81 filtered out; finished in 0.03s
+
+
+exit=0 elapsed=49.472s

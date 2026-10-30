@@ -1,0 +1,7 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.03s
+     Running tests/concurrency_tests.rs (/tmp/codex-p9d-t88-target/debug/deps/concurrency_tests-c48e0d34a769840f)
+
+thread 'group_runs::whole_groups::sim_gate::calibration::calibration' (826012) panicked at crates/rexx-exec/tests/group_runs/whole_groups/sim_gate/calibration.rs:55:9:
+REXX_SIM_ONLY: no calibration rows for NO_SUCH_CALIBRATION_GROUP
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+error: test failed, to rerun pass `-p rexx-exec --test concurrency_tests`

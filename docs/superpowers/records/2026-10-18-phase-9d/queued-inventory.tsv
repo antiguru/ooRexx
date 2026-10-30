@@ -12,8 +12,8 @@ item	kind	probe	proposed	reason	ruled
 2026-09-22-driver-frame-pressure.md	perf	-	phase:9.1	unrun outlining variant; no probe	phase:9.1
 2026-09-22-tracefunction-ungated.md	perf	-	phase:9.1	no probe; both Op::TraceFunction pushes in ir/compile.rs (:1627, :1645) are still unconditional	phase:9.1
 2026-09-24-arity-harness-ignores-target-dir.md	process	-	closed:ecce67dad	no probe; tests/support/arity.rs:399 still joins ../../target/release/rexx where group_runner uses CARGO_BIN_EXE_rexx	closed:ecce67dad
-2026-09-24-mutate-4c-stale-anchor.md	process	-	9d	no probe; scripts/mutate-4c.sh:537 still anchors on a statement parse_template.rs no longer has (:461 is a let binding)	9d
-2026-09-24-refusal-scanner-test-files.md	process	-	9d	no probe; tests/refusal_sites.rs code_lines (:73) still drops only inline #[cfg(test)] mod blocks, and Task 3 reads that table	9d
+2026-09-24-mutate-4c-stale-anchor.md	process	-	closed:03d74f029	no probe; scripts/mutate-4c.sh:537 still anchors on a statement parse_template.rs no longer has (:461 is a let binding)	closed:03d74f029
+2026-09-24-refusal-scanner-test-files.md	process	-	closed:03d74f029	no probe; tests/refusal_sites.rs code_lines (:73) still drops only inline #[cfg(test)] mod blocks, and Task 3 reads that table	closed:03d74f029
 2026-09-25-pos-window-doc-pointers.md	process	-	9d	no probe; builtin/string.rs:123 and rexx-parse block/references.rs:190,:197 still point at text that is gone	9d
 2026-09-25-table-c-derivation-literals.md	process	-	9d	no probe; corpus/gate-tables/classes/*.rex line 6 still names tests/gate_table_c.rs	9d
 2026-09-26-flatloop-spike-comment.md	process	-	closed:4b694fe7c	its own "Closed 2026-09-29" section; no "SPIKE, not for commit" remains under rust/crates	closed:4b694fe7c
@@ -93,7 +93,7 @@ item	kind	probe	proposed	reason	ruled
 2026-10-10-reply-continuation-trace-entry.md	divergence	queued-probes/p7/p7.rex:1	9d-cluster:trace-reply-continuation	probe still lacks the second ONETWO >I>/<I< pair; it is TRACE TEST_TRACE_LABEL_WITH_FORWARD	9d-cluster:trace-reply-continuation
 2026-10-10-reply-propagated-condition-traceback-line.md	divergence	queued-probes/rf1d/rf1d.rex:1	closed:12ef5a35c	probe still lacks the sender's 2 *-* say 'got' o~m line here	closed:12ef5a35c
 2026-10-10-rexxcps-task-6-round-2-delta.md	perf	-	closed:6.1 close within budget	a +0.09% delta the 6.1 close absorbed (rexxcps +0.2694% against base61, task-12-evidence/cg-close2/table.txt); no probe	closed:6.1 close within budget
-2026-10-10-rooting-harness-blind-to-dropped-pushes.md	process	-	9d	no probe; removing either root push left every rooting test green, a test gap in tests/collect_stress.rs	9d
+2026-10-10-rooting-harness-blind-to-dropped-pushes.md	process	-	closed:03d74f029	no probe; removing either root push left every rooting test green, a test gap in tests/collect_stress.rs	closed:03d74f029
 2026-10-10-routine-new-no-package-parent.md	divergence	queued-probes/ctx3/ctx3.rex:1	closed:8b95afe79	RESOLVED in its first line; helper found on both	closed:8b95afe79
 2026-10-10-security-manager-command-rc-requires.md	divergence	-	closed:5053fbd9b	no probe recorded, only a classification table; the manager is consulted where the oracle does not	closed:5053fbd9b
 2026-10-10-select-case-value-outlives-construct.md	design	-	not-a-divergence	no program reads the stale value; an unasserted invariant, no probe	not-a-divergence
@@ -161,9 +161,9 @@ gate:phase-9a-gate.md:456	process	-	9d	no probe; dispatch/library/tests.rs:177 s
 gate:phase-9a-gate.md:457	process	-	closed:ecce67dad	no probe; a harness minor its ledger calls not live	closed:ecce67dad
 gate:phase-9a-gate.md:458	process	-	closed:ecce67dad	no probe; tests/support/group_runner.rs:309 still calls windows(needle.len()), which panics on an empty needle	closed:ecce67dad
 gate:phase-9a-gate.md:459	process	-	9d	no probe; harness minors from 9a Task 2, not checked against the tree	9d
-gate:phase-9a-gate.md:460	process	-	9d	no probe; harness minors from 9a Task 3, not checked against the tree	9d
+gate:phase-9a-gate.md:460	process	-	closed:03d74f029	no probe; harness minors from 9a Task 3, not checked against the tree	closed:03d74f029
 gate:phase-9a-gate.md:461	process	-	9d	no probe; its ledger line says no such row exists yet	9d
-gate:phase-9a-gate.md:462	process	-	9d	no probe; the ffi.rs texts' owners, not checked against the tree	9d
+gate:phase-9a-gate.md:462	process	-	closed:03d74f029	no probe; the ffi.rs texts' owners, not checked against the tree	closed:03d74f029
 gate:phase-9a-gate.md:463	divergence	queued-probes/ins25/ins25.rex:1,queued-probes/ins35/ins35.rex:1,queued-probes/ins47/ins47.rex:1,queued-probes/rnmsg/rnmsg.rex:1	closed:probe agrees	own probes of the named inserts (25.907, 35.1, 47.2, the Routine~new message) agree; 9c Tasks 2 to 4	closed:probe agrees
 gate:phase-9a-gate.md:464	divergence	queued-probes/startw/startw.rex:1	closed:Phase 9b1 L9	Method side-map rows are pruned (phase-9b1-gate.md L9); own startWith probe agrees on the header	closed:Phase 9b1 L9
 gate:phase-9a-gate.md:465	design	-	closed:Deviation 35	HANDLE:0, 1 and 2 reach the standard streams and any other descriptor is refused	closed:Deviation 35
@@ -182,7 +182,7 @@ gate:phase-9a-gate.md:478	divergence	-	closed:Phase 9b1 L7	packages are collecte
 gate:phase-9a-gate.md:479	design	-	closed:Phase 9b1	a pointer to 2026-10-12-package-as-real-object.md	closed:Phase 9b1
 gate:phase-9a-gate.md:480	divergence	queued-probes/dimeth/dimeth.rex:1	closed:probe agrees	probe still differs (1 against 0); Object TEST_INSTANCEMETHOD is that cluster's	closed:probe agrees
 gate:phase-9a-gate.md:481	divergence	-	9d	no probe; a panic its ledger calls unverified	9d
-gate:phase-9a-gate.md:482	process	-	9d	no probe; sim calibration not re-derived, for the Phase 9 close	9d
+gate:phase-9a-gate.md:482	process	-	closed:03d74f029	no probe; sim calibration not re-derived, for the Phase 9 close	closed:03d74f029
 gate:phase-9a-gate.md:483	process	-	9d	Moritz 2026-10-13: under the simulation clock or licensed, owner 9d; its Flaky row is in suite-licences.txt:8, the S2 list has none	9d
 gate:phase-9a-gate.md:485	divergence	-	9d-cluster:redirected-command-holds-baton	TEST_MAKESTRING passed at the 9c close; scclient and sfclient are that cluster's	9d-cluster:redirected-command-holds-baton
 gate:phase-9a-gate.md:488	divergence	-	9d	Task 4 owns TEST35_DIRECTIVES and TEST47_MULTILINEFLOWCOLLECTIONS	9d
@@ -241,7 +241,7 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b
 2026-10-22-constant-frame-and-executable.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.3/probes/constant_frames.rex	closed:7fe50bedd	a ::CONSTANT frame is PROGRAM and its executable a Routine where the oracle has METHOD plus PROGRAM and a Method	closed:7fe50bedd
 2026-10-22-live-frames-omit-nested-primitives.md	divergence	-	closed:5053fbd9b	live stackFrames omit RUN, SORT, HASITEM, REQUEST and PUT frames the oracle lists	closed:5053fbd9b
 2026-10-22-executable-at-quadratic-depth.md	defect	-	closed:5053fbd9b	executable_at walks the frame chain once per level, quadratic at the depth cap	closed:5053fbd9b
-2026-10-22-collect-stress-zero-collection-drift.md	process	-	9d	collect_stress zero-collection list drifted before Task 8.3; pruned, cause open	9d
+2026-10-22-collect-stress-zero-collection-drift.md	process	-	closed:03d74f029	collect_stress zero-collection list drifted before Task 8.3; pruned, cause open	closed:03d74f029
 2026-10-26-file-date-time-dst-dependent.md	process	-	closed:949a7806b	rexxutil_file_date_time line 9 differs across the DST change, at base too	closed:949a7806b
 2026-10-26-redirected-target-waits-timing-flake.md	process	-	closed:d7581cc4a	collect_stress l0 subset flakes on a time(e) > 0.9 check	closed:d7581cc4a
 2026-10-26-main-program-level-during-requires-install.md	divergence	docs/superpowers/records/2026-10-18-phase-9d/t8.4/constant/probes/f1.rex	closed:5053fbd9b	the main PROGRAM level is missing from frames while its own ::REQUIRES install	closed:5053fbd9b

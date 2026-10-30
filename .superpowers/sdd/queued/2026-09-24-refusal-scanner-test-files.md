@@ -1,4 +1,4 @@
-**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe; tests/refusal_sites.rs code_lines (:73) still drops only inline #[cfg(test)] mod blocks, and Task 3 reads that table.
+**CLOSED 2026-10-30 by Task 8.8d (03d74f029).**
 
 # The refusal-site scanner reads file-level test modules as production code
 
@@ -39,3 +39,9 @@ should key on syntax instead: a constructor is a method when it is inside an
 `impl` block; a file-level `#[cfg(test)] mod x;` target is test code. Then the
 deferred move of `Loud` into its own module (File split Task 4, ruled out of
 that task) can run as a pure move.
+
+## Task 8.8d disposition
+
+Separate cfg(test) module files and descendants are excluded using ordinary Rust module paths, while production fixtures remain included. Constructor ownership follows enclosing impl blocks rather than the defining filename. Independent committed red controls fail for each original defect, and the complete repaired scanner target passes eight tests. Task 8.8d records the implementation and only the six stale source-line references changed in the derived table.
+
+See [Task 8.8d report](../2026-10-18-phase-9d/task-8.8d-report.md) for per-subpart evidence and limits.

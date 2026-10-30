@@ -1,0 +1,30 @@
+   Compiling once_cell v1.21.4
+   Compiling rustix v1.1.4
+   Compiling crossbeam-utils v0.8.21
+   Compiling regex-syntax v0.8.11
+   Compiling tracing-core v0.1.36
+   Compiling log v0.4.34
+   Compiling crossbeam-epoch v0.9.20
+   Compiling lazy_static v1.5.1
+   Compiling pin-project-lite v0.2.17
+   Compiling tracing v0.1.44
+   Compiling crossbeam-deque v0.8.6
+   Compiling sharded-slab v0.1.7
+   Compiling tracing-log v0.2.0
+   Compiling regex-automata v0.4.14
+   Compiling thread_local v1.1.10
+   Compiling nu-ansi-term v0.50.3
+   Compiling smallvec v1.16.2
+   Compiling generator v0.8.10
+   Compiling thiserror v1.0.69
+   Compiling rayon-core v1.13.0
+   Compiling scoped-tls v1.0.1
+   Compiling either v1.16.0
+   Compiling datadriven v0.9.0
+   Compiling rayon v1.12.0
+   Compiling rexx-extract v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract)
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+   Compiling matchers v0.2.0
+   Compiling tracing-subscriber v0.3.23
+   Compiling loom v0.7.2
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 28.78s

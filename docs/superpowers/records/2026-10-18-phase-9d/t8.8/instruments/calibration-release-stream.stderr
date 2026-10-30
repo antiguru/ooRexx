@@ -1,0 +1,3 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.06s
+     Running tests/concurrency_tests.rs (/tmp/codex-p9d-t88-target/release/deps/concurrency_tests-4765e34985e2f118)
+calibration: profile=release rows=2 policy=fifo seed-index=0

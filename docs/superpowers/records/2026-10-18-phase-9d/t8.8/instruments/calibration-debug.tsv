@@ -1,0 +1,194 @@
+base/bif/STREAM.testGroup	whole	0	81	clock=real	-	Exited(1)	failure, assertions 218, rc 1, last started TEST_WRONG_TOO_MANY_ARGS_S, failing [TEST_RELATIVE_FILE_EXISTS TEST_RELATIVE_FILE_EXISTS2]
+base/bif/STREAM.testGroup	derived	0	61	clock=real	-	Exited(1)	failure, assertions 2, rc 1, last started TEST_QUERYDIR_EXISTS, failing [TEST_QUERYDIR_EXISTS]
+base/bif/TIME.testGroup	whole	0	132	-	-	Exited(0)	pass, assertions 524, rc 0, last started TEST_9, failing []
+base/bif/TIME.testGroup	derived	0	81	-	-	Exited(0)	pass, assertions 81, rc 0, last started TEST_9, failing []
+base/class/Alarm.testGroup	whole	1035	61	-	-	Exited(0)	pass, assertions 68, rc 0, last started TEST_BASE_ALARM, failing []
+base/class/Alarm.testGroup	derived	1035	61	-	-	Exited(0)	pass, assertions 68, rc 0, last started TEST_BASE_ALARM, failing []
+base/class/Class.testGroup	whole	0	91	-	-	Exited(0)	pass, assertions 312, rc 0, last started TEST_UNINHERIT_TWO_ARGS, failing []
+base/class/Class.testGroup	derived	0	66	-	-	Exited(0)	pass, assertions 4, rc 0, last started TEST_SUBCLASSES, failing []
+base/class/DateTime.testGroup	whole	0	8448	-	-	Exited(0)	pass, assertions 629, rc 0, last started TEST_YEAR_ETC, failing []
+base/class/DateTime.testGroup	derived	0	66	-	-	Exited(0)	pass, assertions 1, rc 0, last started TEST_ELAPSED1, failing []
+base/class/EventSemaphore.testGroup	whole	6	55	-	-	Exited(0)	pass, assertions 30, rc 0, last started TEST_WAIT_TWO_ARGS, failing []
+base/class/EventSemaphore.testGroup	derived	6	61	-	-	Exited(0)	pass, assertions 30, rc 0, last started TEST_WAIT_TWO_ARGS, failing []
+base/class/Message.testGroup	whole	1192	76	-	-	Exited(0)	pass, assertions 279, rc 0, last started TEST_SUPER_OVERRIDE, failing []
+base/class/Message.testGroup	derived	1192	71	-	-	Exited(0)	pass, assertions 189, rc 0, last started TEST_SUPER_OVERRIDE, failing []
+base/class/Method.testGroup	whole	0	121	-	-	Exited(0)	pass, assertions 103, rc 0, last started TEST_SOURCE, failing []
+base/class/Method.testGroup	derived	0	61	-	-	Exited(0)	pass, assertions 9, rc 0, last started TESTDIRECTIVES, failing []
+base/class/MethodArgs.testGroup	whole	48500	192	-	-	Exited(0)	pass, assertions 2232, rc 0, last started TEST_REQUEST_STRING_STRING, failing []
+base/class/MethodArgs.testGroup	derived	48469	197	-	-	Exited(0)	pass, assertions 2232, rc 0, last started TEST_REQUEST_STRING_STRING, failing []
+base/class/MutexSemaphore.testGroup	whole	0	66	-	TEST_EXCLUSION	Exited(0)	pass, assertions 29, rc 0, last started TEST_RELEASE_ONE_ARG, failing []
+base/class/MutexSemaphore.testGroup	derived	0	61	-	TEST_EXCLUSION	Exited(0)	pass, assertions 29, rc 0, last started TEST_RELEASE_ONE_ARG, failing []
+base/class/MutexSemaphore.testGroup	single	21	51	-	TEST_EXCLUSION	Exited(0)	pass, assertions 13, rc 0, last started TEST_EXCLUSION, failing []
+base/class/Object.testGroup	whole	320	91	-	-	Exited(0)	pass, assertions 311, rc 0, last started TEST_UNSETMETHOD_NO_ARG, failing []
+base/class/Object.testGroup	derived	320	76	-	-	Exited(0)	pass, assertions 66, rc 0, last started TEST_START_OVERRIDE_NO_METHOD, failing []
+base/class/RexxContext.testGroup	whole	7	66	-	-	Exited(0)	pass, assertions 359, rc 0, last started TEST_SOURCELINE_LAST_LINE, failing []
+base/class/RexxContext.testGroup	derived	7	56	-	-	Exited(0)	pass, assertions 17, rc 0, last started TEST_INTERPRETER_THREAD_INVOCATION, failing []
+base/class/Ticker.testGroup	whole	5752	66	-	-	Exited(0)	pass, assertions 87, rc 0, last started TEST_TICKER_TWO_ARGS_TIMESPAN_TRIGGER, failing []
+base/class/Ticker.testGroup	derived	5752	66	-	-	Exited(0)	pass, assertions 87, rc 0, last started TEST_TICKER_TWO_ARGS_TIMESPAN_TRIGGER, failing []
+base/directives/ATTRIBUTE.testGroup	whole	0	81	-	-	Exited(0)	pass, assertions 304, rc 0, last started TEST_SET_RETURN, failing []
+base/directives/ATTRIBUTE.testGroup	derived	0	66	-	-	Exited(0)	pass, assertions 214, rc 0, last started TESTDELEGATE, failing []
+base/directives/CONSTANT.testGroup	whole	0	66	-	-	Exited(0)	pass, assertions 174, rc 0, last started TEST_SUBCLASS_DEFINITION, failing []
+base/directives/CONSTANT.testGroup	derived	0	55	-	-	Exited(0)	pass, assertions 6, rc 0, last started TEST_CONSTANT_METHOD_PROPERTIES, failing []
+base/directives/METHOD.testGroup	whole	8	71	-	-	Exited(0)	pass, assertions 232, rc 0, last started TEST_DELEGATE_TWICE, failing []
+base/directives/METHOD.testGroup	derived	8	71	-	-	Exited(0)	pass, assertions 117, rc 0, last started TESTGUARDEDACCESS, failing []
+base/keyword/CALL.testGroup	whole	0	152	-	-	Exited(0)	pass, assertions 181, rc 0, last started TEST_SYMBOL, failing []
+base/keyword/CALL.testGroup	derived	0	61	-	-	Exited(0)	pass, assertions 18, rc 0, last started TEST_4, failing []
+base/keyword/GUARD.testGroup	whole	252	61	-	-	Exited(0)	pass, assertions 26, rc 0, last started TEST_WHEN_USE_LOCAL_NO_WAIT, failing []
+base/keyword/GUARD.testGroup	derived	252	56	-	-	Exited(0)	pass, assertions 17, rc 0, last started TEST_WHEN_USE_LOCAL_NO_WAIT, failing []
+base/keyword/RAISE.testGroup	whole	3	61	-	-	Exited(0)	pass, assertions 130, rc 0, last started TEST_RAISE_USER, failing []
+base/keyword/RAISE.testGroup	derived	3	56	-	-	Exited(0)	pass, assertions 1, rc 0, last started TEST_RAISE_INSERT_CRLF, failing []
+base/keyword/REPLY.testGroup	whole	1312	61	-	-	Exited(0)	pass, assertions 10, rc 0, last started TEST_REPLY__CODE_RETURN, failing []
+base/keyword/REPLY.testGroup	derived	1192	61	-	-	Exited(0)	pass, assertions 9, rc 0, last started TEST_REPLY__CODE_RETURN, failing []
+base/keyword/TRACE.testGroup	whole	59	96	-	-	Exited(0)	pass, assertions 147, rc 0, last started TEST_TRACE_VALUE_NUMERIC_INVALID, failing []
+base/keyword/TRACE.testGroup	derived	3	66	-	-	Exited(0)	pass, assertions 2, rc 0, last started TEST_TRACE_REPLY, failing []
+base/keyword/TRACE_TraceObject.testGroup	whole	268	71	-	-	Exited(0)	pass, assertions 1149, rc 0, last started TEST_VARIABLE, failing []
+base/keyword/TRACE_TraceObject.testGroup	derived	268	66	-	-	Exited(0)	pass, assertions 605, rc 0, last started TEST_TRACEOBJECT_COLLECTOR, failing []
+base/rexxutil/SysSleep.testGroup	whole	19	71	-	-	Exited(0)	pass, assertions 23, rc 0, last started TEST_SLEEP_TWO_ARGS, failing []
+base/rexxutil/SysSleep.testGroup	derived	19	56	-	-	Exited(0)	pass, assertions 23, rc 0, last started TEST_SLEEP_TWO_ARGS, failing []
+base/special.variables/RESULT_RC_SIGL.testGroup	whole	49	81	-	-	Exited(0)	pass, assertions 52, rc 0, last started TEST_SIGL, failing []
+base/special.variables/RESULT_RC_SIGL.testGroup	derived	49	56	-	-	Exited(0)	pass, assertions 5, rc 0, last started TEST_RESULT_WITH_REPLY, failing []
+doc/rexxref/chapter5/Section1.testGroup	whole	15	56	-	-	Exited(0)	pass, assertions 17, rc 0, last started TEST_OBJECT_START, failing []
+doc/rexxref/chapter5/Section1.testGroup	derived	15	56	-	-	Exited(0)	pass, assertions 6, rc 0, last started TEST_OBJECT_START, failing []
+regressions/bug2003_guard_when.testGroup	whole	0	81	-	-	Exited(0)	pass, assertions 12, rc 0, last started TEST_GUARD_WHEN_1, failing []
+regressions/bug2003_guard_when.testGroup	derived	0	86	-	-	Exited(0)	pass, assertions 12, rc 0, last started TEST_GUARD_WHEN_1, failing []
+corpus/lang/call_condition_three_deep.rex	program	0	30	-	-	Exited(0)	rc 0, stdout 8 lines, stderr 0 lines
+corpus/lang/call_signal_out_of_callee.rex	program	0	25	-	-	Exited(3)	rc 3, stdout 4 lines, stderr 0 lines
+corpus/lang/call_trace_nested.rex	program	0	30	-	-	Exited(0)	rc 0, stdout 2 lines, stderr 71 lines
+corpus/lang/call_depth_cap_function.rex	program	0	71	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/call_depth_cap_call.rex	program	0	66	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/call_callee_allocates.rex	program	0	30	-	-	Exited(0)	rc 0, stdout 7 lines, stderr 0 lines
+corpus/lang/send_in_argument.rex	program	0	35	-	-	Exited(0)	rc 0, stdout 15 lines, stderr 55 lines
+corpus/lang/send_callee_allocates.rex	program	0	25	-	-	Exited(0)	rc 0, stdout 7 lines, stderr 0 lines
+corpus/lang/send_resumable_entries.rex	program	2	30	-	-	Exited(0)	rc 0, stdout 16 lines, stderr 0 lines
+corpus/lang/send_new_init_fails.rex	program	0	30	-	-	Exited(214)	rc 214, stdout 2 lines, stderr 5 lines
+corpus/lang/send_guarded.rex	program	0	30	-	-	Exited(0)	rc 0, stdout 2 lines, stderr 0 lines
+corpus/lang/builtin_argument_call.rex	program	0	25	-	-	Exited(0)	rc 0, stdout 6 lines, stderr 0 lines
+corpus/lang/new_init_subclasses.rex	program	0	30	-	-	Exited(214)	rc 214, stdout 28 lines, stderr 5 lines
+corpus/lang/do_block_calls.rex	program	0	41	-	-	Exited(0)	rc 0, stdout 12 lines, stderr 12 lines
+corpus/lang/started_waits_for_a_later_send.rex	program	2	25	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/started_waits_inside_a_call.rex	program	2	30	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/started_unwaited_says.rex	program	0	25	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/started_result_message.rex	program	2	30	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/started_raises.rex	program	103	30	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 3 lines
+corpus/lang/message_wait_then_completed.rex	program	1	30	-	-	Exited(0)	rc 0, stdout 2 lines, stderr 0 lines
+corpus/lang/message_two_waiters.rex	program	7	25	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/message_start.rex	program	3	30	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/started_waited_in_a_replied_body.rex	program	1	30	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/started_waited_in_uninit.rex	program	1	30	-	-	Exited(0)	rc 0, stdout 2 lines, stderr 0 lines
+corpus/lang/context_thread_numbers.rex	program	3	30	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/context_thread_sequential.rex	program	0	25	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/context_thread_pool_bound.rex	program	0	30	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/context_thread_lazy.rex	program	4	25	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/message_start_error_condition.rex	program	103	30	-	-	Exited(214)	rc 214, stdout 6 lines, stderr 6 lines
+corpus/lang/message_result_reraise.rex	program	103	30	-	-	Exited(214)	rc 214, stdout 5 lines, stderr 6 lines
+corpus/lang/message_result_relayed.rex	program	206	30	-	-	Exited(214)	rc 214, stdout 3 lines, stderr 9 lines
+corpus/lang/message_accessors.rex	program	5	30	-	-	Exited(0)	rc 0, stdout 11 lines, stderr 0 lines
+corpus/lang/message_reuse.rex	program	6	30	-	-	Exited(0)	rc 0, stdout 5 lines, stderr 0 lines
+corpus/lang/message_send_error_condition.rex	program	0	31	-	-	Exited(214)	rc 214, stdout 7 lines, stderr 6 lines
+corpus/lang/started_numeric_address.rex	program	2	30	-	-	Exited(0)	rc 0, stdout 5 lines, stderr 0 lines
+corpus/lang/message_error_condition_after_main.rex	program	172	30	-	-	Exited(214)	rc 214, stdout 1 lines, stderr 5 lines
+corpus/lang/message_send_user_condition.rex	program	1	30	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/started_primitive_error_condition.rex	program	103	30	-	-	Exited(163)	rc 163, stdout 13 lines, stderr 6 lines
+corpus/lang/message_send_reentered.rex	program	0	30	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/message_primitive_send_fails_main.rex	program	171	30	-	-	Exited(163)	rc 163, stdout 1 lines, stderr 5 lines
+corpus/lang/message_send_fails_main_frames.rex	program	172	25	-	-	Exited(214)	rc 214, stdout 1 lines, stderr 5 lines
+corpus/lang/message_halt_wait.rex	program	827598	142	-	-	Exited(0)	rc 0, stdout 15 lines, stderr 0 lines
+corpus/lang/message_halt_self.rex	program	104	35	-	-	Exited(0)	rc 0, stdout 4 lines, stderr 3 lines
+corpus/lang/message_halt_untrapped.rex	program	413900	91	-	-	Exited(0)	rc 0, stdout 2 lines, stderr 3 lines
+corpus/lang/message_halt_returning.rex	program	827742	141	-	-	Exited(0)	rc 0, stdout 7 lines, stderr 4 lines
+corpus/lang/message_halt_loop_step.rex	program	3310353	547	-	-	Exited(0)	rc 0, stdout 8 lines, stderr 0 lines
+corpus/lang/message_halt_interpret.rex	program	139	30	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 4 lines
+corpus/lang/pinned_busy_wait_interpret.rex	program	827589	228	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/pinned_busy_wait_handler.rex	program	827589	233	-	-	Exited(0)	rc 0, stdout 2 lines, stderr 0 lines
+corpus/lang/pinned_busy_wait_external.rex	program	827587	228	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/message_halt_pinned_target.rex	program	3724143	699	-	-	Exited(0)	rc 0, stdout 6 lines, stderr 0 lines
+corpus/lang/main_ends_in_pinned_yield.rex	program	1241383	339	-	-	Exited(3)	rc 3, stdout 3 lines, stderr 0 lines
+corpus/lang/main_fails_in_pinned_yield.rex	program	1241488	339	-	-	Exited(214)	rc 214, stdout 1 lines, stderr 6 lines
+corpus/lang/sleepers_wake_in_deadline_order.rex	program	5	35	-	-	Exited(0)	rc 0, stdout 4 lines, stderr 0 lines
+corpus/lang/sleep_parks_in_if_do_and_argument.rex	program	5	25	-	-	Exited(0)	rc 0, stdout 5 lines, stderr 0 lines
+corpus/lang/sleeper_wakes_busy_main.rex	program	827589	861	-	-	Exited(0)	rc 0, stdout 2 lines, stderr 0 lines
+corpus/lang/sleep_in_parse_template_and_when.rex	program	0	25	-	-	Exited(0)	rc 0, stdout 8 lines, stderr 0 lines
+corpus/lang/reply_then_wait.rex	program	3	30	-	-	Exited(0)	rc 0, stdout 4 lines, stderr 0 lines
+corpus/lang/reply_inside_constructs.rex	program	48	30	-	-	Exited(0)	rc 0, stdout 21 lines, stderr 0 lines
+corpus/lang/reply_continuation_error_trace.rex	program	3	25	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/reply_continuation_error_stderr.rex	program	3	30	-	-	Exited(3)	rc 3, stdout 2 lines, stderr 3 lines
+corpus/lang/reply_continuation_failed_send.rex	program	3	40	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 5 lines
+corpus/lang/reply_as_the_last_clause.rex	program	8	30	-	-	Exited(0)	rc 0, stdout 4 lines, stderr 0 lines
+corpus/lang/reply_split_after_a_trap_at_the_reply.rex	program	3	30	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/reply_split_after_a_trap_takes_the_failure.rex	program	1	30	-	-	Exited(0)	rc 0, stdout 2 lines, stderr 3 lines
+corpus/lang/reply_split_after_a_trap_does_not_wait.rex	program	1	25	-	-	Exited(0)	rc 0, stdout 2 lines, stderr 0 lines
+corpus/lang/reply_as_the_last_clause_numbers_the_replier.rex	program	5	30	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/context_of_another_activity.rex	program	4	30	-	-	Exited(0)	rc 0, stdout 8 lines, stderr 0 lines
+corpus/lang/context_moved_by_reply.rex	program	3	25	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/message_reply.rex	program	113	35	-	-	Exited(0)	rc 0, stdout 10 lines, stderr 3 lines
+corpus/lang/message_notify.rex	program	12	30	-	-	Exited(0)	rc 0, stdout 9 lines, stderr 0 lines
+corpus/lang/message_notify_arguments.rex	program	0	30	-	-	Exited(0)	rc 0, stdout 4 lines, stderr 0 lines
+corpus/lang/message_notify_error.rex	program	103	30	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 3 lines
+corpus/lang/message_notify_untrapped.rex	program	0	30	-	-	Exited(214)	rc 214, stdout 1 lines, stderr 5 lines
+corpus/lang/message_notify_single_slot.rex	program	137	30	-	-	Exited(0)	rc 0, stdout 5 lines, stderr 4 lines
+corpus/lang/message_notifier_fails.rex	program	0	30	-	-	Exited(0)	rc 0, stdout 6 lines, stderr 0 lines
+corpus/lang/message_notifier_fails_untrapped.rex	program	0	30	-	-	Exited(159)	rc 159, stdout 1 lines, stderr 6 lines
+corpus/lang/message_notify_error_traceback.rex	program	0	35	-	-	Exited(0)	rc 0, stdout 15 lines, stderr 0 lines
+corpus/lang/alarm_fires_after_reply.rex	program	1	35	-	-	Exited(0)	rc 0, stdout 2 lines, stderr 0 lines
+corpus/lang/ticker_cancelled_by_its_target.rex	program	1	30	-	-	Exited(0)	rc 0, stdout 5 lines, stderr 0 lines
+corpus/lang/timer_cancel_in_whole_days.rex	program	101	30	-	-	Exited(0)	rc 0, stdout 4 lines, stderr 0 lines
+corpus/lang/timer_native_arguments.rex	program	0	30	-	-	Exited(0)	rc 0, stdout 8 lines, stderr 0 lines
+corpus/lang/timer_post_wakes_every_waiter.rex	program	4	25	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/timer_post_reads_the_waiters_cancel.rex	program	19	30	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/timer_remainder_modulo_2_32.rex	program	10	25	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/trace_object_activity_fields.rex	program	4	30	-	-	Exited(0)	rc 0, stdout 59 lines, stderr 0 lines
+corpus/lang/uninit_after_every_activity.rex	program	1	30	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/trace_object_native_caller.rex	program	1	25	-	-	Exited(0)	rc 0, stdout 12 lines, stderr 0 lines
+corpus/lang/guard_serializes_started_sends.rex	program	21	30	-	-	Exited(0)	rc 0, stdout 8 lines, stderr 0 lines
+corpus/lang/reply_seen_by_a_guarded_send.rex	program	6	30	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/reply_continuation_parks_holding_the_guard.rex	program	1	35	-	-	Exited(0)	rc 0, stdout 2 lines, stderr 0 lines
+corpus/lang/reply_at_nesting_two_reserves_again.rex	program	2	30	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/guarded_getter_waits_for_reply.rex	program	1	30	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/guard_on_waits_in_an_unguarded_method.rex	program	6	36	-	-	Exited(0)	rc 0, stdout 5 lines, stderr 0 lines
+corpus/lang/guard_deadlock_two_activities.rex	program	2	30	-	-	Exited(0)	rc 0, stdout 7 lines, stderr 4 lines
+corpus/lang/message_wait_deadlock.rex	program	2	30	-	-	Exited(0)	rc 0, stdout 4 lines, stderr 0 lines
+corpus/lang/trace_object_guard_fields.rex	program	0	35	-	-	Exited(0)	rc 0, stdout 32 lines, stderr 0 lines
+corpus/lang/method_set_unguarded_is_not_reserved.rex	program	2	30	-	-	Exited(0)	rc 0, stdout 5 lines, stderr 0 lines
+corpus/lang/method_set_guarded_is_reserved.rex	program	4	30	-	-	Exited(0)	rc 0, stdout 5 lines, stderr 0 lines
+corpus/lang/guarded_empty_method_waits.rex	program	1	35	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/guard_held_before_the_first_start.rex	program	2	30	-	-	Exited(0)	rc 0, stdout 4 lines, stderr 0 lines
+corpus/lang/guard_on_lock_passes_between_activities.rex	program	4	30	-	-	Exited(0)	rc 0, stdout 9 lines, stderr 0 lines
+corpus/lang/guard_when_waits_for_a_store.rex	program	5	30	-	-	Exited(0)	rc 0, stdout 5 lines, stderr 0 lines
+corpus/lang/guard_when_stem_element_store.rex	program	2	30	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/guard_when_attribute_setter.rex	program	2	30	-	-	Exited(0)	rc 0, stdout 2 lines, stderr 0 lines
+corpus/lang/guard_when_drop_wakes.rex	program	3	30	-	-	Exited(0)	rc 0, stdout 4 lines, stderr 0 lines
+corpus/lang/guard_when_traces_each_evaluation.rex	program	4	35	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 44 lines
+corpus/lang/guard_when_trace_object_waiting.rex	program	2	30	-	-	Exited(0)	rc 0, stdout 4 lines, stderr 0 lines
+corpus/lang/guard_when_replies_take_turns.rex	program	55	25	-	-	Exited(0)	rc 0, stdout 10 lines, stderr 0 lines
+corpus/lang/guard_when_posted_while_evaluating.rex	program	0	30	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/native_guard_on_when_updated.rex	program	4	30	-	-	Exited(0)	rc 0, stdout 4 lines, stderr 0 lines
+corpus/lang/native_guard_off_keeps_the_count.rex	program	2	30	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/guard_when_holds_the_lock_again.rex	program	2	30	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/guard_when_unwatches_at_its_end.rex	program	3	25	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/event_semaphore_post_reset_wait.rex	program	0	30	-	-	Exited(0)	rc 0, stdout 8 lines, stderr 0 lines
+corpus/lang/event_semaphore_post_wakes_every_waiter.rex	program	5	25	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/event_semaphore_timed_wait_ended_by_a_post.rex	program	2	25	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/event_semaphore_wait_not_a_number.rex	program	0	30	-	-	Exited(168)	rc 168, stdout 0 lines, stderr 4 lines
+corpus/lang/mutex_semaphore_nesting_and_close.rex	program	0	30	-	-	Exited(0)	rc 0, stdout 6 lines, stderr 0 lines
+corpus/lang/mutex_semaphore_released_when_its_activity_ends.rex	program	1	30	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/mutex_semaphore_end_hands_over_to_a_waiter.rex	program	2	25	-	-	Exited(0)	rc 0, stdout 5 lines, stderr 0 lines
+corpus/lang/mutex_semaphore_stays_with_the_replier.rex	program	1	30	-	-	Exited(0)	rc 0, stdout 5 lines, stderr 0 lines
+corpus/lang/mutex_semaphore_timed_acquire.rex	program	2	30	-	-	Exited(0)	rc 0, stdout 5 lines, stderr 0 lines
+corpus/lang/sys_semaphores_unnamed.rex	program	0	30	-	-	Exited(0)	rc 0, stdout 25 lines, stderr 0 lines
+corpus/lang/sys_semaphores_across_activities.rex	program	5	25	-	-	Exited(0)	rc 0, stdout 10 lines, stderr 0 lines
+corpus/lang/sys_semaphore_poll_takes_at_its_poll.rex	program	1	25	-	-	Exited(0)	rc 0, stdout 4 lines, stderr 0 lines
+corpus/lang/sys_semaphore_post_waits_for_the_next_poll.rex	program	1	35	-	-	Exited(0)	rc 0, stdout 3 lines, stderr 0 lines
+corpus/lang/sys_wait_event_sem_timeout_not_int.rex	program	0	30	-	-	Exited(168)	rc 168, stdout 0 lines, stderr 4 lines
+corpus/lang/alarm_cancel_waits_for_the_timer.rex	program	14	30	-	-	Exited(0)	rc 0, stdout 2 lines, stderr 0 lines
+corpus/lang/alarm_message_target.rex	program	1	30	-	-	Exited(0)	rc 0, stdout 2 lines, stderr 0 lines
+corpus/lang/ticker_fires_on_its_replied_activity.rex	program	27	30	-	-	Exited(0)	rc 0, stdout 4 lines, stderr 0 lines
+corpus/lang/call_argument_concatenates_a_rexx_string_method.rex	program	0	30	-	-	Exited(0)	rc 0, stdout 8 lines, stderr 0 lines
+corpus/lang/trace_debug_ignores_trace.rex	program	0	30	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 9 lines
+crates/rexx-exec/tests/sim_gate/m11_stale_sleeper.rex	program	1	25	fail=wait:1	-	Exited(0)	rc 0, stdout 2 lines, stderr 0 lines
+crates/rexx-exec/tests/sim_gate/n1_halt_ready_once.rex	program	90394	35	halt@30000	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+crates/rexx-exec/tests/sim_gate/timer_post_wakes_every_waiter.rex	program	4	30	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/trace_reply_continuation.rex	program	65	30	-	-	Exited(0)	rc 0, stdout 20 lines, stderr 0 lines
+corpus/lang/trace_destination_waits_on_thread.rex	program	414047	637	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/trace_destinations_two_threads.rex	program	15220	56	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/trace_destination_waits_calling_a_method.rex	program	414098	475	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines
+corpus/lang/trace_destination_waits_calling_a_label.rex	program	414097	253	-	-	Exited(0)	rc 0, stdout 1 lines, stderr 0 lines

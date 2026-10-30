@@ -1,0 +1,22 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 cargo test -j 4 -p rexx-exec --test suite suite_rows::tests
+
+running 2 tests
+test suite_rows::tests::owner_equality_covers_reaching_group_and_captured_refusal ... ok
+test suite_rows::tests::only_tests_of_test_classes_can_own_suite_rows ... FAILED
+
+failures:
+
+---- suite_rows::tests::only_tests_of_test_classes_can_own_suite_rows stdout ----
+
+thread 'suite_rows::tests::only_tests_of_test_classes_can_own_suite_rows' (623800) panicked at crates/rexx-exec/tests/support/suite_rows/tests.rs:38:9:
+TEST_HELPER
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    suite_rows::tests::only_tests_of_test_classes_can_own_suite_rows
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 65 filtered out; finished in 0.00s
+
+
+exit=101 elapsed=8.190s

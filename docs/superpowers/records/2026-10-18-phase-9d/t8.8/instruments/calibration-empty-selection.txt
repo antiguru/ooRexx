@@ -1,0 +1,14 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 REXX_SIM_CALIBRATION=/tmp/codex-t88d-empty-calibration.tsv REXX_SIM_ONLY=NO_SUCH_CALIBRATION_GROUP cargo test -j 4 -p rexx-exec --test concurrency_tests group_runs::whole_groups::sim_gate::calibration::calibration -- --exact --nocapture
+
+running 1 test
+test group_runs::whole_groups::sim_gate::calibration::calibration ... FAILED
+
+failures:
+
+failures:
+    group_runs::whole_groups::sim_gate::calibration::calibration
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 62 filtered out; finished in 0.31s
+
+
+exit=101 elapsed=0.415s

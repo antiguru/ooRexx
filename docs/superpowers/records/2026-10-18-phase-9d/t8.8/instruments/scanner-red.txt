@@ -1,0 +1,33 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 cargo test -j 4 -p rexx-exec --test refusal_sites refusal_scanner
+
+running 3 tests
+test refusal_scanner::tests::inline_test_refusals_are_excluded ... ok
+test refusal_scanner::tests::constructor_ownership_is_independent_of_production_filename ... FAILED
+test refusal_scanner::tests::separate_test_modules_and_their_descendants_are_not_production ... FAILED
+
+failures:
+
+---- refusal_scanner::tests::constructor_ownership_is_independent_of_production_filename stdout ----
+
+thread 'refusal_scanner::tests::constructor_ownership_is_independent_of_production_filename' (461079) panicked at crates/rexx-exec/tests/refusal_scanner/tests.rs:46:5:
+assertion `left == right` failed
+  left: ["send", "send", "ir+send"]
+ right: ["send", "send", "send"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- refusal_scanner::tests::separate_test_modules_and_their_descendants_are_not_production stdout ----
+
+thread 'refusal_scanner::tests::separate_test_modules_and_their_descendants_are_not_production' (461081) panicked at crates/rexx-exec/tests/refusal_scanner/tests.rs:19:5:
+assertion `left == right` failed
+  left: ["lib.rs", "nested/tests/child.rs", "nested/tests.rs", "nested.rs", "production.rs", "separate.rs"]
+ right: ["lib.rs", "nested.rs", "production.rs"]
+
+
+failures:
+    refusal_scanner::tests::constructor_ownership_is_independent_of_production_filename
+    refusal_scanner::tests::separate_test_modules_and_their_descendants_are_not_production
+
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+
+exit=101 elapsed=2.119s

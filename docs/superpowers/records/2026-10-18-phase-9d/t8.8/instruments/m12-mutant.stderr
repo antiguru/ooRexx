@@ -1,0 +1,18 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+warning: unused variable: `failed_sends`
+   --> crates/rexx-exec/src/activity.rs:686:13
+    |
+686 |             failed_sends,
+    |             ^^^^^^^^^^^^ help: try ignoring the field: `failed_sends: _`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `rexx-exec` (lib test) generated 1 warning (run `cargo fix --lib -p rexx-exec --tests` to apply 1 suggestion)
+    Finished `test` profile [optimized + debuginfo] target(s) in 1m 01s
+     Running unittests src/lib.rs (/tmp/codex-p9d-t88-target/debug/deps/rexx_exec-aaedc271dbf1a724)
+Observation { message: (325, 1), collections: 25, alive: false, attached: false, code: [], replacement: Some((325, 2)), replacement_unchanged: true }
+
+thread 'scheduler::tests::mutants::a_dropped_failed_send_retains_its_condition_across_settlement_collection' (657841) panicked at crates/rexx-exec/src/scheduler/tests/mutants.rs:228:5:
+Observation { message: (325, 1), collections: 25, alive: false, attached: false, code: [], replacement: Some((325, 2)), replacement_unchanged: true }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+error: test failed, to rerun pass `-p rexx-exec --lib`

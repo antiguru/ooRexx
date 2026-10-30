@@ -1,0 +1,3 @@
+   Compiling rexx-api v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api)
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.32s
+     Running tests/concrete_owners.rs (/tmp/codex-p9d-t88-target/debug/deps/concrete_owners-ef8f16f6eddc176f)

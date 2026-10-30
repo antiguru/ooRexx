@@ -1,0 +1,16 @@
+--- rust/crates/rexx-exec/src/lib.rs
++++ rust/crates/rexx-exec/src/lib.rs
+@@ -3221,6 +3221,13 @@
+         behaviour: rexx_core::BehaviourId,
+         body: rexx_core::Body,
+     ) -> ObjRef {
++        #[cfg(test)]
++        if self.stress_collect && self.collections_before_program > 0 {
++            let at = self.heap.collections_performed() - self.collections_before_program;
++            if at < 48 {
++                eprintln!("ALLOC {:?} #{at}\n{}", self.program_path, std::backtrace::Backtrace::force_capture());
++            }
++        }
+         self.collect_if_due();
+         self.heap.alloc_with_uncollected(behaviour, body)
+     }

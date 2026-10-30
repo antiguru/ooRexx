@@ -1,0 +1,39 @@
+{
+  "expected_targets": 154,
+  "completed_targets": 154,
+  "target_nonzero": 18,
+  "target_timeouts": 0,
+  "test_status_counts": {
+    "passed": 3603,
+    "failed": 161,
+    "ignored": 5
+  },
+  "failure_categories": {
+    "missing_ootest_source": 56,
+    "missing_oodocs_source": 4,
+    "missing_checkout_native_artifact": 99,
+    "cross_filesystem_precondition": 1,
+    "other_failure": 1
+  },
+  "native_artifact_counts": {
+    "build/lib/librxregexp.so": 24,
+    "build/lib/librxmath.so": 6,
+    "build/lib (directory)": 69
+  },
+  "target_summary_totals": {
+    "passed": 3603,
+    "failed": 161,
+    "ignored": 5
+  },
+  "target_missing_summary": [],
+  "target_summary_mismatch": [],
+  "doctest_status_counts": {
+    "passed": 15
+  },
+  "doctest_mode_counts": {
+    "compile_only": 1,
+    "compile_fail": 10,
+    "executed": 4
+  },
+  "test_target_total_elapsed_seconds": 1012.5652656058664
+}

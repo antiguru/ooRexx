@@ -1,0 +1,9 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 REXX_SIM_JOBS=1 REXX_SIM_ONLY=base/bif/STREAM.testGroup:derived REXX_SIM_POLICY=fifo REXX_SIM_REPORT=/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/instruments/stream-derived-normal-same-seed-report.txt REXX_SIM_SEEDS=1 cargo test -j 4 -p rexx-exec --test concurrency_tests group_runs::whole_groups::sim_gate::the_seeded_gate -- --exact --nocapture
+
+running 1 test
+test group_runs::whole_groups::sim_gate::the_seeded_gate ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 62 filtered out; finished in 0.38s
+
+
+exit=0 elapsed=0.465s

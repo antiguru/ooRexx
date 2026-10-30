@@ -1,0 +1,12 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 cargo test -j 4 -p rexx-exec --test suite row_checks -- --nocapture
+
+running 4 tests
+test row_checks::a_file_without_its_revision_is_malformed ... ok
+test row_checks::the_row_10_groups_are_the_native_api_partitions ... ok
+test row_checks::the_rxapi_rows_are_reaching_rxapis_output ... ok
+test row_checks::each_owner_check_passes_its_rows_and_fails_the_others ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 63 filtered out; finished in 0.05s
+
+
+exit=0 elapsed=0.165s

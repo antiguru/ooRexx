@@ -1,0 +1,101 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 cargo test -j 4 -p rexx-exec --test refusal_sites
+
+running 5 tests
+test the_answers_more_than_one_row_shares_are_the_recorded_ones ... ok
+test every_send_surface_row_is_walked ... ok
+test the_table_holds_every_constructor_the_source_defines ... FAILED
+test the_scanner_finds_constructors_and_only_constructors ... ok
+test a_reached_row_carries_its_own_site_identifier_and_an_unreached_one_does_not ... ok
+
+failures:
+
+---- the_table_holds_every_constructor_the_source_defines stdout ----
+
+thread 'the_table_holds_every_constructor_the_source_defines' (452600) panicked at crates/rexx-exec/tests/refusal_sites.rs:255:5:
+corpus/refusal-sites.tsv disagrees with crates/rexx-exec/src; re-derive it rather than editing the disagreeing row.
+  in the source, not the table: [
+    (
+        "Loud",
+        "sim_blocked_command",
+        "body",
+        "crates/rexx-exec/src/sim.rs:1348",
+    ),
+    (
+        "Loud",
+        "sim_blocked_native",
+        "body",
+        "crates/rexx-exec/src/sim.rs:1359",
+    ),
+    (
+        "Loud",
+        "sim_endless_wait",
+        "body",
+        "crates/rexx-exec/src/sim.rs:1385",
+    ),
+    (
+        "Loud",
+        "sim_foreign_post",
+        "body",
+        "crates/rexx-exec/src/sim.rs:1337",
+    ),
+    (
+        "Loud",
+        "sim_replay_diverged",
+        "body",
+        "crates/rexx-exec/src/sim.rs:1370",
+    ),
+    (
+        "Loud",
+        "sim_trace_unwritten",
+        "body",
+        "crates/rexx-exec/src/sim.rs:1375",
+    ),
+]
+  in the table, not the source: [
+    (
+        "Loud",
+        "sim_blocked_command",
+        "body",
+        "crates/rexx-exec/src/sim.rs:1383",
+    ),
+    (
+        "Loud",
+        "sim_blocked_native",
+        "body",
+        "crates/rexx-exec/src/sim.rs:1394",
+    ),
+    (
+        "Loud",
+        "sim_endless_wait",
+        "body",
+        "crates/rexx-exec/src/sim.rs:1420",
+    ),
+    (
+        "Loud",
+        "sim_foreign_post",
+        "body",
+        "crates/rexx-exec/src/sim.rs:1372",
+    ),
+    (
+        "Loud",
+        "sim_replay_diverged",
+        "body",
+        "crates/rexx-exec/src/sim.rs:1405",
+    ),
+    (
+        "Loud",
+        "sim_trace_unwritten",
+        "body",
+        "crates/rexx-exec/src/sim.rs:1410",
+    ),
+]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    the_table_holds_every_constructor_the_source_defines
+
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
+
+
+exit=101 elapsed=3.891s

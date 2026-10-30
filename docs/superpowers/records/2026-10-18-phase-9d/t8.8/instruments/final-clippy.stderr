@@ -1,0 +1,13 @@
+    Checking num-traits v0.2.19
+    Checking regex-automata v0.4.14
+    Checking thiserror v1.0.69
+    Checking either v1.16.0
+    Checking datadriven v0.9.0
+    Checking rayon v1.12.0
+    Checking rexx-api v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api)
+    Checking chrono v0.4.45
+    Checking rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Checking matchers v0.2.0
+    Checking tracing-subscriber v0.3.23
+    Checking loom v0.7.2
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 11.42s

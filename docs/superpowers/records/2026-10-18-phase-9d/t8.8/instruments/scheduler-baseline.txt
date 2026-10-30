@@ -1,0 +1,12 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 cargo test -j 4 -p rexx-exec --lib scheduler::tests::mutants
+
+running 4 tests
+test scheduler::tests::mutants::a_failed_pinned_sleep_leaves_no_deadline_to_end_a_later_wait ... ok
+test scheduler::tests::mutants::a_failed_guard_lock_wait_leaves_no_place_in_the_queue ... ok
+test scheduler::tests::mutants::a_failed_guard_when_leaves_no_park_for_a_halt_to_end ... ok
+test scheduler::tests::mutants::a_dropped_failed_send_is_written_while_alive ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 1212 filtered out; finished in 0.54s
+
+
+exit=0 elapsed=73.145s

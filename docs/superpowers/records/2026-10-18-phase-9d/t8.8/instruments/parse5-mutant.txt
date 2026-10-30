@@ -1,0 +1,23 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 cargo test -j 4 -p rexx-exec --lib a_late_parse_arg_template_survives_collection
+
+running 1 test
+test parse_template::tests::a_late_parse_arg_template_survives_collection ... FAILED
+
+failures:
+
+---- parse_template::tests::a_late_parse_arg_template_survives_collection stdout ----
+
+thread 'parse_template::tests::a_late_parse_arg_template_survives_collection' (477798) panicked at crates/rexx-exec/src/parse_template/tests.rs:405:5:
+assertion `left == right` failed
+  left: "[first][argument][here][first][argument][here]\n"
+ right: "[first][argument][here][second][argument][here]\n"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    parse_template::tests::a_late_parse_arg_template_survives_collection
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1215 filtered out; finished in 0.04s
+
+
+exit=101 elapsed=55.176s

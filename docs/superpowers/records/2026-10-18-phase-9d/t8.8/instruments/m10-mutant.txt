@@ -1,0 +1,23 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 cargo test -j 4 -p rexx-exec --lib a_failed_guard_lock_wait_leaves_no_place_in_the_queue
+
+running 1 test
+test scheduler::tests::mutants::a_failed_guard_lock_wait_leaves_no_place_in_the_queue ... FAILED
+
+failures:
+
+---- scheduler::tests::mutants::a_failed_guard_lock_wait_leaves_no_place_in_the_queue stdout ----
+
+thread 'scheduler::tests::mutants::a_failed_guard_lock_wait_leaves_no_place_in_the_queue' (610238) panicked at crates/rexx-exec/src/scheduler/tests/mutants.rs:68:5:
+assertion `left == right` failed: sim:1,order=fifo,fail=wait:1
+  left: (120, "caught 11.1\nheld\n", "    22 *-* return 'touched'\nError 98 running /tmp/mutants.rex line 22:  Execution error.\nError 98.905:  Deadlock detected on a guarded method.\n    22 *-* return 'touched'\nError 98 running /tmp/mutants.rex line 6:  Execution error.\nError 98.905:  Deadlock detected on a guarded method.\nrexx-exec: the scheduler found a guard waiter with no wait recorded for its guard\n")
+ right: (0, "caught 11.1\nheld\nlater touched\n", "")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    scheduler::tests::mutants::a_failed_guard_lock_wait_leaves_no_place_in_the_queue
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1215 filtered out; finished in 0.04s
+
+
+exit=101 elapsed=81.499s

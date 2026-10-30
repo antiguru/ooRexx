@@ -1,0 +1,2 @@
+base/bif/STREAM.testGroup	whole	0	76	clock=real	-	Exited(1)	failure, assertions 218, rc 1, last started TEST_WRONG_TOO_MANY_ARGS_S, failing [TEST_RELATIVE_FILE_EXISTS TEST_RELATIVE_FILE_EXISTS2]
+base/bif/STREAM.testGroup	derived	0	56	clock=real	-	Exited(1)	failure, assertions 2, rc 1, last started TEST_QUERYDIR_EXISTS, failing [TEST_QUERYDIR_EXISTS]

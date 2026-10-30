@@ -1,0 +1,21 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 cargo test -j 4 -p rexx-exec --lib a_traced_loop_condition_keeps_its_fresh_concatenation
+
+running 1 test
+test condition::tests::a_traced_loop_condition_keeps_its_fresh_concatenation ... FAILED
+
+failures:
+
+---- condition::tests::a_traced_loop_condition_keeps_its_fresh_concatenation stdout ----
+
+thread 'rexx-interp' (665476) panicked at crates/rexx-exec/src/dispatch.rs:1942:9:
+a live value
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    condition::tests::a_traced_loop_condition_keeps_its_fresh_concatenation
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1217 filtered out; finished in 0.05s
+
+
+exit=101 elapsed=67.730s

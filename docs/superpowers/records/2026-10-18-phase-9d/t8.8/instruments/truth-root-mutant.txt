@@ -1,0 +1,9 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 cargo test -j 4 -p rexx-exec --lib a_truth_conversion_keeps_the_fresh_array_answer
+
+running 1 test
+test condition::tests::a_truth_conversion_keeps_the_fresh_array_answer ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1218 filtered out; finished in 0.05s
+
+
+exit=0 elapsed=50.922s

@@ -1,0 +1,15 @@
+# sim gate: 1 runs in 0 s, profile debug, stack 536870912
+# group	part	seed	policy	ms	oracle	key	rexx-sim
+base/bif/STREAM.testGroup	derived	4971116297866815808	fifo	61	differs	pass, assertions 10, rc 0, last started TEST_QUERYDIR_EXISTS, failing []	rexx-sim: seed=4971116297866815808 policy=fifo steps=4571 contended=0 switches=0 trace=cbf29ce484222325 profile=debug stack=536870912
+
+## Differences from the oracle sets
+base/bif/STREAM.testGroup:derived:4971116297866815808:fifo: ours pass, assertions 10, rc 0, last started TEST_QUERYDIR_EXISTS, failing []; oracle [30 x pass, assertions 10, rc 0, last started TEST_QUERYDIR_EXISTS, failing []]
+
+## Wall-clock reruns (ruling P48)
+
+
+## Reds
+
+
+## Exempted reds
+

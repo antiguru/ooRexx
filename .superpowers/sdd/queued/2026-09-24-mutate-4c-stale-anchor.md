@@ -1,4 +1,4 @@
-**OPEN: ruled 9d by Moritz 2026-10-18 (Phase 9d inventory).** no probe; scripts/mutate-4c.sh:537 still anchors on a statement parse_template.rs no longer has (:461 is a let binding).
+**CLOSED 2026-10-30 by Task 8.8d (03d74f029).**
 
 # mutate-4c.sh mutation 5's anchor matches nothing
 
@@ -9,3 +9,9 @@ matches nothing in `rexx-exec/src/parse_template.rs` at `1b851ae96` or at
 was meant to witness is unwitnessed. Find when the anchor went stale
 (`git log -S`), re-anchor it to the current code, and run it to show it is
 caught.
+
+## Task 8.8d disposition
+
+The existing mutation-5 anchor now matches the current comma-boundary source handoff. A committed, compiled faithful mutation repeats the previous PARSE ARG source and fails the existing multi-template output assertion, then passes after exact restoration. Bounded history identifies the old assignment replacement at 107d72ee6, and the full 900-second script and its broad instruments were explicitly not run under the controller ruling. Task 8.8d records the exact edits, commits, statuses and bounds in t8.8/instruments.
+
+See [Task 8.8d report](../2026-10-18-phase-9d/task-8.8d-report.md) for per-subpart evidence and limits.

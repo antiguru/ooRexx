@@ -1,0 +1,54 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+error[E0277]: `*const ()` cannot be sent between threads safely
+   --> crates/rexx-exec/src/scheduler/tests/mutants.rs:48:10
+    |
+ 48 |         .spawn(move || {
+    |          ^^^^^ `*const ()` cannot be sent between threads safely
+    |
+    = help: within `mutants::Counted`, the trait `Send` is not implemented for `*const ()`
+note: required because it appears within the type `PhantomData<*const ()>`
+   --> /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/marker.rs:811:12
+    |
+811 | pub struct PhantomData<T: PointeeSized>;
+    |            ^^^^^^^^^^^
+note: required because it appears within the type `rexx_core::ObjRef`
+   --> crates/rexx-core/src/handle.rs:72:12
+    |
+ 72 | pub struct ObjRef(u64, PhantomData<*const ()>);
+    |            ^^^^^^
+note: required because it appears within the type `Observation`
+   --> crates/rexx-exec/src/condition/settlement_observer.rs:9:19
+    |
+  9 | pub(crate) struct Observation {
+    |                   ^^^^^^^^^^^
+note: required because it appears within the type `PhantomData<Observation>`
+   --> /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/marker.rs:811:12
+    |
+811 | pub struct PhantomData<T: PointeeSized>;
+    |            ^^^^^^^^^^^
+note: required because it appears within the type `alloc::raw_vec::RawVec<Observation>`
+   --> /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/raw_vec/mod.rs:73:19
+    |
+ 73 | pub(crate) struct RawVec<T, A: Allocator = Global> {
+    |                   ^^^^^^
+note: required because it appears within the type `Vec<Observation>`
+   --> /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/alloc/src/vec/mod.rs:436:12
+    |
+436 | pub struct Vec<T, #[unstable(feature = "allocator_api", issue = "32838")] A: Allocator = Global> {
+    |            ^^^
+note: required because it appears within the type `mutants::Counted`
+   --> crates/rexx-exec/src/scheduler/tests/mutants.rs:20:8
+    |
+ 20 | struct Counted {
+    |        ^^^^^^^
+note: required by a bound in `Builder::spawn`
+   --> /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/thread/builder.rs:189:12
+    |
+185 |     pub fn spawn<F, T>(self, f: F) -> io::Result<JoinHandle<T>>
+    |            ----- required by a bound in this associated function
+...
+189 |         T: Send + 'static,
+    |            ^^^^ required by this bound in `Builder::spawn`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `rexx-exec` (lib test) due to 1 previous error

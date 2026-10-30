@@ -1,0 +1,22 @@
+CARGO_INCREMENTAL=0 CARGO_TARGET_DIR=/tmp/codex-p9d-t88-target REXX_CORPUS_GATE=1 cargo test -j 4 -p rexx-exec --lib zero_collection_allocation_attribution_probe -- --nocapture
+
+running 1 test
+ALLOCATION_COUNT call_trace_nested 1753 rc=0
+ALLOCATION_COUNT do_ctrl_class 37 rc=159
+ALLOCATION_COUNT do_to_class 37 rc=159
+ALLOCATION_COUNT message_assignment_form 37 rc=159
+ALLOCATION_COUNT message_send_scope_override 37 rc=168
+ALLOCATION_COUNT message_send_unknown_method 37 rc=159
+ALLOCATION_COUNT message_send_unknown_method_on_a_number 37 rc=159
+ALLOCATION_COUNT message_send_unknown_method_on_nil 37 rc=159
+ALLOCATION_COUNT mutation_controlled_order 180 rc=0
+ALLOCATION_COUNT trace_numeric_request 37 rc=232
+ALLOCATION_COUNT trace_output 564 rc=0
+ALLOCATION_COUNT trace_results 252 rc=0
+ALLOCATION_COUNT options 0 rc=0
+test condition::tests::zero_collection_allocation_attribution_probe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1219 filtered out; finished in 0.68s
+
+
+exit=0 elapsed=53.030s
