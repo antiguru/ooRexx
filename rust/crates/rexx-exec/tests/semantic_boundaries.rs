@@ -92,7 +92,7 @@ fn buffered_invocations_do_not_query_the_hosts_stdout() {
 
 #[test]
 fn owned_stdout_queries_observe_the_redirected_file() {
-    check_owned_stdout("opened", b"call lineout 'STDERR', .stdout~query('size') .stdout~query('position') .stdout~query('position write char') .stdout~query('position sys')\ncall charout , 'abc'\ncall lineout 'STDERR', 'logical' .stdout~query('position write char')\ncall lineout 'STDERR', 'sys' .stdout~query('position sys') 'size' .stdout~query('size')\naddress system 'true'\ncall lineout 'STDERR', 'handover' .stdout~query('position write char')\n", b"abc", b"0 1 1 0\nlogical 4\nsys 3 size 3\nhandover 4\n");
+    check_owned_stdout("opened", b"call lineout 'STDERR', .stdout~query('size') .stdout~query('position') .stdout~query('position write char') .stdout~query('position sys')\ncall charout , 'abc'\ncall lineout 'STDERR', 'logical' .stdout~query('position write char')\ncall lineout 'STDERR', 'sys' .stdout~query('position sys') 'size' .stdout~query('size')\naddress system 'true'\ncall lineout 'STDERR', 'handover' .stdout~query('position write char')\n", b"abc", b"0 1 1 0\nlogical 4\nsys 3 size 3\nhandover 4\n", 3);
 }
 
 #[test]
@@ -102,10 +102,39 @@ fn owned_stdout_position_is_empty_before_open_and_after_close() {
         include_bytes!("semantic_boundaries_stdout/closed.rex"),
         b"",
         include_bytes!("semantic_boundaries_stdout/closed.stderr"),
+        0,
     );
 }
 
-fn check_owned_stdout(case: &str, source: &[u8], expected: &[u8], errors: &[u8]) {
+#[test]
+fn owned_stdout_aliases_keep_their_buffered_positions() {
+    let directory = Path::new("tests/semantic_boundaries_stdout");
+    let mut cases = 0;
+    for entry in std::fs::read_dir(directory).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|extension| extension != "rex")
+            || path.file_stem().unwrap() == "closed"
+        {
+            continue;
+        }
+        let offset = std::fs::read_to_string(path.with_extension("offset"))
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        check_owned_stdout(
+            path.file_stem().unwrap().to_str().unwrap(),
+            &std::fs::read(&path).unwrap(),
+            &std::fs::read(path.with_extension("stdout")).unwrap(),
+            &std::fs::read(path.with_extension("stderr")).unwrap(),
+            offset,
+        );
+        cases += 1;
+    }
+    assert!(cases >= 7);
+}
+
+fn check_owned_stdout(case: &str, source: &[u8], expected: &[u8], errors: &[u8], offset: u64) {
     use std::io::{Read, Seek};
     use std::process::{Command, Stdio};
     let directory =
@@ -132,7 +161,7 @@ fn check_owned_stdout(case: &str, source: &[u8], expected: &[u8], errors: &[u8])
     assert!(child.status.success(), "{:?}", child.stderr);
     assert_eq!(child.stderr, errors, "{case}");
     assert_eq!(output.metadata().unwrap().len(), expected.len() as u64);
-    assert_eq!(output.stream_position().unwrap(), expected.len() as u64);
+    assert_eq!(output.stream_position().unwrap(), offset, "{case}");
     output.rewind().unwrap();
     let mut bytes = Vec::new();
     output.read_to_end(&mut bytes).unwrap();
