@@ -116,3 +116,29 @@ fn removing_each_wait_breaks_the_logical_observation() {
         eprintln!("{name} omission: {}", String::from_utf8_lossy(&run.stdout));
     }
 }
+
+
+#[test]
+fn a_late_unrelated_notification_cannot_change_callback_completion() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../corpus/lang/command_redirected_target_waits_elsewhere.rex");
+    let witness = std::fs::read_to_string(path).unwrap();
+    let sleeper = witness.split_once("::class Sleeper").unwrap().1
+        .split_once("::class Waiter").unwrap().0;
+    // Release the old notification only after its value was read. This
+    // represents delayed notification without relying on either timer's speed.
+    let sleeper = sleeper.replace("    slept = .sleepMarked", "    slept = .sleepMarked\n    .notificationRelease~post");
+    let source = format!(".local~notificationRelease = .EventSemaphore~new\n\
+        o = .Sleeper~new\n\
+        address system 'echo a' with output using (o)\n\
+        .notificationRelease~post\nexit\n\
+        ::class Sleeper{sleeper}\n\
+        ::class SleepMark\n::method mark\n\
+        .notificationRelease~wait\n.local~sleepMarked = 1\n");
+    let run = run_program("/tmp/late-notification.rex", source.into_bytes(),
+        rexx_exec::Invocation::none().with_deadline(std::time::Duration::from_secs(20))
+        .with_switch_mode(SwitchMode::Sim(SimConfig::parse("sim:1").unwrap())));
+    assert_eq!(run.exit_code, 0, "{}", String::from_utf8_lossy(&run.stderr));
+    assert_eq!(run.stdout, b"O:a slept 1\n");
+    assert!(run.stderr.is_empty(), "{}", String::from_utf8_lossy(&run.stderr));
+}

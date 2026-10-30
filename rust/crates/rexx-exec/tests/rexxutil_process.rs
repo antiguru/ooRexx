@@ -13,6 +13,7 @@
 
 use std::os::unix::process::CommandExt as _;
 use std::process::Command;
+use std::path::Path;
 
 /// `SysWait` from the main activity and from two activities started together.
 const PROGRAM: &str = "a = .w~new~start('WAIT')\nb = .w~new~start('WAIT')\n\
@@ -135,16 +136,32 @@ fn competing_child_waiters_accept_either_valid_winner() {
     std::fs::remove_dir_all(dir).expect("remove race fixture");
 }
 
+/// Runs the owned-child fixture after the child is waitable without reaping.
+fn waitable_child(mode: &str) -> std::process::Output {
+    let (_, dir) = rexx(&format!("sys-wait-owned-{mode}"), "say SysWait()\n");
+    let output = Command::new("memcap")
+        .args(["2G", "timeout", "-k", "2", "15", "python3"])
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/rexxutil_process/owned_child.py"))
+        .arg(mode).arg(env!("CARGO_BIN_EXE_rexx")).arg(dir.join("p.rex"))
+        .output().expect("isolated interpreter");
+    std::fs::remove_dir_all(dir).expect("remove owned-child fixture");
+    output
+}
+
 /// Exec keeps the child owned by the isolated interpreter process. SysWait
 /// must return its raw status, without racing a command's separate waiter.
 #[test]
 fn sys_wait_returns_the_raw_status_of_an_owned_child() {
-    let (_, dir) = rexx("sys-wait-owned", "say SysWait()\n");
-    let output = Command::new("memcap").args(["2G", "timeout", "-k", "2", "15", "python3", "-c", "import os, subprocess, sys; subprocess.Popen(['python3', '-c', 'raise SystemExit(5)']); os.execv(sys.argv[1], sys.argv[1:])"])
-        .arg(env!("CARGO_BIN_EXE_rexx")).arg(dir.join("p.rex"))
-        .output().expect("isolated interpreter");
+    let output = waitable_child("retained");
     assert!(output.status.success(), "{output:?}");
     assert_eq!(output.stdout, b"1280\n");
     assert!(output.stderr.is_empty(), "{output:?}");
-    std::fs::remove_dir_all(dir).expect("remove owned-child fixture");
+}
+
+#[test]
+fn dropping_a_waitable_popen_consumes_its_child_before_exec() {
+    let output = waitable_child("dropped");
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(output.stdout, b"-1\n");
+    assert!(output.stderr.is_empty(), "{output:?}");
 }
