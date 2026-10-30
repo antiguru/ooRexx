@@ -59,29 +59,24 @@ impl Interp {
         match trigger.kind {
             // Convert before borrowing the source because conversion can allocate.
             // Both source and needle bytes are borrowed only for the search.
-            TriggerKind::String | TriggerKind::Mixed => {
-                let inline;
-                let rendered;
-                let needle = match value.decode() {
-                    Decoded::Text(text) => {
-                        inline = text;
-                        &inline[..]
-                    }
-                    Decoded::SmallInt(_) => {
-                        rendered = self.render(value);
-                        rendered.text(self)
-                    }
-                    _ => {
-                        let needle = self.required_string_value(value)?;
-                        self.roots.activity_mut().push_temp(needle);
-                        rendered = self.render(needle);
-                        rendered.text(self)
-                    }
-                };
-                match trigger.kind {
-                    TriggerKind::String => cursor.search(source.bytes(self), needle),
-                    _ => cursor.caseless_search(source.bytes(self), needle),
+            TriggerKind::String => {
+                let needle = self.required_string_value(value)?;
+                // The operand's earlier root still protects an unchanged answer.
+                if needle != value {
+                    self.roots.activity_mut().push_temp(needle);
                 }
+                let needle = self.render(needle);
+                cursor.search(source.bytes(self), needle.text(self));
+                Ok(())
+            }
+            TriggerKind::Mixed => {
+                let needle = self.required_string_value(value)?;
+                // A different answer needs its own root before rendering.
+                if needle != value {
+                    self.roots.activity_mut().push_temp(needle);
+                }
+                let needle = self.render(needle);
+                cursor.caseless_search(source.bytes(self), needle.text(self));
                 Ok(())
             }
             _ => {
