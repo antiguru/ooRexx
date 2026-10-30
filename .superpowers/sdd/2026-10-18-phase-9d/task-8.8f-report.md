@@ -43,7 +43,7 @@ The FIFO runtime pin was built from `04d2aa894`, with SHA256 `241d7bc029c9026b54
 
 The separate retained `equality-reentry/probe.rex` empties a Table from its queried index's equality method during REMOVE. Both retained oracle runs print `removed 1 items -1`, whereas e2 prints `removed 1 items 0`, all with status 0 and empty stderr. The intermediate f implementation incorrectly printed `removed 0 items 0` by consuming a stale detached item, and `3979b7e31` restores the e2 answer by refreshing store state after equality. The local contract at `oodocs/rexxref/en-US/collclasses.xml:464-477` defines ITEMS as the number of items, which is zero for the emptied collection.
 
-This count defect is separate from the authorized collection-send fix and from Deviations 82/83. The retained ruling request includes oracle repeats, e2, the intermediate regression, source and binary provenance, and the fixed result. The controller has requested Moritz's choice between a separate Deviation 84 and preserving zero while leaving the oracle defect open. No Deviation 84 is written pending that response, and the count discrepancy is not silently licensed by closing the original collection-send queue item.
+This count defect is separate from the authorized collection-send fix and from Deviations 82/83. The retained ruling request includes oracle repeats, e2, the intermediate regression, source and binary provenance, and the fixed result. Moritz approved keeping ITEMS at zero and recording the oracle defect as Deviation 84 on 2026-10-30, replying "Yes, 0." The numbered exclusion and retained ruling record now document that authorization, superseding the pending-ruling statements in the historical verification notes below.
 
 ## Verification and evidence
 
