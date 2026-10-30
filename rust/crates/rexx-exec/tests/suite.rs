@@ -22,6 +22,10 @@
 //! timeout or the memory cap ends has its last started test renamed out, and
 //! runs again.
 
+#[path = "suite/selection.rs"]
+mod selection;
+#[path = "suite/process_ownership.rs"]
+mod process_ownership;
 #[path = "support/group_runner.rs"]
 mod group_runner;
 #[path = "support/suite_rows.rs"]
@@ -826,34 +830,8 @@ pub fn oracle_differences(revision: &str, results: &[(GroupRun, GroupRun)]) -> S
     report
 }
 
-/// The groups [`GROUPS_ENV`] names, each of which must be discovered, else
-/// every group.
 fn selected(groups: Vec<(String, String)>) -> Vec<(String, String)> {
-    let Ok(names) = std::env::var(GROUPS_ENV) else {
-        return groups;
-    };
-    let names: BTreeSet<&str> = names
-        .split(',')
-        .map(str::trim)
-        .filter(|name| !name.is_empty())
-        .collect();
-    let chosen: Vec<(String, String)> = groups
-        .into_iter()
-        .filter(|(dir, group)| names.contains(group_path(dir, group).as_str()))
-        .collect();
-    let found: BTreeSet<String> = chosen
-        .iter()
-        .map(|(dir, group)| group_path(dir, group))
-        .collect();
-    let missing: Vec<&&str> = names
-        .iter()
-        .filter(|name| !found.contains(**name))
-        .collect();
-    assert!(
-        missing.is_empty(),
-        "{GROUPS_ENV} names no group {missing:?}"
-    );
-    chosen
+    selection::selected(groups, std::env::var(GROUPS_ENV).ok().as_deref())
 }
 
 /// The per-test record's groups line for this run.
@@ -1974,17 +1952,6 @@ mod fixtures {
         assert!(run.ended_normally);
     }
 
-    /// Whether a process runs `sleep 41.5`, which `Grandchild`'s test starts.
-    fn grandchild_sleeps() -> bool {
-        fs::read_dir("/proc")
-            .expect("/proc")
-            .filter_map(Result::ok)
-            .any(|entry| {
-                fs::read(entry.path().join("cmdline"))
-                    .is_ok_and(|cmdline| cmdline == b"sleep\x0041.5\x00")
-            })
-    }
-
     #[test]
     fn a_command_a_test_leaves_running_is_killed_with_the_run() {
         let run = scratch_run("grandchild");
@@ -1999,7 +1966,7 @@ mod fixtures {
         );
         assert_eq!(tests, ["TEST_A"]);
         assert_eq!(end_reason(&process, Duration::from_secs(60)), None);
-        assert!(!grandchild_sleeps(), "the command outlived the run");
+        assert!(!super::process_ownership::grandchild_sleeps(), "the command outlived the run");
         fs::remove_dir_all(run.parent().expect("a parent")).expect("cannot remove the run");
     }
 

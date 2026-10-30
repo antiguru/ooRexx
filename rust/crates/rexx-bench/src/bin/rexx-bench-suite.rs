@@ -27,6 +27,10 @@ use rexx_bench::child::{Counted, Counters, ORACLE_ROOT, Side, Wrapper, parse_cou
 #[path = "rexx-bench-suite/report.rs"]
 mod report;
 
+#[path = "rexx-bench-suite/binary.rs"]
+mod binary;
+use binary::rust_binary_candidates;
+
 /// Paired measurements per axis.
 const PAIRS: usize = 9;
 
@@ -588,12 +592,6 @@ fn capture(program: &str, args: &[&str]) -> String {
         .filter(|output| output.status.success())
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
         .unwrap_or_else(|| format!("<{program} failed>"))
-}
-
-/// Where `rexx` is built, release first.
-fn rust_binary_candidates() -> [PathBuf; 2] {
-    let target = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target");
-    [target.join("release/rexx"), target.join("debug/rexx")]
 }
 
 /// The ooRexx shared objects `binary` actually loads, sorted.

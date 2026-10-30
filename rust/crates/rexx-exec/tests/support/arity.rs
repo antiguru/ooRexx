@@ -25,6 +25,16 @@ use std::process::Command;
 
 use super::oracle;
 
+fn interpreter_binary() -> PathBuf {
+    let binary = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/release/rexx");
+    assert!(
+        binary.is_file(),
+        "this test compares the release binary; build it first ({})",
+        binary.display()
+    );
+    binary
+}
+
 pub const EXEMPT: &str = "EXEMPT:";
 
 /// A row whose send the ORACLE refuses by design, where that refusal is the
@@ -396,12 +406,7 @@ pub fn measured(layout: &Layout) -> Vec<(Row, String)> {
         fs::write(dir.join(FIXTURE), "return 1\n").expect("the fixture is writable");
     }
     let oracle = oracle::oracle_root();
-    let binary = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/release/rexx");
-    assert!(
-        binary.is_file(),
-        "this test compares the release binary; build it first ({})",
-        binary.display()
-    );
+    let binary = interpreter_binary();
     let mut rows = Vec::new();
     for (class, method, arm, list) in layout.arguments() {
         if let Some(reason) = list.strip_prefix(EXEMPT) {
