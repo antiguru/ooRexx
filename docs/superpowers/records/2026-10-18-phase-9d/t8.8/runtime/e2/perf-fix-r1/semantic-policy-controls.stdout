@@ -1,0 +1,63 @@
+
+running 8 tests
+test the_row_check_reads_only_a_resolution_that_opens_a_clause ... ok
+test the_row_check_reads_owners_in_any_case_and_no_negated_resolution ... ok
+test the_row_check_tells_an_open_owner_from_a_resolved_one ... ok
+test no_owner_table_names_a_closed_phase ... ok
+test no_open_exclusions_row_names_a_closed_phase ... ok
+test the_literal_scan_finds_a_phase_inside_a_longer_text ... ok
+test the_scan_finds_an_open_phase_it_is_not_asked_about ... ok
+test no_refusal_names_a_closed_phase ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+
+running 6 tests
+test assert_owner_strings_are_split_table_phases ... ok
+test only_backslash_is_unreachable ... ok
+test out_of_scope_set_matches_the_committed_expectation ... ok
+test every_excluded_builtin_names_a_phase_that_owes_it ... ok
+test variant_counts_match_the_audited_split ... ok
+test the_two_harnesses_include_this_exact_file ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 5 tests
+test a_test_module_file_resolves_where_rustc_finds_it ... ok
+test an_inline_test_module_is_left_out_and_its_neighbours_are_not ... ok
+test every_excluded_builtin_names_a_reason_the_enum_knows ... ok
+test no_production_literal_names_phase_10 ... ok
+test the_scan_reads_the_test_modules_it_leaves_out ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+
+running 8 tests
+test refusal_scanner::tests::constructor_ownership_is_independent_of_production_filename ... ok
+test refusal_scanner::tests::inline_test_refusals_are_excluded ... ok
+test refusal_scanner::tests::separate_test_modules_and_their_descendants_are_not_production ... ok
+test the_answers_more_than_one_row_shares_are_the_recorded_ones ... ok
+test every_send_surface_row_is_walked ... ok
+test the_table_holds_every_constructor_the_source_defines ... ok
+test the_scanner_finds_constructors_and_only_constructors ... ok
+test a_reached_row_carries_its_own_site_identifier_and_an_unreached_one_does_not ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+
+
+running 3 tests
+test every_row_names_an_owner ... ok
+test the_scanner_reads_literals_and_skips_comments ... ok
+test every_representation_refusal_is_on_the_allow_list ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+
+running 3 tests
+test buffered_invocations_do_not_query_the_hosts_stdout ... ok
+test owned_stdout_queries_observe_the_redirected_file ... ok
+test conversion_and_trace_boundaries ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.26s
+

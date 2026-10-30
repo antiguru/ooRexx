@@ -1,0 +1,61 @@
+
+running 14 tests
+test scheduler::tests::spawn_failure::configured_inline_and_fixed_saturation_are_not_spawn_errors ... ok
+test command::tests::unused_command_worker_returns_after_drop_unwind_and_exec_failure ... ok
+
+running 1 test
+
+running 1 test
+
+running 1 test
+
+running 1 test
+
+running 1 test
+test input::tests::spawn_failure_preserves_partial_input_and_requeues_other_posts ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1238 filtered out; finished in 0.00s
+
+test input::tests::stdin_recovers_with_a_pooled_worker_after_spawn_failure ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1238 filtered out; finished in 0.00s
+
+
+running 1 test
+
+running 1 test
+test input::tests::stdin_recovers_in_configured_inline_mode_after_spawn_failure ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1238 filtered out; finished in 0.00s
+
+test run::tests::a_collection_drops_the_rows_of_swept_executables_and_messages ... ok
+test run::tests::a_collection_drops_the_identity_rows_of_swept_method_copies ... ok
+test input::tests::stdin_recovers_with_a_pooled_worker_after_spawn_failure ... ok
+test input::tests::stdin_recovers_in_configured_inline_mode_after_spawn_failure ... ok
+test input::tests::spawn_failure_preserves_partial_input_and_requeues_other_posts ... ok
+test scheduler::tests::spawn_failure::guarded_native_spawn_failure_releases_receiver_for_progress ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1238 filtered out; finished in 0.02s
+
+test scheduler::tests::spawn_failure::native_spawn_failure_reaches_main_and_started_handlers ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1238 filtered out; finished in 0.03s
+
+test run::tests::a_collection_drops_the_rows_of_swept_loaded_methods ... ok
+test run::tests::minted_method_identities_do_not_grow_the_method_rows ... ok
+test scheduler::tests::spawn_failure::guarded_native_spawn_failure_releases_receiver_for_progress ... ok
+test scheduler::tests::spawn_failure::native_spawn_failure_reaches_main_and_started_handlers ... ok
+test run::tests::a_collection_drops_the_unnotified_and_waiter_rows_of_swept_messages ... ok
+test scheduler::tests::spawn_failure::command_spawn_failure_creates_no_child_and_repeats ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1238 filtered out; finished in 0.04s
+
+test scheduler::tests::spawn_failure::command_spawn_failure_creates_no_child_and_repeats ... ok
+test input::tests::spawn_failure_on_stdin_reaches_syntax_without_reading ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1238 filtered out; finished in 0.09s
+
+test input::tests::spawn_failure_on_stdin_reaches_syntax_without_reading ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 1225 filtered out; finished in 0.11s
+

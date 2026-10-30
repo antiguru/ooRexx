@@ -1,0 +1,16 @@
+
+running 6 tests
+test method_rows::tests::entries_and_keyed_retention_preserve_identity_and_holes ... ok
+test method_rows::tests::a_sealed_table_files_by_the_vectors_reach ... ok
+test method_rows::tests::first_registration_wins_on_both_sides_of_the_seal ... ok
+test method_rows::tests::a_minted_row_below_the_vector_is_refused - should panic ... ok
+test method_rows::tests::sealed_churn_and_independent_tables_do_not_accumulate_identities ... ok
+test method_rows::tests::executable_registry_stays_bounded_and_weak_across_programs ... FAILED
+
+failures:
+
+failures:
+    method_rows::tests::executable_registry_stays_bounded_and_weak_across_programs
+
+test result: FAILED. 5 passed; 1 failed; 0 ignored; 0 measured; 1233 filtered out; finished in 0.01s
+

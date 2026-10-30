@@ -1,0 +1,15 @@
+{
+  "source_revision": "1233b81da730142057fcf810e324d10d0e55c109",
+  "rust_tree": "8b6fc7672eaf5bcea5a38072043be49fc6cdd0eb",
+  "source_clean": true,
+  "pin": "/tmp/codex-p9d-t88-pins/8.8e2-perf-r1-rexx",
+  "built_binary": "/tmp/codex-p9d-t88-target/release/rexx",
+  "sha256": "470dcb41db61ab7a4d64f3276ce28e539d5686d130be245a4ec7b30e6d6725ac",
+  "compiler": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1\n",
+  "cargo": "cargo 1.99.0 (5f94df478 2026-08-27)",
+  "cargo_lock_sha256": "ca3b38a9343c4d44502f6d15d3404ec6ddb2f970fc7561be3fd82c4d109a94a2",
+  "build_record": "release-build.json",
+  "build_record_sha256": "955d72215570982e10d7fbf0ec82336193c8d49e18931373a3feeb3b82831ea9",
+  "pre_repair_pin": "/tmp/codex-p9d-t88-pins/8.8f-r1-rexx",
+  "pre_repair_sha256": "b695b78fe24903b4be5a2874c8cd128193bbe165f92b50a4d6a8a9956d03d3be"
+}

@@ -1,0 +1,11 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `test` profile [optimized + debuginfo] target(s) in 52.22s
+     Running unittests src/lib.rs (/tmp/codex-p9d-t88-target/debug/deps/rexx_exec-aaedc271dbf1a724)
+
+thread 'method_rows::tests::a_minted_row_below_the_vector_is_refused' (1570518) panicked at crates/rexx-exec/src/method_rows.rs:49:9:
+minted row MethodId(1) sits below the vector's end
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+library=false prefix=0 capacity=0 bytes=0
+library=true prefix=1032 capacity=1734 bytes=27744
+identity: 201 collections
+enhanced: 90 collections

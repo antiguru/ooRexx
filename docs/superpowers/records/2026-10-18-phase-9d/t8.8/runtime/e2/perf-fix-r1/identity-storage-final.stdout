@@ -1,0 +1,17 @@
+
+running 12 tests
+test method_rows::tests::entries_and_keyed_retention_preserve_identity_and_holes ... ok
+test method_rows::tests::first_registration_wins_on_both_sides_of_the_seal ... ok
+test method_rows::tests::a_minted_row_below_the_vector_is_refused - should panic ... ok
+test method_rows::tests::a_sealed_table_files_by_the_vectors_reach ... ok
+test method_rows::tests::sealed_churn_and_independent_tables_do_not_accumulate_identities ... ok
+test dispatch::introspection::tests::enhanced_metaclass_nil_entry_keeps_its_registered_method_through_gc ... ok
+test run::tests::an_executable_retained_under_the_nil_scope_answers ... ok
+test run::tests::a_collection_drops_the_identity_rows_of_swept_method_copies ... ok
+test run::tests::a_freed_programs_id_never_resolves_again ... ok
+test method_rows::tests::executable_registry_stays_bounded_and_weak_across_programs ... ok
+test dispatch::method_entry::tests::executing_copies_and_enhanced_metaclass_entries_survive_collection ... ok
+test dispatch::method_entry::tests::registered_executable_survives_dictionary_mutation_and_collection ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 1227 filtered out; finished in 0.16s
+

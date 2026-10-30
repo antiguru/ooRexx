@@ -1,0 +1,236 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+error[E0599]: no method named `insert_if_absent` found for struct `MethodRows<T>` in the current scope
+  --> crates/rexx-exec/src/method_rows/tests.rs:35:10
+   |
+35 |     rows.insert_if_absent(MethodId(3), 'a');
+   |          ^^^^^^^^^^^^^^^^ method not found in `MethodRows<_>`
+   |
+  ::: crates/rexx-exec/src/method_rows.rs:9:1
+   |
+ 9 | pub(crate) struct MethodRows<T> {
+   | ------------------------------- method `insert_if_absent` not found for this struct
+
+error[E0599]: no method named `insert_if_absent` found for struct `MethodRows<T>` in the current scope
+  --> crates/rexx-exec/src/method_rows/tests.rs:36:10
+   |
+36 |     rows.insert_if_absent(MethodId(3), 'b');
+   |          ^^^^^^^^^^^^^^^^ method not found in `MethodRows<_>`
+   |
+  ::: crates/rexx-exec/src/method_rows.rs:9:1
+   |
+ 9 | pub(crate) struct MethodRows<T> {
+   | ------------------------------- method `insert_if_absent` not found for this struct
+
+error[E0599]: no method named `insert_if_absent` found for struct `MethodRows<T>` in the current scope
+  --> crates/rexx-exec/src/method_rows/tests.rs:38:10
+   |
+38 |     rows.insert_if_absent(MethodId(1), 'c');
+   |          ^^^^^^^^^^^^^^^^ method not found in `MethodRows<_>`
+   |
+  ::: crates/rexx-exec/src/method_rows.rs:9:1
+   |
+ 9 | pub(crate) struct MethodRows<T> {
+   | ------------------------------- method `insert_if_absent` not found for this struct
+
+error[E0599]: no method named `insert_if_absent` found for struct `MethodRows<T>` in the current scope
+  --> crates/rexx-exec/src/method_rows/tests.rs:39:10
+   |
+39 |     rows.insert_if_absent(MethodId(1), 'd');
+   |          ^^^^^^^^^^^^^^^^ method not found in `MethodRows<_>`
+   |
+  ::: crates/rexx-exec/src/method_rows.rs:9:1
+   |
+ 9 | pub(crate) struct MethodRows<T> {
+   | ------------------------------- method `insert_if_absent` not found for this struct
+
+error[E0599]: no method named `insert_if_absent` found for struct `MethodRows<T>` in the current scope
+  --> crates/rexx-exec/src/method_rows/tests.rs:40:10
+   |
+40 |     rows.insert_if_absent(MethodId(9), 'e');
+   |          ^^^^^^^^^^^^^^^^ method not found in `MethodRows<_>`
+   |
+  ::: crates/rexx-exec/src/method_rows.rs:9:1
+   |
+ 9 | pub(crate) struct MethodRows<T> {
+   | ------------------------------- method `insert_if_absent` not found for this struct
+
+error[E0599]: no method named `insert_if_absent` found for struct `MethodRows<T>` in the current scope
+  --> crates/rexx-exec/src/method_rows/tests.rs:41:10
+   |
+41 |     rows.insert_if_absent(MethodId(9), 'f');
+   |          ^^^^^^^^^^^^^^^^ method not found in `MethodRows<_>`
+   |
+  ::: crates/rexx-exec/src/method_rows.rs:9:1
+   |
+ 9 | pub(crate) struct MethodRows<T> {
+   | ------------------------------- method `insert_if_absent` not found for this struct
+
+error[E0599]: no method named `retain_entries` found for struct `MethodRows<T>` in the current scope
+  --> crates/rexx-exec/src/method_rows/tests.rs:61:10
+   |
+61 |     rows.retain_entries(|method, _| method != MethodId(1) && method != MethodId(9));
+   |          ^^^^^^^^^^^^^^ method not found in `MethodRows<char>`
+   |
+  ::: crates/rexx-exec/src/method_rows.rs:9:1
+   |
+ 9 | pub(crate) struct MethodRows<T> {
+   | ------------------------------- method `retain_entries` not found for this struct
+
+error[E0599]: no method named `entries` found for struct `MethodRows<T>` in the current scope
+  --> crates/rexx-exec/src/method_rows/tests.rs:63:10
+   |
+62 |       let mut entries: Vec<_> = rows
+   |  _______________________________-
+63 | |         .entries()
+   | |         -^^^^^^^ method not found in `MethodRows<char>`
+   | |_________|
+   |
+   |
+  ::: crates/rexx-exec/src/method_rows.rs:9:1
+   |
+ 9 |   pub(crate) struct MethodRows<T> {
+   |   ------------------------------- method `entries` not found for this struct
+
+error[E0599]: no method named `entries` found for struct `MethodRows<T>` in the current scope
+  --> crates/rexx-exec/src/method_rows/tests.rs:71:14
+   |
+71 |         rows.entries()
+   |              ^^^^^^^ method not found in `MethodRows<char>`
+   |
+  ::: crates/rexx-exec/src/method_rows.rs:9:1
+   |
+ 9 | pub(crate) struct MethodRows<T> {
+   | ------------------------------- method `entries` not found for this struct
+
+error[E0599]: no method named `insert_if_absent` found for struct `MethodRows<T>` in the current scope
+  --> crates/rexx-exec/src/method_rows/tests.rs:89:11
+   |
+89 |     other.insert_if_absent(MethodId(3), 'b');
+   |           ^^^^^^^^^^^^^^^^ method not found in `MethodRows<_>`
+   |
+  ::: crates/rexx-exec/src/method_rows.rs:9:1
+   |
+ 9 | pub(crate) struct MethodRows<T> {
+   | ------------------------------- method `insert_if_absent` not found for this struct
+
+error[E0599]: no method named `insert_if_absent` found for struct `MethodRows<T>` in the current scope
+  --> crates/rexx-exec/src/method_rows/tests.rs:91:14
+   |
+91 |         rows.insert_if_absent(MethodId(id), 'c');
+   |              ^^^^^^^^^^^^^^^^ method not found in `MethodRows<char>`
+   |
+  ::: crates/rexx-exec/src/method_rows.rs:9:1
+   |
+ 9 | pub(crate) struct MethodRows<T> {
+   | ------------------------------- method `insert_if_absent` not found for this struct
+
+error[E0599]: no method named `retain_entries` found for struct `MethodRows<T>` in the current scope
+  --> crates/rexx-exec/src/method_rows/tests.rs:95:10
+   |
+95 |     rows.retain_entries(|_, _| false);
+   |          ^^^^^^^^^^^^^^ method not found in `MethodRows<char>`
+   |
+  ::: crates/rexx-exec/src/method_rows.rs:9:1
+   |
+ 9 | pub(crate) struct MethodRows<T> {
+   | ------------------------------- method `retain_entries` not found for this struct
+
+error[E0599]: no method named `extent` found for struct `HashMap<K, V, S, A>` in the current scope
+   --> crates/rexx-exec/src/method_rows/tests.rs:116:48
+    |
+116 |         let prefix = interp.executable_objects.extent().0;
+    |                                                ^^^^^^
+    |
+help: there is a method `extend` with a similar name, but with different arguments
+   --> /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/collect.rs:416:5
+    |
+416 |     fn extend<T: IntoIterator<Item = A>>(&mut self, iter: T);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0599]: no method named `extent` found for struct `HashMap<K, V, S, A>` in the current scope
+   --> crates/rexx-exec/src/method_rows/tests.rs:123:46
+    |
+123 |         assert_eq!(interp.executable_objects.extent().1, 0);
+    |                                              ^^^^^^
+    |
+help: there is a method `extend` with a similar name, but with different arguments
+   --> /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/collect.rs:416:5
+    |
+416 |     fn extend<T: IntoIterator<Item = A>>(&mut self, iter: T);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0609]: no field `dense` on type `HashMap<MethodId, rexx_core::ObjRef, FxBuildHasher>`
+   --> crates/rexx-exec/src/method_rows/tests.rs:124:50
+    |
+124 |         let capacity = interp.executable_objects.dense.capacity();
+    |                                                  ^^^^^ unknown field
+
+error[E0308]: mismatched types
+    --> crates/rexx-exec/src/method_rows/tests.rs:140:54
+     |
+ 140 |             assert_eq!(interp.executable_objects.get(method), Some(&object));
+     |                                                  --- ^^^^^^ expected `&MethodId`, found `MethodId`
+     |                                                  |
+     |                                                  arguments to this method are incorrect
+     |
+note: method defined here
+    --> /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs:1034:12
+     |
+1034 |     pub fn get<Q: ?Sized>(&self, k: &Q) -> Option<&V>
+     |            ^^^
+help: consider borrowing here
+     |
+ 140 |             assert_eq!(interp.executable_objects.get(&method), Some(&object));
+     |                                                      +
+
+error[E0308]: mismatched types
+    --> crates/rexx-exec/src/method_rows/tests.rs:147:51
+     |
+ 147 |             assert!(interp.executable_objects.get(method).is_none());
+     |                                               --- ^^^^^^ expected `&MethodId`, found `MethodId`
+     |                                               |
+     |                                               arguments to this method are incorrect
+     |
+note: method defined here
+    --> /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs:1034:12
+     |
+1034 |     pub fn get<Q: ?Sized>(&self, k: &Q) -> Option<&V>
+     |            ^^^
+help: consider borrowing here
+     |
+ 147 |             assert!(interp.executable_objects.get(&method).is_none());
+     |                                                   +
+
+error[E0599]: no method named `extent` found for struct `HashMap<K, V, S, A>` in the current scope
+   --> crates/rexx-exec/src/method_rows/tests.rs:148:50
+    |
+148 |             assert_eq!(interp.executable_objects.extent().0, prefix);
+    |                                                  ^^^^^^
+    |
+help: there is a method `extend` with a similar name, but with different arguments
+   --> /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/collect.rs:416:5
+    |
+416 |     fn extend<T: IntoIterator<Item = A>>(&mut self, iter: T);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0609]: no field `dense` on type `HashMap<MethodId, rexx_core::ObjRef, FxBuildHasher>`
+   --> crates/rexx-exec/src/method_rows/tests.rs:149:50
+    |
+149 |             assert_eq!(interp.executable_objects.dense.capacity(), capacity);
+    |                                                  ^^^^^ unknown field
+
+error[E0599]: no method named `extent` found for struct `HashMap<K, V, S, A>` in the current scope
+   --> crates/rexx-exec/src/method_rows/tests.rs:152:39
+    |
+152 |             interp.executable_objects.extent().1,
+    |                                       ^^^^^^
+    |
+help: there is a method `extend` with a similar name, but with different arguments
+   --> /home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/iter/traits/collect.rs:416:5
+    |
+416 |     fn extend<T: IntoIterator<Item = A>>(&mut self, iter: T);
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Some errors have detailed explanations: E0308, E0599, E0609.
+For more information about an error, try `rustc --explain E0308`.
+error: could not compile `rexx-exec` (lib test) due to 20 previous errors
