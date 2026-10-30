@@ -91,6 +91,7 @@ fn pgid_is_the_parents_group() {
 /// boundary by command::tests::an_externally_reaped_child_maps_to_127_and_failure.
 #[test]
 fn competing_child_waiters_accept_either_valid_winner() {
+    // Normal command RC tracing is unrelated to wait ownership.
     let program = "a = .w~new~start('RUN')\n\
         do 400 until SysFileExists('started'); call SysSleep 0.05; end\n\
         say 'ready' SysFileExists('started')\n\
@@ -98,6 +99,7 @@ fn competing_child_waiters_accept_either_valid_winner() {
         say 'cmd' a~result\n\
         ::class w\n\
         ::method run\n\
+        trace off\n\
         call on failure name failed\n\
         'touch started; sleep 0.6; exit 5'\n\
         return 'rc' rc\n\
