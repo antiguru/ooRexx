@@ -33,3 +33,13 @@ fn unrecognized_executable_uses_the_workspace_target() {
     assert_eq!(rust_binary_candidates_for(None, Path::new("/invoke"), Path::new("/installed/rexx-bench-suite"), Path::new("/workspace/crates/rexx-bench")),
         [PathBuf::from("/workspace/crates/rexx-bench/../../target/release/rexx"), PathBuf::from("/workspace/crates/rexx-bench/../../target/debug/rexx")]);
 }
+
+#[test]
+fn runtime_candidates_use_this_build_target() {
+    let executable = std::env::current_exe().expect("test executable");
+    let profile = executable.parent().expect("deps").parent().expect("profile");
+    let candidates = rust_binary_candidates();
+    assert_eq!(candidates[0], profile.join("rexx"));
+    assert!(candidates[0].is_file(), "build rexx in the same target: {}", candidates[0].display());
+    eprintln!("selected interpreter: {}", candidates[0].display());
+}
