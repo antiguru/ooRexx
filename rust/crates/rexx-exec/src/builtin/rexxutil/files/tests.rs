@@ -117,5 +117,5 @@ fn a_move_on_one_file_system_renames_without_copying() {
     fs::write(&from, b"kept").expect("second source");
     assert_eq!(move_file(bytes(&from), bytes(&to)), EEXIST);
     assert_eq!(fs::read(&from).expect("source remains"), b"kept");
-    assert_eq!(finish_move(bytes(&from), bytes(&to), Err(rustix::io::Errno::ACCES)), 13);
+    assert_eq!(finish_move(bytes(&from), bytes(&to), Err(rustix::io::Errno::ACCESS)), 13);
 }
