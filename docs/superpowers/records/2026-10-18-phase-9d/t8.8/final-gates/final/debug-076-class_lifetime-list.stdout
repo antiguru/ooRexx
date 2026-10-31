@@ -1,0 +1,5 @@
+a_class_nothing_refers_to_is_collected: test
+a_class_side_uninit_runs_at_the_collection_that_reaches_the_class: test
+a_loop_of_class_new_collects_its_classes: test
+a_loop_of_package_new_collects_its_classes_and_packages: test
+an_instance_keeps_its_class_alive_and_nothing_else_does: test

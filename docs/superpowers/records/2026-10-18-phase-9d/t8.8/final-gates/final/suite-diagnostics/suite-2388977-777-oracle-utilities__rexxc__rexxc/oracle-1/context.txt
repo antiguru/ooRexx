@@ -1,0 +1,49 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-777-oracle-utilities__rexxc__rexxc/run
+TZ=None
+status=Some(0) ended=Exited(0) took=123.786064ms
+GroupRun {
+    group: "utilities/rexxc/rexxc",
+    expected: {},
+    started: {
+        "TESTCOMPILED",
+        "TESTSOURCE",
+        "TESTSOURCENOTEXIST",
+        "TEST_REXXC_ENCODING",
+        "TEST_REXXC_NO_ARG",
+        "TEST_REXXC_ONE_ARG",
+        "TEST_REXXC_ONE_ARG_NOT_FOUND",
+        "TEST_REXXC_ONE_ARG_OPTION_S",
+        "TEST_REXXC_ONE_ARG_SYNTAX",
+        "TEST_REXXC_THREE_ARGS",
+        "TEST_REXXC_TWO_ARGS",
+    },
+    passed: {
+        "TESTCOMPILED",
+        "TESTSOURCE",
+        "TESTSOURCENOTEXIST",
+        "TEST_REXXC_ENCODING",
+        "TEST_REXXC_NO_ARG",
+        "TEST_REXXC_ONE_ARG",
+        "TEST_REXXC_ONE_ARG_NOT_FOUND",
+        "TEST_REXXC_ONE_ARG_OPTION_S",
+        "TEST_REXXC_ONE_ARG_SYNTAX",
+        "TEST_REXXC_THREE_ARGS",
+        "TEST_REXXC_TWO_ARGS",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "11",
+    ),
+    took: 123.786064ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-777-oracle-utilities__rexxc__rexxc/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-777-oracle-utilities__rexxc__rexxc/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 313, modified: SystemTime { tv_sec: 1793410829, tv_nsec: 475365376 }, accessed: SystemTime { tv_sec: 1793410829, tv_nsec: 511364333 }, created: SystemTime { tv_sec: 1793410829, tv_nsec: 407367348 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-777-oracle-utilities__rexxc__rexxc/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-777-oracle-utilities__rexxc__rexxc/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-777-oracle-utilities__rexxc__rexxc/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410829, tv_nsec: 307370248 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-777-oracle-utilities__rexxc__rexxc/run/ooRexx/utilities/rexxc/rexxc.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-777-oracle-utilities__rexxc__rexxc/run/ooRexx/utilities/rexxc/rexxc.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 10997, modified: SystemTime { tv_sec: 1793410829, tv_nsec: 392929283 }, accessed: SystemTime { tv_sec: 1793410829, tv_nsec: 407367348 }, created: SystemTime { tv_sec: 1793410829, tv_nsec: 392410528 }, .. })

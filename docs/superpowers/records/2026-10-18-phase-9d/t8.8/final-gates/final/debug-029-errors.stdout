@@ -1,0 +1,22 @@
+
+running 17 tests
+test additional_and_message_agree_on_every_placeholder ... ok
+test code_still_matches_every_variant_after_the_split ... ok
+test divide_by_zero_message_is_42_003 ... ok
+test divide_by_zero_message_is_the_same_for_all_three_operators ... ok
+test general_overflow_message_is_42_901_substituting_the_adjusted_exponent_and_the_constant_9 ... ok
+test general_overflow_message_uses_9_regardless_of_the_active_digits_setting ... ok
+test general_underflow_message_is_42_902_substituting_the_raw_exponent_not_the_adjusted_one ... ok
+test integer_divide_not_whole_message_is_26_011_no_substitution ... ok
+test power_exponent_not_whole_message_is_26_008_substituting_the_exponent ... ok
+test power_exponent_not_whole_message_substitutes_the_original_exponent_not_the_rounded_one ... ok
+test power_magnitude_precheck_message_is_42_001 ... ok
+test power_magnitude_precheck_message_renders_full_stored_precision_not_the_9_digit_default ... ok
+test remainder_not_whole_message_is_26_012_no_substitution ... ok
+test sub_code_is_42_3_for_divide_by_zero_and_26_8_for_power_exponent_not_whole ... ok
+test sub_codes_major_half_agrees_with_code_on_every_variant ... ok
+test system_resources_message_is_the_bare_error_5_no_substitution ... ok
+test zero_to_a_negative_power_message_is_42_903_no_substitution ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

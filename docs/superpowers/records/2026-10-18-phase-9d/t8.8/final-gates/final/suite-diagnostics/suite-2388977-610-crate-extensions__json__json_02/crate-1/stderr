@@ -1,0 +1,3 @@
+  1816 *-* address system "xsltproc" xslFile xsdFile -    with output using (outXsd) error using (errXsd)
+       >>>   "xsltproc /tmp/codex-p9d-t88-target/tmp/suite-2388977-610-crate-extensions__json__json_02/run/ooRexx/extensions/json/docbook/xmlToJson.xsl /tmp/codex-p9d-t88-target/tmp/suite-2388977-610-crate-extensions__json__json_02/run/ooRexx/extensions/json/test_xslt_xsd_tmp.xml"
+       +++   "RC(127)"

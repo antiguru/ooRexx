@@ -1,0 +1,10 @@
+
+running 5 tests
+test a_string_reaches_nothing ... ok
+test an_array_reaches_every_element_including_duplicates ... ok
+test an_array_reaches_past_an_empty_slot_and_not_through_it ... ok
+test an_instance_reaches_every_scope_and_every_value_but_no_name ... ok
+test an_instance_stops_reaching_a_dropped_variable ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

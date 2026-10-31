@@ -1,0 +1,12 @@
+
+running 7 tests
+test scheduler::tests::mutants::a_dropped_failed_send_is_written_while_alive ... ok
+test scheduler::tests::mutants::a_dropped_failed_send_retains_its_condition_across_settlement_collection ... ok
+test scheduler::tests::mutants::a_failed_guard_lock_wait_leaves_no_place_in_the_queue ... ok
+test scheduler::tests::mutants::a_failed_guard_when_leaves_no_park_for_a_halt_to_end ... ok
+test scheduler::tests::mutants::a_failed_pinned_sleep_leaves_no_deadline_to_end_a_later_wait ... ok
+test scheduler::tests::mutants::a_terminal_reply_slice_is_not_attributed_to_the_incoming_sort ... ok
+test scheduler::tests::mutants::a_terminal_return_leaves_no_slice_for_the_incoming_sort ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 1234 filtered out; finished in 0.62s
+

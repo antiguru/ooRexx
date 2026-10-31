@@ -1,0 +1,63 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-756-oracle-base__rexxutil__SysStemSort/run
+TZ=None
+status=Some(0) ended=Exited(0) took=22.022063ms
+GroupRun {
+    group: "base/rexxutil/SysStemSort",
+    expected: {},
+    started: {
+        "TESTSORTRANGE",
+        "TEST_ALREADY_SORTED",
+        "TEST_BAD_COUNT",
+        "TEST_BAD_DIRECTION_ARG",
+        "TEST_CASE_SENSITIVITY",
+        "TEST_COMPOUND_NAME",
+        "TEST_DESCENDING_SIMPLE",
+        "TEST_INVALID_FIRSTCOL_LASTCOL",
+        "TEST_INVALID_FIRST_LAST",
+        "TEST_INVALID_ORDER",
+        "TEST_INVALID_STEM",
+        "TEST_OUT_OF_RANGE",
+        "TEST_SIMPLE_LETTERS",
+        "TEST_SORT",
+        "TEST_SORT_COLS",
+        "TEST_SPARSE_ARRAY",
+        "TEST_TOO_MANY",
+        "TEST_UNSET_COUNT",
+    },
+    passed: {
+        "TESTSORTRANGE",
+        "TEST_ALREADY_SORTED",
+        "TEST_BAD_COUNT",
+        "TEST_BAD_DIRECTION_ARG",
+        "TEST_CASE_SENSITIVITY",
+        "TEST_COMPOUND_NAME",
+        "TEST_DESCENDING_SIMPLE",
+        "TEST_INVALID_FIRSTCOL_LASTCOL",
+        "TEST_INVALID_FIRST_LAST",
+        "TEST_INVALID_ORDER",
+        "TEST_INVALID_STEM",
+        "TEST_OUT_OF_RANGE",
+        "TEST_SIMPLE_LETTERS",
+        "TEST_SORT",
+        "TEST_SORT_COLS",
+        "TEST_SPARSE_ARRAY",
+        "TEST_TOO_MANY",
+        "TEST_UNSET_COUNT",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "18",
+    ),
+    took: 22.022063ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-756-oracle-base__rexxutil__SysStemSort/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-756-oracle-base__rexxutil__SysStemSort/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 483, modified: SystemTime { tv_sec: 1793410828, tv_nsec: 848283722 }, accessed: SystemTime { tv_sec: 1793410828, tv_nsec: 854290904 }, created: SystemTime { tv_sec: 1793410828, tv_nsec: 839383819 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-756-oracle-base__rexxutil__SysStemSort/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-756-oracle-base__rexxutil__SysStemSort/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-756-oracle-base__rexxutil__SysStemSort/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410828, tv_nsec: 763386023 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-756-oracle-base__rexxutil__SysStemSort/run/ooRexx/base/rexxutil/SysStemSort.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-756-oracle-base__rexxutil__SysStemSort/run/ooRexx/base/rexxutil/SysStemSort.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 10741, modified: SystemTime { tv_sec: 1793410828, tv_nsec: 831674628 }, accessed: SystemTime { tv_sec: 1793410828, tv_nsec: 839383819 }, created: SystemTime { tv_sec: 1793410828, tv_nsec: 830874440 }, .. })

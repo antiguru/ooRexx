@@ -1,0 +1,4 @@
+started TEST_LONG
+started TEST_NONE
+started TEST_NO_ARGS_TOO_MANY
+started TEST_SIMPLE_AND_STEM

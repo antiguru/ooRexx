@@ -1,0 +1,55 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-280-oracle-base__class__String__modulo/run
+TZ=None
+status=Some(0) ended=Exited(0) took=32.242187ms
+GroupRun {
+    group: "base/class/String/modulo",
+    expected: {},
+    started: {
+        "TEST_DIVIDEND_FLOAT",
+        "TEST_DIVIDEND_NON_NUMERIC",
+        "TEST_DIVISOR_FLOAT",
+        "TEST_DIVISOR_NEGATIVE",
+        "TEST_DIVISOR_NIL",
+        "TEST_DIVISOR_NULL",
+        "TEST_DIVISOR_STRING",
+        "TEST_DIVISOR_ZERO",
+        "TEST_LARGE_DIVIDEND_POWERS_OF_2",
+        "TEST_LARGE_DIVIDEND_POWERS_OF_3",
+        "TEST_LARGE_DIVISOR",
+        "TEST_NO_ARG",
+        "TEST_RANGE_TEN",
+        "TEST_TWO_ARGS",
+    },
+    passed: {
+        "TEST_DIVIDEND_FLOAT",
+        "TEST_DIVIDEND_NON_NUMERIC",
+        "TEST_DIVISOR_FLOAT",
+        "TEST_DIVISOR_NEGATIVE",
+        "TEST_DIVISOR_NIL",
+        "TEST_DIVISOR_NULL",
+        "TEST_DIVISOR_STRING",
+        "TEST_DIVISOR_ZERO",
+        "TEST_LARGE_DIVIDEND_POWERS_OF_2",
+        "TEST_LARGE_DIVIDEND_POWERS_OF_3",
+        "TEST_LARGE_DIVISOR",
+        "TEST_NO_ARG",
+        "TEST_RANGE_TEN",
+        "TEST_TWO_ARGS",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "14",
+    ),
+    took: 32.242187ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-280-oracle-base__class__String__modulo/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-280-oracle-base__class__String__modulo/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 396, modified: SystemTime { tv_sec: 1793410813, tv_nsec: 458972413 }, accessed: SystemTime { tv_sec: 1793410813, tv_nsec: 463829671 }, created: SystemTime { tv_sec: 1793410813, tv_nsec: 451830019 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-280-oracle-base__class__String__modulo/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-280-oracle-base__class__String__modulo/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-280-oracle-base__class__String__modulo/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410813, tv_nsec: 444220607 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-280-oracle-base__class__String__modulo/run/ooRexx/base/class/String/modulo.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-280-oracle-base__class__String__modulo/run/ooRexx/base/class/String/modulo.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 5534, modified: SystemTime { tv_sec: 1793410813, tv_nsec: 434009962 }, accessed: SystemTime { tv_sec: 1793410813, tv_nsec: 451830019 }, created: SystemTime { tv_sec: 1793410813, tv_nsec: 433163506 }, .. })

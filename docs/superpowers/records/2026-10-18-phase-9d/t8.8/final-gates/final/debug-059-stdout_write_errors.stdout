@@ -1,0 +1,10 @@
+
+running 5 tests
+test a_closed_pipe_is_error_32 ... ok
+test a_flush_into_a_closed_pipe_is_error_32 ... ok
+test a_flush_into_a_full_device_is_error_28 ... ok
+test a_full_device_is_error_28 ... ok
+test a_standard_output_closed_at_start_is_dev_null ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+

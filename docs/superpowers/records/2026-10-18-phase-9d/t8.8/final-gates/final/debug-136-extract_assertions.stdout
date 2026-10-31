@@ -1,0 +1,24 @@
+
+running 19 tests
+test a_method_with_an_assignment_prelude_attaches_it_to_every_row ... ok
+test a_non_test_method_produces_no_rows ... ok
+test a_row_before_assert_syntax_error_is_unaffected ... ok
+test a_row_before_the_expect_syntax_marker_is_unaffected ... ok
+test a_second_expect_syntax_marker_replaces_the_first_for_what_follows_it ... ok
+test a_self_contained_method_gets_an_empty_prelude ... ok
+test a_trailing_return_with_nothing_after_it_reports_no_blocked_method ... ok
+test an_expect_syntax_marker_turns_the_following_row_into_a_raise_expectation ... ok
+test an_unsupported_statement_blocks_only_what_follows_it ... ok
+test assert_syntax_error_blocks_rather_than_silently_passing_through ... ok
+test base_expressions_expect_syntax_conversion_counts ... ok
+test base_expressions_yields_the_measured_row_and_blocked_counts ... ok
+test digits_changing_mid_method_is_carried_sequentially_not_read_in_isolation ... ok
+test every_assert_same_in_base_expressions_is_a_row_or_an_accounted_for_drop ... ok
+test expect_condition_blocks_rather_than_silently_passing_through ... ok
+test expect_syntax_with_message_inserts_blocks_rather_than_guesses ... ok
+test form_changing_mid_method_is_carried_sequentially ... ok
+test other_assertion_kinds_are_ignored_without_blocking_or_changing_state ... ok
+test rows_and_blocked_entries_carry_the_supplied_group_label ... ok
+
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+

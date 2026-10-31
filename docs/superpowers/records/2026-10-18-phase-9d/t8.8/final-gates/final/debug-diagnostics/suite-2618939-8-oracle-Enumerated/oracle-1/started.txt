@@ -1,0 +1,5 @@
+started TEST_AFTER_COMMENT
+started TEST_ATTRIBUTE
+started TEST_CONSTANT
+started TEST_QUOTED NAME 1.5
+started TEST_SINGLE

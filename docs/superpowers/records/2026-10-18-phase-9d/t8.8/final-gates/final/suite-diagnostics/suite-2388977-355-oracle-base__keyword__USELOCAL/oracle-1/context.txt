@@ -1,0 +1,45 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-355-oracle-base__keyword__USELOCAL/run
+TZ=None
+status=Some(0) ended=Exited(0) took=32.713404ms
+GroupRun {
+    group: "base/keyword/USELOCAL",
+    expected: {},
+    started: {
+        "TEST_MISPLACED_USE_LOCAL",
+        "TEST_USE_LOCAL",
+        "TEST_USE_LOCAL_BAD_VARIABLE",
+        "TEST_USE_LOCAL_COMPOUND",
+        "TEST_USE_LOCAL_DOT",
+        "TEST_USE_LOCAL_DOT_SYMBOL",
+        "TEST_USE_LOCAL_INDIRECT",
+        "TEST_USE_LOCAL_NON_METHOD",
+        "TEST_USE_LOCAL_NUMBER",
+    },
+    passed: {
+        "TEST_MISPLACED_USE_LOCAL",
+        "TEST_USE_LOCAL",
+        "TEST_USE_LOCAL_BAD_VARIABLE",
+        "TEST_USE_LOCAL_COMPOUND",
+        "TEST_USE_LOCAL_DOT",
+        "TEST_USE_LOCAL_DOT_SYMBOL",
+        "TEST_USE_LOCAL_INDIRECT",
+        "TEST_USE_LOCAL_NON_METHOD",
+        "TEST_USE_LOCAL_NUMBER",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "9",
+    ),
+    took: 32.713404ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-355-oracle-base__keyword__USELOCAL/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-355-oracle-base__keyword__USELOCAL/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 281, modified: SystemTime { tv_sec: 1793410815, tv_nsec: 137049742 }, accessed: SystemTime { tv_sec: 1793410815, tv_nsec: 143065924 }, created: SystemTime { tv_sec: 1793410815, tv_nsec: 135053388 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-355-oracle-base__keyword__USELOCAL/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-355-oracle-base__keyword__USELOCAL/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-355-oracle-base__keyword__USELOCAL/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410815, tv_nsec: 59783393 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-355-oracle-base__keyword__USELOCAL/run/ooRexx/base/keyword/USELOCAL.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-355-oracle-base__keyword__USELOCAL/run/ooRexx/base/keyword/USELOCAL.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 7582, modified: SystemTime { tv_sec: 1793410815, tv_nsec: 109968361 }, accessed: SystemTime { tv_sec: 1793410815, tv_nsec: 134484494 }, created: SystemTime { tv_sec: 1793410815, tv_nsec: 108599629 }, .. })

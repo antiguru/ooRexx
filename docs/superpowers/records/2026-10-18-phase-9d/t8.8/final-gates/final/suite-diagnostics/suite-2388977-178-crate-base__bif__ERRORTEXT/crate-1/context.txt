@@ -1,0 +1,29 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-178-crate-base__bif__ERRORTEXT/run
+TZ=None
+status=Some(0) ended=Exited(0) took=107.855681ms
+GroupRun {
+    group: "base/bif/ERRORTEXT",
+    expected: {},
+    started: {
+        "TEST_ERRORTEXT",
+    },
+    passed: {
+        "TEST_ERRORTEXT",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "1",
+    ),
+    took: 107.855681ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-178-crate-base__bif__ERRORTEXT/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-178-crate-base__bif__ERRORTEXT/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 23, modified: SystemTime { tv_sec: 1793410811, tv_nsec: 321325830 }, accessed: SystemTime { tv_sec: 1793410811, tv_nsec: 347891026 }, created: SystemTime { tv_sec: 1793410811, tv_nsec: 315891953 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-178-crate-base__bif__ERRORTEXT/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-178-crate-base__bif__ERRORTEXT/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-178-crate-base__bif__ERRORTEXT/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410811, tv_nsec: 311892070 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-178-crate-base__bif__ERRORTEXT/run/ooRexx/base/bif/ERRORTEXT.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-178-crate-base__bif__ERRORTEXT/run/ooRexx/base/bif/ERRORTEXT.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 9518, modified: SystemTime { tv_sec: 1793410811, tv_nsec: 244815962 }, accessed: SystemTime { tv_sec: 1793410811, tv_nsec: 315891953 }, created: SystemTime { tv_sec: 1793410811, tv_nsec: 243606166 }, .. })

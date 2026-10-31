@@ -1,0 +1,59 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-554-oracle-extensions__hostemu__hostemu/run
+TZ=None
+status=Some(0) ended=Exited(0) took=42.408142ms
+GroupRun {
+    group: "extensions/hostemu/hostemu",
+    expected: {},
+    started: {
+        "TEST_EXECIO_DISKR_DEFAULT",
+        "TEST_EXECIO_DISKR_FIFO",
+        "TEST_EXECIO_DISKR_LIFO",
+        "TEST_EXECIO_DISKR_SKIP_THEN_STEM",
+        "TEST_EXECIO_DISKR_START_AT_THREE_READ_FOUR_FIFO",
+        "TEST_EXECIO_DISKR_START_AT_THREE_READ_FOUR_STEM",
+        "TEST_EXECIO_DISKR_START_AT_TWO_FIFO",
+        "TEST_EXECIO_DISKR_START_AT_TWO_STEM",
+        "TEST_EXECIO_DISKR_STEM",
+        "TEST_EXECIO_DISKR_STEM_SKIP",
+        "TEST_EXECIO_DISKR_TWO_LINES_FIFO",
+        "TEST_EXECIO_DISKR_TWO_LINES_STEM",
+        "TEST_EXECIO_DISKW_DEFAULT",
+        "TEST_EXECIO_DISKW_STEM",
+        "TEST_HI",
+        "TEST_TE",
+    },
+    passed: {
+        "TEST_EXECIO_DISKR_DEFAULT",
+        "TEST_EXECIO_DISKR_FIFO",
+        "TEST_EXECIO_DISKR_LIFO",
+        "TEST_EXECIO_DISKR_SKIP_THEN_STEM",
+        "TEST_EXECIO_DISKR_START_AT_THREE_READ_FOUR_FIFO",
+        "TEST_EXECIO_DISKR_START_AT_THREE_READ_FOUR_STEM",
+        "TEST_EXECIO_DISKR_START_AT_TWO_FIFO",
+        "TEST_EXECIO_DISKR_START_AT_TWO_STEM",
+        "TEST_EXECIO_DISKR_STEM",
+        "TEST_EXECIO_DISKR_STEM_SKIP",
+        "TEST_EXECIO_DISKR_TWO_LINES_FIFO",
+        "TEST_EXECIO_DISKR_TWO_LINES_STEM",
+        "TEST_EXECIO_DISKW_DEFAULT",
+        "TEST_EXECIO_DISKW_STEM",
+        "TEST_HI",
+        "TEST_TE",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "16",
+    ),
+    took: 42.408142ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-554-oracle-extensions__hostemu__hostemu/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-554-oracle-extensions__hostemu__hostemu/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 583, modified: SystemTime { tv_sec: 1793410822, tv_nsec: 949854876 }, accessed: SystemTime { tv_sec: 1793410822, tv_nsec: 953770626 }, created: SystemTime { tv_sec: 1793410822, tv_nsec: 930482228 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-554-oracle-extensions__hostemu__hostemu/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-554-oracle-extensions__hostemu__hostemu/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-554-oracle-extensions__hostemu__hostemu/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410822, tv_nsec: 931709544 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-554-oracle-extensions__hostemu__hostemu/run/ooRexx/extensions/hostemu/hostemu.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-554-oracle-extensions__hostemu__hostemu/run/ooRexx/extensions/hostemu/hostemu.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 9409, modified: SystemTime { tv_sec: 1793410822, tv_nsec: 912083724 }, accessed: SystemTime { tv_sec: 1793410822, tv_nsec: 949424528 }, created: SystemTime { tv_sec: 1793410822, tv_nsec: 911507860 }, .. })

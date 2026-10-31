@@ -1,0 +1,29 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-508-oracle-base__class__String__arithmetic/run
+TZ=None
+status=Some(0) ended=Exited(0) took=16.626215ms
+GroupRun {
+    group: "base/class/String/arithmetic",
+    expected: {},
+    started: {
+        "TEST_ARITHMETIC_OPERATORS",
+    },
+    passed: {
+        "TEST_ARITHMETIC_OPERATORS",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "1",
+    ),
+    took: 16.626215ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-508-oracle-base__class__String__arithmetic/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-508-oracle-base__class__String__arithmetic/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 34, modified: SystemTime { tv_sec: 1793410822, tv_nsec: 20377719 }, accessed: SystemTime { tv_sec: 1793410822, tv_nsec: 22174209 }, created: SystemTime { tv_sec: 1793410822, tv_nsec: 18935349 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-508-oracle-base__class__String__arithmetic/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-508-oracle-base__class__String__arithmetic/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-508-oracle-base__class__String__arithmetic/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410822, tv_nsec: 18935349 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-508-oracle-base__class__String__arithmetic/run/ooRexx/base/class/String/arithmetic.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-508-oracle-base__class__String__arithmetic/run/ooRexx/base/class/String/arithmetic.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 3937, modified: SystemTime { tv_sec: 1793410822, tv_nsec: 5210823 }, accessed: SystemTime { tv_sec: 1793410822, tv_nsec: 18935349 }, created: SystemTime { tv_sec: 1793410822, tv_nsec: 4024526 }, .. })

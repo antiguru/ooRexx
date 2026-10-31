@@ -1,0 +1,49 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-719-oracle-base__class__MutableBuffer__delStr/run
+TZ=None
+status=Some(0) ended=Exited(0) took=21.648294ms
+GroupRun {
+    group: "base/class/MutableBuffer/delStr",
+    expected: {},
+    started: {
+        "TESTDELSTR",
+        "TESTDELSTRSYNTAX2",
+        "TESTDELSTRSYNTAX3",
+        "TESTDELSTRSYNTAX4",
+        "TESTDELSTRSYNTAX5",
+        "TEST_MUTABLEBUFFER_DELSTR_ARG_0",
+        "TEST_MUTABLEBUFFER_DELSTR_ARG_1",
+        "TEST_MUTABLEBUFFER_DELSTR_ARG_2_NONE_0",
+        "TEST_MUTABLEBUFFER_DELSTR_ARG_2_NONE_NEGATIVE",
+        "TEST_MUTABLEBUFFER_DELSTR_ARG_2_NONE_NIL",
+        "TEST_MUTABLEBUFFER_DELSTR_ARG_3",
+    },
+    passed: {
+        "TESTDELSTR",
+        "TESTDELSTRSYNTAX2",
+        "TESTDELSTRSYNTAX3",
+        "TESTDELSTRSYNTAX4",
+        "TESTDELSTRSYNTAX5",
+        "TEST_MUTABLEBUFFER_DELSTR_ARG_0",
+        "TEST_MUTABLEBUFFER_DELSTR_ARG_1",
+        "TEST_MUTABLEBUFFER_DELSTR_ARG_2_NONE_0",
+        "TEST_MUTABLEBUFFER_DELSTR_ARG_2_NONE_NEGATIVE",
+        "TEST_MUTABLEBUFFER_DELSTR_ARG_2_NONE_NIL",
+        "TEST_MUTABLEBUFFER_DELSTR_ARG_3",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "11",
+    ),
+    took: 21.648294ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-719-oracle-base__class__MutableBuffer__delStr/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-719-oracle-base__class__MutableBuffer__delStr/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 393, modified: SystemTime { tv_sec: 1793410827, tv_nsec: 601282306 }, accessed: SystemTime { tv_sec: 1793410827, tv_nsec: 603419659 }, created: SystemTime { tv_sec: 1793410827, tv_nsec: 595419893 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-719-oracle-base__class__MutableBuffer__delStr/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-719-oracle-base__class__MutableBuffer__delStr/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-719-oracle-base__class__MutableBuffer__delStr/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410827, tv_nsec: 603419659 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-719-oracle-base__class__MutableBuffer__delStr/run/ooRexx/base/class/MutableBuffer/delStr.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-719-oracle-base__class__MutableBuffer__delStr/run/ooRexx/base/class/MutableBuffer/delStr.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 4889, modified: SystemTime { tv_sec: 1793410827, tv_nsec: 586527219 }, accessed: SystemTime { tv_sec: 1793410827, tv_nsec: 595419893 }, created: SystemTime { tv_sec: 1793410827, tv_nsec: 585830438 }, .. })

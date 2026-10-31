@@ -1,0 +1,35 @@
+
+running 30 tests
+test arms::tests::a_figure_carries_its_own_noise ... ok
+test arms::tests::a_round_is_a_permutation ... ok
+test arms::tests::an_ambiguous_bound_is_refused_and_a_missing_one_is_not_invented ... ok
+test arms::tests::no_cell_keeps_a_slot ... ok
+test arms::tests::only_a_fixed_workload_runs_at_one_size ... ok
+test arms::tests::the_benchmark_programs_all_classify ... ok
+test arms::tests::too_few_rounds_is_not_a_measurement ... ok
+test child::tests::a_missing_counter_is_not_a_zero ... ok
+test child::tests::a_rust_side_sets_no_engine_environment_and_names_its_arm ... ok
+test child::tests::a_scaled_counter_is_not_a_count ... ok
+test child::tests::a_total_counter_does_not_answer_for_a_user_one ... ok
+test child::tests::only_extcall_gets_a_library_path ... ok
+test child::tests::perf_counter_lines_parse ... ok
+test child::tests::the_bare_wrapper_runs_the_command_in_the_working_directory ... ok
+test child::tests::the_default_wrapper_is_the_bare_one ... ok
+test child::tests::the_perf_argument_names_the_events_the_reading_is_parsed_by ... ok
+test child::tests::the_wrapper_nests_taskset_outside_perf_outside_the_interpreter ... ok
+test tests::the_benchmark_list_accounts_for_every_program ... ok
+test tests::the_control_differs_from_its_axis_only_in_the_loop_bound ... ok
+test tests::the_exemptions_are_true_of_the_programs_they_name ... ok
+test timing::tests::a_command_that_fails_reports_its_code_rather_than_erroring ... ok
+test timing::tests::a_single_sample_has_no_interval ... ok
+test timing::tests::collect_returns_the_child_output_on_the_right_descriptor ... ok
+test timing::tests::discard_keeps_the_output_out_of_the_result ... ok
+test timing::tests::env_reaches_the_child ... ok
+test timing::tests::five_samples_cannot_reach_95_percent ... ok
+test timing::tests::more_samples_narrow_the_interval ... ok
+test timing::tests::nine_samples_at_95_percent_give_the_second_and_eighth ... ok
+test timing::tests::summary_of_nothing_is_nothing ... ok
+test timing::tests::summary_sorts_and_reduces ... ok
+
+test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

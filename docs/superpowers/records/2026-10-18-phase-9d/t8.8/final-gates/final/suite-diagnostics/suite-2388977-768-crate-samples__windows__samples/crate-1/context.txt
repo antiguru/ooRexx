@@ -1,0 +1,26 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-768-crate-samples__windows__samples/run
+TZ=None
+status=Some(0) ended=Exited(0) took=61.000982ms
+GroupRun {
+    group: "samples/windows/samples",
+    expected: {},
+    started: {},
+    passed: {},
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "0",
+    ),
+    took: 61.000982ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-768-crate-samples__windows__samples/started.txt canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-768-crate-samples__windows__samples/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-768-crate-samples__windows__samples/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-768-crate-samples__windows__samples/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410829, tv_nsec: 96239930 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-768-crate-samples__windows__samples/run/ooRexx/samples/windows/samples.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-768-crate-samples__windows__samples/run/ooRexx/samples/windows/samples.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 4671, modified: SystemTime { tv_sec: 1793410829, tv_nsec: 92933942 }, accessed: SystemTime { tv_sec: 1793410829, tv_nsec: 127375468 }, created: SystemTime { tv_sec: 1793410829, tv_nsec: 92511284 }, .. })

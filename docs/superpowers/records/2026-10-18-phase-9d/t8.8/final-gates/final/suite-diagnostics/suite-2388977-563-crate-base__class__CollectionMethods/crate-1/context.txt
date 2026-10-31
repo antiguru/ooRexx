@@ -1,0 +1,47 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-563-crate-base__class__CollectionMethods/run
+TZ=None
+status=Some(0) ended=Exited(0) took=152.213579ms
+GroupRun {
+    group: "base/class/CollectionMethods",
+    expected: {},
+    started: {
+        "TEST_ARRAY_FILL",
+        "TEST_COLLECTION_EMPTY",
+        "TEST_COLLECTION_NEW",
+        "TEST_COLLECTION_NEW_2_ARGS",
+        "TEST_COLLECTION_NEW_ARG_1_NEGATIVE",
+        "TEST_COLLECTION_NEW_ARG_1_NIL",
+        "TEST_COLLECTION_NEW_ARG_1_NOTNUMERIC",
+        "TEST_COLLECTION_NEW_ARG_1_NOTWHOLE",
+        "TEST_MAPCOLLECTION_PUTALL",
+        "TEST_ORDEREDCOLLECTION_APPENDALL",
+    },
+    passed: {
+        "TEST_ARRAY_FILL",
+        "TEST_COLLECTION_EMPTY",
+        "TEST_COLLECTION_NEW",
+        "TEST_COLLECTION_NEW_2_ARGS",
+        "TEST_COLLECTION_NEW_ARG_1_NEGATIVE",
+        "TEST_COLLECTION_NEW_ARG_1_NIL",
+        "TEST_COLLECTION_NEW_ARG_1_NOTNUMERIC",
+        "TEST_COLLECTION_NEW_ARG_1_NOTWHOLE",
+        "TEST_MAPCOLLECTION_PUTALL",
+        "TEST_ORDEREDCOLLECTION_APPENDALL",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "100",
+    ),
+    took: 152.213579ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-563-crate-base__class__CollectionMethods/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-563-crate-base__class__CollectionMethods/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 3610, modified: SystemTime { tv_sec: 1793410823, tv_nsec: 200392721 }, accessed: SystemTime { tv_sec: 1793410823, tv_nsec: 243546087 }, created: SystemTime { tv_sec: 1793410823, tv_nsec: 151548755 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-563-crate-base__class__CollectionMethods/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-563-crate-base__class__CollectionMethods/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-563-crate-base__class__CollectionMethods/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410823, tv_nsec: 243546087 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-563-crate-base__class__CollectionMethods/run/ooRexx/base/class/CollectionMethods.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-563-crate-base__class__CollectionMethods/run/ooRexx/base/class/CollectionMethods.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 7701, modified: SystemTime { tv_sec: 1793410823, tv_nsec: 95954435 }, accessed: SystemTime { tv_sec: 1793410823, tv_nsec: 143548987 }, created: SystemTime { tv_sec: 1793410823, tv_nsec: 94904254 }, .. })

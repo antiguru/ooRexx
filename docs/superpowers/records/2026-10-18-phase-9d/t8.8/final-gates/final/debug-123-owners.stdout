@@ -1,0 +1,11 @@
+
+running 6 tests
+test assert_owner_strings_are_split_table_phases ... ok
+test every_excluded_builtin_names_a_phase_that_owes_it ... ok
+test only_backslash_is_unreachable ... ok
+test out_of_scope_set_matches_the_committed_expectation ... ok
+test the_two_harnesses_include_this_exact_file ... ok
+test variant_counts_match_the_audited_split ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

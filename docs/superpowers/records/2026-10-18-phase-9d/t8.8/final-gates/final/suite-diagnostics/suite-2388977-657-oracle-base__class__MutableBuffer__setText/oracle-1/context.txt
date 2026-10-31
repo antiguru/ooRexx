@@ -1,0 +1,35 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-657-oracle-base__class__MutableBuffer__setText/run
+TZ=None
+status=Some(0) ended=Exited(0) took=26.677424ms
+GroupRun {
+    group: "base/class/MutableBuffer/setText",
+    expected: {},
+    started: {
+        "TEST_SETTEXT",
+        "TEST_SETTEXT_NO_ARG",
+        "TEST_SETTEXT_NO_STRING",
+        "TEST_SETTEXT_TWO_ARGS",
+    },
+    passed: {
+        "TEST_SETTEXT",
+        "TEST_SETTEXT_NO_ARG",
+        "TEST_SETTEXT_NO_STRING",
+        "TEST_SETTEXT_TWO_ARGS",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "4",
+    ),
+    took: 26.677424ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-657-oracle-base__class__MutableBuffer__setText/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-657-oracle-base__class__MutableBuffer__setText/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 110, modified: SystemTime { tv_sec: 1793410825, tv_nsec: 813643256 }, accessed: SystemTime { tv_sec: 1793410825, tv_nsec: 819038466 }, created: SystemTime { tv_sec: 1793410825, tv_nsec: 813205099 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-657-oracle-base__class__MutableBuffer__setText/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-657-oracle-base__class__MutableBuffer__setText/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-657-oracle-base__class__MutableBuffer__setText/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410825, tv_nsec: 727474058 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-657-oracle-base__class__MutableBuffer__setText/run/ooRexx/base/class/MutableBuffer/setText.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-657-oracle-base__class__MutableBuffer__setText/run/ooRexx/base/class/MutableBuffer/setText.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 4547, modified: SystemTime { tv_sec: 1793410825, tv_nsec: 793512799 }, accessed: SystemTime { tv_sec: 1793410825, tv_nsec: 812737852 }, created: SystemTime { tv_sec: 1793410825, tv_nsec: 792596215 }, .. })

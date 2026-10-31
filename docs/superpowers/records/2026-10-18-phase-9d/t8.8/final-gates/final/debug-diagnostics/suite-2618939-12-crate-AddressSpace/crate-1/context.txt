@@ -1,0 +1,29 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2618939-12-crate-AddressSpace/run
+TZ=None
+status=Some(0) ended=Exited(0) took=81.895214ms
+GroupRun {
+    group: "AddressSpace",
+    expected: {},
+    started: {
+        "TEST_LIMIT",
+    },
+    passed: {
+        "TEST_LIMIT",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: UlimitFallback,
+    tests_ran: Some(
+        "1",
+    ),
+    took: 81.895214ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2618939-12-crate-AddressSpace/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2618939-12-crate-AddressSpace/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 19, modified: SystemTime { tv_sec: 1793413015, tv_nsec: 858383413 }, accessed: SystemTime { tv_sec: 1793413015, tv_nsec: 880342506 }, created: SystemTime { tv_sec: 1793413015, tv_nsec: 852343313 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2618939-12-crate-AddressSpace/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2618939-12-crate-AddressSpace/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2618939-12-crate-AddressSpace/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 90680520, modified: SystemTime { tv_sec: 1793406683, tv_nsec: 668453788 }, accessed: SystemTime { tv_sec: 1793413015, tv_nsec: 803736732 }, created: SystemTime { tv_sec: 1793406683, tv_nsec: 636454712 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2618939-12-crate-AddressSpace/run/ooRexx/AddressSpace.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2618939-12-crate-AddressSpace/run/ooRexx/AddressSpace.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 568, modified: SystemTime { tv_sec: 1793413015, tv_nsec: 802949864 }, accessed: SystemTime { tv_sec: 1793413015, tv_nsec: 852343313 }, created: SystemTime { tv_sec: 1793413015, tv_nsec: 802347040 }, .. })

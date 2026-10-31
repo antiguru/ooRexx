@@ -219,7 +219,7 @@ gate:phase-9c-gate.md:146	divergence	queued-probes/lossy/lossy.rex:1	closed:b53b
 2026-10-19-sigterm-in-trace-delivery.md	divergence	-	closed:fb86ce94f	gap	closed:fb86ce94f
 2026-10-19-guarded-trace-destination-spin.md	divergence	-	phase:10	9d if lifting the pinned-guard-wait limit is tractable, else Phase 10	phase:10
 2026-10-19-trace-destination-recursion-oom.md	divergence	-	closed:fb86ce94f	Task 6.10 regression	closed:fb86ce94f
-2026-10-18-sysfiletree-tree-directory-flaky.md	process	-	9d	flaky test	9d
+2026-10-18-sysfiletree-tree-directory-flaky.md	process	-	closed:6f2c1346e	flaky test	closed:6f2c1346e
 2026-10-20-halt-after-signal-on-syntax.md	divergence	-	closed:918e67f90	broken report for a HALT taken at a SIGNAL ON SYNTAX label	closed:918e67f90
 2026-10-20-lineout-buffered-until-close.md	divergence	-	not-a-divergence	oracle buffers lineout to a named stream until close; rexxref permits write-through (Moritz 2026-10-20)	not-a-divergence
 2026-10-20-call-on-delayed-reraise.md	divergence	-	closed:918e67f90	a CALL ON condition raised again while delayed runs the handler twice	closed:918e67f90

@@ -1,0 +1,33 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-506-oracle-base__class__String__append/run
+TZ=None
+status=Some(0) ended=Exited(0) took=16.558006ms
+GroupRun {
+    group: "base/class/String/append",
+    expected: {},
+    started: {
+        "TEST_STRING_APPEND",
+        "TEST_STRING_APPEND_NO_ARG",
+        "TEST_STRING_APPEND_TWO_ARGS",
+    },
+    passed: {
+        "TEST_STRING_APPEND",
+        "TEST_STRING_APPEND_NO_ARG",
+        "TEST_STRING_APPEND_TWO_ARGS",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "3",
+    ),
+    took: 16.558006ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-506-oracle-base__class__String__append/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-506-oracle-base__class__String__append/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 97, modified: SystemTime { tv_sec: 1793410821, tv_nsec: 934772955 }, accessed: SystemTime { tv_sec: 1793410821, tv_nsec: 937211897 }, created: SystemTime { tv_sec: 1793410821, tv_nsec: 927584248 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-506-oracle-base__class__String__append/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-506-oracle-base__class__String__append/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-506-oracle-base__class__String__append/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410821, tv_nsec: 914685918 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-506-oracle-base__class__String__append/run/ooRexx/base/class/String/append.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-506-oracle-base__class__String__append/run/ooRexx/base/class/String/append.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 3933, modified: SystemTime { tv_sec: 1793410821, tv_nsec: 920320420 }, accessed: SystemTime { tv_sec: 1793410821, tv_nsec: 927584248 }, created: SystemTime { tv_sec: 1793410821, tv_nsec: 919154573 }, .. })

@@ -1,0 +1,95 @@
+==============================================================================
+rexx-exec bif row report -- ootest/ooRexx/base/bif @ r13178
+*** REPORT MODE. Set REXX_BIF_GATE=1 to fail on an unaccounted row. ***
+THIS HEADLINE IS A MEASUREMENT, NOT A THRESHOLD -- base/bif covers the whole builtin surface, including the names D4 excludes and the builtins later phases own.
+4992 of 4999 value rows passing, 186 of 186 raise rows passing, out of 6293 assertSame calls
+per group (rows passing/total):
+  ABBREV           113/113
+  ABS               49/49
+  B2X               37/37
+  BEEP               3/3
+  BITAND           101/101
+  BITOR            124/124
+  BITXOR           136/136
+  C2D              102/102
+  C2X               33/33
+  CENTER            96/96
+  CENTRE            96/96
+  CHANGESTR          8/8
+  CHARIN             3/3
+  CHAROUT            2/2
+  CHARS              1/1
+  COMPARE          131/131
+  COPIES           447/447
+  COUNTSTR           4/4
+  D2C               50/50
+  D2X               57/57
+  DATATYPE           6/6
+  DATE             716/716
+  DELSTR            79/79
+  DELWORD           65/65
+  DIGITS             5/5
+  ERRORTEXT        101/101
+  FORM               2/2
+  FORMAT           720/720
+  INSERT            80/80
+  LASTPOS          184/184
+  LEFT              32/32
+  LENGTH            32/32
+  LINES              6/6
+  LOWER              5/5
+  MAX               16/16
+  MIN               12/12
+  OVERLAY           62/62
+  POS               69/69
+  QUALIFY            2/2
+  QUEUED             1/1
+  REVERSE           26/26
+  RIGHT             36/36
+  RXQUEUE            0/5
+  SIGN              36/36
+  SPACE             69/69
+  STREAM            30/32
+  STRIP             83/83
+  SUBSTR            64/64
+  SUBWORD          122/122
+  SYMBOL            28/28
+  TIME             122/122
+  TRANSLATE         27/27
+  TRUNC             39/39
+  UPPER              5/5
+  VALUE             40/40
+  VERIFY            84/84
+  WORD              56/56
+  WORDINDEX         55/55
+  WORDLENGTH        55/55
+  WORDPOS          177/177
+  WORDS             39/39
+  X2B               49/49
+  X2C               31/31
+  X2D               66/66
+  XRANGE            51/51
+outside the extracted population, by reason (bodies, assertSame calls):
+  outside any test-prefixed method                  2       2
+  inside a ::routine body                           1       5
+  inside a comment, not a call                      3      25
+  on a continued line                               0       0
+  not first on its line                             0       0
+  unparsed call shape                               0       0
+  at or after a self~expectSyntax                 189     195
+  body uses a message send                        101     418
+  body uses an unsupported statement              112     467
+  NUMERIC operand is not a literal                  9      14
+  a .local fixture the file sets twice            121     121
+  calls a ::routine defined in the file             1       1
+  unassigned symbol under ::options novalue        10      28
+  body sets another kind of expectation             0       0
+  the source bytes are not UTF-8                    6      11
+  an earlier assertion assigned via VALUE           1       6
+  reads the clock or the random generator           1       1
+not passing, by what would unblock it:
+  MISMATCH                                      2
+  Phase 10 Rxapi                                5
+first construct hit, for a row that failed loudly:
+  routine "RXQUEUE"                             5
+==============================================================================

@@ -1,0 +1,49 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-386-oracle-base__class__collections__properties/run
+TZ=None
+status=Some(0) ended=Exited(0) took=27.296176ms
+GroupRun {
+    group: "base/class/collections/properties",
+    expected: {},
+    started: {
+        "TEST_1",
+        "TEST_10",
+        "TEST_11",
+        "TEST_2",
+        "TEST_3",
+        "TEST_4",
+        "TEST_5",
+        "TEST_6",
+        "TEST_7",
+        "TEST_8",
+        "TEST_9",
+    },
+    passed: {
+        "TEST_1",
+        "TEST_10",
+        "TEST_11",
+        "TEST_2",
+        "TEST_3",
+        "TEST_4",
+        "TEST_5",
+        "TEST_6",
+        "TEST_7",
+        "TEST_8",
+        "TEST_9",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "11",
+    ),
+    took: 27.296176ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-386-oracle-base__class__collections__properties/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-386-oracle-base__class__collections__properties/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 167, modified: SystemTime { tv_sec: 1793410815, tv_nsec: 844611613 }, accessed: SystemTime { tv_sec: 1793410815, tv_nsec: 850361122 }, created: SystemTime { tv_sec: 1793410815, tv_nsec: 843313400 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-386-oracle-base__class__collections__properties/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-386-oracle-base__class__collections__properties/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-386-oracle-base__class__collections__properties/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410815, tv_nsec: 737561610 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-386-oracle-base__class__collections__properties/run/ooRexx/base/class/collections/properties.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-386-oracle-base__class__collections__properties/run/ooRexx/base/class/collections/properties.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 7452, modified: SystemTime { tv_sec: 1793410815, tv_nsec: 822654237 }, accessed: SystemTime { tv_sec: 1793410815, tv_nsec: 842701437 }, created: SystemTime { tv_sec: 1793410815, tv_nsec: 822017985 }, .. })

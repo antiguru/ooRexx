@@ -1,0 +1,13 @@
+{
+  "added": [
+    "fixtures::tests::a_fractional_deadline_is_not_truncated_to_whole_seconds",
+    "fixtures::tests::sysfiletree_launches_use_distinct_populated_child_temporary_directories",
+    "fixtures::tests::sysfiletree_temporary_directory_selection_is_exact",
+    "suite_rows::tests::only_tests_of_test_classes_can_own_suite_rows",
+    "suite_rows::tests::owner_equality_covers_reaching_group_and_captured_refusal"
+  ],
+  "removed": [],
+  "reconciled_renames": {
+    "fixtures::tests::the_suite_revision_is_the_recorded_one": "fixtures::tests::the_recorded_suite_revision_is_a_revision_number"
+  }
+}

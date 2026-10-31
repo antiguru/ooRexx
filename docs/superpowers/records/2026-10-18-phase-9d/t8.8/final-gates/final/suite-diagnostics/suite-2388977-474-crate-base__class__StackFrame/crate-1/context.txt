@@ -1,0 +1,49 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-474-crate-base__class__StackFrame/run
+TZ=None
+status=Some(0) ended=Exited(0) took=147.005455ms
+GroupRun {
+    group: "base/class/StackFrame",
+    expected: {},
+    started: {
+        "TESTCOMPILEFRAME",
+        "TESTCONTEXTENTRY",
+        "TESTEXTERNALNATIVECODEFRAME",
+        "TESTINTERNALCALLFRAME",
+        "TESTINTERPRETFRAME",
+        "TESTMETHODFRAME",
+        "TESTNATIVECODEFRAME",
+        "TESTPROGRAMFRAME",
+        "TESTROUTINEFRAME",
+        "TEST_BUG_STACKFRAME_NAME",
+        "TEST_INVOCATION_ENTRY",
+    },
+    passed: {
+        "TESTCOMPILEFRAME",
+        "TESTCONTEXTENTRY",
+        "TESTEXTERNALNATIVECODEFRAME",
+        "TESTINTERNALCALLFRAME",
+        "TESTINTERPRETFRAME",
+        "TESTMETHODFRAME",
+        "TESTNATIVECODEFRAME",
+        "TESTPROGRAMFRAME",
+        "TESTROUTINEFRAME",
+        "TEST_BUG_STACKFRAME_NAME",
+        "TEST_INVOCATION_ENTRY",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "11",
+    ),
+    took: 147.005455ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-474-crate-base__class__StackFrame/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-474-crate-base__class__StackFrame/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 308, modified: SystemTime { tv_sec: 1793410820, tv_nsec: 270949178 }, accessed: SystemTime { tv_sec: 1793410820, tv_nsec: 295631570 }, created: SystemTime { tv_sec: 1793410820, tv_nsec: 263632498 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-474-crate-base__class__StackFrame/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-474-crate-base__class__StackFrame/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-474-crate-base__class__StackFrame/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410820, tv_nsec: 223633657 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-474-crate-base__class__StackFrame/run/ooRexx/base/class/StackFrame.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-474-crate-base__class__StackFrame/run/ooRexx/base/class/StackFrame.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 9599, modified: SystemTime { tv_sec: 1793410820, tv_nsec: 151138673 }, accessed: SystemTime { tv_sec: 1793410820, tv_nsec: 259632613 }, created: SystemTime { tv_sec: 1793410820, tv_nsec: 148259813 }, .. })

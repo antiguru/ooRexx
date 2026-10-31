@@ -1,0 +1,9 @@
+
+running 4 tests
+test a_child_writes_no_sim_line_into_output_its_parent_captures ... ok
+test a_damaged_trace_is_refused_before_the_run ... ok
+test a_seed_gives_one_output_in_two_processes ... ok
+test a_seed_gives_one_trace_hash_in_two_processes ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+

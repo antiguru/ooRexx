@@ -1,0 +1,38 @@
+{
+  "executable": "/tmp/codex-p9d-t88-target/debug/deps/errors-cc8224f818475da2",
+  "argv": [
+    "/tmp/codex-p9d-t88-target/debug/deps/errors-cc8224f818475da2",
+    "--test-threads=1",
+    "--nocapture"
+  ],
+  "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory",
+  "cargo_env": {
+    "CARGO": "/home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo",
+    "CARGO_HOME": "/home/moritz/.cargo",
+    "CARGO_MANIFEST_DIR": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory",
+    "CARGO_MANIFEST_PATH": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory/Cargo.toml",
+    "CARGO_PKG_AUTHORS": "",
+    "CARGO_PKG_DESCRIPTION": "",
+    "CARGO_PKG_HOMEPAGE": "",
+    "CARGO_PKG_LICENSE": "CPL-1.0",
+    "CARGO_PKG_LICENSE_FILE": "",
+    "CARGO_PKG_NAME": "rexx-inventory",
+    "CARGO_PKG_README": "",
+    "CARGO_PKG_REPOSITORY": "",
+    "CARGO_PKG_RUST_VERSION": "1.96.1",
+    "CARGO_PKG_VERSION": "0.1.0",
+    "CARGO_PKG_VERSION_MAJOR": "0",
+    "CARGO_PKG_VERSION_MINOR": "1",
+    "CARGO_PKG_VERSION_PATCH": "0",
+    "CARGO_PKG_VERSION_PRE": "",
+    "OUT_DIR": "/tmp/codex-p9d-t88-target/debug/build/rexx-inventory-9aa47a9c531f0636/out",
+    "LD_LIBRARY_PATH": "/tmp/codex-p9d-t88-target/debug/build/alloca-fc43bf886308a138/out:/tmp/codex-p9d-t88-target/debug:/tmp/codex-p9d-t88-target/debug/deps:/home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/lib:/home/moritz/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib",
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_TARGET_DIR": "/tmp/codex-p9d-t88-target",
+    "CARGO_BUILD_JOBS": "4",
+    "REXX_CORPUS_GATE": "1",
+    "REXX_SUITE_DIAGNOSTICS": "/tmp/codex-p9d-t88-final-gates-final/debug-diagnostics"
+  },
+  "sha256": "801a4412f18a86c0d26a6d187aeea8e1cba5cab6cee3acf17979d5c05b85a8bf",
+  "source_commit": "b51a9466a5ccfa365bcf74e232f6e24c23fb9765"
+}

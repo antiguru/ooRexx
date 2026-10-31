@@ -1,0 +1,29 @@
+
+running 24 tests
+test a_call_context_is_shaped_as_a_method_context ... ok
+test a_condition_is_what_decode_condition_info_fills ... ok
+test a_method_context_has_a_thread_a_table_and_arguments ... ok
+test a_package_entry_is_what_an_extension_publishes ... ok
+test a_populated_table_refuses_exactly_the_members_it_names ... ok
+test a_redirector_context_is_a_table_alone ... ok
+test a_refusing_member_aborts_exactly_where_no_return_is_safe ... ok
+test a_table_row_is_what_the_entry_macros_expand_to ... ok
+test a_thread_context_has_an_instance_and_a_table ... ok
+test a_value_descriptor_is_a_word_and_two_shorts ... ok
+test a_wrapper_puts_the_public_context_first ... ok
+test an_exit_context_is_shaped_as_a_method_context ... ok
+test an_instance_has_a_table_and_application_data ... ok
+test every_interface_declares_the_members_the_header_does ... ok
+test every_interface_is_one_word_per_member ... ok
+test every_interface_version_is_the_frozen_headers ... ok
+test every_member_has_the_type_the_header_declares ... ok
+test every_refusing_member_is_owed_by_phase_10_for_embedding ... ok
+test the_populated_tables_carry_the_interface_version ... ok
+test the_refusal_comparison_tells_a_filled_member_from_a_stub ... ok
+test the_scan_reads_one_struct_at_a_time ... ok
+test the_test_extensions_reach_only_members_that_answer ... ok
+test the_type_comparison_sees_a_width_and_an_argument ... ok
+test the_wrapper_scan_follows_one_wrapper_into_another ... ok
+
+test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s
+

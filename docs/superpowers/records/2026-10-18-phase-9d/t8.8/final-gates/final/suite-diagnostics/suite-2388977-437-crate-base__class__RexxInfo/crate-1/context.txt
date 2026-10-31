@@ -1,0 +1,69 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-437-crate-base__class__RexxInfo/run
+TZ=None
+status=Some(0) ended=Exited(0) took=101.512998ms
+GroupRun {
+    group: "base/class/RexxInfo",
+    expected: {},
+    started: {
+        "TEST_REXXINFO_ARCHITECTURE",
+        "TEST_REXXINFO_CASESENSITIVEFILES",
+        "TEST_REXXINFO_DATE",
+        "TEST_REXXINFO_DIGITS",
+        "TEST_REXXINFO_DIRECTORYSEPARATOR",
+        "TEST_REXXINFO_ENDOFLINE",
+        "TEST_REXXINFO_EXECUTABLE",
+        "TEST_REXXINFO_EXPONENT",
+        "TEST_REXXINFO_FORM",
+        "TEST_REXXINFO_FUZZ",
+        "TEST_REXXINFO_INTERNAL",
+        "TEST_REXXINFO_LANGUAGELEVEL",
+        "TEST_REXXINFO_LIBRARYPATH",
+        "TEST_REXXINFO_MAJORVERSION_RELEASE_MODIFICATION_VERSION",
+        "TEST_REXXINFO_MAXARRAYSIZE",
+        "TEST_REXXINFO_MAXPATHLENGTH",
+        "TEST_REXXINFO_NAME",
+        "TEST_REXXINFO_PACKAGE",
+        "TEST_REXXINFO_PATHSEPARATOR",
+        "TEST_REXXINFO_PLATFORM",
+        "TEST_REXXINFO_REVISION",
+    },
+    passed: {
+        "TEST_REXXINFO_ARCHITECTURE",
+        "TEST_REXXINFO_CASESENSITIVEFILES",
+        "TEST_REXXINFO_DATE",
+        "TEST_REXXINFO_DIGITS",
+        "TEST_REXXINFO_DIRECTORYSEPARATOR",
+        "TEST_REXXINFO_ENDOFLINE",
+        "TEST_REXXINFO_EXECUTABLE",
+        "TEST_REXXINFO_EXPONENT",
+        "TEST_REXXINFO_FORM",
+        "TEST_REXXINFO_FUZZ",
+        "TEST_REXXINFO_INTERNAL",
+        "TEST_REXXINFO_LANGUAGELEVEL",
+        "TEST_REXXINFO_LIBRARYPATH",
+        "TEST_REXXINFO_MAJORVERSION_RELEASE_MODIFICATION_VERSION",
+        "TEST_REXXINFO_MAXARRAYSIZE",
+        "TEST_REXXINFO_MAXPATHLENGTH",
+        "TEST_REXXINFO_NAME",
+        "TEST_REXXINFO_PACKAGE",
+        "TEST_REXXINFO_PATHSEPARATOR",
+        "TEST_REXXINFO_PLATFORM",
+        "TEST_REXXINFO_REVISION",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "21",
+    ),
+    took: 101.512998ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-437-crate-base__class__RexxInfo/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-437-crate-base__class__RexxInfo/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 714, modified: SystemTime { tv_sec: 1793410819, tv_nsec: 40377831 }, accessed: SystemTime { tv_sec: 1793410819, tv_nsec: 59667409 }, created: SystemTime { tv_sec: 1793410819, tv_nsec: 31668221 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-437-crate-base__class__RexxInfo/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-437-crate-base__class__RexxInfo/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-437-crate-base__class__RexxInfo/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410819, tv_nsec: 39641372 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-437-crate-base__class__RexxInfo/run/ooRexx/base/class/RexxInfo.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-437-crate-base__class__RexxInfo/run/ooRexx/base/class/RexxInfo.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 10747, modified: SystemTime { tv_sec: 1793410818, tv_nsec: 963415186 }, accessed: SystemTime { tv_sec: 1793410819, tv_nsec: 31668221 }, created: SystemTime { tv_sec: 1793410818, tv_nsec: 962862981 }, .. })

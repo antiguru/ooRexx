@@ -1,0 +1,10 @@
+
+running 5 tests
+test competing_child_waiters_accept_either_valid_winner ... ok
+test dropping_a_waitable_popen_consumes_its_child_before_exec ... ok
+test pgid_is_the_parents_group ... ok
+test sys_wait_returns_the_raw_status_of_an_owned_child ... ok
+test sys_wait_with_no_child_answers_minus_one ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.15s
+

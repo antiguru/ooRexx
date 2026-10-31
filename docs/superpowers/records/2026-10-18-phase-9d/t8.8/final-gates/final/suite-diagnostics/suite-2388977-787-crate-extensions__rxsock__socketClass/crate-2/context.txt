@@ -1,0 +1,33 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-787-crate-extensions__rxsock__socketClass/run
+TZ=None
+status=Some(137) ended=Exited(137) took=60.041675537s
+GroupRun {
+    group: "extensions/rxsock/socketClass",
+    expected: {},
+    started: {
+        "TEST_001",
+        "TEST_002",
+        "TEST_003",
+        "TEST_004",
+        "TEST_005",
+        "TEST_006",
+    },
+    passed: {},
+    failed: {},
+    blocked: {
+        "TEST_005": "timeout after 60 s",
+        "TEST_006": "timeout after 60 s",
+    },
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 2,
+    ended_normally: false,
+    cap: Memcap,
+    tests_ran: None,
+    took: 120.094069074s,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-787-crate-extensions__rxsock__socketClass/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-787-crate-extensions__rxsock__socketClass/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 85, modified: SystemTime { tv_sec: 1793410893, tv_nsec: 842722240 }, accessed: SystemTime { tv_sec: 1793410953, tv_nsec: 811759143 }, created: SystemTime { tv_sec: 1793410893, tv_nsec: 837498794 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-787-crate-extensions__rxsock__socketClass/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-787-crate-extensions__rxsock__socketClass/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-787-crate-extensions__rxsock__socketClass/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410910, tv_nsec: 185024636 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-787-crate-extensions__rxsock__socketClass/run/ooRexx/extensions/rxsock/socketClass.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-787-crate-extensions__rxsock__socketClass/run/ooRexx/extensions/rxsock/socketClass.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 13020, modified: SystemTime { tv_sec: 1793410893, tv_nsec: 775291478 }, accessed: SystemTime { tv_sec: 1793410893, tv_nsec: 837498794 }, created: SystemTime { tv_sec: 1793410893, tv_nsec: 774895229 }, .. })

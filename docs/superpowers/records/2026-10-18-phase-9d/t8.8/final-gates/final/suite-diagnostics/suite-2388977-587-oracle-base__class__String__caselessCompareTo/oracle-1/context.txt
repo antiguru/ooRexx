@@ -1,0 +1,29 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-587-oracle-base__class__String__caselessCompareTo/run
+TZ=None
+status=Some(0) ended=Exited(0) took=21.144677ms
+GroupRun {
+    group: "base/class/String/caselessCompareTo",
+    expected: {},
+    started: {
+        "TEST_COMPARETO_CASELESS",
+    },
+    passed: {
+        "TEST_COMPARETO_CASELESS",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "1",
+    ),
+    took: 21.144677ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-587-oracle-base__class__String__caselessCompareTo/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-587-oracle-base__class__String__caselessCompareTo/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 32, modified: SystemTime { tv_sec: 1793410824, tv_nsec: 7537693 }, accessed: SystemTime { tv_sec: 1793410824, tv_nsec: 14119279 }, created: SystemTime { tv_sec: 1793410824, tv_nsec: 4040971 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-587-oracle-base__class__String__caselessCompareTo/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-587-oracle-base__class__String__caselessCompareTo/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-587-oracle-base__class__String__caselessCompareTo/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410823, tv_nsec: 932722098 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-587-oracle-base__class__String__caselessCompareTo/run/ooRexx/base/class/String/caselessCompareTo.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-587-oracle-base__class__String__caselessCompareTo/run/ooRexx/base/class/String/caselessCompareTo.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 3637, modified: SystemTime { tv_sec: 1793410823, tv_nsec: 992618551 }, accessed: SystemTime { tv_sec: 1793410824, tv_nsec: 4040971 }, created: SystemTime { tv_sec: 1793410823, tv_nsec: 991467903 }, .. })

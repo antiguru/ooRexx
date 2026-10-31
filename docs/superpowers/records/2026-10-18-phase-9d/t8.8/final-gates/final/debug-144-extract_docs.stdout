@@ -1,0 +1,16 @@
+
+running 11 tests
+test every_absolute_path_literal_in_a_construction_program_does_not_exist ... ok
+test every_committed_construction_program_has_an_instance_arm_to_run_it ... ok
+test every_method_rows_class_and_status_come_from_the_class_set ... ok
+test every_method_rows_origin_line_names_its_section ... ok
+test every_row_set_is_exactly_what_its_extractor_derives_today ... ok
+test every_row_set_is_stamped_with_the_revision_the_checkout_is_at ... ok
+test no_construction_program_embeds_this_checkouts_own_location ... ok
+test skipping_the_comment_blanking_fires_the_argutil_assertion ... ok
+test the_concept_row_set_carries_the_two_sections_the_gate_was_written_for ... ok
+test the_edge_set_and_the_class_set_name_the_same_classes ... ok
+test the_row_set_directory_holds_exactly_the_row_sets ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+

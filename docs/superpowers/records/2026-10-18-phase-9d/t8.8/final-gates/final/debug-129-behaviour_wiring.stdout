@@ -1,0 +1,26 @@
+
+running 21 tests
+test a_diamond_still_prefers_the_first_listed_mixin_and_keeps_the_common_ancestors_own_method ... ok
+test a_new_class_reuses_an_expunged_classs_behaviours ... ok
+test a_refused_inherit_propagates_no_uninit_flag ... ok
+test a_scope_rooted_lookup_can_disagree_with_the_ordinary_lookup ... ok
+test an_explicit_superclass_outranks_every_inherited_mixin ... ok
+test define_does_not_reach_an_instance_created_before_it ... ok
+test define_on_a_superclass_still_reaches_an_existing_subclass_instance ... ok
+test every_cascade_against_a_handle_bumps_its_version_by_exactly_one ... ok
+test expunge_empties_the_behaviours_define_retired ... ok
+test first_listed_inherit_mixin_wins_a_name_conflict ... ok
+test inherit_donates_a_mixins_class_side_methods_to_the_class_object_not_its_instances ... ok
+test inherit_instance_methods_donates_without_a_superclass_edge ... ok
+test inherit_on_a_superclass_reaches_an_existing_subclass_instance_too ... ok
+test inherit_reaches_an_instance_created_before_it ... ok
+test inherit_refuses_a_cycle_through_a_mixins_own_mixinclass_target ... ok
+test inherit_refuses_a_non_mixin_class ... ok
+test inherit_refuses_re_inheriting_the_same_mixin ... ok
+test resolve_super_scope_answers_the_immediate_ancestor_in_a_linear_chain ... ok
+test reversing_the_inherit_list_reverses_the_winner ... ok
+test two_classes_with_identical_ancestors_can_still_answer_to_different_method_sets ... ok
+test uninit_propagates_through_all_three_constructors_at_the_graph_api ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

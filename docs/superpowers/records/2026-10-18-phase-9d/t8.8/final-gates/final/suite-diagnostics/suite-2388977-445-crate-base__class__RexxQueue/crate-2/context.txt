@@ -1,0 +1,30 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-445-crate-base__class__RexxQueue/run
+TZ=None
+status=Some(0) ended=Exited(0) took=76.160358ms
+GroupRun {
+    group: "base/class/RexxQueue",
+    expected: {},
+    started: {
+        "TEST_BUG_1379",
+    },
+    passed: {},
+    failed: {},
+    blocked: {
+        "TEST_BUG_1379": "rexx-exec: the LIBRARY REXX entry point \"rexx_query_queue\" is not implemented (Phase 10 Rxapi)",
+    },
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 2,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "0",
+    ),
+    took: 177.724935ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-445-crate-base__class__RexxQueue/started.txt canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-445-crate-base__class__RexxQueue/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-445-crate-base__class__RexxQueue/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-445-crate-base__class__RexxQueue/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410819, tv_nsec: 514873777 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-445-crate-base__class__RexxQueue/run/ooRexx/base/class/RexxQueue.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-445-crate-base__class__RexxQueue/run/ooRexx/base/class/RexxQueue.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 21378, modified: SystemTime { tv_sec: 1793410819, tv_nsec: 472140983 }, accessed: SystemTime { tv_sec: 1793410819, tv_nsec: 518732368 }, created: SystemTime { tv_sec: 1793410819, tv_nsec: 467414655 }, .. })

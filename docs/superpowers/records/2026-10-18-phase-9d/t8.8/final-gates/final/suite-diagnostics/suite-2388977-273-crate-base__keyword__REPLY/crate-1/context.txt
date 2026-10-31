@@ -1,0 +1,63 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-273-crate-base__keyword__REPLY/run
+TZ=None
+status=Some(0) ended=Exited(0) took=203.801354ms
+GroupRun {
+    group: "base/keyword/REPLY",
+    expected: {},
+    started: {
+        "TEST_REPLY_ARRAY",
+        "TEST_REPLY_CALL",
+        "TEST_REPLY_CONCURRENT",
+        "TEST_REPLY_EXIT_CODE_REPLYASSERT",
+        "TEST_REPLY_INTERPRET",
+        "TEST_REPLY_NIL",
+        "TEST_REPLY_NOP",
+        "TEST_REPLY_PLAIN",
+        "TEST_REPLY_PROCEDURE",
+        "TEST_REPLY_RETURN_CODE_REPLYASSERT",
+        "TEST_REPLY_RETURN_CODE_SAME_REPLYASSERT",
+        "TEST_REPLY_ROUTINE",
+        "TEST_REPLY_SAME_REPLYASSERT",
+        "TEST_REPLY_STACK_REPLYASSERT",
+        "TEST_REPLY_STRING",
+        "TEST_REPLY_TWICE_REPLYASSERT",
+        "TEST_REPLY__CODE_EXIT",
+        "TEST_REPLY__CODE_RETURN",
+    },
+    passed: {
+        "TEST_REPLY_ARRAY",
+        "TEST_REPLY_CALL",
+        "TEST_REPLY_CONCURRENT",
+        "TEST_REPLY_EXIT_CODE_REPLYASSERT",
+        "TEST_REPLY_INTERPRET",
+        "TEST_REPLY_NIL",
+        "TEST_REPLY_NOP",
+        "TEST_REPLY_PLAIN",
+        "TEST_REPLY_PROCEDURE",
+        "TEST_REPLY_RETURN_CODE_REPLYASSERT",
+        "TEST_REPLY_RETURN_CODE_SAME_REPLYASSERT",
+        "TEST_REPLY_ROUTINE",
+        "TEST_REPLY_SAME_REPLYASSERT",
+        "TEST_REPLY_STACK_REPLYASSERT",
+        "TEST_REPLY_STRING",
+        "TEST_REPLY_TWICE_REPLYASSERT",
+        "TEST_REPLY__CODE_EXIT",
+        "TEST_REPLY__CODE_RETURN",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "18",
+    ),
+    took: 203.801354ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-273-crate-base__keyword__REPLY/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-273-crate-base__keyword__REPLY/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 565, modified: SystemTime { tv_sec: 1793410813, tv_nsec: 444220607 }, accessed: SystemTime { tv_sec: 1793410813, tv_nsec: 483829091 }, created: SystemTime { tv_sec: 1793410813, tv_nsec: 340653276 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-273-crate-base__keyword__REPLY/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-273-crate-base__keyword__REPLY/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-273-crate-base__keyword__REPLY/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410813, tv_nsec: 479829208 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-273-crate-base__keyword__REPLY/run/ooRexx/base/keyword/REPLY.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-273-crate-base__keyword__REPLY/run/ooRexx/base/keyword/REPLY.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 7003, modified: SystemTime { tv_sec: 1793410813, tv_nsec: 282778226 }, accessed: SystemTime { tv_sec: 1793410813, tv_nsec: 341450444 }, created: SystemTime { tv_sec: 1793410813, tv_nsec: 281859031 }, .. })

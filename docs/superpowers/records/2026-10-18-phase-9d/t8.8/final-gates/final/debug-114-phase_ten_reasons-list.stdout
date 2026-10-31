@@ -1,0 +1,5 @@
+a_test_module_file_resolves_where_rustc_finds_it: test
+an_inline_test_module_is_left_out_and_its_neighbours_are_not: test
+every_excluded_builtin_names_a_reason_the_enum_knows: test
+no_production_literal_names_phase_10: test
+the_scan_reads_the_test_modules_it_leaves_out: test

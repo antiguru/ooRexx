@@ -1,0 +1,3 @@
+a_single_quoted_method_name_is_still_recognised_as_a_test: test
+methods_touching_instance_state_are_flagged_as_fixture_dependent: test
+only_test_methods_are_extracted: test

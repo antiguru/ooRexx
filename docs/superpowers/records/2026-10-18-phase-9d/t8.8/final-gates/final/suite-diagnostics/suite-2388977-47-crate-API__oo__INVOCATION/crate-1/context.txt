@@ -1,0 +1,26 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-47-crate-API__oo__INVOCATION/run
+TZ=None
+status=Some(0) ended=Exited(0) took=91.584566ms
+GroupRun {
+    group: "API/oo/INVOCATION",
+    expected: {},
+    started: {},
+    passed: {},
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "0",
+    ),
+    took: 91.584566ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-47-crate-API__oo__INVOCATION/started.txt canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-47-crate-API__oo__INVOCATION/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-47-crate-API__oo__INVOCATION/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-47-crate-API__oo__INVOCATION/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410809, tv_nsec: 140048648 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-47-crate-API__oo__INVOCATION/run/ooRexx/API/oo/INVOCATION.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-47-crate-API__oo__INVOCATION/run/ooRexx/API/oo/INVOCATION.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 46113, modified: SystemTime { tv_sec: 1793410809, tv_nsec: 57863929 }, accessed: SystemTime { tv_sec: 1793410809, tv_nsec: 112425401 }, created: SystemTime { tv_sec: 1793410809, tv_nsec: 56623784 }, .. })

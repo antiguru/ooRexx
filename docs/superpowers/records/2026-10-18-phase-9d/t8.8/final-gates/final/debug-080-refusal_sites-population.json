@@ -1,0 +1,9 @@
+{
+  "added": [
+    "refusal_scanner::tests::constructor_ownership_is_independent_of_production_filename",
+    "refusal_scanner::tests::inline_test_refusals_are_excluded",
+    "refusal_scanner::tests::separate_test_modules_and_their_descendants_are_not_production"
+  ],
+  "removed": [],
+  "reconciled_renames": {}
+}

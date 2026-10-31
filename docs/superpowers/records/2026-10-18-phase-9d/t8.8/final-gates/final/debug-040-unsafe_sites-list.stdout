@@ -1,0 +1,2 @@
+only_the_granted_module_may_say_unsafe: test
+the_scan_reaches_the_whole_workspace: test

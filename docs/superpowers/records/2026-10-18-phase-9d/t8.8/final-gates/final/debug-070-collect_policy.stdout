@@ -1,0 +1,7 @@
+
+running 2 tests
+test a_dead_transients_slots_are_reused_before_the_collector_runs_again ... ok
+test a_live_set_that_does_not_die_still_collects_as_it_grows ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+

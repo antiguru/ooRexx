@@ -1,0 +1,10 @@
+
+running 5 tests
+test assertions_differential ... ok
+test digits_and_form_are_carried_not_defaulted ... ok
+test the_exempt_set_matches_the_current_blocked_rows ... ok
+test the_falsification_proof ... ok
+test the_raise_falsification_proof ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.79s
+

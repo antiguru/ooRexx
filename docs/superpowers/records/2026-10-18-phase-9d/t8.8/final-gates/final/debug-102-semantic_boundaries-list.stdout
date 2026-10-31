@@ -1,0 +1,5 @@
+buffered_invocations_do_not_query_the_hosts_stdout: test
+conversion_and_trace_boundaries: test
+owned_stdout_aliases_keep_their_buffered_positions: test
+owned_stdout_position_is_empty_before_open_and_after_close: test
+owned_stdout_queries_observe_the_redirected_file: test

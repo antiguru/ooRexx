@@ -1,0 +1,4 @@
+
+thread 'an_edit_growing_lent_bytes_panics' (2418470) panicked at crates/rexx-core/src/body.rs:705:9:
+a buffer edit reallocated lent storage
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

@@ -1,0 +1,29 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-11-crate-base__class__String__concatenationOperators/run
+TZ=None
+status=Some(0) ended=Exited(0) took=112.386424ms
+GroupRun {
+    group: "base/class/String/concatenationOperators",
+    expected: {},
+    started: {
+        "TEST_CONCATENATION_OPERATORS",
+    },
+    passed: {
+        "TEST_CONCATENATION_OPERATORS",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "1",
+    ),
+    took: 112.386424ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-11-crate-base__class__String__concatenationOperators/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-11-crate-base__class__String__concatenationOperators/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 37, modified: SystemTime { tv_sec: 1793410808, tv_nsec: 516387098 }, accessed: SystemTime { tv_sec: 1793410808, tv_nsec: 547818588 }, created: SystemTime { tv_sec: 1793410808, tv_nsec: 511973257 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-11-crate-base__class__String__concatenationOperators/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-11-crate-base__class__String__concatenationOperators/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-11-crate-base__class__String__concatenationOperators/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410808, tv_nsec: 467974533 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-11-crate-base__class__String__concatenationOperators/run/ooRexx/base/class/String/concatenationOperators.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-11-crate-base__class__String__concatenationOperators/run/ooRexx/base/class/String/concatenationOperators.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 3762, modified: SystemTime { tv_sec: 1793410808, tv_nsec: 434574548 }, accessed: SystemTime { tv_sec: 1793410808, tv_nsec: 511058897 }, created: SystemTime { tv_sec: 1793410808, tv_nsec: 432733300 }, .. })

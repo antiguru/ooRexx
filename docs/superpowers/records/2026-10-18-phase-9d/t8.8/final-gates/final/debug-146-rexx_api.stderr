@@ -1,0 +1,4 @@
+
+thread 'ffi::tests::a_guarded_host_reached_without_the_baton_fails' (2617612) panicked at crates/rexx-api/src/ffi.rs:194:9:
+a callback reached the host without the baton
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

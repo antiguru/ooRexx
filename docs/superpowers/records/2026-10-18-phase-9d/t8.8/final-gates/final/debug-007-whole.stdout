@@ -1,0 +1,14 @@
+
+running 9 tests
+test a_negative_whole_number_keeps_its_sign ... ok
+test a_number_that_is_not_whole_has_no_whole_value ... ok
+test a_whole_number_may_be_written_any_way_rexx_writes_one ... ok
+test acceptance_and_conversion_are_separate_questions ... ok
+test the_carry_only_path_drops_the_sign_as_the_cpp_does ... ok
+test the_conversion_rounds_to_the_precision_before_asking_if_it_is_whole ... ok
+test the_digit_limit_is_the_precision_the_caller_passed ... ok
+test whole_i64_agrees_with_building_the_number ... ok
+test zero_is_zero_however_it_is_spelled ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

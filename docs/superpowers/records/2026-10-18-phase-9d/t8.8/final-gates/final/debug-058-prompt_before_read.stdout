@@ -1,0 +1,7 @@
+
+running 2 tests
+test a_say_before_a_pull_arrives_before_the_answer_is_typed ... ok
+test an_interactive_trace_prompt_arrives_before_its_command_is_typed ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+

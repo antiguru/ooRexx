@@ -1,0 +1,9 @@
+
+running 4 tests
+test registered_is_refused_with_the_rxapi_reason ... ok
+test rexxc_agrees_with_every_recorded_parse_error_row ... ok
+test the_command_line_answers_as_the_oracles_does ... ok
+test the_oracle_refuses_this_crates_images_as_another_versions ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.44s
+

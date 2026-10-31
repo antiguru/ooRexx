@@ -1,0 +1,57 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-418-oracle-base__class__Orderable/run
+TZ=None
+status=Some(0) ended=Exited(0) took=31.876698ms
+GroupRun {
+    group: "base/class/Orderable",
+    expected: {},
+    started: {
+        "TESTCOMPARES",
+        "TEST_ORDERABLE_NIL",
+        "TEST_ORDERABLE_NIL_GREATER_THAN",
+        "TEST_ORDERABLE_NIL_GREATER_THAN_OR_EQUAL",
+        "TEST_ORDERABLE_NIL_LESS_THAN",
+        "TEST_ORDERABLE_NIL_LESS_THAN_OR_EQUAL",
+        "TEST_ORDERABLE_NIL_NOT_GREATER_THAN",
+        "TEST_ORDERABLE_NIL_NOT_LESS_THAN",
+        "TEST_ORDERABLE_NIL_NOT_STRICTLY_GREATER_THAN",
+        "TEST_ORDERABLE_NIL_NOT_STRICTLY_LESS_THAN",
+        "TEST_ORDERABLE_NIL_STRICTLY_GREATER_THAN",
+        "TEST_ORDERABLE_NIL_STRICTLY_GREATER_THAN_OR_EQUAL",
+        "TEST_ORDERABLE_NIL_STRICTLY_LESS_THAN",
+        "TEST_ORDERABLE_NIL_STRICTLY_LESS_THAN_OR_EQUAL",
+        "TEST_ORDERABLE_SORT",
+    },
+    passed: {
+        "TESTCOMPARES",
+        "TEST_ORDERABLE_NIL",
+        "TEST_ORDERABLE_NIL_GREATER_THAN",
+        "TEST_ORDERABLE_NIL_GREATER_THAN_OR_EQUAL",
+        "TEST_ORDERABLE_NIL_LESS_THAN",
+        "TEST_ORDERABLE_NIL_LESS_THAN_OR_EQUAL",
+        "TEST_ORDERABLE_NIL_NOT_GREATER_THAN",
+        "TEST_ORDERABLE_NIL_NOT_LESS_THAN",
+        "TEST_ORDERABLE_NIL_NOT_STRICTLY_GREATER_THAN",
+        "TEST_ORDERABLE_NIL_NOT_STRICTLY_LESS_THAN",
+        "TEST_ORDERABLE_NIL_STRICTLY_GREATER_THAN",
+        "TEST_ORDERABLE_NIL_STRICTLY_GREATER_THAN_OR_EQUAL",
+        "TEST_ORDERABLE_NIL_STRICTLY_LESS_THAN",
+        "TEST_ORDERABLE_NIL_STRICTLY_LESS_THAN_OR_EQUAL",
+        "TEST_ORDERABLE_SORT",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "30",
+    ),
+    took: 31.876698ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-418-oracle-base__class__Orderable/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-418-oracle-base__class__Orderable/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 1288, modified: SystemTime { tv_sec: 1793410817, tv_nsec: 440333777 }, accessed: SystemTime { tv_sec: 1793410817, tv_nsec: 443714267 }, created: SystemTime { tv_sec: 1793410817, tv_nsec: 431714614 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-418-oracle-base__class__Orderable/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-418-oracle-base__class__Orderable/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-418-oracle-base__class__Orderable/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410817, tv_nsec: 35726097 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-418-oracle-base__class__Orderable/run/ooRexx/base/class/Orderable.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-418-oracle-base__class__Orderable/run/ooRexx/base/class/Orderable.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 16552, modified: SystemTime { tv_sec: 1793410817, tv_nsec: 417512847 }, accessed: SystemTime { tv_sec: 1793410817, tv_nsec: 431714614 }, created: SystemTime { tv_sec: 1793410817, tv_nsec: 414631507 }, .. })

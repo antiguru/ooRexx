@@ -1,0 +1,17 @@
+
+running 12 tests
+test every_corpus_program_tiles ... ok
+test the_containment_checker_rejects_a_child_escaping_its_parent ... ok
+test the_prefix_checker_rejects_an_operator_with_nothing_in_front ... ok
+test the_resource_span_is_total_over_the_markers_the_parser_produces ... ok
+test the_tightness_checker_rejects_a_mis_nested_operand ... ok
+test the_tightness_checker_rejects_a_missing_operator ... ok
+test the_tightness_checker_rejects_overlapping_operands ... ok
+test the_tiling_checker_permits_comments_and_continuations_between_clauses ... ok
+test the_tiling_checker_rejects_a_dropped_clause ... ok
+test the_tiling_checker_rejects_an_interstitial_semicolon ... ok
+test the_tiling_checker_rejects_bytes_after_the_last_clause ... ok
+test the_tiling_checker_rejects_overlapping_clause_spans ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+

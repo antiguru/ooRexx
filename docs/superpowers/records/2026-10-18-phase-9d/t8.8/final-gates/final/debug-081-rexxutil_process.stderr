@@ -1,0 +1,1 @@
+waiter race: ready=true status=ExitStatus(unix_wait_status(0)) stdout="ready 1\nwait 1280\nfailure 127\ncmd rc 127\n" stderr=""

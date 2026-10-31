@@ -1,0 +1,19 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.11+deb14-amd64
+
+Tests ran:          300
+Assertions:         406
+Failures:           0
+Errors:             0
+
+File search:        00:00:00.014820
+Suite construction: 00:00:00.007908
+Test execution:     00:00:00.014767
+Total time:         00:00:00.039442
+

@@ -1,0 +1,65 @@
+{
+  "source_commit": "b51a9466a5ccfa365bcf74e232f6e24c23fb9765",
+  "identities": [
+    [
+      "crates/rexx-api/src/load.rs - load::Library::method (line 1676) - compile",
+      "ok"
+    ],
+    [
+      "crates/rexx-api/src/ffi.rs - ffi::METHOD_CONTEXT (line 229) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-api/src/ffi.rs - ffi::value_of (line 65) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-api/src/load.rs - load::Library::method (line 1685) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-api/src/load.rs - load::NativeMethodEntry (line 195) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-core/src/frame.rs - frame::FrameArena (line 179)",
+      "ok"
+    ],
+    [
+      "crates/rexx-core/src/frame.rs - frame::RegFrame (line 108)",
+      "ok"
+    ],
+    [
+      "crates/rexx-core/src/handle.rs - handle::ObjRef (line 65)",
+      "ok"
+    ],
+    [
+      "crates/rexx-core/src/frame.rs - frame::FrameArena (line 168) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-core/src/frame.rs - frame::RegFrame (line 90) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-core/src/frame.rs - frame::RegFrame (line 99) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-core/src/handle.rs - handle::ObjRef (line 52) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-core/src/handle.rs - handle::ObjRef (line 57) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-exec/src/run.rs - run::Interp::run_activation (line 446)",
+      "ok"
+    ],
+    [
+      "crates/rexx-exec/src/run.rs - run::Interp::run_activation (line 463) - compile fail",
+      "ok"
+    ]
+  ]
+}

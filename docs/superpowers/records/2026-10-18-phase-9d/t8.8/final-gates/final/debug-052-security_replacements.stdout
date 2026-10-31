@@ -1,0 +1,7 @@
+
+running 2 tests
+test a_requires_name_that_is_not_a_string_names_its_string_value ... ok
+test a_stream_replacement_that_is_not_a_stream_is_the_target ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+

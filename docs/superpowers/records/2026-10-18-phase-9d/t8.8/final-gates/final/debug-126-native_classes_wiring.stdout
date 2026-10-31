@@ -1,0 +1,36 @@
+
+running 31 tests
+test a_class_subclassing_class_itself_can_inherit_a_mixinclass_class_mixin ... ok
+test a_native_classs_flattened_set_includes_its_ancestors_methods_the_cascade_witness ... ok
+test a_system_class_is_absent_from_the_environment_registration ... ok
+test an_ordinary_object_hierarchy_class_cannot_inherit_a_mixinclass_class_mixin ... ok
+test arrays_flattened_set_is_a_measured_subset_of_the_live_oracles ... ok
+test bags_flattened_set_lacks_manyitemmixin_and_bagmixins_donated_methods ... ok
+test class_and_object_match_their_recorded_own_instance_method_sets ... ok
+test class_does_not_answer_the_two_setup_only_methods_remove_setup_methods_deletes ... ok
+test class_is_an_instance_of_itself_by_identity ... ok
+test class_method_names_reads_the_flattened_class_side_set ... ok
+test every_class_answers_its_recorded_own_class_methods ... ok
+test every_class_untouched_by_the_prologue_matches_the_live_oracle_exactly ... ok
+test every_native_class_answers_class_instance_methods_on_its_class_side ... ok
+test every_native_class_answers_metaclass_class_and_isa_object ... ok
+test every_native_class_matches_its_recorded_own_class_method_set ... ok
+test every_prologue_mutated_class_has_the_pre_prologue_superclasses_setup_cpp_builds ... ok
+test every_prologue_mutated_class_matches_its_recorded_own_instance_method_set ... ok
+test every_setup_class_is_native_or_deferred_with_a_reason ... ok
+test every_untouched_class_matches_its_recorded_own_instance_method_set ... ok
+test hiding_leaves_a_tombstone_where_removal_leaves_nothing ... ok
+test id_string_matches_the_recorded_id_for_a_representative_sample ... ok
+test is_a_is_false_for_unrelated_and_reversed_pairs ... ok
+test object_and_string_answer_the_concatenation_operator_names ... ok
+test objects_subclass_list_contains_every_other_native_class ... ok
+test relations_flattened_set_lacks_manyitemmixins_donated_methods ... ok
+test rexxinfos_own_instance_methods_are_setup_cpps_and_carry_no_id ... ok
+test set_bag_relation_and_supplier_match_their_setup_cpp_derived_own_sets ... ok
+test sets_flattened_set_lacks_setmixins_donated_methods ... ok
+test suppliers_flattened_set_lacks_suppliermixins_donated_methods ... ok
+test the_metaclass_merge_carries_the_metaclasss_scope_not_just_its_methods ... ok
+test the_registry_holds_the_identities_it_was_given_and_mints_none ... ok
+
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+

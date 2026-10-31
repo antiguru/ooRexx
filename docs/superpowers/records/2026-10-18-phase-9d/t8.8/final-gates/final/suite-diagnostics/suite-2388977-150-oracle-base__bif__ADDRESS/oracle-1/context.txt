@@ -1,0 +1,29 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-150-oracle-base__bif__ADDRESS/run
+TZ=None
+status=Some(0) ended=Exited(0) took=26.838918ms
+GroupRun {
+    group: "base/bif/ADDRESS",
+    expected: {},
+    started: {
+        "TEST_1",
+    },
+    passed: {
+        "TEST_1",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "1",
+    ),
+    took: 26.838918ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-150-oracle-base__bif__ADDRESS/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-150-oracle-base__bif__ADDRESS/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 15, modified: SystemTime { tv_sec: 1793410810, tv_nsec: 789003033 }, accessed: SystemTime { tv_sec: 1793410810, tv_nsec: 794620586 }, created: SystemTime { tv_sec: 1793410810, tv_nsec: 788979654 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-150-oracle-base__bif__ADDRESS/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-150-oracle-base__bif__ADDRESS/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-150-oracle-base__bif__ADDRESS/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410810, tv_nsec: 794620586 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-150-oracle-base__bif__ADDRESS/run/ooRexx/base/bif/ADDRESS.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-150-oracle-base__bif__ADDRESS/run/ooRexx/base/bif/ADDRESS.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 3977, modified: SystemTime { tv_sec: 1793410810, tv_nsec: 768865587 }, accessed: SystemTime { tv_sec: 1793410810, tv_nsec: 788314252 }, created: SystemTime { tv_sec: 1793410810, tv_nsec: 767018519 }, .. })

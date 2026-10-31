@@ -1,0 +1,20 @@
+
+running 15 tests
+test a_borrow_or_carry_never_overflows_an_opposite_sign_comparison ... ok
+test a_non_utf8_operand_compares_correctly_where_str_could_not_express_it ... ok
+test a_supplied_number_does_not_affect_strict_comparison ... ok
+test compare_and_compare_bytes_and_compare_decoded_agree_on_every_case_above ... ok
+test compare_decoded_uses_the_supplied_number_not_a_fresh_parse_of_the_bytes ... ok
+test compare_never_errors_for_ordinary_operands ... ok
+test non_numeric_operands_fall_back_to_string_comparison_instead_of_erroring ... ok
+test not_equal_holds_whenever_equal_does_not ... ok
+test numeric_equal_ignores_form_but_strict_equal_does_not ... ok
+test numeric_fuzz_relaxes_the_numeric_operators_but_never_the_strict_ones ... ok
+test strict_comparison_does_not_strip_blanks ... ok
+test strict_ordering_is_plain_byte_ordering ... ok
+test the_nine_transcripts_that_pin_leading_not_padded_blank_stripping ... ok
+test truncation_to_digits_can_make_longer_operands_compare_equal_without_fuzz ... ok
+test zero_and_negative_zero_are_numerically_equal ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

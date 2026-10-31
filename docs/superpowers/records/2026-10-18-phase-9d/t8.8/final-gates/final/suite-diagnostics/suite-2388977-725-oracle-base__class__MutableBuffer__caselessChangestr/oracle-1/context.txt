@@ -1,0 +1,53 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-725-oracle-base__class__MutableBuffer__caselessChangestr/run
+TZ=None
+status=Some(0) ended=Exited(0) took=22.076961ms
+GroupRun {
+    group: "base/class/MutableBuffer/caselessChangestr",
+    expected: {},
+    started: {
+        "TEST_1",
+        "TEST_2",
+        "TEST_4",
+        "TEST_5",
+        "TEST_6",
+        "TEST_CASELESSCHANGESTR_FOUR_ARGS",
+        "TEST_CASELESSCHANGESTR_NEEDLES_THREE_PATHS",
+        "TEST_CASELESSCHANGESTR_NEEDLE_NULLSTRING",
+        "TEST_CASELESSCHANGESTR_NO_ARGS",
+        "TEST_CASELESSCHANGESTR_ONE_ARG",
+        "TEST_CHANGESTR_CASELESS",
+        "TEST_COUNT_NEGATIVE",
+        "TEST_COUNT_ZERO",
+    },
+    passed: {
+        "TEST_1",
+        "TEST_2",
+        "TEST_4",
+        "TEST_5",
+        "TEST_6",
+        "TEST_CASELESSCHANGESTR_FOUR_ARGS",
+        "TEST_CASELESSCHANGESTR_NEEDLES_THREE_PATHS",
+        "TEST_CASELESSCHANGESTR_NEEDLE_NULLSTRING",
+        "TEST_CASELESSCHANGESTR_NO_ARGS",
+        "TEST_CASELESSCHANGESTR_ONE_ARG",
+        "TEST_CHANGESTR_CASELESS",
+        "TEST_COUNT_NEGATIVE",
+        "TEST_COUNT_ZERO",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "13",
+    ),
+    took: 22.076961ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-725-oracle-base__class__MutableBuffer__caselessChangestr/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-725-oracle-base__class__MutableBuffer__caselessChangestr/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 378, modified: SystemTime { tv_sec: 1793410827, tv_nsec: 784006870 }, accessed: SystemTime { tv_sec: 1793410827, tv_nsec: 786914759 }, created: SystemTime { tv_sec: 1793410827, tv_nsec: 779414556 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-725-oracle-base__class__MutableBuffer__caselessChangestr/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-725-oracle-base__class__MutableBuffer__caselessChangestr/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-725-oracle-base__class__MutableBuffer__caselessChangestr/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410827, tv_nsec: 711416528 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-725-oracle-base__class__MutableBuffer__caselessChangestr/run/ooRexx/base/class/MutableBuffer/caselessChangestr.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-725-oracle-base__class__MutableBuffer__caselessChangestr/run/ooRexx/base/class/MutableBuffer/caselessChangestr.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 8094, modified: SystemTime { tv_sec: 1793410827, tv_nsec: 764474447 }, accessed: SystemTime { tv_sec: 1793410827, tv_nsec: 775414672 }, created: SystemTime { tv_sec: 1793410827, tv_nsec: 763708269 }, .. })

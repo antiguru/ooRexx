@@ -1,0 +1,13 @@
+
+running 8 tests
+test a_started_message_waiting_on_itself_keeps_the_process_alive ... ok
+test an_uncancelled_timer_keeps_the_process_alive ... ok
+test buffering::a_command_starts_after_what_came_before ... ok
+test buffering::a_redirected_standard_output_keeps_what_it_handed_over ... ok
+test buffering::a_redirected_standard_output_loses_what_it_still_holds ... ok
+test buffering::a_shared_pipe_interleaves_by_hand_over ... ok
+test buffering::a_terminal_standard_output_takes_each_line ... ok
+test buffering::standard_error_keeps_each_line ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.12s
+

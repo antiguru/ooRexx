@@ -1,0 +1,29 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-556-crate-extensions__hostemu__hostemu/run
+TZ=None
+status=Some(120) ended=Exited(120) took=81.350742ms
+GroupRun {
+    group: "extensions/hostemu/hostemu",
+    expected: {},
+    started: {
+        "TEST_EXECIO_DISKR_DEFAULT",
+        "TEST_EXECIO_DISKR_FIFO",
+    },
+    passed: {},
+    failed: {},
+    blocked: {
+        "TEST_EXECIO_DISKR_DEFAULT": "rexx-exec: the LIBRARY REXX entry point \"rexx_clear_queue\" is not implemented (Phase 10 Rxapi)",
+        "TEST_EXECIO_DISKR_FIFO": "rexx-exec: the LIBRARY REXX entry point \"rexx_clear_queue\" is not implemented (Phase 10 Rxapi)",
+    },
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 2,
+    ended_normally: false,
+    cap: Memcap,
+    tests_ran: None,
+    took: 162.649466ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-556-crate-extensions__hostemu__hostemu/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-556-crate-extensions__hostemu__hostemu/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 31, modified: SystemTime { tv_sec: 1793410823, tv_nsec: 95954435 }, accessed: SystemTime { tv_sec: 1793410823, tv_nsec: 115549800 }, created: SystemTime { tv_sec: 1793410823, tv_nsec: 95666923 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-556-crate-extensions__hostemu__hostemu/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-556-crate-extensions__hostemu__hostemu/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-556-crate-extensions__hostemu__hostemu/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410823, tv_nsec: 104805417 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-556-crate-extensions__hostemu__hostemu/run/ooRexx/extensions/hostemu/hostemu.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-556-crate-extensions__hostemu__hostemu/run/ooRexx/extensions/hostemu/hostemu.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 9417, modified: SystemTime { tv_sec: 1793410823, tv_nsec: 40390151 }, accessed: SystemTime { tv_sec: 1793410823, tv_nsec: 93456235 }, created: SystemTime { tv_sec: 1793410823, tv_nsec: 39769188 }, .. })

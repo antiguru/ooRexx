@@ -1,3 +1,9 @@
+**CLOSED 2026-10-31 by Phase 9d Task 8.8 (`6f2c1346e`).**
+
+The final full suite reproduced a count mismatch between two independent observations of shared host `/tmp`, with 1,430 expected entries and 1,431 actual entries. Controlled comparisons on both interpreters established the mechanism, with stable counts 1-to-1 and one intervening creation producing exactly 1-to-2. The harness now gives only this exact group a populated private temporary directory per interpreter and attempt, preserving the protected tests, nonempty file/directory coverage and existing retry policy. The reviewed repair passes all 26 tests and 2,014 assertions per side in the complete final suite, with no new Flaky licence.
+
+The original extra writer remains unproven because the failed run did not retain its first complete name set. The isolation regression failed the intended private-path assertion on both launch routes before implementation, then passed with exact contents, parent-environment and cleanup checks. Diagnosis, raw red/green records and independent review are retained under `docs/superpowers/records/2026-10-18-phase-9d/t8.8/sysfiletree-{final-diagnosis,isolation}/`. The complete frozen validation at `b51a9466a5ccfa365bcf74e232f6e24c23fb9765` is retained under `t8.8/final-gates/final/`, and the historical investigation below remains unchanged.
+
 **RULED: 9d, ruled by Moritz 2026-10-19 ("proposal ok").** flaky test.
 
 **OPEN: found by Phase 9d Task 6.2, not yet ruled.** `base/rexxutil/SysFileTree TEST_TREE_DIRECTORY` passes and fails between runs, on either side.

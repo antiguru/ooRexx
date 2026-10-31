@@ -1,0 +1,14 @@
+
+running 9 tests
+test a_compound_tail_is_part_of_the_one_symbol ... ok
+test a_symbols_name_is_the_upcased_spelling_not_the_source_spelling ... ok
+test a_tag_drops_the_payload_but_not_the_class ... ok
+test blank_significance_depends_on_the_class_of_the_token_before_it ... ok
+test distinct_spellings_get_distinct_ids_in_first_seen_order ... ok
+test interning_a_keyword_from_source_reuses_the_pre_interned_id ... ok
+test keyword_tables_keep_the_cpp_table_order ... ok
+test one_spelling_in_two_tables_keeps_each_tables_own_index ... ok
+test spellings_differing_only_in_case_are_one_symbol ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

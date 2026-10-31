@@ -1,0 +1,2 @@
+a_block_size_outside_the_range_is_refused_before_any_run: test
+registers_in_every_block_stay_rooted_under_the_smallest_block: test

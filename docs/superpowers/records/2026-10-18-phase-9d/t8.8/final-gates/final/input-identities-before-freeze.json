@@ -1,0 +1,16 @@
+{
+  "source_commit": "b51a9466a5ccfa365bcf74e232f6e24c23fb9765",
+  "expected_and_verified": {
+    "/tmp/codex-p9d-t88-final-gate-final.py": "6e6696a48d592ae937974bab49a0cb8875146bbb555306b7a54681a33e69cdb3",
+    "/tmp/codex-p9d-t88-final-final-suite-delta.py": "33114e2b18f1d6c47d6528253315fd13ba9dc45eaa886e09281bd31160b66290",
+    "/tmp/codex-p9d-t88-final-source-bridge.json": "26280d4cd5082193bd773caf886a61c68329bf33628e775ac03ff8937f0a2330",
+    "/tmp/codex-p9d-t88-pins/8.8-corpus-registration-rexx": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145"
+  },
+  "config_path": "/tmp/codex-p9d-t88-final-final-config.json",
+  "config_sha256": "78ca601decbc6710d17dabd3c22777d05a5e018637b15fa9244a90144aff92f3",
+  "profile_attestation_path": "/tmp/codex-p9d-t88-final-final-profile-completion.json",
+  "profile_attestation_sha256": "d3da3dcec78c38750bae84728324348fdd68115c0ca07bc82e0d3421e07f813f",
+  "tracked_and_index_clean": true,
+  "only_user_zip_untracked": true,
+  "final_output_absent_before_freeze": true
+}

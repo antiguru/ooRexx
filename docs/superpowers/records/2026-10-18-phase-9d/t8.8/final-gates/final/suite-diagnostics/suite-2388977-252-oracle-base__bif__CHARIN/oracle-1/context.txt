@@ -1,0 +1,53 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-252-oracle-base__bif__CHARIN/run
+TZ=None
+status=Some(0) ended=Exited(0) took=38.103234ms
+GroupRun {
+    group: "base/bif/CHARIN",
+    expected: {},
+    started: {
+        "TEST_CHARIN_0_LENGTH",
+        "TEST_CHARIN_0_START",
+        "TEST_CHARIN_ALOT",
+        "TEST_CHARIN_DEFAULTS_01",
+        "TEST_CHARIN_NEGATIVE_LENGTH",
+        "TEST_CHARIN_NEGATIVE_LENGTH2",
+        "TEST_CHARIN_NEGATIVE_START",
+        "TEST_CHARIN_NOERR_1",
+        "TEST_CHARIN_NOERR_2",
+        "TEST_CHARIN_SIMPLE",
+        "TEST_CHARIN_SYNTAX_1",
+        "TEST_CHARIN_TOO_FAR",
+        "TEST_CHARIN_TOO_MUCH",
+    },
+    passed: {
+        "TEST_CHARIN_0_LENGTH",
+        "TEST_CHARIN_0_START",
+        "TEST_CHARIN_ALOT",
+        "TEST_CHARIN_DEFAULTS_01",
+        "TEST_CHARIN_NEGATIVE_LENGTH",
+        "TEST_CHARIN_NEGATIVE_LENGTH2",
+        "TEST_CHARIN_NEGATIVE_START",
+        "TEST_CHARIN_NOERR_1",
+        "TEST_CHARIN_NOERR_2",
+        "TEST_CHARIN_SIMPLE",
+        "TEST_CHARIN_SYNTAX_1",
+        "TEST_CHARIN_TOO_FAR",
+        "TEST_CHARIN_TOO_MUCH",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "13",
+    ),
+    took: 38.103234ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-252-oracle-base__bif__CHARIN/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-252-oracle-base__bif__CHARIN/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 391, modified: SystemTime { tv_sec: 1793410812, tv_nsec: 888462745 }, accessed: SystemTime { tv_sec: 1793410812, tv_nsec: 896947268 }, created: SystemTime { tv_sec: 1793410812, tv_nsec: 879846604 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-252-oracle-base__bif__CHARIN/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-252-oracle-base__bif__CHARIN/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-252-oracle-base__bif__CHARIN/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410812, tv_nsec: 863328009 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-252-oracle-base__bif__CHARIN/run/ooRexx/base/bif/CHARIN.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-252-oracle-base__bif__CHARIN/run/ooRexx/base/bif/CHARIN.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 9464, modified: SystemTime { tv_sec: 1793410812, tv_nsec: 858816755 }, accessed: SystemTime { tv_sec: 1793410812, tv_nsec: 887980999 }, created: SystemTime { tv_sec: 1793410812, tv_nsec: 857504892 }, .. })

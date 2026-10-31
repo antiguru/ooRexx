@@ -1,0 +1,15 @@
+
+running 9 tests
+test a_loud_failure_message_does_not_grow_with_the_expression ... ok
+test a_raised_condition_reports_the_failing_clause ... ok
+test a_variable_round_trips_through_its_slot ... ok
+test an_unset_variable_reads_as_its_own_name ... ok
+test records_the_stack_cost_of_one_eval_frame ... interpreter stack: 536870912 bytes, eval depth reached: 100000, span: 51199488 bytes, per frame: 512.0 bytes
+ok
+test say_hello_prints_hello ... ok
+test the_loud_failure_code_cannot_be_confused_with_a_rexx_error ... ok
+test unbounded_call_recursion_raises_11_1_rather_than_overflowing ... ok
+test unbounded_external_recursion_raises_11_1_rather_than_overflowing ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.35s
+

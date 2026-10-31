@@ -1,0 +1,18 @@
+absent restoration: before absent []
+[2020-10-25] [02:30:00]            0 2020-10-25 02:30:00 2020-10-25 02:30:00
+  valid overlap 1 1
+after absent []
+same ordinary epoch 1
+
+empty restoration: before present []
+[2020-10-25] [02:30:00]            0 2020-10-25 02:30:00 2020-10-25 02:30:00
+  valid overlap 1 1
+after present []
+same ordinary epoch 1
+
+present restoration: before present [America/New_York]
+[2020-10-25] [02:30:00]            0 2020-10-25 02:30:00 2020-10-25 02:30:00
+  valid overlap 1 1
+after present [America/New_York]
+same ordinary epoch 1
+

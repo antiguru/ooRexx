@@ -1,0 +1,3314 @@
+{
+  "source_commit": "b51a9466a5ccfa365bcf74e232f6e24c23fb9765",
+  "population": {
+    "historical_count": 154,
+    "fresh_count": 156,
+    "added": [
+      {
+        "key": [
+          "rexx-api",
+          "concrete_owners",
+          [
+            "test"
+          ],
+          [
+            "bin"
+          ]
+        ],
+        "ruling": "Commit 3d52229d6f1a467129b5a62a51e27c9922ca81b9 adds two concrete FFI owner refusal tests after the prerequisite enumeration"
+      },
+      {
+        "key": [
+          "rexx-exec",
+          "semantic_boundaries",
+          [
+            "test"
+          ],
+          [
+            "bin"
+          ]
+        ],
+        "ruling": "Task 8.8f adds semantic boundary integration coverage after the prerequisite enumeration"
+      }
+    ],
+    "removed": []
+  },
+  "targets": [
+    {
+      "key": [
+        "rexx-exec",
+        "class_weak_reference",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 1,
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "fbefcfca04f77730bca00afe475b1d3e9713da557a86f44510b0c306acff0ed1"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "deadline",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 10,
+      "summary": [
+        10,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "b2965b640b9fe12e396cb624bec0ba7056dc20ea3b89361ec0301120fb48007f"
+    },
+    {
+      "key": [
+        "rexx-oracle",
+        "rexx-diff",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "1723bf945e08a34c12613557be67a4af4ce2b4f24daa828077cd4f238cb74693"
+    },
+    {
+      "key": [
+        "rexx-oracle",
+        "normalize",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 2,
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "2211c8ce5f357d5a6ccd2f46c3397da4c9c05f42a8fded69416c12e072fc5284"
+    },
+    {
+      "key": [
+        "rexx-core",
+        "heap",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 5,
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "73d618f975c27880e529c9fa42c833b555543b93d0e3dec3d078d8e8bf1bdc6b"
+    },
+    {
+      "key": [
+        "rexx-core",
+        "trace",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 5,
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "4ff14a3b4507c9210dc9ba358d15512b06a6ef484e06130cb4846aad1ea2f3b8"
+    },
+    {
+      "key": [
+        "rexx-parse",
+        "rexx_parse",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "listed_tests": 260,
+      "summary": [
+        260,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "5f44063fb98dcda96b409e01a3e33ca198e4e30dadc1042f71f6995b8aafa496"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "whole",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 9,
+      "summary": [
+        9,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "b9da1a53bf8afdb4b60bf62bbdb045796c84b965924bb5417c5b722a00af47b6"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "int64",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 7,
+      "summary": [
+        7,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "897c2d3f144e9b3cdca8ac12a733e2efb7eb96299a2826bb02b659a673159f8b"
+    },
+    {
+      "key": [
+        "rexx-parse",
+        "program",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 28,
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "38b4ef1a7de6c840c2747fcd68af9a2a3021c157b54363f903e5da9a94c61e80"
+    },
+    {
+      "key": [
+        "rexx-parse",
+        "errors",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 34,
+      "summary": [
+        34,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "0ca8fd25122b1cdcb255bf0170ad4d2d80cb477318271097c86939b8ae24ccd7"
+    },
+    {
+      "key": [
+        "rexx-core",
+        "rexx_core",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "listed_tests": 22,
+      "summary": [
+        22,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "83ac861cef45c01a254adfa2becd711153c06aa82c8fffe83e9564492a13e04e"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "pow",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 12,
+      "summary": [
+        12,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "164ad9d6b9e39460a18bf95b4864bb7f29b4d5f8c89843afeb8701277e990c06"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "addsub",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 7,
+      "summary": [
+        7,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "ba61f7e196bb6cdf058662fdcb1b1dc2f5d0d34f7ed3e7df0cc957f6593440dd"
+    },
+    {
+      "key": [
+        "rexx-parse",
+        "variants",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 1,
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "023a1ffeb016f8ac25f633f4e57c3f9ff4a308665b9ec329a5596c74854dbeef"
+    },
+    {
+      "key": [
+        "rexx-parse",
+        "deep",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 6,
+      "summary": [
+        6,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "fb2a6058ea3d11b2a1359e1afc5b08171940bec0e6e82bc9550cb4342c0e0910"
+    },
+    {
+      "key": [
+        "rexx-core",
+        "handle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 9,
+      "summary": [
+        9,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "9bbe04033618c1be32fdc3133d66fcf2cbb53c03f4eabe80735a5745839b82b4"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "settings",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 17,
+      "summary": [
+        17,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "fb2f671a465c58f67b2d96fcda38f37296103b2829cd42fa43ee07df3cacc57a"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "format",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 52,
+      "summary": [
+        49,
+        0,
+        3,
+        0,
+        0
+      ],
+      "executable_sha256": "cb643490c3c338b77cca81debdb1005d3073f326b6b238f2bcbd00481d6a87c0"
+    },
+    {
+      "key": [
+        "rexx-bench",
+        "rexx-bench-suite",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 15,
+      "summary": [
+        15,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "84e3d0da80def90829c1d40c03aa6bfb816fbeae4f9b8a360aff54f30e4002e6"
+    },
+    {
+      "key": [
+        "rexx-core",
+        "scope_pools",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 5,
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "87dbbb5574d6ff533ad11422783282c8fcf5941536624f9f12fb45b93b670e2f"
+    },
+    {
+      "key": [
+        "rexx-bench",
+        "rexx-arms",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "fe043897e7d6f6e5cb08aeee1813e6d4585ab19ada8a7457fc98a5246019dc5a"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "gen-cases",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "3623d106175f32e682bf4b8f7c2279a496cc6f0ca929674bfa520f23ac13f298"
+    },
+    {
+      "key": [
+        "rexx-parse",
+        "tokens",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 9,
+      "summary": [
+        9,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "61a47e33655e412baa9fbafdaa13cff31da863b371e09ea244b27f5a58cad2fa"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "canon",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "625403d46387cf5b5e5288480f7f7a8ccb0bcb63272df6640c23d9b06ac3eb60"
+    },
+    {
+      "key": [
+        "rexx-parse",
+        "tiling",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 12,
+      "summary": [
+        12,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "af709baab2249625d986e80cb933184537c44963151aada366bb998ff6d2ddfa"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "parse",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 14,
+      "summary": [
+        14,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "0151b00aefd3dab8e715a11ca50b960996a1efa2c540936e29002de9fce9e2a1"
+    },
+    {
+      "key": [
+        "rexx-parse",
+        "scan-check",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "d4c1830a570a919e637e01ebe8d957df364cc3855d02f30e9e157f48c14de106"
+    },
+    {
+      "key": [
+        "rexx-parse",
+        "sourceline_oracle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 1,
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "ac838ce3c60c1e966e14e4a2c568e2c09ee49a9fbd179b523286d732ab76222e"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "errors",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 17,
+      "summary": [
+        17,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "62d0a34e220fdfb6f83aafe75817bb47a4afb9da6e7cc9068c8f8f1db931ec6a"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "rounding",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 13,
+      "summary": [
+        13,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "0efae7ff27186b45888b1908a0de6256caf96c1177ef03f894a80b03cbe4405a"
+    },
+    {
+      "key": [
+        "rexx-core",
+        "collect",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 16,
+      "summary": [
+        16,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "81e3c34bd24d1a1adb90c8adaf72097cb8a3f1de038ce7d9f930809896ddf218"
+    },
+    {
+      "key": [
+        "rexx-core",
+        "roots",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 22,
+      "summary": [
+        22,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "605dc87a6ef51693ceb6c3883a061fb76344a11de4ba6ef42f730209bb291890"
+    },
+    {
+      "key": [
+        "rexx-parse",
+        "sourceline",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 25,
+      "summary": [
+        25,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "de42bd259324b386dbf7c09a95577c7e1a96d6e0d26c23d55f55d1186e2611ba"
+    },
+    {
+      "key": [
+        "rexx-core",
+        "uninit",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 8,
+      "summary": [
+        8,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "06476a282adca7068ada2ba5a040f6e5676c7ed65a271556d5ba8f6b998fef2e"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "muldiv",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 11,
+      "summary": [
+        11,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "88ae519387f4e8af4e9a273d18b70a8b8e6f21a702e96a10b2ae5214cbebd64f"
+    },
+    {
+      "key": [
+        "rexx-core",
+        "buffer_bytes",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 6,
+      "summary": [
+        6,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "d226fb97d6b1b4d9b846b9c0f627f1b6d983c623b08197b7b13e6177872f2f41"
+    },
+    {
+      "key": [
+        "rexx-parse",
+        "scanner",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 36,
+      "summary": [
+        36,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "f19779fe56d84ff08cde116719aceef344268f704f42c6fa336514d3c1302f46"
+    },
+    {
+      "key": [
+        "rexx-bench",
+        "rexx-time",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "11b04a0b7de676c75cef87450ff6f84dc472ad36bab463aebb7a32b639d9ce24"
+    },
+    {
+      "key": [
+        "rexx-bench",
+        "rexx-bench-band",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 10,
+      "summary": [
+        10,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "e9c17108861e963bd578bc97cced711c43957ac74207c7a6a6bbbd8441ea0159"
+    },
+    {
+      "key": [
+        "rexx-core",
+        "unsafe_sites",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 2,
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "0303eb5e90fbc6191fd5a139f13d56aca214f2b0dc5372765bb16159086badb8"
+    },
+    {
+      "key": [
+        "rexx-bench",
+        "rexx_bench",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "listed_tests": 30,
+      "summary": [
+        30,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "587ced45d661649c306e270c9a639cdb0f0df9a1858906a55ce78542291b4f47"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "rexx_num",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "listed_tests": 23,
+      "summary": [
+        23,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "38172a39c12102762b0887728426fcd83f90e8c02e7479db559ef1c92701d7a1"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "addsub",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "f3c5f91d229097797714e9085d19dfab913a8cbb2181287fdb955e8b22573f0c"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "fmt-check",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "31d6549ad11610a7f7f590f9733a3efa226dcb97ef9a539b994aa63e8e557ceb"
+    },
+    {
+      "key": [
+        "rexx-core",
+        "behaviour",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 6,
+      "summary": [
+        6,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "c3f945a3fd5845743f9933a18d09bdd4f79710795620f0a8dcc9c4ca193b9acf"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "muldiv",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "d3d98a408669a23e37fd4ee958f02366da6c78301b74387061508a233bd50071"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "compare",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 15,
+      "summary": [
+        15,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "6d97bce625bead321ab9e7b12464fc8e06d04a5b95f949455dcd45e270922b6f"
+    },
+    {
+      "key": [
+        "rexx-num",
+        "rendered",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 2,
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "14a833cf8398f0648732319fff557374db4ca92a30f69598e27faf687ccaffb8"
+    },
+    {
+      "key": [
+        "rexx-parse",
+        "samples",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 1,
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "136f4aa34c63be25e17e53a1fdbd78a3b589fd921b847b0f07910c283c4190d4"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "introspection_scopes",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 29,
+      "summary": [
+        29,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "cea1d225c8ee9647cd81d6882500f6a9879706e1e66504462f3939464b3c8ca2"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "numeric_model",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 28,
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "f8e729ccbd2d7abc652e61a4ba0ddc558feb7d1b4464fa3a822094356339a8a1"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "security_replacements",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 2,
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "3ddfd44612a54771965fca8813e106092fd545165d0e99104aa69666777d7034"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "string_answer_arguments",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 1,
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "0206cc45c9e203d6614b6ce657dd7406558d55fcad88fb3e99b91f624117eb5b"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "buffer_growth_error_exit",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 1,
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "13a372799eb763ac28b9494984f4b9719b117b731fa3b24011e0634c708c08be"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "corpus",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 35,
+      "summary": [
+        34,
+        0,
+        1,
+        0,
+        0
+      ],
+      "executable_sha256": "0a5e22656783354ef8dcf59bf7cc26fef9515bb5d6772f346f407bf0d6a5b66a"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "instance_copy_memory",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 26,
+      "summary": [
+        26,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "9b32918102657e8e6847c80516154292ac7ce98e5dcc69d8a720b7ff29905d1b"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "method_bodies",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 28,
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "9933459523bd14e1a534173ac78b616fb8787291c445713a056e8b1f4735ddb2"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "prompt_before_read",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 2,
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "4da6409e6d43c7a9ad9ec08f477a52aca3d1696c053763bf52ba8bf538c5b40d"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "stdout_write_errors",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 5,
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "f8f569ad6ef03a391b6976580c70c205450e24989a3f0e2449ef8d2e1b0e8b3b"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "unreachable_classes",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 26,
+      "summary": [
+        26,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "7ede42118f6b1c34c0286b3453093f8f9e66f54f1bb98d805563545e27bad3ec"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "assertions",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 5,
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "9e6296ceeee259b8d069d7499dcc9d63ab277dbc7793b5a39e006bc8487f592e"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "collection_scopes",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 28,
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "2be8e39b882be01f9d5f3efcec1664eac5c6a579d44b4a4edf2dc0a907c1393d"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "gate_table_c",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 27,
+      "summary": [
+        27,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "49a222c2ef47f51904592e7da9aa3ae668b5106d909a828e080a41669d5117fd"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "licensed_divergences",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 27,
+      "summary": [
+        27,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "79fe6c481f6e470f80e668d11619df4d63381ce784cd780d5e998c7ae1227c86"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "rexx",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "5fa537c4a8102a9b6bde7e4873c347beef084e20b3fefb60e5ebcd08678531dd"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "parse_version_oracle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 26,
+      "summary": [
+        26,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "047ad43eed99373b5b1f7c8d6caf6173ec0fcf096549865cabefda8da16f2aeb"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "rexx_exec",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "listed_tests": 1239,
+      "summary": [
+        1239,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "0a65979c4aa1d549a84f3ac4989a090ec7c950c0ab5cd73328b5e2ff4013db02"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "standard_stream_reopen",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 2,
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "5476fd15c661643096eed36adcd89de16c9e44588cd8a3b4748eab3c9fa3a090"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "trace_indent",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 28,
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "9d11e069f93bbe31494b713e42b4716d71bb8e2dc8cd2bec5e4cbd1cb06eeaab"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "collect_policy",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 2,
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "65bcf2215a2db58b76088d6d9e58cc96619e0da836bbf18b234cfd3077463927"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "release_local_reference",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 3,
+      "summary": [
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "eb33b57c0fd24a4268f5e54e75b20d81cf1e227f60bbb0016db7994ad35f039d"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "ir_recorded_oracle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 26,
+      "summary": [
+        26,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "80f6a45917cd47ac7466a9277e3380e50d0d445f3c4750659f7dfc20b16dbcaa"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "outer_context",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 28,
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "af8578325dc46528223cc18066abd60516f8f32ed78b0ec7c952ebb133e48900"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "signals",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 42,
+      "summary": [
+        42,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "52ba802153007198063e129af982d059c052b88ef440b92ad5eb2d4e3fef6cf0"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "timing_witnesses",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 29,
+      "summary": [
+        29,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "1e168f34adcee75b08a9ed49e9fc7421ef327425a6786e26cb031942e4c8f2f6"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "class_lifetime",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 5,
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "13f201854e3a19323f278fdaf9e795ad114e1cfdbd152061d393e6a9f164fd9a"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "introspection_arity",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 31,
+      "summary": [
+        31,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "cbf1ea2b35f547638f79dbc549a72f32efa0aa774e2e8ca5e212a3a33b2ff0ff"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "no_process_state",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 1,
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "1cf35ba5387c60aeacfa3d4e46696ab456b09f909591a7117ab0a4708bb880d1"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "datetime_zone",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 28,
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "05b572d5274f4dc8e9e4be39016f7e4258dedd0f2d082fdd008093cabb1dc080"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "refusal_sites",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 8,
+      "summary": [
+        8,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "3be77f5bf530bd844157887bcbf59d59ce3a6003fb83a16aa231486cedd73f2b"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "rexxutil_process",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 5,
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "fd15e8218df0b1a8d710aa80530cd139f3f0d0322a42a47ce1266f1f08fa4cda"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "stream_model",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 31,
+      "summary": [
+        31,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "eba06fd529684ae2558c54d221ca2674ccca256b420aa2bc40fc96c159161492"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "bootstrap_install_oracle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 27,
+      "summary": [
+        27,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "932b349ee10ef4a665f6248a62a5b8d3056a6f92da3f1434e0567f062c679bff"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "input_oracle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 34,
+      "summary": [
+        34,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "c4ae2d73245a12845cefbdec9cc5a9b3ba502b19238c51ebec19764bd0262211"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "loud",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 9,
+      "summary": [
+        9,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "ffd8ab03755033253fc7f663e6e95778d9c4a3ebf1474eeec0957b0697c6e678"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "program_end",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 8,
+      "summary": [
+        8,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "9f5237053130ccabd755d6f5a6af89cb9bc56b101803fd21ef3856cf20663c47"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "stdin_contention",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 1,
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "dd1b30bd95896c703b057331b2bc4d5aa347208d88d5b5b6cc43bf956438fb98"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "truth",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 1,
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "b64263dd844b9ca70637d89bef0c26a45db9d3efd6664c367d2e7e65ed170223"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "api_group_tests",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 31,
+      "summary": [
+        31,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "bdeee3a0603ee3b1108f482b2928dbd422f115f8bd9786fe9ca5cdecff55d310"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "collection_arity",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 29,
+      "summary": [
+        29,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "ac8f0abda058c8c12bc9b0aba3636d4b2201f9da9d9e52e32819a45e2c93664f"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "frame_block",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 2,
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "334f06a75df491f636ed6240264acb0061b3aca1a5833a42ec93f469d8e5ce74"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "library_routine_memory",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 28,
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "5db441cd5fd0976d85828194f4da2ac8e771873f02637d466277309d524f62d5"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "rexx_command",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 1,
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "5dff906f50b342e7e50b32ba589f30e0b835d1436f30b8f09bc8644541870f26"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "package_requires",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 29,
+      "summary": [
+        29,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "ff768529a8f8e5468da6ff808a2535b0360c52479176e819da21c7d3e819ec5d"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "spike",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 9,
+      "summary": [
+        9,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "b7634c5a3ed4620f888704e446c9da361ad3398c584d4ac87092b4e3a5f6d505"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "rexxc",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "22ae5acbdbf1265197c7e39438ab535b28e00329911092bac4ffde76622e14d6"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "trace_delivery_schedule",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 1,
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "8c35993c8170159e8ff1c129f4bfc67083ff48200358280c0ccac3e1576980be"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "closed_phases",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 8,
+      "summary": [
+        8,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "14b38b9730b6528346f3ce9cf5fb1052bb7b4a2b2fc8a73bc180e2f959f0891a"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "directive_options",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 29,
+      "summary": [
+        29,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "50a3a15a8d6961fcf0b3c51176966da479a853efcc42fc6dd1ee7a7516ad49db"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "ir_recorded",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 33,
+      "summary": [
+        33,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "4e31469f38a4691a464aa0e3036ad241bab82ff61f22b7d25752787568202fbd"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "oracle_deadline",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 33,
+      "summary": [
+        33,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "44bf28464f18334ea64fd0c8bac6ddb373a09a78c0cf7f31c4ee0c7fd4d73027"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "semantic_boundaries",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 5,
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "c442104a03fdacfd917ed13eafb1d6d8ea4209e0acc744a348d0f77a90e53cea"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "builtin_status",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 31,
+      "summary": [
+        31,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "1d54fdaae7082d0a99c94f9e3d8783dd39de9950150d5b8e93793bc6be987fcc"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "coverage",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 21,
+      "summary": [
+        21,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "b21f464a6c3636926cc1d62fd4e26208e8eb64044d9e9dde68fe7381dedab926"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "internal_routines",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 2,
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "8e4ab0ebcb43454086dd1c4ba503415821294f3ca7766b1f310190d97d3ef1f1"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "native_entries",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 29,
+      "summary": [
+        29,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "e3f79d2bf75c8098173a64a1bbee28429645080f0ee2eeb239cc3dbf4145bd5a"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "refusal_dispositions",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 3,
+      "summary": [
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "31979dd0e2afab34756f5bb09a5a4c0d72837bfc074a7c1dc5333d341acb2366"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "rexxc",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 4,
+      "summary": [
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "cf60ed4c52e27cf8333f37230bb287d6dd07d96c40b34d8491be16e66209688d"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "stream_handle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 8,
+      "summary": [
+        8,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "8ab023b34e1a87936d689ede493d1a54c5041a14b052e0545f3eb5d36cfb4ca3"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "bif_assertions",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 5,
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "4e933bbb1b96e37ce10ae457e1e08a4e64b638015759ed5f2a1cd51931efba82"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "compiled",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 2,
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "92d320460bca1d1c24eca4d373d1b0ad7fa6da49d226621dd90120936d4a08ab"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "gate_table_d",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 28,
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "0fe3bf9ceb72f48aec5b492b3c6da2ed0da81910b4b681d332f6d6b938fd4802"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "loom",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "fa5a7cad307f005935699726116d7a7b07f54973ce9d188d47d52d8305e72401"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "phase_ten_reasons",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 5,
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "48f9e7e3e45b7e72c8cb70314da7bc2589dc79e7f134105bd3d9cdb2560eee03"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "state_builtin_oracle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 27,
+      "summary": [
+        27,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "bb5d4ed0af49bc3d36f2719dce343697f518cf675c3c3d6855cf2c0292d7e038"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "trace_oracle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 46,
+      "summary": [
+        46,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "d5225fe87ccb53760aa484d366c6489de984110baca362b3ed9ff225679b2cc8"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "api_group_partition",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 27,
+      "summary": [
+        27,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "42543711c8eaacf2c22387776e9af0a267cd17c591767350154e31345027133e"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "rexx-ir",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "a6f478813288df30912c400c530f89c199eb6351cc33e899677885cd86aaf6a5"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "collect_stress",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 79,
+      "summary": [
+        79,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "b7dafafacc50f98829d569fbe70e59ec6b44751b4a71fcbffb292edfc99cbd8f"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "environment_seam",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 3,
+      "summary": [
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "c4f1f856b7aec83c2956239c4d1ee229278e475ecd607b5cd28bca1a3185abb9"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "keyword_assertions",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 7,
+      "summary": [
+        7,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "4011cb609ab23b8191626fed0d2d5ebf37ce13a6b7cecfaa310f5a1de23a49de"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "representation_refusals",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 3,
+      "summary": [
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "10a9d932f4cf5220b4a1e94a73830ca737d299a746b4ba4fdb461370f32eb302"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "owners",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 6,
+      "summary": [
+        6,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "d718c0a991ef2ca4020c95255673b4cfa67f73fbcc3274b8a3b4fb119d9d96e1"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "sim_processes",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 4,
+      "summary": [
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "a3ffcd3e8465e92ff30d1d0be2d1a6105d0d0f6ff477b53250d7b32319e29622"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "trace_delivery_memory",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 26,
+      "summary": [
+        26,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "45b801306657c29a15b534c7329e5cbd0beb938328946102d8459cf914db022a"
+    },
+    {
+      "key": [
+        "rexx-classes",
+        "native_classes_wiring",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 31,
+      "summary": [
+        31,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "7f08e65da650bf3b32c9dde80ba11d6297a5e296414ecc748dae49f717a49943"
+    },
+    {
+      "key": [
+        "rexx-classes",
+        "uninit_sweep_order",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 5,
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "cf5d7f9153458e1abee1f15477c738aaac01157e5a44bcfea717cc329c4d10d4"
+    },
+    {
+      "key": [
+        "rexx-lib",
+        "rexx_lib",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "listed_tests": 3,
+      "summary": [
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "5a04f9bb245c2aa0a98d23c5bd7944961077a523b578f4677c0fa39742ccee11"
+    },
+    {
+      "key": [
+        "rexx-classes",
+        "behaviour_wiring",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 21,
+      "summary": [
+        21,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "be655f7c2eeb0d6781a9eeea648f5785437964142eb43a3830ded20e9294003a"
+    },
+    {
+      "key": [
+        "rexx-classes",
+        "rexx_classes",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "listed_tests": 3,
+      "summary": [
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "634204ad61362b559cb53bb7e0928874e8b31c7b7b9721798d5ed9fff51bea7f"
+    },
+    {
+      "key": [
+        "rexx-api",
+        "handles",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 6,
+      "summary": [
+        6,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "12dce33f7fc64e7387744c220d4a5c0a2a1d8c0aab6b8ce28df220f5228099c4"
+    },
+    {
+      "key": [
+        "rexx-extract",
+        "rexx-extract-assertions",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "2081ebe8a6602c213ada049293c20ca9266ea842d319407fb6cd5c53d97ae3a4"
+    },
+    {
+      "key": [
+        "rexx-extract",
+        "extract_bif",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 10,
+      "summary": [
+        10,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "3d7b924d083d2565d56ad5525e5fb1ae7c5d322bb173763f5569a5263401cdea"
+    },
+    {
+      "key": [
+        "rexx-extract",
+        "rexx-extract",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "628f5e5578f8be30a0f3a25337450f527169c5c866a60ad546c7c3f65ae482b4"
+    },
+    {
+      "key": [
+        "rexx-api",
+        "context",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 14,
+      "summary": [
+        14,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "1556c01436dd070200f4cb34f521e66c03b4c9bbe7d11f0fd881670710a87f7a"
+    },
+    {
+      "key": [
+        "rexx-extract",
+        "extract_assertions",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 19,
+      "summary": [
+        19,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "0c90e1df2220604f07b3c5db9fc91f01473a0f99a901ca5aa5c63572992cc693"
+    },
+    {
+      "key": [
+        "rexx-api",
+        "values",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 83,
+      "summary": [
+        83,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "78463a4f9d67f52e45d9275bd13da3075ce043d1c092973da02b09dbc4796c2c"
+    },
+    {
+      "key": [
+        "rexx-api",
+        "concrete_owners",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 2,
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "90ee672e4831edb8891aaa61e4c6f02a3b7fb898bda63dbd4de7a01225c92856"
+    },
+    {
+      "key": [
+        "rexx-extract",
+        "extract_keyword",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 22,
+      "summary": [
+        22,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "f897ef424a51b9069749dbafc01f95396282afd04bfcd0c52fb4581f20795af6"
+    },
+    {
+      "key": [
+        "rexx-api",
+        "load",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 11,
+      "summary": [
+        11,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "c9d6c8adb6d998646242534b8fd90365e2cad9122ac8da055bdb03e1aedff52b"
+    },
+    {
+      "key": [
+        "rexx-api",
+        "layout",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 24,
+      "summary": [
+        24,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "ce11243394a8039253ceade0ea00ab0d63502c3ec0d040a8a5cf70237b70ce0a"
+    },
+    {
+      "key": [
+        "rexx-extract",
+        "extract",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 3,
+      "summary": [
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "82929c8ef7a7f394c4b50ac856cd2884493764712457f804cddd486e56e2c69d"
+    },
+    {
+      "key": [
+        "rexx-extract",
+        "rexx-extract-docs",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "82dc442bfa3ab39a097039dff008a222e2e7cd28e7f9fbf93627b01a450c6e8f"
+    },
+    {
+      "key": [
+        "rexx-extract",
+        "extract_docs",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 11,
+      "summary": [
+        11,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "aeff1a69b625f2ddfb3eaf3d6039adb86992ddb0c79b254c06364d5243573f80"
+    },
+    {
+      "key": [
+        "rexx-api",
+        "invoke",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 16,
+      "summary": [
+        16,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "01967c42b384e98b0dd8efa90f9b3c342aaa538c997d03d1f1f458c72b483ab1"
+    },
+    {
+      "key": [
+        "rexx-api",
+        "rexx_api",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "listed_tests": 70,
+      "summary": [
+        70,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "bfc8c1d333d3c9bc3f4fdafcd2a5cb7bd6541bce585d53e569689ceff8254aa1"
+    },
+    {
+      "key": [
+        "rexx-inventory",
+        "builtins",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 2,
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "bf57eb5116a8a5d2f16523578f35ac00215779e3b4889489a6fb169f3f5d3807"
+    },
+    {
+      "key": [
+        "rexx-inventory",
+        "errors",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 8,
+      "summary": [
+        8,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "801a4412f18a86c0d26a6d187aeea8e1cba5cab6cee3acf17979d5c05b85a8bf"
+    },
+    {
+      "key": [
+        "rexx-inventory",
+        "oracle_agreement",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 1,
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "9a7c6bd1cab9092bc7e2837207d26d01514fb412c909689eb07ddcd09c12d657"
+    },
+    {
+      "key": [
+        "rexx-inventory",
+        "rexx_inventory",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "703b509b054cd912c42d8701b40f279ee375e4f4dda3a727cf4a45270bedd511"
+    },
+    {
+      "key": [
+        "rexx-oracle",
+        "rexx_oracle",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "listed_tests": 0,
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "9ecc121c76bed959655fc05b583830dab288694f987d9cf98cf9eadbce26cd62"
+    },
+    {
+      "key": [
+        "rexx-extract",
+        "rexx_extract",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "listed_tests": 32,
+      "summary": [
+        32,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "a002ebe7e2ce2f78bdeba2359948e7106fe79db94a0d0d840606861ef3409a14"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "dispatch_seam",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 6,
+      "summary": [
+        6,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "3f59a520eadc68a3324258502674693987997be2ea9e3df7189d6a5ecdac4def"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "suite",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 70,
+      "summary": [
+        69,
+        0,
+        1,
+        0,
+        0
+      ],
+      "executable_sha256": "b9c779d3985101beac2eedb34ba2c3a0064173cf76afd4328e03ead6e8c67bc2"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "concurrency_tests",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "listed_tests": 63,
+      "summary": [
+        63,
+        0,
+        0,
+        0,
+        0
+      ],
+      "executable_sha256": "6eb4e44e0c9cfd57652d7885105bf03166d12e5bc538f1f9bcedffda8a7ff914"
+    }
+  ]
+}

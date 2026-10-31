@@ -1,0 +1,35 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.11+deb14-amd64
+
+Tests ran:          1
+Assertions:         0
+Failures:           0
+Errors:             1
+
+[error] 20261031 02:40:29.988410
+  Test:   TEST_RXAPI_LOCKED
+  Class:  RXAPI.TESTGROUP
+  File:   .../ooRexx/utilities/rxapi.testGroup
+  Event:  SYNTAX 98.971 raised unexpectedly.
+    External command "/tmp/codex-p9d-t88-target/tmp/suite-2388977-781-crate-utilities__rxapi/bin-rexx/rxapi" failed with return code 127.
+    Line:    61
+    61 *-* address "path" rxapi with output using (output)
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+File search:        00:00:00.001300
+Suite construction: 00:00:00.000884
+Test execution:     00:00:00.001261
+Total time:         00:00:00.005003
+

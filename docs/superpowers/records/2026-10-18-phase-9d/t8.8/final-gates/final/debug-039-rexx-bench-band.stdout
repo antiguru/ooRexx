@@ -1,0 +1,15 @@
+
+running 10 tests
+test tests::a_row_splits_into_the_columns_the_header_names ... ok
+test tests::an_axis_entry_is_a_stem_or_a_path ... ok
+test tests::pooled_and_paired_disagree_when_one_pair_is_perturbed ... ok
+test tests::quantiles_interpolate ... ok
+test tests::the_central_band_pulls_in_from_the_extremes ... ok
+test tests::the_envelope_covers_deviations_below_the_median ... ok
+test tests::the_median_is_an_element ... ok
+test tests::the_minimum_reduction_takes_the_least_perturbed_run ... ok
+test tests::the_relative_standard_deviation_is_scale_free ... ok
+test tests::the_spread_is_relative_to_the_median ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

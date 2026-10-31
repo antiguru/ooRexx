@@ -1,0 +1,5 @@
+a_string_reaches_nothing: test
+an_array_reaches_every_element_including_duplicates: test
+an_array_reaches_past_an_empty_slot_and_not_through_it: test
+an_instance_reaches_every_scope_and_every_value_but_no_name: test
+an_instance_stops_reaching_a_dropped_variable: test

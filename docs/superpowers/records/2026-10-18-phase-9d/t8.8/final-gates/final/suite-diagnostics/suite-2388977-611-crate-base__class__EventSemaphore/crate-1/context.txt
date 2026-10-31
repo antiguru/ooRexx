@@ -1,0 +1,45 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-611-crate-base__class__EventSemaphore/run
+TZ=None
+status=Some(0) ended=Exited(0) took=187.375413ms
+GroupRun {
+    group: "base/class/EventSemaphore",
+    expected: {},
+    started: {
+        "TEST_ISPOSTED_ONE_ARG",
+        "TEST_NEW_ONE_ARG",
+        "TEST_POST_ONE_ARG",
+        "TEST_POST_RESET",
+        "TEST_RESET_ONE_ARG",
+        "TEST_WAIT_CONCURRENT",
+        "TEST_WAIT_NUMBER",
+        "TEST_WAIT_SIMPLE",
+        "TEST_WAIT_TWO_ARGS",
+    },
+    passed: {
+        "TEST_ISPOSTED_ONE_ARG",
+        "TEST_NEW_ONE_ARG",
+        "TEST_POST_ONE_ARG",
+        "TEST_POST_RESET",
+        "TEST_RESET_ONE_ARG",
+        "TEST_WAIT_CONCURRENT",
+        "TEST_WAIT_NUMBER",
+        "TEST_WAIT_SIMPLE",
+        "TEST_WAIT_TWO_ARGS",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "9",
+    ),
+    took: 187.375413ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-611-crate-base__class__EventSemaphore/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-611-crate-base__class__EventSemaphore/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 238, modified: SystemTime { tv_sec: 1793410824, tv_nsec: 923497372 }, accessed: SystemTime { tv_sec: 1793410824, tv_nsec: 955852682 }, created: SystemTime { tv_sec: 1793410824, tv_nsec: 807500736 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-611-crate-base__class__EventSemaphore/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-611-crate-base__class__EventSemaphore/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-611-crate-base__class__EventSemaphore/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410824, tv_nsec: 887498416 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-611-crate-base__class__EventSemaphore/run/ooRexx/base/class/EventSemaphore.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-611-crate-base__class__EventSemaphore/run/ooRexx/base/class/EventSemaphore.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 6455, modified: SystemTime { tv_sec: 1793410824, tv_nsec: 767623333 }, accessed: SystemTime { tv_sec: 1793410824, tv_nsec: 803500853 }, created: SystemTime { tv_sec: 1793410824, tv_nsec: 765035505 }, .. })

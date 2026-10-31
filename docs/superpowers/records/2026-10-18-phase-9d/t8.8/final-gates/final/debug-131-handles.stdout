@@ -1,0 +1,11 @@
+
+running 6 tests
+test a_handle_that_outlived_its_activation_misses_the_slots_next_occupant ... ok
+test a_live_handle_resolves_to_the_object_it_was_made_from ... ok
+test registering_the_same_object_twice_answers_the_same_handle ... ok
+test release_unroots_one_registration_and_clear_drops_them_all ... ok
+test released_handles_of_swept_objects_are_forgotten ... ok
+test the_extremes_of_the_handle_space_are_not_null ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,0 +1,31 @@
+
+running 26 tests
+test a_destination_failing_deep_for_every_report_line_runs_under_the_oracles_memory_cap ... ok
+test support::arity::binary_selection_tests::arity_runs_the_cargo_owned_binary ... ok
+test support::arity::tests::a_receiver_with_no_wrapper_and_no_directives_writes_the_original_program ... ok
+test support::arity::tests::an_empty_argument_list_sends_no_parentheses ... ok
+test support::arity::tests::comparing_values_assigns_the_send_and_prints_the_answer ... ok
+test support::arity::tests::directives_are_appended_after_the_program ... ok
+test support::arity::tests::the_call_wrapper_puts_the_setup_and_the_send_inside_the_routine ... ok
+test support::arity::unstable::tests::identity_properties_reject_stable_overrides_and_failed_sends ... ok
+test support::arity::unstable::tests::only_the_documented_identity_rows_can_skip_value_comparison ... ok
+test support::oracle::process::tests::timeout_context_names_the_probe_phase_budget_and_load ... ok
+test support::oracle::process::tests::unavailable_load_keeps_the_timeout_diagnostic_useful ... ok
+test support::oracle::tests::classify_termination_reports_a_normal_exit_regardless_of_the_deadline_flag ... ok
+test support::oracle::tests::classify_termination_reports_signaled_when_nothing_here_killed_it ... ok
+test support::oracle::tests::classify_termination_reports_timed_out_when_the_harness_killed_it ... ok
+test support::oracle::tests::did_not_finish_is_true_for_both_failing_arms_and_false_for_a_normal_exit ... ok
+test support::oracle::tests::labels_name_exactly_the_channels_that_differ ... ok
+test support::oracle::tests::only_the_multiset_stdout_mode_ignores_ordering ... ok
+test support::oracle::tests::raw_fails_where_normalized_passes_on_a_two_column_indent_difference ... ok
+test support::oracle::tests::the_stdout_multiset_comparison_discards_ordering_and_nothing_else ... ok
+test support::tests::a_changed_value_still_differs_after_normalisation ... ok
+test support::tests::a_missing_line_still_differs_after_normalisation ... ok
+test support::tests::a_non_trace_line_is_untouched_including_its_own_spaces ... ok
+test support::tests::a_reordered_line_still_differs_after_normalisation ... ok
+test support::tests::a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change ... ok
+test support::tests::two_clause_lines_differing_only_in_indent_width_normalise_equal ... ok
+test support::tests::two_value_lines_differing_only_in_indent_width_normalise_equal ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.35s
+

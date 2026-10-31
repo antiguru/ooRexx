@@ -1,0 +1,33 @@
+{
+  "historical_count": 154,
+  "fresh_count": 156,
+  "added": [
+    {
+      "key": [
+        "rexx-api",
+        "concrete_owners",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "ruling": "Commit 3d52229d6f1a467129b5a62a51e27c9922ca81b9 adds two concrete FFI owner refusal tests after the prerequisite enumeration"
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "semantic_boundaries",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "ruling": "Task 8.8f adds semantic boundary integration coverage after the prerequisite enumeration"
+    }
+  ],
+  "removed": []
+}

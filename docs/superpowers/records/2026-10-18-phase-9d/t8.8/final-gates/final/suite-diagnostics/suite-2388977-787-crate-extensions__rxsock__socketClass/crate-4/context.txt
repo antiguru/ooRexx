@@ -1,0 +1,74 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-787-crate-extensions__rxsock__socketClass/run
+TZ=None
+status=Some(0) ended=Exited(0) took=91.266143ms
+GroupRun {
+    group: "extensions/rxsock/socketClass",
+    expected: {},
+    started: {
+        "TEST_001",
+        "TEST_002",
+        "TEST_003",
+        "TEST_004",
+        "TEST_005",
+        "TEST_006",
+        "TEST_007",
+        "TEST_GETOPTION_INVALID_OPTION",
+        "TEST_GETOPTION_NO_ARGS",
+        "TEST_GETOPTION_TWO_ARGS",
+        "TEST_OPTIONS_BOOLEAN",
+        "TEST_OPTIONS_BUFFER",
+        "TEST_OPTIONS_TIMEOUT",
+        "TEST_OPTION_BROADCAST",
+        "TEST_OPTION_ERROR",
+        "TEST_OPTION_LINGER",
+        "TEST_OPTION_TYPE",
+        "TEST_OPTION_USELOOPBACK",
+        "TEST_SETOPTION_INVALID_OPTION",
+        "TEST_SETOPTION_INVALID_VALUE",
+        "TEST_SETOPTION_NO_ARGS",
+        "TEST_SETOPTION_ONE_ARG",
+        "TEST_SETOPTION_TWO_ARGS",
+    },
+    passed: {
+        "TEST_001",
+        "TEST_002",
+        "TEST_003",
+        "TEST_004",
+        "TEST_GETOPTION_INVALID_OPTION",
+        "TEST_GETOPTION_NO_ARGS",
+        "TEST_GETOPTION_TWO_ARGS",
+        "TEST_OPTIONS_BOOLEAN",
+        "TEST_OPTIONS_BUFFER",
+        "TEST_OPTIONS_TIMEOUT",
+        "TEST_OPTION_BROADCAST",
+        "TEST_OPTION_ERROR",
+        "TEST_OPTION_LINGER",
+        "TEST_OPTION_TYPE",
+        "TEST_OPTION_USELOOPBACK",
+        "TEST_SETOPTION_INVALID_OPTION",
+        "TEST_SETOPTION_INVALID_VALUE",
+        "TEST_SETOPTION_NO_ARGS",
+        "TEST_SETOPTION_ONE_ARG",
+        "TEST_SETOPTION_TWO_ARGS",
+    },
+    failed: {},
+    blocked: {
+        "TEST_005": "timeout after 60 s",
+        "TEST_006": "timeout after 60 s",
+        "TEST_007": "timeout after 60 s",
+    },
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 4,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "20",
+    ),
+    took: 180.225945011s,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-787-crate-extensions__rxsock__socketClass/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-787-crate-extensions__rxsock__socketClass/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 564, modified: SystemTime { tv_sec: 1793411013, tv_nsec: 928989649 }, accessed: SystemTime { tv_sec: 1793411013, tv_nsec: 950014462 }, created: SystemTime { tv_sec: 1793411013, tv_nsec: 922015274 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-787-crate-extensions__rxsock__socketClass/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-787-crate-extensions__rxsock__socketClass/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-787-crate-extensions__rxsock__socketClass/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793411013, tv_nsec: 886016318 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-787-crate-extensions__rxsock__socketClass/run/ooRexx/extensions/rxsock/socketClass.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-787-crate-extensions__rxsock__socketClass/run/ooRexx/extensions/rxsock/socketClass.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 13036, modified: SystemTime { tv_sec: 1793411013, tv_nsec: 861490680 }, accessed: SystemTime { tv_sec: 1793411013, tv_nsec: 922015274 }, created: SystemTime { tv_sec: 1793411013, tv_nsec: 861118030 }, .. })

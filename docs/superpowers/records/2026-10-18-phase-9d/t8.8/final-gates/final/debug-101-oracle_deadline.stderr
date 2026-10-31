@@ -1,0 +1,5 @@
+oracle timeout: probe=/tmp/codex-p9d-t88-target/tmp/oracle-deadline-2548695-1793412412112547449/orphan.rex phase=output drain configured=10s elapsed=10.000086488s loadavg=20.44 16.73 14.77 1/3200 2548753
+stopping owned pipe-holder PID 2548702, start time 40797237, sleep limit 30s
+oracle timeout: probe=/tmp/codex-p9d-t88-target/tmp/oracle-deadline-2548695-1793412422128893459/hang.rex phase=child wait configured=10s elapsed=10.000352369s loadavg=17.92 16.31 14.66 2/3198 2548799
+oracle timeout: probe=/tmp/codex-p9d-t88-target/tmp/oracle-deadline-2548695-1793412432217020000/pipe.rex phase=child wait configured=10s elapsed=10.003039594s loadavg=15.62 15.87 14.53 21/3214 2548876
+oracle timeout: probe=/tmp/codex-p9d-t88-target/tmp/oracle-deadline-2548695-1793412442222475707/pipe.rex phase=child wait configured=500ms elapsed=501.050953ms loadavg=15.62 15.87 14.53 19/3201 2548882

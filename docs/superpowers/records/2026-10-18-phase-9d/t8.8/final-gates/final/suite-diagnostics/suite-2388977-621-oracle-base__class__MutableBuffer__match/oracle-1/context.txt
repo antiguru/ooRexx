@@ -1,0 +1,51 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-621-oracle-base__class__MutableBuffer__match/run
+TZ=None
+status=Some(0) ended=Exited(0) took=27.910418ms
+GroupRun {
+    group: "base/class/MutableBuffer/match",
+    expected: {},
+    started: {
+        "TESTNEGATIVELENGTH",
+        "TESTNEGATIVEN",
+        "TESTNEGATIVEPOS",
+        "TESTNONINTEGERLENGTH",
+        "TESTNONINTEGERN",
+        "TESTNONINTEGERPOS",
+        "TESTNONNUMERICLENGTH",
+        "TESTNONNUMERICN",
+        "TESTNONNUMERICPOS",
+        "TESTZERON",
+        "TESTZEROPOS",
+        "TEST_MATCH",
+    },
+    passed: {
+        "TESTNEGATIVELENGTH",
+        "TESTNEGATIVEN",
+        "TESTNEGATIVEPOS",
+        "TESTNONINTEGERLENGTH",
+        "TESTNONINTEGERN",
+        "TESTNONINTEGERPOS",
+        "TESTNONNUMERICLENGTH",
+        "TESTNONNUMERICN",
+        "TESTNONNUMERICPOS",
+        "TESTZERON",
+        "TESTZEROPOS",
+        "TEST_MATCH",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "12",
+    ),
+    took: 27.910418ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-621-oracle-base__class__MutableBuffer__match/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-621-oracle-base__class__MutableBuffer__match/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 288, modified: SystemTime { tv_sec: 1793410825, tv_nsec: 85286648 }, accessed: SystemTime { tv_sec: 1793410825, tv_nsec: 89457001 }, created: SystemTime { tv_sec: 1793410825, tv_nsec: 84089582 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-621-oracle-base__class__MutableBuffer__match/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-621-oracle-base__class__MutableBuffer__match/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-621-oracle-base__class__MutableBuffer__match/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410825, tv_nsec: 19494588 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-621-oracle-base__class__MutableBuffer__match/run/ooRexx/base/class/MutableBuffer/match.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-621-oracle-base__class__MutableBuffer__match/run/ooRexx/base/class/MutableBuffer/match.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 5363, modified: SystemTime { tv_sec: 1793410825, tv_nsec: 61697089 }, accessed: SystemTime { tv_sec: 1793410825, tv_nsec: 83617375 }, created: SystemTime { tv_sec: 1793410825, tv_nsec: 60759595 }, .. })

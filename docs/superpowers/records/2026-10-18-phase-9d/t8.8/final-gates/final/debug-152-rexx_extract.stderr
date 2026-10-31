@@ -1,0 +1,19 @@
+
+thread 'docs::classes::tests::a_group_heading_with_no_operator_list_is_loud' (2618585) panicked at crates/rexx-extract/src/docs/classes/methods.rs:151:9:
+fundclasses.xml names the group heading mthStringLogicalMethods with no operator list after the <xref>, so this class's operator methods would be silently absent
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'docs::classes::tests::a_member_with_no_xrefstyle_is_loud' (2618587) panicked at crates/rexx-extract/src/docs/classes/methods.rs:115:9:
+collclasses.xml names mthArrayAppend in a <member> whose <xref> carries no xrefstyle
+
+thread 'docs::classes::tests::a_template_member_whose_displayed_text_changed_is_loud' (2618589) panicked at crates/rexx-extract/src/docs/classes/methods.rs:125:13:
+utilityclasses.xml names mthDateTimeInit with xrefstyle "template:new (Class Method)", which neither displays the target section's own title nor is a member this extractor has decided about. The book displays something other than "init" here, so deriving the name from the title would emit a name the book does not show and silently omit the one it does
+
+thread 'docs::classes::tests::an_unknown_title_parenthetical_is_loud' (2618593) panicked at crates/rexx-extract/src/docs/classes/methods.rs:214:13:
+the title "frobnicate (Ceremonial Method)" ends with a parenthetical this extractor does not know. Either it is a kind marker whose arm nobody has decided, or it is a gloss that has to come off the name; guessing gives a name the oracle has on neither arm
+
+thread 'docs::classes::tests::an_unrecognised_xrefstyle_is_loud' (2618594) panicked at crates/rexx-extract/src/docs/classes/methods.rs:125:13:
+collclasses.xml names mthArrayAppend with xrefstyle "template:add", which neither displays the target section's own title nor is a member this extractor has decided about. The book displays something other than "append" here, so deriving the name from the title would emit a name the book does not show and silently omit the one it does
+
+thread 'docs::hierarchy::tests::skipping_the_comment_blanking_fires_the_argutil_assertion' (2618604) panicked at crates/rexx-extract/src/docs/hierarchy.rs:109:5:
+ArgUtil is in the derived edge set: the member at provide.xml:844 sits inside an XML comment, so this derivation read a commented-out member as a live one. The oracle confirms that edge -- .ArgUtil~superClasses is The Object class -- so the end-to-end run cannot see this and does not

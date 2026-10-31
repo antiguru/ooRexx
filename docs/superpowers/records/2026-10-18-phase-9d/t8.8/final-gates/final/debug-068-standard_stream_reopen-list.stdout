@@ -1,0 +1,2 @@
+a_reopened_standard_stream_keeps_its_writes_in_order: test
+say_after_a_reopen_writes_every_line: test

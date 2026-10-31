@@ -1,0 +1,52 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-298-crate-base__keyword__SIGNAL/run
+TZ=None
+status=Some(120) ended=Exited(120) took=101.836289ms
+GroupRun {
+    group: "base/keyword/SIGNAL",
+    expected: {},
+    started: {
+        "TEST_1",
+        "TEST_2",
+        "TEST_3",
+        "TEST_4",
+        "TEST_5",
+        "TEST_6",
+        "TEST_7",
+        "TEST_8",
+        "TEST_9",
+        "TEST_BUG_1664",
+        "TEST_BUG_1877",
+        "TEST_LABEL_ADDITIONAL",
+        "TEST_LABEL_DO",
+        "TEST_LABEL_DUPLICATE",
+        "TEST_LABEL_IF",
+        "TEST_LABEL_INTERPRET",
+        "TEST_LABEL_LITERAL",
+        "TEST_LABEL_LITERAL_HEX",
+        "TEST_LABEL_SELECT",
+        "TEST_LABEL_SYMBOL",
+        "TEST_LABEL_SYMBOL_NOT_FOUND",
+        "TEST_LABEL_VALUE_STRING",
+        "TEST_NO_LABEL",
+        "TEST_SIGNAL_ANY_CONDITION_ERROR",
+        "TEST_SIGNAL_ANY_CONDITION_FAILURE",
+        "TEST_SIGNAL_ANY_CONDITION_HALT",
+    },
+    passed: {},
+    failed: {},
+    blocked: {
+        "TEST_SIGNAL_ANY_CONDITION_HALT": "rexx-exec: ADDRESS environment \"hostemu\" a native package loader registers is not implemented (Phase 10 Extension)",
+    },
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: false,
+    cap: Memcap,
+    tests_ran: None,
+    took: 101.836289ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-298-crate-base__keyword__SIGNAL/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-298-crate-base__keyword__SIGNAL/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 632, modified: SystemTime { tv_sec: 1793410813, tv_nsec: 885155912 }, accessed: SystemTime { tv_sec: 1793410813, tv_nsec: 914699294 }, created: SystemTime { tv_sec: 1793410813, tv_nsec: 878131538 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-298-crate-base__keyword__SIGNAL/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-298-crate-base__keyword__SIGNAL/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-298-crate-base__keyword__SIGNAL/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410813, tv_nsec: 907816797 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-298-crate-base__keyword__SIGNAL/run/ooRexx/base/keyword/SIGNAL.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-298-crate-base__keyword__SIGNAL/run/ooRexx/base/keyword/SIGNAL.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 10187, modified: SystemTime { tv_sec: 1793410813, tv_nsec: 811711238 }, accessed: SystemTime { tv_sec: 1793410813, tv_nsec: 874972416 }, created: SystemTime { tv_sec: 1793410813, tv_nsec: 810538320 }, .. })

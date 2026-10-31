@@ -1,0 +1,11 @@
+
+thread 'a_collected_cell_is_refused' (2417641) panicked at crates/rexx-core/src/roots.rs:360:9:
+assertion `left == right` failed: a variable's cell CellRef { object: ObjRef(0, PhantomData<*const ()>), index: 0, generation: 0 } was collected while something still held it
+  left: 1
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'popping_a_frame_that_is_not_the_top_one_panics' (2417648) panicked at crates/rexx-core/src/roots.rs:594:9:
+assertion `left == right` failed: pop_slots on a frame that is not the top one
+  left: 2
+ right: 1

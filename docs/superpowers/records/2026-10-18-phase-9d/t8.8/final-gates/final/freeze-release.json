@@ -1,0 +1,41 @@
+{
+  "released_utc": "2026-10-31T02:28:00.759401+00:00",
+  "source_commit": "b51a9466a5ccfa365bcf74e232f6e24c23fb9765",
+  "authorization": "Root explicitly releases source/index/input freeze after reading actual audit0/debug completeness156 and confirming all semantic commands stopped. Root waits for this final guard and report/manifest before tracked metadata writes.",
+  "active_commands": [],
+  "active_sessions": [],
+  "driver": {
+    "path": "/tmp/codex-p9d-t88-final-gate-final.py",
+    "sha256": "6e6696a48d592ae937974bab49a0cb8875146bbb555306b7a54681a33e69cdb3"
+  },
+  "helper": {
+    "path": "/tmp/codex-p9d-t88-final-final-suite-delta.py",
+    "sha256": "33114e2b18f1d6c47d6528253315fd13ba9dc45eaa886e09281bd31160b66290"
+  },
+  "bridge": {
+    "path": "/tmp/codex-p9d-t88-final-source-bridge.json",
+    "sha256": "26280d4cd5082193bd773caf886a61c68329bf33628e775ac03ff8937f0a2330"
+  },
+  "config_sha256": "78ca601decbc6710d17dabd3c22777d05a5e018637b15fa9244a90144aff92f3",
+  "profile_attestation_sha256": "d3da3dcec78c38750bae84728324348fdd68115c0ca07bc82e0d3421e07f813f",
+  "normal_pin_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+  "cargo_test_cli_sha256": "9c3d09f9f9e39810985b1200007035488a3eba9d00ab6ee7382b6d7aea1b4d06",
+  "default_summary": [
+    3805,
+    0,
+    5,
+    0,
+    0
+  ],
+  "default_targets": 156,
+  "default_test_identities": 3810,
+  "doctests": 15,
+  "pinning_tests": 7,
+  "release_suite_groups_green": 402,
+  "per_test_keys": 24523,
+  "foreground_gate_timeouts": 0,
+  "existing_phase10_suite_timeout_rows": 3,
+  "audit_status": 0,
+  "final_completeness_proof": "final-completeness-proof.json",
+  "final_completeness_proof_sha256": "81759a4407f54cf317ff93308c31e0703a92b843209e5365e0fc161d32d702b5"
+}

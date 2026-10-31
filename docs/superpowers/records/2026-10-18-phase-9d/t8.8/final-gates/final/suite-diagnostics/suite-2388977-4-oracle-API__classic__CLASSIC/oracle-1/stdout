@@ -1,0 +1,51 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.11+deb14-amd64
+
+Tests ran:          63
+Assertions:         420
+Failures:           0
+Errors:             2
+
+[error] 20261031 02:40:08.429854
+  Test:   TEST_51_EXTERNALFUNCTION
+  Class:  CLASSIC.testGroup
+  File:   .../ooRexx/API/classic/CLASSIC.testGroup
+  Event:  SYNTAX 43.1 raised unexpectedly.
+    Could not find routine "MYTESTEXTFUNC".
+    Line:    832
+   832 *-* call MyTestExtFunc
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+[error] 20261031 02:40:08.431832
+  Test:   TEST_54_EXTERNALFUNCTION
+  Class:  CLASSIC.testGroup
+  File:   .../ooRexx/API/classic/CLASSIC.testGroup
+  Event:  SYNTAX 43.1 raised unexpectedly.
+    Could not find routine "MYTESTEXTFUNC".
+    Line:    850
+   850 *-* call MyTestExtFunc
+       *-* Compiled method "SEND" with scope "Message".
+  1585 *-*     .message~new(self, methodName)~send
+  1548 *-* self~doTheTest(fName, aTestResult)  -- carry out the testmethod
+   548 *-*   test~execute(testResult, verbose)
+   548 *-*   test~execute(testResult, verbose)
+   110 *-* suite~execute(testResult)
+    79 *-* retCode = 'worker.rex'(arguments)
+
+File search:        00:00:00.004035
+Suite construction: 00:00:00.000967
+Test execution:     00:00:00.025419
+Total time:         00:00:00.031112
+

@@ -1,0 +1,167 @@
+{
+  "source_commit": "b51a9466a5ccfa365bcf74e232f6e24c23fb9765",
+  "scope": "Five affected Cargo-owned harnesses; dynamic filesystem inputs remain separately frozen/manifests. Only workspace Rust dependency paths serialized, no environment-dependency records.",
+  "artifacts": [
+    {
+      "key": [
+        "rexx-core",
+        "unsafe_sites"
+      ],
+      "executable": "/tmp/codex-p9d-t88-target/debug/deps/unsafe_sites-212b841c6a394c20",
+      "executable_sha256": "0303eb5e90fbc6191fd5a139f13d56aca214f2b0dc5372765bb16159086badb8",
+      "dependency_file": "/tmp/codex-p9d-t88-target/debug/deps/unsafe_sites-212b841c6a394c20.d",
+      "dependency_file_sha256": "80fd4e9318120e4c4fafa363fa7e548cb8bfa06ad9717bc26e9ff23ed46f64ab",
+      "compiled_workspace_rust_paths": [
+        "crates/rexx-core/tests/unsafe_sites.rs"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 2,
+        "debug_assertions": true,
+        "overflow_checks": true,
+        "test": true
+      },
+      "features": []
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "ir_recorded"
+      ],
+      "executable": "/tmp/codex-p9d-t88-target/debug/deps/ir_recorded-35941a44527a2a5f",
+      "executable_sha256": "4e31469f38a4691a464aa0e3036ad241bab82ff61f22b7d25752787568202fbd",
+      "dependency_file": "/tmp/codex-p9d-t88-target/debug/deps/ir_recorded-35941a44527a2a5f.d",
+      "dependency_file_sha256": "7399593cba692994573f2fa019beebb73e2806751a343e5a795c63653eeaef64",
+      "compiled_workspace_rust_paths": [
+        "crates/rexx-exec/tests/ir_recorded.rs",
+        "crates/rexx-exec/tests/support/arity.rs",
+        "crates/rexx-exec/tests/support/arity/tests.rs",
+        "crates/rexx-exec/tests/support/arity/unstable.rs",
+        "crates/rexx-exec/tests/support/arity/unstable/tests.rs",
+        "crates/rexx-exec/tests/support/mod.rs",
+        "crates/rexx-exec/tests/support/oracle.rs",
+        "crates/rexx-exec/tests/support/oracle/process.rs",
+        "crates/rexx-exec/tests/support/oracle/process/tests.rs",
+        "crates/rexx-exec/tests/support/setup_cpp.rs",
+        "crates/rexx-exec/tests/support/sidecar.rs",
+        "crates/rexx-exec/tests/watchdog/mod.rs"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 2,
+        "debug_assertions": true,
+        "overflow_checks": true,
+        "test": true
+      },
+      "features": []
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "dispatch_seam"
+      ],
+      "executable": "/tmp/codex-p9d-t88-target/debug/deps/dispatch_seam-028afd5aa49f0af8",
+      "executable_sha256": "3f59a520eadc68a3324258502674693987997be2ea9e3df7189d6a5ecdac4def",
+      "dependency_file": "/tmp/codex-p9d-t88-target/debug/deps/dispatch_seam-028afd5aa49f0af8.d",
+      "dependency_file_sha256": "1d529799a6076445be65f6137e570475b65df889d0f386bc3f6e37c1875ed6ce",
+      "compiled_workspace_rust_paths": [
+        "crates/rexx-exec/tests/dispatch_seam.rs"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 2,
+        "debug_assertions": true,
+        "overflow_checks": true,
+        "test": true
+      },
+      "features": []
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "suite"
+      ],
+      "executable": "/tmp/codex-p9d-t88-target/debug/deps/suite-e086b2850a1d8c8d",
+      "executable_sha256": "b9c779d3985101beac2eedb34ba2c3a0064173cf76afd4328e03ead6e8c67bc2",
+      "dependency_file": "/tmp/codex-p9d-t88-target/debug/deps/suite-e086b2850a1d8c8d.d",
+      "dependency_file_sha256": "5a6e102c61d5cfc138ed4c92a50adf33dd6911d546bfdf855bd2b74a72ba37a7",
+      "compiled_workspace_rust_paths": [
+        "crates/rexx-exec/tests/suite.rs",
+        "crates/rexx-exec/tests/suite/diagnostics.rs",
+        "crates/rexx-exec/tests/suite/fixtures/mod.rs",
+        "crates/rexx-exec/tests/suite/fixtures/tests.rs",
+        "crates/rexx-exec/tests/suite/launch/mod.rs",
+        "crates/rexx-exec/tests/suite/process_ownership/mod.rs",
+        "crates/rexx-exec/tests/suite/process_ownership/tests.rs",
+        "crates/rexx-exec/tests/suite/selection/mod.rs",
+        "crates/rexx-exec/tests/suite/selection/tests.rs",
+        "crates/rexx-exec/tests/support/arity.rs",
+        "crates/rexx-exec/tests/support/arity/tests.rs",
+        "crates/rexx-exec/tests/support/arity/unstable.rs",
+        "crates/rexx-exec/tests/support/arity/unstable/tests.rs",
+        "crates/rexx-exec/tests/support/group_runner.rs",
+        "crates/rexx-exec/tests/support/group_runner/bytes/mod.rs",
+        "crates/rexx-exec/tests/support/group_runner/bytes/tests.rs",
+        "crates/rexx-exec/tests/support/mod.rs",
+        "crates/rexx-exec/tests/support/oracle.rs",
+        "crates/rexx-exec/tests/support/oracle/process.rs",
+        "crates/rexx-exec/tests/support/oracle/process/tests.rs",
+        "crates/rexx-exec/tests/support/setup_cpp.rs",
+        "crates/rexx-exec/tests/support/sidecar.rs",
+        "crates/rexx-exec/tests/support/suite_rows/checks.rs",
+        "crates/rexx-exec/tests/support/suite_rows/mod.rs",
+        "crates/rexx-exec/tests/support/suite_rows/tests.rs",
+        "crates/rexx-exec/tests/watchdog/mod.rs"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 2,
+        "debug_assertions": true,
+        "overflow_checks": true,
+        "test": true
+      },
+      "features": []
+    },
+    {
+      "key": [
+        "rexx-exec",
+        "concurrency_tests"
+      ],
+      "executable": "/tmp/codex-p9d-t88-target/debug/deps/concurrency_tests-740260b2b2a0d457",
+      "executable_sha256": "6eb4e44e0c9cfd57652d7885105bf03166d12e5bc538f1f9bcedffda8a7ff914",
+      "dependency_file": "/tmp/codex-p9d-t88-target/debug/deps/concurrency_tests-740260b2b2a0d457.d",
+      "dependency_file_sha256": "5e042ea02e225406433df4f7b9f01e1f4c3a9689cc5d0b88cbfa4e526201a14e",
+      "compiled_workspace_rust_paths": [
+        "crates/rexx-exec/tests/concurrency_tests.rs",
+        "crates/rexx-exec/tests/group_runs/mod.rs",
+        "crates/rexx-exec/tests/group_runs/whole_groups.rs",
+        "crates/rexx-exec/tests/group_runs/whole_groups/sim_gate/calibration.rs",
+        "crates/rexx-exec/tests/support/arity.rs",
+        "crates/rexx-exec/tests/support/arity/tests.rs",
+        "crates/rexx-exec/tests/support/arity/unstable.rs",
+        "crates/rexx-exec/tests/support/arity/unstable/tests.rs",
+        "crates/rexx-exec/tests/support/group_runner.rs",
+        "crates/rexx-exec/tests/support/group_runner/bytes/mod.rs",
+        "crates/rexx-exec/tests/support/group_runner/bytes/tests.rs",
+        "crates/rexx-exec/tests/support/mod.rs",
+        "crates/rexx-exec/tests/support/oracle.rs",
+        "crates/rexx-exec/tests/support/oracle/process.rs",
+        "crates/rexx-exec/tests/support/oracle/process/tests.rs",
+        "crates/rexx-exec/tests/support/setup_cpp.rs",
+        "crates/rexx-exec/tests/support/sidecar.rs",
+        "crates/rexx-exec/tests/support/suite_rows/checks.rs",
+        "crates/rexx-exec/tests/support/suite_rows/mod.rs",
+        "crates/rexx-exec/tests/support/suite_rows/tests.rs",
+        "crates/rexx-exec/tests/watchdog/mod.rs"
+      ],
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 2,
+        "debug_assertions": true,
+        "overflow_checks": true,
+        "test": true
+      },
+      "features": []
+    }
+  ]
+}

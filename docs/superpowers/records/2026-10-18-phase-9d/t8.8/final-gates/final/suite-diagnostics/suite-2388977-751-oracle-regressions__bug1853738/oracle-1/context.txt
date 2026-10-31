@@ -1,0 +1,35 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-751-oracle-regressions__bug1853738/run
+TZ=None
+status=Some(0) ended=Exited(0) took=21.717962ms
+GroupRun {
+    group: "regressions/bug1853738",
+    expected: {},
+    started: {
+        "TEST_INITCLASS_PROPERTY01",
+        "TEST_INITCLASS_PROPERTY20",
+        "TEST_INITCLASS_PROPERTY_MIDDLLE",
+        "TEST_INITCLASS_PROPERTY_PASTDATA",
+    },
+    passed: {
+        "TEST_INITCLASS_PROPERTY01",
+        "TEST_INITCLASS_PROPERTY20",
+        "TEST_INITCLASS_PROPERTY_MIDDLLE",
+        "TEST_INITCLASS_PROPERTY_PASTDATA",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "4",
+    ),
+    took: 21.717962ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-751-oracle-regressions__bug1853738/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-751-oracle-regressions__bug1853738/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 149, modified: SystemTime { tv_sec: 1793410828, tv_nsec: 717293779 }, accessed: SystemTime { tv_sec: 1793410828, tv_nsec: 719387299 }, created: SystemTime { tv_sec: 1793410828, tv_nsec: 712302009 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-751-oracle-regressions__bug1853738/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-751-oracle-regressions__bug1853738/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-751-oracle-regressions__bug1853738/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410828, tv_nsec: 643665931 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-751-oracle-regressions__bug1853738/run/ooRexx/regressions/bug1853738.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-751-oracle-regressions__bug1853738/run/ooRexx/regressions/bug1853738.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 6542, modified: SystemTime { tv_sec: 1793410828, tv_nsec: 701378396 }, accessed: SystemTime { tv_sec: 1793410828, tv_nsec: 712302009 }, created: SystemTime { tv_sec: 1793410828, tv_nsec: 700984287 }, .. })

@@ -1,0 +1,88 @@
+
+running 1 test
+test crates/rexx-api/src/load.rs - load::Library::method (line 1676) - compile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 4 tests
+test crates/rexx-api/src/ffi.rs - ffi::METHOD_CONTEXT (line 229) - compile fail ... ok
+test crates/rexx-api/src/ffi.rs - ffi::value_of (line 65) - compile fail ... ok
+test crates/rexx-api/src/load.rs - load::Library::method (line 1685) - compile fail ... ok
+test crates/rexx-api/src/load.rs - load::NativeMethodEntry (line 195) - compile fail ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+all doctests ran in 0.24s; merged doctests compilation took 0.13s
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test crates/rexx-core/src/frame.rs - frame::FrameArena (line 179) ... ok
+test crates/rexx-core/src/frame.rs - frame::RegFrame (line 108) ... ok
+test crates/rexx-core/src/handle.rs - handle::ObjRef (line 65) ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 5 tests
+test crates/rexx-core/src/frame.rs - frame::FrameArena (line 168) - compile fail ... ok
+test crates/rexx-core/src/frame.rs - frame::RegFrame (line 90) - compile fail ... ok
+test crates/rexx-core/src/frame.rs - frame::RegFrame (line 99) - compile fail ... ok
+test crates/rexx-core/src/handle.rs - handle::ObjRef (line 52) - compile fail ... ok
+test crates/rexx-core/src/handle.rs - handle::ObjRef (line 57) - compile fail ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+all doctests ran in 0.32s; merged doctests compilation took 0.14s
+
+running 1 test
+test crates/rexx-exec/src/run.rs - run::Interp::run_activation (line 446) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test crates/rexx-exec/src/run.rs - run::Interp::run_activation (line 463) - compile fail ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+all doctests ran in 0.16s; merged doctests compilation took 0.12s
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

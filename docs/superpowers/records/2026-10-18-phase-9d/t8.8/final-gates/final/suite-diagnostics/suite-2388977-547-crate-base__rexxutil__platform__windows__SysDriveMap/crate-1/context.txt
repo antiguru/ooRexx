@@ -1,0 +1,26 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-547-crate-base__rexxutil__platform__windows__SysDriveMap/run
+TZ=None
+status=Some(0) ended=Exited(0) took=66.040001ms
+GroupRun {
+    group: "base/rexxutil/platform/windows/SysDriveMap",
+    expected: {},
+    started: {},
+    passed: {},
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "0",
+    ),
+    took: 66.040001ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-547-crate-base__rexxutil__platform__windows__SysDriveMap/started.txt canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-547-crate-base__rexxutil__platform__windows__SysDriveMap/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-547-crate-base__rexxutil__platform__windows__SysDriveMap/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-547-crate-base__rexxutil__platform__windows__SysDriveMap/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410822, tv_nsec: 795559077 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-547-crate-base__rexxutil__platform__windows__SysDriveMap/run/ooRexx/base/rexxutil/platform/windows/SysDriveMap.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-547-crate-base__rexxutil__platform__windows__SysDriveMap/run/ooRexx/base/rexxutil/platform/windows/SysDriveMap.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 3829, modified: SystemTime { tv_sec: 1793410822, tv_nsec: 786657334 }, accessed: SystemTime { tv_sec: 1793410822, tv_nsec: 823558265 }, created: SystemTime { tv_sec: 1793410822, tv_nsec: 786182728 }, .. })

@@ -1,0 +1,37 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-754-crate-base__rexxutil__SysStemInsert/run
+TZ=None
+status=Some(0) ended=Exited(0) took=91.253925ms
+GroupRun {
+    group: "base/rexxutil/SysStemInsert",
+    expected: {},
+    started: {
+        "TEST_INSERT_EMPTY",
+        "TEST_INSERT_OUT_OF_RANGE",
+        "TEST_INSET",
+        "TEST_STEM_SIZE_BAD_VALUE",
+        "TEST_STEM_SIZE_NOT_SET",
+    },
+    passed: {
+        "TEST_INSERT_EMPTY",
+        "TEST_INSERT_OUT_OF_RANGE",
+        "TEST_INSET",
+        "TEST_STEM_SIZE_BAD_VALUE",
+        "TEST_STEM_SIZE_NOT_SET",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "5",
+    ),
+    took: 91.253925ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-754-crate-base__rexxutil__SysStemInsert/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-754-crate-base__rexxutil__SysStemInsert/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 142, modified: SystemTime { tv_sec: 1793410828, tv_nsec: 802897593 }, accessed: SystemTime { tv_sec: 1793410828, tv_nsec: 823384283 }, created: SystemTime { tv_sec: 1793410828, tv_nsec: 797978091 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-754-crate-base__rexxutil__SysStemInsert/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-754-crate-base__rexxutil__SysStemInsert/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-754-crate-base__rexxutil__SysStemInsert/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410828, tv_nsec: 763386023 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-754-crate-base__rexxutil__SysStemInsert/run/ooRexx/base/rexxutil/SysStemInsert.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-754-crate-base__rexxutil__SysStemInsert/run/ooRexx/base/rexxutil/SysStemInsert.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 4570, modified: SystemTime { tv_sec: 1793410828, tv_nsec: 735999726 }, accessed: SystemTime { tv_sec: 1793410828, tv_nsec: 797978091 }, created: SystemTime { tv_sec: 1793410828, tv_nsec: 735538889 }, .. })

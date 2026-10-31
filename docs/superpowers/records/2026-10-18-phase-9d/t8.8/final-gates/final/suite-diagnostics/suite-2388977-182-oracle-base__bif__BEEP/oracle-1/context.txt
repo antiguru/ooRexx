@@ -1,0 +1,45 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-182-oracle-base__bif__BEEP/run
+TZ=None
+status=Some(0) ended=Exited(0) took=37.329385ms
+GroupRun {
+    group: "base/bif/BEEP",
+    expected: {},
+    started: {
+        "TEST_1",
+        "TEST_2",
+        "TEST_3",
+        "TEST_4",
+        "TEST_5",
+        "TEST_6",
+        "TEST_7",
+        "TEST_8",
+        "TEST_BEEP_DURATION",
+    },
+    passed: {
+        "TEST_1",
+        "TEST_2",
+        "TEST_3",
+        "TEST_4",
+        "TEST_5",
+        "TEST_6",
+        "TEST_7",
+        "TEST_8",
+        "TEST_BEEP_DURATION",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "9",
+    ),
+    took: 37.329385ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-182-oracle-base__bif__BEEP/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-182-oracle-base__bif__BEEP/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 147, modified: SystemTime { tv_sec: 1793410811, tv_nsec: 393713064 }, accessed: SystemTime { tv_sec: 1793410811, tv_nsec: 396053148 }, created: SystemTime { tv_sec: 1793410811, tv_nsec: 382082299 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-182-oracle-base__bif__BEEP/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-182-oracle-base__bif__BEEP/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-182-oracle-base__bif__BEEP/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410811, tv_nsec: 311892070 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-182-oracle-base__bif__BEEP/run/ooRexx/base/bif/BEEP.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-182-oracle-base__bif__BEEP/run/ooRexx/base/bif/BEEP.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 4652, modified: SystemTime { tv_sec: 1793410811, tv_nsec: 363797331 }, accessed: SystemTime { tv_sec: 1793410811, tv_nsec: 382082299 }, created: SystemTime { tv_sec: 1793410811, tv_nsec: 361871625 }, .. })

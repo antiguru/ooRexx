@@ -1,0 +1,124 @@
+==============================================================================
+rexx-exec method-body table (D76) -- whether each documented method works (corpus/method-bodies.txt)
+mode: STRICT (the gate) -- REXX_CORPUS_GATE is set, verdicts gated for 5a, 5b, 5c, 5d, 5e, 5f, 5g, 5h, 5i, 5j, 6, 7, 8
+1347 row(s) over corpus/docs/class-methods.txt, one zero-argument send each. The oracle ran 3959 time(s): the rows pass one did not classify.
+
+verdicts, over every row of this table:
+  answers: 1312
+  loud: 17
+  unanswered: 5
+  uncomparable: 8
+  unstable: 5
+
+by (class, arm) -- rows, and what they did:
+  Alarm                        instance  7    row(s): answers=6 unstable=1
+  AlarmNotification            instance  2    row(s): answers=2
+  Array                        class     2    row(s): answers=2
+  Array                        instance  44   row(s): answers=44
+  Bag                          class     2    row(s): answers=2
+  Bag                          instance  28   row(s): answers=28
+  Buffer                       class     1    row(s): answers=1
+  CaselessColumnComparator     instance  2    row(s): answers=2
+  CaselessComparator           instance  1    row(s): answers=1
+  CaselessDescendingComparator instance  1    row(s): answers=1
+  CircularQueue                class     2    row(s): answers=2
+  CircularQueue                instance  47   row(s): answers=47
+  Class                        class     1    row(s): answers=1
+  Class                        instance  31   row(s): answers=31
+  Collection                   instance  19   row(s): answers=19
+  ColumnComparator             instance  2    row(s): answers=2
+  Comparable                   instance  1    row(s): answers=1
+  Comparator                   instance  1    row(s): answers=1
+  DateTime                     class     18   row(s): answers=17 unstable=1
+  DateTime                     instance  76   row(s): answers=75 unstable=1
+  DescendingComparator         instance  1    row(s): answers=1
+  Directory                    class     2    row(s): answers=2
+  Directory                    instance  31   row(s): answers=31
+  EventSemaphore               class     1    row(s): answers=1
+  EventSemaphore               instance  5    row(s): answers=4 loud=1
+  File                         class     10   row(s): answers=10
+  File                         instance  50   row(s): answers=50
+  IdentityTable                class     2    row(s): answers=2
+  IdentityTable                instance  24   row(s): answers=24
+  InputOutputStream            instance  11   row(s): answers=11
+  InputStream                  instance  10   row(s): answers=10
+  InvertingComparator          instance  2    row(s): answers=2
+  List                         class     2    row(s): answers=2
+  List                         instance  38   row(s): answers=38
+  MapCollection                class     1    row(s): answers=1
+  MapCollection                instance  20   row(s): answers=20
+  Message                      class     1    row(s): answers=1
+  Message                      instance  20   row(s): answers=18 loud=2
+  MessageNotification          instance  1    row(s): answers=1
+  Method                       class     3    row(s): answers=3
+  Method                       instance  17   row(s): answers=17
+  Monitor                      instance  4    row(s): answers=4
+  MutableBuffer                class     1    row(s): answers=1
+  MutableBuffer                instance  51   row(s): answers=51
+  MutexSemaphore               class     1    row(s): answers=1
+  MutexSemaphore               instance  3    row(s): answers=3
+  NumericComparator            instance  2    row(s): answers=2
+  Object                       class     1    row(s): answers=1
+  Object                       instance  31   row(s): answers=29 unstable=2
+  Orderable                    instance  19   row(s): answers=19
+  OrderedCollection            instance  34   row(s): answers=34
+  OutputStream                 instance  10   row(s): answers=10
+  Package                      class     2    row(s): answers=2
+  Package                      instance  38   row(s): answers=38
+  Pointer                      class     1    row(s): answers=1
+  Pointer                      instance  5    row(s): unanswered=5
+  Properties                   class     3    row(s): answers=3
+  Properties                   instance  39   row(s): answers=39
+  Queue                        class     2    row(s): answers=2
+  Queue                        instance  43   row(s): answers=43
+  Relation                     class     2    row(s): answers=2
+  Relation                     instance  28   row(s): answers=28
+  RexxContext                  instance  15   row(s): answers=15
+  RexxInfo                     instance  28   row(s): answers=28
+  RexxQueue                    class     5    row(s): answers=1 loud=4
+  RexxQueue                    instance  13   row(s): answers=3 loud=10
+  Routine                      class     3    row(s): answers=3
+  Routine                      instance  8    row(s): answers=8
+  Set                          class     2    row(s): answers=2
+  Set                          instance  24   row(s): answers=24
+  SetCollection                instance  19   row(s): answers=19
+  Singleton                    class     1    row(s): answers=1
+  StackFrame                   instance  10   row(s): answers=10
+  Stem                         class     2    row(s): answers=2
+  Stem                         instance  27   row(s): answers=25 uncomparable=2
+  Stream                       class     1    row(s): answers=1
+  Stream                       instance  24   row(s): answers=24
+  StreamSupplier               class     1    row(s): answers=1
+  StreamSupplier               instance  8    row(s): answers=8
+  String                       class     17   row(s): answers=17
+  String                       instance  118  row(s): answers=112 uncomparable=6
+  StringTable                  class     2    row(s): answers=2
+  StringTable                  instance  29   row(s): answers=29
+  Supplier                     class     1    row(s): answers=1
+  Supplier                     instance  7    row(s): answers=7
+  Table                        class     2    row(s): answers=2
+  Table                        instance  24   row(s): answers=24
+  Ticker                       instance  6    row(s): answers=6
+  TimeSpan                     class     10   row(s): answers=10
+  TimeSpan                     instance  47   row(s): answers=47
+  TraceObject                  class     12   row(s): answers=12
+  TraceObject                  instance  2    row(s): answers=2
+  Validate                     class     13   row(s): answers=13
+  VariableReference            instance  4    row(s): answers=4
+  WeakReference                class     1    row(s): answers=1
+  WeakReference                instance  1    row(s): answers=1
+
+every row this crate answered without agreeing, and every unstable row:
+  unstable  Object hashCode (instance arm) [the oracle]
+            the oracle answered "\u{1f}|\u{7f0}����\n" and then "\u{1f}|\u{1f}�#���\n"
+  unstable  Object identityHash (instance arm) [the oracle]
+            the oracle answered "-139783229703185\n" and then "-140597713208337\n"
+  unstable  Alarm scheduledTime (instance arm) [this crate]
+            two runs of one engine differ; the last was rc=0 out="2026-11-01T06:39:01.333434\n" err=""
+  unstable  DateTime new (class arm) [this crate]
+            two runs of one engine differ; the last was rc=0 out="2026-10-31T02:52:24.698630\n" err=""
+  unstable  DateTime elapsed (instance arm) [this crate]
+            two runs of one engine differ; the last was rc=0 out="2493.23:48:21.802291\n" err=""
+
+regressions this run: 0. other drift from the committed table: 0.
+==============================================================================

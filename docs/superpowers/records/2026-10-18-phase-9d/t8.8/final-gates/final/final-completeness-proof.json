@@ -1,0 +1,4933 @@
+{
+  "source_commit": "b51a9466a5ccfa365bcf74e232f6e24c23fb9765",
+  "status": "ALL AUTHORIZED FUNCTIONAL CHECKS PASSED",
+  "stages": {
+    "preflight": {
+      "record": "preflight.json",
+      "record_sha256": "473098e1a46b14ab361da452b69167b67695c847d08f114b323b8be7df99f2b2",
+      "returncode": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.03230531595181674
+    },
+    "rustc-version": {
+      "record": "rustc-version.json",
+      "record_sha256": "1097ecc677975ea2cb7b01693c32cf55dc642580c8749a594473009f8cdb9a3c",
+      "returncode": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.03204035299131647
+    },
+    "cargo-version": {
+      "record": "cargo-version.json",
+      "record_sha256": "be072f9340a739e819d7334065ec494b7b8652768cd74c2f6a5c6ea56e3c7233",
+      "returncode": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.0323543650447391
+    },
+    "git-revision": {
+      "record": "git-revision.json",
+      "record_sha256": "7cacc4cd38b52df005ee6a2f35c28516be4549c6f2e14ae462f0ad445ce4bbe6",
+      "returncode": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.003953969979193062
+    },
+    "git-status": {
+      "record": "git-status.json",
+      "record_sha256": "7c9084d5af801bb1668f0e06b0f7e1995ec54b791bc8b34e707a6f4b360dc108",
+      "returncode": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.11441541102249175
+    },
+    "fmt": {
+      "record": "fmt.json",
+      "record_sha256": "ce0a63b9d5659844919952618dd2814b667334cce41e5b217b6b806a2e3b0475",
+      "returncode": 0,
+      "timed_out": false,
+      "elapsed_seconds": 2.6701815180131234
+    },
+    "clippy": {
+      "record": "clippy.json",
+      "record_sha256": "f9aa6209c87f73f737eb9d2ed2504896417bf01a69573df74a93d1589e473121",
+      "returncode": 0,
+      "timed_out": false,
+      "elapsed_seconds": 1.1167793140048161
+    },
+    "release-build": {
+      "record": "release-build.json",
+      "record_sha256": "f669d5f4d77d52c60ec4a6b3beb4f9f70625d509a470e2d58edfc4d01c9442d4",
+      "returncode": 0,
+      "timed_out": false,
+      "elapsed_seconds": 30.18110850499943
+    },
+    "release-corpus": {
+      "record": "release-corpus.json",
+      "record_sha256": "0b7ed6350ccea13f144ca65e3f3581064a03dc893fdab7629ff215cf9a59a458",
+      "returncode": 0,
+      "timed_out": false,
+      "elapsed_seconds": 147.08639447099995
+    },
+    "release-suite": {
+      "record": "release-suite.json",
+      "record_sha256": "27f9cdedca6d0dc77a91ff2ae1a43a3847edd49703ec9708b5b25404e4ab198b",
+      "returncode": 0,
+      "timed_out": false,
+      "elapsed_seconds": 262.18733304401394
+    },
+    "suite-delta": {
+      "record": "suite-delta.json",
+      "record_sha256": "8a81c41cdd41f9ea50edd0ae7ebb98aab1169b0b214419f66b3e047744f8f05c",
+      "returncode": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.3150195740163326
+    },
+    "metadata": {
+      "record": "metadata.json",
+      "record_sha256": "733b99e63bbf4299685be33ab1b07971d378a980d20d2a9a2336f9bb17674f8f",
+      "returncode": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.03218897798797116
+    },
+    "debug-build": {
+      "record": "debug-build.json",
+      "record_sha256": "aa960ea88a9ba2062c270acf0f1a194438f7a2d20603ba00cad78e9879688b13",
+      "returncode": 0,
+      "timed_out": false,
+      "elapsed_seconds": 15.501600975985639
+    },
+    "cargo-dispatch-only": {
+      "record": "cargo-dispatch-only.json",
+      "record_sha256": "ccf84c04a735f06ff8371ccb28606f7836939db9e12f6d342a8c1df6d1519e85",
+      "returncode": 0,
+      "timed_out": false,
+      "elapsed_seconds": 28.37579443800496
+    },
+    "doctests": {
+      "record": "doctests.json",
+      "record_sha256": "4eac69935329512d98c79518bf901994e536ed30335311c70124d3c39113d4fc",
+      "returncode": 0,
+      "timed_out": false,
+      "elapsed_seconds": 2.168832756986376
+    },
+    "pinning": {
+      "record": "pinning.json",
+      "record_sha256": "9cd6f32d4974a051833ea53b2202d9e8743fb5bab455a8751e687410dc367b75",
+      "returncode": 0,
+      "timed_out": false,
+      "elapsed_seconds": 0.7158038230263628
+    }
+  },
+  "audit_status": 0,
+  "default_targets": 156,
+  "default_test_identities": 3810,
+  "default_summary": [
+    3805,
+    0,
+    5,
+    0,
+    0
+  ],
+  "default_records": [
+    {
+      "index": 0,
+      "key": [
+        "rexx-exec",
+        "class_weak_reference",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-000-class_weak_reference.json",
+      "record_sha256": "cab02400d8c6905b25de56b4f8c6a1d6af27fda45b64be1a8ca358eaf9502cf4",
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 1,
+      "final_population": {
+        "previous_tests": 1,
+        "added_tests": [],
+        "fresh_tests": 1
+      },
+      "elapsed_seconds": 0.032135638990439475
+    },
+    {
+      "index": 1,
+      "key": [
+        "rexx-exec",
+        "deadline",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-001-deadline.json",
+      "record_sha256": "d7cf843215e94d529dc400503e80abe83b9168f8d1332e37aed8d38a205ce243",
+      "summary": [
+        10,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 10,
+      "final_population": {
+        "previous_tests": 10,
+        "added_tests": [],
+        "fresh_tests": 10
+      },
+      "elapsed_seconds": 15.798582830990199
+    },
+    {
+      "index": 2,
+      "key": [
+        "rexx-oracle",
+        "rexx-diff",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-002-rexx-diff.json",
+      "record_sha256": "27592a12cfb483a74045bf56363d1b770dc4fb93c0e26f1f8bdd99dac7850a80",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.0017850999720394611
+    },
+    {
+      "index": 3,
+      "key": [
+        "rexx-oracle",
+        "normalize",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-003-normalize.json",
+      "record_sha256": "f3e538b217335cc33dfc0b878d02bbeeb90acc994ac380d231dd8e9736a8f3ec",
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 2,
+      "final_population": {
+        "previous_tests": 2,
+        "added_tests": [],
+        "fresh_tests": 2
+      },
+      "elapsed_seconds": 0.003880031988956034
+    },
+    {
+      "index": 4,
+      "key": [
+        "rexx-core",
+        "heap",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-004-heap.json",
+      "record_sha256": "522b8ef755987a2cd3b306b8228766fc0e624dce25440f9fa95d25142b0c5f03",
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 5,
+      "final_population": {
+        "previous_tests": 5,
+        "added_tests": [],
+        "fresh_tests": 5
+      },
+      "elapsed_seconds": 0.004011416982393712
+    },
+    {
+      "index": 5,
+      "key": [
+        "rexx-core",
+        "trace",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-005-trace.json",
+      "record_sha256": "9c0706eeecf7fe5ab8228a9f94139fdbdebabb6e25f31abcd8c77c61a0a8943d",
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 5,
+      "final_population": {
+        "previous_tests": 5,
+        "added_tests": [],
+        "fresh_tests": 5
+      },
+      "elapsed_seconds": 0.004115914984140545
+    },
+    {
+      "index": 6,
+      "key": [
+        "rexx-parse",
+        "rexx_parse",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "record": "debug-006-rexx_parse.json",
+      "record_sha256": "bfb0b6e2ecebbda2a30c1e6114fd0571b04944b738f733f245d52f5b105bfae2",
+      "summary": [
+        260,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 260,
+      "final_population": {
+        "previous_tests": 260,
+        "added_tests": [],
+        "fresh_tests": 260
+      },
+      "elapsed_seconds": 0.16451825900003314
+    },
+    {
+      "index": 7,
+      "key": [
+        "rexx-num",
+        "whole",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-007-whole.json",
+      "record_sha256": "afca9bcccb99893dff37248f20fafad0ec71e1ddb4de6b6c17e03e531b5eded1",
+      "summary": [
+        9,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 9,
+      "final_population": {
+        "previous_tests": 9,
+        "added_tests": [],
+        "fresh_tests": 9
+      },
+      "elapsed_seconds": 0.00384352303808555
+    },
+    {
+      "index": 8,
+      "key": [
+        "rexx-num",
+        "int64",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-008-int64.json",
+      "record_sha256": "8845937ef42c56d6d11bd299da38e6435f281202e7cf1d99fd3009cdf0a08eda",
+      "summary": [
+        7,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 7,
+      "final_population": {
+        "previous_tests": 7,
+        "added_tests": [],
+        "fresh_tests": 7
+      },
+      "elapsed_seconds": 0.003943558956962079
+    },
+    {
+      "index": 9,
+      "key": [
+        "rexx-parse",
+        "program",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-009-program.json",
+      "record_sha256": "d6fdcd323a03994c44473960dc789f9d678b97a5383926971e20fb32e4b62051",
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 28,
+      "final_population": {
+        "previous_tests": 28,
+        "added_tests": [],
+        "fresh_tests": 28
+      },
+      "elapsed_seconds": 0.21464679396012798
+    },
+    {
+      "index": 10,
+      "key": [
+        "rexx-parse",
+        "errors",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-010-errors.json",
+      "record_sha256": "8df6c36230d05c1a4111afb05b35fb62052ccb89361ea1cd4bb20b6f1308febb",
+      "summary": [
+        34,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 34,
+      "final_population": {
+        "previous_tests": 34,
+        "added_tests": [],
+        "fresh_tests": 34
+      },
+      "elapsed_seconds": 0.7658953660284169
+    },
+    {
+      "index": 11,
+      "key": [
+        "rexx-core",
+        "rexx_core",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "record": "debug-011-rexx_core.json",
+      "record_sha256": "1b4a2ccead1bc278d19e128ecdd4ceb8ff15019671ebbc05e9c87b7a9919b22c",
+      "summary": [
+        22,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 22,
+      "final_population": {
+        "previous_tests": 22,
+        "added_tests": [],
+        "fresh_tests": 22
+      },
+      "elapsed_seconds": 0.016206466010771692
+    },
+    {
+      "index": 12,
+      "key": [
+        "rexx-num",
+        "pow",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-012-pow.json",
+      "record_sha256": "015da8c5421c881ed809a76d5165422c9f4e03aeb8199f764c3add2f02cd5b53",
+      "summary": [
+        12,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 12,
+      "final_population": {
+        "previous_tests": 12,
+        "added_tests": [],
+        "fresh_tests": 12
+      },
+      "elapsed_seconds": 0.004057897021993995
+    },
+    {
+      "index": 13,
+      "key": [
+        "rexx-num",
+        "addsub",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-013-addsub.json",
+      "record_sha256": "afc4b68d6e32ef5ce5a9236067fb45911c11c6667e0c7dda80841ed231beaa0a",
+      "summary": [
+        7,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 7,
+      "final_population": {
+        "previous_tests": 7,
+        "added_tests": [],
+        "fresh_tests": 7
+      },
+      "elapsed_seconds": 0.003846612002234906
+    },
+    {
+      "index": 14,
+      "key": [
+        "rexx-parse",
+        "variants",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-014-variants.json",
+      "record_sha256": "f13921e32a23becad470f33b7c6cbaffa6f6dc2147cefb994ccbb0c1ed49d015",
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 1,
+      "final_population": {
+        "previous_tests": 1,
+        "added_tests": [],
+        "fresh_tests": 1
+      },
+      "elapsed_seconds": 0.16443133202847093
+    },
+    {
+      "index": 15,
+      "key": [
+        "rexx-parse",
+        "deep",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-015-deep.json",
+      "record_sha256": "b1d30db62682e19f66954d9fa9d30580332f1b7fbc26d1337c439a8273cec582",
+      "summary": [
+        6,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 6,
+      "final_population": {
+        "previous_tests": 6,
+        "added_tests": [],
+        "fresh_tests": 6
+      },
+      "elapsed_seconds": 0.16456252802163363
+    },
+    {
+      "index": 16,
+      "key": [
+        "rexx-core",
+        "handle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-016-handle.json",
+      "record_sha256": "c19814bc3028fbdb2f4d3714ae42a4bdb722899a152d6c2a3d8d8bba95119c8e",
+      "summary": [
+        9,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 9,
+      "final_population": {
+        "previous_tests": 9,
+        "added_tests": [],
+        "fresh_tests": 9
+      },
+      "elapsed_seconds": 0.0038892209995537996
+    },
+    {
+      "index": 17,
+      "key": [
+        "rexx-num",
+        "settings",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-017-settings.json",
+      "record_sha256": "0f84aff5448acd0c0fcaa5eb1924c8c0a27871c1e2b617e8e9dbaedaaefaa99d",
+      "summary": [
+        17,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 17,
+      "final_population": {
+        "previous_tests": 17,
+        "added_tests": [],
+        "fresh_tests": 17
+      },
+      "elapsed_seconds": 0.003929510014131665
+    },
+    {
+      "index": 18,
+      "key": [
+        "rexx-num",
+        "format",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-018-format.json",
+      "record_sha256": "b61f9d82b05e9a091e86f3d22f87af640c0a5414a1bc01ee77d2d6b5c55bcbb2",
+      "summary": [
+        49,
+        0,
+        3,
+        0,
+        0
+      ],
+      "listed_tests": 52,
+      "final_population": {
+        "previous_tests": 52,
+        "added_tests": [],
+        "fresh_tests": 52
+      },
+      "elapsed_seconds": 0.008019384986255318
+    },
+    {
+      "index": 19,
+      "key": [
+        "rexx-bench",
+        "rexx-bench-suite",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-019-rexx-bench-suite.json",
+      "record_sha256": "bccbbc258f63c799fd45b073e1f4859cf0fcf1c96ed500f1301a773b6f6fbc8c",
+      "summary": [
+        15,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 15,
+      "final_population": {
+        "previous_tests": 15,
+        "added_tests": [],
+        "fresh_tests": 15
+      },
+      "elapsed_seconds": 0.2647346900193952
+    },
+    {
+      "index": 20,
+      "key": [
+        "rexx-core",
+        "scope_pools",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-020-scope_pools.json",
+      "record_sha256": "5d52ed4484dcc26630c95142adbd544cefa1b0648add6ef7d89765e4e1c1cd2a",
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 5,
+      "final_population": {
+        "previous_tests": 5,
+        "added_tests": [],
+        "fresh_tests": 5
+      },
+      "elapsed_seconds": 0.003847721964120865
+    },
+    {
+      "index": 21,
+      "key": [
+        "rexx-bench",
+        "rexx-arms",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-021-rexx-arms.json",
+      "record_sha256": "f33faf139a0ac2042fd43b49bda5de04b8b8159b131d0e59bf2e08fac31a7db0",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.0017188920173794031
+    },
+    {
+      "index": 22,
+      "key": [
+        "rexx-num",
+        "gen-cases",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-022-gen-cases.json",
+      "record_sha256": "19d988422613ce71cfcb1cb9eb5d56cff11665a8b584d1e1f816bf5af2a1b53a",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.004132505040615797
+    },
+    {
+      "index": 23,
+      "key": [
+        "rexx-parse",
+        "tokens",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-023-tokens.json",
+      "record_sha256": "6473d6308a097cecb42f6334a29141be22ce552aeb4ab816e6fa124fa0bf8cc1",
+      "summary": [
+        9,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 9,
+      "final_population": {
+        "previous_tests": 9,
+        "added_tests": [],
+        "fresh_tests": 9
+      },
+      "elapsed_seconds": 0.004993451002519578
+    },
+    {
+      "index": 24,
+      "key": [
+        "rexx-num",
+        "canon",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-024-canon.json",
+      "record_sha256": "4abfeb2cd2cb37e1369b96a8ba800f3333642e364181a4e1e10fa10000358588",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.001972794998437166
+    },
+    {
+      "index": 25,
+      "key": [
+        "rexx-parse",
+        "tiling",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-025-tiling.json",
+      "record_sha256": "59e289fe4c67c222b84bbae6c5d1a12f4fde5888eb6b690ea9586acf70cbda36",
+      "summary": [
+        12,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 12,
+      "final_population": {
+        "previous_tests": 12,
+        "added_tests": [],
+        "fresh_tests": 12
+      },
+      "elapsed_seconds": 0.11433805496199057
+    },
+    {
+      "index": 26,
+      "key": [
+        "rexx-num",
+        "parse",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-026-parse.json",
+      "record_sha256": "3acd3b50caddf986023bca03d5b9b16a2a49a638f84875ca96b5cb4b14ce3f27",
+      "summary": [
+        14,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 14,
+      "final_population": {
+        "previous_tests": 14,
+        "added_tests": [],
+        "fresh_tests": 14
+      },
+      "elapsed_seconds": 0.0037888140068389475
+    },
+    {
+      "index": 27,
+      "key": [
+        "rexx-parse",
+        "scan-check",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-027-scan-check.json",
+      "record_sha256": "47ce9c6a0ae4bd20abe8694af5dd8d5212da602471aa63d199db2e79400e3d3e",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.0017446820274926722
+    },
+    {
+      "index": 28,
+      "key": [
+        "rexx-parse",
+        "sourceline_oracle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-028-sourceline_oracle.json",
+      "record_sha256": "1a27f1093900303226e58fb0b5944c238e32faf0a7dd221cd58b8196d490eeab",
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 1,
+      "final_population": {
+        "previous_tests": 1,
+        "added_tests": [],
+        "fresh_tests": 1
+      },
+      "elapsed_seconds": 0.03233264398295432
+    },
+    {
+      "index": 29,
+      "key": [
+        "rexx-num",
+        "errors",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-029-errors.json",
+      "record_sha256": "1b2a2853ee710f75e220e14c2745dee91059ffbe1f854439a4dc008f2af31283",
+      "summary": [
+        17,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 17,
+      "final_population": {
+        "previous_tests": 17,
+        "added_tests": [],
+        "fresh_tests": 17
+      },
+      "elapsed_seconds": 0.0038899409701116383
+    },
+    {
+      "index": 30,
+      "key": [
+        "rexx-num",
+        "rounding",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-030-rounding.json",
+      "record_sha256": "c4a9e275c38fafe4d65f43d2ba190ac7981bfd56e7b10b065759de6cd08e51e8",
+      "summary": [
+        13,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 13,
+      "final_population": {
+        "previous_tests": 13,
+        "added_tests": [],
+        "fresh_tests": 13
+      },
+      "elapsed_seconds": 0.003934870008379221
+    },
+    {
+      "index": 31,
+      "key": [
+        "rexx-core",
+        "collect",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-031-collect.json",
+      "record_sha256": "b42da2c9ba7c75a9277fe37724a865fa1f0b4d1208543f21b9f173279892a23a",
+      "summary": [
+        16,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 16,
+      "final_population": {
+        "previous_tests": 16,
+        "added_tests": [],
+        "fresh_tests": 16
+      },
+      "elapsed_seconds": 0.003802323015406728
+    },
+    {
+      "index": 32,
+      "key": [
+        "rexx-core",
+        "roots",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-032-roots.json",
+      "record_sha256": "f00b15a0ab8ebb45103baeffee6e661a2139a31deeebcff699e76f4c479380d3",
+      "summary": [
+        22,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 22,
+      "final_population": {
+        "previous_tests": 22,
+        "added_tests": [],
+        "fresh_tests": 22
+      },
+      "elapsed_seconds": 0.00404804601566866
+    },
+    {
+      "index": 33,
+      "key": [
+        "rexx-parse",
+        "sourceline",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-033-sourceline.json",
+      "record_sha256": "3b870f434cebba3b24336f460eedd46639b549cd2d9805c5b2c1ebead709376b",
+      "summary": [
+        25,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 25,
+      "final_population": {
+        "previous_tests": 25,
+        "added_tests": [],
+        "fresh_tests": 25
+      },
+      "elapsed_seconds": 0.003899800998624414
+    },
+    {
+      "index": 34,
+      "key": [
+        "rexx-core",
+        "uninit",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-034-uninit.json",
+      "record_sha256": "cc84a18512051771897537d85f8d78aaae8a520a761ef4db8f68223813203397",
+      "summary": [
+        8,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 8,
+      "final_population": {
+        "previous_tests": 8,
+        "added_tests": [],
+        "fresh_tests": 8
+      },
+      "elapsed_seconds": 0.00381224398734048
+    },
+    {
+      "index": 35,
+      "key": [
+        "rexx-num",
+        "muldiv",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-035-muldiv.json",
+      "record_sha256": "768e60d190614dd6cd886cf872065c6b5b0493742a519078f6f1ee9238280cae",
+      "summary": [
+        11,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 11,
+      "final_population": {
+        "previous_tests": 11,
+        "added_tests": [],
+        "fresh_tests": 11
+      },
+      "elapsed_seconds": 0.0038969710003584623
+    },
+    {
+      "index": 36,
+      "key": [
+        "rexx-core",
+        "buffer_bytes",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-036-buffer_bytes.json",
+      "record_sha256": "ecc3e61114812ba670ced443a229d42ac69115667f7ce87e640a8c29c51cbe5d",
+      "summary": [
+        6,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 6,
+      "final_population": {
+        "previous_tests": 6,
+        "added_tests": [],
+        "fresh_tests": 6
+      },
+      "elapsed_seconds": 0.004027027986012399
+    },
+    {
+      "index": 37,
+      "key": [
+        "rexx-parse",
+        "scanner",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-037-scanner.json",
+      "record_sha256": "baa9aadb3df0cbb8a58e3c77e075d421a001875189ee985e4a7c2574ff59882b",
+      "summary": [
+        36,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 36,
+      "final_population": {
+        "previous_tests": 36,
+        "added_tests": [],
+        "fresh_tests": 36
+      },
+      "elapsed_seconds": 1.5175204999977723
+    },
+    {
+      "index": 38,
+      "key": [
+        "rexx-bench",
+        "rexx-time",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-038-rexx-time.json",
+      "record_sha256": "5a5863b7ae5aed23752a12ae214b405fb71415dac27389d3005503c561ee6517",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.0017053329502232373
+    },
+    {
+      "index": 39,
+      "key": [
+        "rexx-bench",
+        "rexx-bench-band",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-039-rexx-bench-band.json",
+      "record_sha256": "3c05f3569a79bdab62cb30231f6b4188daf12d5596ca9c075edd74257816cb60",
+      "summary": [
+        10,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 10,
+      "final_population": {
+        "previous_tests": 10,
+        "added_tests": [],
+        "fresh_tests": 10
+      },
+      "elapsed_seconds": 0.00378049403661862
+    },
+    {
+      "index": 40,
+      "key": [
+        "rexx-core",
+        "unsafe_sites",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-040-unsafe_sites.json",
+      "record_sha256": "05a716054ebde94af877a4fed847ab9dcec9ef39184b4137a5bc612a63aa49e8",
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 2,
+      "final_population": {
+        "previous_tests": 2,
+        "added_tests": [],
+        "fresh_tests": 2
+      },
+      "elapsed_seconds": 0.11429502599639818
+    },
+    {
+      "index": 41,
+      "key": [
+        "rexx-bench",
+        "rexx_bench",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "record": "debug-041-rexx_bench.json",
+      "record_sha256": "22857e76145641806e8664f429909e461ba6c4baad9948986432c38a9f2d093d",
+      "summary": [
+        30,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 30,
+      "final_population": {
+        "previous_tests": 30,
+        "added_tests": [],
+        "fresh_tests": 30
+      },
+      "elapsed_seconds": 0.015902384999208152
+    },
+    {
+      "index": 42,
+      "key": [
+        "rexx-num",
+        "rexx_num",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "record": "debug-042-rexx_num.json",
+      "record_sha256": "8b245aba8b49a8a3d1ca616b225883287674a1e7c8bf09392463850ffde5c147",
+      "summary": [
+        23,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 23,
+      "final_population": {
+        "previous_tests": 23,
+        "added_tests": [],
+        "fresh_tests": 23
+      },
+      "elapsed_seconds": 4.775411618989892
+    },
+    {
+      "index": 43,
+      "key": [
+        "rexx-num",
+        "addsub",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-043-addsub.json",
+      "record_sha256": "70a054b9e7084f922ac705f462fae1834e59cb8fcd9c6f8378e9ef1ff43274a2",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.0017676699790172279
+    },
+    {
+      "index": 44,
+      "key": [
+        "rexx-num",
+        "fmt-check",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-044-fmt-check.json",
+      "record_sha256": "ee45b119108213cecb699a9660271961bee4df3af1669382009a05d196c7561e",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.0016726430039852858
+    },
+    {
+      "index": 45,
+      "key": [
+        "rexx-core",
+        "behaviour",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-045-behaviour.json",
+      "record_sha256": "e28f7fc64e3a1b4492478a9646edc14bff122189ee22c887c01785d4c1e4b804",
+      "summary": [
+        6,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 6,
+      "final_population": {
+        "previous_tests": 6,
+        "added_tests": [],
+        "fresh_tests": 6
+      },
+      "elapsed_seconds": 0.003816223004832864
+    },
+    {
+      "index": 46,
+      "key": [
+        "rexx-num",
+        "muldiv",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-046-muldiv.json",
+      "record_sha256": "215b88f1a47884bffdc7d2b95543307f861941f19a51b9ab457c2b6f9d54442f",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.001596396032255143
+    },
+    {
+      "index": 47,
+      "key": [
+        "rexx-num",
+        "compare",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-047-compare.json",
+      "record_sha256": "8de0da501629623484a02b8a3be68ebb13113515e5e382fc8a28bb70177ff1cb",
+      "summary": [
+        15,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 15,
+      "final_population": {
+        "previous_tests": 15,
+        "added_tests": [],
+        "fresh_tests": 15
+      },
+      "elapsed_seconds": 0.003724345995578915
+    },
+    {
+      "index": 48,
+      "key": [
+        "rexx-num",
+        "rendered",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-048-rendered.json",
+      "record_sha256": "bc2b01f624c626db8ed58884e19138b5c3b145b6bc70bbc9d168b277a5c6bd15",
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 2,
+      "final_population": {
+        "previous_tests": 2,
+        "added_tests": [],
+        "fresh_tests": 2
+      },
+      "elapsed_seconds": 0.032153568987268955
+    },
+    {
+      "index": 49,
+      "key": [
+        "rexx-parse",
+        "samples",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-049-samples.json",
+      "record_sha256": "8cd4350268ea6e554a1a06cc5c7f23ab9735ef747ea8d63794ffa822dc2e4afe",
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 1,
+      "final_population": {
+        "previous_tests": 1,
+        "added_tests": [],
+        "fresh_tests": 1
+      },
+      "elapsed_seconds": 0.06398328702198341
+    },
+    {
+      "index": 50,
+      "key": [
+        "rexx-exec",
+        "introspection_scopes",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-050-introspection_scopes.json",
+      "record_sha256": "8177fc3aa43a95c3da54fd0dabb344ef721e5f29306e0b630c4a8e950623add4",
+      "summary": [
+        29,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 29,
+      "final_population": {
+        "previous_tests": 29,
+        "added_tests": [],
+        "fresh_tests": 29
+      },
+      "elapsed_seconds": 0.2146764430217445
+    },
+    {
+      "index": 51,
+      "key": [
+        "rexx-exec",
+        "numeric_model",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-051-numeric_model.json",
+      "record_sha256": "139f319f93ada8f4b13e719ceaeafb8b26210ebd1be8c7ae211c9ad7de8939a9",
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 28,
+      "final_population": {
+        "previous_tests": 28,
+        "added_tests": [],
+        "fresh_tests": 28
+      },
+      "elapsed_seconds": 26.97413718298776
+    },
+    {
+      "index": 52,
+      "key": [
+        "rexx-exec",
+        "security_replacements",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-052-security_replacements.json",
+      "record_sha256": "c4e0a481fb39a5b24deeade9b2a09dffaa7ec64c6fe154105f238ac57a796018",
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 2,
+      "final_population": {
+        "previous_tests": 2,
+        "added_tests": [],
+        "fresh_tests": 2
+      },
+      "elapsed_seconds": 0.064209470001515
+    },
+    {
+      "index": 53,
+      "key": [
+        "rexx-exec",
+        "string_answer_arguments",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-053-string_answer_arguments.json",
+      "record_sha256": "496e6c70745c87d4aa95f1c7fdbb2a4bf36475bf3e7f1d88c086b11eeaa50eea",
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 1,
+      "final_population": {
+        "previous_tests": 1,
+        "added_tests": [],
+        "fresh_tests": 1
+      },
+      "elapsed_seconds": 1.717673305014614
+    },
+    {
+      "index": 54,
+      "key": [
+        "rexx-exec",
+        "buffer_growth_error_exit",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-054-buffer_growth_error_exit.json",
+      "record_sha256": "25d703adec2f18aaa02bcc127943a8d7d9daa4bed769e1ab8a4e030200864ec7",
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 1,
+      "final_population": {
+        "previous_tests": 1,
+        "added_tests": [],
+        "fresh_tests": 1
+      },
+      "elapsed_seconds": 0.21456162602407858
+    },
+    {
+      "index": 55,
+      "key": [
+        "rexx-exec",
+        "corpus",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-055-corpus.json",
+      "record_sha256": "e895d1e8198f7ac453ab5363569534dc09b7ef446be440c24b1c3e6a217e1937",
+      "summary": [
+        34,
+        0,
+        1,
+        0,
+        0
+      ],
+      "listed_tests": 35,
+      "final_population": {
+        "previous_tests": 35,
+        "added_tests": [],
+        "fresh_tests": 35
+      },
+      "elapsed_seconds": 149.84112607804127
+    },
+    {
+      "index": 56,
+      "key": [
+        "rexx-exec",
+        "instance_copy_memory",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-056-instance_copy_memory.json",
+      "record_sha256": "078cf206d2b46f4503d2e5123371b6bde18c7f9553ecad543bd12b98633d916d",
+      "summary": [
+        26,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 26,
+      "final_population": {
+        "previous_tests": 26,
+        "added_tests": [],
+        "fresh_tests": 26
+      },
+      "elapsed_seconds": 0.2146184539888054
+    },
+    {
+      "index": 57,
+      "key": [
+        "rexx-exec",
+        "method_bodies",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-057-method_bodies.json",
+      "record_sha256": "7b91257cc156c84fa4a27fbd245ad68b58bfd101622fced107ec4cb825434894",
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 28,
+      "final_population": {
+        "previous_tests": 28,
+        "added_tests": [],
+        "fresh_tests": 28
+      },
+      "elapsed_seconds": 120.27797114400892
+    },
+    {
+      "index": 58,
+      "key": [
+        "rexx-exec",
+        "prompt_before_read",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-058-prompt_before_read.json",
+      "record_sha256": "e2c15ca62f7f1ab9d71b24c7ecdef98829f37370c8e326410d916475e1e1c5bc",
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 2,
+      "final_population": {
+        "previous_tests": 2,
+        "added_tests": [],
+        "fresh_tests": 2
+      },
+      "elapsed_seconds": 0.11545720300637186
+    },
+    {
+      "index": 59,
+      "key": [
+        "rexx-exec",
+        "stdout_write_errors",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-059-stdout_write_errors.json",
+      "record_sha256": "69f89c4d65c9bf89c13cf95fd04075acfac8567fd87a93ca0e1eac523938d739",
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 5,
+      "final_population": {
+        "previous_tests": 5,
+        "added_tests": [],
+        "fresh_tests": 5
+      },
+      "elapsed_seconds": 0.1644361999933608
+    },
+    {
+      "index": 60,
+      "key": [
+        "rexx-exec",
+        "unreachable_classes",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-060-unreachable_classes.json",
+      "record_sha256": "a7a9b7057c42e282469572971b1e3fc0baf229636c0dca4db4e966584d7d8e51",
+      "summary": [
+        26,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 26,
+      "final_population": {
+        "previous_tests": 26,
+        "added_tests": [],
+        "fresh_tests": 26
+      },
+      "elapsed_seconds": 0.11464736599009484
+    },
+    {
+      "index": 61,
+      "key": [
+        "rexx-exec",
+        "assertions",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-061-assertions.json",
+      "record_sha256": "115b36f9a91b98f2cc1ca55bd40694a87e9173ea8892bd7155bbf71e3cf96543",
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 5,
+      "final_population": {
+        "previous_tests": 5,
+        "added_tests": [],
+        "fresh_tests": 5
+      },
+      "elapsed_seconds": 16.900329435011372
+    },
+    {
+      "index": 62,
+      "key": [
+        "rexx-exec",
+        "collection_scopes",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-062-collection_scopes.json",
+      "record_sha256": "a2b855d42d552fada9f441d3fed8ddbd370f2b90c0de79e46ba10122d7d5f989",
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 28,
+      "final_population": {
+        "previous_tests": 28,
+        "added_tests": [],
+        "fresh_tests": 28
+      },
+      "elapsed_seconds": 0.03216620703460649
+    },
+    {
+      "index": 63,
+      "key": [
+        "rexx-exec",
+        "gate_table_c",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-063-gate_table_c.json",
+      "record_sha256": "d97f77ccf20db50e550b7d0aaa1671b63c331916bfde5c71b9f26e5035d1b6fb",
+      "summary": [
+        27,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 27,
+      "final_population": {
+        "previous_tests": 27,
+        "added_tests": [],
+        "fresh_tests": 27
+      },
+      "elapsed_seconds": 8.031796954048332
+    },
+    {
+      "index": 64,
+      "key": [
+        "rexx-exec",
+        "licensed_divergences",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-064-licensed_divergences.json",
+      "record_sha256": "5609b51dd78fbe0d5a521d81e6782951844a82cd3a9e242e0fb2b70d8bc14aae",
+      "summary": [
+        27,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 27,
+      "final_population": {
+        "previous_tests": 27,
+        "added_tests": [],
+        "fresh_tests": 27
+      },
+      "elapsed_seconds": 0.4651413380051963
+    },
+    {
+      "index": 65,
+      "key": [
+        "rexx-exec",
+        "rexx",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-065-rexx.json",
+      "record_sha256": "a806649b803a7064e4774d740d91f25e6eaf66a869d1be7164b19c0c11604116",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.0019295659731142223
+    },
+    {
+      "index": 66,
+      "key": [
+        "rexx-exec",
+        "parse_version_oracle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-066-parse_version_oracle.json",
+      "record_sha256": "4ce765ced2703a4bc91d350a693d8440adfd30643d56fdff037e8b39f64c4a5b",
+      "summary": [
+        26,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 26,
+      "final_population": {
+        "previous_tests": 26,
+        "added_tests": [],
+        "fresh_tests": 26
+      },
+      "elapsed_seconds": 0.06415111204842106
+    },
+    {
+      "index": 67,
+      "key": [
+        "rexx-exec",
+        "rexx_exec",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "record": "debug-067-rexx_exec.json",
+      "record_sha256": "f018edef3a5fa072c81ec975c9612d6f6a5d38df8617913e1e84caa3560b7377",
+      "summary": [
+        1239,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 1239,
+      "final_population": {
+        "previous_tests": 1239,
+        "added_tests": [],
+        "fresh_tests": 1239
+      },
+      "elapsed_seconds": 115.51501075096894
+    },
+    {
+      "index": 68,
+      "key": [
+        "rexx-exec",
+        "standard_stream_reopen",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-068-standard_stream_reopen.json",
+      "record_sha256": "be48192ddd3ee65eaef70dcb4f2f4736d31b6b2eaf5f12296a46aa962f684af2",
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 2,
+      "final_population": {
+        "previous_tests": 2,
+        "added_tests": [],
+        "fresh_tests": 2
+      },
+      "elapsed_seconds": 0.16445637901779264
+    },
+    {
+      "index": 69,
+      "key": [
+        "rexx-exec",
+        "trace_indent",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-069-trace_indent.json",
+      "record_sha256": "b12d89ad56cb0cfa0d230690968c944a56ad9a688553bb3abc3ba83fcb9443f3",
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 28,
+      "final_population": {
+        "previous_tests": 28,
+        "added_tests": [],
+        "fresh_tests": 28
+      },
+      "elapsed_seconds": 0.2145499939797446
+    },
+    {
+      "index": 70,
+      "key": [
+        "rexx-exec",
+        "collect_policy",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-070-collect_policy.json",
+      "record_sha256": "16a31838b419c205d9e2370c14fec63d4c1333647ffb7cc0d78e4045ad4ae89f",
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 2,
+      "final_population": {
+        "previous_tests": 2,
+        "added_tests": [],
+        "fresh_tests": 2
+      },
+      "elapsed_seconds": 0.6655545280082151
+    },
+    {
+      "index": 71,
+      "key": [
+        "rexx-exec",
+        "release_local_reference",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-071-release_local_reference.json",
+      "record_sha256": "2c4037884498144b1728d8020e3f8b1112337047a44cde54140a9572e2c51307",
+      "summary": [
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 3,
+      "final_population": {
+        "previous_tests": 3,
+        "added_tests": [],
+        "fresh_tests": 3
+      },
+      "elapsed_seconds": 1.5699717170209624
+    },
+    {
+      "index": 72,
+      "key": [
+        "rexx-exec",
+        "ir_recorded_oracle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-072-ir_recorded_oracle.json",
+      "record_sha256": "a2c039d7fbbe611ffa8234a8d00283b005b6e47e5a550a4c44d49f1f8e0731dc",
+      "summary": [
+        26,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 26,
+      "final_population": {
+        "previous_tests": 26,
+        "added_tests": [],
+        "fresh_tests": 26
+      },
+      "elapsed_seconds": 1.3666941759875044
+    },
+    {
+      "index": 73,
+      "key": [
+        "rexx-exec",
+        "outer_context",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-073-outer_context.json",
+      "record_sha256": "bb0bedf45735c9e88bd97fbd74a9863957a1cd17682f8ce779c07cac4b3d0252",
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 28,
+      "final_population": {
+        "previous_tests": 28,
+        "added_tests": [],
+        "fresh_tests": 28
+      },
+      "elapsed_seconds": 2.1255704169743694
+    },
+    {
+      "index": 74,
+      "key": [
+        "rexx-exec",
+        "signals",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-074-signals.json",
+      "record_sha256": "579fef9b651307ca5f0d1a653dd10b7b50f76d69f9ca33875e31dd9c29e18022",
+      "summary": [
+        42,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 42,
+      "final_population": {
+        "previous_tests": 42,
+        "added_tests": [],
+        "fresh_tests": 42
+      },
+      "elapsed_seconds": 66.6197332930169
+    },
+    {
+      "index": 75,
+      "key": [
+        "rexx-exec",
+        "timing_witnesses",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-075-timing_witnesses.json",
+      "record_sha256": "e31c97fd52686e204ce234dec20a248b678bb0b8ce743cc29c6ae10f490a6e35",
+      "summary": [
+        29,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 29,
+      "final_population": {
+        "previous_tests": 29,
+        "added_tests": [],
+        "fresh_tests": 29
+      },
+      "elapsed_seconds": 36.47430723399157
+    },
+    {
+      "index": 76,
+      "key": [
+        "rexx-exec",
+        "class_lifetime",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-076-class_lifetime.json",
+      "record_sha256": "bd986f794572919691f9f44cb1b0d8756cd253e877d6591eef004eb6a2cd6b3a",
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 5,
+      "final_population": {
+        "previous_tests": 5,
+        "added_tests": [],
+        "fresh_tests": 5
+      },
+      "elapsed_seconds": 0.2648435439914465
+    },
+    {
+      "index": 77,
+      "key": [
+        "rexx-exec",
+        "introspection_arity",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-077-introspection_arity.json",
+      "record_sha256": "f93c1f9b996ff86dfacea8cea7aaf70788af2bf7d08964d8308e11524145b84c",
+      "summary": [
+        31,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 31,
+      "final_population": {
+        "previous_tests": 31,
+        "added_tests": [],
+        "fresh_tests": 31
+      },
+      "elapsed_seconds": 19.10052400396671
+    },
+    {
+      "index": 78,
+      "key": [
+        "rexx-exec",
+        "no_process_state",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-078-no_process_state.json",
+      "record_sha256": "f999c47880931b8360ca8facfb789d274a1ab49d21dcde64a6d634031c4581de",
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 1,
+      "final_population": {
+        "previous_tests": 1,
+        "added_tests": [],
+        "fresh_tests": 1
+      },
+      "elapsed_seconds": 0.03208581998478621
+    },
+    {
+      "index": 79,
+      "key": [
+        "rexx-exec",
+        "datetime_zone",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-079-datetime_zone.json",
+      "record_sha256": "7aea3dccd6cd760a27bb3ef33efbd1f94735b048da0dd206ff6a5159e457afec",
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 28,
+      "final_population": {
+        "previous_tests": 28,
+        "added_tests": [],
+        "fresh_tests": 28
+      },
+      "elapsed_seconds": 1.066235669015441
+    },
+    {
+      "index": 80,
+      "key": [
+        "rexx-exec",
+        "refusal_sites",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-080-refusal_sites.json",
+      "record_sha256": "537f1070044e4d334d239afbf4407ef6300bd707860d9e51e54b54715ca84e37",
+      "summary": [
+        8,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 8,
+      "final_population": {
+        "previous_tests": 8,
+        "added_tests": [],
+        "fresh_tests": 8
+      },
+      "elapsed_seconds": 0.7653757060179487
+    },
+    {
+      "index": 81,
+      "key": [
+        "rexx-exec",
+        "rexxutil_process",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-081-rexxutil_process.json",
+      "record_sha256": "bafeeeee1f34c43ba8eeb56089717ac1c26eb8cc520a7e31fd4f9b73484f50fb",
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 5,
+      "final_population": {
+        "previous_tests": 5,
+        "added_tests": [],
+        "fresh_tests": 5
+      },
+      "elapsed_seconds": 1.1668712500249967
+    },
+    {
+      "index": 82,
+      "key": [
+        "rexx-exec",
+        "stream_model",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-082-stream_model.json",
+      "record_sha256": "69efd421c8138e6000cec6effa18ed5ea678b14e98c2c937a32a273478ce33bd",
+      "summary": [
+        31,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 31,
+      "final_population": {
+        "previous_tests": 31,
+        "added_tests": [],
+        "fresh_tests": 31
+      },
+      "elapsed_seconds": 3.8726214399794117
+    },
+    {
+      "index": 83,
+      "key": [
+        "rexx-exec",
+        "bootstrap_install_oracle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-083-bootstrap_install_oracle.json",
+      "record_sha256": "f891b1021817ae5cc9d2c7b83c48f51fae226bb040d90bf8af5da80816c2876d",
+      "summary": [
+        27,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 27,
+      "final_population": {
+        "previous_tests": 27,
+        "added_tests": [],
+        "fresh_tests": 27
+      },
+      "elapsed_seconds": 0.11428298900136724
+    },
+    {
+      "index": 84,
+      "key": [
+        "rexx-exec",
+        "input_oracle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-084-input_oracle.json",
+      "record_sha256": "d369209e2b7a5966f67fdf2c6b7863ed3a03fac8f561bae7d3395083425fe476",
+      "summary": [
+        34,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 34,
+      "final_population": {
+        "previous_tests": 34,
+        "added_tests": [],
+        "fresh_tests": 34
+      },
+      "elapsed_seconds": 1.3673062240122817
+    },
+    {
+      "index": 85,
+      "key": [
+        "rexx-exec",
+        "loud",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-085-loud.json",
+      "record_sha256": "f2f60c35856e5b007fc17ef067d4658a4a65caad1b3bd9c87a82c4542d65859d",
+      "summary": [
+        9,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 9,
+      "final_population": {
+        "previous_tests": 9,
+        "added_tests": [],
+        "fresh_tests": 9
+      },
+      "elapsed_seconds": 0.0038083060062490404
+    },
+    {
+      "index": 86,
+      "key": [
+        "rexx-exec",
+        "program_end",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-086-program_end.json",
+      "record_sha256": "209d1a2698c1dbcf83ee93981a02c7edfd1ad1e951a99063d1dc6c24ed7c6013",
+      "summary": [
+        8,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 8,
+      "final_population": {
+        "previous_tests": 8,
+        "added_tests": [],
+        "fresh_tests": 8
+      },
+      "elapsed_seconds": 9.133906591974664
+    },
+    {
+      "index": 87,
+      "key": [
+        "rexx-exec",
+        "stdin_contention",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-087-stdin_contention.json",
+      "record_sha256": "da2132860c2a3ca839b522e6aef44ed37a2838936723aaa6872b43a003c38558",
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 1,
+      "final_population": {
+        "previous_tests": 1,
+        "added_tests": [],
+        "fresh_tests": 1
+      },
+      "elapsed_seconds": 25.572434332978446
+    },
+    {
+      "index": 88,
+      "key": [
+        "rexx-exec",
+        "truth",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-088-truth.json",
+      "record_sha256": "0b904d6ff3a836e518d8deb3c9a52dd159bac3c35f2ed334e9597a5f421066e3",
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 1,
+      "final_population": {
+        "previous_tests": 1,
+        "added_tests": [],
+        "fresh_tests": 1
+      },
+      "elapsed_seconds": 1.3285147009883076
+    },
+    {
+      "index": 89,
+      "key": [
+        "rexx-exec",
+        "api_group_tests",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-089-api_group_tests.json",
+      "record_sha256": "b9260027c61b1cb9a5a429938d2463fe870a97b0cd0970e6fd6ff52b49b69f25",
+      "summary": [
+        31,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 31,
+      "final_population": {
+        "previous_tests": 31,
+        "added_tests": [],
+        "fresh_tests": 31
+      },
+      "elapsed_seconds": 66.81307533296058
+    },
+    {
+      "index": 90,
+      "key": [
+        "rexx-exec",
+        "collection_arity",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-090-collection_arity.json",
+      "record_sha256": "01fd00aeb30469dbcda03071ec781e5f8305596fa2587846161a915574b4c363",
+      "summary": [
+        29,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 29,
+      "final_population": {
+        "previous_tests": 29,
+        "added_tests": [],
+        "fresh_tests": 29
+      },
+      "elapsed_seconds": 34.13723003299674
+    },
+    {
+      "index": 91,
+      "key": [
+        "rexx-exec",
+        "frame_block",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-091-frame_block.json",
+      "record_sha256": "3cf420cf045553dcb28cc104d9e1610704251a8a969f7330ce431e34abdbeacf",
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 2,
+      "final_population": {
+        "previous_tests": 2,
+        "added_tests": [],
+        "fresh_tests": 2
+      },
+      "elapsed_seconds": 0.11466714297421277
+    },
+    {
+      "index": 92,
+      "key": [
+        "rexx-exec",
+        "library_routine_memory",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-092-library_routine_memory.json",
+      "record_sha256": "c6ceddb18169565b94e0cb553a0168b0d18693794f04f84c69758448ae4ab7fe",
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 28,
+      "final_population": {
+        "previous_tests": 28,
+        "added_tests": [],
+        "fresh_tests": 28
+      },
+      "elapsed_seconds": 26.274079086026177
+    },
+    {
+      "index": 93,
+      "key": [
+        "rexx-exec",
+        "rexx_command",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-093-rexx_command.json",
+      "record_sha256": "f0f6a5d38aae3af963f0cf7fb565aa2afbc96223d191b0db6d28f1931d72341e",
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 1,
+      "final_population": {
+        "previous_tests": 1,
+        "added_tests": [],
+        "fresh_tests": 1
+      },
+      "elapsed_seconds": 4.17376122600399
+    },
+    {
+      "index": 94,
+      "key": [
+        "rexx-exec",
+        "package_requires",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-094-package_requires.json",
+      "record_sha256": "50ef2e7c07f61e5b45213fa9e3ffed23d798a3df6030ce09821cce974281d919",
+      "summary": [
+        29,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 29,
+      "final_population": {
+        "previous_tests": 29,
+        "added_tests": [],
+        "fresh_tests": 29
+      },
+      "elapsed_seconds": 0.46510724897962064
+    },
+    {
+      "index": 95,
+      "key": [
+        "rexx-exec",
+        "spike",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-095-spike.json",
+      "record_sha256": "c7d2845aac66e69dd6515a51faf2a25e5a4c2a4a818cd3dab24c429c4224803f",
+      "summary": [
+        9,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 9,
+      "final_population": {
+        "previous_tests": 9,
+        "added_tests": [],
+        "fresh_tests": 9
+      },
+      "elapsed_seconds": 2.369261876970995
+    },
+    {
+      "index": 96,
+      "key": [
+        "rexx-exec",
+        "rexxc",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-096-rexxc.json",
+      "record_sha256": "c6ddf2ef54771b5b62a829d38824e974267dcde7aa9a631f5b2e4d1497c0205d",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.0019102870137430727
+    },
+    {
+      "index": 97,
+      "key": [
+        "rexx-exec",
+        "trace_delivery_schedule",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-097-trace_delivery_schedule.json",
+      "record_sha256": "38c2caa40df3ca8496401e0aadcc473cfcde943f8bac627a6e6f1ad929572400",
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 1,
+      "final_population": {
+        "previous_tests": 1,
+        "added_tests": [],
+        "fresh_tests": 1
+      },
+      "elapsed_seconds": 1.8682423630380072
+    },
+    {
+      "index": 98,
+      "key": [
+        "rexx-exec",
+        "closed_phases",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-098-closed_phases.json",
+      "record_sha256": "627ddd6d758f576118f88d82ce95ba13b9b27de24ee71d6b8bdce10afc875831",
+      "summary": [
+        8,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 8,
+      "final_population": {
+        "previous_tests": 8,
+        "added_tests": [],
+        "fresh_tests": 8
+      },
+      "elapsed_seconds": 0.1144343739724718
+    },
+    {
+      "index": 99,
+      "key": [
+        "rexx-exec",
+        "directive_options",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-099-directive_options.json",
+      "record_sha256": "69187502f529de89a6ceb4a279ba859c26b1e660caed7ff7aa943a3a2a19452a",
+      "summary": [
+        29,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 29,
+      "final_population": {
+        "previous_tests": 29,
+        "added_tests": [],
+        "fresh_tests": 29
+      },
+      "elapsed_seconds": 1.517536869039759
+    },
+    {
+      "index": 100,
+      "key": [
+        "rexx-exec",
+        "ir_recorded",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-100-ir_recorded.json",
+      "record_sha256": "d292fbb75f94a457fcdd32c1ee3220f446dee3eb3f2f90301de6950e6a2bbfa3",
+      "summary": [
+        33,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 33,
+      "final_population": {
+        "previous_tests": 33,
+        "added_tests": [],
+        "fresh_tests": 33
+      },
+      "elapsed_seconds": 27.55102573399199
+    },
+    {
+      "index": 101,
+      "key": [
+        "rexx-exec",
+        "oracle_deadline",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-101-oracle_deadline.json",
+      "record_sha256": "1675f48398b06da2018a5af69fc7cfde2f2c8b3cf4cf2c5ac520c8a562c7506d",
+      "summary": [
+        33,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 33,
+      "final_population": {
+        "previous_tests": 33,
+        "added_tests": [],
+        "fresh_tests": 33
+      },
+      "elapsed_seconds": 30.632366942008957
+    },
+    {
+      "index": 102,
+      "key": [
+        "rexx-exec",
+        "semantic_boundaries",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-102-semantic_boundaries.json",
+      "record_sha256": "60a99fc6cd228dce65c09e00dbbc8506886bf812021df2b824ddd73a0fb0c21f",
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 5,
+      "final_population": {
+        "previous_tests": 5,
+        "added_tests": [],
+        "fresh_tests": 5
+      },
+      "elapsed_seconds": 2.719995548017323
+    },
+    {
+      "index": 103,
+      "key": [
+        "rexx-exec",
+        "builtin_status",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-103-builtin_status.json",
+      "record_sha256": "96d9251d6890eadc29fe635bfd3b52108158841df8846800c463a73482cb7230",
+      "summary": [
+        31,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 31,
+      "final_population": {
+        "previous_tests": 31,
+        "added_tests": [],
+        "fresh_tests": 31
+      },
+      "elapsed_seconds": 5.325391190999653
+    },
+    {
+      "index": 104,
+      "key": [
+        "rexx-exec",
+        "coverage",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-104-coverage.json",
+      "record_sha256": "48a41b7cb1981407276797d48a77897aa15cce18f95c793dd5618fcfb9b92cab",
+      "summary": [
+        21,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 21,
+      "final_population": {
+        "previous_tests": 21,
+        "added_tests": [],
+        "fresh_tests": 21
+      },
+      "elapsed_seconds": 0.11436127597698942
+    },
+    {
+      "index": 105,
+      "key": [
+        "rexx-exec",
+        "internal_routines",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-105-internal_routines.json",
+      "record_sha256": "33ad8eccc460d9e7efe3eb92794baf71c7f7ecf446c1255a9c8443e9e82a5956",
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 2,
+      "final_population": {
+        "previous_tests": 2,
+        "added_tests": [],
+        "fresh_tests": 2
+      },
+      "elapsed_seconds": 0.003824553976301104
+    },
+    {
+      "index": 106,
+      "key": [
+        "rexx-exec",
+        "native_entries",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-106-native_entries.json",
+      "record_sha256": "073eeb9cf936434729e4c5e8c452d6e2ab884260109d89d2cacb99c0581a31bf",
+      "summary": [
+        29,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 29,
+      "final_population": {
+        "previous_tests": 29,
+        "added_tests": [],
+        "fresh_tests": 29
+      },
+      "elapsed_seconds": 0.06434057600563392
+    },
+    {
+      "index": 107,
+      "key": [
+        "rexx-exec",
+        "refusal_dispositions",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-107-refusal_dispositions.json",
+      "record_sha256": "4128e4d246e4774400e25c24083e1f00fbb6ba66ec66b4b4f3c03837645ee3f1",
+      "summary": [
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 3,
+      "final_population": {
+        "previous_tests": 3,
+        "added_tests": [],
+        "fresh_tests": 3
+      },
+      "elapsed_seconds": 0.11435461696237326
+    },
+    {
+      "index": 108,
+      "key": [
+        "rexx-exec",
+        "rexxc",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-108-rexxc.json",
+      "record_sha256": "df0b4c406eda2e2d2f5d6fb6088e8daf75498c6a7fcafbaa7cd842a1c786f93a",
+      "summary": [
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 4,
+      "final_population": {
+        "previous_tests": 4,
+        "added_tests": [],
+        "fresh_tests": 4
+      },
+      "elapsed_seconds": 2.4846016519586556
+    },
+    {
+      "index": 109,
+      "key": [
+        "rexx-exec",
+        "stream_handle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-109-stream_handle.json",
+      "record_sha256": "97694f44e57ebbb3b3419abdc65abc9b29892495c818f333d7df711a55216dae",
+      "summary": [
+        8,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 8,
+      "final_population": {
+        "previous_tests": 8,
+        "added_tests": [],
+        "fresh_tests": 8
+      },
+      "elapsed_seconds": 0.21456451003905386
+    },
+    {
+      "index": 110,
+      "key": [
+        "rexx-exec",
+        "bif_assertions",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-110-bif_assertions.json",
+      "record_sha256": "0a9db8d22766642453bc658ab89aab43c2bf8f76738827ce9b29752cf9925ed2",
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 5,
+      "final_population": {
+        "previous_tests": 5,
+        "added_tests": [],
+        "fresh_tests": 5
+      },
+      "elapsed_seconds": 37.849242020980455
+    },
+    {
+      "index": 111,
+      "key": [
+        "rexx-exec",
+        "compiled",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-111-compiled.json",
+      "record_sha256": "2f9da2ddccbe7eda565249e47518104944ebd1df5d2cec2773a894d599f65b03",
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 2,
+      "final_population": {
+        "previous_tests": 2,
+        "added_tests": [],
+        "fresh_tests": 2
+      },
+      "elapsed_seconds": 1.8188010970479809
+    },
+    {
+      "index": 112,
+      "key": [
+        "rexx-exec",
+        "gate_table_d",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-112-gate_table_d.json",
+      "record_sha256": "de86dc16a1964ca05b6a295aa9f352f9bc7e9f14ec7efaf643e4b3f48ad31628",
+      "summary": [
+        28,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 28,
+      "final_population": {
+        "previous_tests": 28,
+        "added_tests": [],
+        "fresh_tests": 28
+      },
+      "elapsed_seconds": 2.669667807989754
+    },
+    {
+      "index": 113,
+      "key": [
+        "rexx-exec",
+        "loom",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-113-loom.json",
+      "record_sha256": "7f8cb9a67e9cabb2c42c4b72aa2022f45a5251023269cc5edb119d4a09b4c7a1",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.001737202052026987
+    },
+    {
+      "index": 114,
+      "key": [
+        "rexx-exec",
+        "phase_ten_reasons",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-114-phase_ten_reasons.json",
+      "record_sha256": "3c9e6af7bb241dc40a39b50dad8da0b4257df69cbaa10e6b86659738c9e21c79",
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 5,
+      "final_population": {
+        "previous_tests": 5,
+        "added_tests": [],
+        "fresh_tests": 5
+      },
+      "elapsed_seconds": 0.21481344499625266
+    },
+    {
+      "index": 115,
+      "key": [
+        "rexx-exec",
+        "state_builtin_oracle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-115-state_builtin_oracle.json",
+      "record_sha256": "305e8a6f4700670784f389261c42f4e148fa0b9d93ec0708c3ce524f442a4e54",
+      "summary": [
+        27,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 27,
+      "final_population": {
+        "previous_tests": 27,
+        "added_tests": [],
+        "fresh_tests": 27
+      },
+      "elapsed_seconds": 3.020711229997687
+    },
+    {
+      "index": 116,
+      "key": [
+        "rexx-exec",
+        "trace_oracle",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-116-trace_oracle.json",
+      "record_sha256": "2f2f8227d27ec63de2258592ab61c319caae234d1f5b0bc112289cc3934620a7",
+      "summary": [
+        46,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 46,
+      "final_population": {
+        "previous_tests": 46,
+        "added_tests": [],
+        "fresh_tests": 46
+      },
+      "elapsed_seconds": 0.5153381860000081
+    },
+    {
+      "index": 117,
+      "key": [
+        "rexx-exec",
+        "api_group_partition",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-117-api_group_partition.json",
+      "record_sha256": "1caf39d3229b58b4130f77e2a2e4efefe572cc9661728bbb62158ab04b828774",
+      "summary": [
+        27,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 27,
+      "final_population": {
+        "previous_tests": 27,
+        "added_tests": [],
+        "fresh_tests": 27
+      },
+      "elapsed_seconds": 0.3651278849574737
+    },
+    {
+      "index": 118,
+      "key": [
+        "rexx-exec",
+        "rexx-ir",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-118-rexx-ir.json",
+      "record_sha256": "ccd639f88a039422c19eab20eedd0b997632739d31d863156aec911523a3a068",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.001891836989670992
+    },
+    {
+      "index": 119,
+      "key": [
+        "rexx-exec",
+        "collect_stress",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-119-collect_stress.json",
+      "record_sha256": "1d5ea31fd2baa54eb1e5b016cb3a0b265130a69aac4c490b322f3b49083471f3",
+      "summary": [
+        79,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 79,
+      "final_population": {
+        "previous_tests": 79,
+        "added_tests": [],
+        "fresh_tests": 79
+      },
+      "elapsed_seconds": 268.400683607033
+    },
+    {
+      "index": 120,
+      "key": [
+        "rexx-exec",
+        "environment_seam",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-120-environment_seam.json",
+      "record_sha256": "ec370546d664cdcbd232e5864e1dc7689d4604fab67f779a3ec4b267c2f1a787",
+      "summary": [
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 3,
+      "final_population": {
+        "previous_tests": 3,
+        "added_tests": [],
+        "fresh_tests": 3
+      },
+      "elapsed_seconds": 0.11457936902297661
+    },
+    {
+      "index": 121,
+      "key": [
+        "rexx-exec",
+        "keyword_assertions",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-121-keyword_assertions.json",
+      "record_sha256": "8a13d6ec3b79fb4da076d8c018074c53403e67b924999a710aca3974684f3ddf",
+      "summary": [
+        7,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 7,
+      "final_population": {
+        "previous_tests": 7,
+        "added_tests": [],
+        "fresh_tests": 7
+      },
+      "elapsed_seconds": 39.70146513503278
+    },
+    {
+      "index": 122,
+      "key": [
+        "rexx-exec",
+        "representation_refusals",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-122-representation_refusals.json",
+      "record_sha256": "ce45f8a038f0d0d65022072df4742728f3c4d8a77182d5f3fa3346b0bd58f905",
+      "summary": [
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 3,
+      "final_population": {
+        "previous_tests": 3,
+        "added_tests": [],
+        "fresh_tests": 3
+      },
+      "elapsed_seconds": 0.03280224901391193
+    },
+    {
+      "index": 123,
+      "key": [
+        "rexx-exec",
+        "owners",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-123-owners.json",
+      "record_sha256": "1be15626e95322c9d9932d59a8360f216dd3160c3a6299189a503908f2c4dac0",
+      "summary": [
+        6,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 6,
+      "final_population": {
+        "previous_tests": 6,
+        "added_tests": [],
+        "fresh_tests": 6
+      },
+      "elapsed_seconds": 0.0037973750149831176
+    },
+    {
+      "index": 124,
+      "key": [
+        "rexx-exec",
+        "sim_processes",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-124-sim_processes.json",
+      "record_sha256": "eb9d58d5f392ad8940c6c3a71c14683e2402aa84220008fc8fb455c9241092d0",
+      "summary": [
+        4,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 4,
+      "final_population": {
+        "previous_tests": 4,
+        "added_tests": [],
+        "fresh_tests": 4
+      },
+      "elapsed_seconds": 0.3650624419678934
+    },
+    {
+      "index": 125,
+      "key": [
+        "rexx-exec",
+        "trace_delivery_memory",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-125-trace_delivery_memory.json",
+      "record_sha256": "4e85aee826798d4a50f163df21e5d4dda716669f16d633231ef52e13c1734f1f",
+      "summary": [
+        26,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 26,
+      "final_population": {
+        "previous_tests": 26,
+        "added_tests": [],
+        "fresh_tests": 26
+      },
+      "elapsed_seconds": 2.3694158629514277
+    },
+    {
+      "index": 126,
+      "key": [
+        "rexx-classes",
+        "native_classes_wiring",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-126-native_classes_wiring.json",
+      "record_sha256": "687ec987c858e2c4c7b0bc24466deb6a39376ef0e9900d758a9d12ba60533b15",
+      "summary": [
+        31,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 31,
+      "final_population": {
+        "previous_tests": 31,
+        "added_tests": [],
+        "fresh_tests": 31
+      },
+      "elapsed_seconds": 0.21446813305374235
+    },
+    {
+      "index": 127,
+      "key": [
+        "rexx-classes",
+        "uninit_sweep_order",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-127-uninit_sweep_order.json",
+      "record_sha256": "8a116ad94d1fac0cc61d35fd796597ba27804aae5d916485c6839728c2f4db81",
+      "summary": [
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 5,
+      "final_population": {
+        "previous_tests": 5,
+        "added_tests": [],
+        "fresh_tests": 5
+      },
+      "elapsed_seconds": 0.0037935739965178072
+    },
+    {
+      "index": 128,
+      "key": [
+        "rexx-lib",
+        "rexx_lib",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "record": "debug-128-rexx_lib.json",
+      "record_sha256": "8949d73d18c7523d8a6ff87078096d5b5c5d0a34906d07488f4542e79a699bae",
+      "summary": [
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 3,
+      "final_population": {
+        "previous_tests": 3,
+        "added_tests": [],
+        "fresh_tests": 3
+      },
+      "elapsed_seconds": 0.004051297029945999
+    },
+    {
+      "index": 129,
+      "key": [
+        "rexx-classes",
+        "behaviour_wiring",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-129-behaviour_wiring.json",
+      "record_sha256": "7ec93d218cdece0a39459a84dc3147b6e99e65daf50afb270fb141786bb2f511",
+      "summary": [
+        21,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 21,
+      "final_population": {
+        "previous_tests": 21,
+        "added_tests": [],
+        "fresh_tests": 21
+      },
+      "elapsed_seconds": 0.0039016419905237854
+    },
+    {
+      "index": 130,
+      "key": [
+        "rexx-classes",
+        "rexx_classes",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "record": "debug-130-rexx_classes.json",
+      "record_sha256": "20d18156b21083f2eaf3e01a3ff9f004719bbd062bfb4d71955383461ba635b8",
+      "summary": [
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 3,
+      "final_population": {
+        "previous_tests": 3,
+        "added_tests": [],
+        "fresh_tests": 3
+      },
+      "elapsed_seconds": 0.01613434200407937
+    },
+    {
+      "index": 131,
+      "key": [
+        "rexx-api",
+        "handles",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-131-handles.json",
+      "record_sha256": "b6fda69f88d8f6eeca42d3d108ca0db7a322bd3b58edce83a4c4759d1d2a4387",
+      "summary": [
+        6,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 6,
+      "final_population": {
+        "previous_tests": 6,
+        "added_tests": [],
+        "fresh_tests": 6
+      },
+      "elapsed_seconds": 0.00389341200934723
+    },
+    {
+      "index": 132,
+      "key": [
+        "rexx-extract",
+        "rexx-extract-assertions",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-132-rexx-extract-assertions.json",
+      "record_sha256": "fa64bb5f466562b15388e430eb5e7d187e9a1717e37860749b063f0df07eec9a",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.0017128029721789062
+    },
+    {
+      "index": 133,
+      "key": [
+        "rexx-extract",
+        "extract_bif",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-133-extract_bif.json",
+      "record_sha256": "0c965c97258231f909086cbb0a3efb8c9ac860f013c0e6db566bfd7c83e8495d",
+      "summary": [
+        10,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 10,
+      "final_population": {
+        "previous_tests": 10,
+        "added_tests": [],
+        "fresh_tests": 10
+      },
+      "elapsed_seconds": 0.1143444330082275
+    },
+    {
+      "index": 134,
+      "key": [
+        "rexx-extract",
+        "rexx-extract",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-134-rexx-extract.json",
+      "record_sha256": "e4b118fd430a3f1ce6c86c742929ce3ae74471cb45a8f10e657f1caeced11d00",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.0016529139829799533
+    },
+    {
+      "index": 135,
+      "key": [
+        "rexx-api",
+        "context",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-135-context.json",
+      "record_sha256": "7df591482f2e79362164c8ca6d34d3eacb8190d1dca05c4eed42d7ff7162445f",
+      "summary": [
+        14,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 14,
+      "final_population": {
+        "previous_tests": 14,
+        "added_tests": [],
+        "fresh_tests": 14
+      },
+      "elapsed_seconds": 0.007873950991779566
+    },
+    {
+      "index": 136,
+      "key": [
+        "rexx-extract",
+        "extract_assertions",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-136-extract_assertions.json",
+      "record_sha256": "c9e0ed5ec9a1c3462cb96c7296ec4d5dd6bc8c9bc4dcd4f632e55cf294cb1e7f",
+      "summary": [
+        19,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 19,
+      "final_population": {
+        "previous_tests": 19,
+        "added_tests": [],
+        "fresh_tests": 19
+      },
+      "elapsed_seconds": 0.03216556698316708
+    },
+    {
+      "index": 137,
+      "key": [
+        "rexx-api",
+        "values",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-137-values.json",
+      "record_sha256": "23a451863ad7f82d95c27e085b02bd69fec3dd9a91a3db53eb3304e61992da93",
+      "summary": [
+        83,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 83,
+      "final_population": {
+        "previous_tests": 83,
+        "added_tests": [],
+        "fresh_tests": 83
+      },
+      "elapsed_seconds": 0.016231849032919854
+    },
+    {
+      "index": 138,
+      "key": [
+        "rexx-api",
+        "concrete_owners",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-138-concrete_owners.json",
+      "record_sha256": "a8ff42c78bc555ac21b7e079a0c204ed32c94958305a62cc91b80e2aa85e8a70",
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 2,
+      "final_population": {
+        "previous_tests": 2,
+        "added_tests": [],
+        "fresh_tests": 2
+      },
+      "elapsed_seconds": 0.003957510052714497
+    },
+    {
+      "index": 139,
+      "key": [
+        "rexx-extract",
+        "extract_keyword",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-139-extract_keyword.json",
+      "record_sha256": "dfc8233efc765aba11561ba8b7b09564b3345903b368353d50458ee0d83aaafd",
+      "summary": [
+        22,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 22,
+      "final_population": {
+        "previous_tests": 22,
+        "added_tests": [],
+        "fresh_tests": 22
+      },
+      "elapsed_seconds": 0.11424089700449258
+    },
+    {
+      "index": 140,
+      "key": [
+        "rexx-api",
+        "load",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-140-load.json",
+      "record_sha256": "7f6d40e219440916161b43c54f8b3a1472705f159861d5d7f4c1cfa4735b7af8",
+      "summary": [
+        11,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 11,
+      "final_population": {
+        "previous_tests": 11,
+        "added_tests": [],
+        "fresh_tests": 11
+      },
+      "elapsed_seconds": 0.007872931018937379
+    },
+    {
+      "index": 141,
+      "key": [
+        "rexx-api",
+        "layout",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-141-layout.json",
+      "record_sha256": "3b6f99b02588d5ffb4b224324f4ef5c9494528f5e14710d6acc2d9395cb7542e",
+      "summary": [
+        24,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 24,
+      "final_population": {
+        "previous_tests": 24,
+        "added_tests": [],
+        "fresh_tests": 24
+      },
+      "elapsed_seconds": 0.6655861199833453
+    },
+    {
+      "index": 142,
+      "key": [
+        "rexx-extract",
+        "extract",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-142-extract.json",
+      "record_sha256": "3bbc98c6118eb853c0bc7238ae966e68c75a56bc47e1ba5b6af00c11dc14a15d",
+      "summary": [
+        3,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 3,
+      "final_population": {
+        "previous_tests": 3,
+        "added_tests": [],
+        "fresh_tests": 3
+      },
+      "elapsed_seconds": 0.004015589016489685
+    },
+    {
+      "index": 143,
+      "key": [
+        "rexx-extract",
+        "rexx-extract-docs",
+        [
+          "bin"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-143-rexx-extract-docs.json",
+      "record_sha256": "e4548b6586d391aa4d5a8ab69e91de1ccd2e3822cb06041d2ece5e12fac505bc",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.004069546994287521
+    },
+    {
+      "index": 144,
+      "key": [
+        "rexx-extract",
+        "extract_docs",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-144-extract_docs.json",
+      "record_sha256": "3c2d5251a2648865389b5c36096c50b1cd72f1338e6ec702fc368af116ec18cd",
+      "summary": [
+        11,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 11,
+      "final_population": {
+        "previous_tests": 11,
+        "added_tests": [],
+        "fresh_tests": 11
+      },
+      "elapsed_seconds": 0.2646568469936028
+    },
+    {
+      "index": 145,
+      "key": [
+        "rexx-api",
+        "invoke",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-145-invoke.json",
+      "record_sha256": "4f8b8637fe3d85af1ca03f3bef2dcdad945f375759076baa65895a62a2b8f5e5",
+      "summary": [
+        16,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 16,
+      "final_population": {
+        "previous_tests": 16,
+        "added_tests": [],
+        "fresh_tests": 16
+      },
+      "elapsed_seconds": 0.008158252981957048
+    },
+    {
+      "index": 146,
+      "key": [
+        "rexx-api",
+        "rexx_api",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "record": "debug-146-rexx_api.json",
+      "record_sha256": "8c19ce604b616a35c8552abbad4c0a76d7d82eff7debc3be49037ce90f7648f3",
+      "summary": [
+        70,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 70,
+      "final_population": {
+        "previous_tests": 70,
+        "added_tests": [],
+        "fresh_tests": 70
+      },
+      "elapsed_seconds": 0.2148127420223318
+    },
+    {
+      "index": 147,
+      "key": [
+        "rexx-inventory",
+        "builtins",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-147-builtins.json",
+      "record_sha256": "ebcea3a7be9d0c7978b7712551f13d7868907162064a6292fc644b6012fa2bee",
+      "summary": [
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 2,
+      "final_population": {
+        "previous_tests": 2,
+        "added_tests": [],
+        "fresh_tests": 2
+      },
+      "elapsed_seconds": 0.004015048034489155
+    },
+    {
+      "index": 148,
+      "key": [
+        "rexx-inventory",
+        "errors",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-148-errors.json",
+      "record_sha256": "8cf25bb48d57e250d80ba11af4e7adcd7f7b5cbb4d8b3c4b3c2159f2ee27053b",
+      "summary": [
+        8,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 8,
+      "final_population": {
+        "previous_tests": 8,
+        "added_tests": [],
+        "fresh_tests": 8
+      },
+      "elapsed_seconds": 0.0038134640199132264
+    },
+    {
+      "index": 149,
+      "key": [
+        "rexx-inventory",
+        "oracle_agreement",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-149-oracle_agreement.json",
+      "record_sha256": "c0dfa9c650981acd31d72027ab1979d80a524e9e66d2a7950f75e65511bf4c32",
+      "summary": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 1,
+      "final_population": {
+        "previous_tests": 1,
+        "added_tests": [],
+        "fresh_tests": 1
+      },
+      "elapsed_seconds": 0.008035106991883367
+    },
+    {
+      "index": 150,
+      "key": [
+        "rexx-inventory",
+        "rexx_inventory",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "record": "debug-150-rexx_inventory.json",
+      "record_sha256": "6cb27f539832d76707b85c1f417413158e09cf27c4ea0cdbfd2c17338e6a8b42",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.001815290015656501
+    },
+    {
+      "index": 151,
+      "key": [
+        "rexx-oracle",
+        "rexx_oracle",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "record": "debug-151-rexx_oracle.json",
+      "record_sha256": "aea034e725f36ed8fc13c09d60edec442754669d6bce6aa28b484d586572afb7",
+      "summary": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 0,
+      "final_population": {
+        "previous_tests": 0,
+        "added_tests": [],
+        "fresh_tests": 0
+      },
+      "elapsed_seconds": 0.003946469980292022
+    },
+    {
+      "index": 152,
+      "key": [
+        "rexx-extract",
+        "rexx_extract",
+        [
+          "lib"
+        ],
+        [
+          "lib"
+        ]
+      ],
+      "record": "debug-152-rexx_extract.json",
+      "record_sha256": "5e63102232e5eca97f25482ec7aa6a07f4d12027e87cd386b151057e853bf30b",
+      "summary": [
+        32,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 32,
+      "final_population": {
+        "previous_tests": 32,
+        "added_tests": [],
+        "fresh_tests": 32
+      },
+      "elapsed_seconds": 0.008487234998028725
+    },
+    {
+      "index": 153,
+      "key": [
+        "rexx-exec",
+        "dispatch_seam",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-153-dispatch_seam.json",
+      "record_sha256": "7b9ec2d01c4f2ed014d24715dac8cc8b2263d07606e8729eaa827924e0f84261",
+      "summary": [
+        6,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 6,
+      "final_population": {
+        "previous_tests": 6,
+        "added_tests": [],
+        "fresh_tests": 6
+      },
+      "elapsed_seconds": 0.21448373096063733
+    },
+    {
+      "index": 154,
+      "key": [
+        "rexx-exec",
+        "suite",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-154-suite.json",
+      "record_sha256": "f666730424715f70d412fa7751349779e4535acd5ee7731523e7376ba8fc4807",
+      "summary": [
+        69,
+        0,
+        1,
+        0,
+        0
+      ],
+      "listed_tests": 70,
+      "final_population": {
+        "previous_tests": 68,
+        "added_tests": [
+          "fixtures::tests::sysfiletree_launches_use_distinct_populated_child_temporary_directories",
+          "fixtures::tests::sysfiletree_temporary_directory_selection_is_exact"
+        ],
+        "fresh_tests": 70
+      },
+      "elapsed_seconds": 25.766964635055047
+    },
+    {
+      "index": 155,
+      "key": [
+        "rexx-exec",
+        "concurrency_tests",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-155-concurrency_tests.json",
+      "record_sha256": "3ecfae02b066eacedfa13d7e87f6196a78d02294ae8671e579fcc7e00f4edac6",
+      "summary": [
+        63,
+        0,
+        0,
+        0,
+        0
+      ],
+      "listed_tests": 63,
+      "final_population": {
+        "previous_tests": 63,
+        "added_tests": [],
+        "fresh_tests": 63
+      },
+      "elapsed_seconds": 486.2871042980114
+    }
+  ],
+  "doctest_identities": [
+    [
+      "crates/rexx-api/src/load.rs - load::Library::method (line 1676) - compile",
+      "ok"
+    ],
+    [
+      "crates/rexx-api/src/ffi.rs - ffi::METHOD_CONTEXT (line 229) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-api/src/ffi.rs - ffi::value_of (line 65) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-api/src/load.rs - load::Library::method (line 1685) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-api/src/load.rs - load::NativeMethodEntry (line 195) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-core/src/frame.rs - frame::FrameArena (line 179)",
+      "ok"
+    ],
+    [
+      "crates/rexx-core/src/frame.rs - frame::RegFrame (line 108)",
+      "ok"
+    ],
+    [
+      "crates/rexx-core/src/handle.rs - handle::ObjRef (line 65)",
+      "ok"
+    ],
+    [
+      "crates/rexx-core/src/frame.rs - frame::FrameArena (line 168) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-core/src/frame.rs - frame::RegFrame (line 90) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-core/src/frame.rs - frame::RegFrame (line 99) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-core/src/handle.rs - handle::ObjRef (line 52) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-core/src/handle.rs - handle::ObjRef (line 57) - compile fail",
+      "ok"
+    ],
+    [
+      "crates/rexx-exec/src/run.rs - run::Interp::run_activation (line 446)",
+      "ok"
+    ],
+    [
+      "crates/rexx-exec/src/run.rs - run::Interp::run_activation (line 463) - compile fail",
+      "ok"
+    ]
+  ],
+  "pinning_tests": [
+    "scheduler::tests::mutants::a_dropped_failed_send_is_written_while_alive",
+    "scheduler::tests::mutants::a_dropped_failed_send_retains_its_condition_across_settlement_collection",
+    "scheduler::tests::mutants::a_failed_guard_lock_wait_leaves_no_place_in_the_queue",
+    "scheduler::tests::mutants::a_failed_guard_when_leaves_no_park_for_a_halt_to_end",
+    "scheduler::tests::mutants::a_failed_pinned_sleep_leaves_no_deadline_to_end_a_later_wait",
+    "scheduler::tests::mutants::a_terminal_reply_slice_is_not_attributed_to_the_incoming_sort",
+    "scheduler::tests::mutants::a_terminal_return_leaves_no_slice_for_the_incoming_sort"
+  ],
+  "release_corpus": {
+    "matching": 1242,
+    "programs": 1242,
+    "passed": 34,
+    "ignored": 1
+  },
+  "debug_corpus": {
+    "matching": 1242,
+    "programs": 1242,
+    "passed": 34,
+    "ignored": 1
+  },
+  "semantic_boundary_fixture_programs": 42,
+  "release_suite": {
+    "groups": 402,
+    "green_groups": 402,
+    "per_test_keys": 24523,
+    "sysfiletree": [
+      {
+        "group": "base/rexxutil/SysFileTree",
+        "side": "oracle",
+        "expected": "26",
+        "started": "26",
+        "passed": "26",
+        "failed": "",
+        "blocked": "",
+        "blocked at load": "-",
+        "ended before a test": "-",
+        "iterations": "1",
+        "ended normally": "yes",
+        "cap": "ulimit -v 1048576",
+        "tests ran": "26"
+      },
+      {
+        "group": "base/rexxutil/SysFileTree",
+        "side": "crate",
+        "expected": "26",
+        "started": "26",
+        "passed": "26",
+        "failed": "",
+        "blocked": "",
+        "blocked at load": "-",
+        "ended before a test": "-",
+        "iterations": "1",
+        "ended normally": "yes",
+        "cap": "memcap 2G",
+        "tests ran": "26"
+      }
+    ],
+    "sysfiletree_diagnostics": [
+      {
+        "context": "/tmp/codex-p9d-t88-final-gates-final/suite-diagnostics/suite-2388977-393-oracle-base__rexxutil__SysFileTree/oracle-1/context.txt",
+        "context_sha256": "3dc4dededd6985cd079f52b7455248e6d73f0ae61ae9423180ea0a38a6a88f73",
+        "stdout": "/tmp/codex-p9d-t88-final-gates-final/suite-diagnostics/suite-2388977-393-oracle-base__rexxutil__SysFileTree/oracle-1/stdout",
+        "stdout_sha256": "e437a03a9232b8f3202d86231792da9304dbb7a103a64733cbbdb7b22489ca28",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "tmpdir": "/tmp/codex-p9d-t88-target/tmp/suite-2388977-393-oracle-base__rexxutil__SysFileTree/run/sysfiletree-tmp"
+      },
+      {
+        "context": "/tmp/codex-p9d-t88-final-gates-final/suite-diagnostics/suite-2388977-396-crate-base__rexxutil__SysFileTree/crate-1/context.txt",
+        "context_sha256": "27a6a450de2ea34b34e89257b9cd254a2c74cf8dfe9b0e5fd0b570f9e92c4eee",
+        "stdout": "/tmp/codex-p9d-t88-final-gates-final/suite-diagnostics/suite-2388977-396-crate-base__rexxutil__SysFileTree/crate-1/stdout",
+        "stdout_sha256": "8ec5de38516ac8bf4d2813ae355f4e302b283c4b2e8dc28ca09f82f91dde916a",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "tmpdir": "/tmp/codex-p9d-t88-target/tmp/suite-2388977-396-crate-base__rexxutil__SysFileTree/run/sysfiletree-tmp"
+      }
+    ],
+    "existing_phase10_timeout_rows": [
+      {
+        "group": "extensions/rxsock/socketClass",
+        "test": "TEST_005",
+        "row": "Phase10(Extension)",
+        "oracle": "passed",
+        "crate": "blocked: timeout after 60 s"
+      },
+      {
+        "group": "extensions/rxsock/socketClass",
+        "test": "TEST_006",
+        "row": "Phase10(Extension)",
+        "oracle": "passed",
+        "crate": "blocked: timeout after 60 s"
+      },
+      {
+        "group": "extensions/rxsock/socketClass",
+        "test": "TEST_007",
+        "row": "Phase10(Extension)",
+        "oracle": "passed",
+        "crate": "blocked: timeout after 60 s"
+      }
+    ],
+    "static_inputs_equal_before_after_and_freeze_release": true,
+    "static_inputs_entries": 1063,
+    "static_manifest_sha256": "54e34606829f340cb63a4f80ca93f661f8616ab1a08a917969a72d2eeff1005e",
+    "baseline_delta": {
+      "old_tests": 24523,
+      "new_tests": 24523,
+      "groups": 402,
+      "changed_rows": 1,
+      "added": 0,
+      "removed": 0
+    },
+    "attempt_2_delta": {
+      "old_tests": 24523,
+      "new_tests": 24523,
+      "groups": 402,
+      "changed_rows": 1,
+      "added": 0,
+      "removed": 0
+    }
+  },
+  "normal_pin": {
+    "path": "/tmp/codex-p9d-t88-pins/8.8-corpus-registration-rexx",
+    "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145"
+  },
+  "cargo_test_cli": {
+    "path": "/tmp/codex-p9d-t88-target/release/rexx",
+    "sha256": "9c3d09f9f9e39810985b1200007035488a3eba9d00ab6ee7382b6d7aea1b4d06"
+  },
+  "source_bridge_provenance": {
+    "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/corpus-registration-repair/implementation/release-pin.json",
+    "sha256": "e19cbcf353dbd70dd485b36c3c4ddea8cc94cf67cd46bbaa8a2a0a33c9909187",
+    "pin_producer_source_commit": "f65066b04fe1f2355ce64d8be581fa9e79641673",
+    "rust_tree": "1d856ce7661c2e8508aced2282ffbd8747d42538",
+    "validation_rust_tree": "5835d04d1a3dde2bb6a4c2949feda240afbf6188",
+    "validation_source_bridge": {
+      "path": "/tmp/codex-p9d-t88-final-source-bridge.json",
+      "sha256": "26280d4cd5082193bd773caf886a61c68329bf33628e775ac03ff8937f0a2330",
+      "prior_validation_source_commit": "6b6f3fb460049c6ef63f565ceb78e11b5582f165",
+      "settled_source_commit": "ac446500e03c18b5143f2967ca30015e6d64b95f",
+      "validation_rust_tree": "5835d04d1a3dde2bb6a4c2949feda240afbf6188",
+      "changed_test_inputs": {
+        "rust/crates/rexx-exec/tests/concurrency_tests.rs": {
+          "before_git": "100644 blob 7d73b2eb4bb2650c7a99b0eb4953c0eaa5d8f617\trust/crates/rexx-exec/tests/concurrency_tests.rs",
+          "after_git": "100644 blob 52bac5fc01276a0f74238c1dcefd84785b863e94\trust/crates/rexx-exec/tests/concurrency_tests.rs",
+          "sha256": "4be36d6bcaa529c5044af3401ae72ebe1da3e613c761d6bc86068fde1d2c5879"
+        },
+        "rust/crates/rexx-exec/tests/dispatch_seam.rs": {
+          "before_git": "100644 blob fd89ccfef5ace8907eacb43a84fc78d6cee16725\trust/crates/rexx-exec/tests/dispatch_seam.rs",
+          "after_git": "100644 blob 09da2e854fa240c68f7c2a6de5c5ae96e235bfc1\trust/crates/rexx-exec/tests/dispatch_seam.rs",
+          "sha256": "9cc3a818e9d7b89ba61db1eaafddc55196a754e9caa31563d8663177abf8788d"
+        },
+        "rust/crates/rexx-exec/tests/group_runs/mod.rs": {
+          "before_git": null,
+          "after_git": "100644 blob bd3247317e33e9fbd7cb001222afef328f0056dd\trust/crates/rexx-exec/tests/group_runs/mod.rs",
+          "sha256": "d1ff1197ad2690be1e4b20ffed55f9d2530d0c8eb7b0ae9b462e126a5fc5e2e5"
+        },
+        "rust/crates/rexx-exec/tests/group_runs/whole_groups.rs": {
+          "before_git": null,
+          "after_git": "100644 blob 9ba4bd4a9704d6818f0eeaca88a271aab63f8b83\trust/crates/rexx-exec/tests/group_runs/whole_groups.rs",
+          "sha256": "1a87d2e9ea3e410559a9c19853c6c645c2801238bd06135b8e95043012e30e08"
+        },
+        "rust/crates/rexx-exec/tests/suite.rs": {
+          "before_git": "100644 blob 5f53e521b5e8c05ae258f2485d8ea7a467652eef\trust/crates/rexx-exec/tests/suite.rs",
+          "after_git": "100644 blob 153072f048e37482692f2a3d1569c567e68697a1\trust/crates/rexx-exec/tests/suite.rs",
+          "sha256": "e9913744ba6f465d74434fe0a1df33b5b29948c3500a803395363b6fa012bc62"
+        },
+        "rust/crates/rexx-exec/tests/suite/diagnostics.rs": {
+          "before_git": "100644 blob 16855db017fccec1fa0b3ae4643262cf2e1e1af2\trust/crates/rexx-exec/tests/suite/diagnostics.rs",
+          "after_git": "100644 blob 157627682adff4dc4d8a40ea72c948508a76d03a\trust/crates/rexx-exec/tests/suite/diagnostics.rs",
+          "sha256": "ac49183dcab0ec98ba498f8bc786cf42593ebaea63bdb2b19f43d6ecffcc93b1"
+        },
+        "rust/crates/rexx-exec/tests/suite/fixtures/temporary_directory/base/rexxutil/SysFileTree.testGroup": {
+          "before_git": null,
+          "after_git": "100644 blob 58d7d0e4c08c7ebf8847a56489f90e42a20e0463\trust/crates/rexx-exec/tests/suite/fixtures/temporary_directory/base/rexxutil/SysFileTree.testGroup",
+          "sha256": "53a6dbe660a6b7c5cd37746b641c2535d0c031dd51dcd6e8d32c8f56d07c7ec4"
+        },
+        "rust/crates/rexx-exec/tests/suite/fixtures/tests.rs": {
+          "before_git": "100644 blob 4d9538dbabad24b8cf9ca59660f8cc3487e2a0c5\trust/crates/rexx-exec/tests/suite/fixtures/tests.rs",
+          "after_git": "100644 blob b89a7df5340f4151659f78c33beb39bb1748a3ba\trust/crates/rexx-exec/tests/suite/fixtures/tests.rs",
+          "sha256": "9f59247098d50b4d315a29e6bd3b9540da55fd1964ac964ff202722f0f72f6cc"
+        },
+        "rust/crates/rexx-exec/tests/suite/launch/mod.rs": {
+          "before_git": null,
+          "after_git": "100644 blob f098dcbaff29996634a918a7db2077fee09186c0\trust/crates/rexx-exec/tests/suite/launch/mod.rs",
+          "sha256": "fd47f68828635b981d100e4ef3a61e562cf7fbb36a71285d24f6acba046b3ff7"
+        }
+      },
+      "protected_files": 553,
+      "reviews": {
+        "assertion": {
+          "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/final-test-repair/review.md",
+          "sha256": "7c6fa54cad40c8ad96e9b89557d34e5ade9c11dd4de861b8fc66bca49fbeed48",
+          "accepted_by_root": true
+        },
+        "harness": {
+          "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/sysfiletree-isolation/review.md",
+          "sha256": "b1f01ab83bffa68b4c27a2673137509ba6463b848a087356ac32ee371f2e2e65",
+          "accepted_by_root": true
+        }
+      }
+    },
+    "source_proof_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/corpus-registration-repair/implementation/source-proof.json",
+    "source_proof_sha256": "1392f5e088827159bb1dea34599a9efe59ee956eb698e91fece19d23310e5854",
+    "production_manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/corpus-registration-repair/implementation/production-manifest.json",
+    "production_manifest_sha256": "593073463602158d59e98322416036af7a9515ba87a48c51072aedaffb447493",
+    "production_manifest_files": 300,
+    "measured_normal_pin": "/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx",
+    "measured_normal_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+    "byte_identical_to_measured_normal": true
+  },
+  "original_stderr_fixture": "Passed on its single final default execution, alongside both added temporary-directory tests",
+  "foreground_gate_timeouts": 0,
+  "retries_within_final_snapshot": 0,
+  "historical_failures_preserved": true,
+  "task_or_phase_completion_claimed": false
+}

@@ -1,0 +1,200 @@
+{
+  "source_commit": "b51a9466a5ccfa365bcf74e232f6e24c23fb9765",
+  "pin_provenance": {
+    "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/corpus-registration-repair/implementation/release-pin.json",
+    "sha256": "e19cbcf353dbd70dd485b36c3c4ddea8cc94cf67cd46bbaa8a2a0a33c9909187",
+    "pin_producer_source_commit": "f65066b04fe1f2355ce64d8be581fa9e79641673",
+    "rust_tree": "1d856ce7661c2e8508aced2282ffbd8747d42538",
+    "validation_rust_tree": "5835d04d1a3dde2bb6a4c2949feda240afbf6188",
+    "validation_source_bridge": {
+      "path": "/tmp/codex-p9d-t88-final-source-bridge.json",
+      "sha256": "26280d4cd5082193bd773caf886a61c68329bf33628e775ac03ff8937f0a2330",
+      "prior_validation_source_commit": "6b6f3fb460049c6ef63f565ceb78e11b5582f165",
+      "settled_source_commit": "ac446500e03c18b5143f2967ca30015e6d64b95f",
+      "validation_rust_tree": "5835d04d1a3dde2bb6a4c2949feda240afbf6188",
+      "changed_test_inputs": {
+        "rust/crates/rexx-exec/tests/concurrency_tests.rs": {
+          "before_git": "100644 blob 7d73b2eb4bb2650c7a99b0eb4953c0eaa5d8f617\trust/crates/rexx-exec/tests/concurrency_tests.rs",
+          "after_git": "100644 blob 52bac5fc01276a0f74238c1dcefd84785b863e94\trust/crates/rexx-exec/tests/concurrency_tests.rs",
+          "sha256": "4be36d6bcaa529c5044af3401ae72ebe1da3e613c761d6bc86068fde1d2c5879"
+        },
+        "rust/crates/rexx-exec/tests/dispatch_seam.rs": {
+          "before_git": "100644 blob fd89ccfef5ace8907eacb43a84fc78d6cee16725\trust/crates/rexx-exec/tests/dispatch_seam.rs",
+          "after_git": "100644 blob 09da2e854fa240c68f7c2a6de5c5ae96e235bfc1\trust/crates/rexx-exec/tests/dispatch_seam.rs",
+          "sha256": "9cc3a818e9d7b89ba61db1eaafddc55196a754e9caa31563d8663177abf8788d"
+        },
+        "rust/crates/rexx-exec/tests/group_runs/mod.rs": {
+          "before_git": null,
+          "after_git": "100644 blob bd3247317e33e9fbd7cb001222afef328f0056dd\trust/crates/rexx-exec/tests/group_runs/mod.rs",
+          "sha256": "d1ff1197ad2690be1e4b20ffed55f9d2530d0c8eb7b0ae9b462e126a5fc5e2e5"
+        },
+        "rust/crates/rexx-exec/tests/group_runs/whole_groups.rs": {
+          "before_git": null,
+          "after_git": "100644 blob 9ba4bd4a9704d6818f0eeaca88a271aab63f8b83\trust/crates/rexx-exec/tests/group_runs/whole_groups.rs",
+          "sha256": "1a87d2e9ea3e410559a9c19853c6c645c2801238bd06135b8e95043012e30e08"
+        },
+        "rust/crates/rexx-exec/tests/suite.rs": {
+          "before_git": "100644 blob 5f53e521b5e8c05ae258f2485d8ea7a467652eef\trust/crates/rexx-exec/tests/suite.rs",
+          "after_git": "100644 blob 153072f048e37482692f2a3d1569c567e68697a1\trust/crates/rexx-exec/tests/suite.rs",
+          "sha256": "e9913744ba6f465d74434fe0a1df33b5b29948c3500a803395363b6fa012bc62"
+        },
+        "rust/crates/rexx-exec/tests/suite/diagnostics.rs": {
+          "before_git": "100644 blob 16855db017fccec1fa0b3ae4643262cf2e1e1af2\trust/crates/rexx-exec/tests/suite/diagnostics.rs",
+          "after_git": "100644 blob 157627682adff4dc4d8a40ea72c948508a76d03a\trust/crates/rexx-exec/tests/suite/diagnostics.rs",
+          "sha256": "ac49183dcab0ec98ba498f8bc786cf42593ebaea63bdb2b19f43d6ecffcc93b1"
+        },
+        "rust/crates/rexx-exec/tests/suite/fixtures/temporary_directory/base/rexxutil/SysFileTree.testGroup": {
+          "before_git": null,
+          "after_git": "100644 blob 58d7d0e4c08c7ebf8847a56489f90e42a20e0463\trust/crates/rexx-exec/tests/suite/fixtures/temporary_directory/base/rexxutil/SysFileTree.testGroup",
+          "sha256": "53a6dbe660a6b7c5cd37746b641c2535d0c031dd51dcd6e8d32c8f56d07c7ec4"
+        },
+        "rust/crates/rexx-exec/tests/suite/fixtures/tests.rs": {
+          "before_git": "100644 blob 4d9538dbabad24b8cf9ca59660f8cc3487e2a0c5\trust/crates/rexx-exec/tests/suite/fixtures/tests.rs",
+          "after_git": "100644 blob b89a7df5340f4151659f78c33beb39bb1748a3ba\trust/crates/rexx-exec/tests/suite/fixtures/tests.rs",
+          "sha256": "9f59247098d50b4d315a29e6bd3b9540da55fd1964ac964ff202722f0f72f6cc"
+        },
+        "rust/crates/rexx-exec/tests/suite/launch/mod.rs": {
+          "before_git": null,
+          "after_git": "100644 blob f098dcbaff29996634a918a7db2077fee09186c0\trust/crates/rexx-exec/tests/suite/launch/mod.rs",
+          "sha256": "fd47f68828635b981d100e4ef3a61e562cf7fbb36a71285d24f6acba046b3ff7"
+        }
+      },
+      "protected_files": 553,
+      "reviews": {
+        "assertion": {
+          "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/final-test-repair/review.md",
+          "sha256": "7c6fa54cad40c8ad96e9b89557d34e5ade9c11dd4de861b8fc66bca49fbeed48",
+          "accepted_by_root": true
+        },
+        "harness": {
+          "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/sysfiletree-isolation/review.md",
+          "sha256": "b1f01ab83bffa68b4c27a2673137509ba6463b848a087356ac32ee371f2e2e65",
+          "accepted_by_root": true
+        }
+      }
+    },
+    "source_proof_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/corpus-registration-repair/implementation/source-proof.json",
+    "source_proof_sha256": "1392f5e088827159bb1dea34599a9efe59ee956eb698e91fece19d23310e5854",
+    "production_manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/corpus-registration-repair/implementation/production-manifest.json",
+    "production_manifest_sha256": "593073463602158d59e98322416036af7a9515ba87a48c51072aedaffb447493",
+    "production_manifest_files": 300,
+    "measured_normal_pin": "/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx",
+    "measured_normal_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+    "byte_identical_to_measured_normal": true
+  },
+  "test_variant": {
+    "source_commit": "b51a9466a5ccfa365bcf74e232f6e24c23fb9765",
+    "pin_producer_source_commit": "f65066b04fe1f2355ce64d8be581fa9e79641673",
+    "rust_tree": "5835d04d1a3dde2bb6a4c2949feda240afbf6188",
+    "causal_proof_source_commit": "8b7767ed3fda908fffe75181b2c8bd12dd7509f8",
+    "causal_runtime_source_commit": "9d919b7c3832c55edc3a0a07974309f092102201",
+    "normal_pin_identity_bridge": {
+      "prior_path": "/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx",
+      "current_path": "/tmp/codex-p9d-t88-pins/8.8-corpus-registration-rexx",
+      "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+      "production_manifest_sha256": "593073463602158d59e98322416036af7a9515ba87a48c51072aedaffb447493",
+      "source_proof_sha256": "1392f5e088827159bb1dea34599a9efe59ee956eb698e91fece19d23310e5854"
+    },
+    "authorization_path": "/tmp/codex-p9d-t88-final-gates/release-variant-diagnosis/root-authorization.json",
+    "authorization_sha256": "e2f37ea8d96b6fe16f94254034f1f30262b39424fc3bf6ec1e5973bbd9758188",
+    "proof_path": "/tmp/codex-p9d-t88-final-gates/release-variant-diagnosis/one-variable-result.json",
+    "proof_sha256": "c15d10a04a63c9b9a2db52dd6568b19692f445e847fedc88e02b9c38fce3e96d",
+    "test_cli_sha256": "9c3d09f9f9e39810985b1200007035488a3eba9d00ab6ee7382b6d7aea1b4d06",
+    "normal_pin_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+    "cli_profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": false,
+      "overflow_checks": false,
+      "test": false
+    },
+    "rustix_features": [
+      "alloc",
+      "default",
+      "event",
+      "fs",
+      "param",
+      "process",
+      "pty",
+      "std",
+      "system",
+      "termios",
+      "time"
+    ],
+    "rustix_package_id": "registry+https://github.com/rust-lang/crates.io-index#rustix@1.1.4",
+    "rustix_manifest_path": "/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/Cargo.toml",
+    "rustix_profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": false,
+      "overflow_checks": false,
+      "test": false
+    }
+  },
+  "normal_pin": {
+    "path": "/tmp/codex-p9d-t88-pins/8.8-corpus-registration-rexx",
+    "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145"
+  },
+  "cli": {
+    "executable": "/tmp/codex-p9d-t88-target/release/rexx",
+    "sha256": "9c3d09f9f9e39810985b1200007035488a3eba9d00ab6ee7382b6d7aea1b4d06",
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": false,
+      "overflow_checks": false,
+      "test": false
+    }
+  },
+  "rustix": {
+    "package_id": "registry+https://github.com/rust-lang/crates.io-index#rustix@1.1.4",
+    "features": [
+      "alloc",
+      "default",
+      "event",
+      "fs",
+      "param",
+      "process",
+      "pty",
+      "std",
+      "system",
+      "termios",
+      "time"
+    ],
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": false,
+      "overflow_checks": false,
+      "test": false
+    },
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/release/deps/librustix-1a9d1be0d5de2fde.rlib",
+      "/tmp/codex-p9d-t88-target/release/deps/librustix-1a9d1be0d5de2fde.rmeta"
+    ]
+  },
+  "tests": {
+    "corpus": {
+      "executable": "/tmp/codex-p9d-t88-target/release/deps/corpus-6953cc47785bd785",
+      "sha256": "97935a9ba034987051c144ec4f14a20ab7755a4df83e24d733bc9925375fb670",
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 2,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": true
+      }
+    },
+    "suite": {
+      "executable": "/tmp/codex-p9d-t88-target/release/deps/suite-edb8ccd5504785e7",
+      "sha256": "d3df14621cd409fcf587b9eac201db4658aa1a579afe142b07ebae2bf8625a76",
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 2,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": true
+      }
+    }
+  }
+}

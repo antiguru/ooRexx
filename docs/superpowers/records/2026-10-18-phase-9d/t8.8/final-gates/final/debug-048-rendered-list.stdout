@@ -1,0 +1,2 @@
+rounding_to_the_precision_happens_before_the_shape_is_read: test
+the_shape_predicate_answers_what_the_rendering_says: test

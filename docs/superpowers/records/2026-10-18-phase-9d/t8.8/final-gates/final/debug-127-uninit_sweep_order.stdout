@@ -1,0 +1,10 @@
+
+running 5 tests
+test a_second_sweep_of_the_same_registry_is_empty ... ok
+test a_shared_bucket_keeps_entry_order ... ok
+test an_instance_side_uninit_does_not_enter_the_sweep ... ok
+test the_sweep_contradicts_declaration_order ... ok
+test twenty_classes_still_run_in_bucket_order ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

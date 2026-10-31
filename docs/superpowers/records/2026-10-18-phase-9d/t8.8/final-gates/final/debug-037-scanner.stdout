@@ -1,0 +1,41 @@
+
+running 36 tests
+test a_blank_before_an_operator_is_discarded ... ok
+test a_clause_terminator_is_emitted_once_however_the_clause_ends ... ok
+test a_closing_paren_also_makes_a_following_blank_significant ... ok
+test a_comment_separates_tokens_without_inserting_a_blank ... ok
+test a_continuation_becomes_a_significant_blank ... ok
+test a_continuation_between_an_operators_two_halves_does_not_split_it_either ... ok
+test a_continuation_onto_an_empty_line_ends_the_clause ... ok
+test a_continuation_with_no_next_line_is_simply_consumed ... ok
+test a_ctrl_z_ends_the_program_before_the_scanner_sees_it ... ok
+test a_double_colon_is_one_token_and_a_single_colon_is_another ... ok
+test a_hex_marker_must_not_be_the_start_of_a_longer_symbol ... ok
+test a_literals_value_is_decoded_rather_than_sliced ... ok
+test a_resource_body_is_copied_verbatim_rather_than_scanned ... ok
+test a_resource_end_marker_is_a_prefix_match_on_the_upcased_value ... ok
+test a_resource_without_its_end_marker_consumes_the_rest_and_records_no_body ... ok
+test a_semicolon_still_separates_interpret_clauses ... ok
+test a_shebang_line_is_skipped_by_the_scanner_but_kept_by_the_line_index ... ok
+test a_significant_blank_needs_both_sides ... ok
+test a_symbol_is_classified_by_its_shape ... ok
+test a_tab_is_a_blank ... ok
+test an_exponent_sign_joins_the_symbol_only_when_digits_follow ... ok
+test an_interpret_does_not_skip_a_shebang_line ... ok
+test an_operator_followed_by_equals_is_an_assignment_shortcut ... ok
+test blanks_and_comments_between_an_operators_two_halves_do_not_split_it ... ok
+test block_comments_nest ... ok
+test double_dash_starts_a_line_comment_but_minus_does_not ... ok
+test doubled_quotes_are_one_quote ... ok
+test every_error_the_scanner_raises_matches_the_interpreters_number_and_line ... ok
+test every_token_span_lies_inside_the_source_and_is_ordered ... ok
+test hex_and_binary_literals_pack_down_to_bytes ... ok
+test interpret_text_is_one_line_so_a_line_terminator_in_it_is_an_invalid_character ... ok
+test one_symbol_has_one_id_and_as_many_spans_as_occurrences ... ok
+test scan_always_answers_with_tokens_or_an_error_number ... ok
+test spans_stay_absolute_across_every_line_terminator ... ok
+test the_alternative_logical_not_bytes_are_accepted ... ok
+test the_comparison_operators_scan_to_their_own_kinds ... ok
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.48s
+

@@ -1,0 +1,7 @@
+
+running 2 tests
+test concrete_cross_thread_refusals_belong_to_embedding ... ok
+test each_wrong_concrete_owner_is_rejected_independently ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

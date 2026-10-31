@@ -1,0 +1,57 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-434-crate-base__class__RexxContext/run
+TZ=None
+status=Some(0) ended=Exited(0) took=91.334113ms
+GroupRun {
+    group: "base/class/RexxContext",
+    expected: {},
+    started: {
+        "TESTARGS01",
+        "TESTCONDITION01",
+        "TESTCOPY01",
+        "TESTEXECUTION01",
+        "TESTLINE01",
+        "TESTNAME01",
+        "TESTNEW01",
+        "TESTNUMERIC01",
+        "TESTRS01",
+        "TESTVARIABLES01",
+        "TEST_INTERPRETER_THREAD_INVOCATION",
+        "TEST_SOURCELINE_FIRST_LINE",
+        "TEST_SOURCELINE_FULL_FILE",
+        "TEST_SOURCELINE_HASHBANG",
+        "TEST_SOURCELINE_LAST_LINE",
+    },
+    passed: {
+        "TESTARGS01",
+        "TESTCONDITION01",
+        "TESTCOPY01",
+        "TESTEXECUTION01",
+        "TESTLINE01",
+        "TESTNAME01",
+        "TESTNEW01",
+        "TESTNUMERIC01",
+        "TESTRS01",
+        "TESTVARIABLES01",
+        "TEST_INTERPRETER_THREAD_INVOCATION",
+        "TEST_SOURCELINE_FIRST_LINE",
+        "TEST_SOURCELINE_FULL_FILE",
+        "TEST_SOURCELINE_HASHBANG",
+        "TEST_SOURCELINE_LAST_LINE",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "15",
+    ),
+    took: 91.334113ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-434-crate-base__class__RexxContext/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-434-crate-base__class__RexxContext/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 384, modified: SystemTime { tv_sec: 1793410818, tv_nsec: 909648100 }, accessed: SystemTime { tv_sec: 1793410818, tv_nsec: 927671237 }, created: SystemTime { tv_sec: 1793410818, tv_nsec: 895672165 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-434-crate-base__class__RexxContext/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-434-crate-base__class__RexxContext/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-434-crate-base__class__RexxContext/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410818, tv_nsec: 859673208 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-434-crate-base__class__RexxContext/run/ooRexx/base/class/RexxContext.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-434-crate-base__class__RexxContext/run/ooRexx/base/class/RexxContext.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 10838, modified: SystemTime { tv_sec: 1793410818, tv_nsec: 839063457 }, accessed: SystemTime { tv_sec: 1793410818, tv_nsec: 905319502 }, created: SystemTime { tv_sec: 1793410818, tv_nsec: 836747382 }, .. })

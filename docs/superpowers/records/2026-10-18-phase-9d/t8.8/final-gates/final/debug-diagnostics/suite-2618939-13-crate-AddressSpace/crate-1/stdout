@@ -1,0 +1,28 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.11+deb14-amd64
+
+Tests ran:          1
+Assertions:         0
+Failures:           1
+Errors:             0
+
+[failure] 20261031 03:16:55.991184
+  Test:   TEST_LIMIT
+  Class:  AddressSpace.testGroup
+  File:   .../ooRexx/AddressSpace.testGroup
+  Line:   19
+  Failed: assertSame
+    Expected: 4294967296
+    Actual:   unlimited
+
+File search:        00:00:00.001749
+Suite construction: 00:00:00.001497
+Test execution:     00:00:00.001722
+Total time:         00:00:00.007383
+

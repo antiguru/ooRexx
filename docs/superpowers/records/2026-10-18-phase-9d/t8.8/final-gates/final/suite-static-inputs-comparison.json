@@ -1,0 +1,7 @@
+{
+  "equal": true,
+  "before_sha256": "54e34606829f340cb63a4f80ca93f661f8616ab1a08a917969a72d2eeff1005e",
+  "after_sha256": "54e34606829f340cb63a4f80ca93f661f8616ab1a08a917969a72d2eeff1005e",
+  "entry_count": 1063,
+  "limits": "Configured static source/native/artifact inputs only. Mutable run directories, operating-system state, proc state and arbitrary PATH tools are not covered."
+}

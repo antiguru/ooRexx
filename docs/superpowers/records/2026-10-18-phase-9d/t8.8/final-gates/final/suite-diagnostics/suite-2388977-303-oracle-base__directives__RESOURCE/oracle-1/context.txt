@@ -1,0 +1,53 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2388977-303-oracle-base__directives__RESOURCE/run
+TZ=None
+status=Some(0) ended=Exited(0) took=32.118382ms
+GroupRun {
+    group: "base/directives/RESOURCE",
+    expected: {},
+    started: {
+        "TEST_RESOURCE_DEFINED",
+        "TEST_RESOURCE_DEFINED_BLANK",
+        "TEST_RESOURCE_DEFINED_INDENT",
+        "TEST_RESOURCE_DYNAMICALLY",
+        "TEST_RESOURCE_END_CASE_MISMATCH",
+        "TEST_RESOURCE_END_EXTRA_VALUE",
+        "TEST_RESOURCE_END_INVALID",
+        "TEST_RESOURCE_END_NONE",
+        "TEST_RESOURCE_NAME_DUPLICATE",
+        "TEST_RESOURCE_NAME_EXTRA_VALUE",
+        "TEST_RESOURCE_NAME_INVALID",
+        "TEST_RESOURCE_NAME_MISSING",
+        "TEST_RESOURCE_NO_END_CASE_MISMATCH",
+    },
+    passed: {
+        "TEST_RESOURCE_DEFINED",
+        "TEST_RESOURCE_DEFINED_BLANK",
+        "TEST_RESOURCE_DEFINED_INDENT",
+        "TEST_RESOURCE_DYNAMICALLY",
+        "TEST_RESOURCE_END_CASE_MISMATCH",
+        "TEST_RESOURCE_END_EXTRA_VALUE",
+        "TEST_RESOURCE_END_INVALID",
+        "TEST_RESOURCE_END_NONE",
+        "TEST_RESOURCE_NAME_DUPLICATE",
+        "TEST_RESOURCE_NAME_EXTRA_VALUE",
+        "TEST_RESOURCE_NAME_INVALID",
+        "TEST_RESOURCE_NAME_MISSING",
+        "TEST_RESOURCE_NO_END_CASE_MISMATCH",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "13",
+    ),
+    took: 32.118382ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-303-oracle-base__directives__RESOURCE/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-303-oracle-base__directives__RESOURCE/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 469, modified: SystemTime { tv_sec: 1793410813, tv_nsec: 959883020 }, accessed: SystemTime { tv_sec: 1793410813, tv_nsec: 968100470 }, created: SystemTime { tv_sec: 1793410813, tv_nsec: 954778212 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-303-oracle-base__directives__RESOURCE/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-303-oracle-base__directives__RESOURCE/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-303-oracle-base__directives__RESOURCE/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793410813, tv_nsec: 964659676 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2388977-303-oracle-base__directives__RESOURCE/run/ooRexx/base/directives/RESOURCE.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2388977-303-oracle-base__directives__RESOURCE/run/ooRexx/base/directives/RESOURCE.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 17507, modified: SystemTime { tv_sec: 1793410813, tv_nsec: 935495852 }, accessed: SystemTime { tv_sec: 1793410813, tv_nsec: 954778212 }, created: SystemTime { tv_sec: 1793410813, tv_nsec: 934815711 }, .. })

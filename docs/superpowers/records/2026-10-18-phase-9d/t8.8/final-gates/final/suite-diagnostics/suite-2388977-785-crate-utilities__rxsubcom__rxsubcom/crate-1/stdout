@@ -1,0 +1,91 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.11+deb14-amd64
+
+Tests ran:          13
+Assertions:         0
+Failures:           7
+Errors:             0
+
+[failure] 20261031 02:40:30.466702
+  Test:   TEST_ACTIONS_ENVIRONMENT_CASELESS
+  Class:  RXSUBCOM.TESTGROUP
+  File:   .../ooRexx/utilities/rxsubcom/rxsubcom.testGroup
+  Line:   147
+  Failed: assertRc
+    Expected: 0
+    Actual:   127
+
+[failure] 20261031 02:40:30.468224
+  Test:   TEST_DROP_TWICE
+  Class:  RXSUBCOM.TESTGROUP
+  File:   .../ooRexx/utilities/rxsubcom/rxsubcom.testGroup
+  Line:   198
+  Failed: assertRc
+    Expected: 0
+    Actual:   127
+
+[failure] 20261031 02:40:30.469238
+  Test:   TEST_INVALID_ARGS
+  Class:  RXSUBCOM.TESTGROUP
+  File:   .../ooRexx/utilities/rxsubcom/rxsubcom.testGroup
+  Line:   120
+  Failed: assertRc
+    Expected: -1
+    Actual:   127
+
+[failure] 20261031 02:40:30.470377
+  Test:   TEST_REGISTER_INVALID_HANDLER
+  Class:  RXSUBCOM.TESTGROUP
+  File:   .../ooRexx/utilities/rxsubcom/rxsubcom.testGroup
+  Line:   179
+  Failed: assertRc
+    Expected: 0
+    Actual:   127
+
+[failure] 20261031 02:40:30.471383
+  Test:   TEST_REGISTER_INVALID_LIBRARY
+  Class:  RXSUBCOM.TESTGROUP
+  File:   .../ooRexx/utilities/rxsubcom/rxsubcom.testGroup
+  Line:   169
+  Failed: assertRc
+    Expected: 0
+    Actual:   127
+
+[failure] 20261031 02:40:30.472459
+  Test:   TEST_REGISTER_TWICE
+  Class:  RXSUBCOM.TESTGROUP
+  File:   .../ooRexx/utilities/rxsubcom/rxsubcom.testGroup
+  Line:   189
+  Failed: assertRc
+    Expected: 0
+    Actual:   127
+
+[failure] 20261031 02:40:30.473510
+  Test:   TEST_UNREGISTERED
+  Class:  RXSUBCOM.TESTGROUP
+  File:   .../ooRexx/utilities/rxsubcom/rxsubcom.testGroup
+  Line:   135
+  Failed: assertRc
+    Expected: 30
+    Actual:   127
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.11+deb14-amd64
+
+Tests ran:          13
+Assertions:         0
+Failures:           7
+Errors:             0
+
+File search:        00:00:00.001945
+Suite construction: 00:00:00.001401
+Test execution:     00:00:00.010911
+Total time:         00:00:00.015817
+

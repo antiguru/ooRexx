@@ -1,0 +1,10 @@
+tests::a_row_splits_into_the_columns_the_header_names: test
+tests::an_axis_entry_is_a_stem_or_a_path: test
+tests::pooled_and_paired_disagree_when_one_pair_is_perturbed: test
+tests::quantiles_interpolate: test
+tests::the_central_band_pulls_in_from_the_extremes: test
+tests::the_envelope_covers_deviations_below_the_median: test
+tests::the_median_is_an_element: test
+tests::the_minimum_reduction_takes_the_least_perturbed_run: test
+tests::the_relative_standard_deviation_is_scale_free: test
+tests::the_spread_is_relative_to_the_median: test

@@ -1,0 +1,28 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2618939-2-crate-RefusedCall/run
+TZ=None
+status=Some(120) ended=Exited(120) took=101.45185ms
+GroupRun {
+    group: "RefusedCall",
+    expected: {},
+    started: {
+        "TEST_A",
+        "TEST_B",
+    },
+    passed: {},
+    failed: {},
+    blocked: {
+        "TEST_B": "rexx-exec: routine \"SYSQUERYREXXMACRO\" is not implemented (Phase 10 Rxapi)",
+    },
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: false,
+    cap: Memcap,
+    tests_ran: None,
+    took: 101.45185ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2618939-2-crate-RefusedCall/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2618939-2-crate-RefusedCall/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 30, modified: SystemTime { tv_sec: 1793412994, tv_nsec: 181820600 }, accessed: SystemTime { tv_sec: 1793412994, tv_nsec: 200966642 }, created: SystemTime { tv_sec: 1793412994, tv_nsec: 176967333 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2618939-2-crate-RefusedCall/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2618939-2-crate-RefusedCall/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2618939-2-crate-RefusedCall/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 90680520, modified: SystemTime { tv_sec: 1793406683, tv_nsec: 668453788 }, accessed: SystemTime { tv_sec: 1793412994, tv_nsec: 140968369 }, created: SystemTime { tv_sec: 1793406683, tv_nsec: 636454712 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2618939-2-crate-RefusedCall/run/ooRexx/RefusedCall.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2618939-2-crate-RefusedCall/run/ooRexx/RefusedCall.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 661, modified: SystemTime { tv_sec: 1793412994, tv_nsec: 102546903 }, accessed: SystemTime { tv_sec: 1793412994, tv_nsec: 176967333 }, created: SystemTime { tv_sec: 1793412994, tv_nsec: 102232112 }, .. })

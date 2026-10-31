@@ -1,0 +1,8 @@
+a_started_message_waiting_on_itself_keeps_the_process_alive: test
+an_uncancelled_timer_keeps_the_process_alive: test
+buffering::a_command_starts_after_what_came_before: test
+buffering::a_redirected_standard_output_keeps_what_it_handed_over: test
+buffering::a_redirected_standard_output_loses_what_it_still_holds: test
+buffering::a_shared_pipe_interleaves_by_hand_over: test
+buffering::a_terminal_standard_output_takes_each_line: test
+buffering::standard_error_keeps_each_line: test

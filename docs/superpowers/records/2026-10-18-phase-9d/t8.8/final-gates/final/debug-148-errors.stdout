@@ -1,0 +1,13 @@
+
+running 8 tests
+test a_major_carries_its_own_text_with_no_substitutions ... ok
+test a_message_with_no_placeholder_takes_no_inserts ... ok
+test a_submessage_is_keyed_by_the_pair_and_renders_markup_like_the_oracle ... ok
+test error_13_is_invalid_character_in_program ... ok
+test every_arity_override_exceeds_its_texts_placeholders ... ok
+test every_constants_arity_is_its_texts_highest_placeholder ... ok
+test every_message_from_the_catalogue_is_present ... ok
+test q_markup_around_literal_text_still_renders_its_quotes ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

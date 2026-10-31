@@ -1,0 +1,28 @@
+
+running 23 tests
+test addsub::add_shortcut_tests::the_small_sum_shortcut_answers_what_the_digit_addition_answers ... ok
+test addsub::add_shortcut_tests::the_small_sum_shortcut_declines_what_it_cannot_answer_exactly ... ok
+test compare::tests::a_trailing_zero_is_not_a_difference_but_a_trailing_digit_is ... ok
+test compare::tests::an_operand_past_the_working_precision_is_left_to_the_subtraction ... ok
+test compare::tests::fuzz_above_digits_orders_by_the_shared_sign ... ok
+test compare::tests::the_two_routes_agree_wherever_both_apply ... ok
+test digits::tests::a_computation_that_crosses_the_capacity_agrees_with_the_heap ... ok
+test digits::tests::a_long_value_spills_to_the_heap_and_reads_back_the_same ... ok
+test digits::tests::a_slice_at_the_boundary_inlines_and_one_past_it_does_not ... ok
+test digits::tests::every_operation_answers_the_same_with_the_digits_on_the_heap ... ok
+test digits::tests::the_capacity_is_the_one_the_language_asks_for ... ok
+test digits::tests::the_in_place_edits_agree_with_a_vector_on_both_arms ... ok
+test digits::tests::the_same_digits_compare_equal_whichever_arm_holds_them ... ok
+test muldiv::divide_route_tests::a_divisor_either_side_of_the_route_boundary_divides_correctly ... ok
+test muldiv::divide_route_tests::a_short_divisor_divides_the_same_way_the_wide_path_does ... ok
+test muldiv::divide_route_tests::the_short_divisor_width_is_the_one_a_machine_word_holds ... ok
+test muldiv::mul_shortcut_tests::the_integer_shortcut_answers_what_the_long_multiplication_answers ... ok
+test muldiv::mul_shortcut_tests::the_integer_shortcut_declines_what_it_cannot_answer_exactly ... ok
+test settings::tests::each_reset_leaves_the_settings_it_does_not_own ... ok
+test settings::tests::the_digits_reset_refuses_what_the_operand_form_refuses ... ok
+test substitute_tests::a_substitution_value_shaped_like_a_placeholder_does_not_get_rewritten_again ... ok
+test substitute_tests::an_unsupplied_or_malformed_placeholder_passes_through_unchanged ... ok
+test substitute_tests::fills_placeholders_in_order ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.76s
+
