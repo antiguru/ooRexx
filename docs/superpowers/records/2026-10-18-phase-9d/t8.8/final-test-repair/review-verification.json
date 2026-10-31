@@ -1,0 +1,13 @@
+{
+  "base": "47c5a5ea4fbc9518b41ed640d25c3baa86212269",
+  "review_head": "fe955f4e511a0b4f054dc3303d34d9e838203ab5",
+  "pure_move_exact_reconstruction": true,
+  "only_four_test_files_changed": true,
+  "all21_raw_descriptor_channel_hashes_match": true,
+  "all6_retained_failure_hashes_match": true,
+  "all63_test_identities_stable": true,
+  "calibration_bytes_stable": true,
+  "fixture_pristine_and_normal_pin_hashes_match": true,
+  "assertion_diff_only_authorized_changes_plus_rustfmt": true,
+  "tests_rerun_by_reviewer": false
+}
