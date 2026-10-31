@@ -1,0 +1,1202 @@
+{
+  "rust/Cargo.lock": {
+    "git": "100644 blob 7d95df1acec4995f9d0dee949e39261192d3471e",
+    "sha256": "ca3b38a9343c4d44502f6d15d3404ec6ddb2f970fc7561be3fd82c4d109a94a2"
+  },
+  "rust/Cargo.toml": {
+    "git": "100644 blob b394eb86007868adcf53f0f89d7a0a5db311c9bd",
+    "sha256": "eb99ce602d4c7105848a33ed287d4c7e4dbb2a6ac7f4552bf47bf81f8d5b9b5d"
+  },
+  "rust/crates/rexx-api/Cargo.toml": {
+    "git": "100644 blob 7f80e89798d17c8a9d6d1eaef61b0a4256b07339",
+    "sha256": "895acbf17e886f75f812d6417159bfcd6934eb96ed6e5417babcf89272348d24"
+  },
+  "rust/crates/rexx-api/src/callbacks.rs": {
+    "git": "100644 blob 1464ded734cc9078b953321e2f1003b338417198",
+    "sha256": "4ac0bee43f893988b14a22bde1d83cc09f8e6118f674182408651f87e3b8c3a3"
+  },
+  "rust/crates/rexx-api/src/callbacks/fake.rs": {
+    "git": "100644 blob 98d5e00dc861bdbafd1673d730693629349bea43",
+    "sha256": "260afe879802de95c561199db93217735411842c94cdb61435155332008bada5"
+  },
+  "rust/crates/rexx-api/src/ffi.rs": {
+    "git": "100644 blob 2c10eb15b7ec38827eaec446de5eaf5c0dc153dc",
+    "sha256": "3f389abe6fe757606b6c0d1216345a98b160eace39467894705d33e31126b1d1"
+  },
+  "rust/crates/rexx-api/src/handles.rs": {
+    "git": "100644 blob 6fced65fc6ea7473643d5ce099dbbd4ab164b042",
+    "sha256": "f87d8069a6ac8805618058deef9d2b4b921ce8fe98b048231590bf87966814ef"
+  },
+  "rust/crates/rexx-api/src/invoke.rs": {
+    "git": "100644 blob f8844df03abbe4af62ae32f278e4c9e5df1543cd",
+    "sha256": "1abdcc4cc9fcdf451fbb2f84f61c78fb9c4061e84ce90566940000bb94952492"
+  },
+  "rust/crates/rexx-api/src/invoke/tests.rs": {
+    "git": "100644 blob 372b4157bed0f0eda651c12d1332f7ec91012099",
+    "sha256": "5a5f5fc34a9521cc1690c25cce041896eeea3cb6afbe3c72639c40853045b1c9"
+  },
+  "rust/crates/rexx-api/src/layout.rs": {
+    "git": "100644 blob 53a537617ffdb444791f4ad662de8a73d590ab97",
+    "sha256": "be1282c2e7d5836f9a75b3d09d8cc7d41a9b60b0f4b0c329d0e8f9f425075497"
+  },
+  "rust/crates/rexx-api/src/lib.rs": {
+    "git": "100644 blob 0d95c6bf8b0c207d757a4d7b4c08fc2d57f6300d",
+    "sha256": "ef8b6b524a217c89d5b497ec406e05594cddd6c7f325c47b790af18db3c88484"
+  },
+  "rust/crates/rexx-api/src/load.rs": {
+    "git": "100644 blob db2688faec4d627fe6014d522c52a71a0ed0be23",
+    "sha256": "41df05e5960616ada198bc7df6c5b2dbc4b9f041edb9eb772c7636227b594a72"
+  },
+  "rust/crates/rexx-api/src/redirect.rs": {
+    "git": "100644 blob 9daa7097e61bdc8245234c2aa5d9d0205a12e9f7",
+    "sha256": "bec924c8b3103ed61038dec84441059de24794248aead392176857b907bce24a"
+  },
+  "rust/crates/rexx-api/src/values.rs": {
+    "git": "100644 blob b58686126e7d6e73edc76db2b7fefee648c15e1b",
+    "sha256": "147e727656655b84a57911af637286145cf9c63a0c44397027d634e123ac325a"
+  },
+  "rust/crates/rexx-api/src/values/convert.rs": {
+    "git": "100644 blob 87271bf8b0f1302922004d08367f273d0e12a9cc",
+    "sha256": "0895e629ab36c4477b03bd81d6bf8f30ec6185ee1995e1a7d15d461d5594b733"
+  },
+  "rust/crates/rexx-bench/Cargo.toml": {
+    "git": "100644 blob 6dcf275a74534e0469799fcf1999ad1637093c33",
+    "sha256": "7d3de4d2ff786c3385668bd4bb62554107a5195f6cff777f547b80e84fab8c84"
+  },
+  "rust/crates/rexx-bench/src/arms.rs": {
+    "git": "100644 blob 0573c90da8f3952f00e6f4e344eebe09e3e80258",
+    "sha256": "4f20320ba64b69ec79d882ec215f941aefbaca4f5353958ea3aea2012908c567"
+  },
+  "rust/crates/rexx-bench/src/bin/rexx-arms.rs": {
+    "git": "100644 blob 07e265442bb63c092d6e1ee73c44b13936f1927b",
+    "sha256": "2bd7b04b0b081922ebdf0cf507b9bd4b3f4c9aac9825321d2070fc1405249acf"
+  },
+  "rust/crates/rexx-bench/src/bin/rexx-bench-band.rs": {
+    "git": "100644 blob 96b5628f472ce604fb0ea5243c1f6bd5b8417c85",
+    "sha256": "b55b1c41f67b46e745dd59a3ff7094480e29bdbc021dffb896df2d8ee05399a3"
+  },
+  "rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs": {
+    "git": "100644 blob 5e6101e512ed86ceffb02f22e40b720661043f13",
+    "sha256": "68ed5b89d6883ddd2f1e25f880efa87cd675e19dafd3c46d9143c500b9c11aeb"
+  },
+  "rust/crates/rexx-bench/src/bin/rexx-bench-suite/binary/mod.rs": {
+    "git": "100644 blob db9ef698779867b7097832344cd6512a37590eef",
+    "sha256": "7c061d48e5c6047f54d565e6ed18eecd7eccfecebc354a7892a899a080582e50"
+  },
+  "rust/crates/rexx-bench/src/bin/rexx-bench-suite/binary/tests.rs": {
+    "git": "100644 blob 0abb2eb07bb6a9e6ee118c1107ca4d9e8e181c11",
+    "sha256": "2a183ae534a10de2b52a46c31fca67e193d18d66153d911feffe15934d143b64"
+  },
+  "rust/crates/rexx-bench/src/bin/rexx-bench-suite/report.rs": {
+    "git": "100644 blob 1604f4d5d85b72067d687fff385dd66d6f3288ac",
+    "sha256": "b661d026b5b4f5eb37ab4662e65a316dbb691f706019842db26bcbd86be6436a"
+  },
+  "rust/crates/rexx-bench/src/bin/rexx-time.rs": {
+    "git": "100644 blob 876e329282475a927e64486b0eea9b25cc8d4bc6",
+    "sha256": "4e5aaeda032483ca3e92e88f4b078a6c4851970c7dcccbf7d2b7989d5988a290"
+  },
+  "rust/crates/rexx-bench/src/child.rs": {
+    "git": "100644 blob 973254794d2b272a7cbcafe23d46756c0060f772",
+    "sha256": "abdfba39cab1b6460ba22265ea02eb11fc0ca8e5044055aed63cf45f90b37bfc"
+  },
+  "rust/crates/rexx-bench/src/lib.rs": {
+    "git": "100644 blob fcaba8848efcaba0a0a90df7ee0a72dfad8dfbe8",
+    "sha256": "087a236558e7461b4dc9a856a2e221198fe5968cc6a912c2e9d65f7656bdd962"
+  },
+  "rust/crates/rexx-bench/src/timing.rs": {
+    "git": "100644 blob f0cabc8b1d6e7184dd2c5b319d314f054847441c",
+    "sha256": "a828b3e57a0b9c7ac5e128f2ecb0232b4ab5df51459bf14fde729b3f2720d9b1"
+  },
+  "rust/crates/rexx-classes/Cargo.toml": {
+    "git": "100644 blob 37cefac40b25848481b8175710bc7ad5252a4fc2",
+    "sha256": "75acdd33b5be135d4b516422a7f1f7aa029d5e56c10c6832b8babeb495f61854"
+  },
+  "rust/crates/rexx-classes/build.rs": {
+    "git": "100644 blob 971aa1399298e5875b5a2edc1aad2824d5be54b6",
+    "sha256": "1a3ed464396137f47c1e339421e909add2b36cde3af177ad6f97e1c912415236"
+  },
+  "rust/crates/rexx-classes/src/class_graph.rs": {
+    "git": "100644 blob c7a7e39e90e81db30ea319848e7fb661df32f14e",
+    "sha256": "bd2582a930a37941a062046d6137170d0698c11024cb9ce6bffe5beb47fc9d68"
+  },
+  "rust/crates/rexx-classes/src/lib.rs": {
+    "git": "100644 blob afd7b84a10f967e4322722ca27162504e0ce41c2",
+    "sha256": "53b3708296b069addeb33113e80fe59583ac353b495da514d6fcfb61796dc81d"
+  },
+  "rust/crates/rexx-classes/src/method_dict.rs": {
+    "git": "100644 blob 697227cd2fcd07db35047d88ae73b5d409fe4ca7",
+    "sha256": "d714ad8c1062812d9bb12196f32b861105e4d75f6b5ef6f775fce3f658fdcf43"
+  },
+  "rust/crates/rexx-classes/src/native_classes.rs": {
+    "git": "100644 blob 6cdc5ad68479255325557e2d66a01b88a2a667cf",
+    "sha256": "4ebbfb6221038fa54745f358143f19ba5d7a97c2e535cb0ce5d0938190d69565"
+  },
+  "rust/crates/rexx-classes/src/registry.rs": {
+    "git": "100644 blob 0ce981f6cc8d051412478e48361309f4676c168c",
+    "sha256": "314524d0e825cde85c8e89583f4dc98f17a466fd3e5925d7d7a0d84af7e7c0a4"
+  },
+  "rust/crates/rexx-core/Cargo.toml": {
+    "git": "100644 blob 227ebf3db9d60a90d0b55fe17a0858977396f6ff",
+    "sha256": "ab663915c4f5dae83921c5c7f7b309d132cd206c2b76126cfc0a8d005bc5fcdc"
+  },
+  "rust/crates/rexx-core/src/behaviour.rs": {
+    "git": "100644 blob ba0beb787de8a4ca5ddd97c818a16340696bec26",
+    "sha256": "362f3ad2d8ebb3e18df74737d738ec99ae8a30a3593d54b7d1a568012a5884a2"
+  },
+  "rust/crates/rexx-core/src/body.rs": {
+    "git": "100644 blob 501d3354e378d5e1a2ac6655f2dcd2a130ac6569",
+    "sha256": "871365f742a1adaa03ba28fe80cff076cdcedbf8c2cac5d4b00bdc9acb937a64"
+  },
+  "rust/crates/rexx-core/src/body/open_file.rs": {
+    "git": "100644 blob 238c9db11766d6bf3d86574921baf65cceb3ed2e",
+    "sha256": "7cb094d1a622026cbd7eef21db0a34014c134757e96bd868338cf5774db83364"
+  },
+  "rust/crates/rexx-core/src/bytes.rs": {
+    "git": "100644 blob 5c36955dc445b9ba2bb55bf5f48071ce98ad7712",
+    "sha256": "16265bc55172230339555ea96308893c41741f71d40c55d9c93fdea55bd511e9"
+  },
+  "rust/crates/rexx-core/src/frame.rs": {
+    "git": "100644 blob cfc7b789ac6f11f495ea622dce51aca1923cc1b2",
+    "sha256": "9f9e295297c2dd7ccfada0b4bde9fe95e470e528bcf6b22c7f0b69f20fec0d59"
+  },
+  "rust/crates/rexx-core/src/handle.rs": {
+    "git": "100644 blob 1e7fb66a93fc8b6772e6f72a600fa32950d6f828",
+    "sha256": "82c3a88b778e283a4ddd67febd384c58f87da791914cfcec1fa51133cd18ffdd"
+  },
+  "rust/crates/rexx-core/src/heap.rs": {
+    "git": "100644 blob 29ead06e6081a0226fb21302ec233a3d5d723617",
+    "sha256": "ce2d6fde9f7b44fcddaaff7d0f4680582cd4fb553a792b90405db877afe03a3e"
+  },
+  "rust/crates/rexx-core/src/lib.rs": {
+    "git": "100644 blob 458e6f6e18f0c1687e1477e565faeccc18ff62e2",
+    "sha256": "345303f6cdbedbc95ad3fb4a62ac326f8f006aa0b0637deaa5799b4b188dbd8e"
+  },
+  "rust/crates/rexx-core/src/owner.rs": {
+    "git": "100644 blob b8fb65c7d89e4be7e31d252aacb3d3c9197e8419",
+    "sha256": "46c4213fecab8a4f14b2971449a3a0ff87cfc80230bee6000a27075160bb0287"
+  },
+  "rust/crates/rexx-core/src/roots.rs": {
+    "git": "100644 blob d1198a53347813965ce3445a4364c48d4bc48aa1",
+    "sha256": "1d17b0ec2c7bb0452650571a185ce241a9fdf6a8e767f079d8e3100816cf727b"
+  },
+  "rust/crates/rexx-core/src/slots.rs": {
+    "git": "100644 blob bd7d6a6cb4ef5e5230a875052941403f781698d4",
+    "sha256": "36131d2400abbfeedf01d99404807c89c855e732eca526569a3c5cfa090a4db2"
+  },
+  "rust/crates/rexx-exec/Cargo.toml": {
+    "git": "100644 blob 51f888c81b08cee44f6826bd988033cef1621e15",
+    "sha256": "0e0a3ec6d737e48822d13001b3262fa466873534729231cbbc3d24a828c50205"
+  },
+  "rust/crates/rexx-exec/src/activation.rs": {
+    "git": "100644 blob 8110d38bf53a46f5e351ec4e17f98e16ff9bd074",
+    "sha256": "b124137da382815c7dfcca86b8d3e6123350f52cef9879b89a0b2f9da835cb15"
+  },
+  "rust/crates/rexx-exec/src/activity.rs": {
+    "git": "100644 blob 0025771f64a7186e7a2d93d5ad257bfd43b15cba",
+    "sha256": "8a8ad42205e32e5fba5af01225cce956972d9b013d5267a9452bbeb3d791fb25"
+  },
+  "rust/crates/rexx-exec/src/baton.rs": {
+    "git": "100644 blob 7954672c13111dd0f5fe08125cd1c34ac76d1a53",
+    "sha256": "e8b1dc6e7a71d41a4a99278b086a876f6d3adaa26e7e33025a0b3fb4aa818f63"
+  },
+  "rust/crates/rexx-exec/src/bin/rexx-ir.rs": {
+    "git": "100644 blob 70565bd6d7d68dfdccb3389a3f26692ee089bb30",
+    "sha256": "25a99ababcc964fd950c0879ebf9b58ed3206ce89061e42fa85e3bcfd4ef360d"
+  },
+  "rust/crates/rexx-exec/src/bin/rexx.rs": {
+    "git": "100644 blob 5b7529c507183e935d6b92df90cbe71ff3cb1576",
+    "sha256": "a07618e55c98a1e7b569c03e01c5f40bab26cd83ccfdbac674618ac6a39bc13a"
+  },
+  "rust/crates/rexx-exec/src/bin/rexxc.rs": {
+    "git": "100644 blob 5ff0028fc4b36f1de2e2ad70fc5bc2cc2aa2a415",
+    "sha256": "4bf706cb71433b33d907921ea828dc29dfbea4bfdb800eba9bd0db1a91698466"
+  },
+  "rust/crates/rexx-exec/src/builtin.rs": {
+    "git": "100644 blob cb7c40aa053daab817bef2f5cb2d6eda05c0f82f",
+    "sha256": "cc5c6f553e556c286fc0aee473efb86bc61d1d19394d8824244b95df6a8e3f2e"
+  },
+  "rust/crates/rexx-exec/src/builtin/convert.rs": {
+    "git": "100644 blob c700b1844aec937b0400d09c2ca4645293f8a6b6",
+    "sha256": "7371a4130b19c4e32e3c4683ea8a9816a19f98646e1ca2fca444c0ff30d973e0"
+  },
+  "rust/crates/rexx-exec/src/builtin/convert/tests.rs": {
+    "git": "100644 blob b0051d25081a6a7cbdaf04d460aed4348bdb3640",
+    "sha256": "5370280d2f653d330abf6d33537956dce190f8c4220be6ee672961f3cb41fc96"
+  },
+  "rust/crates/rexx-exec/src/builtin/datatype.rs": {
+    "git": "100644 blob 69942f6ce902065444b8cd20c443a041fbd5a798",
+    "sha256": "3c7e36da0fa201b8d83da634a0fbed91384d388eed0121c083a2c859b96b296e"
+  },
+  "rust/crates/rexx-exec/src/builtin/datetime.rs": {
+    "git": "100644 blob ddac7601ae467a13f9ef6fe0e166c5d0a6263afa",
+    "sha256": "c36cd78aa442b21aa5c0514430c796bc4fa784599b16b653d24cc3dbc0cb9214"
+  },
+  "rust/crates/rexx-exec/src/builtin/datetime/tests.rs": {
+    "git": "100644 blob e50485d431e5e4c617fedccc3c0d9470816f282d",
+    "sha256": "a64a5cb20fb07d2b4e13bed15992859c4301b3303341ef34332046b69f73da57"
+  },
+  "rust/crates/rexx-exec/src/builtin/numeric.rs": {
+    "git": "100644 blob 2515fb144be45db3fbd5b5683f6c907db78f9bd7",
+    "sha256": "84867bf0f06bfd27fda0e6e15fc97b631457f86b0056575230b8439c7bbd77d6"
+  },
+  "rust/crates/rexx-exec/src/builtin/numeric/tests.rs": {
+    "git": "100644 blob 44334ed3c747ceb4bedac999094185fb0432d31d",
+    "sha256": "70d414656d4b7a3a982cba07312924ac94e30555e1426ae0c536c9628af96bc7"
+  },
+  "rust/crates/rexx-exec/src/builtin/platform.rs": {
+    "git": "100644 blob 170b69083af192af1793a82a8b0bac3f00e6b9fb",
+    "sha256": "2761c65f19649dea05dd96029e1b66cbc68d64ea0c20b90ae53f271217112a61"
+  },
+  "rust/crates/rexx-exec/src/builtin/rexxutil.rs": {
+    "git": "100644 blob 70370f33e61d27c3dd9cb430aa5ad1afd5badd70",
+    "sha256": "61b10fcf8b1bd4d8e549145cc738b58a72b68decc8ec1dfae63bae5a80253e6d"
+  },
+  "rust/crates/rexx-exec/src/builtin/rexxutil/files.rs": {
+    "git": "100644 blob bfa1ff4b25dc34e250b02523db61b958a32a97b1",
+    "sha256": "d377641ec7025c5db4e8c37aedf72db2934c02d4b2df19728e85a3956de30513"
+  },
+  "rust/crates/rexx-exec/src/builtin/rexxutil/files/tests.rs": {
+    "git": "100644 blob 7a196b83b709636a96534628acdccd586b03abe3",
+    "sha256": "89c21ccbd2256c1957b748b09b37065dda31bef791181a3cc452fed6aa678b10"
+  },
+  "rust/crates/rexx-exec/src/builtin/rexxutil/messages.rs": {
+    "git": "100644 blob b1468d1757a3e77499608a8b614b0c10943dd9c4",
+    "sha256": "ba8562d8b3c61318c555ed2a40c102e6b4d45b96fa619d27dc824e90ef459700"
+  },
+  "rust/crates/rexx-exec/src/builtin/rexxutil/messages/tests.rs": {
+    "git": "100644 blob 4415bb580fcff7d0a9937ac52d3f78af05136a3a",
+    "sha256": "86602c9f1380abda8decdf9a62b92abd18645ec1f4427cf0600b7b527caa92c9"
+  },
+  "rust/crates/rexx-exec/src/builtin/rexxutil/process.rs": {
+    "git": "100644 blob 6802fc2e06c768f73093f955038864d7c23abd15",
+    "sha256": "7fb907c17212d8084b0de1e2b6d553d5686dfb55008ec8f1727590d227b90e0b"
+  },
+  "rust/crates/rexx-exec/src/builtin/rexxutil/process/tests.rs": {
+    "git": "100644 blob dabc08889526e7c5ac581caa7fefee1de1d80af4",
+    "sha256": "b27ad38fecf012df852099dfa718f8942c6f061d25b847134346b875770b93eb"
+  },
+  "rust/crates/rexx-exec/src/builtin/rexxutil/stems.rs": {
+    "git": "100644 blob 358bfe0244448bad219ba396b76aecd3a3cf52c3",
+    "sha256": "e05e6fa58b258d6b8d509752e0674f2c56935d47ff661372aa6b030afdb74a00"
+  },
+  "rust/crates/rexx-exec/src/builtin/rexxutil/stems/tests.rs": {
+    "git": "100644 blob ce0d09006d5e7e58689ed61923796c0047b842a7",
+    "sha256": "acb73209622224325090862a9a85700ea7805a3212e93eade17256cca0f2b63d"
+  },
+  "rust/crates/rexx-exec/src/builtin/rexxutil/tree.rs": {
+    "git": "100644 blob 174792308a81e2567c818098ac5a80a67e02dcae",
+    "sha256": "6bbfc6ddc324aa0bbe10e175c586c0c8c374a92292207db308ac7a8edd5e34ec"
+  },
+  "rust/crates/rexx-exec/src/builtin/rexxutil/tree/tests.rs": {
+    "git": "100644 blob a88ad1ee84707e99dff114126bce7d6dba0c79ae",
+    "sha256": "ba45cc6b1daabc3d47119e733ad9369b16fa4242ddd5cf56cabade19c1d48dab"
+  },
+  "rust/crates/rexx-exec/src/builtin/state.rs": {
+    "git": "100644 blob ba6bf198fab61066166591b2cb3b9cbea0d9d609",
+    "sha256": "d96aea17d8a89fe9be9f241f5a322be16f2753928dcbce6e02b57cb1f87356f7"
+  },
+  "rust/crates/rexx-exec/src/builtin/stream.rs": {
+    "git": "100644 blob 2bbc950867c18a2f8055110e8190c1b785ff5181",
+    "sha256": "8c03b3888215f6f6d4c587c005eb424eda847c7d926f0db515b80590444e1be5"
+  },
+  "rust/crates/rexx-exec/src/builtin/string.rs": {
+    "git": "100644 blob 49e873dcac1505ae41a3da08604b62f3c221de15",
+    "sha256": "43414c754a92383e5fdac9a22aea7c268e3c6b6b5b8f66d81add294813592d1d"
+  },
+  "rust/crates/rexx-exec/src/builtin/string/scan_tests.rs": {
+    "git": "100644 blob 92a0e57c06514baef1177ea850d253c71ba60cee",
+    "sha256": "67e1da4017aca504042e0932d1fbe7d0249defc03d3a636a62f176268dc2ebfb"
+  },
+  "rust/crates/rexx-exec/src/builtin/string/tests.rs": {
+    "git": "100644 blob 04aab51c77bfeb94a51bb0ff5b0c9f80abb2687b",
+    "sha256": "e5bf792bb6f0874ec46b4f7f06b02b09aeb49a2583f8fa48d6a0d1f54621f2ee"
+  },
+  "rust/crates/rexx-exec/src/builtin/tests.rs": {
+    "git": "100644 blob 8aaf157e71f4f1f84b722a177d5ded6f55884a76",
+    "sha256": "2a21369b8959f01ba88d575a44f07492954f4935af268f84e1d0463b156df574"
+  },
+  "rust/crates/rexx-exec/src/builtin/word.rs": {
+    "git": "100644 blob 6041071819bac0d7df61ed4e8129561fe8f45814",
+    "sha256": "d46b7012dc244e10cb3028fe2b00c4a00eac3f576867ce2cfd322091952d5bdb"
+  },
+  "rust/crates/rexx-exec/src/clause.rs": {
+    "git": "100644 blob aad18567c102b604e4227e401188a4933436118a",
+    "sha256": "fd839286fae7a1a673f0737c3dc50707d610906fbb2c9a027ff19d90d7adf352"
+  },
+  "rust/crates/rexx-exec/src/command.rs": {
+    "git": "100644 blob 7a06573ba73bd3f08378dc4f1e4f47c251e6398e",
+    "sha256": "eaeea1ed58f63c93aed1bdb60441b351d44d2a5f2c046823a9b0c8fcd404e0eb"
+  },
+  "rust/crates/rexx-exec/src/command/tests.rs": {
+    "git": "100644 blob 77c78de49afab7308b55ce3c6169b1b430eb8174",
+    "sha256": "4197c69d4d802776aed82b464730c589d1c44eff964c35e7e608a70e3db38d5e"
+  },
+  "rust/crates/rexx-exec/src/compiled.rs": {
+    "git": "100644 blob 53dc2c1f7b2a426a40a4ed0f066edad890c9685b",
+    "sha256": "ad6b4afe30f3bc45fb43124f6e11e4db39234beb81ebd10da35077abf3d4f646"
+  },
+  "rust/crates/rexx-exec/src/condition.rs": {
+    "git": "100644 blob ad566bd15d536be1f8e4eb3a2e118bd33fe10925",
+    "sha256": "73591cb926154b467ee1762b8857aaa336b77841f565b2591b1fdd9342351553"
+  },
+  "rust/crates/rexx-exec/src/condition/settlement_observer.rs": {
+    "git": "100644 blob f457c87fd74154247295500c63f68f92d802512d",
+    "sha256": "61b06294f2d68735a6643f765c1390dc957d5bfaa6483837ae8c56dc232ef8d3"
+  },
+  "rust/crates/rexx-exec/src/condition/tests.rs": {
+    "git": "100644 blob c45d6e41570cdc708688513f7f9f1fefb0392bf9",
+    "sha256": "2ceb09218c339c20ce43794554fdac1158af7894c94c7d9dc351ae46dbcb4ab6"
+  },
+  "rust/crates/rexx-exec/src/directives.rs": {
+    "git": "100644 blob 8b0b27c6f7584bff6428fac02c176a571c1980b9",
+    "sha256": "7aba5782bf18517cb6184ae7e4ee4addcea307394878775362d186a7f45f03fa"
+  },
+  "rust/crates/rexx-exec/src/dispatch.rs": {
+    "git": "100644 blob f42ec9cb1c31a629d47ff3884da8e6f5f98bd251",
+    "sha256": "6749ff61e6b5a0b662e06084299ebc9416af4e4fafc960840aeac1f8be277540"
+  },
+  "rust/crates/rexx-exec/src/dispatch/array.rs": {
+    "git": "100644 blob c84612d04b86179aa5572f846f64beb01f155fed",
+    "sha256": "b6bbf6ceea58e98c911981d573c013280c4e9e423597ad1df62e0cd465925e91"
+  },
+  "rust/crates/rexx-exec/src/dispatch/array/sort.rs": {
+    "git": "100644 blob 3a4d4a4b9086721edd4e061b2d575fc88d50cc0e",
+    "sha256": "5e30765fb6e48d23de2dae3c81565606183dac7c41dd4f5135b087550957f85a"
+  },
+  "rust/crates/rexx-exec/src/dispatch/array/surface.rs": {
+    "git": "100644 blob ab0e6e99bfa90391c02e0fe6ed8a2cbea0648113",
+    "sha256": "2edd5ff1f06a8e990770e2f72e0b64cbf6b9ac4782cac69c9b29c6f14371c99b"
+  },
+  "rust/crates/rexx-exec/src/dispatch/buffer.rs": {
+    "git": "100644 blob c0aa8d5f33eaaadf6012eda6683bb9835f033aa5",
+    "sha256": "37b8fe327edc9f6ab92e4586daf2e52b079fcebeb96946617535e6fcfb31e386"
+  },
+  "rust/crates/rexx-exec/src/dispatch/class_protocol.rs": {
+    "git": "100644 blob 493d984d6dee4b796dbc81d0a42a1f88abf94cd2",
+    "sha256": "f25da823be528317549ffb8be176ab2594f0463f08a5f26442d2bdd02ed76b29"
+  },
+  "rust/crates/rexx-exec/src/dispatch/collection.rs": {
+    "git": "100644 blob 472baba59b1607d070f657bd8d1682db218600c3",
+    "sha256": "3f1193cde228b6dc46275ed2bcec1fac804c91999556c6a9646c89b09cc6c897"
+  },
+  "rust/crates/rexx-exec/src/dispatch/collection/list.rs": {
+    "git": "100644 blob d3736dd122e90674113f615129f3fa6ea36dfdec",
+    "sha256": "46ac7efb0fe6f0ee94a41da505849f51c7175109cf4b0895196d865f08c7a7d6"
+  },
+  "rust/crates/rexx-exec/src/dispatch/collection/queue.rs": {
+    "git": "100644 blob 5905523104f0da5629eb8dcce1bbe5f06ccc6263",
+    "sha256": "62e01377786395656306a2d58b6cecef91f3ffc47e2795bff8ff8d1ae243d6df"
+  },
+  "rust/crates/rexx-exec/src/dispatch/collection/supplier.rs": {
+    "git": "100644 blob 3e5aa0177608db1e70d55e389537a6c9dedc7986",
+    "sha256": "1690b1eb204b079267bf76d4598ec0f626c761b499e958706ef4c2a845d6b278"
+  },
+  "rust/crates/rexx-exec/src/dispatch/construct.rs": {
+    "git": "100644 blob 9f088f93e20874c40689e4b55cc2f35fa9d75d9b",
+    "sha256": "216861d6a64b6d5f01d8c0153747885c68b13862ce97e108af5565407edcdb08"
+  },
+  "rust/crates/rexx-exec/src/dispatch/context.rs": {
+    "git": "100644 blob ebeaa0d608d5396b7f01700fa6574b02f772f7b9",
+    "sha256": "715cdc03f58ca30a1d8e57b459395d54256730b8442b266de00577193dc8b098"
+  },
+  "rust/crates/rexx-exec/src/dispatch/executable.rs": {
+    "git": "100644 blob 72f17df45d122a196d0428c38d59fdb6183cf402",
+    "sha256": "84983c85442a4808496d48206ab2eabeff2b621cbf4c47a6930a65f91e147b86"
+  },
+  "rust/crates/rexx-exec/src/dispatch/files.rs": {
+    "git": "100644 blob 2df95c789db45988319763cf17418995368f1f18",
+    "sha256": "c475dac66f956ab4f1b6c9f8593d7c944ddae3c69a9e493d4153136d63ab7e02"
+  },
+  "rust/crates/rexx-exec/src/dispatch/hash.rs": {
+    "git": "100644 blob c7d1e79475d4e807d903b8f346e1b693bbb3a19c",
+    "sha256": "1f6c1d276f37d25f685aa8b6a0b3a0274afebf0b79f8c20b7201495aa6057cb6"
+  },
+  "rust/crates/rexx-exec/src/dispatch/hash/probe.rs": {
+    "git": "100644 blob b8873fd9572936188f4025108ea3d4eacc02669a",
+    "sha256": "425ed4030cc01c55e00159414db3395bd3cc115298ff40fd788e89aa6b3e87a2"
+  },
+  "rust/crates/rexx-exec/src/dispatch/hash/relation.rs": {
+    "git": "100644 blob ef800348793a433d6aa8c3d91c2bf45041123ecf",
+    "sha256": "d8f91093841deed62b32b13c2390ab04223d995e0a5b36341c2fe1a9bfdbcaa7"
+  },
+  "rust/crates/rexx-exec/src/dispatch/hash/removal.rs": {
+    "git": "100644 blob fc4bfb05f7e3a594296fd43aed78a66070fab524",
+    "sha256": "b69d4f45be1e4a8764363ff1228f1017977dc014e3db99bbf181dbe8412a257f"
+  },
+  "rust/crates/rexx-exec/src/dispatch/hash/stem.rs": {
+    "git": "100644 blob 488582b30c3c246b425d1b0e2cb01309065a146f",
+    "sha256": "e0b4a6949db7f7fff7639594735666db0af6f55b7892e31dd9909cd7c5a372d4"
+  },
+  "rust/crates/rexx-exec/src/dispatch/introspection.rs": {
+    "git": "100644 blob cba8ae49f6aeea9a2d6c2c91f6fd88dd03715f04",
+    "sha256": "368f9750e9151d85abcd62a1a3551887b14366a09e4f4026d534bbc24348b370"
+  },
+  "rust/crates/rexx-exec/src/dispatch/introspection/tests.rs": {
+    "git": "100644 blob 0c8ea5128909906e826ae00c697be62a22ef3f24",
+    "sha256": "e9ff02993f54e1bb0d23588bac5e508827671363931d6e67dda94e6fa5e407c7"
+  },
+  "rust/crates/rexx-exec/src/dispatch/library.rs": {
+    "git": "100644 blob 00f2fbade798662d4cc7646ddba395bb922e96ce",
+    "sha256": "5406bf9147c309fbf6a3c10be0c1284bdf5dd498b2d9418bb6b51082f3f72b09"
+  },
+  "rust/crates/rexx-exec/src/dispatch/library/surface.rs": {
+    "git": "100644 blob 69026ed45d08ef315225745182a4d19104e56515",
+    "sha256": "7a19cf5469c1b1b6b4438e963772dd93936bac4d67d4666d37aae28cb8f2530f"
+  },
+  "rust/crates/rexx-exec/src/dispatch/library/tests.rs": {
+    "git": "100644 blob 668acbca9e3c110451ab50c6a289a8fce12a4309",
+    "sha256": "e054a7ba0b2c663704f4f5a47c583795ee41ef32320e9893411a1583fc0f65ab"
+  },
+  "rust/crates/rexx-exec/src/dispatch/method_arguments.rs": {
+    "git": "100644 blob c6deb0c4c907379e28bb860b4875418c2262a578",
+    "sha256": "fe01fd44612f175d11a2b8979647a2a04e299711a037c905d84887d545c3fc52"
+  },
+  "rust/crates/rexx-exec/src/dispatch/method_entry.rs": {
+    "git": "100644 blob 8d46e3ebc72ce4d4c609a4d2f9336e4cd0cd31a8",
+    "sha256": "d9b58102d88d57e4823669a5977df2cea3e9688fb9a68b25b834ed9bdd31049b"
+  },
+  "rust/crates/rexx-exec/src/dispatch/method_entry/tests.rs": {
+    "git": "100644 blob ca833f90c9f35a91d9fef5a02116717bf5f46aed",
+    "sha256": "598a29f420aa3f970962f0a9b3d39c827e5bec129a0ebae2a9b6d8c14e15e8ce"
+  },
+  "rust/crates/rexx-exec/src/dispatch/native.rs": {
+    "git": "100644 blob 0477bdbbe50839eb969b1c27e0a35467063e5ed9",
+    "sha256": "5fa0186c54afeb7e0580bf6f959722308daae874b606772b7ca62caefae2d362"
+  },
+  "rust/crates/rexx-exec/src/dispatch/native/tests.rs": {
+    "git": "100644 blob 0258dd29285d08f720d08f6d1068682d058dfb54",
+    "sha256": "fe036d267cdf3149d67917196a13ddcda6f13904a83528e773c299851f765a94"
+  },
+  "rust/crates/rexx-exec/src/dispatch/object_protocol.rs": {
+    "git": "100644 blob 121153e69af38a428d2c6e57098bd996adc2ec8e",
+    "sha256": "e8609dad6b85063d1caaf17d6b7f4d67902f7ab164f86191ce653810fa57edf8"
+  },
+  "rust/crates/rexx-exec/src/dispatch/package.rs": {
+    "git": "100644 blob 20dfdf4ece7c7b95dbebfaf5b7de86c7aded042c",
+    "sha256": "efb1f9700cf6b01f47a8f009d08c08c6a41adb573765eef86c51a82fbf7d7b9d"
+  },
+  "rust/crates/rexx-exec/src/dispatch/reqstr.rs": {
+    "git": "100644 blob bca441c0e505dbf55f27e76bb1431636ba16ef24",
+    "sha256": "be6da7393d4e08d94a54acfe461a2f6f95cdc7c7900872f884b2cb1c02fe0639"
+  },
+  "rust/crates/rexx-exec/src/dispatch/rexx_info.rs": {
+    "git": "100644 blob e007f19acf7b24ca45af975aa46b35bdf4f4bedc",
+    "sha256": "59d21e1d2e4c1bdf6b27e2f866cafa2331d11a95016fdbfc825913e3fad525c5"
+  },
+  "rust/crates/rexx-exec/src/dispatch/semaphore.rs": {
+    "git": "100644 blob dc86eaf5ba32cb7f015c06cbc68ee253eb80f0f8",
+    "sha256": "e668fbabd8b90584da90794f6c3c2c2613d3edd9a1bd1d1891f8ca702c7e3a3c"
+  },
+  "rust/crates/rexx-exec/src/dispatch/stream.rs": {
+    "git": "100644 blob fc11a7d1bc10274c8074bf06f8a09e12c5bb02e1",
+    "sha256": "956b416ab66b2977c9d065a7972dabee854ce9ed27d34e738f7b30438f2ac460"
+  },
+  "rust/crates/rexx-exec/src/dispatch/stream/query.rs": {
+    "git": "100644 blob 5f726bab22ce99364784058f8f3aa937f7c5b47d",
+    "sha256": "157d369db27cd57d5377e093e4c1bf5b7afc2a336ad2075dd2e6e80e70b46481"
+  },
+  "rust/crates/rexx-exec/src/dispatch/stream/read.rs": {
+    "git": "100644 blob 603d33e9fdfb996ce5412f5c1d06213ca2eefbb5",
+    "sha256": "819389a9931d72efb6d0c7bd9e0e90c7954a8c0daa86a7478e3b66521ee768fe"
+  },
+  "rust/crates/rexx-exec/src/dispatch/string.rs": {
+    "git": "100644 blob 2d25c9297f31910b4f7f52e10473cad0978f0a1c",
+    "sha256": "b32769602659427757d5070ce8f4d6f13e362de5574e61f5ad4359439f3b6cfd"
+  },
+  "rust/crates/rexx-exec/src/dispatch/tests.rs": {
+    "git": "100644 blob 6ac73f49cfdd6b748ace0826cebc9e53ce94cc4e",
+    "sha256": "3c713c92d6e468ff67c4fd0b273de1966d4c89a3954aa6b7549586a48d7966c4"
+  },
+  "rust/crates/rexx-exec/src/dispatch/time_support.rs": {
+    "git": "100644 blob f22d37e02d0db7d9d6e012f28cd099d671d66e99",
+    "sha256": "d46484da74cdbcb374c5737f2f89b8a7276e0f450f75e7ebba1b0a3e364f8d7d"
+  },
+  "rust/crates/rexx-exec/src/dispatch/time_support/tests.rs": {
+    "git": "100644 blob af32109232de2245630834c80b199430cc05de2b",
+    "sha256": "421c4a7504546c8c8eadc6c0ffcb05448bb3ab3959e4adfa69500b34b728a747"
+  },
+  "rust/crates/rexx-exec/src/environment.rs": {
+    "git": "100644 blob a4dd8d6cefca722d98dfa2664855ebc0d451195b",
+    "sha256": "7274f549155a9d4e095672234977eea6dfaf01c4f37b6bc0f8ca87502ec75af0"
+  },
+  "rust/crates/rexx-exec/src/environment/identities.rs": {
+    "git": "100644 blob 363fc707564f6ee41a80b02a6a76a4bbb0f56fa8",
+    "sha256": "2c4e3d3ffae8e251c993e43a9ad64286736fbf53fd28f77b818e828f648d6a11"
+  },
+  "rust/crates/rexx-exec/src/environment/route.rs": {
+    "git": "100644 blob d3e386f6efa76ffdef6ba2b4298e69cd65efc3fe",
+    "sha256": "d27140573027b045c01ed17e6f84b6c77bb803d37ac359e97752dbf44e5e6c7b"
+  },
+  "rust/crates/rexx-exec/src/environment/tests.rs": {
+    "git": "100644 blob bdbd04b46aec1f77213e3d3839eb4cfbe19da60c",
+    "sha256": "16fdc239f13227b6dc01201b7ea21d162c6ae64878118b707244b06929f6fe19"
+  },
+  "rust/crates/rexx-exec/src/error.rs": {
+    "git": "100644 blob a278f91178bfdfa27b3790369ed6e6605bfcc71d",
+    "sha256": "c2d216c7ceeaaf721353222bb4f365d373abbff1c7c6b13f476c5b4a792e2afc"
+  },
+  "rust/crates/rexx-exec/src/eval.rs": {
+    "git": "100644 blob 247514e4111a2bfad92c96dbc360bee6d0812ca8",
+    "sha256": "fc7a7781b16df3342b0d3228f7c08282cf8d34d05c8a8015c7f105850bdb9eca"
+  },
+  "rust/crates/rexx-exec/src/eval/object_operand_tests.rs": {
+    "git": "100644 blob 9e4cb3c2d4d11fc21116500fc008d67ca52c1139",
+    "sha256": "f2d28a6e23e65d1c105275c1622455304659f430b14fdeca8e11adadfc7c932a"
+  },
+  "rust/crates/rexx-exec/src/eval/tests.rs": {
+    "git": "100644 blob 64c91eeefa8108c5691c7b00be5e56fb415e8ca1",
+    "sha256": "57b3d39c0f7faabe333503dac1f72ebff5e65ddd2c778e5dc67072ab8c553b07"
+  },
+  "rust/crates/rexx-exec/src/guards.rs": {
+    "git": "100644 blob 58e1b33b5349f788d44cfdbb4820642d2594a5a6",
+    "sha256": "61159700518b45e799c8aa8bda07dc3cf3756535058bdaff63c1d07b16a57528"
+  },
+  "rust/crates/rexx-exec/src/input.rs": {
+    "git": "100644 blob a157b4c5da60159ec1b88a5755e4ce87be0bf0a6",
+    "sha256": "39a265a7014cc3042625d9329d0dd3a6865c1c20a832bced5eb77235498cc94b"
+  },
+  "rust/crates/rexx-exec/src/input/tests.rs": {
+    "git": "100644 blob 1a13cbb272c434f38127658a55df9fc736ccf2c3",
+    "sha256": "7a388a13afbe63bee848cc8b38899aeaf5cbbb403fe261164bce43391a8c84ed"
+  },
+  "rust/crates/rexx-exec/src/install.rs": {
+    "git": "100644 blob dbd0750cd0088b52b2cb48ab7a12da4cc27cc062",
+    "sha256": "a2cc9340a0fbcccf7c21dc80947b10102f3dae0521edb5bef5320de9cbc3b5ee"
+  },
+  "rust/crates/rexx-exec/src/internal_routines.rs": {
+    "git": "100644 blob 22c47931440775944eb4983f07b2cbcfeeb83b20",
+    "sha256": "25aeed5878c26363d10f7bd771897e0b8fa9702b56ac7b9559e3c35715f37dd4"
+  },
+  "rust/crates/rexx-exec/src/invocation.rs": {
+    "git": "100644 blob dcda280963b31f055b5924102b551b6c73d66f39",
+    "sha256": "2f1a5d92ffc539fab63d2bb259643cc0aacfce865c0da745eed8d459fd17cb02"
+  },
+  "rust/crates/rexx-exec/src/ir.rs": {
+    "git": "100644 blob e84183cdb0ddadd75bca99cd8d4afa6e627815d0",
+    "sha256": "8328c88a56f3206ef5b16bb67761859dedddc1462ebd09556b9b006e8cf3c5bf"
+  },
+  "rust/crates/rexx-exec/src/ir/compile.rs": {
+    "git": "100644 blob 0b86681deb7833dea271876cef8257853508af5f",
+    "sha256": "7e35358f0dbc671570b8847a7a72eb5b617868ec7ef102e8a623f415eb21d732"
+  },
+  "rust/crates/rexx-exec/src/ir/compile/invariants.rs": {
+    "git": "100644 blob 56a70ef4b1c094f9b6a0057ab9cabffdfcb03600",
+    "sha256": "8d20d00a1efbd553def027d064d135834b84fecadd10d45120d3b1dae6cdaa3f"
+  },
+  "rust/crates/rexx-exec/src/ir/compile/tests.rs": {
+    "git": "100644 blob 31afe1c07d88266591a9a30559a240828fc1a829",
+    "sha256": "2eff612cc5bb6c54630dc038ffddf638e9a32d197e8d8574887479e66cb3cbd9"
+  },
+  "rust/crates/rexx-exec/src/ir/corpus_shape_tests.rs": {
+    "git": "100644 blob 58d622aed8489f48b55c1f87df6e98002aa14939",
+    "sha256": "5c6b178c434a764a533681588524a558c6d5003d64c9059479811b472be4b449"
+  },
+  "rust/crates/rexx-exec/src/ir/counters.rs": {
+    "git": "100644 blob 93be0fdfdd85a101412d189be6b13633c841cdab",
+    "sha256": "718d5e8358794a1058febf3360206ba8c462c363db90d18da7cd481957a1a4f8"
+  },
+  "rust/crates/rexx-exec/src/ir/drive.rs": {
+    "git": "100644 blob 9ecc339cda9f6caf3155233d5e7a95d2af87d853",
+    "sha256": "8bcf9bd123c40ee1e4cd4ec962bda9ad56f65cfe065451453f893b5b19f1b454"
+  },
+  "rust/crates/rexx-exec/src/ir/drive/tests.rs": {
+    "git": "100644 blob a9298cc3f66d5d8b6f7d41ee297eea74a9ba5925",
+    "sha256": "79924a602bce0b155aca4d1382c2807b8be5d69cfda1e15c758f3a81dd8a02f5"
+  },
+  "rust/crates/rexx-exec/src/ir/golden.rs": {
+    "git": "100644 blob e0e374d1067d7c6f84134925cb5d5536967b4a36",
+    "sha256": "346534616e2536c25cde7e43473e2adb50d38c73a7f526760ea2767ca817aa5c"
+  },
+  "rust/crates/rexx-exec/src/ir/golden_tests.rs": {
+    "git": "100644 blob b6faa8732281a5218f11fbde15a715b0bc00bf43",
+    "sha256": "81a58ef7c90651cd1759eee45c08e81a2fe7349d24688951580fb0aee08836d4"
+  },
+  "rust/crates/rexx-exec/src/ir/trace_flow.rs": {
+    "git": "100644 blob cbcc7e85b2a2b5dd54946aa0d8af21acd197abbd",
+    "sha256": "a2d02aa24d90bf28157d772edbeca6720ae5dfa38d00c69d00a98f344de884b6"
+  },
+  "rust/crates/rexx-exec/src/ir/valid.rs": {
+    "git": "100644 blob a6e46ef4aa0c5d7dc4a9dec1d344e1374e416ba3",
+    "sha256": "18a1b65779352ac36a2028fb86363c17d260f1679d375380b2b2130a831edc0d"
+  },
+  "rust/crates/rexx-exec/src/island.rs": {
+    "git": "100644 blob 6906a8196f6407069d9ac792445e0cae616976d8",
+    "sha256": "531838a1efcc3cad4cd82b6907afd7c3041293e09cfa8027f6e5effe407e963e"
+  },
+  "rust/crates/rexx-exec/src/launcher.rs": {
+    "git": "100644 blob df16c016e0ce00e0dbf416025d84b42962d51517",
+    "sha256": "b1ffc71d4c7e5754952a3224124b6fa584f34b1565a9c4d6e7fad0829b6a86cd"
+  },
+  "rust/crates/rexx-exec/src/lib.rs": {
+    "git": "100644 blob 3dd18e8bea6dd95d9faf5b6f908913a5dbfa98b3",
+    "sha256": "1765a2592341da19431a619389a7949e5a219ffffd2f5ee196aac23fbf9a615a"
+  },
+  "rust/crates/rexx-exec/src/libraries.rs": {
+    "git": "100644 blob e93871d0ed1f6b5541843b5c0bcb749d0054afd7",
+    "sha256": "9c08ed59d4d57d630cbb1bd570d237a51c81e3f1c2cc02339260c0fb4b9f9022"
+  },
+  "rust/crates/rexx-exec/src/lines.rs": {
+    "git": "100644 blob 1f2afda9215f578c2693dc82f36e8c6dfeba7d71",
+    "sha256": "08191d509617fb50c35a51910a59aae04f3c78d176c4e2ad29e5961570b1b520"
+  },
+  "rust/crates/rexx-exec/src/method_rows.rs": {
+    "git": "100644 blob 9eedba65441d68fb17937ec9ca67550f6ca4b4d9",
+    "sha256": "46e1a18508226076b68fcd19636a0b7b8524b087c1a232b3d8323b91b84b29d0"
+  },
+  "rust/crates/rexx-exec/src/method_rows/tests.rs": {
+    "git": "100644 blob ac610b394991e5adfd79f9ba0c082f7261002033",
+    "sha256": "09428575fa5fb72aa45b57719b6ffe4b388da15b1d78d8c19ceebf9426e5887d"
+  },
+  "rust/crates/rexx-exec/src/options.rs": {
+    "git": "100644 blob ffc4905a43f304796ec21b39a60aeb6f0513a5b5",
+    "sha256": "d556e98a8a79991c74a5341a13c4830e76ef001a96553adda33a4a283bdb33f6"
+  },
+  "rust/crates/rexx-exec/src/package_state.rs": {
+    "git": "100644 blob 46bc429bf18b303ad89f7b6080c2355ff97b255b",
+    "sha256": "2eb9166c66686beb9f4904905ad1ce914753ed9089057652d8f594088db7bb00"
+  },
+  "rust/crates/rexx-exec/src/parse_template.rs": {
+    "git": "100644 blob d9c8d0d8e851082f4239bd67501f37db2ede2a35",
+    "sha256": "cdd7e8335086fa7175b20a3d42becffd8136da5f6e52ce068d42b3a751ba2ad0"
+  },
+  "rust/crates/rexx-exec/src/parse_template/tests.rs": {
+    "git": "100644 blob 0b2ec0be4845e1b2b2f4aa388a9fb2de2e2a6d5b",
+    "sha256": "93bab65332d9978e034dcdc38d1e8993c207ca0455cafd464ad31885830f995a"
+  },
+  "rust/crates/rexx-exec/src/parse_template/trigger.rs": {
+    "git": "100644 blob 4c67f7268a8e21163f192a4ed9ac409ad81a7789",
+    "sha256": "38ece6030c9a55d310911889479abdc4906962cfdeecd104583decc4623f837d"
+  },
+  "rust/crates/rexx-exec/src/paths.rs": {
+    "git": "100644 blob 760feaae3ec3af39327c632bc76c09d9e7dbbd3c",
+    "sha256": "2458305ce03244834faf7f43cbe06c88ecb3173e85b7feff75e2af3a57d40b8e"
+  },
+  "rust/crates/rexx-exec/src/pinning.rs": {
+    "git": "100644 blob 9b62dcf7910e33e3c3136f940eed705fe2ead5a9",
+    "sha256": "25447cdf5462c34a753ce566692913ea0d96aae9d7a1c1f7c0cc54c5c9f02fc6"
+  },
+  "rust/crates/rexx-exec/src/plan.rs": {
+    "git": "100644 blob 6537729a9cd22d2868e030900350e66338ce548a",
+    "sha256": "eadb18b7defc48bd5f3ddfab27ff489ae658dd7bc88bc1950001cbe4e7d62dd0"
+  },
+  "rust/crates/rexx-exec/src/plan/tests.rs": {
+    "git": "100644 blob 14888bf05af066500d7050814d07db8a7fa12068",
+    "sha256": "08d5737deec8bdf75a64d3f025a2f4a455f370244cfe2f1462e5f97214de53bb"
+  },
+  "rust/crates/rexx-exec/src/queue.rs": {
+    "git": "100644 blob ef59a0fb39d03cd877fc4729fe3f7515507bfe41",
+    "sha256": "1ef0ad1dd36503144e745b61902905925773fc8d2766fc4ceadbb6b009b2cc27"
+  },
+  "rust/crates/rexx-exec/src/redirect.rs": {
+    "git": "100644 blob 57b7038d1883b91ba29de94e28b199df4332fdaa",
+    "sha256": "5677259f067fa96b6d76f39892f2a12e42cbb1dcc1025fd5956e49f8bbb3b864"
+  },
+  "rust/crates/rexx-exec/src/require.rs": {
+    "git": "100644 blob c595829778053e3336b080bc063b840b6df80ebf",
+    "sha256": "c4479d5486b83e5e4374c3e251e2508a89d4c4f45c2f11a668b2f895c206d1be"
+  },
+  "rust/crates/rexx-exec/src/run.rs": {
+    "git": "100644 blob c09a2f47dffb675d04f25dffb7b203ea3a03b87b",
+    "sha256": "52cb557ff39795cec5fb56134608e67df20aacb4cb717b7b30d8a0093d8b2fab"
+  },
+  "rust/crates/rexx-exec/src/run/assignment.rs": {
+    "git": "100644 blob 6a952803e12839f041bcbc519c3ebadc62d51e3e",
+    "sha256": "7972dd227594fd407d695910c72ba11168e6bcf140b928b80740ab0d6886f08f"
+  },
+  "rust/crates/rexx-exec/src/run/call.rs": {
+    "git": "100644 blob 50473e88a51395131ca8a3993b853325bb9de901",
+    "sha256": "b529e33c81122b1a2f628781388eb83cbb40d6ccea82fedc12b261eac19c89b8"
+  },
+  "rust/crates/rexx-exec/src/run/condition.rs": {
+    "git": "100644 blob 932ed10dfd5ef4b9e30843f66a80ac1eef6b71a0",
+    "sha256": "1b93bbe66db49244a37c73dd1d3e713b4f94d070fec2568a4d3c5afe7d80126a"
+  },
+  "rust/crates/rexx-exec/src/run/condition/raise.rs": {
+    "git": "100644 blob 44996383067168035f026e301c614cef5740a2f8",
+    "sha256": "dc1bd0497c93450b3dc9d444f230eb098963d3f054b3a9631262fd6be8775eb1"
+  },
+  "rust/crates/rexx-exec/src/run/indent.rs": {
+    "git": "100644 blob dafdbb888cd62280d23446121eb66be3494e00b6",
+    "sha256": "5598b32437d28bc53a5a8a485f3416040173a526954def734372739ed7739840"
+  },
+  "rust/crates/rexx-exec/src/run/interpret.rs": {
+    "git": "100644 blob 2a289fbd75d24e30cd3606196094a777829bbc58",
+    "sha256": "55e8fd268c654cff253263b30a9b42b5514758aee54e344446b484d3d75c115a"
+  },
+  "rust/crates/rexx-exec/src/run/loops.rs": {
+    "git": "100644 blob 6b8df33f311ac4633e83692595ac6979651513a1",
+    "sha256": "95a95b006884c1d7977d7da2687914ea86e32611180dddf20714546160920187"
+  },
+  "rust/crates/rexx-exec/src/run/raised.rs": {
+    "git": "100644 blob 1dccf5c452350e7dc9b4dd2e9ce7667de5307fac",
+    "sha256": "5b6fc8a7c8c6f1ba4de23fc0875ad0bac6fe4b70458ae1e1d268273c03372ba8"
+  },
+  "rust/crates/rexx-exec/src/run/select.rs": {
+    "git": "100644 blob 74de5e1803b67aba7cf3d6c990275f1f3c46d02e",
+    "sha256": "a05bc61587dab6c6c8652a582f9ce1088247017749be64ea23eab92d62e0506e"
+  },
+  "rust/crates/rexx-exec/src/run/settings.rs": {
+    "git": "100644 blob 1ca6758355fc3b683252d8e81a2a24e56180817c",
+    "sha256": "d4010c8c96241fcf24d9e53a7ca1dd101b27c6391429ea9dacbafde4a0245234"
+  },
+  "rust/crates/rexx-exec/src/run/tests.rs": {
+    "git": "100644 blob 7e0b1fa5ff59f8976162478ae6ccec939e27cd35",
+    "sha256": "6d32a2c537a4a893331bcc271b2a33c02a5302afce836e9817aacebe12fd348f"
+  },
+  "rust/crates/rexx-exec/src/run/tests/address.rs": {
+    "git": "100644 blob 051d5c533d2444d6af4a4b2819b90196f1b6d2b6",
+    "sha256": "f0fae0ec216269821609ae0e43c4f125af23001a0956a5bf5c0606ee646d6911"
+  },
+  "rust/crates/rexx-exec/src/run/tests/assignment.rs": {
+    "git": "100644 blob 3312216dad92e901e0322747d6405762f94b2a90",
+    "sha256": "5f2c1136ef370c5ccf430e20a85454683663c369860cf80494594d8d2ff6152a"
+  },
+  "rust/crates/rexx-exec/src/run/tests/branch.rs": {
+    "git": "100644 blob d7f0698bfcc6c47581c823b7774575d852000da8",
+    "sha256": "012be46774eeca101548b0e4a3fa0ce92207f1a905a6521c6bf17cb00a9ba426"
+  },
+  "rust/crates/rexx-exec/src/run/tests/conditions.rs": {
+    "git": "100644 blob 638dd0f60baa408e8898e78281cb423c34a02e1a",
+    "sha256": "580c2d6a16d9643ef30a948fe1c13e78b03b0fc22c753a276c684a8ee90b0efc"
+  },
+  "rust/crates/rexx-exec/src/run/tests/directives.rs": {
+    "git": "100644 blob 4fab480edfec3b99e25d90b6d7809f8e97be914e",
+    "sha256": "6034c980c394917712f01dfa3240187b4f64b093ecf9f8a18c29e9be0b3a6713"
+  },
+  "rust/crates/rexx-exec/src/run/tests/indent.rs": {
+    "git": "100644 blob d1c69e4af619b9575ce49f64b54796efe3c2df63",
+    "sha256": "9369772f14e8676fde54637ed35ba1d1169b3441d3bbf150766faeecf8b1bd0b"
+  },
+  "rust/crates/rexx-exec/src/run/tests/iterate_leave.rs": {
+    "git": "100644 blob 92060d2d210206e1e1e6bd4e24388fd2e6f9363e",
+    "sha256": "04909d913fcc9114d379fe7bfe7b2ab6c3ca41b4edcd9987fdc25f9f944d515b"
+  },
+  "rust/crates/rexx-exec/src/run/tests/loops.rs": {
+    "git": "100644 blob 3e89788b2ec433507cb019c72599c775e33d7764",
+    "sha256": "9c9aa2fd465e9fb0c6fc83ebc464ebf69c5f51879e0b48e2a7ab3a7233790206"
+  },
+  "rust/crates/rexx-exec/src/run/tests/message.rs": {
+    "git": "100644 blob 3cb0e43277d8305d95e88523777038a006ae085b",
+    "sha256": "93d7b872fcac8b07d42e584308919c9cb72a45aaab2b7d002d659a2b7abeedb1"
+  },
+  "rust/crates/rexx-exec/src/run/tests/numeric.rs": {
+    "git": "100644 blob cfd780b2948c58df2e4671c2ea504d42b7c799d6",
+    "sha256": "dbed295d74f1db7c88a3e00df138a7aae04793181d58ea1c1bb781b2c1e0f415"
+  },
+  "rust/crates/rexx-exec/src/run/tests/result.rs": {
+    "git": "100644 blob 69c08d72a423a1dbca7f96368824eab52687d644",
+    "sha256": "7a2c1ba16646f7079b75ebe8120d973d153fae4e7e137e3c23ccdaf73372bf7a"
+  },
+  "rust/crates/rexx-exec/src/run/tests/routines.rs": {
+    "git": "100644 blob 229f4afe8671cdc34b3691a2a37bfa8d98682845",
+    "sha256": "72227970c02f707b38e18429bf959b339b1d76ccfde17449683f3c1c45c3be35"
+  },
+  "rust/crates/rexx-exec/src/run/tests/scope.rs": {
+    "git": "100644 blob ed6496b91dda3a29e97eedb5f7eb34170363b72b",
+    "sha256": "5f219901e31285f302c5315d7cefef6560ede8c92d09d4ff18bab5d08f3b7aa1"
+  },
+  "rust/crates/rexx-exec/src/run/tests/signal.rs": {
+    "git": "100644 blob 9a9b80025fb877f170e94f85edd6450ca1e09455",
+    "sha256": "326a598af90ac398d4b18c76c2b8bb4ca5990e2e7472584ef91ee3dbd8158340"
+  },
+  "rust/crates/rexx-exec/src/run/use_args.rs": {
+    "git": "100644 blob 53da5d94c703d89f3945d7a045086d7e1bd564d1",
+    "sha256": "5b706eb1de568c3a374dba4b2b28a7e2674fc5c7ffc10860af418f43116ef571"
+  },
+  "rust/crates/rexx-exec/src/scheduler.rs": {
+    "git": "100644 blob f2785ec88b73081bf498423d66a135413c9ae632",
+    "sha256": "320baed0cc7f226ec7823caf529efdc1283affac8707355a4b9e46ada1da7747"
+  },
+  "rust/crates/rexx-exec/src/scheduler/pool.rs": {
+    "git": "100644 blob 8cdb0e43635bebba6055c7f95bc33d1cb55b660a",
+    "sha256": "17442257fdb6cf8970c044fbfe05bdb4a3f148b951e4e1a261e5f8aaf3b80329"
+  },
+  "rust/crates/rexx-exec/src/scheduler/tests.rs": {
+    "git": "100644 blob 1b570bf79d9398248c16e7f7ce3558bade06bae7",
+    "sha256": "405bfdea1ba0a3543ca7393a2f59a343d4780e4df4cef5ff522fb7bc0baf351e"
+  },
+  "rust/crates/rexx-exec/src/scheduler/tests/callbacks.rs": {
+    "git": "100644 blob 3d8b826e479d92f722735d274a8bc937967eaeb4",
+    "sha256": "341062f424c7817d8633a66cef7a4b1f1b0af6296ceac18309956d0d2a64d3a4"
+  },
+  "rust/crates/rexx-exec/src/scheduler/tests/lent.rs": {
+    "git": "100644 blob bfdc9867e6176b170f7a3ea43c556fca8932520b",
+    "sha256": "8522103d4512ac406b5fca52755130c424c64afe7dce0637a06140657373bb16"
+  },
+  "rust/crates/rexx-exec/src/scheduler/tests/mutants.rs": {
+    "git": "100644 blob 11781ee7f8bed9404bc1370fb3f7dd616adbf286",
+    "sha256": "1980adb745d2413fde3a0f10e3c2c8fe5feeaefb16ab22c917a9c5e5f41cc220"
+  },
+  "rust/crates/rexx-exec/src/scheduler/tests/native.rs": {
+    "git": "100644 blob d27d24fa0d00626564620c86efe4ac90fe848456",
+    "sha256": "4dbbd8d89c599ee007e5219ed66b952aebf999c1980e44f38b7eca505c04baca"
+  },
+  "rust/crates/rexx-exec/src/scheduler/tests/pool.rs": {
+    "git": "100644 blob 4a50a663578fd3cc10a62d1211ba32afd9179aa3",
+    "sha256": "7a30ee9479935fb87701373d3702f251b199cc5bb0c837efe09a9828f45e2868"
+  },
+  "rust/crates/rexx-exec/src/scheduler/tests/spawn_failure.rs": {
+    "git": "100644 blob 5d56d46d4af9d0ecb8585adc459a49067ed568a3",
+    "sha256": "2473e98a5dfd75cce56ae30a8038a1cee927a43e0a8b4bee46d8774566eea2d1"
+  },
+  "rust/crates/rexx-exec/src/security.rs": {
+    "git": "100644 blob 5c1ff73a2869739b76855f50a9f8314c8d489816",
+    "sha256": "f93a65af69e41994daa259d2b0ecc6a5e2f2413a6318e8a25b95ed59bdffb20b"
+  },
+  "rust/crates/rexx-exec/src/semaphores.rs": {
+    "git": "100644 blob 7d7cabd01bc9c1281030ceb246061f5a5c156a06",
+    "sha256": "9dc6a55755a2e67d248e65281dbc2dbf1a8768d670adcc648e857533bd3a1de6"
+  },
+  "rust/crates/rexx-exec/src/semaphores/tests.rs": {
+    "git": "100644 blob 9207407bed74bc0ed09cbc1bd923cfc6414e6400",
+    "sha256": "0699492a50fa4015d3a49247a5698ef79a53d2aab0399a8c5fe4035d73c7f9e0"
+  },
+  "rust/crates/rexx-exec/src/signal.rs": {
+    "git": "100644 blob a2f738135acd08b0a82f48b75f427014f12a7616",
+    "sha256": "dde03a27915e57c61cf053c27a819f50c13cc5833e8e26363df6dc43229d00d4"
+  },
+  "rust/crates/rexx-exec/src/sim.rs": {
+    "git": "100644 blob b4eb63e606962c344569355f183f322a283c8077",
+    "sha256": "803d0118f1097474ffa929188d8d8c47834adac6529dfd288f0ca5410c68366f"
+  },
+  "rust/crates/rexx-exec/src/sim/native_watch.rs": {
+    "git": "100644 blob ec9c126caa717d52d2f804ed939715eeb4c3f2ba",
+    "sha256": "90bee8bdc3f62abebb90a24bc765fd5322d6f5f65f8fe8f317459efddc79a0b0"
+  },
+  "rust/crates/rexx-exec/src/sim/tests.rs": {
+    "git": "100644 blob 16ff713018152efc6e612b7aebf3898436c3780c",
+    "sha256": "369d5da4918a1e30a6f863624aaa6195b62325a1069e3a277bc9e10be26ebab0"
+  },
+  "rust/crates/rexx-exec/src/stem.rs": {
+    "git": "100644 blob 0ea7b44d21be3660076555e56bca2ba8957b6efe",
+    "sha256": "683618ac7cfa33e7ec441a24f75a3dccb95656cd79602a24202d7e4bfb0cd054"
+  },
+  "rust/crates/rexx-exec/src/sync.rs": {
+    "git": "100644 blob 80ede35a3f92a02ce7073a3173022d3fd1b0ce1e",
+    "sha256": "a3fa6473cc161f6b90124ecd69d63dec686dacd6e43fc7337e4f3607c3b1c08d"
+  },
+  "rust/crates/rexx-exec/src/test_process.rs": {
+    "git": "100644 blob 1dc65d7ba09efea550fced9ac88c555c3ef73325",
+    "sha256": "db5e3eec619d3a8c13c89d083e5d06bb2ae99eeb01fadfa0cfcd929c419254ed"
+  },
+  "rust/crates/rexx-exec/src/tests.rs": {
+    "git": "100644 blob b02a2f2050e3cdfdae9e52db0b60741ea30c55aa",
+    "sha256": "0603f9b8ddf65a89ed3f033b22d5ecbe4d772af548b39b9d78139cc3e1f9de7a"
+  },
+  "rust/crates/rexx-exec/src/timer.rs": {
+    "git": "100644 blob 93566b037e450350b0c236d8f7335b0e483fd7f3",
+    "sha256": "0272a0e7eba023576b32fab89f6e2f004d14cd118fe64847ae8454ed56c11dee"
+  },
+  "rust/crates/rexx-exec/src/trace.rs": {
+    "git": "100644 blob 68371e5712d1c6145571060b52ed87536470524d",
+    "sha256": "9d922e67f0335bf1d88c823e09bf373346fba98ba13c6c7c45c21901070ee6af"
+  },
+  "rust/crates/rexx-exec/src/trace/format.rs": {
+    "git": "100644 blob e7208556f8281a95beed7b0d928734e5607c6f8c",
+    "sha256": "0dcb812e721a11902a9a0deda28bcb3a2d90b61cfcbae4723643123092305675"
+  },
+  "rust/crates/rexx-exec/src/value.rs": {
+    "git": "100644 blob 3d7d3a9c8bda2de3cda67553cff6d0aa79fdff25",
+    "sha256": "d21e433a2867132a78e5425b5ca0b0fb0487dd1dbfd0920652f0c6070f317b01"
+  },
+  "rust/crates/rexx-exec/src/value/tests.rs": {
+    "git": "100644 blob 372c3ddbc5805e71ccea73dd51e6a53abcb39d67",
+    "sha256": "86a93fa356aacc0558212126c21a9e68214ac94b0f4b3ef29615c625111a5863"
+  },
+  "rust/crates/rexx-exec/src/variables.rs": {
+    "git": "100644 blob 5db7b3444d40a346790443f7c38a37a7841984d3",
+    "sha256": "f1b9abc6bf4bb6d2ce04111167e1b844de2de05e6aff888d8531aaf51d629874"
+  },
+  "rust/crates/rexx-exec/src/version.rs": {
+    "git": "100644 blob ca1d24d5e885d7c3e8833ac4c4d38b3675c4d37d",
+    "sha256": "90e1f80a86a3cd5c329e98c2406263182c85c71cee76d5faed054bafb03dace6"
+  },
+  "rust/crates/rexx-extract/Cargo.toml": {
+    "git": "100644 blob 422210f0c91c32f065e2c99495c77f97ebc76f2c",
+    "sha256": "4a56126349c213dd422783bef0523e12ae34adfbc4a485b7f7db13e681a29983"
+  },
+  "rust/crates/rexx-extract/src/bif.rs": {
+    "git": "100644 blob 8c335323284bd597f49628835f351f09ba40d8cd",
+    "sha256": "c20685f20c44c2a94780345818c7687dfab9eb039b8e932f52aca6ced6179152"
+  },
+  "rust/crates/rexx-extract/src/bin/rexx-extract-assertions.rs": {
+    "git": "100644 blob c199db88ffa172512c27b8bc6f0d8361257bf389",
+    "sha256": "c49e00c6eecd1e20fc5e500094887fb5e193c07e2faa0b43d175d1bdf48554e3"
+  },
+  "rust/crates/rexx-extract/src/bin/rexx-extract-docs.rs": {
+    "git": "100644 blob 48d744076f2464e8823a770411798d2728eb62ab",
+    "sha256": "6f9a9a148f175bf7777aab55fb1705677c9f62f4a6e6b86f88730226ce19c120"
+  },
+  "rust/crates/rexx-extract/src/bin/rexx-extract.rs": {
+    "git": "100644 blob e0b006b7887b30e4e5fcf1d834a5b0538c2525d0",
+    "sha256": "82a718367bc0a3634bfc68505112af83099f4f9d2f3a69689554e8ca10acb99d"
+  },
+  "rust/crates/rexx-extract/src/docs.rs": {
+    "git": "100644 blob 5109ab16c725489f74ce5d005637d819355895ed",
+    "sha256": "57865afb3c4676cbe6fde2abbe3276c73a0a255aedba767cccdefe48e7b1e167"
+  },
+  "rust/crates/rexx-extract/src/docs/classes.rs": {
+    "git": "100644 blob 349a648043a0607e1a069b1679240da2e8609fb0",
+    "sha256": "339654b634f156e6a6a9ae3fdf70ed6aa4ec673c8fb6e4c3ce67ae19d49037c6"
+  },
+  "rust/crates/rexx-extract/src/docs/classes/coverage.rs": {
+    "git": "100644 blob 7647b315f2cd6558631990b558cc4c31ffccbdd8",
+    "sha256": "ed6c3c56d45c2553afbd3b8efa5aa82301859de1b39f06f7d89fa3a8f25a9b0d"
+  },
+  "rust/crates/rexx-extract/src/docs/classes/methods.rs": {
+    "git": "100644 blob b08023d77c5d0d0dbf69b04d6ed0ba891e9c24b2",
+    "sha256": "dd5bc4ece53f4d9e674b1377dd77b5c483f44fcc2b97c4287376147e27a60a26"
+  },
+  "rust/crates/rexx-extract/src/docs/directives.rs": {
+    "git": "100644 blob f7077417291218253ed2ca7f10962e788158bb5d",
+    "sha256": "10b5a74e878cf1178001e16f7f81cf33b27900cd682182a47c111138f7d1188d"
+  },
+  "rust/crates/rexx-extract/src/docs/hierarchy.rs": {
+    "git": "100644 blob 56f71d65443ece5ddd1e82eb1b48119c92b50587",
+    "sha256": "c99aa4584e441ac0a9783affb737ef5584e7ce7f6c14e143eb199f0e9a79419a"
+  },
+  "rust/crates/rexx-extract/src/docs/provide.rs": {
+    "git": "100644 blob ba0fd2f084ee1bddad55869defc5b7d3750c08e1",
+    "sha256": "69ccee9c61540510b2c3e68e96639a1c7e7f9639743501387956120bf90c594a"
+  },
+  "rust/crates/rexx-extract/src/docs/xml.rs": {
+    "git": "100644 blob 3d171efea7f2c718a5907d727bb9edacf102dab1",
+    "sha256": "3255a99a60e51b4f6f6eee8554fdbba49b87a8fb491586232aae1c0ce9aa3738"
+  },
+  "rust/crates/rexx-extract/src/keyword.rs": {
+    "git": "100644 blob c3794d547323737231722d0ff5b84f219a2799c0",
+    "sha256": "5e67766118bcda8663a421d73804e604f8402a3ad51a75f5c3cb20ba4c0f920f"
+  },
+  "rust/crates/rexx-extract/src/lib.rs": {
+    "git": "100644 blob 321f059c89f2bf4640d9cccdc5b6f452c879b1ec",
+    "sha256": "1950d10095aa408759125fde356c4478f8981a6345b741cf9240eaf431a12098"
+  },
+  "rust/crates/rexx-inventory/Cargo.toml": {
+    "git": "100644 blob 6800eb7a24242ab36d62289dbf30db192b518c79",
+    "sha256": "eca5ba6e66380ec7bf5a97289f626cf2e61dc0c4cd6df81cb905ff68ab6c1458"
+  },
+  "rust/crates/rexx-inventory/build.rs": {
+    "git": "100644 blob 485d8f8dc062b02f9bed4f0aac21e8d7731d53ae",
+    "sha256": "0ce61fcb82bbfac0a86ab0f1781df0209f0de80739742111431cd5608381cf1a"
+  },
+  "rust/crates/rexx-inventory/src/lib.rs": {
+    "git": "100644 blob ae0d2d9b1b1b338e4c08524152002c368a62b418",
+    "sha256": "25310623e04e1d4fb5a16393960d171973e3eede77c078262413a8a8023c6158"
+  },
+  "rust/crates/rexx-lib/Cargo.toml": {
+    "git": "100644 blob f8f2ecb77e46388daec6b322953413548360ed90",
+    "sha256": "808256deb54f7ab0a857b7affee1a4a32411de252daa51b910ec95e813873e1b"
+  },
+  "rust/crates/rexx-lib/build.rs": {
+    "git": "100644 blob 4b3e95965088668f605942b1ad3ffca069238aa5",
+    "sha256": "e8a758dab71918974ef621f33d4613aaaf237d4f1e149b0c95d666b04d1e0efb"
+  },
+  "rust/crates/rexx-lib/src/lib.rs": {
+    "git": "100644 blob c1d89f1f55b2de2b3802c3a6136604f4e21a2e0b",
+    "sha256": "f81f68c7504845a6a5f3c36a0ad3e9b26b792b73cd0cb3fada6dac68b093e3e9"
+  },
+  "rust/crates/rexx-num/Cargo.toml": {
+    "git": "100644 blob eef96b5274da185a0f603727c695431cc42018e5",
+    "sha256": "1f4dca603439d52c1abd252cb898f0ebb319997b61b4c06b7f2989cd95f14deb"
+  },
+  "rust/crates/rexx-num/src/addsub.rs": {
+    "git": "100644 blob e60f9ec5cd0aaae06503a50a161d392dbb0a0150",
+    "sha256": "654333e8d2309748a430d1274a455d403a46a2bcc879f2e349c02f3b65e8584a"
+  },
+  "rust/crates/rexx-num/src/bin/addsub.rs": {
+    "git": "100644 blob baa3b086ddc9dd0cf698fe7828af027b5add91b3",
+    "sha256": "5abc839c91f8e79824aee1d0fd33d8b073e60a0eeaba0a9d30c6001c66ff22ef"
+  },
+  "rust/crates/rexx-num/src/bin/canon.rs": {
+    "git": "100644 blob 926c80163161df603a7e51fc4408282c006fbcea",
+    "sha256": "589fa3269db272e79c4b721471166fc0cc22a1178d7a7fe6221ac247bf08358c"
+  },
+  "rust/crates/rexx-num/src/bin/fmt-check.rs": {
+    "git": "100644 blob 63cb46aa76806234e127f3b3b8f43ba7797c179c",
+    "sha256": "7cfd34cd788df48f9d8dde7af0c88e85c9a0ab1e2aaf30e54e553bee44a16acc"
+  },
+  "rust/crates/rexx-num/src/bin/gen-cases.rs": {
+    "git": "100644 blob c70916b560e4e90ca22084f4a7082d51525f7904",
+    "sha256": "066798aebb8ed8cd2313ef7f7148a0b91c4c66b1fde932dc57b3fdec7f9df4e6"
+  },
+  "rust/crates/rexx-num/src/bin/muldiv.rs": {
+    "git": "100644 blob ef80a54284a82d3c356c668c3e1cca8f9965393f",
+    "sha256": "ae6f14062af9f6bddb89d4d4243d9c85f838cb6ed8f2712f24375b3c50da0d6b"
+  },
+  "rust/crates/rexx-num/src/compare.rs": {
+    "git": "100644 blob 8403459ef1c00fb2d5532000bd55c4c4ed6373dd",
+    "sha256": "77e7c5845ac8e9e42d0fa6775af184af945eb2f964a9ed5b8aaeaa4f485842fa"
+  },
+  "rust/crates/rexx-num/src/digits.rs": {
+    "git": "100644 blob 482d8c9f6cf7cda3564e7369606147d07bcc5630",
+    "sha256": "b8ecbf30a5132f3551a01c8adac951d6e5188ee81fd48d7ccee46811cefc8377"
+  },
+  "rust/crates/rexx-num/src/format.rs": {
+    "git": "100644 blob 4d9a8589c1976af9611b0b90a499071bc3e73c64",
+    "sha256": "1c6675d3675d4ca2d8a823af584bfde5a318225c50b02e6e77c802f57fea6222"
+  },
+  "rust/crates/rexx-num/src/lib.rs": {
+    "git": "100644 blob 60c8681fe979f88688a9117938e4ba3b87505fed",
+    "sha256": "8105e0d7f7567987ecadba9a0d04f22d74a4759f7f50b7a3aee78d56bc64a4d0"
+  },
+  "rust/crates/rexx-num/src/muldiv.rs": {
+    "git": "100644 blob a64227de535e8ff2ed9f1625087fcbcec90df8d2",
+    "sha256": "150b3946e7c9caf39270ffc87375115f748a5a07feff1e506de4451d6f5615d9"
+  },
+  "rust/crates/rexx-num/src/pow.rs": {
+    "git": "100644 blob 80863d3a41a22dbe8934cd128c12efc1b05fac80",
+    "sha256": "90124ea01a8970b27659e10cef26a343bd69ee2fafc38097df2e308c013e660e"
+  },
+  "rust/crates/rexx-num/src/rounding.rs": {
+    "git": "100644 blob b0dd821c0ab2cdedd9ddad61e236c6b739845afa",
+    "sha256": "6dc69740a64387032a1ef4cbed8324c25c8736b35ead306f4249a9ab1ab2eed3"
+  },
+  "rust/crates/rexx-num/src/settings.rs": {
+    "git": "100644 blob 59dbbecb2e927abeb2cd33a03b8f0ea1c46a5e54",
+    "sha256": "2269a5391f808021ef58a8b6a68fce89b238269221cfda3181c670ff7801a275"
+  },
+  "rust/crates/rexx-oracle/Cargo.toml": {
+    "git": "100644 blob f5bcf6539838528a46c1748d0a1fa3d0f88200a2",
+    "sha256": "16a49deccc989aebe2e2a0e7d83ec4a22c3d3360333f1ac46ed5477410bd4613"
+  },
+  "rust/crates/rexx-oracle/src/bin/rexx-diff.rs": {
+    "git": "100644 blob 848a11b0c6d0a493644546b14f6a5886376fbf8f",
+    "sha256": "f8789a1822728851e838eb248d6db18c5535d84b02ee0298a0284d8bb515a5cf"
+  },
+  "rust/crates/rexx-oracle/src/lib.rs": {
+    "git": "100644 blob 36cf9e5d39b03a36e193b5f44972325d42bf2e7d",
+    "sha256": "e4d6c5b4d2d2094aa64f4f132b01715ae29bd3b87214f9c8378aa1f3bff53576"
+  },
+  "rust/crates/rexx-oracle/src/normalize.rs": {
+    "git": "100644 blob 794839575ff9e1f7439c237768ef400dc8b6b9db",
+    "sha256": "8390c8a76f493cdef0dd0b12106f03929d7e5d83c0bf0befcc29f15f7be1c811"
+  },
+  "rust/crates/rexx-parse/Cargo.toml": {
+    "git": "100644 blob be4dec27f4b5e1aeaf026cea1002b4b0e4d677c8",
+    "sha256": "59ba164a8cee666b13907dd03d2fa740106999a52c2aec7b5c9aa6cb20d75a37"
+  },
+  "rust/crates/rexx-parse/src/ast.rs": {
+    "git": "100644 blob a3a7b281e4f2ad825520017b1c38af121bf57c47",
+    "sha256": "b285bfe39a17e4c3179a19f295eddbe7e2f2b37c58ee222005e523100c5b4151"
+  },
+  "rust/crates/rexx-parse/src/ast/tests.rs": {
+    "git": "100644 blob 2e2836487bfebde5b29507c59beb71bd9c0f6227",
+    "sha256": "a37c3a67abe1196594b8862debe75b7113c5cc5973f87a2c93c87e8b6c5dda16"
+  },
+  "rust/crates/rexx-parse/src/bin/scan-check.rs": {
+    "git": "100644 blob 58e0cc05a0cb439cd2bb3329ed2ca9a20a2d8c80",
+    "sha256": "9e44d45ddd818d1c35d4617e9bfdd374187c6095292f665df368aafaf5c02529"
+  },
+  "rust/crates/rexx-parse/src/block.rs": {
+    "git": "100644 blob 04261b5f95b19b68a3398cbd823be3543b3bb885",
+    "sha256": "71a787fc2ea589364c60c487dee15ce1fd3a775683d4cc76f995cbc7191d165f"
+  },
+  "rust/crates/rexx-parse/src/block/references.rs": {
+    "git": "100644 blob 93067365276f41e35de756314172b5c3ba8a977e",
+    "sha256": "d914c6cbba0721a518abdb8f8bfe9273288deb31221c87970838d89d2ddc1231"
+  },
+  "rust/crates/rexx-parse/src/block/tests.rs": {
+    "git": "100644 blob 054b350e43c65fc5aaa748225fa7cc9264190511",
+    "sha256": "322340a4d9978ca1b0c1fb55dc39c58e6961d3ae559221759e463bd9d63724b0"
+  },
+  "rust/crates/rexx-parse/src/clause.rs": {
+    "git": "100644 blob aac55302c75018a82e72edd74dc72f61c3ccff09",
+    "sha256": "33bf007ff1f3fe11596a621677551acce620652ecac59217cef34cd9cdad79e1"
+  },
+  "rust/crates/rexx-parse/src/clause/tests.rs": {
+    "git": "100644 blob 19d2ac6a332fccfcc59ff6c1434f98fb97a53442",
+    "sha256": "55b2eca15ec8441c35d1689a21196e12ea881d03ebe6e15065a45acf1b78a126"
+  },
+  "rust/crates/rexx-parse/src/convert.rs": {
+    "git": "100644 blob 2e99fb671728a54a5649979c0a8cfc893c1988d5",
+    "sha256": "9da9b2d1e3bc30c619d300a13b5fe4f02a9e0811dfb1402eac0851adb8cdb7d6"
+  },
+  "rust/crates/rexx-parse/src/convert/tests.rs": {
+    "git": "100644 blob 59eb657ddd9aadb8ac3b5f333239f11255ec4513",
+    "sha256": "97a70c6b0d1a6f22e30caf23ed44dd1ba322e993b4783561b52f642a21695689"
+  },
+  "rust/crates/rexx-parse/src/directive.rs": {
+    "git": "100644 blob 3fc106b20c28490f36399c6d738bc01b4d577d19",
+    "sha256": "97bfb4b875c289514daa00e0aeb9960056695bfe9f53e78b92684e431d4cc724"
+  },
+  "rust/crates/rexx-parse/src/directive/tests.rs": {
+    "git": "100644 blob 88f08ba4413f341880afa61908e89f8e5a989eb4",
+    "sha256": "4454d0be4bd35d567d7828cd9ab3aca09738052fac35b8c9bdc5aa38a17504de"
+  },
+  "rust/crates/rexx-parse/src/error.rs": {
+    "git": "100644 blob 1160930378ce5fd98221a4758390f3ed04da0301",
+    "sha256": "0171cc4d00b55e27c502c74b9dd8182f29925eb3e738213120f529565e8b8bb2"
+  },
+  "rust/crates/rexx-parse/src/error/tests.rs": {
+    "git": "100644 blob c46d51d25905fae3791b9c1490269b98beb583bd",
+    "sha256": "2a06815c9d97f79b9260c6e124c8a18e1521a2953a0a01870cbcae6876b324f3"
+  },
+  "rust/crates/rexx-parse/src/expr.rs": {
+    "git": "100644 blob d361c3ae3fc0c6e7ddb405c84f0eacd081257c7b",
+    "sha256": "220e5764a342b3a2d2afbe2a8ef57ae63d4cf317e3f2d4327e4becff69968e43"
+  },
+  "rust/crates/rexx-parse/src/expr/differential.rs": {
+    "git": "100644 blob 61478bb8d18056c5f0af596bfba62b76bc3f28ce",
+    "sha256": "2b1b1a5554f8e12f41eb12ef1d441ed79de560e1c8abc73ae28349bdf2173867"
+  },
+  "rust/crates/rexx-parse/src/expr/tests.rs": {
+    "git": "100644 blob cfa337647205ee780d1bcd64cd639f10b2079086",
+    "sha256": "f285dbf7a715fd4b8cf1bd0570e14a78bccc045aeaf4dbb9120f6b15a8b8bd1b"
+  },
+  "rust/crates/rexx-parse/src/instruction.rs": {
+    "git": "100644 blob 3809cff449ca05f267a11b678a0d1665393b8c22",
+    "sha256": "2ae0060f279ef5c79c11a14ad9ae689b67d079dcfa05fe6722dd5a58e934e9bc"
+  },
+  "rust/crates/rexx-parse/src/instruction/address.rs": {
+    "git": "100644 blob e7aae2e810b3c228de5232607869899ccc629060",
+    "sha256": "864cd92b841bd56d38586fcab3ace0ee7678153a6bf0edf69be12cfc6238dd9c"
+  },
+  "rust/crates/rexx-parse/src/instruction/loops.rs": {
+    "git": "100644 blob 06c61cb723ac040ccd858bd8f67d410139cd43bc",
+    "sha256": "e3ee713e955cd5632ca8fa46211adc4f8457ecd942801c33614cde1d4e5bcfbd"
+  },
+  "rust/crates/rexx-parse/src/instruction/parse.rs": {
+    "git": "100644 blob 2c1ccf2f74e93b087bf1cb18d1858fb1643e1c18",
+    "sha256": "3ad06c0aba5bb7d4a53b5177ddef01c77c4a3706811c343966441ad0778d1f6f"
+  },
+  "rust/crates/rexx-parse/src/instruction/tests.rs": {
+    "git": "100644 blob 88922b41392a2ace1d25920401414529480c6b19",
+    "sha256": "435b9a6dd534798b4ce52cae53f16836e057a2e4cc377432724fa2308d23365b"
+  },
+  "rust/crates/rexx-parse/src/lib.rs": {
+    "git": "100644 blob c4fa3bc4c867ae14fd679bff01220bd8a4734623",
+    "sha256": "d3d2b5ef87f08be0836051b15a9fe9fda2eeb6108dccb4fc8d974127595b3953"
+  },
+  "rust/crates/rexx-parse/src/scanner.rs": {
+    "git": "100644 blob d83f4b031a3e1e4b1fc9d5b9cb781fe015417682",
+    "sha256": "3a560e3cb707646d9906eb277399043a594e8f1bdd6d39b69c98783068cf4c95"
+  },
+  "rust/crates/rexx-parse/src/selector.rs": {
+    "git": "100644 blob 54e114471e182d136d8174de3e89b98b5e644694",
+    "sha256": "0168fbcc05446eae5cbb56b4139f9c3364e32a0c419962317b27f39951bb213b"
+  },
+  "rust/crates/rexx-parse/src/source.rs": {
+    "git": "100644 blob fc53bed0b2bffaefc3b114b7af7aa5c587c26721",
+    "sha256": "e1b728e2920c448e32d1baaf87df3bdef0540cd8c3cbf73dd9e81851806cb2de"
+  },
+  "rust/crates/rexx-parse/src/token.rs": {
+    "git": "100644 blob 5218de37dc25354ae2df1dce1e98f785bd4108ef",
+    "sha256": "36ef564c138d1a3309d87382fe81f7e37c0f4a7aba323b8c8ab43d1127acf32e"
+  },
+  "rust/crates/rexx-parse/src/token/cursor.rs": {
+    "git": "100644 blob 09264c48d2740a04fddb823690bafdbdc6763d00",
+    "sha256": "e0f072302269ff9265e0fb2ac1db6862c8656d78c7f39499dbc6fdc086adbefb"
+  },
+  "rust/crates/rexx-parse/src/token/keywords.rs": {
+    "git": "100644 blob 69e93794ad083941521f10eb387bfea48eead450",
+    "sha256": "b0c3a2ef00977addb03e51511e4dc092f18de9388d2b5807b68db4b912b9c2df"
+  },
+  "rust/crates/rexx-parse/src/token/symbols.rs": {
+    "git": "100644 blob 892378522b4a9108c2f5420176a81ad41051cf1b",
+    "sha256": "0d9931b8f6c027f1eee15adb8833eea3dddfb787b384130abbab9610e6902bad"
+  },
+  "rust/crates/rexx-parse/src/token/tests.rs": {
+    "git": "100644 blob 18ceeb6551a3e78b150b063a6ec45347887c9526",
+    "sha256": "ad2c61d0505e516f66a3f3adb33d755999c084e325fa40b5d0a12a5791b40f0f"
+  }
+}

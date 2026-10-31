@@ -1,0 +1,58 @@
+    (dn 1)
+s1 98.900 boom.
+    (dn 1)
+s2 98.900 boom.
+handler USER ZZ
+handler ERROR
+handler USER ZZ
+after bd user
+handler ERROR
+after bd error
+%SRCG%COUNT 47
+%SRCG%L/* A reference's required string value that raises raises in its clause,
+%SRCG%L   with one send. DESCRIPTION converts at RAISE under Deviation 83. */
+%SRCG%Lb1 = .once~new
+%SRCG%Lq1 = >b1
+%SRCG%Lsignal on syntax name s1
+%SRCG%Lnumeric digits (q1)
+%SRCG%Lsay 'returned 1'
+%SRCG%Ls1: say 's1' condition('o')~code condition('o')~message
+%SRCG%Lb2 = .once~new
+%SRCG%Lq2 = >b2
+%SRCG%Lsignal on syntax name s2
+%SRCG%Lsignal value q2
+%SRCG%Lsay 'returned 2'
+%SRCG%Ls2: say 's2' condition('o')~code condition('o')~message
+%SRCG%Lnz = .noisy~new
+%SRCG%Lbd = .bad~new
+%SRCG%Lcall on user zz name u
+%SRCG%Lcall on error name u
+%SRCG%Lsignal on syntax name s3
+%SRCG%Lcall ru 'user', >nz
+%SRCG%Lcall ru 'error', >nz
+%SRCG%Lcall ru 'user', >bd
+%SRCG%Lsay 'after bd user'
+%SRCG%Lcall ru 'error', >bd
+%SRCG%Lsay 'after bd error'
+%SRCG%Lexit
+%SRCG%Ls3: say 's3' condition('o')~code condition('o')~message; exit
+%SRCG%Lu: say 'handler' condition('c'); return
+%SRCG%Lru:
+%SRCG%L  use arg how, v
+%SRCG%L  if how = 'user' then raise user zz description (v) return
+%SRCG%L  raise error (v) return
+%SRCG%L::class once
+%SRCG%L::method init; expose n; n = 0
+%SRCG%L::method defaultname; expose n
+%SRCG%L  n = n + 1
+%SRCG%L  say '    (dn' n')'
+%SRCG%L  if n = 1 then raise syntax 98.900 array('boom')
+%SRCG%L  return 'ONCE'
+%SRCG%L::class noisy
+%SRCG%L::method defaultname
+%SRCG%L  say '    (noisy dn)'
+%SRCG%L  return 'NOISY'
+%SRCG%L::class bad
+%SRCG%L::method defaultname
+%SRCG%L  say '    (bad dn)'
+%SRCG%L  raise syntax 98.900 array('boom')

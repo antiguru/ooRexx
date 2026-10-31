@@ -1,0 +1,69 @@
+{
+  "source_commit": "f65066b04fe1f2355ce64d8be581fa9e79641673",
+  "base": "5091eba39531c661c407c0d6a985a99b60d281a1",
+  "pin": "/tmp/codex-p9d-t88-pins/8.8-corpus-registration-rexx",
+  "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+  "measured_normal_pin": "/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx",
+  "measured_normal_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+  "byte_identical_to_measured_normal": true,
+  "build_executable": "/tmp/codex-p9d-t88-target/release/rexx",
+  "build_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+  "compiler": "rustc 1.99.0 (b940084d7 2026-09-28)\nbinary: rustc\ncommit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4\ncommit-date: 2026-09-28\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.0\nLLVM version: 23.1.1\n",
+  "cargo_artifact": {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rexx",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/src/bin/rexx.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": false,
+      "overflow_checks": false,
+      "test": false
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/release/rexx"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/release/rexx",
+    "fresh": true
+  },
+  "build_record": "checks/release.json",
+  "build_record_sha256": "fc169063366566b0e36d27294a520a56a0fbe648791cfd33f0bb1be9e8c6b24b",
+  "build_output_sha256": "f9b5f9d7fba3288037705698d9ec0d1c0d2811c7e951d07700ae64d4617377e8",
+  "source_proof_sha256": "1392f5e088827159bb1dea34599a9efe59ee956eb698e91fece19d23310e5854",
+  "production_manifest_sha256": "593073463602158d59e98322416036af7a9515ba87a48c51072aedaffb447493",
+  "preserved_pins": {
+    "/tmp/codex-p9d-t88-pins/8.8-base-rexx": "4913ad067898fd6a786c12a696b2a21b0d066ad6b019c73273f78e30c16f5c58",
+    "/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+    "/tmp/codex-p9d-t88-pins/8.8-final-fix-rexx": "1e528101880f326e816e85715fb8c5401e45c62382a7b172dd113c050206ff6d",
+    "/tmp/codex-p9d-t88-pins/8.8a-perf-r1-rexx": "ecb06e984ed736233ce0e2ef779b74941488ae64fdec10333dfb2215c309198a",
+    "/tmp/codex-p9d-t88-pins/8.8ab-rejected-cache-reuse-rexx": "4913ad067898fd6a786c12a696b2a21b0d066ad6b019c73273f78e30c16f5c58",
+    "/tmp/codex-p9d-t88-pins/8.8ab-rexx": "361392c36b1207a9174dfab7b32b2acb212d2c69e53f3e76f106e3a1cdad42dd",
+    "/tmp/codex-p9d-t88-pins/8.8c-release-build.txt": "087f28c74e5ff5a9b015e2a2566d02a2f30ddd22ec40968fe6e3078514a33943",
+    "/tmp/codex-p9d-t88-pins/8.8c-rexx": "af52ecd6802b878e9d81be6440492f6bfdadd680628cb48b3224615c70d39a78",
+    "/tmp/codex-p9d-t88-pins/8.8c-rexx.json": "80f4879164279720ad35819443d4f7f72387c41b873c3d0ca241cacc16446eb7",
+    "/tmp/codex-p9d-t88-pins/8.8e1-rexx": "434d6567458248fdb804eebe9edb715a54ddb9ded650fcca994eed6c4b691e06",
+    "/tmp/codex-p9d-t88-pins/8.8e1-rexxc": "11286b31ee5d2ad0c28b94883d7544f58ed503b9510879588319f3d673f2f3ea",
+    "/tmp/codex-p9d-t88-pins/8.8e2-perf-r1-rexx": "470dcb41db61ab7a4d64f3276ce28e539d5686d130be245a4ec7b30e6d6725ac",
+    "/tmp/codex-p9d-t88-pins/8.8e2-rexx": "00e29fde4456ee4845a76941263f495b827c083af35363cb54eb3ac8c6b7c733",
+    "/tmp/codex-p9d-t88-pins/8.8f-perf-r1-rexx": "6ed1c08eb03d54c48d1fe3947ce376f09502aaeba34ac221c334b01b1572b86e",
+    "/tmp/codex-p9d-t88-pins/8.8f-perf-r2-rexx": "22c317baa3ed111935a6577ac33097e428a53b64eb64b4697af2b85664e3f8eb",
+    "/tmp/codex-p9d-t88-pins/8.8f-r1-rexx": "b695b78fe24903b4be5a2874c8cd128193bbe165f92b50a4d6a8a9956d03d3be",
+    "/tmp/codex-p9d-t88-pins/8.8f-rexx": "0c9fb8371ab3d6dcea780194e02c112ed7981447f7f396e606e5f418975583f0",
+    "/tmp/codex-p9d-t88-pins/commands.jsonl": "30b4dfd6a222a9e4e07f2c8e1b1adcc9378fe5765b4c87d7d4155b7d4d9ddfdb"
+  }
+}

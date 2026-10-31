@@ -1,0 +1,13 @@
+{
+  "command": [
+    "timeout",
+    "-k",
+    "5",
+    "20",
+    "/home/moritz/dev/repos/ooRexx/build/bin/rexx",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/reference_conversion_raises_in_clause.rex"
+  ],
+  "cwd": "/tmp/t88-reg-eqiz8ity",
+  "oracle_as": 1073741824,
+  "source_sha256": "fa01c1ff7944b8a838dffaf78a7e4e4dc47785d70235d066d88a6bedbdb8b552"
+}

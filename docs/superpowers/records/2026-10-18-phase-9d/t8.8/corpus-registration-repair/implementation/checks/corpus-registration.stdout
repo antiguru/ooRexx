@@ -1,0 +1,8 @@
+
+running 3 tests
+test the_differential_reads_every_phase_subset_file ... ok
+test every_lang_program_is_run_or_named_unfiled ... ok
+test every_sidecar_names_a_program_the_subset_runs ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 32 filtered out; finished in 0.00s
+

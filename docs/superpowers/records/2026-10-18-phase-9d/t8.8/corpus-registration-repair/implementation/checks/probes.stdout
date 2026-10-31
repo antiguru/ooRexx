@@ -1,0 +1,5 @@
+reference_conversion_raises_in_clause oracle 0 b'    (dn 1)\ns1 98.900 boom.\n    (dn 1)\ns2 98.900 boom.\nhandler USER ZZ\nhandler ERROR\nhandler USER ZZ\nafter bd user\nhandler ERROR\nafter bd error\n' b''
+reference_conversion_raises_in_clause crate 0 b'    (dn 1)\ns1 98.900 boom.\n    (dn 1)\ns2 98.900 boom.\n    (noisy dn)\nhandler USER ZZ\nhandler ERROR\n    (bad dn)\ns3 98.900 boom.\n' b''
+reference_conversion_without_description oracle 0 b'    (dn 1)\ns1 98.900 boom.\n    (dn 1)\ns2 98.900 boom.\nhandler ERROR\nafter nz error\nhandler ERROR\nafter bd error\nhandler USER ZZ\nafter nz additional\nhandler USER ZZ\nafter bd additional\n    (bad dn)\ns3 98.900 boom.\n' b''
+reference_conversion_without_description crate 0 b'    (dn 1)\ns1 98.900 boom.\n    (dn 1)\ns2 98.900 boom.\nhandler ERROR\nafter nz error\nhandler ERROR\nafter bd error\nhandler USER ZZ\nafter nz additional\nhandler USER ZZ\nafter bd additional\n    (bad dn)\ns3 98.900 boom.\n' b''
+companion: three exact oracle/pin channels; full ruled fixture: three exact pin channels

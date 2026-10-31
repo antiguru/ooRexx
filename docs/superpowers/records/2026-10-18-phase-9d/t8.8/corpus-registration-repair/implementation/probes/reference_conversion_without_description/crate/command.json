@@ -1,0 +1,15 @@
+{
+  "command": [
+    "memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "5",
+    "20",
+    "/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx",
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/reference_conversion_without_description.rex"
+  ],
+  "cwd": "/tmp/t88-reg-mtd24as4",
+  "oracle_as": null,
+  "source_sha256": "2840f19aa5811992fae29b27083f6127e91c75bb4db8bd8968bb3af588a2acd0"
+}

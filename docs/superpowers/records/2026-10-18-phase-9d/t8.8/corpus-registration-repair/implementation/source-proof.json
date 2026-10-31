@@ -1,0 +1,49 @@
+{
+  "base": "5091eba39531c661c407c0d6a985a99b60d281a1",
+  "source_commit": "f65066b04fe1f2355ce64d8be581fa9e79641673",
+  "changed_rust": [
+    "rust/corpus/lang/reference_conversion_raises_in_clause.rex",
+    "rust/corpus/lang/reference_conversion_without_description.rex",
+    "rust/corpus/phase-9.txt",
+    "rust/corpus/unfiled.txt",
+    "rust/crates/rexx-exec/tests/semantic_boundaries.rs",
+    "rust/crates/rexx-exec/tests/semantic_boundaries/reference-conversion-raises-in-clause.rex",
+    "rust/crates/rexx-exec/tests/semantic_boundaries/reference-conversion-raises-in-clause.status",
+    "rust/crates/rexx-exec/tests/semantic_boundaries/reference-conversion-raises-in-clause.stderr",
+    "rust/crates/rexx-exec/tests/semantic_boundaries/reference-conversion-raises-in-clause.stdout",
+    "rust/crates/rexx-parse/tests/sourceline_oracle/reference_conversion_raises_in_clause.txt",
+    "rust/crates/rexx-parse/tests/sourceline_oracle/reference_conversion_without_description.txt"
+  ],
+  "all_production_and_cargo_inputs_unchanged": true,
+  "production_manifest_files": 300,
+  "production_manifest_sha256": "593073463602158d59e98322416036af7a9515ba87a48c51072aedaffb447493",
+  "original_executable_lines_preserved": true,
+  "semantic_test_names_unchanged": [
+    "conversion_and_trace_boundaries",
+    "buffered_invocations_do_not_query_the_hosts_stdout",
+    "owned_stdout_queries_observe_the_redirected_file",
+    "owned_stdout_position_is_empty_before_open_and_after_close",
+    "owned_stdout_aliases_keep_their_buffered_positions"
+  ],
+  "differential_programs": 1242,
+  "unfiled_programs": [
+    "lang/stream_builtin_errors.rex",
+    "lang/stream_append_writes_at_end.rex",
+    "lang/raise_untraced_renders_nothing.rex",
+    "lang/reference_conversion_raises_in_clause.rex"
+  ],
+  "semantic_fixtures": 42,
+  "source_hashes": {
+    "rust/corpus/lang/reference_conversion_raises_in_clause.rex": "fa01c1ff7944b8a838dffaf78a7e4e4dc47785d70235d066d88a6bedbdb8b552",
+    "rust/corpus/lang/reference_conversion_without_description.rex": "2840f19aa5811992fae29b27083f6127e91c75bb4db8bd8968bb3af588a2acd0",
+    "rust/corpus/phase-9.txt": "7633af46bf7266f2c83ec5f6e635761d0924c7fd30ccb21bec2ee0c581172203",
+    "rust/corpus/unfiled.txt": "811dc7f9f9964394a3521024d5ad10edd133cb37f330d4e21ae2ed680f27c192",
+    "rust/crates/rexx-exec/tests/semantic_boundaries.rs": "ed39421341de42a4e812f5c1341c8675b86d5e131055ba54a6a0a467761a46f8",
+    "rust/crates/rexx-exec/tests/semantic_boundaries/reference-conversion-raises-in-clause.rex": "fa01c1ff7944b8a838dffaf78a7e4e4dc47785d70235d066d88a6bedbdb8b552",
+    "rust/crates/rexx-exec/tests/semantic_boundaries/reference-conversion-raises-in-clause.status": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/crates/rexx-exec/tests/semantic_boundaries/reference-conversion-raises-in-clause.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rust/crates/rexx-exec/tests/semantic_boundaries/reference-conversion-raises-in-clause.stdout": "796087f8014f183bc2ad6dce57006d880cf00bf761139714c739c5f61781a3a0",
+    "rust/crates/rexx-parse/tests/sourceline_oracle/reference_conversion_raises_in_clause.txt": "e6c5741e458d8b58cc433e42a4a646f4a7e41ff649230d1af2daa8b80fd5e474",
+    "rust/crates/rexx-parse/tests/sourceline_oracle/reference_conversion_without_description.txt": "2ebdda177d04ef6921ad8a89e6da911c45b7a5b9823b3029b890bd91cdb31dc1"
+  }
+}

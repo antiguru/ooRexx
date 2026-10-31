@@ -1,0 +1,1 @@
+{"command": ["timeout", "-k", "5", "20", "/home/moritz/dev/repos/ooRexx/build/bin/rexx", "/tmp/t88f-src-5bpmejz3/source.rex", "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/corpus/lang/reference_conversion_without_description.rex"], "cwd": "/tmp/t88f-src-5bpmejz3", "status": 0}

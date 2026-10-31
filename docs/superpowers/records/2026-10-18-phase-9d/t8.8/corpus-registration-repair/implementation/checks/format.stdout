@@ -1,0 +1,10 @@
+Diff in /home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/semantic_boundaries.rs:34:
+         } else if path.file_stem().unwrap() == "reference-conversion-raises-in-clause" {
+             assert_eq!(
+                 source,
+[31m-                std::fs::read("../../corpus/lang/reference_conversion_raises_in_clause.rex").unwrap()
+[m[32m+                std::fs::read("../../corpus/lang/reference_conversion_raises_in_clause.rex")
+[m[32m+                    .unwrap()
+[m             );
+         }
+         let stressed = rexx_exec::run_program_collect_every_alloc(

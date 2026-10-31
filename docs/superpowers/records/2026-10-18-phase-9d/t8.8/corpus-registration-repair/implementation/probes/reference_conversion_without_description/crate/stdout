@@ -1,0 +1,14 @@
+    (dn 1)
+s1 98.900 boom.
+    (dn 1)
+s2 98.900 boom.
+handler ERROR
+after nz error
+handler ERROR
+after bd error
+handler USER ZZ
+after nz additional
+handler USER ZZ
+after bd additional
+    (bad dn)
+s3 98.900 boom.
