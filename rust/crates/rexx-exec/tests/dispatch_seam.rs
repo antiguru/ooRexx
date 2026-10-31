@@ -206,13 +206,16 @@ const CLEARANCE_CONSUMERS: &[&str] = &[
     "src/dispatch/collection/supplier.rs",
     "src/dispatch/hash.rs",
     "src/dispatch/hash/relation.rs",
+    "src/dispatch/hash/removal.rs",
     "src/dispatch/hash/stem.rs",
     "src/dispatch/rexx_info.rs",
     "src/dispatch/executable.rs",
+    "src/dispatch/method_entry.rs",
     "src/dispatch/introspection.rs",
     "src/dispatch/context.rs",
     "src/dispatch/package.rs",
     "src/dispatch/stream.rs",
+    "src/dispatch/stream/query.rs",
     "src/dispatch/files.rs",
     "src/dispatch/array.rs",
     "src/dispatch/array/sort.rs",
@@ -232,10 +235,19 @@ const CLEARANCE_CONSUMERS: &[&str] = &[
 fn the_seam_token_is_named_only_by_the_dispatch_module() {
     let token = format!("{}{}", "Clea", "red");
     let sites = code_occurrences(&token);
-    let elsewhere: Vec<&String> = sites
-        .iter()
-        .filter(|site| !CLEARANCE_CONSUMERS.iter().any(|file| site.contains(file)))
-        .collect();
+    let is_allowed = |site: &str| CLEARANCE_CONSUMERS.iter().any(|file| site.contains(file));
+    for site in [
+        "/synthetic/src/unlisted.rs:1",
+        "/synthetic/src/dispatch/unlisted.rs:1",
+        "/synthetic/src/dispatch/hash/unlisted.rs:1",
+        "/synthetic/src/dispatch/stream/unlisted.rs:1",
+    ] {
+        assert!(
+            !is_allowed(site),
+            "an unlisted clearance consumer was allowed: {site}"
+        );
+    }
+    let elsewhere: Vec<&String> = sites.iter().filter(|site| !is_allowed(site)).collect();
     assert!(
         elsewhere.is_empty(),
         "the seam's token is named in code outside {CLEARANCE_CONSUMERS:?}, at \
