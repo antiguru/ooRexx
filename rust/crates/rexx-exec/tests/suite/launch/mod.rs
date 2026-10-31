@@ -13,6 +13,22 @@
 
 use super::*;
 
+/// The private temporary directory for the logical SysFileTree group only.
+pub(super) fn temporary_directory(run: &Path, group: &str) -> Option<PathBuf> {
+    (group == "base/rexxutil/SysFileTree").then(|| run.join("sysfiletree-tmp"))
+}
+
+/// Seeds the selected child temporary directory in a freshly prepared run.
+fn prepare_temporary_directory(run: &Path, group: &str) -> Option<PathBuf> {
+    let directory = temporary_directory(run, group)?;
+    fs::create_dir(&directory).expect("create SysFileTree child temporary directory");
+    fs::write(directory.join("stable-file.txt"), b"stable\n")
+        .expect("seed SysFileTree temporary file");
+    fs::create_dir(directory.join("stable-directory"))
+        .expect("seed SysFileTree temporary directory");
+    Some(directory)
+}
+
 /// `group` of `dir` on the oracle, once, with the tests reaching rxapi and
 /// `renamed_out` (`GROUP.TEST` names) renamed out.
 pub fn run_group_on_oracle(dir: &str, group: &str, renamed_out: &BTreeSet<String>) -> GroupRun {
@@ -37,6 +53,7 @@ pub fn run_group_on_oracle_from(
         group,
         &left_out(root, dir, group, renamed_out),
     );
+    let temporary = prepare_temporary_directory(&run, &group_path(dir, group));
     let path = std::env::join_paths(
         std::iter::once(oracle_root().join("bin")).chain(
             std::env::var_os("PATH")
@@ -56,6 +73,9 @@ pub fn run_group_on_oracle_from(
         .current_dir(&run)
         .env("LD_LIBRARY_PATH", oracle_root().join("lib"))
         .env("PATH", path);
+    if let Some(temporary) = temporary {
+        command.env("TMPDIR", temporary);
+    }
     let process = run_process(command, None, ORACLE_DEADLINE);
     let mut result = GroupRun::new(group_path(dir, group), CapKind::OracleUlimit);
     record(
@@ -151,6 +171,7 @@ pub fn crate_run_once(
     deadline: Duration,
 ) -> (ProcessRun, Vec<String>) {
     let group_file = prepare(root, run, dir, group, left_out);
+    let temporary = prepare_temporary_directory(run, &group_path(dir, group));
     let environment = crate_side_environment(run);
     let bin = interpreter_bin(run);
     lay_class_files(&bin);
@@ -190,6 +211,9 @@ pub fn crate_run_once(
     };
     command.args(&words).current_dir(run);
     set_environment(&mut command, environment);
+    if let Some(temporary) = temporary {
+        command.env("TMPDIR", temporary);
+    }
     let process = run_process(command, None, deadline + Duration::from_secs(30));
     let tests = started_in_file(&marker(run));
     (process, tests)

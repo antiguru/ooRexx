@@ -273,6 +273,28 @@ fn sysfiletree_launches_use_distinct_populated_child_temporary_directories() {
 }
 
 #[test]
+fn sysfiletree_temporary_directory_selection_is_exact() {
+    let run = scratch_run("temporary-directory-selection");
+    for (group, selected) in [
+        ("base/rexxutil/SysFileTree", true),
+        ("SysFileTree", false),
+        ("base/rexxutil/platform/windows/SysFileTree", false),
+        ("base/class/Stream", false),
+    ] {
+        assert_eq!(
+            super::launch::temporary_directory(&run, group),
+            selected.then(|| run.join("sysfiletree-tmp")),
+            "{group}"
+        );
+    }
+    let other = scratch_run("other-temporary-directory-selection");
+    assert_ne!(
+        super::launch::temporary_directory(&run, "base/rexxutil/SysFileTree"),
+        super::launch::temporary_directory(&other, "base/rexxutil/SysFileTree")
+    );
+}
+
+#[test]
 fn a_child_refusing_on_the_inherited_stderr_leaves_the_run_ended_normally() {
     let run = scratch_run("child-refuses");
     let (process, tests) = crate_run_once(

@@ -21,6 +21,13 @@ pub(super) fn capture(run: &Path, side: &str, process: &ProcessRun, result: &Gro
         process.ended,
         process.took
     );
+    if let Some(temporary) = launch::temporary_directory(run, &result.group) {
+        let _ = writeln!(
+            context,
+            "TMPDIR={}\nTMPDIR seeds=stable-file.txt stable-directory",
+            temporary.display()
+        );
+    }
     for path in [
         marker(run),
         run.join("child.rex"),
