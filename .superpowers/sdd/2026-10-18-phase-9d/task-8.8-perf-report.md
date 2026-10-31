@@ -12,3 +12,7 @@ The accepted P-to-Q comparison adds 198 successful profiles, bringing the indepe
 ## Final corrected candidate
 
 The final corrected runtime9d919b7c3 completed198paired profiles againstQ, with all33 direct own-cost gates passing and1,683 historical/current profiles verified. Complete evidence is retained in [the final candidate report](../../../docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/final-fix/metrics/README.md). The final original-baseline OVER count is10, superseding the earlier12, while parse remains+0.17203271% against originale2. Whole-process fibfunc+0.12033230% and own−0.00000809% remain separate, and budget acceptance is still pending.
+
+## Accepted residuals
+
+Moritz accepted the remaining instruction-cost overruns on 2026-10-31 with "lgtm" in reply to the explicit Task 8.8 closure proposal. Acceptance covers the ten original BASE/e1 OVER programs, worst alloc +0.73785570%, and the recorded original-e2 parse residual of +0.17203271%, with performance tuning deferred. The 1,683 verified profiles, their original OVER classifications and the separate whole-process fibfunc result remain unchanged. This disposition satisfies Task 8.8's acceptance requirement without asserting that every original per-program budget passed or authorizing new performance work.

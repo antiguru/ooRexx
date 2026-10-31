@@ -99,6 +99,9 @@ named is placed above by area; an item a Task 6 cluster already fixed closes as 
 with its probe path, as the 8.8 rule says.
 
 ## 8.8 Process items, unclear items, and items triage found fixed
+
+**Complete 2026-10-31.** The [Task 8.8 report](task-8.8-report.md) records passing final validation and Moritz's acceptance of the remaining performance residuals and open stderr-refusal follow-up. Historical batch scope follows.
+
 Every `process` and `unclear` row of task-8-triage.tsv not named above, the gate lines
 phase-9a-gate.md:456-459, and the `fixed` rows (re-check each, then close with `closed:probe agrees`
 and the probe path), 2026-10-22-collect-stress-zero-collection-drift.md,
