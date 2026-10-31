@@ -1,0 +1,7 @@
+
+running 2 tests
+test fixtures::tests::sysfiletree_temporary_directory_selection_is_exact ... ok
+test fixtures::tests::sysfiletree_launches_use_distinct_populated_child_temporary_directories ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 68 filtered out; finished in 0.11s
+

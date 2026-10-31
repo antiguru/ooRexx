@@ -1,0 +1,29 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.11+deb14-amd64
+
+Tests ran:          1
+Assertions:         0
+Failures:           1
+Errors:             0
+
+[failure] 20261031 02:23:50.437991
+  Test:   TEST_TEMPORARY_DIRECTORY
+  Class:  SYSFILETREE.TESTGROUP
+  File:   .../ooRexx/base/rexxutil/SysFileTree.testGroup
+  Line:   38
+  Failed: assertSame
+    Expected: /tmp/codex-p9d-t88-target/tmp/suite-2358060-1-crate-base__rexxutil__SysFileTree/run/sysfiletree-tmp
+    Actual:   /tmp
+    Message:  private child TMPDIR
+
+File search:        00:00:00.001110
+Suite construction: 00:00:00.000957
+Test execution:     00:00:00.053149
+Total time:         00:00:00.056884
+

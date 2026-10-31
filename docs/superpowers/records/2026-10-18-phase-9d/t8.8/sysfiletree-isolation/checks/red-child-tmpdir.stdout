@@ -1,0 +1,11 @@
+
+running 1 test
+test fixtures::tests::sysfiletree_launches_use_distinct_populated_child_temporary_directories ... FAILED
+
+failures:
+
+failures:
+    fixtures::tests::sysfiletree_launches_use_distinct_populated_child_temporary_directories
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 68 filtered out; finished in 0.20s
+

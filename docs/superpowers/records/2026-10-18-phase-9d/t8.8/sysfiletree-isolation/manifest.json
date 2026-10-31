@@ -1,0 +1,282 @@
+{
+  "check.py": {
+    "bytes": 1558,
+    "sha256": "55ddec2ff026995e02a0568940a22cba76dddb241ec82618249a2d6fd5a3dfbf"
+  },
+  "checks/clippy.json": {
+    "bytes": 382,
+    "sha256": "dc50d99ed725bc6114e02a9e51df2127e0342fba41f7b46bcd096965ddcaa2b4"
+  },
+  "checks/clippy.stderr": {
+    "bytes": 169,
+    "sha256": "5e8aae32d7bd9d69a5680e392bb517f0144df19043345f5eb296d16384397294"
+  },
+  "checks/clippy.stdout": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "checks/final-list.json": {
+    "bytes": 369,
+    "sha256": "7a54f6c83f26ce0590e4ccbf62ec1032bb32f32f930ae7188b44809af776fa78"
+  },
+  "checks/final-list.stderr": {
+    "bytes": 161,
+    "sha256": "c9f3c6757339944024e1e118cd08384c73f9d0e2f87fbc609d1d193db5f625e2"
+  },
+  "checks/final-list.stdout": {
+    "bytes": 5586,
+    "sha256": "10a1eb5007cbc37a483c715c2f8785bf85d7ab1e687238fcc808c6b1e42269d6"
+  },
+  "checks/fixtures.json": {
+    "bytes": 397,
+    "sha256": "14893df903e334be5f10584ec1a9a6d2aba2749890a8890cf5a0ca570b4b407d"
+  },
+  "checks/fixtures.stderr": {
+    "bytes": 161,
+    "sha256": "d96bf8d51c1d5b4cf2a6b47e105fbfb01ab4316732ab5abe24aec5a93a6bf1d5"
+  },
+  "checks/fixtures.stdout": {
+    "bytes": 2144,
+    "sha256": "bba13de9469a8f78eb8eb0b9f9953f10f7dc0dc4a4ec3179aa878e14cc893459"
+  },
+  "checks/fmt.json": {
+    "bytes": 306,
+    "sha256": "94de00852197557bf79b3098ff1efdc57ae94061a504ce56d0a479f333a2ab67"
+  },
+  "checks/fmt.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "checks/fmt.stdout": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "checks/format-implementation.json": {
+    "bytes": 290,
+    "sha256": "a5583b9d432cec3f557421eee35d296a81d743ac58b45d4fdfa13b3add5c4bf7"
+  },
+  "checks/format-implementation.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "checks/format-implementation.stdout": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "checks/format-regression.json": {
+    "bytes": 290,
+    "sha256": "f62f65e2e45e4911024b68cb1579c2c2f3e84cce80fc4411e7cd3c19b5138dac"
+  },
+  "checks/format-regression.stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "checks/format-regression.stdout": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "checks/green-child-tmpdir-v2.json": {
+    "bytes": 750,
+    "sha256": "af073949f5af54904dee55c9230d8e83d30bacfb7d8ad4764848fdda4ebbae79"
+  },
+  "checks/green-child-tmpdir-v2.stderr": {
+    "bytes": 1388,
+    "sha256": "8d8df8c73025d85d135ecc6ba315699338aafeb3308945c8640223929c5568ec"
+  },
+  "checks/green-child-tmpdir-v2.stdout": {
+    "bytes": 295,
+    "sha256": "45bfcd9bba68d3e6b5cff5068141f0dcdd6edd924e720c7896b89b1b3523df90"
+  },
+  "checks/green-child-tmpdir.json": {
+    "bytes": 755,
+    "sha256": "80458a8208ba5aaecfb57acc09aa84872fb73a52d570868c1f3689d6aa39c9c4"
+  },
+  "checks/green-child-tmpdir.stderr": {
+    "bytes": 195,
+    "sha256": "467c410d62bbddb38e9d3f9937b3d23a5affad0960660cb08161feda915936e2"
+  },
+  "checks/green-child-tmpdir.stdout": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "checks/original-group.json": {
+    "bytes": 834,
+    "sha256": "3269a789b33122c6f623ed022f413e4458e4283d80a0c1b0fd75a8f7746ebf96"
+  },
+  "checks/original-group.stderr": {
+    "bytes": 484,
+    "sha256": "d33a52d569e4e176342cdb6a436d3a13a18568e18b28398573f6e0866159a903"
+  },
+  "checks/original-group.stdout": {
+    "bytes": 139,
+    "sha256": "97cb9261eac70872fe6ec3e85cc400e98aa5c578bd5fbf6bb84fd9d6ee592a56"
+  },
+  "checks/pure-move-fixtures.json": {
+    "bytes": 396,
+    "sha256": "193884e152f27e05f5b459502723fd4573bdb709cc6a15f9e36a3fd2d4875aeb"
+  },
+  "checks/pure-move-fixtures.stderr": {
+    "bytes": 258,
+    "sha256": "1f8673b07c7f22e412c7930c3d7f3754b97b3d5ab0ab155be04cfce0bbd9d66c"
+  },
+  "checks/pure-move-fixtures.stdout": {
+    "bytes": 1963,
+    "sha256": "6548d9a99c4454450246b412cbc14f9fe5a5e8db0643cef4dff2a2cc6bfe4127"
+  },
+  "checks/pure-move-list.json": {
+    "bytes": 369,
+    "sha256": "08ce8f1776bd71f3c3e8b01b8f3f8022ef434153e696970d95b85fbcb8b94a84"
+  },
+  "checks/pure-move-list.stderr": {
+    "bytes": 161,
+    "sha256": "d96bf8d51c1d5b4cf2a6b47e105fbfb01ab4316732ab5abe24aec5a93a6bf1d5"
+  },
+  "checks/pure-move-list.stdout": {
+    "bytes": 5417,
+    "sha256": "ababecae7b8b3aabb90c5db58e00884003efab0daba660eef5d6072627aa1e2d"
+  },
+  "checks/red-child-tmpdir.json": {
+    "bytes": 677,
+    "sha256": "8eec78ba5f04f85231d7af126b30d5d62bedee6e4ecab2ebdaf93b4362afe29a"
+  },
+  "checks/red-child-tmpdir.stderr": {
+    "bytes": 100515,
+    "sha256": "efc97cd55c2e0dc93ea14bf08549c940c4b287d70a683e7a4a78621aa1ad0554"
+  },
+  "checks/red-child-tmpdir.stdout": {
+    "bytes": 337,
+    "sha256": "276b9ebf99dd63d1e22b5b292e17d26bf29af1951fa4cbffe5decef6d0f7053c"
+  },
+  "final-proof.json": {
+    "bytes": 10176,
+    "sha256": "30d445ddc218a6d5376c9645e600da6e857eec9fe245a936f87bfa4ecafc7f13"
+  },
+  "green-diagnostics/suite-2358786-0-oracle-base__rexxutil__SysFileTree/oracle-1/context.txt": {
+    "bytes": 2882,
+    "sha256": "52501f3762fd5a3b4f6c9a1dff37e60193b2d6fa8e4f41b741cb9c3ad76b9ffb"
+  },
+  "green-diagnostics/suite-2358786-0-oracle-base__rexxutil__SysFileTree/oracle-1/started.txt": {
+    "bytes": 33,
+    "sha256": "75c2353ebef7f8cc64e82aeee812e6bce039aba2bedf5d3d82255e34a47f6b84"
+  },
+  "green-diagnostics/suite-2358786-0-oracle-base__rexxutil__SysFileTree/oracle-1/stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "green-diagnostics/suite-2358786-0-oracle-base__rexxutil__SysFileTree/oracle-1/stdout": {
+    "bytes": 496,
+    "sha256": "11d94fdccfffb48d47961e02c0e6841ee92c3020ca9ec977ed51893720562008"
+  },
+  "green-diagnostics/suite-2358786-1-crate-base__rexxutil__SysFileTree/crate-1/context.txt": {
+    "bytes": 2865,
+    "sha256": "d940c15174b82dfb9a0be31b39487da87c921dced002364a485ee6226fce6368"
+  },
+  "green-diagnostics/suite-2358786-1-crate-base__rexxutil__SysFileTree/crate-1/started.txt": {
+    "bytes": 33,
+    "sha256": "75c2353ebef7f8cc64e82aeee812e6bce039aba2bedf5d3d82255e34a47f6b84"
+  },
+  "green-diagnostics/suite-2358786-1-crate-base__rexxutil__SysFileTree/crate-1/stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "green-diagnostics/suite-2358786-1-crate-base__rexxutil__SysFileTree/crate-1/stdout": {
+    "bytes": 496,
+    "sha256": "21b46c2543f30a86f0cfb271e8cf6fe8dd3c53694d56e108420319bbd167b9b0"
+  },
+  "original-group/diagnostics/suite-2359420-0-oracle-base__rexxutil__SysFileTree/oracle-1/context.txt": {
+    "bytes": 4443,
+    "sha256": "2f34b7ca2892664ec6bd581b682646173b39eb8db496e325c26e4ff581512f62"
+  },
+  "original-group/diagnostics/suite-2359420-0-oracle-base__rexxutil__SysFileTree/oracle-1/started.txt": {
+    "bytes": 737,
+    "sha256": "0c4f43ab43fcd19ab8789366702865498585c41941c547db07e62c09695d150c"
+  },
+  "original-group/diagnostics/suite-2359420-0-oracle-base__rexxutil__SysFileTree/oracle-1/stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "original-group/diagnostics/suite-2359420-0-oracle-base__rexxutil__SysFileTree/oracle-1/stdout": {
+    "bytes": 499,
+    "sha256": "f5cb3ff66a7a83dab6a58e025e0e4c9491bc964078ed982f105d813eeeeaa160"
+  },
+  "original-group/diagnostics/suite-2359420-1-crate-base__rexxutil__SysFileTree/crate-1/context.txt": {
+    "bytes": 4428,
+    "sha256": "3340bc760ba73cdbb52bed771c64268c0a038af2a5a4a91c120fb4516e8eade3"
+  },
+  "original-group/diagnostics/suite-2359420-1-crate-base__rexxutil__SysFileTree/crate-1/started.txt": {
+    "bytes": 737,
+    "sha256": "0c4f43ab43fcd19ab8789366702865498585c41941c547db07e62c09695d150c"
+  },
+  "original-group/diagnostics/suite-2359420-1-crate-base__rexxutil__SysFileTree/crate-1/stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "original-group/diagnostics/suite-2359420-1-crate-base__rexxutil__SysFileTree/crate-1/stdout": {
+    "bytes": 499,
+    "sha256": "2802881211dfbfd9f981628eab1ab9f253c3c2be51db2d29f0ea5909e0f702ec"
+  },
+  "original-group/oracle-differences.tsv": {
+    "bytes": 48,
+    "sha256": "5807ab3e887255a68a02b18db1573456e813f0e5af7c80bdbf26d6e73694cd7f"
+  },
+  "original-group/table.tsv": {
+    "bytes": 291,
+    "sha256": "0e074b04d953132dd82214d66b18a56864d8fbc0fcbd5c04bb5fefe31d572de0"
+  },
+  "original-group/tests.tsv": {
+    "bytes": 1708,
+    "sha256": "6ccf842d97ebe74317a8650d2baf3c442b320023e4d2f36ac159a62ce651efa7"
+  },
+  "original-group/verdicts.tsv": {
+    "bytes": 102,
+    "sha256": "32113cf7c4ccc0319ad69059ad4c6156749515aae2697a1c90bedf35d1b14224"
+  },
+  "proof.py": {
+    "bytes": 4990,
+    "sha256": "697356d7b940a1eab1afbd9a86818138543793df496f53fd78c6a1519802fc92"
+  },
+  "pure-move.json": {
+    "bytes": 604,
+    "sha256": "ad60944b1183fdd51b422223da41d63a3afb540a1a76cd02505de958d2c4c62f"
+  },
+  "red-diagnostics/suite-2358060-0-oracle-base__rexxutil__SysFileTree/oracle-1/context.txt": {
+    "bytes": 2728,
+    "sha256": "cf16587873b096ddc053e93448b4b3ac276bec6ad16789eb2d891507c12a830f"
+  },
+  "red-diagnostics/suite-2358060-0-oracle-base__rexxutil__SysFileTree/oracle-1/started.txt": {
+    "bytes": 33,
+    "sha256": "75c2353ebef7f8cc64e82aeee812e6bce039aba2bedf5d3d82255e34a47f6b84"
+  },
+  "red-diagnostics/suite-2358060-0-oracle-base__rexxutil__SysFileTree/oracle-1/stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "red-diagnostics/suite-2358060-0-oracle-base__rexxutil__SysFileTree/oracle-1/stdout": {
+    "bytes": 858,
+    "sha256": "e909eba18087444120be57b42712156e2f15853acb7148028388848edfa734d2"
+  },
+  "red-diagnostics/suite-2358060-1-crate-base__rexxutil__SysFileTree/crate-1/context.txt": {
+    "bytes": 2716,
+    "sha256": "ae29b3b277596f8f925c464d1bdb8e4755d992972f8541b1c239d7099c9ac60a"
+  },
+  "red-diagnostics/suite-2358060-1-crate-base__rexxutil__SysFileTree/crate-1/started.txt": {
+    "bytes": 33,
+    "sha256": "75c2353ebef7f8cc64e82aeee812e6bce039aba2bedf5d3d82255e34a47f6b84"
+  },
+  "red-diagnostics/suite-2358060-1-crate-base__rexxutil__SysFileTree/crate-1/stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "red-diagnostics/suite-2358060-1-crate-base__rexxutil__SysFileTree/crate-1/stdout": {
+    "bytes": 857,
+    "sha256": "21b86f16124c29dc677708611b0051c21ff38a664dfe45cca101541c5ea1fc27"
+  },
+  "suite-before.list": {
+    "bytes": 5393,
+    "sha256": "7f96e2945966423f8245ffa4599da78064e6da009fab38684bd8dea85321c631"
+  },
+  "report.md": {
+    "bytes": 9540,
+    "sha256": "e8d24db7f7374f72f040cc5c4a52125e6d05e793ad56abc7a9f326818f2f352c"
+  }
+}

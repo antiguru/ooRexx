@@ -1,0 +1,22 @@
+{
+  "command": [
+    "cargo",
+    "clippy",
+    "-j4",
+    "-p",
+    "rexx-exec",
+    "--test",
+    "suite",
+    "--",
+    "-D",
+    "warnings"
+  ],
+  "cwd": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust",
+  "status": 0,
+  "elapsed": 0.7159293500008062,
+  "bound": 520.0,
+  "environment": {
+    "CARGO_INCREMENTAL": "0",
+    "CARGO_TARGET_DIR": "/tmp/codex-p9d-t88-target"
+  }
+}

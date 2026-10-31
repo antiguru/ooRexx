@@ -1,0 +1,3 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.03s
+     Running tests/suite.rs (/tmp/codex-p9d-t88-target/debug/deps/suite-eac85036d724489e)
+suite: 1 groups, 0 red, table /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/sysfiletree-isolation/original-group/table.tsv, verdicts /home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/sysfiletree-isolation/original-group/verdicts.tsv
