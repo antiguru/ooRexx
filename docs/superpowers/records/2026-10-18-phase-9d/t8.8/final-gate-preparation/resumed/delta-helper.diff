@@ -1,0 +1,11 @@
+--- /tmp/codex-p9d-t88-final-suite-delta.py
++++ /tmp/codex-p9d-t88-final-resume-suite-delta.py
+@@ -5,7 +5,7 @@
+ from pathlib import Path
+ 
+ old_root = Path('/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7c/fix-r4/suite')
+-new_root = Path('/tmp/codex-p9d-t88-final-gates/suite')
++new_root = Path('/tmp/codex-p9d-t88-final-gates-resume/suite')
+ 
+ 
+ def load(path, fields):

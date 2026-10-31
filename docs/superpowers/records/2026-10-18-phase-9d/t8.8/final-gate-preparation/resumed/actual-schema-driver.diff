@@ -1,0 +1,84 @@
+--- /tmp/codex-p9d-t88-final-gate-resume-before-actual-provenance.py
++++ /tmp/codex-p9d-t88-final-gate-resume.py
+@@ -38,7 +38,7 @@
+ CONFIG = json.loads(CONFIG_PATH.read_text())
+ assert set(CONFIG) == {'source_commit', 'profile_completion_record', 'release_binary', 'release_binary_sha256', 'release_pin_provenance'}
+ PIN = CONFIG['source_commit']
+-RELEASE_PIN_PROVENANCE = Path(CONFIG['release_pin_provenance'])
++RELEASE_PIN_PROVENANCE = ROOT / CONFIG['release_pin_provenance']
+ ENV = {k: v for k, v in os.environ.items() if not k.startswith('REXX_')}
+ for key_name in list(ENV):
+     if key_name in {'RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'RUSTDOCFLAGS', 'CARGO_ENCODED_RUSTDOCFLAGS', 'CARGO_BUILD_RUSTFLAGS', 'CARGO_BUILD_RUSTDOCFLAGS', 'CARGO_BUILD_TARGET'} or key_name.startswith('CARGO_PROFILE_') or (key_name.startswith('CARGO_TARGET_') and key_name.endswith(('_RUNNER', '_RUSTFLAGS', '_RUSTDOCFLAGS', '_LINKER'))):
+@@ -88,14 +88,56 @@
+     provenance = json.loads(RELEASE_PIN_PROVENANCE.read_text())
+     assert provenance['pin'] == CONFIG['release_binary']
+     assert provenance['sha256'] == provenance['build_sha256'] == CONFIG['release_binary_sha256']
++    assert provenance['byte_identical_to_measured_normal'] is True
++    assert provenance['measured_normal_sha256'] == CONFIG['release_binary_sha256'] == digest(Path(provenance['measured_normal_pin']))
+     runtime_tree = git_output('rev-parse', provenance['source_commit'] + ':rust').decode().strip()
+     assert runtime_tree == git_output('rev-parse', PIN + ':rust').decode().strip(), 'Pinned runtime Rust tree differs from gate source'
+-    for path, expected in provenance['source_hashes'].items():
+-        assert digest(ROOT / path) == expected, f'Pinned source hash changed: {path}'
++    proof_path = RELEASE_PIN_PROVENANCE.parent / 'source-proof.json'
++    manifest_path = RELEASE_PIN_PROVENANCE.parent / 'production-manifest.json'
++    assert digest(proof_path) == provenance['source_proof_sha256'], 'Registration source proof changed'
++    proof = json.loads(proof_path.read_text())
++    assert proof['source_commit'] == provenance['source_commit'] and proof['base'] == provenance['base']
++    assert proof['all_production_and_cargo_inputs_unchanged'] is True and proof['original_executable_lines_preserved'] is True
++    assert digest(manifest_path) == provenance['production_manifest_sha256'] == proof['production_manifest_sha256']
++    production = json.loads(manifest_path.read_text())
++    assert production and len(production) == proof['production_manifest_files']
++    current_entries = {}
++    for line in git_output('ls-tree', '-r', PIN, '--', 'rust').decode().splitlines():
++        metadata, path = line.split('\t', 1)
++        if '/src/' in path or Path(path).name in {'Cargo.toml', 'Cargo.lock', 'build.rs'} or '/.cargo/' in path:
++            current_entries[path] = metadata
++    assert current_entries.keys() == production.keys(), 'Production/Cargo manifest coverage changed'
++    for path, entry in production.items():
++        assert current_entries[path] == entry['git'] and digest(ROOT / path) == entry['sha256'], f'Production/Cargo input changed: {path}'
++    assert set(proof['changed_rust']) == proof['source_hashes'].keys()
++    for path, expected in proof['source_hashes'].items():
++        assert digest(ROOT / path) == expected, f'Registration input changed: {path}'
+     build_record = RELEASE_PIN_PROVENANCE.parent / provenance['build_record']
+     assert digest(build_record) == provenance['build_record_sha256'], 'Pin build provenance changed'
++    build = json.loads(build_record.read_text())
++    assert build['status'] == 0 and build['cwd'] == str(RUST)
++    assert digest(build_record.with_suffix('.stdout')) == provenance['build_output_sha256'], 'Pin Cargo JSON changed'
++    artifact = provenance['cargo_artifact']
++    assert artifact['manifest_path'] == str(RUST / 'crates/rexx-exec/Cargo.toml')
++    assert artifact['target']['kind'] == ['bin'] and artifact['target']['name'] == 'rexx'
++    assert artifact['target']['src_path'] == str(RUST / 'crates/rexx-exec/src/bin/rexx.rs')
++    assert artifact['executable'] == provenance['build_executable'] and not artifact['features']
++    assert artifact['profile'] == {'opt_level': '3', 'debuginfo': 2, 'debug_assertions': False, 'overflow_checks': False, 'test': False}
++    output_artifacts = []
++    for line in build_record.with_suffix('.stdout').read_text().splitlines():
++        try:
++            item = json.loads(line)
++        except json.JSONDecodeError:
++            continue
++        if isinstance(item, dict) and item.get('reason') == 'compiler-artifact':
++            output_artifacts.append(item)
++    assert artifact in output_artifacts, 'Declared normal Cargo artifact absent from its hashed build output'
+     return {'path': str(RELEASE_PIN_PROVENANCE), 'sha256': digest(RELEASE_PIN_PROVENANCE),
+-            'runtime_source_commit': provenance['source_commit'], 'rust_tree': runtime_tree}
++            'pin_producer_source_commit': provenance['source_commit'], 'rust_tree': runtime_tree,
++            'source_proof_path': str(proof_path), 'source_proof_sha256': provenance['source_proof_sha256'],
++            'production_manifest_path': str(manifest_path), 'production_manifest_sha256': provenance['production_manifest_sha256'],
++            'production_manifest_files': len(production), 'measured_normal_pin': provenance['measured_normal_pin'],
++            'measured_normal_sha256': provenance['measured_normal_sha256'], 'byte_identical_to_measured_normal': True}
+ 
+ 
+ def release_test_variant():
+@@ -117,9 +159,10 @@
+     assert proof['actual_cli_sha256'] == proof['test_built_sha256'] == authorization['test_cli_sha256']
+     assert proof['rustix_artifact']['features'] == authorization['test_rustix_features']
+     assert proof['cli_artifact']['features'] == [] and not proof['cli_artifact']['profile']['test']
+-    return {'source_commit': PIN, 'runtime_source_commit': normal['runtime_source_commit'], 'rust_tree': normal['rust_tree'],
++    return {'source_commit': PIN, 'pin_producer_source_commit': normal['pin_producer_source_commit'], 'rust_tree': normal['rust_tree'],
+             'causal_proof_source_commit': proof['source_commit'], 'causal_runtime_source_commit': authorization['runtime_source_commit'],
+-            'normal_pin_identity_bridge': {'prior_path': prior['normal_pin']['path'], 'current_path': CONFIG['release_binary'], 'sha256': CONFIG['release_binary_sha256']},
++            'normal_pin_identity_bridge': {'prior_path': prior['normal_pin']['path'], 'current_path': CONFIG['release_binary'], 'sha256': CONFIG['release_binary_sha256'],
++                                           'production_manifest_sha256': normal['production_manifest_sha256'], 'source_proof_sha256': normal['source_proof_sha256']},
+             'authorization_path': str(TEST_VARIANT_AUTHORIZATION), 'authorization_sha256': TEST_VARIANT_AUTHORIZATION_SHA256,
+             'proof_path': str(proof_path), 'proof_sha256': authorization['one_variable_proof_sha256'],
+             'test_cli_sha256': authorization['test_cli_sha256'], 'normal_pin_sha256': authorization['normal_pin_sha256'],

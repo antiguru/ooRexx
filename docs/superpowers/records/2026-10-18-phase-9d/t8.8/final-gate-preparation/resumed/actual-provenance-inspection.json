@@ -1,0 +1,11 @@
+{
+  "source_proof_hash_matches": true,
+  "manifest_hash_matches": true,
+  "production_entries": 300,
+  "production_hash_mismatches": [],
+  "test_input_hash_mismatches": [],
+  "new_normal_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+  "measured_normal_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+  "build_record_hash_matches": true,
+  "build_output_hash_matches": true
+}

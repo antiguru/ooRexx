@@ -1,0 +1,11 @@
+{
+  "command": ["du", "-s", "-B1", "/home/moritz/dev/repos/ooRexx-rust-rewrite/ootest", "/home/moritz/dev/repos/ooRexx-rust-rewrite/build/lib", "/home/moritz/dev/repos/ooRexx/build/bin", "/home/moritz/dev/repos/ooRexx/build/lib", "/home/moritz/dev/repos/ooRexx/build/samples"],
+  "allocated_bytes_including_administrative_metadata_before_snapshot_exclusion": {
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/ootest": 21053440,
+    "/home/moritz/dev/repos/ooRexx-rust-rewrite/build/lib": 6561792,
+    "/home/moritz/dev/repos/ooRexx/build/bin": 1888256,
+    "/home/moritz/dev/repos/ooRexx/build/lib": 23392256,
+    "/home/moritz/dev/repos/ooRexx/build/samples": 2248704
+  },
+  "validation_snapshot_executed": false
+}
