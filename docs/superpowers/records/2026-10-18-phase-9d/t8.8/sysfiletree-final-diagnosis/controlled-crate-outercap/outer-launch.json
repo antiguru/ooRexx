@@ -1,0 +1,11 @@
+{
+  "command": [
+    "memcap",
+    "2G",
+    "python3",
+    "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/run-crate-outercap.py"
+  ],
+  "exit_code": 0,
+  "inner_cgroup_failure_preserved": "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-v2/crate-stable",
+  "controller_instruction": "Use established outer memcap launch route; preserve inherited launcher environment."
+}

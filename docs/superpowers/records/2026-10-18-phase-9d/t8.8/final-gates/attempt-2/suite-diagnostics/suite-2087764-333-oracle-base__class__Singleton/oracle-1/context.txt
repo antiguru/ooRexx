@@ -1,0 +1,31 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-333-oracle-base__class__Singleton/run
+TZ=None
+status=Some(0) ended=Exited(0) took=16.284594ms
+GroupRun {
+    group: "base/class/Singleton",
+    expected: {},
+    started: {
+        "TESTSINGLETON01NEW",
+        "TESTSINGLETON02COPY",
+    },
+    passed: {
+        "TESTSINGLETON01NEW",
+        "TESTSINGLETON02COPY",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "2",
+    ),
+    took: 16.284594ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-333-oracle-base__class__Singleton/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-333-oracle-base__class__Singleton/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 55, modified: SystemTime { tv_sec: 1793406131, tv_nsec: 471538786 }, accessed: SystemTime { tv_sec: 1793406131, tv_nsec: 474703848 }, created: SystemTime { tv_sec: 1793406131, tv_nsec: 471397740 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-333-oracle-base__class__Singleton/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-333-oracle-base__class__Singleton/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-333-oracle-base__class__Singleton/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406131, tv_nsec: 471930056 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-333-oracle-base__class__Singleton/run/ooRexx/base/class/Singleton.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-333-oracle-base__class__Singleton/run/ooRexx/base/class/Singleton.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 3662, modified: SystemTime { tv_sec: 1793406131, tv_nsec: 458035555 }, accessed: SystemTime { tv_sec: 1793406131, tv_nsec: 471065020 }, created: SystemTime { tv_sec: 1793406131, tv_nsec: 455589764 }, .. })

@@ -1,0 +1,4 @@
+
+thread 'skipping_the_comment_blanking_fires_the_argutil_assertion' (2114922) panicked at crates/rexx-extract/src/docs/hierarchy.rs:109:5:
+ArgUtil is in the derived edge set: the member at provide.xml:844 sits inside an XML comment, so this derivation read a commented-out member as a live one. The oracle confirms that edge -- .ArgUtil~superClasses is The Object class -- so the end-to-end run cannot see this and does not
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

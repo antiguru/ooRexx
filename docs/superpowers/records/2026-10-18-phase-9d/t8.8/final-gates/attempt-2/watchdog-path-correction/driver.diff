@@ -1,0 +1,11 @@
+--- /tmp/codex-p9d-t88-final-gate-resume.py
++++ /tmp/codex-p9d-t88-final-gate-resume.py
+@@ -222,7 +222,7 @@
+              ROOT / 'rust/corpus/suite-revision.txt', ROOT / 'rust/corpus/suite-licences.txt',
+              ROOT / 'rust/corpus/suite-not-run.txt', ROOT / 'docs/superpowers/plans/phase-9-exclusions.txt',
+              RUST / 'crates/rexx-exec/tests/suite.rs', RUST / 'crates/rexx-exec/tests/suite',
+-             RUST / 'crates/rexx-exec/tests/support', RUST / 'crates/rexx-exec/tests/watchdog.rs',
++             RUST / 'crates/rexx-exec/tests/support', RUST / 'crates/rexx-exec/tests/watchdog',
+              Path(TARGET) / 'release/rexx', Path(TARGET) / 'release/rexxc',
+              Path(json.loads((OUT / 'release-artifacts-verified.json').read_text())['tests']['suite']['executable']),
+              Path('/tmp/codex-p9d-t88-final-gate-resume.py'), Path('/tmp/codex-p9d-t88-final-resume-suite-delta.py')]

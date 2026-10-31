@@ -1,0 +1,12 @@
+    Finished `test` profile [optimized + debuginfo] target(s) in 0.05s
+   Doc-tests rexx_api
+   Doc-tests rexx_bench
+   Doc-tests rexx_classes
+   Doc-tests rexx_core
+   Doc-tests rexx_exec
+   Doc-tests rexx_extract
+   Doc-tests rexx_inventory
+   Doc-tests rexx_lib
+   Doc-tests rexx_num
+   Doc-tests rexx_oracle
+   Doc-tests rexx_parse

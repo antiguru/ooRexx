@@ -1,0 +1,6 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `test` profile [optimized + debuginfo] target(s) in 50.65s
+     Running unittests src/lib.rs (/tmp/codex-p9d-t88-target/debug/deps/rexx_exec-014394b50b2e01b7)
+Observation { message: (325, 1), collections: 25, alive: true, attached: true, code: [52, 50, 46, 51], replacement: None, replacement_unchanged: true }
+reply: simulation=Some(SimReport { seed: 1, policy: Fifo, steps: 9, contended: 6, switches: 5, trace_hash: Some(14695981039346656037) }), pinning=PinReport { parks: {(Reply, [OpExec]): 1, (MessageResult, []): 4}, pinned_parks: {}, late_wakes: {}, inverted: {}, deferred_slices: {}, pinned_yields: {}, inverted_yields: {}, immovable_replies: {}, unbalanced: 0 }
+return: simulation=Some(SimReport { seed: 1, policy: Fifo, steps: 9, contended: 6, switches: 4, trace_hash: Some(14695981039346656037) }), pinning=PinReport { parks: {(MessageResult, []): 4}, pinned_parks: {}, late_wakes: {}, inverted: {}, deferred_slices: {}, pinned_yields: {}, inverted_yields: {}, immovable_replies: {}, unbalanced: 0 }

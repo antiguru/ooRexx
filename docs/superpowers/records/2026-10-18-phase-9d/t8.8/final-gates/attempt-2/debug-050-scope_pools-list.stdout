@@ -1,0 +1,5 @@
+a_name_the_pool_never_held_reads_as_unset: test
+a_second_write_to_one_name_replaces_rather_than_shadows: test
+clearing_a_name_the_pool_never_held_is_a_no_op: test
+clearing_one_scopes_binding_leaves_the_others: test
+two_scopes_hold_one_name_at_two_values: test

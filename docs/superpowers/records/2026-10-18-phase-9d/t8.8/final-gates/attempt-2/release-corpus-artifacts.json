@@ -1,0 +1,121 @@
+{
+  "source_commit": "6b6f3fb460049c6ef63f565ceb78e11b5582f165",
+  "pin_provenance": {
+    "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/corpus-registration-repair/implementation/release-pin.json",
+    "sha256": "e19cbcf353dbd70dd485b36c3c4ddea8cc94cf67cd46bbaa8a2a0a33c9909187",
+    "pin_producer_source_commit": "f65066b04fe1f2355ce64d8be581fa9e79641673",
+    "rust_tree": "1d856ce7661c2e8508aced2282ffbd8747d42538",
+    "source_proof_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/corpus-registration-repair/implementation/source-proof.json",
+    "source_proof_sha256": "1392f5e088827159bb1dea34599a9efe59ee956eb698e91fece19d23310e5854",
+    "production_manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/corpus-registration-repair/implementation/production-manifest.json",
+    "production_manifest_sha256": "593073463602158d59e98322416036af7a9515ba87a48c51072aedaffb447493",
+    "production_manifest_files": 300,
+    "measured_normal_pin": "/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx",
+    "measured_normal_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+    "byte_identical_to_measured_normal": true
+  },
+  "test_variant": {
+    "source_commit": "6b6f3fb460049c6ef63f565ceb78e11b5582f165",
+    "pin_producer_source_commit": "f65066b04fe1f2355ce64d8be581fa9e79641673",
+    "rust_tree": "1d856ce7661c2e8508aced2282ffbd8747d42538",
+    "causal_proof_source_commit": "8b7767ed3fda908fffe75181b2c8bd12dd7509f8",
+    "causal_runtime_source_commit": "9d919b7c3832c55edc3a0a07974309f092102201",
+    "normal_pin_identity_bridge": {
+      "prior_path": "/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx",
+      "current_path": "/tmp/codex-p9d-t88-pins/8.8-corpus-registration-rexx",
+      "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+      "production_manifest_sha256": "593073463602158d59e98322416036af7a9515ba87a48c51072aedaffb447493",
+      "source_proof_sha256": "1392f5e088827159bb1dea34599a9efe59ee956eb698e91fece19d23310e5854"
+    },
+    "authorization_path": "/tmp/codex-p9d-t88-final-gates/release-variant-diagnosis/root-authorization.json",
+    "authorization_sha256": "e2f37ea8d96b6fe16f94254034f1f30262b39424fc3bf6ec1e5973bbd9758188",
+    "proof_path": "/tmp/codex-p9d-t88-final-gates/release-variant-diagnosis/one-variable-result.json",
+    "proof_sha256": "c15d10a04a63c9b9a2db52dd6568b19692f445e847fedc88e02b9c38fce3e96d",
+    "test_cli_sha256": "9c3d09f9f9e39810985b1200007035488a3eba9d00ab6ee7382b6d7aea1b4d06",
+    "normal_pin_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+    "cli_profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": false,
+      "overflow_checks": false,
+      "test": false
+    },
+    "rustix_features": [
+      "alloc",
+      "default",
+      "event",
+      "fs",
+      "param",
+      "process",
+      "pty",
+      "std",
+      "system",
+      "termios",
+      "time"
+    ],
+    "rustix_package_id": "registry+https://github.com/rust-lang/crates.io-index#rustix@1.1.4",
+    "rustix_manifest_path": "/home/moritz/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/rustix-1.1.4/Cargo.toml",
+    "rustix_profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": false,
+      "overflow_checks": false,
+      "test": false
+    }
+  },
+  "normal_pin": {
+    "path": "/tmp/codex-p9d-t88-pins/8.8-corpus-registration-rexx",
+    "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145"
+  },
+  "cli": {
+    "executable": "/tmp/codex-p9d-t88-target/release/rexx",
+    "sha256": "9c3d09f9f9e39810985b1200007035488a3eba9d00ab6ee7382b6d7aea1b4d06",
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": false,
+      "overflow_checks": false,
+      "test": false
+    }
+  },
+  "rustix": {
+    "package_id": "registry+https://github.com/rust-lang/crates.io-index#rustix@1.1.4",
+    "features": [
+      "alloc",
+      "default",
+      "event",
+      "fs",
+      "param",
+      "process",
+      "pty",
+      "std",
+      "system",
+      "termios",
+      "time"
+    ],
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": false,
+      "overflow_checks": false,
+      "test": false
+    },
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/release/deps/librustix-1a9d1be0d5de2fde.rlib",
+      "/tmp/codex-p9d-t88-target/release/deps/librustix-1a9d1be0d5de2fde.rmeta"
+    ]
+  },
+  "tests": {
+    "corpus": {
+      "executable": "/tmp/codex-p9d-t88-target/release/deps/corpus-6953cc47785bd785",
+      "sha256": "97935a9ba034987051c144ec4f14a20ab7755a4df83e24d733bc9925375fb670",
+      "profile": {
+        "opt_level": "3",
+        "debuginfo": 2,
+        "debug_assertions": false,
+        "overflow_checks": false,
+        "test": true
+      }
+    }
+  }
+}

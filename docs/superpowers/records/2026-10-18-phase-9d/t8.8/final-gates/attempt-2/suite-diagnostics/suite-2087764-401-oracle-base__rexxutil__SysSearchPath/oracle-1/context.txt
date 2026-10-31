@@ -1,0 +1,47 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-401-oracle-base__rexxutil__SysSearchPath/run
+TZ=None
+status=Some(0) ended=Exited(0) took=32.161039ms
+GroupRun {
+    group: "base/rexxutil/SysSearchPath",
+    expected: {},
+    started: {
+        "TEST_SEARCHPATH_ABSOLUTE",
+        "TEST_SEARCHPATH_ARGS_FOUR",
+        "TEST_SEARCHPATH_ARGS_NONE",
+        "TEST_SEARCHPATH_ARGS_ONE",
+        "TEST_SEARCHPATH_EMPTY",
+        "TEST_SEARCHPATH_OPTION_INVALID",
+        "TEST_SEARCHPATH_OPTION_NULL",
+        "TEST_SEARCHPATH_RELATIVE",
+        "TEST_SEARCHPATH_SHELL",
+        "TEST_SEARCHPATH_VARIABLE",
+    },
+    passed: {
+        "TEST_SEARCHPATH_ABSOLUTE",
+        "TEST_SEARCHPATH_ARGS_FOUR",
+        "TEST_SEARCHPATH_ARGS_NONE",
+        "TEST_SEARCHPATH_ARGS_ONE",
+        "TEST_SEARCHPATH_EMPTY",
+        "TEST_SEARCHPATH_OPTION_INVALID",
+        "TEST_SEARCHPATH_OPTION_NULL",
+        "TEST_SEARCHPATH_RELATIVE",
+        "TEST_SEARCHPATH_SHELL",
+        "TEST_SEARCHPATH_VARIABLE",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "10",
+    ),
+    took: 32.161039ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-401-oracle-base__rexxutil__SysSearchPath/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-401-oracle-base__rexxutil__SysSearchPath/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 335, modified: SystemTime { tv_sec: 1793406132, tv_nsec: 595689692 }, accessed: SystemTime { tv_sec: 1793406132, tv_nsec: 603945292 }, created: SystemTime { tv_sec: 1793406132, tv_nsec: 592267199 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-401-oracle-base__rexxutil__SysSearchPath/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-401-oracle-base__rexxutil__SysSearchPath/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-401-oracle-base__rexxutil__SysSearchPath/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406132, tv_nsec: 563885794 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-401-oracle-base__rexxutil__SysSearchPath/run/ooRexx/base/rexxutil/SysSearchPath.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-401-oracle-base__rexxutil__SysSearchPath/run/ooRexx/base/rexxutil/SysSearchPath.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 7453, modified: SystemTime { tv_sec: 1793406132, tv_nsec: 571441222 }, accessed: SystemTime { tv_sec: 1793406132, tv_nsec: 592267199 }, created: SystemTime { tv_sec: 1793406132, tv_nsec: 570585296 }, .. })

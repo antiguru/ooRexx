@@ -1,0 +1,33 @@
+
+running 28 tests
+test a_body_directives_body_is_validated_not_merely_skipped_missing_then ... ok
+test a_body_directives_body_is_validated_not_merely_skipped_unmatched_paren ... ok
+test a_constant_directives_own_body_check_still_wins_over_the_generic_one ... ok
+test a_ctrl_z_inside_an_element_does_not_truncate_the_source ... ok
+test a_directives_clause_span_indexes_the_programs_own_source ... ok
+test a_duplicate_label_keeps_the_first_occurrence_not_the_last ... ok
+test a_fragments_symbol_table_is_its_own_not_shared_across_calls ... ok
+test a_label_inside_a_directive_body_is_not_in_the_programs_own_label_map ... ok
+test a_label_may_hold_bytes_that_are_not_valid_utf8 ... ok
+test a_literal_label_is_keyed_by_its_exact_bytes ... ok
+test a_method_directives_body_is_recognised_and_consumed ... ok
+test a_program_with_directives_separates_them_from_instructions ... ok
+test a_program_with_no_directives_has_an_empty_directive_list ... ok
+test a_program_with_no_main_instructions_starts_directly_with_a_directive ... ok
+test a_shebang_first_element_is_skipped ... ok
+test a_symbol_label_is_keyed_by_its_upcased_spelling ... ok
+test a_terminator_inside_an_element_is_a_character_and_not_a_line_break ... ok
+test a_trailing_instruction_after_a_body_directive_joins_its_body ... ok
+test an_attribute_directives_body_is_recognised_and_consumed ... ok
+test an_empty_element_list_is_a_source_with_no_lines ... ok
+test every_corpus_lang_program_parses ... ok
+test interpret_accepts_ordinary_text_with_no_directive_and_no_label ... ok
+test interpret_rejects_a_directive_with_99_914 ... ok
+test interpret_rejects_a_label_with_47_1 ... ok
+test parse_lines_accepts_what_an_interpret_refuses ... ok
+test the_corpus_exercises_at_least_one_directive_with_a_body ... ok
+test trailing_code_after_a_bodiless_directive_is_99_916_for_every_kind_that_never_has_a_body ... ok
+test two_body_directives_in_a_row_each_get_their_own_body ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+

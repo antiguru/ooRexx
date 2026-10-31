@@ -1,0 +1,317 @@
+==============================================================================
+rexx-exec gate table C -- the concept and class surface (corpus/docs/provide-sections.txt, class-set.txt, hierarchy-edges.txt, class-methods.txt)
+mode: STRICT (the gate) -- REXX_CORPUS_GATE is set, verdicts gated for 5a, 5b, 5c, 5d, 5e, 5f, 5g, 5h, 5i, 5j, 6, 7, 8
+concept rows: 21, one probe each under corpus/gate-tables/concepts/. class wiring rows: 63, under corpus/gate-tables/classes/. hierarchy edge rows: 57, under corpus/gate-tables/hierarchy/. method rows: 1347, sharing 96 program(s) under corpus/gate-tables/methods/. stderr is compared raw on every row.
+
+the ArgUtil assertion: held: ArgUtil is a class row and emits no hierarchy edge
+
+concept rows (verdict / loud / owning phase / section / probe):
+  agree          loud=no  5a   typcla Types of Classes                  depth 0 parent - provide.xml:75    typcla.rex
+  agree          loud=no  5b   objcla Object Classes                    depth 1 parent typcla provide.xml:84 objcla.rex
+  agree          loud=no  5a   xmixin Mixin Classes                     depth 1 parent typcla provide.xml:105 xmixin.rex
+  agree          loud=no  5b   abscla Abstract Classes                  depth 1 parent typcla provide.xml:134 abscla.rex
+  agree          loud=no  5a   xmetac Metaclasses                       depth 1 parent typcla provide.xml:155 xmetac.rex
+  agree          loud=no  5a   xcremet Creating and Using Classes and Methods depth 0 parent - provide.xml:315   xcremet.rex
+  agree          loud=no  5a   usingcl Using Classes                    depth 1 parent xcremet provide.xml:407 usingcl.rex
+  agree          loud=no  5a   xscope Scope                             depth 1 parent xcremet provide.xml:423 xscope.rex
+  agree          loud=no  5b   usesem Defining Instance Methods with SETMETHOD or ENHANCED depth 1 parent xcremet provide.xml:440 usesem.rex
+  agree          loud=no  5a   methna Method Names                      depth 1 parent xcremet provide.xml:456 methna.rex
+  agree          loud=no  5a   xmeths Default Search Order for Method Selection depth 1 parent xcremet provide.xml:483 xmeths.rex
+  agree          loud=no  5a   unkno Defining an UNKNOWN Method         depth 1 parent xcremet provide.xml:526 unkno.rex
+  agree          loud=no  5a   chsrod Changing the Search Order for Methods depth 1 parent xcremet provide.xml:548 chsrod.rex
+  agree          loud=no  5a   pubpri Public, Package-Scope, and Private Methods depth 1 parent xcremet provide.xml:587 pubpri.rex
+  agree          loud=no  5b   creo Initialization                      depth 1 parent xcremet provide.xml:660 creo.rex
+  agree          loud=no  5b   obdes Object Destruction and Uninitialization depth 1 parent xcremet provide.xml:709 obdes.rex
+  agree          loud=no  5a   reqstr Required String Values            depth 1 parent xcremet provide.xml:723 reqstr.rex
+  agree          loud=no  5a   concurr Concurrency                      depth 1 parent xcremet provide.xml:816 concurr.rex
+  agree          loud=no  5a   classmeth Overview of Classes Provided by Rexx depth 0 parent - provide.xml:824   classmeth.rex
+  agree          loud=no  5a   chi The Class Hierarchy                  depth 1 parent classmeth provide.xml:828 chi.rex
+  agree          loud=no  5b   methodsbyclass Class Library Notes       depth 1 parent classmeth provide.xml:1006 methodsbyclass.rex
+
+the negative control each concept row carries:
+  typcla           5a   make `::CLASS ... METACLASS` a no-op, so the declared class is an instance of `.Class` like a plain one. The section's abstract kind has no control here and is not owed one: this probe asks each class its `~class~id`, which an abstract class answers exactly as a plain one does, and abstract enforcement is `abscla`'s row, at 5b because the check lives inside `~new` -- a discriminator added here would duplicate that row rather than cover a gap
+      owning-phase authority: spec enumeration: the four kinds themselves are 5a, with enforcement split into its own rows
+  objcla           5b   rebuild an existing instance's method lookup from its class on every send, so a method defined after the instance was created answers -- 5b
+      owning-phase authority: the section's distinguishing claim is that an object acquires its class's methods at the time of its creation, which needs `~new`; the plan's handover puts instance construction in 5b
+  xmixin           5a   answer `~baseClass` with the class itself rather than with the mixin's first non-mixin superclass, or merge an INHERIT target's methods in front of the class's own
+      owning-phase authority: spec enumeration: a mixin's base class, and who may inherit it, is 5a
+  abscla           5b   drop `checkAbstract` from the `~new` path, so an abstract class constructs -- 5b
+      owning-phase authority: spec enumeration: abstract-*class* enforcement is 5b, because the check lives inside `~new`; the abstract-*method* half is 5a and has no arm of this section's probe
+  xmetac           5a   ignore `METACLASS`, so a class declared with one is still an instance of `.Class`
+      owning-phase authority: spec enumeration: the metaclass graph and its circularity is 5a
+  xcremet          5a   install a quoted `::CLASS` identifier under a different name, or give the new class a superclass other than Object
+      owning-phase authority: no row in the spec enumeration; the probe needs `::CLASS` install with a quoted identifier and a `::METHOD ... CLASS` body
+  usingcl          5a   answer `~subclass` with a class whose superclass is Object rather than the receiver
+      owning-phase authority: spec enumeration: `mixinClass()` and `inherit()` are 5a, and `~subclass` is the same factory protocol reached by message rather than by directive
+  xscope           5a   answer `~method` from the flattened all-scopes dictionary, so an inherited name answers where the oracle raises
+      owning-phase authority: spec enumeration: the method dictionary's one entry per scope, and `Method~scope`, are 5a
+  usesem           5b   put a `setMethod` definition in the class's dictionary rather than in the object's own scope, so it reaches the class's other instances -- 5b
+      owning-phase authority: spec enumeration: per-object methods -- SETMETHOD and ENHANCED, and the scope they create -- are 5b
+  methna           5a   stop uppercasing a method name as it is added, so a name defined in lower case is not found by the message that names it. Both sites have to go together, measured: `dispatch/class_protocol.rs`'s own `method_name_pair`, and `MethodDict::replace_method`. Either one alone leaves this row `agree` and the corpus untouched
+      owning-phase authority: no row in the spec enumeration; the probe needs `~define` and `~method`, which the enumeration files under 5a
+  xmeths           5a   search a superclass before the class's own dictionary, or drop the `UNKNOWN` step so a miss goes straight to NOMETHOD
+      owning-phase authority: spec enumeration: the complete method search order is 5a with the per-object arm 5b; this probe deliberately omits that arm, which is `usesem`'s row
+  unkno            5a   **delete the `UNKNOWN` step** and record that this row reddens. One of D50's two required controls; runnable only once the step exists
+      owning-phase authority: spec enumeration: the complete method search order, of which `UNKNOWN` is a step, is 5a
+  chsrod           5a   start a scope-override send at the receiver's own class rather than at the named scope, which makes `self~type:super` recurse or answer the subclass's method
+      owning-phase authority: spec enumeration: changing the search order -- `~m:scope`, `~m:super` -- is 5a
+  pubpri           5a   let a PRIVATE method answer a send from outside the object, so the outside-send line answers instead of raising 97.2
+      owning-phase authority: spec enumeration: PUBLIC / PACKAGE / PRIVATE as three access scopes is 5a
+  creo             5b   stop calling `init` after `~new` builds the object, or pass `~new`'s arguments to the wrong `init` -- 5b
+      owning-phase authority: spec enumeration: initialization of an instance -- `~new`, `init`, `self~init:super` -- is 5b
+  obdes            5b   skip the termination sweep, since under D59 a class object's storage is never reclaimed and no collection ever reaches one. Measured as run: the row reddens **silently**, rc 0 with empty stderr on both sides, differing on stdout alone -- 5b
+      owning-phase authority: spec enumeration: object destruction and uninitialization -- `UNINIT` and its propagation flags -- is 5b, with the flags carried by 5a's code
+  reqstr           5a   **delete the `makeString` limb** and record that this row reddens (the second of D50's two required controls), and **answer `makeString` with the wrong string**, which reddens the same row at rc 0 with empty stderr on both sides -- that second one is table C's mutation 3
+      owning-phase authority: spec enumeration: required string values -- request("STRING") to makeString to NOSTRING to defaultName -- is 5a
+  concurr          5a   refuse `REPLY` inside a method body, or stop returning its expression to the sender
+      owning-phase authority: spec enumeration: GUARDED/UNGUARDED, REPLY and GUARD legality is 5a, with the semantics Phase 6's
+  classmeth        5a   drop a class from the registry, so its `~id` line cannot answer
+      owning-phase authority: no row in the spec enumeration; the probe asks `~id` of every class reachable as an environment symbol
+  chi              5a   answer `~superClass` with the whole superclass list's last element rather than the class's direct superclass
+      owning-phase authority: no row in the spec enumeration as a section; the hierarchy list is the wiring rows' own authority and the probe asks `~superClass` and `~superClasses`
+  methodsbyclass   5b   route `matrix[2, 3] = 0` to a single-index `[]=`, so the element read back is not the one written; or transpose the index mapping, which the `order` line reads and no write-then-read pair can. Transpose the **offset accumulation alone**, leaving `multi_dimension_position`'s bounds pass pairing each subscript with its own dimension: reversing that pairing does not terminate, because a subscript past the dimension it was mispaired with re-enters `array_extend_multi` and the interpreter thread overflows its stack at rc 134, which reads as an infrastructure failure and not as a reddened row -- 5b
+      owning-phase authority: no row in the spec enumeration; the probe needs a multidimensional Array instance for the section's own `matrix[2, 3] = 0` note, and the plan's handover puts instance construction in 5b
+
+class wiring rows (verdict / loud / owning phase / class / probe):
+  agree          loud=no  5a   Class                                    class covered fundclasses.xml:51   class.rex
+  agree          loud=no  5a   Message                                  class covered fundclasses.xml:1093 message.rex
+  agree          loud=no  5a   Method                                   class covered fundclasses.xml:1987 method.rex
+  agree          loud=no  5a   Object                                   class covered fundclasses.xml:2519 object.rex
+  agree          loud=no  5a   Package                                  class covered fundclasses.xml:3561 package.rex
+  agree          loud=no  5a   Routine                                  class covered fundclasses.xml:4689 routine.rex
+  agree          loud=no  5a   String                                   class covered fundclasses.xml:4996 string.rex
+  agree          loud=no  5a   Collection                               class covered collclasses.xml:170  collection.rex
+  agree          loud=no  5a   MapCollection                            class covered collclasses.xml:612  mapcollection.rex
+  agree          loud=no  5a   OrderedCollection                        class covered collclasses.xml:741  orderedcollection.rex
+  agree          loud=no  5a   SetCollection                            class covered collclasses.xml:1222 setcollection.rex
+  agree          loud=no  5a   Array                                    class covered collclasses.xml:1267 array.rex
+  agree          loud=no  5a   Bag                                      class covered collclasses.xml:2566 bag.rex
+  agree          loud=no  5a   CircularQueue                            class covered collclasses.xml:3252 circularqueue.rex
+  agree          loud=no  5a   Directory                                class covered collclasses.xml:3943 directory.rex
+  agree          loud=no  5a   IdentityTable                            class covered collclasses.xml:4609 identitytable.rex
+  agree          loud=no  5a   List                                     class covered collclasses.xml:5000 list.rex
+  agree          loud=no  5a   Properties                               class covered collclasses.xml:5667 properties.rex
+  agree          loud=no  5a   Queue                                    class covered collclasses.xml:5984 queue.rex
+  agree          loud=no  5a   Relation                                 class covered collclasses.xml:6745 relation.rex
+  agree          loud=no  5a   Set                                      class covered collclasses.xml:7420 set.rex
+  agree          loud=no  5a   Stem                                     class covered collclasses.xml:7964 stem.rex
+  agree          loud=no  5a   StringTable                              class covered collclasses.xml:8504 stringtable.rex
+  agree          loud=no  5a   Table                                    class covered collclasses.xml:9048 table.rex
+  agree          loud=no  5a   Alarm                                    class covered utilityclasses.xml:51 alarm.rex
+  agree          loud=no  5a   AlarmNotification                        class covered utilityclasses.xml:322 alarmnotification.rex
+  agree          loud=no  5a   Buffer                                   class unreachable utilityclasses.xml:421 buffer.rex
+  agree          loud=no  5a   Comparable                               class covered utilityclasses.xml:481 comparable.rex
+  agree          loud=no  5a   Comparator                               class covered utilityclasses.xml:566 comparator.rex
+  agree          loud=no  5a   CaselessComparator                       class covered utilityclasses.xml:639 caselesscomparator.rex
+  agree          loud=no  5a   ColumnComparator                         class covered utilityclasses.xml:708 columncomparator.rex
+  agree          loud=no  5a   CaselessColumnComparator                 class covered utilityclasses.xml:798 caselesscolumncomparator.rex
+  agree          loud=no  5a   DescendingComparator                     class covered utilityclasses.xml:888 descendingcomparator.rex
+  agree          loud=no  5a   CaselessDescendingComparator             class covered utilityclasses.xml:965 caselessdescendingcomparator.rex
+  agree          loud=no  5a   InvertingComparator                      class covered utilityclasses.xml:1038 invertingcomparator.rex
+  agree          loud=no  5a   NumericComparator                        class covered utilityclasses.xml:1139 numericcomparator.rex
+  agree          loud=no  5a   DateTime                                 class covered utilityclasses.xml:1234 datetime.rex
+  agree          loud=no  5a   EventSemaphore                           class covered utilityclasses.xml:3142 eventsemaphore.rex
+  agree          loud=no  5a   File                                     class covered utilityclasses.xml:3382 file.rex
+  agree          loud=no  5a   MessageNotification                      class covered utilityclasses.xml:4633 messagenotification.rex
+  agree          loud=no  5a   Monitor                                  class covered utilityclasses.xml:4701 monitor.rex
+  agree          loud=no  5a   MutableBuffer                            class covered utilityclasses.xml:4829 mutablebuffer.rex
+  agree          loud=no  5a   MutexSemaphore                           class covered utilityclasses.xml:6451 mutexsemaphore.rex
+  agree          loud=no  5a   Orderable                                class covered utilityclasses.xml:6649 orderable.rex
+  agree          loud=no  5a   Pointer                                  class unreachable utilityclasses.xml:6902 pointer.rex
+  agree          loud=no  5a   RexxContext                              class covered utilityclasses.xml:7533 rexxcontext.rex
+  agree          loud=no  5a   RexxInfo                                 instance covered utilityclasses.xml:7934 rexxinfo.rex
+  agree          loud=no  5a   RexxQueue                                class covered utilityclasses.xml:8811 rexxqueue.rex
+  agree          loud=no  5a   Singleton                                class not-covered utilityclasses.xml:9260 singleton.rex
+  agree          loud=no  5a   StackFrame                               class not-covered utilityclasses.xml:9396 stackframe.rex
+  agree          loud=no  5a   StreamSupplier                           class covered utilityclasses.xml:9754 streamsupplier.rex
+  agree          loud=no  5a   Supplier                                 class covered utilityclasses.xml:9903 supplier.rex
+  agree          loud=no  5a   Ticker                                   class covered utilityclasses.xml:10169 ticker.rex
+  agree          loud=no  5a   TimeSpan                                 class covered utilityclasses.xml:10442 timespan.rex
+  agree          loud=no  5a   TraceObject                              class covered utilityclasses.xml:11301 traceobject.rex
+  agree          loud=no  5a   Validate                                 class covered utilityclasses.xml:12201 validate.rex
+  agree          loud=no  5a   VariableReference                        class covered utilityclasses.xml:12548 variablereference.rex
+  agree          loud=no  5a   WeakReference                            class covered utilityclasses.xml:12698 weakreference.rex
+  agree          loud=no  5a   InputOutputStream                        class covered streamclasses.xml:57 inputoutputstream.rex
+  agree          loud=no  5a   InputStream                              class covered streamclasses.xml:103 inputstream.rex
+  agree          loud=no  5a   OutputStream                             class covered streamclasses.xml:245 outputstream.rex
+  agree          loud=no  5a   Stream                                   class covered streamclasses.xml:389 stream.rex
+  agree          loud=no  5a   ArgUtil                                  class covered provide.xml:838      argutil.rex
+
+hierarchy edge rows (verdict / loud / owning phase / edge / probe):
+  agree          loud=no  5a   Alarm <- Object                          provide.xml:841                    alarm__object.rex
+  agree          loud=no  5a   AlarmNotification <- Object              provide.xml:842                    alarmnotification__object.rex
+  agree          loud=no  5a   Buffer <- Object                         provide.xml:846                    buffer__object.rex
+  agree          loud=no  5a   Class <- Object                          provide.xml:847                    class__object.rex
+  agree          loud=no  5a   Collection <- Object                     provide.xml:848                    collection__object.rex
+  agree          loud=no  5a   MapCollection <- Collection              provide.xml:849                    mapcollection__collection.rex
+  agree          loud=no  5a   Bag <- MapCollection                     provide.xml:850                    bag__mapcollection.rex
+  agree          loud=no  5a   Directory <- MapCollection               provide.xml:851                    directory__mapcollection.rex
+  agree          loud=no  5a   Properties <- Directory                  provide.xml:852                    properties__directory.rex
+  agree          loud=no  5a   IdentityTable <- MapCollection           provide.xml:853                    identitytable__mapcollection.rex
+  agree          loud=no  5a   Relation <- MapCollection                provide.xml:854                    relation__mapcollection.rex
+  agree          loud=no  5a   Set <- MapCollection                     provide.xml:855                    set__mapcollection.rex
+  agree          loud=no  5a   Stem <- MapCollection                    provide.xml:856                    stem__mapcollection.rex
+  agree          loud=no  5a   StringTable <- MapCollection             provide.xml:857                    stringtable__mapcollection.rex
+  agree          loud=no  5a   TraceObject <- StringTable               provide.xml:858                    traceobject__stringtable.rex
+  agree          loud=no  5a   Table <- MapCollection                   provide.xml:859                    table__mapcollection.rex
+  agree          loud=no  5a   OrderedCollection <- Collection          provide.xml:860                    orderedcollection__collection.rex
+  agree          loud=no  5a   Array <- OrderedCollection               provide.xml:861                    array__orderedcollection.rex
+  agree          loud=no  5a   List <- OrderedCollection                provide.xml:862                    list__orderedcollection.rex
+  agree          loud=no  5a   Queue <- OrderedCollection               provide.xml:863                    queue__orderedcollection.rex
+  agree          loud=no  5a   CircularQueue <- Queue                   provide.xml:864                    circularqueue__queue.rex
+  agree          loud=no  5a   SetCollection <- Collection              provide.xml:865                    setcollection__collection.rex
+  agree          loud=no  5a   Comparable <- Object                     provide.xml:866                    comparable__object.rex
+  agree          loud=no  5a   DateTime <- Comparable                   provide.xml:867                    datetime__comparable.rex
+  agree          loud=no  5a   File <- Comparable                       provide.xml:868                    file__comparable.rex
+  agree          loud=no  5a   String <- Comparable                     provide.xml:869                    string__comparable.rex
+  agree          loud=no  5a   TimeSpan <- Comparable                   provide.xml:870                    timespan__comparable.rex
+  agree          loud=no  5a   Comparator <- Object                     provide.xml:871                    comparator__object.rex
+  agree          loud=no  5a   CaselessColumnComparator <- Comparator   provide.xml:872                    caselesscolumncomparator__comparator.rex
+  agree          loud=no  5a   CaselessComparator <- Comparator         provide.xml:873                    caselesscomparator__comparator.rex
+  agree          loud=no  5a   CaselessDescendingComparator <- Comparator provide.xml:874                    caselessdescendingcomparator__comparator.rex
+  agree          loud=no  5a   ColumnComparator <- Comparator           provide.xml:875                    columncomparator__comparator.rex
+  agree          loud=no  5a   DescendingComparator <- Comparator       provide.xml:876                    descendingcomparator__comparator.rex
+  agree          loud=no  5a   InvertingComparator <- Comparator        provide.xml:877                    invertingcomparator__comparator.rex
+  agree          loud=no  5a   NumericComparator <- Comparator          provide.xml:878                    numericcomparator__comparator.rex
+  agree          loud=no  5a   InputStream <- Object                    provide.xml:879                    inputstream__object.rex
+  agree          loud=no  5a   InputOutputStream <- InputStream         provide.xml:880                    inputoutputstream__inputstream.rex
+  agree          loud=no  5a   Stream <- InputOutputStream              provide.xml:881                    stream__inputoutputstream.rex
+  agree          loud=no  5a   MessageNotification <- Object            provide.xml:882                    messagenotification__object.rex
+  agree          loud=no  5a   Message <- MessageNotification           provide.xml:883                    message__messagenotification.rex
+  agree          loud=no  5a   Method <- Object                         provide.xml:884                    method__object.rex
+  agree          loud=no  5a   Monitor <- Object                        provide.xml:885                    monitor__object.rex
+  agree          loud=no  5a   MutableBuffer <- Object                  provide.xml:886                    mutablebuffer__object.rex
+  agree          loud=no  5a   Orderable <- Object                      provide.xml:888                    orderable__object.rex
+  agree          loud=no  5a   OutputStream <- Object                   provide.xml:889                    outputstream__object.rex
+  agree          loud=no  5a   Package <- Object                        provide.xml:890                    package__object.rex
+  agree          loud=no  5a   Pointer <- Object                        provide.xml:891                    pointer__object.rex
+  agree          loud=no  5a   RexxContext <- Object                    provide.xml:892                    rexxcontext__object.rex
+  agree          loud=no  5a   RexxQueue <- Object                      provide.xml:894                    rexxqueue__object.rex
+  agree          loud=no  5a   Routine <- Object                        provide.xml:895                    routine__object.rex
+  agree          loud=no  5a   StackFrame <- Object                     provide.xml:896                    stackframe__object.rex
+  agree          loud=no  5a   Supplier <- Object                       provide.xml:897                    supplier__object.rex
+  agree          loud=no  5a   StreamSupplier <- Supplier               provide.xml:898                    streamsupplier__supplier.rex
+  agree          loud=no  5a   Ticker <- Object                         provide.xml:899                    ticker__object.rex
+  agree          loud=no  5a   Validate <- Object                       provide.xml:900                    validate__object.rex
+  agree          loud=no  5a   VariableReference <- Object              provide.xml:901                    variablereference__object.rex
+  agree          loud=no  5a   WeakReference <- Object                  provide.xml:902                    weakreference__object.rex
+
+method rows, by the program their group shares. A group whose rows do not all read the same verdict is listed row by row:
+  Class                        instance  loud=no  5c                               31   row(s): agree=31                                 class__instance.rex
+  Class                        class     loud=no  5c                               1    row(s): agree=1                                  class__class.rex
+  Message                      class     loud=no  5c                               1    row(s): agree=1                                  message__class.rex
+  Message                      instance  loud=no  5c                               20   row(s): agree=20                                 message__instance.rex
+  Method                       class     loud=no  5c                               3    row(s): agree=3                                  method__class.rex
+  Method                       instance  loud=no  5c                               17   row(s): agree=17                                 method__instance.rex
+  Object                       class     loud=no  5c                               1    row(s): agree=1                                  object__class.rex
+  Object                       instance  loud=no  5c                               31   row(s): agree=31                                 object__instance.rex
+  Package                      class     loud=no  5c                               2    row(s): agree=2                                  package__class.rex
+  Package                      instance  loud=no  5c                               38   row(s): agree=38                                 package__instance.rex
+  Routine                      class     loud=no  5c                               3    row(s): agree=3                                  routine__class.rex
+  Routine                      instance  loud=no  5c                               8    row(s): agree=8                                  routine__instance.rex
+  String                       class     loud=no  5c                               17   row(s): agree=17                                 string__class.rex
+  String                       instance  loud=no  5c                               118  row(s): agree=118                                string__instance.rex
+  Collection                   instance  loud=no  5c                               19   row(s): agree=19                                 collection__instance.rex
+  MapCollection                class     loud=no  5c                               1    row(s): agree=1                                  mapcollection__class.rex
+  MapCollection                instance  loud=no  5c                               20   row(s): agree=20                                 mapcollection__instance.rex
+  OrderedCollection            instance  loud=no  5c                               34   row(s): agree=34                                 orderedcollection__instance.rex
+  SetCollection                instance  loud=no  5c                               19   row(s): agree=19                                 setcollection__instance.rex
+  Array                        class     loud=no  5c                               2    row(s): agree=2                                  array__class.rex
+  Array                        instance  loud=no  5c                               44   row(s): agree=44                                 array__instance.rex
+  Bag                          class     loud=no  5c                               2    row(s): agree=2                                  bag__class.rex
+  Bag                          instance  loud=no  5c                               28   row(s): agree=28                                 bag__instance.rex
+  CircularQueue                class     loud=no  5c                               2    row(s): agree=2                                  circularqueue__class.rex
+  CircularQueue                instance  loud=no  5c                               47   row(s): agree=47                                 circularqueue__instance.rex
+  Directory                    class     loud=no  5c                               2    row(s): agree=2                                  directory__class.rex
+  Directory                    instance  loud=no  5c                               31   row(s): agree=31                                 directory__instance.rex
+  IdentityTable                class     loud=no  5c                               2    row(s): agree=2                                  identitytable__class.rex
+  IdentityTable                instance  loud=no  5c                               24   row(s): agree=24                                 identitytable__instance.rex
+  List                         class     loud=no  5c                               2    row(s): agree=2                                  list__class.rex
+  List                         instance  loud=no  5c                               38   row(s): agree=38                                 list__instance.rex
+  Properties                   class     loud=no  5c                               3    row(s): agree=3                                  properties__class.rex
+  Properties                   instance  loud=no  5c                               39   row(s): agree=39                                 properties__instance.rex
+  Queue                        class     loud=no  5c                               2    row(s): agree=2                                  queue__class.rex
+  Queue                        instance  loud=no  5c                               43   row(s): agree=43                                 queue__instance.rex
+  Relation                     class     loud=no  5c                               2    row(s): agree=2                                  relation__class.rex
+  Relation                     instance  loud=no  5c                               28   row(s): agree=28                                 relation__instance.rex
+  Set                          class     loud=no  5c                               2    row(s): agree=2                                  set__class.rex
+  Set                          instance  loud=no  5c                               24   row(s): agree=24                                 set__instance.rex
+  Stem                         class     loud=no  5c                               2    row(s): agree=2                                  stem__class.rex
+  Stem                         instance  loud=no  5c                               27   row(s): agree=27                                 stem__instance.rex
+  StringTable                  class     loud=no  5c                               2    row(s): agree=2                                  stringtable__class.rex
+  StringTable                  instance  loud=no  5c                               29   row(s): agree=29                                 stringtable__instance.rex
+  Table                        class     loud=no  5c                               2    row(s): agree=2                                  table__class.rex
+  Table                        instance  loud=no  5c                               24   row(s): agree=24                                 table__instance.rex
+  Alarm                        instance  loud=no  6                                7    row(s): agree=7                                  alarm__instance.rex
+  AlarmNotification            instance  loud=no  5c                               2    row(s): agree=2                                  alarmnotification__instance.rex
+  Buffer                       class     loud=no  5c                               1    row(s): agree=1                                  buffer__class.rex
+  Comparable                   instance  loud=no  5c                               1    row(s): agree=1                                  comparable__instance.rex
+  Comparator                   instance  loud=no  5c                               1    row(s): agree=1                                  comparator__instance.rex
+  CaselessComparator           instance  loud=no  5c                               1    row(s): agree=1                                  caselesscomparator__instance.rex
+  ColumnComparator             instance  loud=no  5c                               2    row(s): agree=2                                  columncomparator__instance.rex
+  CaselessColumnComparator     instance  loud=no  5c                               2    row(s): agree=2                                  caselesscolumncomparator__instance.rex
+  DescendingComparator         instance  loud=no  5c                               1    row(s): agree=1                                  descendingcomparator__instance.rex
+  CaselessDescendingComparator instance  loud=no  5c                               1    row(s): agree=1                                  caselessdescendingcomparator__instance.rex
+  InvertingComparator          instance  loud=no  5c                               2    row(s): agree=2                                  invertingcomparator__instance.rex
+  NumericComparator            instance  loud=no  5c                               2    row(s): agree=2                                  numericcomparator__instance.rex
+  DateTime                     instance  loud=no  5c                               76   row(s): agree=76                                 datetime__instance.rex
+  DateTime                     class     loud=no  5c                               18   row(s): agree=18                                 datetime__class.rex
+  EventSemaphore               class     loud=no  5c                               1    row(s): agree=1                                  eventsemaphore__class.rex
+  EventSemaphore               instance  loud=no  5c                               5    row(s): agree=5                                  eventsemaphore__instance.rex
+  File                         class     loud=no  7                                10   row(s): agree=10                                 file__class.rex
+  File                         instance  loud=no  7                                50   row(s): agree=50                                 file__instance.rex
+  MessageNotification          instance  loud=no  5c                               1    row(s): agree=1                                  messagenotification__instance.rex
+  Monitor                      instance  loud=no  5c                               4    row(s): agree=4                                  monitor__instance.rex
+  MutableBuffer                class     loud=no  5c                               1    row(s): agree=1                                  mutablebuffer__class.rex
+  MutableBuffer                instance  loud=no  5c                               51   row(s): agree=51                                 mutablebuffer__instance.rex
+  MutexSemaphore               class     loud=no  5c                               1    row(s): agree=1                                  mutexsemaphore__class.rex
+  MutexSemaphore               instance  loud=no  5c                               3    row(s): agree=3                                  mutexsemaphore__instance.rex
+  Orderable                    instance  loud=no  5c                               19   row(s): agree=19                                 orderable__instance.rex
+  Pointer                      class     loud=no  5c                               1    row(s): agree=1                                  pointer__class.rex
+  Pointer                      instance  loud=no  never-expected-to-agree          5    row(s): unanswered=5                             pointer__instance.rex
+      oracle rc=163  out="" err="       *-* Compiled method \"NEW\" with scope \"Pointer\".\n     8 *-* o = .Pointer~new\nError 93 runn"...
+      crate  rc=163  out="" err="       *-* Compiled method \"NEW\" with scope \"Pointer\".\n     8 *-* o = .Pointer~new\nError 93 runn"...
+  RexxContext                  instance  loud=no  5c                               15   row(s): agree=15                                 rexxcontext__instance.rex
+  RexxInfo                     instance  loud=no  5c                               28   row(s): agree=28                                 rexxinfo__instance.rex
+  RexxQueue                    class     loud=no  5c                               5    row(s): agree=5                                  rexxqueue__class.rex
+  RexxQueue                    instance  loud=no  5c                               13   row(s): agree=13                                 rexxqueue__instance.rex
+  Singleton                    class     loud=no  5c                               1    row(s): agree=1                                  singleton__class.rex
+  StackFrame                   instance  loud=no  deferred-rexxcontext-stackframes 10   row(s): unanswered=10                            stackframe__instance.rex
+      oracle rc=163  out="" err="       *-* Compiled method \"NEW\" with scope \"StackFrame\".\n     8 *-* o = .StackFrame~new\nError 9"...
+      crate  rc=163  out="" err="       *-* Compiled method \"NEW\" with scope \"StackFrame\".\n     8 *-* o = .StackFrame~new\nError 9"...
+  StreamSupplier               instance  loud=no  7                                8    row(s): agree=8                                  streamsupplier__instance.rex
+  StreamSupplier               class     loud=no  7                                1    row(s): agree=1                                  streamsupplier__class.rex
+  Supplier                     class     loud=no  5c                               1    row(s): agree=1                                  supplier__class.rex
+  Supplier                     instance  loud=no  5c                               7    row(s): agree=7                                  supplier__instance.rex
+  Ticker                       instance  loud=no  6                                6    row(s): agree=6                                  ticker__instance.rex
+  TimeSpan                     instance  loud=no  5c                               47   row(s): agree=47                                 timespan__instance.rex
+  TimeSpan                     class     loud=no  5c                               10   row(s): agree=10                                 timespan__class.rex
+  TraceObject                  class     loud=no  5c                               12   row(s): agree=12                                 traceobject__class.rex
+  TraceObject                  instance  loud=no  5c                               2    row(s): agree=2                                  traceobject__instance.rex
+  Validate                     class     loud=no  5c                               13   row(s): agree=13                                 validate__class.rex
+  VariableReference            instance  loud=no  5c                               4    row(s): agree=4                                  variablereference__instance.rex
+  WeakReference                class     loud=no  5c                               1    row(s): agree=1                                  weakreference__class.rex
+  WeakReference                instance  loud=no  5c                               1    row(s): agree=1                                  weakreference__instance.rex
+  InputOutputStream            instance  loud=no  5c                               11   row(s): agree=11                                 inputoutputstream__instance.rex
+  InputStream                  instance  loud=no  5c                               10   row(s): agree=10                                 inputstream__instance.rex
+  OutputStream                 instance  loud=no  5c                               10   row(s): agree=10                                 outputstream__instance.rex
+  Stream                       class     loud=no  7                                1    row(s): agree=1                                  stream__class.rex
+  Stream                       instance  loud=no  7                                24   row(s): agree=24                                 stream__instance.rex
+
+verdicts, over every row of this table:
+  agree: 1473
+  unanswered: 15
+  loud (this crate declined rather than answered): 0
+  method rows no documented name was asked of, on either side, because their group's probe raised first: 15
+
+by owning phase -- rows, and rows not yet `agree`:
+  5a: 135 rows, 0 not yet `agree`
+  5b: 6 rows, 0 not yet `agree`
+  5c: 1225 rows, 0 not yet `agree`
+  6: 13 rows, 0 not yet `agree`
+  7: 94 rows, 0 not yet `agree`
+  deferred-rexxcontext-stackframes: 10 rows, 10 not yet `agree`
+  never-expected-to-agree: 5 rows, 5 not yet `agree`
+
+gated by this run: 0 row(s) whose owning phase is closing or closed and whose verdict is not `agree`
+==============================================================================

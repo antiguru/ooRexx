@@ -1,0 +1,18 @@
+
+running 13 tests
+test a_fraction_goes_to_the_integer_each_direction_names ... ok
+test a_half_goes_away_from_zero ... ok
+test a_large_value_renders_in_full ... ok
+test a_magnitude_under_one_steps_to_one ... ok
+test a_step_may_carry_past_every_digit ... ok
+test a_value_with_decimals_is_whole_only_if_they_are_all_zero ... ok
+test a_value_with_no_exponent_is_whole_however_long_it_is ... ok
+test a_value_with_only_zero_decimals_is_already_whole ... ok
+test an_exponent_is_bounded_by_the_precision ... ok
+test below_a_half_goes_to_zero_without_a_sign ... ok
+test every_spelling_of_zero_rounds_to_the_one_zero ... ok
+test the_side_that_truncates_is_the_side_the_direction_points_away_from ... ok
+test the_value_is_rounded_to_the_precision_first ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

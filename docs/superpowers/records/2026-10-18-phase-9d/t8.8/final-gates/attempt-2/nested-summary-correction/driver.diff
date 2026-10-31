@@ -1,0 +1,52 @@
+--- before-driver.py
++++ accepted-driver.py
+@@ -340,6 +340,35 @@
+ 
+ def capture_path(executable):
+     return OUT / 'dispatch' / (hashlib.sha256(os.fsencode(executable)).hexdigest() + '.json')
++
++
++def verified_summary(stdout, names, item):
++    summaries = [list(map(int, row)) for row in re.findall(r'^test result: (?:ok|FAILED)\. (\d+) passed; (\d+) failed; (\d+) ignored; (\d+) measured; (\d+) filtered out;', stdout, re.M)]
++    complete = [row for row in summaries if row[4] == 0]
++    assert len(complete) == 1 and complete[0] == summaries[-1], 'Full unfiltered summary must be unique and final'
++    summary = complete[0]
++    assert sum(summary) == len(names) and summary[3:] == [0, 0], 'Incomplete default population'
++    nested = summaries[:-1]
++    proof = None
++    if nested:
++        assert key(item) == ('rexx-exec', 'rexx_exec', ('lib',), ('lib',)), 'Unexpected nested test summaries'
++        expected = {
++            'input::tests::spawn_failure_on_stdin_reaches_syntax_without_reading',
++            'input::tests::spawn_failure_preserves_partial_input_and_requeues_other_posts',
++            'input::tests::stdin_recovers_in_configured_inline_mode_after_spawn_failure',
++            'input::tests::stdin_recovers_with_a_pooled_worker_after_spawn_failure',
++            'scheduler::tests::spawn_failure::command_spawn_failure_creates_no_child_and_repeats',
++            'scheduler::tests::spawn_failure::guarded_native_spawn_failure_releases_receiver_for_progress',
++            'scheduler::tests::spawn_failure::native_spawn_failure_reaches_main_and_started_handlers',
++        }
++        pattern = r'^test (\S+) \.\.\. \nrunning 1 test\ntest \1 \.\.\. ok\n\ntest result: ok\. 1 passed; 0 failed; 0 ignored; 0 measured; ' + str(len(names) - 1) + r' filtered out;'
++        wrappers = re.findall(pattern, stdout, re.M)
++        assert len(wrappers) == len(nested) == len(expected) and set(wrappers) == expected, 'Unattributed nested summary'
++        assert all(row == [1, 0, 0, 0, len(names) - 1] for row in nested), 'Failed or incomplete isolated child'
++        source = RUST / 'crates/rexx-exec/src/test_process.rs'
++        assert '.args(["--exact", name, "--nocapture"])' in source.read_text()
++        proof = {'names': wrappers, 'summaries': nested, 'source': str(source.relative_to(ROOT)), 'source_sha256': digest(source)}
++    return summary, proof
+ 
+ 
+ mode = sys.argv[1]
+@@ -525,10 +554,9 @@
+     assert not population['removed'], 'Removed default tests need controller reconciliation'
+     result = run(name, dispatch['argv'], dispatch['cwd'], env, 510)
+     stdout = (OUT / (name + '.stdout')).read_text(errors='replace')
+-    summaries = re.findall(r'^test result: (?:ok|FAILED)\. (\d+) passed; (\d+) failed; (\d+) ignored; (\d+) measured; (\d+) filtered out;', stdout, re.M)
+-    assert len(summaries) == 1 and sum(map(int, summaries[0])) == len(names), 'Incomplete default population'
+-    assert int(summaries[0][4]) == 0 and not result['timed_out'], 'Filtered or timed-out run'
+-    result.update(listed_tests=len(names), executable_sha256=dispatch['sha256'], summary=list(map(int, summaries[0])))
++    summary, nested_proof = verified_summary(stdout, names, item)
++    assert not result['timed_out'], 'Timed-out run'
++    result.update(listed_tests=len(names), executable_sha256=dispatch['sha256'], summary=summary, nested_summary_proof=nested_proof)
+     (OUT / (name + '.json')).write_text(json.dumps(result, indent=2) + '\n')
+     sys.exit(0 if result['returncode'] == 0 else 1)
+ elif mode == 'doc':

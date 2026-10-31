@@ -1,0 +1,5 @@
+a_closed_pipe_is_error_32: test
+a_flush_into_a_closed_pipe_is_error_32: test
+a_flush_into_a_full_device_is_error_28: test
+a_full_device_is_error_28: test
+a_standard_output_closed_at_start_is_dev_null: test

@@ -1,0 +1,45 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-629-oracle-base__class__CollectionSetlikeMethods/run
+TZ=None
+status=Some(0) ended=Exited(0) took=21.442849ms
+GroupRun {
+    group: "base/class/CollectionSetlikeMethods",
+    expected: {},
+    started: {
+        "TEST_BAG",
+        "TEST_DIFFERENCE_BAG_SET",
+        "TEST_DIRECTORY",
+        "TEST_INTERSECTION_BAG_SET",
+        "TEST_RELATION",
+        "TEST_SET",
+        "TEST_TABLE",
+        "TEST_UNION_BAG_SET",
+        "TEST_XOR_BAG_SET",
+    },
+    passed: {
+        "TEST_BAG",
+        "TEST_DIFFERENCE_BAG_SET",
+        "TEST_DIRECTORY",
+        "TEST_INTERSECTION_BAG_SET",
+        "TEST_RELATION",
+        "TEST_SET",
+        "TEST_TABLE",
+        "TEST_UNION_BAG_SET",
+        "TEST_XOR_BAG_SET",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "9",
+    ),
+    took: 21.442849ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-629-oracle-base__class__CollectionSetlikeMethods/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-629-oracle-base__class__CollectionSetlikeMethods/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 216, modified: SystemTime { tv_sec: 1793406140, tv_nsec: 122017441 }, accessed: SystemTime { tv_sec: 1793406140, tv_nsec: 124192450 }, created: SystemTime { tv_sec: 1793406140, tv_nsec: 116192683 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-629-oracle-base__class__CollectionSetlikeMethods/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-629-oracle-base__class__CollectionSetlikeMethods/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-629-oracle-base__class__CollectionSetlikeMethods/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406140, tv_nsec: 196049 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-629-oracle-base__class__CollectionSetlikeMethods/run/ooRexx/base/class/CollectionSetlikeMethods.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-629-oracle-base__class__CollectionSetlikeMethods/run/ooRexx/base/class/CollectionSetlikeMethods.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 16078, modified: SystemTime { tv_sec: 1793406140, tv_nsec: 106102517 }, accessed: SystemTime { tv_sec: 1793406140, tv_nsec: 116192683 }, created: SystemTime { tv_sec: 1793406140, tv_nsec: 102381602 }, .. })

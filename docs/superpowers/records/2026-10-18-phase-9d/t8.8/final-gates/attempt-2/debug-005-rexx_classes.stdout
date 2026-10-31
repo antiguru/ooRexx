@@ -1,0 +1,8 @@
+
+running 3 tests
+test native_classes::tests::every_checklist_entry_is_mapped_and_either_built_or_deferred ... ok
+test native_classes::tests::every_checklist_entry_is_registered_in_the_directory_setup_cpp_names ... ok
+test native_classes::tests::system_only_separates_the_two_closing_macros ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

@@ -1,0 +1,41 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-386-oracle-base__special.variables__RESULT_RC_SIGL/run
+TZ=None
+status=Some(0) ended=Exited(0) took=26.368212ms
+GroupRun {
+    group: "base/special.variables/RESULT_RC_SIGL",
+    expected: {},
+    started: {
+        "TEST_RESULT_WITH_EXIT",
+        "TEST_RESULT_WITH_EXIT_ADDRESSING_EXTERNALFILE",
+        "TEST_RESULT_WITH_EXIT_EXTERNALFILE",
+        "TEST_RESULT_WITH_REPLY",
+        "TEST_RESULT_WITH_RETURN",
+        "TEST_RESULT_WITH_RETURN_EXTERNALFILE",
+        "TEST_SIGL",
+    },
+    passed: {
+        "TEST_RESULT_WITH_EXIT",
+        "TEST_RESULT_WITH_EXIT_ADDRESSING_EXTERNALFILE",
+        "TEST_RESULT_WITH_EXIT_EXTERNALFILE",
+        "TEST_RESULT_WITH_REPLY",
+        "TEST_RESULT_WITH_RETURN",
+        "TEST_RESULT_WITH_RETURN_EXTERNALFILE",
+        "TEST_SIGL",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "7",
+    ),
+    took: 26.368212ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-386-oracle-base__special.variables__RESULT_RC_SIGL/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-386-oracle-base__special.variables__RESULT_RC_SIGL/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 253, modified: SystemTime { tv_sec: 1793406132, tv_nsec: 393320424 }, accessed: SystemTime { tv_sec: 1793406132, tv_nsec: 400523342 }, created: SystemTime { tv_sec: 1793406132, tv_nsec: 385185492 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-386-oracle-base__special.variables__RESULT_RC_SIGL/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-386-oracle-base__special.variables__RESULT_RC_SIGL/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-386-oracle-base__special.variables__RESULT_RC_SIGL/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406132, tv_nsec: 364713796 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-386-oracle-base__special.variables__RESULT_RC_SIGL/run/ooRexx/base/special.variables/RESULT_RC_SIGL.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-386-oracle-base__special.variables__RESULT_RC_SIGL/run/ooRexx/base/special.variables/RESULT_RC_SIGL.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 10801, modified: SystemTime { tv_sec: 1793406132, tv_nsec: 373866629 }, accessed: SystemTime { tv_sec: 1793406132, tv_nsec: 385185492 }, created: SystemTime { tv_sec: 1793406132, tv_nsec: 373491690 }, .. })

@@ -1,0 +1,8 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.03s
+     Running tests/suite.rs (/tmp/codex-p9d-t88-target/release/deps/suite-edb8ccd5504785e7)
+suite: 402 groups, 1 red, table /tmp/codex-p9d-t88-final-gates-resume/suite/table.tsv, verdicts /tmp/codex-p9d-t88-final-gates-resume/suite/verdicts.tsv
+
+thread 'l3_core_suite' (2087765) panicked at crates/rexx-exec/tests/suite.rs:1084:5:
+1 of 402 groups are not green; each reason is in /tmp/codex-p9d-t88-final-gates-resume/suite/verdicts.tsv
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+error: test failed, to rerun pass `-p rexx-exec --test suite`

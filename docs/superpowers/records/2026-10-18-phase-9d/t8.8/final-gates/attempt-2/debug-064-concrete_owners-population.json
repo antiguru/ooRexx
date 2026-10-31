@@ -1,0 +1,8 @@
+{
+  "added": [
+    "concrete_cross_thread_refusals_belong_to_embedding",
+    "each_wrong_concrete_owner_is_rejected_independently"
+  ],
+  "removed": [],
+  "reconciled_renames": {}
+}

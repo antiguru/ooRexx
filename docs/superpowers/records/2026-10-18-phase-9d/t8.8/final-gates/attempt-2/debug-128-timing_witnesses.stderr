@@ -1,0 +1,231 @@
+mode=None stress=false status=0 stdout=O:a slept 1
+O:b slept 0
+O:c slept 0
+sleep 0 3
+O:a waited 1
+O:b waited 0
+O:c waited 0
+semaphore 0 3
+holding
+released
+O:a released 1
+O:b released 1
+O:c released 1
+guard 0 3 released 1
+ stderr=""
+mode=None stress=true status=0 stdout=O:a slept 1
+O:b slept 0
+O:c slept 0
+sleep 0 3
+O:a waited 1
+O:b waited 0
+O:c waited 0
+semaphore 0 3
+holding
+released
+O:a released 1
+O:b released 1
+O:c released 1
+guard 0 3 released 1
+ stderr=""
+mode=Some("sim:1") stress=false status=0 stdout=O:a slept 1
+O:b slept 0
+O:c slept 0
+sleep 0 3
+O:a waited 1
+O:b waited 0
+O:c waited 0
+semaphore 0 3
+holding
+released
+O:a released 1
+O:b released 1
+O:c released 1
+guard 0 3 released 1
+ stderr=""
+mode=Some("sim:2,uniform:0.2") stress=false status=0 stdout=O:a slept 1
+O:b slept 0
+O:c slept 0
+sleep 0 3
+O:a waited 1
+O:b waited 0
+O:c waited 0
+semaphore 0 3
+holding
+released
+O:a released 1
+O:b released 1
+O:c released 1
+guard 0 3 released 1
+ stderr=""
+mode=Some("sim:3,pct:3,k=40") stress=true status=0 stdout=O:a slept 1
+O:b slept 0
+O:c slept 0
+sleep 0 3
+O:a waited 1
+O:b waited 0
+O:c waited 0
+semaphore 0 3
+holding
+released
+O:a released 1
+O:b released 1
+O:c released 1
+guard 0 3 released 1
+ stderr=""
+oracle status=Exited(0) stdout=O:a slept 1
+O:b slept 0
+O:c slept 0
+sleep 0 3
+O:a waited 1
+O:b waited 0
+O:c waited 0
+semaphore 0 3
+holding
+released
+O:a released 1
+O:b released 1
+O:c released 1
+guard 0 3 released 1
+ stderr=""
+oracle status=Exited(0) stdout=O:a slept 1
+O:b slept 0
+O:c slept 0
+sleep 0 3
+O:a waited 1
+O:b waited 0
+O:c waited 0
+semaphore 0 3
+holding
+released
+O:a released 1
+O:b released 1
+O:c released 1
+guard 0 3 released 1
+ stderr=""
+oracle status=Exited(0) stdout=O:a slept 1
+O:b slept 0
+O:c slept 0
+sleep 0 3
+O:a waited 1
+O:b waited 0
+O:c waited 0
+semaphore 0 3
+holding
+released
+O:a released 1
+O:b released 1
+O:c released 1
+guard 0 3 released 1
+ stderr=""
+oracle status=Exited(0) stdout=O:a slept 1
+O:b slept 0
+O:c slept 0
+sleep 0 3
+O:a waited 1
+O:b waited 0
+O:c waited 0
+semaphore 0 3
+holding
+released
+O:a released 1
+O:b released 1
+O:c released 1
+guard 0 3 released 1
+ stderr=""
+oracle status=Exited(0) stdout=O:a slept 1
+O:b slept 0
+O:c slept 0
+sleep 0 3
+O:a waited 1
+O:b waited 0
+O:c waited 0
+semaphore 0 3
+holding
+released
+O:a released 1
+O:b released 1
+O:c released 1
+guard 0 3 released 1
+ stderr=""
+oracle status=Exited(0) stdout=O:a slept 1
+O:b slept 0
+O:c slept 0
+sleep 0 3
+O:a waited 1
+O:b waited 0
+O:c waited 0
+semaphore 0 3
+holding
+released
+O:a released 1
+O:b released 1
+O:c released 1
+guard 0 3 released 1
+ stderr=""
+oracle status=Exited(0) stdout=O:a slept 1
+O:b slept 0
+O:c slept 0
+sleep 0 3
+O:a waited 1
+O:b waited 0
+O:c waited 0
+semaphore 0 3
+holding
+released
+O:a released 1
+O:b released 1
+O:c released 1
+guard 0 3 released 1
+ stderr=""
+oracle status=Exited(0) stdout=O:a slept 1
+O:b slept 0
+O:c slept 0
+sleep 0 3
+O:a waited 1
+O:b waited 0
+O:c waited 0
+semaphore 0 3
+holding
+released
+O:a released 1
+O:b released 1
+O:c released 1
+guard 0 3 released 1
+ stderr=""
+semaphore omission: O:a slept 1
+O:b slept 0
+O:c slept 0
+sleep 0 3
+O:a waited 0
+O:b waited 0
+O:c waited 0
+semaphore 0 3
+holding
+released
+O:a released 1
+O:b released 1
+O:c released 1
+guard 0 3 released 1
+
+guard omission: O:a slept 1
+O:b slept 0
+O:c slept 0
+sleep 0 3
+O:a waited 1
+O:b waited 0
+O:c waited 0
+semaphore 0 3
+holding
+O:a released 0
+O:b released 0
+O:c released 0
+guard 0 3 released 0
+released
+
+virtual sleep control: O:a slept 1
+advanced 1
+
+virtual sleep control: O:a slept 1
+advanced 0
+

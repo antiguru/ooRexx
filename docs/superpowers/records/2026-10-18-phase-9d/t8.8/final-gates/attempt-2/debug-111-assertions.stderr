@@ -1,0 +1,14 @@
+==============================================================================
+rexx-exec assertion-table report -- ootest/ooRexx/base/expressions
+*** REPORT MODE -- NOT THE GATE. Set REXX_ASSERTIONS_GATE=1 to run this as the gate. ***
+4259 of 4259 rows passing -- REPORT MODE, NOT THE GATE
+extraction-blocked (Task 15a, unsupported prelude shape): 7 methods, 10 assertSame calls dropped before ever becoming a row
+  extraction-blocked: Literals::test_hexadecimal_single -- unsupported statement: do hex over "0123456789abcdef"~makeArray("") (2 dropped)
+  extraction-blocked: Literals::test_hexadecimal_double -- unsupported statement: do first over "0123456789abcdef"~makeArray("") (1 dropped)
+  extraction-blocked: Literals::test_binary_single -- unsupported statement: do bin = 0 to 1 (1 dropped)
+  extraction-blocked: Literals::test_binary_nibble -- unsupported statement: do first = 0 to 1 (1 dropped)
+  extraction-blocked: Literals::test_binary_ones -- unsupported statement: do power = 1 to 64 (1 dropped)
+  extraction-blocked: MULTIPLICATION::test_bug1339 -- unsupported statement: do m = 2 to 3 (2 dropped)
+  extraction-blocked: SPECIAL::test_37 -- unsupported statement: h=''; lta=lt; c.lta=f1(3)+f1(4); (2 dropped)
+*** REPORT MODE -- NOT THE GATE. 4259 of 4259 matching means 0 rows are not passing yet; it is a progress signal, not a claim that criterion 2 is met. ***
+==============================================================================

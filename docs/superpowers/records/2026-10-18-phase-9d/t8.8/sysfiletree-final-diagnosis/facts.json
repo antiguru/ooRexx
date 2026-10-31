@@ -1,0 +1,21 @@
+{
+  "frozen_source": "6b6f3fb460049c6ef63f565ceb78e11b5582f165",
+  "assertion": "lines returned",
+  "expected": 1430,
+  "actual": 1431,
+  "listed_rows": 1431,
+  "unique_paths": 1431,
+  "duplicate_paths": [],
+  "failure_timestamp_local": "2026-10-31 01:22:12.337942",
+  "expected_names_retained": false,
+  "candidate_path": "/tmp/test_bug_1917",
+  "candidate_bytes": 34,
+  "stream_started_marker_created_epoch": {
+    "seconds": 1793406132,
+    "nanoseconds": 305548723
+  },
+  "crate_sysfiletree_marker_created_epoch": {
+    "seconds": 1793406132,
+    "nanoseconds": 262314565
+  }
+}

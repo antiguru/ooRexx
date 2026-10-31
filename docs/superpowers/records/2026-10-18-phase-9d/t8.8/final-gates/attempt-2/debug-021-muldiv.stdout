@@ -1,0 +1,16 @@
+
+running 11 tests
+test a_digits_past_the_fast_buffer_still_divides_via_the_reservation_path ... ok
+test a_digits_too_large_to_reserve_working_storage_for_is_error_5 ... ok
+test a_literal_outside_the_representable_range_is_not_a_number_at_all ... ok
+test a_quotient_too_wide_to_be_whole_is_error_26 ... ok
+test a_result_outside_the_representable_range_is_error_42 ... ok
+test dividing_by_zero_is_error_42_for_all_three_operators ... ok
+test division_stops_when_it_comes_out_even ... ok
+test division_strips_trailing_zeros_where_the_other_operators_keep_them ... ok
+test integer_divide_and_remainder_take_the_sign_of_the_dividend ... ok
+test multiplication_truncates_operands_rather_than_rounding_them ... ok
+test recurring_quotients_fill_the_digits_setting ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

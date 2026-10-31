@@ -1,0 +1,13 @@
+
+running 8 tests
+test a_reached_row_carries_its_own_site_identifier_and_an_unreached_one_does_not ... ok
+test every_send_surface_row_is_walked ... ok
+test refusal_scanner::tests::constructor_ownership_is_independent_of_production_filename ... ok
+test refusal_scanner::tests::inline_test_refusals_are_excluded ... ok
+test refusal_scanner::tests::separate_test_modules_and_their_descendants_are_not_production ... ok
+test the_answers_more_than_one_row_shares_are_the_recorded_ones ... ok
+test the_scanner_finds_constructors_and_only_constructors ... ok
+test the_table_holds_every_constructor_the_source_defines ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.78s
+

@@ -1,0 +1,4994 @@
+[
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-oracle#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-oracle/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rexx-diff",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-oracle/src/bin/rexx-diff.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_diff-6e7b74c924d1e1a4"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_diff-6e7b74c924d1e1a4",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-oracle#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-oracle/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "normalize",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-oracle/tests/normalize.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/normalize-6f6300ebf91aa00d"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/normalize-6f6300ebf91aa00d",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-classes#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-classes/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "behaviour_wiring",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-classes/tests/behaviour_wiring.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/behaviour_wiring-ea100a2cba10d746"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/behaviour_wiring-ea100a2cba10d746",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-classes#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-classes/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "native_classes_wiring",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-classes/tests/native_classes_wiring.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/native_classes_wiring-e6dc7292d3d0c3c2"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/native_classes_wiring-e6dc7292d3d0c3c2",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-classes#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-classes/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "uninit_sweep_order",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-classes/tests/uninit_sweep_order.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/uninit_sweep_order-035b77974371a2d4"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/uninit_sweep_order-035b77974371a2d4",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-classes#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-classes/Cargo.toml",
+    "target": {
+      "kind": [
+        "lib"
+      ],
+      "crate_types": [
+        "lib"
+      ],
+      "name": "rexx_classes",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-classes/src/lib.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": true,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_classes-fe254d3b5ea408fc"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_classes-fe254d3b5ea408fc",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-lib#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-lib/Cargo.toml",
+    "target": {
+      "kind": [
+        "lib"
+      ],
+      "crate_types": [
+        "lib"
+      ],
+      "name": "rexx_lib",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-lib/src/lib.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": true,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_lib-69e65a5b853baf93"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_lib-69e65a5b853baf93",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "layout",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api/tests/layout.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/layout-4c563e6961011799"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/layout-4c563e6961011799",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "extract",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/tests/extract.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/extract-555e744b201f389f"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/extract-555e744b201f389f",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "extract_docs",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/tests/extract_docs.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/extract_docs-beeb7416b40dd4fd"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/extract_docs-beeb7416b40dd4fd",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rexx-extract-docs",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/src/bin/rexx-extract-docs.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_extract_docs-66ef9b7bea89f70f"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_extract_docs-66ef9b7bea89f70f",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "invoke",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api/tests/invoke.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/invoke-bb4d5151e6859880"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/invoke-bb4d5151e6859880",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "handles",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api/tests/handles.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/handles-18aefee789fd1e43"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/handles-18aefee789fd1e43",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rexx-extract-assertions",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/src/bin/rexx-extract-assertions.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_extract_assertions-9fdd4069017f11e4"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_extract_assertions-9fdd4069017f11e4",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "extract_bif",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/tests/extract_bif.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/extract_bif-eb90aa96c988f542"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/extract_bif-eb90aa96c988f542",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rexx-extract",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/src/bin/rexx-extract.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_extract-7e3509cb87111f64"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_extract-7e3509cb87111f64",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "context",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api/tests/context.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/context-dea855826d590228"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/context-dea855826d590228",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "extract_assertions",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/tests/extract_assertions.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/extract_assertions-01e351401dee7495"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/extract_assertions-01e351401dee7495",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "sourceline",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/tests/sourceline.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/sourceline-7085ade911561eb1"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/sourceline-7085ade911561eb1",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "uninit",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/tests/uninit.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/uninit-0a2737ab584dc1f2"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/uninit-0a2737ab584dc1f2",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "values",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api/tests/values.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/values-264a592872ddd62e"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/values-264a592872ddd62e",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "muldiv",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/tests/muldiv.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/muldiv-313e5d8ade8ea89c"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/muldiv-313e5d8ade8ea89c",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "buffer_bytes",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/tests/buffer_bytes.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/buffer_bytes-2553a20e5382c2a6"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/buffer_bytes-2553a20e5382c2a6",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rexx-time",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench/src/bin/rexx-time.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_time-5d8fcb5f34c3ba6f"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_time-5d8fcb5f34c3ba6f",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rexx-bench-band",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench/src/bin/rexx-bench-band.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_bench_band-c59f723dc9782078"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_bench_band-c59f723dc9782078",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "unsafe_sites",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/tests/unsafe_sites.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/unsafe_sites-212b841c6a394c20"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/unsafe_sites-212b841c6a394c20",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "scanner",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/tests/scanner.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/scanner-9851bc50bb62ce98"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/scanner-9851bc50bb62ce98",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench/Cargo.toml",
+    "target": {
+      "kind": [
+        "lib"
+      ],
+      "crate_types": [
+        "lib"
+      ],
+      "name": "rexx_bench",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench/src/lib.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": true,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_bench-68485def6b4583bc"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_bench-68485def6b4583bc",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "addsub",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/src/bin/addsub.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/addsub-af24db276b0bc481"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/addsub-af24db276b0bc481",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "fmt-check",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/src/bin/fmt-check.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/fmt_check-d619a555b709b946"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/fmt_check-d619a555b709b946",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "behaviour",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/tests/behaviour.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/behaviour-bf76556e46186ff9"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/behaviour-bf76556e46186ff9",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "muldiv",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/src/bin/muldiv.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/muldiv-34b838b4b8b716ce"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/muldiv-34b838b4b8b716ce",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "compare",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/tests/compare.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/compare-16581811f0140947"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/compare-16581811f0140947",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rendered",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/tests/rendered.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rendered-76d8a36f9d3ed158"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rendered-76d8a36f9d3ed158",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "lib"
+      ],
+      "crate_types": [
+        "lib"
+      ],
+      "name": "rexx_num",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/src/lib.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": true,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_num-9ddaef7ced17c20c"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_num-9ddaef7ced17c20c",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "samples",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/tests/samples.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/samples-5e52b444a6cb37d8"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/samples-5e52b444a6cb37d8",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "trace",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/tests/trace.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/trace-f856289917a0d8e6"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/trace-f856289917a0d8e6",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "heap",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/tests/heap.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/heap-e32ad6d61ee0b230"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/heap-e32ad6d61ee0b230",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "whole",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/tests/whole.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/whole-7bb22455b00a1aca"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/whole-7bb22455b00a1aca",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "int64",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/tests/int64.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/int64-a6bd6be0814f310f"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/int64-a6bd6be0814f310f",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "program",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/tests/program.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/program-a4f250d933742c5d"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/program-a4f250d933742c5d",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "errors",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/tests/errors.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/errors-291ae65535f37a0e"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/errors-291ae65535f37a0e",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/Cargo.toml",
+    "target": {
+      "kind": [
+        "lib"
+      ],
+      "crate_types": [
+        "lib"
+      ],
+      "name": "rexx_core",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/src/lib.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": true,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_core-b24b5542487c70b2"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_core-b24b5542487c70b2",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "pow",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/tests/pow.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/pow-3b7f1cf3884dd358"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/pow-3b7f1cf3884dd358",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "addsub",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/tests/addsub.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/addsub-e47d257b96858568"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/addsub-e47d257b96858568",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "variants",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/tests/variants.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/variants-74683a8cd8fba0d9"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/variants-74683a8cd8fba0d9",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "deep",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/tests/deep.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/deep-54e3feef097c1248"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/deep-54e3feef097c1248",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "handle",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/tests/handle.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/handle-f4a002ce16490cd3"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/handle-f4a002ce16490cd3",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "settings",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/tests/settings.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/settings-5b94feece3b07797"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/settings-5b94feece3b07797",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rexx-bench-suite",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_bench_suite-9a3c2f3e60299c9b"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_bench_suite-9a3c2f3e60299c9b",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "scope_pools",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/tests/scope_pools.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/scope_pools-b41e0a7d0d60e9b6"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/scope_pools-b41e0a7d0d60e9b6",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rexx-arms",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-bench/src/bin/rexx-arms.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_arms-a325e78a4122653d"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_arms-a325e78a4122653d",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "gen-cases",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/src/bin/gen-cases.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/gen_cases-7834435602b77055"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/gen_cases-7834435602b77055",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/Cargo.toml",
+    "target": {
+      "kind": [
+        "lib"
+      ],
+      "crate_types": [
+        "lib"
+      ],
+      "name": "rexx_parse",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/src/lib.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": true,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_parse-bcd77bc1b1d04b7f"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_parse-bcd77bc1b1d04b7f",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "format",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/tests/format.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/format-352fb3714d6c4c5e"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/format-352fb3714d6c4c5e",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "canon",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/src/bin/canon.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/canon-bf7cdecfd57f5bf1"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/canon-bf7cdecfd57f5bf1",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "tokens",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/tests/tokens.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/tokens-31e656f842961285"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/tokens-31e656f842961285",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "tiling",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/tests/tiling.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/tiling-3bbe339d54ad1488"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/tiling-3bbe339d54ad1488",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "scan-check",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/src/bin/scan-check.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/scan_check-b9dc4102339cfa2a"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/scan_check-b9dc4102339cfa2a",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "parse",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/tests/parse.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/parse-6c1c14e196cc625c"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/parse-6c1c14e196cc625c",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "sourceline_oracle",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-parse/tests/sourceline_oracle.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/sourceline_oracle-6e4b9c218ed2575d"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/sourceline_oracle-6e4b9c218ed2575d",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rounding",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/tests/rounding.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rounding-c5bbcfc1b35c3af2"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rounding-c5bbcfc1b35c3af2",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "errors",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-num/tests/errors.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/errors-b236e03fc42378b8"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/errors-b236e03fc42378b8",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "collect",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/tests/collect.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/collect-55061ee7397a3605"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/collect-55061ee7397a3605",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "concrete_owners",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api/tests/concrete_owners.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/concrete_owners-ef8f16f6eddc176f"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/concrete_owners-ef8f16f6eddc176f",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "roots",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-core/tests/roots.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/roots-37f9083548ea8eb0"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/roots-37f9083548ea8eb0",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "extract_keyword",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/tests/extract_keyword.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/extract_keyword-02c56223e7632e11"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/extract_keyword-02c56223e7632e11",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "load",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api/tests/load.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/load-3c1f02ff68216563"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/load-3c1f02ff68216563",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "oracle_agreement",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory/tests/oracle_agreement.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/oracle_agreement-5f4bfa616bbc21e1"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/oracle_agreement-5f4bfa616bbc21e1",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "builtins",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory/tests/builtins.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/builtins-cce18a7539dfb25b"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/builtins-cce18a7539dfb25b",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "errors",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory/tests/errors.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/errors-cc8224f818475da2"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/errors-cc8224f818475da2",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory/Cargo.toml",
+    "target": {
+      "kind": [
+        "lib"
+      ],
+      "crate_types": [
+        "lib"
+      ],
+      "name": "rexx_inventory",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-inventory/src/lib.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": true,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_inventory-43d4cd719e4341f7"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_inventory-43d4cd719e4341f7",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-oracle#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-oracle/Cargo.toml",
+    "target": {
+      "kind": [
+        "lib"
+      ],
+      "crate_types": [
+        "lib"
+      ],
+      "name": "rexx_oracle",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-oracle/src/lib.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": true,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_oracle-3d83c6de5090628f"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_oracle-3d83c6de5090628f",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/Cargo.toml",
+    "target": {
+      "kind": [
+        "lib"
+      ],
+      "crate_types": [
+        "lib"
+      ],
+      "name": "rexx_extract",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-extract/src/lib.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": true,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_extract-1a028621b0edb56c"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_extract-1a028621b0edb56c",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api/Cargo.toml",
+    "target": {
+      "kind": [
+        "lib"
+      ],
+      "crate_types": [
+        "lib"
+      ],
+      "name": "rexx_api",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-api/src/lib.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": true,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_api-8e2ecf6584902795"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_api-8e2ecf6584902795",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "builtin_status",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/builtin_status.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/builtin_status-0de87640d9c6cb86"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/builtin_status-0de87640d9c6cb86",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "coverage",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/coverage.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/coverage-bb073f81f7dea96b"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/coverage-bb073f81f7dea96b",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "internal_routines",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/internal_routines.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/internal_routines-3c85b68c298eec0e"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/internal_routines-3c85b68c298eec0e",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "native_entries",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/native_entries.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/native_entries-505d1e2aebe1ac86"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/native_entries-505d1e2aebe1ac86",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "refusal_dispositions",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/refusal_dispositions.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/refusal_dispositions-722f2331476c3632"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/refusal_dispositions-722f2331476c3632",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rexxc",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/rexxc.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexxc-b1a7c8d8c7dc8742"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexxc-b1a7c8d8c7dc8742",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "stream_handle",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/stream_handle.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/stream_handle-e442f425f6ab7e06"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/stream_handle-e442f425f6ab7e06",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "compiled",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/compiled.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/compiled-598b11ee8496e895"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/compiled-598b11ee8496e895",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "bif_assertions",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/bif_assertions.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/bif_assertions-dbb9ed5ff8cdbc4f"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/bif_assertions-dbb9ed5ff8cdbc4f",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "loom",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/loom.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/loom-783878d240f00ac1"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/loom-783878d240f00ac1",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "phase_ten_reasons",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/phase_ten_reasons.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/phase_ten_reasons-1a2e2b3e779a2c12"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/phase_ten_reasons-1a2e2b3e779a2c12",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "lib"
+      ],
+      "crate_types": [
+        "lib"
+      ],
+      "name": "rexx_exec",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/src/lib.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": true,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_exec-c22898fa0f2252be"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_exec-c22898fa0f2252be",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "trace_oracle",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/trace_oracle.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/trace_oracle-ced064aaa218b18f"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/trace_oracle-ced064aaa218b18f",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rexx-ir",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/src/bin/rexx-ir.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_ir-d8e38366e2594ab1"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_ir-d8e38366e2594ab1",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "state_builtin_oracle",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/state_builtin_oracle.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/state_builtin_oracle-3927e2e38b2664ac"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/state_builtin_oracle-3927e2e38b2664ac",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "gate_table_d",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/gate_table_d.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/gate_table_d-18e66cb9f85cc768"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/gate_table_d-18e66cb9f85cc768",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "environment_seam",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/environment_seam.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/environment_seam-3562f4202d0199b2"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/environment_seam-3562f4202d0199b2",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "representation_refusals",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/representation_refusals.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/representation_refusals-3bc6ea1df922df1e"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/representation_refusals-3bc6ea1df922df1e",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "owners",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/owners.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/owners-a11461d4dbe40cd2"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/owners-a11461d4dbe40cd2",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "keyword_assertions",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/keyword_assertions.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/keyword_assertions-b0bab808272a577a"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/keyword_assertions-b0bab808272a577a",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "collect_stress",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/collect_stress.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/collect_stress-234019a3bcf8dd41"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/collect_stress-234019a3bcf8dd41",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "sim_processes",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/sim_processes.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/sim_processes-3996a3991c421646"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/sim_processes-3996a3991c421646",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "class_weak_reference",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/class_weak_reference.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/class_weak_reference-848ebf5ca1ac8ad5"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/class_weak_reference-848ebf5ca1ac8ad5",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "api_group_partition",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/api_group_partition.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/api_group_partition-882531e91e56ef0f"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/api_group_partition-882531e91e56ef0f",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "trace_delivery_memory",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/trace_delivery_memory.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/trace_delivery_memory-423cf512fa9e390b"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/trace_delivery_memory-423cf512fa9e390b",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "deadline",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/deadline.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/deadline-bd3952952573c84e"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/deadline-bd3952952573c84e",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "security_replacements",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/security_replacements.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/security_replacements-eab44c9021c28658"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/security_replacements-eab44c9021c28658",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "buffer_growth_error_exit",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/buffer_growth_error_exit.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/buffer_growth_error_exit-be5c8bf2684ae2f4"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/buffer_growth_error_exit-be5c8bf2684ae2f4",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "string_answer_arguments",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/string_answer_arguments.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/string_answer_arguments-6132c7f2dd21f68e"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/string_answer_arguments-6132c7f2dd21f68e",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "instance_copy_memory",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/instance_copy_memory.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/instance_copy_memory-b9c6d0437f127245"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/instance_copy_memory-b9c6d0437f127245",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "introspection_scopes",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/introspection_scopes.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/introspection_scopes-a04929013d602ac5"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/introspection_scopes-a04929013d602ac5",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "numeric_model",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/numeric_model.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/numeric_model-9020063363fdcb8b"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/numeric_model-9020063363fdcb8b",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "stdout_write_errors",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/stdout_write_errors.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/stdout_write_errors-3ba087c4d52a09d5"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/stdout_write_errors-3ba087c4d52a09d5",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "prompt_before_read",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/prompt_before_read.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/prompt_before_read-4d62b0e6be042fed"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/prompt_before_read-4d62b0e6be042fed",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "corpus",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/corpus.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/corpus-750665d9736f6051"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/corpus-750665d9736f6051",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "unreachable_classes",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/unreachable_classes.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/unreachable_classes-9b994d899cc35845"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/unreachable_classes-9b994d899cc35845",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "assertions",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/assertions.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/assertions-f7491f7bc2fe9986"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/assertions-f7491f7bc2fe9986",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "method_bodies",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/method_bodies.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/method_bodies-c8fac6edd5804f96"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/method_bodies-c8fac6edd5804f96",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rexx",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/src/bin/rexx.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx-743ee1e952e8e79a"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx-743ee1e952e8e79a",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "collection_scopes",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/collection_scopes.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/collection_scopes-8c993806847acc26"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/collection_scopes-8c993806847acc26",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "licensed_divergences",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/licensed_divergences.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/licensed_divergences-2c3545eab3bec911"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/licensed_divergences-2c3545eab3bec911",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "standard_stream_reopen",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/standard_stream_reopen.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/standard_stream_reopen-e21e689bdef5d2ff"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/standard_stream_reopen-e21e689bdef5d2ff",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "collect_policy",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/collect_policy.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/collect_policy-50b7bd924bff3058"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/collect_policy-50b7bd924bff3058",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "dispatch_seam",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/dispatch_seam.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/dispatch_seam-028afd5aa49f0af8"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/dispatch_seam-028afd5aa49f0af8",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "trace_indent",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/trace_indent.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/trace_indent-c95ae71f14f8c22e"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/trace_indent-c95ae71f14f8c22e",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "parse_version_oracle",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/parse_version_oracle.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/parse_version_oracle-c4d9ae6938f56218"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/parse_version_oracle-c4d9ae6938f56218",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "release_local_reference",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/release_local_reference.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/release_local_reference-0bb5eb24c4cc69f9"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/release_local_reference-0bb5eb24c4cc69f9",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "gate_table_c",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/gate_table_c.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/gate_table_c-9e345e1055e25850"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/gate_table_c-9e345e1055e25850",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "signals",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/signals.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/signals-df0fd2d1d9f0c9ce"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/signals-df0fd2d1d9f0c9ce",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "ir_recorded_oracle",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/ir_recorded_oracle.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/ir_recorded_oracle-66525a422424357b"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/ir_recorded_oracle-66525a422424357b",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "class_lifetime",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/class_lifetime.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/class_lifetime-10c5333c443e6ea3"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/class_lifetime-10c5333c443e6ea3",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "outer_context",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/outer_context.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/outer_context-ad2ff80dec606437"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/outer_context-ad2ff80dec606437",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "no_process_state",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/no_process_state.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/no_process_state-c79f7357f52fbd5b"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/no_process_state-c79f7357f52fbd5b",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "timing_witnesses",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/timing_witnesses.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/timing_witnesses-32023995440f31bd"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/timing_witnesses-32023995440f31bd",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rexxutil_process",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/rexxutil_process.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexxutil_process-99fbee1e593000c2"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexxutil_process-99fbee1e593000c2",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "introspection_arity",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/introspection_arity.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/introspection_arity-879265e25702e9da"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/introspection_arity-879265e25702e9da",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "datetime_zone",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/datetime_zone.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/datetime_zone-a0236cb71a71ffef"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/datetime_zone-a0236cb71a71ffef",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "refusal_sites",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/refusal_sites.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/refusal_sites-36ed9a952916bdd3"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/refusal_sites-36ed9a952916bdd3",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "bootstrap_install_oracle",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/bootstrap_install_oracle.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/bootstrap_install_oracle-81a3bfb34f403551"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/bootstrap_install_oracle-81a3bfb34f403551",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "loud",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/loud.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/loud-dcdbc09d8e70addf"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/loud-dcdbc09d8e70addf",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "program_end",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/program_end.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/program_end-b2b7a6afde19c49c"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/program_end-b2b7a6afde19c49c",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "input_oracle",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/input_oracle.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/input_oracle-bca440ce418a9d5d"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/input_oracle-bca440ce418a9d5d",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "stream_model",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/stream_model.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/stream_model-7ac6698fc152a32c"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/stream_model-7ac6698fc152a32c",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "stdin_contention",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/stdin_contention.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/stdin_contention-91be8fce420b9688"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/stdin_contention-91be8fce420b9688",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "truth",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/truth.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/truth-cc2db241f5e18bb5"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/truth-cc2db241f5e18bb5",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "frame_block",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/frame_block.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/frame_block-3c9409aab76eac4d"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/frame_block-3c9409aab76eac4d",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "collection_arity",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/collection_arity.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/collection_arity-90c6fc190a0a6dd7"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/collection_arity-90c6fc190a0a6dd7",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "library_routine_memory",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/library_routine_memory.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/library_routine_memory-2e1370fde5efe6f1"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/library_routine_memory-2e1370fde5efe6f1",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rexx_command",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/rexx_command.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexx_command-5e92b31a6cf098f6"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexx_command-5e92b31a6cf098f6",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "spike",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/spike.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/spike-8f7b9ff13c33c87d"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/spike-8f7b9ff13c33c87d",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "trace_delivery_schedule",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/trace_delivery_schedule.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/trace_delivery_schedule-a1046e9462be63bf"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/trace_delivery_schedule-a1046e9462be63bf",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "bin"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "rexxc",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/src/bin/rexxc.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/rexxc-1a60db753e778a90"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/rexxc-1a60db753e778a90",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "api_group_tests",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/api_group_tests.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/api_group_tests-87f1f3f853f35b9a"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/api_group_tests-87f1f3f853f35b9a",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "package_requires",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/package_requires.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/package_requires-a1564128459cb24c"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/package_requires-a1564128459cb24c",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "closed_phases",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/closed_phases.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/closed_phases-e89f0304e9ce4709"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/closed_phases-e89f0304e9ce4709",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "directive_options",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/directive_options.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/directive_options-20969ead2ed19fc3"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/directive_options-20969ead2ed19fc3",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "oracle_deadline",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/oracle_deadline.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/oracle_deadline-e8ffae6649c50755"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/oracle_deadline-e8ffae6649c50755",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "semantic_boundaries",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/semantic_boundaries.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/semantic_boundaries-d4417439687530c2"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/semantic_boundaries-d4417439687530c2",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "ir_recorded",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/ir_recorded.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/ir_recorded-35941a44527a2a5f"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/ir_recorded-35941a44527a2a5f",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "concurrency_tests",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/concurrency_tests.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/concurrency_tests-740260b2b2a0d457"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/concurrency_tests-740260b2b2a0d457",
+    "fresh": false
+  },
+  {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec#0.1.0",
+    "manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/Cargo.toml",
+    "target": {
+      "kind": [
+        "test"
+      ],
+      "crate_types": [
+        "bin"
+      ],
+      "name": "suite",
+      "src_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/suite.rs",
+      "edition": "2024",
+      "doc": false,
+      "doctest": false,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "3",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": true
+    },
+    "features": [],
+    "filenames": [
+      "/tmp/codex-p9d-t88-target/debug/deps/suite-e086b2850a1d8c8d"
+    ],
+    "executable": "/tmp/codex-p9d-t88-target/debug/deps/suite-e086b2850a1d8c8d",
+    "fresh": false
+  }
+]

@@ -1,0 +1,9 @@
+mode stable
+directory /tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-stable/tmpdir
+before-count 1
+before /tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-stable/tmpdir/seed.txt
+injected none
+tree-rc 0
+after-count 1
+after /tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-stable/tmpdir/seed.txt
+counts-equal 1

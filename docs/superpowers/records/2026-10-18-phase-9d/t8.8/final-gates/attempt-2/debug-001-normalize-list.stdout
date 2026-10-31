@@ -1,0 +1,2 @@
+absolute_program_paths_are_replaced_by_a_placeholder: test
+crlf_is_folded_so_windows_and_unix_compare_equal: test

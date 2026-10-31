@@ -1,0 +1,5 @@
+competing_child_waiters_accept_either_valid_winner: test
+dropping_a_waitable_popen_consumes_its_child_before_exec: test
+pgid_is_the_parents_group: test
+sys_wait_returns_the_raw_status_of_an_owned_child: test
+sys_wait_with_no_child_answers_minus_one: test

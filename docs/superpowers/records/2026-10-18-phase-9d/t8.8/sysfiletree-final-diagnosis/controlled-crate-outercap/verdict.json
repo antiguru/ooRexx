@@ -1,0 +1,38 @@
+{
+  "runs": [
+    {
+      "side": "crate",
+      "mode": "stable",
+      "before": [
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-stable/tmpdir/seed.txt"
+      ],
+      "after": [
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-stable/tmpdir/seed.txt"
+      ],
+      "added": [],
+      "removed": [],
+      "counts_equal": true,
+      "status": 0
+    },
+    {
+      "side": "crate",
+      "mode": "create",
+      "before": [
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-create/tmpdir/seed.txt"
+      ],
+      "after": [
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-create/tmpdir/injected.txt",
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-create/tmpdir/seed.txt"
+      ],
+      "added": [
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-create/tmpdir/injected.txt"
+      ],
+      "removed": [],
+      "counts_equal": false,
+      "status": 0
+    }
+  ],
+  "crate_mechanism_confirmed": true,
+  "crate_stable_control_equal": true,
+  "executable_hashes_unchanged": true
+}

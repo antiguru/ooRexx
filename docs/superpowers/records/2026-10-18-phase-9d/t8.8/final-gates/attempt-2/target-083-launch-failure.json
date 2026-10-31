@@ -1,0 +1,15 @@
+{
+  "command": [
+    "memcap",
+    "8G",
+    "python3",
+    "/tmp/cod-p9d-t88-final-gate-resume.py",
+    "target",
+    "83"
+  ],
+  "status": 2,
+  "stderr": "python3: can't open file '/tmp/cod-p9d-t88-final-gate-resume.py': [Errno 2] No such file or directory",
+  "test_child_started": false,
+  "cause": "Agent command path typo",
+  "correct_command": "memcap 8G python3 /tmp/codex-p9d-t88-final-gate-resume.py target 83"
+}

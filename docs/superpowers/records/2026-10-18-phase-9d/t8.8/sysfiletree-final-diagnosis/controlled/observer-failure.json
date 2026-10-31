@@ -1,0 +1,9 @@
+{
+  "cause": "Probe used Rexx special RESULT variable; subsequent message instructions replaced the saved SysFileTree return code.",
+  "process_exit": 0,
+  "driver_exit": 1,
+  "completed_runs": [
+    "oracle-stable"
+  ],
+  "correction": "Version2 uses tree_rc, with all original version1 sources and channels preserved."
+}

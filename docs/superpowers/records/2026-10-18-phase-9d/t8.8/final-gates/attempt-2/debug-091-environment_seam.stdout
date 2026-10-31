@@ -1,0 +1,8 @@
+
+running 3 tests
+test directory_lookup_passes_through_exactly_one_chokepoint ... ok
+test the_scan_can_tell_a_present_token_from_an_absent_one ... ok
+test the_seam_module_holds_only_the_items_it_is_designed_around ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+

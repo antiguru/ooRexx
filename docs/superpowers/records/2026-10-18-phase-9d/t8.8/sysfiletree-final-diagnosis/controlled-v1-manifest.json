@@ -1,0 +1,42 @@
+{
+  "controlled-witness.rex": {
+    "bytes": 926,
+    "sha256": "68e9b1f82d64bd72ca6e1440f91f0e84cd30df6be158c1c4fa5b4a9586d1f6d4"
+  },
+  "run-controlled.py": {
+    "bytes": 4803,
+    "sha256": "722c1db34dc9a33107d384da1a217f1ecad359d0a172187c7e0806d2a1f2d43f"
+  },
+  "controlled/executables.json": {
+    "bytes": 330,
+    "sha256": "b336d78ebadc07d6afa44212d2a4b50df6dbfd9e05ec2e0d2ed28ea1c89e097f"
+  },
+  "controlled/observer-failure.json": {
+    "bytes": 323,
+    "sha256": "9509eafbbc51dab2933f584af5341d757c644657be90759c273d7da4c0cda433"
+  },
+  "controlled/oracle-stable/command.json": {
+    "bytes": 936,
+    "sha256": "aea486224c65a4886d266cb5a1a5ac2d60628b354cd4aabed56c0429645a5afc"
+  },
+  "controlled/oracle-stable/result.json": {
+    "bytes": 1258,
+    "sha256": "96fa554a788fed676eceee7c9087fc1a90e40a7e6ff43b5adfff6ce332d226a4"
+  },
+  "controlled/oracle-stable/status": {
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "controlled/oracle-stable/stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "controlled/oracle-stable/stdout": {
+    "bytes": 444,
+    "sha256": "a664dbc900693687c0e02107c4da5118c51d7df18f8aee24e6ba30cd47735a88"
+  },
+  "controlled/oracle-stable/tmpdir/seed.txt": {
+    "bytes": 5,
+    "sha256": "4a6689419b00b11700c9b6246bcfa8936c8f5e1e824db3a7e57030e2d1c1a684"
+  }
+}

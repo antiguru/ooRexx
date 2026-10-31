@@ -1,0 +1,55 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-64-crate-base__bif__CONDITION/run
+TZ=None
+status=Some(0) ended=Exited(0) took=117.078328ms
+GroupRun {
+    group: "base/bif/CONDITION",
+    expected: {},
+    started: {
+        "TEST_CONDITION_CALL",
+        "TEST_CONDITION_CALL_BIF",
+        "TEST_CONDITION_CALL_EXTERNAL",
+        "TEST_CONDITION_INVALID_ARG_NULL",
+        "TEST_CONDITION_INVALID_ARG_Z",
+        "TEST_CONDITION_NONE",
+        "TEST_CONDITION_SIGNAL",
+        "TEST_CONDITION_TOO_MANY_ARGS",
+        "TEST_NOVALUE_DROP",
+        "TEST_NOVALUE_METHOD_EXPOSE",
+        "TEST_NOVALUE_OVERRIDE",
+        "TEST_NOVALUE_PARSE_VAR",
+        "TEST_NOVALUE_PROEDURE_EXPOSE",
+        "TEST_NOVALUE_TERM",
+    },
+    passed: {
+        "TEST_CONDITION_CALL",
+        "TEST_CONDITION_CALL_BIF",
+        "TEST_CONDITION_CALL_EXTERNAL",
+        "TEST_CONDITION_INVALID_ARG_NULL",
+        "TEST_CONDITION_INVALID_ARG_Z",
+        "TEST_CONDITION_NONE",
+        "TEST_CONDITION_SIGNAL",
+        "TEST_CONDITION_TOO_MANY_ARGS",
+        "TEST_NOVALUE_DROP",
+        "TEST_NOVALUE_METHOD_EXPOSE",
+        "TEST_NOVALUE_OVERRIDE",
+        "TEST_NOVALUE_PARSE_VAR",
+        "TEST_NOVALUE_PROEDURE_EXPOSE",
+        "TEST_NOVALUE_TERM",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "14",
+    ),
+    took: 117.078328ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-64-crate-base__bif__CONDITION/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-64-crate-base__bif__CONDITION/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 454, modified: SystemTime { tv_sec: 1793406127, tv_nsec: 644239839 }, accessed: SystemTime { tv_sec: 1793406127, tv_nsec: 673608525 }, created: SystemTime { tv_sec: 1793406127, tv_nsec: 628722073 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-64-crate-base__bif__CONDITION/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-64-crate-base__bif__CONDITION/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-64-crate-base__bif__CONDITION/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406127, tv_nsec: 604555821 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-64-crate-base__bif__CONDITION/run/ooRexx/base/bif/CONDITION.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-64-crate-base__bif__CONDITION/run/ooRexx/base/bif/CONDITION.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 21568, modified: SystemTime { tv_sec: 1793406127, tv_nsec: 555922944 }, accessed: SystemTime { tv_sec: 1793406127, tv_nsec: 628722073 }, created: SystemTime { tv_sec: 1793406127, tv_nsec: 555046188 }, .. })

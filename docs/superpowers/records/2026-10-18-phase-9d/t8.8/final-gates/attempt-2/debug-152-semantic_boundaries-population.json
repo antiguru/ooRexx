@@ -1,0 +1,11 @@
+{
+  "added": [
+    "buffered_invocations_do_not_query_the_hosts_stdout",
+    "conversion_and_trace_boundaries",
+    "owned_stdout_aliases_keep_their_buffered_positions",
+    "owned_stdout_position_is_empty_before_open_and_after_close",
+    "owned_stdout_queries_observe_the_redirected_file"
+  ],
+  "removed": [],
+  "reconciled_renames": {}
+}

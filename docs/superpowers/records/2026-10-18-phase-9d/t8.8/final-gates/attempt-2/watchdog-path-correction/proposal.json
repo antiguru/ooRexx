@@ -1,0 +1,9 @@
+{
+  "before_sha256": "898d73dea60af0dea841dca2bb1a6203e9fac9bc6e05fc062572f72392dc6206",
+  "proposed_sha256": "50d87272318acd09bf2c06d79457df388051680ed5f534ba1031ecfc17900310",
+  "actual_module": "rust/crates/rexx-exec/tests/watchdog/mod.rs",
+  "change": "Replace nonexistent watchdog.rs with actual watchdog module directory, recursively hashed",
+  "validation_scope_not_reduced": true,
+  "proposed_patch_executed": false,
+  "suite_child_started": false
+}

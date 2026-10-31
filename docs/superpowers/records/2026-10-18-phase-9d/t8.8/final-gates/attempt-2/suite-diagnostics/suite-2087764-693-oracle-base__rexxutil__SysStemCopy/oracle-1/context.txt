@@ -1,0 +1,51 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-693-oracle-base__rexxutil__SysStemCopy/run
+TZ=None
+status=Some(0) ended=Exited(0) took=22.12029ms
+GroupRun {
+    group: "base/rexxutil/SysStemCopy",
+    expected: {},
+    started: {
+        "TEST_BAD_FROM_COUNT",
+        "TEST_BAD_TO_COUNT",
+        "TEST_COPIES",
+        "TEST_COUNT_OUT_OF_RANGE",
+        "TEST_FROM_OUT_OF_RANGE",
+        "TEST_INVALID_OPTION",
+        "TEST_SPARSE_INSERT_SOURCE",
+        "TEST_SPARSE_INSERT_TARGET",
+        "TEST_SPARSE_OVERLAY_SOURCE",
+        "TEST_TO_OUT_OF_RANGE",
+        "TEST_UNSET_FROM_COUNT",
+        "TEST_UNSET_TO_COUNT",
+    },
+    passed: {
+        "TEST_BAD_FROM_COUNT",
+        "TEST_BAD_TO_COUNT",
+        "TEST_COPIES",
+        "TEST_COUNT_OUT_OF_RANGE",
+        "TEST_FROM_OUT_OF_RANGE",
+        "TEST_INVALID_OPTION",
+        "TEST_SPARSE_INSERT_SOURCE",
+        "TEST_SPARSE_INSERT_TARGET",
+        "TEST_SPARSE_OVERLAY_SOURCE",
+        "TEST_TO_OUT_OF_RANGE",
+        "TEST_UNSET_FROM_COUNT",
+        "TEST_UNSET_TO_COUNT",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "12",
+    ),
+    took: 22.12029ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-693-oracle-base__rexxutil__SysStemCopy/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-693-oracle-base__rexxutil__SysStemCopy/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 355, modified: SystemTime { tv_sec: 1793406145, tv_nsec: 135215806 }, accessed: SystemTime { tv_sec: 1793406145, tv_nsec: 140504978 }, created: SystemTime { tv_sec: 1793406145, tv_nsec: 128047234 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-693-oracle-base__rexxutil__SysStemCopy/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-693-oracle-base__rexxutil__SysStemCopy/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-693-oracle-base__rexxutil__SysStemCopy/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406145, tv_nsec: 60049207 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-693-oracle-base__rexxutil__SysStemCopy/run/ooRexx/base/rexxutil/SysStemCopy.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-693-oracle-base__rexxutil__SysStemCopy/run/ooRexx/base/rexxutil/SysStemCopy.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 8286, modified: SystemTime { tv_sec: 1793406145, tv_nsec: 118080856 }, accessed: SystemTime { tv_sec: 1793406145, tv_nsec: 128047234 }, created: SystemTime { tv_sec: 1793406145, tv_nsec: 117528232 }, .. })

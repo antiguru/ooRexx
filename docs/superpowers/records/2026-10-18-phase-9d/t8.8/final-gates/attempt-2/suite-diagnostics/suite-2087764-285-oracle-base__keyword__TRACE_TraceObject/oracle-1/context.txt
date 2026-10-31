@@ -1,0 +1,47 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-285-oracle-base__keyword__TRACE_TraceObject/run
+TZ=None
+status=Some(0) ended=Exited(0) took=155.670878ms
+GroupRun {
+    group: "base/keyword/TRACE_TraceObject",
+    expected: {},
+    started: {
+        "TEST_CALLER_STACK_FRAME",
+        "TEST_CALLER_STACK_FRAME_REPLY_START",
+        "TEST_OBJECT_AND_SCOPE",
+        "TEST_RECEIVER",
+        "TEST_SETMAKESTRING_WITH_METHOD_OBJECT",
+        "TEST_TRACEOBJECT_COLLECTOR",
+        "TEST_TRACEOBJECT_COLLECTOR_AND_NOTIFY_CLASS_ATTRIBUTES",
+        "TEST_TRACEOBJECT_OPTION",
+        "TEST_TRACEOBJECT_OPTION_INVALID",
+        "TEST_VARIABLE",
+    },
+    passed: {
+        "TEST_CALLER_STACK_FRAME",
+        "TEST_CALLER_STACK_FRAME_REPLY_START",
+        "TEST_OBJECT_AND_SCOPE",
+        "TEST_RECEIVER",
+        "TEST_SETMAKESTRING_WITH_METHOD_OBJECT",
+        "TEST_TRACEOBJECT_COLLECTOR",
+        "TEST_TRACEOBJECT_COLLECTOR_AND_NOTIFY_CLASS_ATTRIBUTES",
+        "TEST_TRACEOBJECT_OPTION",
+        "TEST_TRACEOBJECT_OPTION_INVALID",
+        "TEST_VARIABLE",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "10",
+    ),
+    took: 155.670878ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-285-oracle-base__keyword__TRACE_TraceObject/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-285-oracle-base__keyword__TRACE_TraceObject/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 366, modified: SystemTime { tv_sec: 1793406130, tv_nsec: 966730494 }, accessed: SystemTime { tv_sec: 1793406130, tv_nsec: 972766615 }, created: SystemTime { tv_sec: 1793406130, tv_nsec: 838599554 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-285-oracle-base__keyword__TRACE_TraceObject/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-285-oracle-base__keyword__TRACE_TraceObject/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-285-oracle-base__keyword__TRACE_TraceObject/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406130, tv_nsec: 924459458 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-285-oracle-base__keyword__TRACE_TraceObject/run/ooRexx/base/keyword/TRACE_TraceObject.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-285-oracle-base__keyword__TRACE_TraceObject/run/ooRexx/base/keyword/TRACE_TraceObject.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 41788, modified: SystemTime { tv_sec: 1793406130, tv_nsec: 816595311 }, accessed: SystemTime { tv_sec: 1793406130, tv_nsec: 838049150 }, created: SystemTime { tv_sec: 1793406130, tv_nsec: 815628818 }, .. })

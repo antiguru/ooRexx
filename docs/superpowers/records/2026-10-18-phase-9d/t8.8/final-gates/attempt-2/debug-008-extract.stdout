@@ -1,0 +1,8 @@
+
+running 3 tests
+test a_single_quoted_method_name_is_still_recognised_as_a_test ... ok
+test methods_touching_instance_state_are_flagged_as_fixture_dependent ... ok
+test only_test_methods_are_extracted ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

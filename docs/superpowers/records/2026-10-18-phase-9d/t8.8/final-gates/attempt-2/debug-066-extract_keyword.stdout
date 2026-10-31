@@ -1,0 +1,27 @@
+
+running 22 tests
+test a_body_blocked_only_by_other_assertion_spellings_is_its_own_category ... ok
+test a_call_inside_a_string_literal_breaks_conservation_loudly ... ok
+test a_comma_inside_a_comment_is_not_an_argument_separator ... ok
+test a_comment_inside_an_operand_is_kept_verbatim_not_turned_into_a_blank ... ok
+test a_message_send_anywhere_blocks_the_whole_body_including_earlier_assertions ... ok
+test a_message_send_inside_an_assertions_own_argument_blocks_it ... ok
+test a_then_target_assertion_becomes_a_single_say_not_a_nested_if ... ok
+test a_tilde_inside_a_string_literal_does_not_block ... ok
+test an_assertion_after_a_semicolon_is_found_not_only_a_line_starting_one ... ok
+test an_assertion_inside_a_comment_is_accounted_as_a_drop_not_rewritten ... ok
+test an_assertion_on_a_continued_line_blocks_from_either_side ... ok
+test an_assertion_used_as_an_operand_blocks_rather_than_producing_invalid_rexx ... ok
+test assert_same_list_is_neither_counted_nor_rewritten ... ok
+test base_keyword_yields_the_measured_counts ... ok
+test calls_outside_a_test_prefixed_method_are_accounted_as_drops ... ok
+test every_assert_same_is_a_row_or_an_accounted_for_drop ... ok
+test the_committed_group_list_matches_the_checkout ... ok
+test the_drop_reasons_account_for_every_call_outside_the_population ... ok
+test the_optional_third_message_argument_is_discarded_not_compared ... ok
+test the_population_choices_price_is_reproduced_by_an_independent_rule ... ok
+test the_row_floor ... ok
+test the_unparsed_call_shape_category_is_reachable ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+

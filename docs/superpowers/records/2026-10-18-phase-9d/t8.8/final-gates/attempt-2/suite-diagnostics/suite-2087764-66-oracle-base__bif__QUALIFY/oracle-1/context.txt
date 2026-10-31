@@ -1,0 +1,65 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-66-oracle-base__bif__QUALIFY/run
+TZ=None
+status=Some(0) ended=Exited(0) took=31.770169ms
+GroupRun {
+    group: "base/bif/QUALIFY",
+    expected: {},
+    started: {
+        "TEST_DOTSLASH_REMOVAL",
+        "TEST_DOT_DOT_SLASH_REMOVAL",
+        "TEST_DOT_FILE",
+        "TEST_EXTRASLASH_REMOVAL",
+        "TEST_LOWER_DIRS",
+        "TEST_NO_SUCH_FILE",
+        "TEST_NO_SUCH_FILE2",
+        "TEST_QUALIFY_ARG_DEVICE",
+        "TEST_QUALIFY_ARG_DOT",
+        "TEST_QUALIFY_ARG_LONG",
+        "TEST_QUALIFY_ARG_SHORT",
+        "TEST_QUALIFY_ARG_WINDOWS_DRIVE",
+        "TEST_QUALIFY_NO_ARGS",
+        "TEST_QUALIFY_TWO_ARGS",
+        "TEST_SIMPLENAME",
+        "TEST_SIMPLENAME2",
+        "TEST_THISDIR_NAME",
+        "TEST_UPTHREE",
+        "TEST_UPTWO_ANDOVER",
+    },
+    passed: {
+        "TEST_DOTSLASH_REMOVAL",
+        "TEST_DOT_DOT_SLASH_REMOVAL",
+        "TEST_DOT_FILE",
+        "TEST_EXTRASLASH_REMOVAL",
+        "TEST_LOWER_DIRS",
+        "TEST_NO_SUCH_FILE",
+        "TEST_NO_SUCH_FILE2",
+        "TEST_QUALIFY_ARG_DEVICE",
+        "TEST_QUALIFY_ARG_DOT",
+        "TEST_QUALIFY_ARG_LONG",
+        "TEST_QUALIFY_ARG_SHORT",
+        "TEST_QUALIFY_ARG_WINDOWS_DRIVE",
+        "TEST_QUALIFY_NO_ARGS",
+        "TEST_QUALIFY_TWO_ARGS",
+        "TEST_SIMPLENAME",
+        "TEST_SIMPLENAME2",
+        "TEST_THISDIR_NAME",
+        "TEST_UPTHREE",
+        "TEST_UPTWO_ANDOVER",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "19",
+    ),
+    took: 31.770169ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-66-oracle-base__bif__QUALIFY/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-66-oracle-base__bif__QUALIFY/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 539, modified: SystemTime { tv_sec: 1793406127, tv_nsec: 583685396 }, accessed: SystemTime { tv_sec: 1793406127, tv_nsec: 588556284 }, created: SystemTime { tv_sec: 1793406127, tv_nsec: 581221805 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-66-oracle-base__bif__QUALIFY/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-66-oracle-base__bif__QUALIFY/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-66-oracle-base__bif__QUALIFY/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406127, tv_nsec: 583685396 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-66-oracle-base__bif__QUALIFY/run/ooRexx/base/bif/QUALIFY.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-66-oracle-base__bif__QUALIFY/run/ooRexx/base/bif/QUALIFY.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 10026, modified: SystemTime { tv_sec: 1793406127, tv_nsec: 560778838 }, accessed: SystemTime { tv_sec: 1793406127, tv_nsec: 580572083 }, created: SystemTime { tv_sec: 1793406127, tv_nsec: 559529653 }, .. })

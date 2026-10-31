@@ -1,0 +1,7 @@
+
+running 2 tests
+test a_reopened_standard_stream_keeps_its_writes_in_order ... ok
+test say_after_a_reopen_writes_every_line ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+

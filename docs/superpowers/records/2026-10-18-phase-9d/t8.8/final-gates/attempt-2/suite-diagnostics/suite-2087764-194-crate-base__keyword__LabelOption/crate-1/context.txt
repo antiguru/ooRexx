@@ -1,0 +1,43 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-194-crate-base__keyword__LabelOption/run
+TZ=None
+status=Some(0) ended=Exited(0) took=121.788797ms
+GroupRun {
+    group: "base/keyword/LabelOption",
+    expected: {},
+    started: {
+        "TEST_DO_LABEL",
+        "TEST_DO_LABEL_INTERPRET_WITH_ERROR",
+        "TEST_DO_LABLE_WORKS_WITH_INTERPRET",
+        "TEST_LOOP_LABEL",
+        "TEST_LOOP_LABEL_INTERPRET_WITH_ERROR_10.2",
+        "TEST_LOOP_LABEL_WITH_INTERPRET",
+        "TEST_SELECT_LABEL",
+        "TEST_SELECT_LABEL_ERROR 10.4",
+    },
+    passed: {
+        "TEST_DO_LABEL",
+        "TEST_DO_LABEL_INTERPRET_WITH_ERROR",
+        "TEST_DO_LABLE_WORKS_WITH_INTERPRET",
+        "TEST_LOOP_LABEL",
+        "TEST_LOOP_LABEL_INTERPRET_WITH_ERROR_10.2",
+        "TEST_LOOP_LABEL_WITH_INTERPRET",
+        "TEST_SELECT_LABEL",
+        "TEST_SELECT_LABEL_ERROR 10.4",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "8",
+    ),
+    took: 121.788797ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-194-crate-base__keyword__LabelOption/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-194-crate-base__keyword__LabelOption/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 284, modified: SystemTime { tv_sec: 1793406129, tv_nsec: 714402150 }, accessed: SystemTime { tv_sec: 1793406129, tv_nsec: 745472570 }, created: SystemTime { tv_sec: 1793406129, tv_nsec: 712751497 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-194-crate-base__keyword__LabelOption/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-194-crate-base__keyword__LabelOption/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-194-crate-base__keyword__LabelOption/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406129, tv_nsec: 672495797 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-194-crate-base__keyword__LabelOption/run/ooRexx/base/keyword/LabelOption.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-194-crate-base__keyword__LabelOption/run/ooRexx/base/keyword/LabelOption.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 12623, modified: SystemTime { tv_sec: 1793406129, tv_nsec: 622624973 }, accessed: SystemTime { tv_sec: 1793406129, tv_nsec: 710526939 }, created: SystemTime { tv_sec: 1793406129, tv_nsec: 621966741 }, .. })

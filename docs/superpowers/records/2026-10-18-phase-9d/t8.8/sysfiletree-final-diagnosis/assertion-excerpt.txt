@@ -1,0 +1,26 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.11+deb14-amd64
+
+Tests ran:          26
+Assertions:         1997
+Failures:           1
+Errors:             0
+
+[failure] 20261031 01:22:12.337942
+  Test:   TEST_TREE_DIRECTORY
+  Class:  SYSFILETREE.TESTGROUP
+  File:   .../ooRexx/base/rexxutil/SysFileTree.testGroup
+  Line:   461
+  Failed: assertSame
+    Expected: 1430
+    Actual:   1431
+    Message:  SysFileTree(/tmp/*, ) lines returned 
+ 10/31/26   1:22a          34  -rw-rw-r--  /tmp/test_bug_1917
+10/31/26   1:22a         800  drwxrwxr-x  /tmp/codex-p9d-t88-final-gates-resume
+10/31/26   1:17a        1022  -rw-rw-r--  /tmp/codex-p9d-t88-final-resume-profile-completion.json

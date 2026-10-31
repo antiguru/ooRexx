@@ -1,0 +1,15 @@
+binary::tests::executable_location_preserves_alternate_targets_and_deps: test
+binary::tests::explicit_target_directories_do_not_fall_back_to_workspace_artifacts: test
+binary::tests::relative_target_under_cargo_tests_uses_the_actual_executable_target: test
+binary::tests::runtime_candidates_use_this_build_target: test
+binary::tests::unrecognized_executable_uses_the_workspace_target: test
+tests::a_failing_side_aborts_the_axis: test
+tests::a_program_without_a_loop_has_no_bound: test
+tests::a_quoted_line_that_is_absent_says_so: test
+tests::every_declared_runnability_still_holds: test
+tests::every_loop_axis_has_a_loop_bound: test
+tests::the_axis_list_covers_every_bench_program: test
+tests::the_caveat_matches_the_committed_baseline: test
+tests::the_joint_coverage_bound_is_clamped: test
+tests::the_performance_line_parses: test
+tests::the_two_sides_alternate_and_run_in_the_working_directory: test

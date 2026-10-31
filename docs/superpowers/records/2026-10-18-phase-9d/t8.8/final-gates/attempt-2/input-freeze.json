@@ -1,0 +1,37 @@
+{
+  "source_commit": "6b6f3fb460049c6ef63f565ceb78e11b5582f165",
+  "authorized_evidence_outputs": [],
+  "config_sha256": "c4084568fff85db86e2bedc241471b0bf2070b706c3a5523dbefebcc9b844819",
+  "release_pin_provenance": {
+    "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/corpus-registration-repair/implementation/release-pin.json",
+    "sha256": "e19cbcf353dbd70dd485b36c3c4ddea8cc94cf67cd46bbaa8a2a0a33c9909187",
+    "pin_producer_source_commit": "f65066b04fe1f2355ce64d8be581fa9e79641673",
+    "rust_tree": "1d856ce7661c2e8508aced2282ffbd8747d42538",
+    "source_proof_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/corpus-registration-repair/implementation/source-proof.json",
+    "source_proof_sha256": "1392f5e088827159bb1dea34599a9efe59ee956eb698e91fece19d23310e5854",
+    "production_manifest_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/corpus-registration-repair/implementation/production-manifest.json",
+    "production_manifest_sha256": "593073463602158d59e98322416036af7a9515ba87a48c51072aedaffb447493",
+    "production_manifest_files": 300,
+    "measured_normal_pin": "/tmp/codex-p9d-t88-pins/8.8-final-fix-r2-rexx",
+    "measured_normal_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+    "byte_identical_to_measured_normal": true
+  },
+  "profiling_completion_record": "/tmp/codex-p9d-t88-final-resume-profile-completion.json",
+  "profiling_completion": {
+    "source_commit": "6b6f3fb460049c6ef63f565ceb78e11b5582f165",
+    "pin_producer_source_commit": "f65066b04fe1f2355ce64d8be581fa9e79641673",
+    "measured_runtime_source_commit": "9d919b7c3832c55edc3a0a07974309f092102201",
+    "profiling_complete": true,
+    "active_profile_commands": [],
+    "verified_profiles": 1683,
+    "verification_evidence": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/performance/final-fix/metrics/final-all-complete-verification.json",
+    "combined_manifest_sha256": "3bfa61c576e191ba69f94598346a715ff2bc382bf5c1b238d649ab2ef6e01edc",
+    "normal_binary_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+    "byte_identical_to_measured_normal": true,
+    "source_proof_sha256": "1392f5e088827159bb1dea34599a9efe59ee956eb698e91fece19d23310e5854",
+    "production_manifest_sha256": "593073463602158d59e98322416036af7a9515ba87a48c51072aedaffb447493",
+    "new_profiles_required": false,
+    "performance_budget_acceptance": "Pending user decision, separate from functional validation"
+  },
+  "index_staging_sha256": "9ce5307a55b0c8b28b9712bc8f5db179664e182f5742cf7638b3659d1d9ff91c"
+}

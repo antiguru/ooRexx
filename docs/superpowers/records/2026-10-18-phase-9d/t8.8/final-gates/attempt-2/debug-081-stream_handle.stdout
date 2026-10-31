@@ -1,0 +1,13 @@
+
+running 8 tests
+test a_second_open_opens_the_descriptor_again ... ok
+test an_append_stream_on_a_write_only_file_writes_at_the_end ... ok
+test an_append_stream_refuses_positions_within_a_file_over_four_gib ... ok
+test another_descriptor_is_refused_loudly ... ok
+test handle_one_and_two_write_standard_output_and_error ... ok
+test handle_zero_reads_standard_input ... ok
+test query_handle_after_open_answers_the_descriptor ... ok
+test the_stream_type_follows_the_invocation_once_opened ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+

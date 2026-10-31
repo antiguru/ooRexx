@@ -1,0 +1,3 @@
+tests::every_program_is_reachable_by_name: test
+tests::the_entry_point_is_one_of_the_embedded_programs: test
+tests::the_entry_program_calls_exactly_the_other_embedded_programs: test

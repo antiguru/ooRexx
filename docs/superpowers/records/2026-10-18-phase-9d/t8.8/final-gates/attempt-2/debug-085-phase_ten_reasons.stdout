@@ -1,0 +1,10 @@
+
+running 5 tests
+test a_test_module_file_resolves_where_rustc_finds_it ... ok
+test an_inline_test_module_is_left_out_and_its_neighbours_are_not ... ok
+test every_excluded_builtin_names_a_reason_the_enum_knows ... ok
+test no_production_literal_names_phase_10 ... ok
+test the_scan_reads_the_test_modules_it_leaves_out ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+

@@ -1,0 +1,47 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-278-crate-base__class__String__min/run
+TZ=None
+status=Some(0) ended=Exited(0) took=86.322311ms
+GroupRun {
+    group: "base/class/String/min",
+    expected: {},
+    started: {
+        "TEST001",
+        "TEST002",
+        "TEST003",
+        "TEST004",
+        "TEST005",
+        "TEST006",
+        "TEST007",
+        "TEST008",
+        "TEST009",
+        "TEST_MIN",
+    },
+    passed: {
+        "TEST001",
+        "TEST002",
+        "TEST003",
+        "TEST004",
+        "TEST005",
+        "TEST006",
+        "TEST007",
+        "TEST008",
+        "TEST009",
+        "TEST_MIN",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "10",
+    ),
+    took: 86.322311ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-278-crate-base__class__String__min/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-278-crate-base__class__String__min/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 161, modified: SystemTime { tv_sec: 1793406130, tv_nsec: 738790752 }, accessed: SystemTime { tv_sec: 1793406130, tv_nsec: 764464102 }, created: SystemTime { tv_sec: 1793406130, tv_nsec: 734345667 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-278-crate-base__class__String__min/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-278-crate-base__class__String__min/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-278-crate-base__class__String__min/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406130, tv_nsec: 720829645 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-278-crate-base__class__String__min/run/ooRexx/base/class/String/min.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-278-crate-base__class__String__min/run/ooRexx/base/class/String/min.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 4827, modified: SystemTime { tv_sec: 1793406130, tv_nsec: 679919652 }, accessed: SystemTime { tv_sec: 1793406130, tv_nsec: 734345667 }, created: SystemTime { tv_sec: 1793406130, tv_nsec: 678159241 }, .. })

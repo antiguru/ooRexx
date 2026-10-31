@@ -1,0 +1,11 @@
+
+running 6 tests
+test a_copy_of_lent_bytes_is_not_lent ... ok
+test a_lent_buffer_set_smaller_keeps_its_storage ... ok
+test an_edit_growing_lent_bytes_panics - should panic ... ok
+test each_growth_path_moves_lent_bytes ... ok
+test growth_of_lent_bytes_keeps_the_old_storage_until_the_last_release ... ok
+test unlent_or_fitting_growth_keeps_the_storage ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

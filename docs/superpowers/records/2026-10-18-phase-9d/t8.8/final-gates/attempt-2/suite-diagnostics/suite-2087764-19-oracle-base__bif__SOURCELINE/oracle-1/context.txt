@@ -1,0 +1,49 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-19-oracle-base__bif__SOURCELINE/run
+TZ=None
+status=Some(0) ended=Exited(0) took=15.974963ms
+GroupRun {
+    group: "base/bif/SOURCELINE",
+    expected: {},
+    started: {
+        "TEST001",
+        "TEST002",
+        "TEST003",
+        "TEST_NEGATIVE_NUMBER",
+        "TEST_NON_INTEGER_NUMBER",
+        "TEST_SOURCELINE_FIRST_LINE",
+        "TEST_SOURCELINE_FULL_FILE",
+        "TEST_SOURCELINE_LAST_LINE",
+        "TEST_SOURCELINE_WITH_NO_ARGS",
+        "TEST_TOO_LARGE_A_NUMBER",
+        "TEST_TOO_LARGE_BY_ONE",
+    },
+    passed: {
+        "TEST001",
+        "TEST002",
+        "TEST003",
+        "TEST_NEGATIVE_NUMBER",
+        "TEST_NON_INTEGER_NUMBER",
+        "TEST_SOURCELINE_FIRST_LINE",
+        "TEST_SOURCELINE_FULL_FILE",
+        "TEST_SOURCELINE_LAST_LINE",
+        "TEST_SOURCELINE_WITH_NO_ARGS",
+        "TEST_TOO_LARGE_A_NUMBER",
+        "TEST_TOO_LARGE_BY_ONE",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "11",
+    ),
+    took: 15.974963ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-19-oracle-base__bif__SOURCELINE/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-19-oracle-base__bif__SOURCELINE/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 311, modified: SystemTime { tv_sec: 1793406127, tv_nsec: 117881891 }, accessed: SystemTime { tv_sec: 1793406127, tv_nsec: 121463490 }, created: SystemTime { tv_sec: 1793406127, tv_nsec: 116817120 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-19-oracle-base__bif__SOURCELINE/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-19-oracle-base__bif__SOURCELINE/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-19-oracle-base__bif__SOURCELINE/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406127, tv_nsec: 105163267 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-19-oracle-base__bif__SOURCELINE/run/ooRexx/base/bif/SOURCELINE.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-19-oracle-base__bif__SOURCELINE/run/ooRexx/base/bif/SOURCELINE.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 5005, modified: SystemTime { tv_sec: 1793406127, tv_nsec: 105163267 }, accessed: SystemTime { tv_sec: 1793406127, tv_nsec: 117561620 }, created: SystemTime { tv_sec: 1793406127, tv_nsec: 103509443 }, .. })

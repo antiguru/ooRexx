@@ -1,0 +1,27 @@
+{
+  "old_count": 154,
+  "metadata_count": 156,
+  "added": [
+    [
+      "rexx-api",
+      "concrete_owners",
+      [
+        "test"
+      ],
+      [
+        "bin"
+      ]
+    ],
+    [
+      "rexx-exec",
+      "semantic_boundaries",
+      [
+        "test"
+      ],
+      [
+        "bin"
+      ]
+    ]
+  ],
+  "removed": []
+}

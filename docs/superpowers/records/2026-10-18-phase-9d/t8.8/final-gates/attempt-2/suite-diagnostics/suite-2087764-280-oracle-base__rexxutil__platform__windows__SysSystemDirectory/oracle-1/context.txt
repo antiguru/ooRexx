@@ -1,0 +1,26 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-280-oracle-base__rexxutil__platform__windows__SysSystemDirectory/run
+TZ=None
+status=Some(0) ended=Exited(0) took=27.390622ms
+GroupRun {
+    group: "base/rexxutil/platform/windows/SysSystemDirectory",
+    expected: {},
+    started: {},
+    passed: {},
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "0",
+    ),
+    took: 27.390622ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-280-oracle-base__rexxutil__platform__windows__SysSystemDirectory/started.txt canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-280-oracle-base__rexxutil__platform__windows__SysSystemDirectory/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-280-oracle-base__rexxutil__platform__windows__SysSystemDirectory/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-280-oracle-base__rexxutil__platform__windows__SysSystemDirectory/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406130, tv_nsec: 720829645 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-280-oracle-base__rexxutil__platform__windows__SysSystemDirectory/run/ooRexx/base/rexxutil/platform/windows/SysSystemDirectory.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-280-oracle-base__rexxutil__platform__windows__SysSystemDirectory/run/ooRexx/base/rexxutil/platform/windows/SysSystemDirectory.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 3674, modified: SystemTime { tv_sec: 1793406130, tv_nsec: 751408319 }, accessed: SystemTime { tv_sec: 1793406130, tv_nsec: 771679151 }, created: SystemTime { tv_sec: 1793406130, tv_nsec: 750528273 }, .. })

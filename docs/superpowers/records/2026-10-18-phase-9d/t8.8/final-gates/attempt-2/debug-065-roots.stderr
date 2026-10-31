@@ -1,0 +1,23 @@
+
+thread 'a_closed_frames_handle_is_refused_by_its_successor' (2130251) panicked at crates/rexx-core/src/roots.rs:532:9:
+assertion `left == right` failed: slot frame SlotFrame { depth: 0, serial: 0 } resolved against another frame's record
+  left: 1
+ right: 0
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'a_frame_aliasing_a_slot_does_not_move' (2130252) panicked at crates/rexx-core/src/roots.rs:623:9:
+assertion `left == right` failed: a moved frame aliases a slot its old record addresses
+  left: 1
+ right: 0
+
+thread 'a_moved_frames_old_handle_is_refused' (2130255) panicked at crates/rexx-core/src/roots.rs:559:9:
+the cached top record disagrees with SlotFrame { depth: 1, serial: 1 }'s
+
+thread 'an_alias_that_does_not_descend_is_refused' (2130260) panicked at crates/rexx-core/src/roots.rs:710:13:
+alias at Slot { frame: SlotFrame { depth: 0, serial: 0 }, index: 0 } points at Slot { frame: SlotFrame { depth: 1, serial: 1 }, index: 0 }, which does not descend
+
+thread 'promoting_a_cell_again_is_refused' (2130263) panicked at crates/rexx-core/src/roots.rs:231:13:
+promote on a slot that already resolves to a cell
+
+thread 'the_frame_block_size_cannot_change_under_a_reserved_frame' (2130270) panicked at crates/rexx-core/src/roots.rs:494:9:
+the frame block size is set before the first frame

@@ -1,0 +1,33 @@
+{
+  "side": "crate",
+  "mode": "create",
+  "command": [
+    "/home/moritz/.local/bin/memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "5",
+    "20",
+    "/tmp/codex-p9d-t88-pins/8.8-corpus-registration-rexx",
+    "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-witness-v2.rex",
+    "create"
+  ],
+  "cwd": "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-create/cwd",
+  "TMPDIR": "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-create/tmpdir",
+  "LD_LIBRARY_PATH": null,
+  "source_sha256": "5e4760846db5f168aece9ef4063dbcb09e7c949801eb555deff72cc36d4ece0d",
+  "executable": {
+    "path": "/tmp/codex-p9d-t88-pins/8.8-corpus-registration-rexx",
+    "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145"
+  },
+  "outer_cap": "memcap 2G python3 run-crate-outercap.py",
+  "seed_sha256": "4a6689419b00b11700c9b6246bcfa8936c8f5e1e824db3a7e57030e2d1c1a684",
+  "timeout_seconds": 20,
+  "elapsed_seconds": 0.03684596798848361,
+  "status": 0,
+  "channels": {
+    "stdout": "949d1c9b86f4a5986651c07008c66c79bc043acc9ddb2288be207a5c81ead1f7",
+    "stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  }
+}

@@ -1,0 +1,10 @@
+
+running 5 tests
+test a_class_nothing_refers_to_is_collected ... ok
+test a_class_side_uninit_runs_at_the_collection_that_reaches_the_class ... ok
+test a_loop_of_class_new_collects_its_classes ... ok
+test a_loop_of_package_new_collects_its_classes_and_packages ... ok
+test an_instance_keeps_its_class_alive_and_nothing_else_does ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+

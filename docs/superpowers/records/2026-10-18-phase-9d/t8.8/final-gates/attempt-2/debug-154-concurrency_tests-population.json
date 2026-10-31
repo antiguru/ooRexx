@@ -1,0 +1,10 @@
+{
+  "added": [
+    "suite_rows::tests::only_tests_of_test_classes_can_own_suite_rows",
+    "suite_rows::tests::owner_equality_covers_reaching_group_and_captured_refusal"
+  ],
+  "removed": [],
+  "reconciled_renames": {
+    "group_runs::whole_groups::sim_gate::calibration": "group_runs::whole_groups::sim_gate::calibration::calibration"
+  }
+}

@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/tmp/codex-p9d-t88-final-gate-resume.py", line 393, in <module>
+    suite_before = suite_input_snapshot()
+  File "/tmp/codex-p9d-t88-final-gate-resume.py", line 254, in suite_input_snapshot
+    walk(root, set())
+    ~~~~^^^^^^^^^^^^^
+  File "/tmp/codex-p9d-t88-final-gate-resume.py", line 235, in walk
+    own = path.lstat()
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 662, in lstat
+    return os.lstat(self)
+           ~~~~~~~~^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/watchdog.rs'

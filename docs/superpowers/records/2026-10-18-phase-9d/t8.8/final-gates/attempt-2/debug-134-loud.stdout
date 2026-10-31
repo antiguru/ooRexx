@@ -1,0 +1,14 @@
+
+running 9 tests
+test assert_witness_set_is_complete ... ok
+test every_out_of_scope_variant_fails_loudly ... ok
+test in_scope_counts_match_the_audited_split ... ok
+test owners::assert_owner_strings_are_split_table_phases ... ok
+test owners::every_excluded_builtin_names_a_phase_that_owes_it ... ok
+test owners::only_backslash_is_unreachable ... ok
+test owners::out_of_scope_set_matches_the_committed_expectation ... ok
+test owners::the_two_harnesses_include_this_exact_file ... ok
+test owners::variant_counts_match_the_audited_split ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,0 +1,27 @@
+{
+  "side": "oracle",
+  "mode": "stable",
+  "command": [
+    "sh",
+    "-c",
+    "ulimit -v 1048576; exec \"$@\"",
+    "oracle-wrapper",
+    "timeout",
+    "-k",
+    "5",
+    "20",
+    "/home/moritz/dev/repos/ooRexx/build/bin/rexx",
+    "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-witness.rex",
+    "stable"
+  ],
+  "cwd": "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled/oracle-stable/cwd",
+  "TMPDIR": "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled/oracle-stable/tmpdir",
+  "LD_LIBRARY_PATH": "/home/moritz/dev/repos/ooRexx/build/lib",
+  "source_sha256": "68e9b1f82d64bd72ca6e1440f91f0e84cd30df6be158c1c4fa5b4a9586d1f6d4",
+  "executable": {
+    "path": "/home/moritz/dev/repos/ooRexx/build/bin/rexx",
+    "sha256": "bb5bb8ccbb96c376e329b91aafdad891f975ba06c941dbceba82c3848fa13019"
+  },
+  "seed_sha256": "4a6689419b00b11700c9b6246bcfa8936c8f5e1e824db3a7e57030e2d1c1a684",
+  "timeout_seconds": 20
+}

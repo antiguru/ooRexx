@@ -1,0 +1,13 @@
+--- before-driver.py
++++ accepted-driver.py
+@@ -21,7 +21,9 @@
+ TEST_VARIANT_AUTHORIZATION = PRIOR_OUT / 'release-variant-diagnosis/root-authorization.json'
+ TEST_VARIANT_AUTHORIZATION_SHA256 = 'e2f37ea8d96b6fe16f94254034f1f30262b39424fc3bf6ec1e5973bbd9758188'
+ ADDED_TARGETS = {('rexx-exec', 'semantic_boundaries', ('test',), ('bin',)):
+-                 'Task 8.8f adds semantic boundary integration coverage after the prerequisite enumeration'}
++                 'Task 8.8f adds semantic boundary integration coverage after the prerequisite enumeration',
++                 ('rexx-api', 'concrete_owners', ('test',), ('bin',)):
++                 'Commit 3d52229d6f1a467129b5a62a51e27c9922ca81b9 adds two concrete FFI owner refusal tests after the prerequisite enumeration'}
+ RENAMED_TESTS = {
+     ('rexx-exec', 'rexx_exec', ('lib',), ('lib',)): {
+         'run::tests::an_executable_rebuilt_under_the_nil_scope_answers': 'run::tests::an_executable_retained_under_the_nil_scope_answers',

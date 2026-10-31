@@ -1,0 +1,67 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-279-oracle-base__class__RexxInteger/run
+TZ=None
+status=Some(0) ended=Exited(0) took=173.950485ms
+GroupRun {
+    group: "base/class/RexxInteger",
+    expected: {},
+    started: {
+        "TEST_INTEGER_ADDITION",
+        "TEST_INTEGER_CONSTANT",
+        "TEST_INTEGER_D2C",
+        "TEST_INTEGER_D2X",
+        "TEST_INTEGER_DATE",
+        "TEST_INTEGER_DIVISION",
+        "TEST_INTEGER_INTEGERDIVIDE",
+        "TEST_INTEGER_MODULO",
+        "TEST_INTEGER_MULTIPLICATION",
+        "TEST_INTEGER_POWER",
+        "TEST_INTEGER_REMAINDER",
+        "TEST_INTEGER_REXXINFO",
+        "TEST_INTEGER_SUBTRACTION",
+        "TEST_INTEGER_TIME",
+        "TEST_INTEGER_UNARY_MINUS",
+        "TEST_INTEGER_UNARY_PLUS",
+        "TEST_NUMBERSTRING_CEIL_FLOOR_ROUND_TRUNC",
+        "TEST_NUMBERSTRING_INTEGERDIVIDE",
+        "TEST_STRING_C2D",
+        "TEST_STRING_X2D",
+    },
+    passed: {
+        "TEST_INTEGER_ADDITION",
+        "TEST_INTEGER_CONSTANT",
+        "TEST_INTEGER_D2C",
+        "TEST_INTEGER_D2X",
+        "TEST_INTEGER_DATE",
+        "TEST_INTEGER_DIVISION",
+        "TEST_INTEGER_INTEGERDIVIDE",
+        "TEST_INTEGER_MODULO",
+        "TEST_INTEGER_MULTIPLICATION",
+        "TEST_INTEGER_POWER",
+        "TEST_INTEGER_REMAINDER",
+        "TEST_INTEGER_REXXINFO",
+        "TEST_INTEGER_SUBTRACTION",
+        "TEST_INTEGER_TIME",
+        "TEST_INTEGER_UNARY_MINUS",
+        "TEST_INTEGER_UNARY_PLUS",
+        "TEST_NUMBERSTRING_CEIL_FLOOR_ROUND_TRUNC",
+        "TEST_NUMBERSTRING_INTEGERDIVIDE",
+        "TEST_STRING_C2D",
+        "TEST_STRING_X2D",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "20",
+    ),
+    took: 173.950485ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-279-oracle-base__class__RexxInteger/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-279-oracle-base__class__RexxInteger/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 614, modified: SystemTime { tv_sec: 1793406130, tv_nsec: 855126701 }, accessed: SystemTime { tv_sec: 1793406130, tv_nsec: 864461200 }, created: SystemTime { tv_sec: 1793406130, tv_nsec: 714962330 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-279-oracle-base__class__RexxInteger/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-279-oracle-base__class__RexxInteger/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-279-oracle-base__class__RexxInteger/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406130, tv_nsec: 849386643 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-279-oracle-base__class__RexxInteger/run/ooRexx/base/class/RexxInteger.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-279-oracle-base__class__RexxInteger/run/ooRexx/base/class/RexxInteger.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 17193, modified: SystemTime { tv_sec: 1793406130, tv_nsec: 692287095 }, accessed: SystemTime { tv_sec: 1793406130, tv_nsec: 714234980 }, created: SystemTime { tv_sec: 1793406130, tv_nsec: 691382130 }, .. })

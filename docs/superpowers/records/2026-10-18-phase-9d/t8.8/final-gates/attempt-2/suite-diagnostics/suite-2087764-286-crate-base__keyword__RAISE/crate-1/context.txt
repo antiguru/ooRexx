@@ -1,0 +1,71 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-286-crate-base__keyword__RAISE/run
+TZ=None
+status=Some(0) ended=Exited(0) took=101.604452ms
+GroupRun {
+    group: "base/keyword/RAISE",
+    expected: {},
+    started: {
+        "TEST_RAISE_ERROR",
+        "TEST_RAISE_FAILURE",
+        "TEST_RAISE_HALT",
+        "TEST_RAISE_INSERT_CRLF",
+        "TEST_RAISE_LOSTDIGITS",
+        "TEST_RAISE_NOSTRING",
+        "TEST_RAISE_NOTREADY",
+        "TEST_RAISE_NOVALUE",
+        "TEST_RAISE_PROPAGATE",
+        "TEST_RAISE_SYNTAX_01",
+        "TEST_RAISE_SYNTAX_02",
+        "TEST_RAISE_SYNTAX_03",
+        "TEST_RAISE_SYNTAX_ADDITIONAL",
+        "TEST_RAISE_SYNTAX_ARRAY",
+        "TEST_RAISE_SYNTAX_ERROR_01",
+        "TEST_RAISE_SYNTAX_ERROR_02",
+        "TEST_RAISE_SYNTAX_ERROR_03",
+        "TEST_RAISE_SYNTAX_EXIT_01",
+        "TEST_RAISE_SYNTAX_EXIT_02",
+        "TEST_RAISE_SYNTAX_RETURN_01",
+        "TEST_RAISE_SYNTAX_RETURN_02",
+        "TEST_RAISE_USER",
+    },
+    passed: {
+        "TEST_RAISE_ERROR",
+        "TEST_RAISE_FAILURE",
+        "TEST_RAISE_HALT",
+        "TEST_RAISE_INSERT_CRLF",
+        "TEST_RAISE_LOSTDIGITS",
+        "TEST_RAISE_NOSTRING",
+        "TEST_RAISE_NOTREADY",
+        "TEST_RAISE_NOVALUE",
+        "TEST_RAISE_PROPAGATE",
+        "TEST_RAISE_SYNTAX_01",
+        "TEST_RAISE_SYNTAX_02",
+        "TEST_RAISE_SYNTAX_03",
+        "TEST_RAISE_SYNTAX_ADDITIONAL",
+        "TEST_RAISE_SYNTAX_ARRAY",
+        "TEST_RAISE_SYNTAX_ERROR_01",
+        "TEST_RAISE_SYNTAX_ERROR_02",
+        "TEST_RAISE_SYNTAX_ERROR_03",
+        "TEST_RAISE_SYNTAX_EXIT_01",
+        "TEST_RAISE_SYNTAX_EXIT_02",
+        "TEST_RAISE_SYNTAX_RETURN_01",
+        "TEST_RAISE_SYNTAX_RETURN_02",
+        "TEST_RAISE_USER",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "22",
+    ),
+    took: 101.604452ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-286-crate-base__keyword__RAISE/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-286-crate-base__keyword__RAISE/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 674, modified: SystemTime { tv_sec: 1793406130, tv_nsec: 913615553 }, accessed: SystemTime { tv_sec: 1793406130, tv_nsec: 942636659 }, created: SystemTime { tv_sec: 1793406130, tv_nsec: 896460271 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-286-crate-base__keyword__RAISE/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-286-crate-base__keyword__RAISE/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-286-crate-base__keyword__RAISE/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406130, tv_nsec: 924459458 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-286-crate-base__keyword__RAISE/run/ooRexx/base/keyword/RAISE.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-286-crate-base__keyword__RAISE/run/ooRexx/base/keyword/RAISE.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 14342, modified: SystemTime { tv_sec: 1793406130, tv_nsec: 840276057 }, accessed: SystemTime { tv_sec: 1793406130, tv_nsec: 892460388 }, created: SystemTime { tv_sec: 1793406130, tv_nsec: 839160598 }, .. })

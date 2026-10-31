@@ -1,0 +1,71 @@
+{
+  "released_utc": "2026-10-31T01:08:59.035441+00:00",
+  "source_commit": "6b6f3fb460049c6ef63f565ceb78e11b5582f165",
+  "authorization": "Root explicitly releases source/index/input freeze after all commands stopped, for bounded test/harness repairs and evidence retention. No retry/further actions authorized to this agent.",
+  "active_sessions": [],
+  "active_commands": [],
+  "driver_path": "/tmp/codex-p9d-t88-final-gate-resume.py",
+  "driver_sha256": "af2bfb41da1d71930e2b7eb3c09319d16ac685609365dce8aa9a8dc1587f85e4",
+  "config_path": "/tmp/codex-p9d-t88-final-resume-config.json",
+  "config_sha256": "c4084568fff85db86e2bedc241471b0bf2070b706c3a5523dbefebcc9b844819",
+  "delta_helper_sha256": "058a7adb629464b79e2117e57528d4045ae73d032b7bd3d039b31b7dc5b773a5",
+  "normal_pin_path": "/tmp/codex-p9d-t88-pins/8.8-corpus-registration-rexx",
+  "normal_pin_sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145",
+  "cargo_test_cli_sha256": "9c3d09f9f9e39810985b1200007035488a3eba9d00ab6ee7382b6d7aea1b4d06",
+  "default_test_totals": [
+    3801,
+    2,
+    5,
+    0,
+    0
+  ],
+  "default_failed_targets": [
+    {
+      "index": 118,
+      "key": [
+        "rexx-exec",
+        "dispatch_seam",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-118-dispatch_seam.json",
+      "summary": [
+        5,
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "index": 154,
+      "key": [
+        "rexx-exec",
+        "concurrency_tests",
+        [
+          "test"
+        ],
+        [
+          "bin"
+        ]
+      ],
+      "record": "debug-154-concurrency_tests.json",
+      "summary": [
+        62,
+        1,
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "release_suite_red_groups": 1,
+  "release_suite_failed_rows": 1,
+  "audit_status": 1,
+  "independent_completeness_report": "independent-completeness.json",
+  "independent_completeness_sha256": "157521669b6543a7cea26b8e68c0c1e3195735a06bae4c183b46d0a9158e2f10"
+}

@@ -1,0 +1,59 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-683-crate-base__keyword__EXPOSE/run
+TZ=None
+status=Some(0) ended=Exited(0) took=121.863436ms
+GroupRun {
+    group: "base/keyword/EXPOSE",
+    expected: {},
+    started: {
+        "TEST_EXPOSE",
+        "TEST_EXPOSE_BAD_VARIABLE",
+        "TEST_EXPOSE_DOT",
+        "TEST_EXPOSE_DOT_SYMBOL",
+        "TEST_EXPOSE_INDIRECT_BAD_VARIABLE",
+        "TEST_EXPOSE_INDIRECT_DOT",
+        "TEST_EXPOSE_INDIRECT_DOT_SYMBOL",
+        "TEST_EXPOSE_INDIRECT_NESTED",
+        "TEST_EXPOSE_INDIRECT_NO_CLOSE",
+        "TEST_EXPOSE_INDIRECT_NO_VAR",
+        "TEST_EXPOSE_INDIRECT_NUMBER",
+        "TEST_EXPOSE_INDIRECT_TWO_NAMES",
+        "TEST_EXPOSE_NON_METHOD",
+        "TEST_EXPOSE_NO_VARIABLES",
+        "TEST_EXPOSE_NUMBER",
+        "TEST_MISPLACED_EXPOSE",
+    },
+    passed: {
+        "TEST_EXPOSE",
+        "TEST_EXPOSE_BAD_VARIABLE",
+        "TEST_EXPOSE_DOT",
+        "TEST_EXPOSE_DOT_SYMBOL",
+        "TEST_EXPOSE_INDIRECT_BAD_VARIABLE",
+        "TEST_EXPOSE_INDIRECT_DOT",
+        "TEST_EXPOSE_INDIRECT_DOT_SYMBOL",
+        "TEST_EXPOSE_INDIRECT_NESTED",
+        "TEST_EXPOSE_INDIRECT_NO_CLOSE",
+        "TEST_EXPOSE_INDIRECT_NO_VAR",
+        "TEST_EXPOSE_INDIRECT_NUMBER",
+        "TEST_EXPOSE_INDIRECT_TWO_NAMES",
+        "TEST_EXPOSE_NON_METHOD",
+        "TEST_EXPOSE_NO_VARIABLES",
+        "TEST_EXPOSE_NUMBER",
+        "TEST_MISPLACED_EXPOSE",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "16",
+    ),
+    took: 121.863436ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-683-crate-base__keyword__EXPOSE/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-683-crate-base__keyword__EXPOSE/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 529, modified: SystemTime { tv_sec: 1793406144, tv_nsec: 856163125 }, accessed: SystemTime { tv_sec: 1793406144, tv_nsec: 880054430 }, created: SystemTime { tv_sec: 1793406144, tv_nsec: 844055475 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-683-crate-base__keyword__EXPOSE/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-683-crate-base__keyword__EXPOSE/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-683-crate-base__keyword__EXPOSE/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406144, tv_nsec: 800056752 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-683-crate-base__keyword__EXPOSE/run/ooRexx/base/keyword/EXPOSE.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-683-crate-base__keyword__EXPOSE/run/ooRexx/base/keyword/EXPOSE.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 9173, modified: SystemTime { tv_sec: 1793406144, tv_nsec: 763691216 }, accessed: SystemTime { tv_sec: 1793406144, tv_nsec: 844055475 }, created: SystemTime { tv_sec: 1793406144, tv_nsec: 762532749 }, .. })

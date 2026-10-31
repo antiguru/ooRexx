@@ -1,0 +1,32 @@
+{
+  "side": "crate",
+  "mode": "stable",
+  "command": [
+    "/home/moritz/.local/bin/memcap",
+    "2G",
+    "timeout",
+    "-k",
+    "5",
+    "20",
+    "/tmp/codex-p9d-t88-pins/8.8-corpus-registration-rexx",
+    "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-witness-v2.rex",
+    "stable"
+  ],
+  "cwd": "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-v2/crate-stable/cwd",
+  "TMPDIR": "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-v2/crate-stable/tmpdir",
+  "LD_LIBRARY_PATH": null,
+  "source_sha256": "5e4760846db5f168aece9ef4063dbcb09e7c949801eb555deff72cc36d4ece0d",
+  "executable": {
+    "path": "/tmp/codex-p9d-t88-pins/8.8-corpus-registration-rexx",
+    "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145"
+  },
+  "seed_sha256": "4a6689419b00b11700c9b6246bcfa8936c8f5e1e824db3a7e57030e2d1c1a684",
+  "timeout_seconds": 20,
+  "elapsed_seconds": 0.005460155021864921,
+  "status": 1,
+  "channels": {
+    "stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr": "9769b56d858ec01fa67b6082c4c78ca373b0010ebaf6d87cdc479e6fcd9d2ac6",
+    "status": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+  }
+}

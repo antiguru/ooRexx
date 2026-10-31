@@ -1,0 +1,41 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-409-oracle-base__rexxutil__SysSleep/run
+TZ=None
+status=Some(0) ended=Exited(0) took=6.174124899s
+GroupRun {
+    group: "base/rexxutil/SysSleep",
+    expected: {},
+    started: {
+        "TEST_SLEEP_CONCURRENT",
+        "TEST_SLEEP_DURATION",
+        "TEST_SLEEP_INVALID",
+        "TEST_SLEEP_INVALID_NEGATIVE",
+        "TEST_SLEEP_INVALID_TOO_LARGE",
+        "TEST_SLEEP_NO_ARG",
+        "TEST_SLEEP_TWO_ARGS",
+    },
+    passed: {
+        "TEST_SLEEP_CONCURRENT",
+        "TEST_SLEEP_DURATION",
+        "TEST_SLEEP_INVALID",
+        "TEST_SLEEP_INVALID_NEGATIVE",
+        "TEST_SLEEP_INVALID_TOO_LARGE",
+        "TEST_SLEEP_NO_ARG",
+        "TEST_SLEEP_TWO_ARGS",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "7",
+    ),
+    took: 6.174124899s,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-409-oracle-base__rexxutil__SysSleep/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-409-oracle-base__rexxutil__SysSleep/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 212, modified: SystemTime { tv_sec: 1793406138, tv_nsec: 855364206 }, accessed: SystemTime { tv_sec: 1793406138, tv_nsec: 860229133 }, created: SystemTime { tv_sec: 1793406132, tv_nsec: 704407796 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-409-oracle-base__rexxutil__SysSleep/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-409-oracle-base__rexxutil__SysSleep/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-409-oracle-base__rexxutil__SysSleep/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406138, tv_nsec: 772231686 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-409-oracle-base__rexxutil__SysSleep/run/ooRexx/base/rexxutil/SysSleep.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-409-oracle-base__rexxutil__SysSleep/run/ooRexx/base/rexxutil/SysSleep.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 6075, modified: SystemTime { tv_sec: 1793406132, tv_nsec: 688284128 }, accessed: SystemTime { tv_sec: 1793406132, tv_nsec: 704407796 }, created: SystemTime { tv_sec: 1793406132, tv_nsec: 687456801 }, .. })

@@ -1,0 +1,5 @@
+a_class_is_an_ordinary_arena_object_and_a_freed_one_misses: test
+a_handle_from_a_stale_generation_does_not_read_the_slots_new_occupant: test
+allocation_returns_a_heap_handle_that_reads_back: test
+arrays_hold_handles_to_other_objects: test
+small_integer_handles_are_not_in_the_heap: test

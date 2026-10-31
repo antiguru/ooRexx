@@ -1,0 +1,27 @@
+   104 *-* address "path" "rxsubcom" arg(1, "a")~makeString(, " ") with output stem ignore.
+       >>>   "rxsubcom register have-library orxclassic1 MyTestSubcomHandler"
+       +++   "RC(127)"
+   104 *-* address "path" "rxsubcom" arg(1, "a")~makeString(, " ") with output stem ignore.
+       >>>   "rxsubcom drop have-library "
+       +++   "RC(127)"
+   104 *-* address "path" "rxsubcom" arg(1, "a")~makeString(, " ") with output stem ignore.
+       >>>   "rxsubcom REGISTER   case lib entry"
+       +++   "RC(127)"
+   104 *-* address "path" "rxsubcom" arg(1, "a")~makeString(, " ") with output stem ignore.
+       >>>   "rxsubcom register drop orxclassic1 MyTestSubcomHandler"
+       +++   "RC(127)"
+   104 *-* address "path" "rxsubcom" arg(1, "a")~makeString(, " ") with output stem ignore.
+       >>>   "rxsubcom "
+       +++   "RC(127)"
+   104 *-* address "path" "rxsubcom" arg(1, "a")~makeString(, " ") with output stem ignore.
+       >>>   "rxsubcom register nohandler orxclassic1 nohandler"
+       +++   "RC(127)"
+   104 *-* address "path" "rxsubcom" arg(1, "a")~makeString(, " ") with output stem ignore.
+       >>>   "rxsubcom register nolibrary invalid-library MyTestSubcomHandler"
+       +++   "RC(127)"
+   104 *-* address "path" "rxsubcom" arg(1, "a")~makeString(, " ") with output stem ignore.
+       >>>   "rxsubcom register twice orxclassic1 MyTestSubcomHandler"
+       +++   "RC(127)"
+   104 *-* address "path" "rxsubcom" arg(1, "a")~makeString(, " ") with output stem ignore.
+       >>>   "rxsubcom query unregistered "
+       +++   "RC(127)"

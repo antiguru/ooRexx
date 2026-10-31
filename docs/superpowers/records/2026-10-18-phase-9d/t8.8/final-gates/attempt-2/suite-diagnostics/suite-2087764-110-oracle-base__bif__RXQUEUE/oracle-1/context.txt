@@ -1,0 +1,26 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-110-oracle-base__bif__RXQUEUE/run
+TZ=None
+status=Some(0) ended=Exited(0) took=15.948253ms
+GroupRun {
+    group: "base/bif/RXQUEUE",
+    expected: {},
+    started: {},
+    passed: {},
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "0",
+    ),
+    took: 15.948253ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-110-oracle-base__bif__RXQUEUE/started.txt canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-110-oracle-base__bif__RXQUEUE/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-110-oracle-base__bif__RXQUEUE/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-110-oracle-base__bif__RXQUEUE/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406128, tv_nsec: 128540611 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-110-oracle-base__bif__RXQUEUE/run/ooRexx/base/bif/RXQUEUE.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-110-oracle-base__bif__RXQUEUE/run/ooRexx/base/bif/RXQUEUE.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 11039, modified: SystemTime { tv_sec: 1793406128, tv_nsec: 191577959 }, accessed: SystemTime { tv_sec: 1793406128, tv_nsec: 200538521 }, created: SystemTime { tv_sec: 1793406128, tv_nsec: 189485797 }, .. })

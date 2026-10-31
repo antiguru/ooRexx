@@ -1,0 +1,21 @@
+
+running 16 tests
+test a_cells_value_lives_as_long_as_its_object ... ok
+test a_cleared_slot_is_unset_and_differs_from_one_holding_nil ... ok
+test a_cleared_slot_stops_being_a_root ... ok
+test a_collected_cell_is_refused - should panic ... ok
+test a_handle_to_a_swept_object_does_not_alias_the_slots_next_occupant ... ok
+test a_slot_frame_grows_for_a_name_the_plan_never_saw ... ok
+test a_stems_tails_and_default_are_traced ... ok
+test growing_a_frame_below_the_top_keeps_every_frames_values ... ok
+test growth_does_not_recycle_a_cleared_slot ... ok
+test objects_reachable_from_a_root_survive ... ok
+test popping_a_frame_that_is_not_the_top_one_panics - should panic ... ok
+test reference_cycles_are_collected ... ok
+test slot_frames_keep_locals_alive_and_release_them_on_pop ... ok
+test swept_slots_are_reused_by_the_next_allocation ... ok
+test transitively_reachable_objects_survive ... ok
+test unreachable_objects_are_swept ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

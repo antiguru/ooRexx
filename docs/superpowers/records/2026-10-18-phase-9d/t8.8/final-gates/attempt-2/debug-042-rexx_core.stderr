@@ -1,0 +1,7 @@
+
+thread 'frame::tests::an_out_of_order_release_is_refused' (2126311) panicked at crates/rexx-core/src/frame.rs:267:9:
+frame arena released out of order
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'frame::tests::unparking_under_a_shorter_top_is_refused' (2126315) panicked at crates/rexx-core/src/frame.rs:307:9:
+frame arena unparked a frame that is not the most recent

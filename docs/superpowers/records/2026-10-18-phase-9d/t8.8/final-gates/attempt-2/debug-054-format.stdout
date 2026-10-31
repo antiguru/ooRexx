@@ -1,0 +1,57 @@
+
+running 52 tests
+test additional_and_message_agree_on_every_placeholder ... ok
+test additional_carries_the_before_oversize_value_and_width_as_two_entries ... ok
+test additional_carries_the_exponent_oversize_mantissa_and_width_as_two_entries ... ok
+test additional_matches_message_for_the_post_carry_case_too ... ok
+test after_only_rounds_or_pads_the_decimal_part ... ok
+test after_rounding_carry_can_bump_the_exponent_itself ... ok
+test after_rounding_carry_can_cross_from_plain_into_exponential ... ok
+test after_rounding_carry_can_grow_the_integer_part_before_before_is_checked ... ok
+test after_rounding_underflow_still_shows_the_requested_decimal_places ... ok
+test before_and_after_apply_to_the_mantissa_in_exponential_form ... ok
+test before_only_pads_or_rejects_the_integer_part ... ok
+test before_oversize_in_exponential_form_reports_the_engineering_mantissa ... ok
+test before_oversize_message_in_exponential_form_still_shows_the_unreframed_number ... ok
+test before_oversize_message_reflects_rounding_to_the_current_digits ... ok
+test before_oversize_message_substitutes_n1_not_the_padded_mantissa ... ok
+test before_too_narrow_for_the_integer_part_is_error_93 ... ok
+test before_zero_always_errors_even_for_a_single_integer_digit ... ok
+test displayed_exponent_of_zero_is_never_written_as_e_plus_zero ... ok
+test engineering_carry_stays_in_the_same_group_when_it_fits ... ok
+test engineering_forces_the_exponent_to_a_multiple_of_three ... ok
+test engineering_grouping_can_also_produce_a_displayed_exponent_of_zero ... ok
+test engineering_negative_exponents_group_by_floor_division_not_truncation ... ok
+test engineering_pads_a_short_mantissa_with_trailing_zeros_not_a_decimal ... ok
+test exponent_oversize_can_be_triggered_for_the_first_time_by_a_post_carry_exponent ... ok
+test exponent_oversize_is_reported_before_before_oversize ... ok
+test exponent_oversize_is_still_reported_when_only_the_post_carry_exponent_overflows_expp ... ok
+test exponent_oversize_message_substitutes_the_mantissa_not_the_exponent_digits ... ok
+test exponent_oversize_message_uses_the_pre_carry_exponent_not_the_final_one ... ok
+test expp_already_used_no_i32_cast_to_begin_with ... ok
+test expp_pads_the_exponent_with_leading_zeros ... ok
+test expp_too_narrow_for_the_exponent_is_error_93 ... ok
+test expp_zero_forces_plain_form_no_matter_how_large ... ok
+test expp_zero_overrides_expt_zero ... ok
+test expt_moves_the_lower_exponential_trigger_only_for_fractional_values ... ok
+test expt_moves_the_upper_exponential_trigger ... ok
+test expt_zero_plugs_into_the_ordinary_trigger_like_any_other_value ... ok
+test form_does_not_move_the_plain_versus_exponential_boundary ... ok
+test format_after_survives_the_full_u32_range ... ignored, allocates 2.1 GB; run with --ignored
+test format_before_survives_the_full_u32_range ... ignored, allocates 3.0 GB; run with --ignored
+test format_form_scientific_matches_number_format_exactly ... ok
+test format_survives_a_bare_digits_at_the_top_of_u64 ... ok
+test one_arg_format_reproduces_the_default_display ... ok
+test trunc_accepts_places_at_and_past_the_i32_negation_boundary ... ignored, allocates 2.1 GB; run with --ignored
+test trunc_defaults_places_to_zero ... ok
+test trunc_drops_digits_rather_than_rounding_them ... ok
+test trunc_never_produces_exponential_form ... ok
+test trunc_pads_with_zeros_when_places_exceeds_the_decimal_count ... ok
+test trunc_rounds_to_current_digits_before_truncating_decimals ... ok
+test trunc_to_a_magnitude_that_vanishes_drops_the_sign ... ok
+test trunc_underflow_still_shows_the_requested_decimal_places ... ok
+test zero_never_goes_exponential_but_still_takes_before_and_after ... ok
+test zero_still_triggers_the_displayed_exponent_zero_padding_when_expt_is_zero ... ok
+
+test result: ok. 49 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

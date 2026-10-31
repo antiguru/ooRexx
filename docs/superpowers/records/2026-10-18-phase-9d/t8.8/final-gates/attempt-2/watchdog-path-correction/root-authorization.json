@@ -1,0 +1,8 @@
+{
+  "source_commit": "6b6f3fb460049c6ef63f565ceb78e11b5582f165",
+  "accepted_driver_sha256": "50d87272318acd09bf2c06d79457df388051680ed5f534ba1031ecfc17900310",
+  "prior_driver_sha256": "898d73dea60af0dea841dca2bb1a6203e9fac9bc6e05fc062572f72392dc6206",
+  "authorization": "Root accepted only the untracked static-input path correction from nonexistent tests/watchdog.rs to the actual tests/watchdog/ module directory. Continue suite and remaining independent gates.",
+  "source_index_config_freeze_unchanged": true,
+  "first_launch_failure_preserved": true
+}

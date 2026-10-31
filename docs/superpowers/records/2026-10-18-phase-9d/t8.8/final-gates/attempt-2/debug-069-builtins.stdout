@@ -1,0 +1,7 @@
+
+running 2 tests
+test table_order_is_preserved_because_the_parser_indexes_by_position ... ok
+test the_builtin_table_has_81_entries ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

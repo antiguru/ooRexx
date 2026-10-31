@@ -1,0 +1,32 @@
+{
+  "added": [
+    "builtin::rexxutil::files::tests::a_move_on_one_file_system_renames_without_copying",
+    "command::tests::unused_command_worker_returns_after_drop_unwind_and_exec_failure",
+    "condition::tests::a_traced_loop_condition_keeps_its_fresh_concatenation",
+    "condition::tests::a_truth_conversion_keeps_the_fresh_array_answer",
+    "condition::tests::a_truth_conversion_keeps_the_third_fresh_array_element",
+    "dispatch::introspection::tests::enhanced_metaclass_nil_entry_keeps_its_registered_method_through_gc",
+    "dispatch::library::tests::unstarted_native_failure_releases_kept_objects_and_lent_storage",
+    "dispatch::method_entry::tests::executing_copies_and_enhanced_metaclass_entries_survive_collection",
+    "dispatch::method_entry::tests::registered_executable_survives_dictionary_mutation_and_collection",
+    "environment::tests::a_repeated_package_local_miss_is_invalidated_by_a_write",
+    "input::tests::spawn_failure_on_stdin_reaches_syntax_without_reading",
+    "input::tests::spawn_failure_preserves_partial_input_and_requeues_other_posts",
+    "input::tests::stdin_recovers_in_configured_inline_mode_after_spawn_failure",
+    "input::tests::stdin_recovers_with_a_pooled_worker_after_spawn_failure",
+    "method_rows::tests::entries_and_keyed_retention_preserve_identity_and_holes",
+    "method_rows::tests::executable_registry_stays_bounded_and_weak_across_programs",
+    "method_rows::tests::first_registration_wins_on_both_sides_of_the_seal",
+    "method_rows::tests::sealed_churn_and_independent_tables_do_not_accumulate_identities",
+    "scheduler::tests::mutants::a_dropped_failed_send_retains_its_condition_across_settlement_collection",
+    "scheduler::tests::spawn_failure::command_spawn_failure_creates_no_child_and_repeats",
+    "scheduler::tests::spawn_failure::configured_inline_and_fixed_saturation_are_not_spawn_errors",
+    "scheduler::tests::spawn_failure::guarded_native_spawn_failure_releases_receiver_for_progress",
+    "scheduler::tests::spawn_failure::native_spawn_failure_reaches_main_and_started_handlers"
+  ],
+  "removed": [],
+  "reconciled_renames": {
+    "run::tests::an_executable_rebuilt_under_the_nil_scope_answers": "run::tests::an_executable_retained_under_the_nil_scope_answers",
+    "scheduler::tests::pool::a_spawn_failure_leaves_ready_activities_to_the_next_baton_holder": "scheduler::tests::pool::a_disabled_pool_leaves_ready_activities_to_the_next_baton_holder"
+  }
+}

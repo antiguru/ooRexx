@@ -1,0 +1,11 @@
+
+running 6 tests
+test a_call_nesting_past_the_native_cliff_raises_11_1_instead_of_aborting ... ok
+test a_chain_past_the_pre_fix_cliff_parses_and_drops ... ok
+test a_paren_nesting_past_the_native_cliff_raises_11_1_instead_of_aborting ... ok
+test a_shallow_paren_nesting_still_parses_on_a_default_stack_thread ... ok
+test parens_and_calls_share_one_budget_rather_than_one_each ... ok
+test the_depth_the_oracle_still_answers_also_parses_and_drops ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+

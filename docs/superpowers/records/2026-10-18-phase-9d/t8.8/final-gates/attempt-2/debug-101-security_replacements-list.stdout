@@ -1,0 +1,2 @@
+a_requires_name_that_is_not_a_string_names_its_string_value: test
+a_stream_replacement_that_is_not_a_stream_is_the_target: test

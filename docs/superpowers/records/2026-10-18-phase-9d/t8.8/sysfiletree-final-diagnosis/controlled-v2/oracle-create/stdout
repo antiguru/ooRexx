@@ -1,0 +1,12 @@
+mode create
+directory /tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-v2/oracle-create/tmpdir
+before-count 1
+before /tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-v2/oracle-create/tmpdir/seed.txt
+write-residual 0
+close-result READY:
+injected /tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-v2/oracle-create/tmpdir/injected.txt
+tree-rc 0
+after-count 2
+after /tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-v2/oracle-create/tmpdir/injected.txt
+after /tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-v2/oracle-create/tmpdir/seed.txt
+counts-equal 0

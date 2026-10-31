@@ -1,0 +1,66 @@
+
+thread 'command::tests::unused_command_worker_returns_after_drop_unwind_and_exec_failure' (2183253) panicked at crates/rexx-exec/src/command/tests.rs:135:9:
+unwind before dispatch
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+identity: 201 collections
+enhanced: 90 collections
+
+thread 'ir::compile::tests::a_literal_echo_in_front_of_its_load_is_refused' (2184625) panicked at crates/rexx-exec/src/ir/compile/invariants.rs:52:9:
+the literal echo at 1 does not follow the load of the register it reads, so it echoes a value that op did not put there
+
+thread 'ir::compile::tests::a_literal_echo_reading_another_register_is_refused' (2184626) panicked at crates/rexx-exec/src/ir/compile/invariants.rs:52:9:
+the literal echo at 2 does not follow the load of the register it reads, so it echoes a value that op did not put there
+
+thread 'ir::compile::tests::a_read_echo_in_front_of_its_load_is_refused' (2184628) panicked at crates/rexx-exec/src/ir/compile/invariants.rs:82:9:
+the read echo at 1 does not follow the load of the symbol and register it names, so it echoes a value or a name that op did not put there
+
+thread 'ir::compile::tests::a_read_echo_naming_another_symbol_is_refused' (2184629) panicked at crates/rexx-exec/src/ir/compile/invariants.rs:82:9:
+the read echo at 2 does not follow the load of the symbol and register it names, so it echoes a value or a name that op did not put there
+
+thread 'ir::compile::tests::a_read_echo_of_another_kind_is_refused' (2184630) panicked at crates/rexx-exec/src/ir/compile/invariants.rs:82:9:
+the read echo at 2 does not follow the load of the symbol and register it names, so it echoes a value or a name that op did not put there
+
+thread 'ir::compile::tests::a_read_echo_reading_another_register_is_refused' (2184631) panicked at crates/rexx-exec/src/ir/compile/invariants.rs:82:9:
+the read echo at 2 does not follow the load of the symbol and register it names, so it echoes a value or a name that op did not put there
+
+thread 'ir::compile::tests::a_region_op_naming_a_neighbouring_instruction_is_refused' (2184632) panicked at crates/rexx-exec/src/ir/compile/invariants.rs:288:13:
+the op at 1 names instruction 1 inside the region of clause 0, so the driver would hand it the wrong instruction
+
+thread 'ir::compile::tests::a_trace_op_after_the_regions_first_op_is_refused' (2184636) panicked at crates/rexx-exec/src/ir/compile/invariants.rs:27:9:
+the trace op at 2 is not the first op of a Clause region, so it echoes against another clause's indent or after a value line it has to precede
+
+thread 'ir::compile::tests::a_trace_op_naming_a_neighbouring_instruction_is_refused' (2184638) panicked at crates/rexx-exec/src/ir/compile/invariants.rs:288:13:
+the op at 2 names instruction 2 inside the region of clause 1, so the driver would hand it the wrong instruction
+
+thread 'ir::compile::tests::a_trace_op_outside_a_clause_region_is_refused' (2184639) panicked at crates/rexx-exec/src/ir/compile/invariants.rs:27:9:
+the trace op at 1 is not the first op of a Clause region, so it echoes against another clause's indent or after a value line it has to precede
+
+thread 'ir::compile::tests::an_exec_region_holding_an_op_that_drives_clauses_is_refused' (2184640) panicked at crates/rexx-exec/src/ir/compile/invariants.rs:220:13:
+op 2 sits in the Exec region of clause 0, which may hold                  nothing but its echo and the Exec itself
+
+thread 'island::tests::an_island_value_is_made_only_on_the_baton' (2184826) panicked at crates/rexx-exec/src/island.rs:61:9:
+an island value moved off the baton
+
+thread '<unnamed>' (2184828) panicked at crates/rexx-exec/src/island.rs:67:9:
+an island value taken off the baton
+
+thread 'method_rows::tests::a_minted_row_below_the_vector_is_refused' (2184837) panicked at crates/rexx-exec/src/method_rows.rs:49:9:
+minted row MethodId(1) sits below the vector's end
+library=false prefix=0 capacity=0 bytes=0
+library=true prefix=1032 capacity=1734 bytes=27744
+
+thread 'scheduler::tests::a_collection_without_the_baton_fails_its_assertion' (2186002) panicked at crates/rexx-exec/src/scheduler.rs:689:9:
+a collection on a thread not holding the interpreter's baton
+
+thread 'scheduler::tests::a_stack_within_the_margin_is_refused' (2186257) panicked at crates/rexx-exec/src/scheduler.rs:1326:9:
+a thread stack of 33554432 bytes leaves nothing beyond the 33554432-byte margin
+Observation { message: (325, 1), collections: 25, alive: true, attached: true, code: [52, 50, 46, 51], replacement: None, replacement_unchanged: true }
+
+thread 'rexx-pool' (2186729) panicked at crates/rexx-exec/src/scheduler/tests/pool.rs:155:5:
+a native panicked
+
+thread 'rexx-pool' (2186732) panicked at crates/rexx-exec/src/scheduler/tests/pool.rs:165:5:
+a native panicked
+
+thread 'rexx-pool' (2186735) panicked at crates/rexx-exec/src/dispatch/library.rs:1349:13:
+a call's end panicked under a lend

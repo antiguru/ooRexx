@@ -1,0 +1,39 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-4-oracle-base__keyword__FORWARD/run
+TZ=None
+status=Some(0) ended=Exited(0) took=26.266905ms
+GroupRun {
+    group: "base/keyword/FORWARD",
+    expected: {},
+    started: {
+        "TEST_FORWARD_MIXINCLASSES_01",
+        "TEST_FORWARD_MIXINCLASSES_01_CLASS",
+        "TEST_FORWARD_MIXINCLASSES_NO_CLASS_01",
+        "TEST_FORWARD_MIXINCLASSES_NO_CLASS_01_CLASS",
+        "TEST_FORWARD_MIXINCLASSES_NO_CLASS_02",
+        "TEST_FORWARD_MIXINCLASSES_NO_CLASS_02_CLASS",
+    },
+    passed: {
+        "TEST_FORWARD_MIXINCLASSES_01",
+        "TEST_FORWARD_MIXINCLASSES_01_CLASS",
+        "TEST_FORWARD_MIXINCLASSES_NO_CLASS_01",
+        "TEST_FORWARD_MIXINCLASSES_NO_CLASS_01_CLASS",
+        "TEST_FORWARD_MIXINCLASSES_NO_CLASS_02",
+        "TEST_FORWARD_MIXINCLASSES_NO_CLASS_02_CLASS",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "6",
+    ),
+    took: 26.266905ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-4-oracle-base__keyword__FORWARD/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-4-oracle-base__keyword__FORWARD/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 276, modified: SystemTime { tv_sec: 1793406126, tv_nsec: 994750571 }, accessed: SystemTime { tv_sec: 1793406127, tv_nsec: 3006670 }, created: SystemTime { tv_sec: 1793406126, tv_nsec: 988573701 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-4-oracle-base__keyword__FORWARD/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-4-oracle-base__keyword__FORWARD/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-4-oracle-base__keyword__FORWARD/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406126, tv_nsec: 680582640 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-4-oracle-base__keyword__FORWARD/run/ooRexx/base/keyword/FORWARD.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-4-oracle-base__keyword__FORWARD/run/ooRexx/base/keyword/FORWARD.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 7673, modified: SystemTime { tv_sec: 1793406126, tv_nsec: 976478563 }, accessed: SystemTime { tv_sec: 1793406126, tv_nsec: 988573701 }, created: SystemTime { tv_sec: 1793406126, tv_nsec: 975724994 }, .. })

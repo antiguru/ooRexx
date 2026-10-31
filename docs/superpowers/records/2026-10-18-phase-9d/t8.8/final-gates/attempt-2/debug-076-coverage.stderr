@@ -1,0 +1,4 @@
+
+thread 'an_unadmitted_directive_still_panics' (2133074) panicked at crates/rexx-exec/tests/coverage.rs:76:5:
+<phase-5a-task-1-demo> has a `::` directive this walker does not admit (["RESOURCE"]) -- see `is_admitted_directive_kind` for the set and `each_instruction` for which of them carry a body it descends into; either the subset gained a directive kind by mistake or this walker needs widening
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

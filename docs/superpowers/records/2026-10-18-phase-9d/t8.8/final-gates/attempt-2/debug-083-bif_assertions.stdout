@@ -1,0 +1,10 @@
+
+running 5 tests
+test a_raise_row_needs_the_sub_number_too ... ok
+test bif_assertions_differential ... ok
+test every_exempt_attribution_is_a_known_phase_or_a_declared_outcome ... ok
+test the_exempt_set_matches_the_current_failures ... ok
+test the_falsification_proof ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 20.35s
+

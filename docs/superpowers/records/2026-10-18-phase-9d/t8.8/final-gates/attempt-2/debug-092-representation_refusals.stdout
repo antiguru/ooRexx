@@ -1,0 +1,8 @@
+
+running 3 tests
+test every_representation_refusal_is_on_the_allow_list ... ok
+test every_row_names_an_owner ... ok
+test the_scanner_reads_literals_and_skips_comments ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+

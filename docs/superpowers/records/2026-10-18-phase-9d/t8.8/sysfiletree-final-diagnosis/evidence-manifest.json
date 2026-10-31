@@ -1,0 +1,82 @@
+{
+  "/tmp/codex-p9d-t88-final-gates-resume/suite-diagnostics/suite-2087764-374-crate-base__rexxutil__SysFileTree/crate-1/stdout": {
+    "bytes": 115832,
+    "sha256": "3cd0bd075ee9038aa83f77e5e33eba01d8a0cd50b0f8b8dc285340cf48acc4f6"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite-diagnostics/suite-2087764-374-crate-base__rexxutil__SysFileTree/crate-1/stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite-diagnostics/suite-2087764-374-crate-base__rexxutil__SysFileTree/crate-1/context.txt": {
+    "bytes": 4298,
+    "sha256": "cea8edf5406d1d19183b438567b3bfce2329e2387623edd6d89b8b3bad36deae"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite-diagnostics/suite-2087764-374-crate-base__rexxutil__SysFileTree/crate-1/started.txt": {
+    "bytes": 737,
+    "sha256": "0c4f43ab43fcd19ab8789366702865498585c41941c547db07e62c09695d150c"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite-diagnostics/suite-2087764-364-oracle-base__rexxutil__SysFileTree/oracle-1/stdout": {
+    "bytes": 500,
+    "sha256": "da30d7f3e2f2a451cd2524c52356e83b9dfc8767c8d9fd6ae8d3d8108470d806"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite-diagnostics/suite-2087764-364-oracle-base__rexxutil__SysFileTree/oracle-1/stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite-diagnostics/suite-2087764-364-oracle-base__rexxutil__SysFileTree/oracle-1/context.txt": {
+    "bytes": 4307,
+    "sha256": "783c36babde6463f7ce53420c6b7f298ed5d37719e52e0c750a8ba72935528ba"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite-diagnostics/suite-2087764-364-oracle-base__rexxutil__SysFileTree/oracle-1/started.txt": {
+    "bytes": 737,
+    "sha256": "0c4f43ab43fcd19ab8789366702865498585c41941c547db07e62c09695d150c"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite-diagnostics/suite-2087764-360-oracle-base__class__Stream/oracle-1/stdout": {
+    "bytes": 501,
+    "sha256": "2f6a8a5a7be7d7e1440481b500fe99b171faab5e980ba67183d820c2ec04d906"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite-diagnostics/suite-2087764-360-oracle-base__class__Stream/oracle-1/stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite-diagnostics/suite-2087764-360-oracle-base__class__Stream/oracle-1/context.txt": {
+    "bytes": 9569,
+    "sha256": "28ded090028834cbdf6c22ca8cd2361a441684f84f04439502388c7043efd9f1"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite-diagnostics/suite-2087764-360-oracle-base__class__Stream/oracle-1/started.txt": {
+    "bytes": 3168,
+    "sha256": "d024a5eb39a1bb8f59c211431fa7f660cad3b2999f5c26b8da9fbf13caecfb5c"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite-diagnostics/suite-2087764-378-crate-base__class__Stream/crate-1/stdout": {
+    "bytes": 501,
+    "sha256": "2cf6fa2b45e78d6cdc539e0c663af6c9c0ca4feea37d2481e5ef2aa58e6b292b"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite-diagnostics/suite-2087764-378-crate-base__class__Stream/crate-1/stderr": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite-diagnostics/suite-2087764-378-crate-base__class__Stream/crate-1/context.txt": {
+    "bytes": 9555,
+    "sha256": "9f28417a5a54bc14c3d8baa3817b7982500da25621541bf071950137be5e2860"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite-diagnostics/suite-2087764-378-crate-base__class__Stream/crate-1/started.txt": {
+    "bytes": 3168,
+    "sha256": "d024a5eb39a1bb8f59c211431fa7f660cad3b2999f5c26b8da9fbf13caecfb5c"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/release-suite.json": {
+    "bytes": 889,
+    "sha256": "11f6ee823bcfd9d7442eb86e477aef8e30ea96f18104b5467e298a0099239a0b"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite/tests.tsv": {
+    "bytes": 1297680,
+    "sha256": "8bd7814f84b05fe417a56f7fd644b509ba5e84af03f0f6703c0a3942d1b0de87"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite/delta-vs-t8.7c-fix-r4.tsv": {
+    "bytes": 275,
+    "sha256": "7b8bde89f1c5d8dfb4ad51ebb2c88f1c6bee47f3056acbd18eec252ba0362586"
+  },
+  "/tmp/codex-p9d-t88-final-gates-resume/suite-static-inputs-comparison.json": {
+    "bytes": 387,
+    "sha256": "24e480fd64cb0df8992cfc157d2c0b2884fd09d8860188964182fa668b496195"
+  }
+}

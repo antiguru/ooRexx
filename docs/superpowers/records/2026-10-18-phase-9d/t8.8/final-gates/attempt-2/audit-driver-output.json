@@ -1,0 +1,14 @@
+{
+  "command": [
+    "memcap",
+    "8G",
+    "python3",
+    "/tmp/codex-p9d-t88-final-gate-resume.py",
+    "audit"
+  ],
+  "chunk_id": "fd61d0",
+  "wall_time_seconds": 0.073877124,
+  "exit_code": 1,
+  "original_token_count": 81,
+  "output": "Traceback (most recent call last):\n  File \"/tmp/codex-p9d-t88-final-gate-resume.py\", line 580, in <module>\n    assert record['source_commit'] == PIN and record['returncode'] == 0 and not record['timed_out']\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n"
+}

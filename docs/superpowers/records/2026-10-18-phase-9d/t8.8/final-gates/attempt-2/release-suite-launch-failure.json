@@ -1,0 +1,12 @@
+{
+  "source_commit": "6b6f3fb460049c6ef63f565ceb78e11b5582f165",
+  "action": "release-suite",
+  "driver_exit_status": 1,
+  "cargo_child_started": false,
+  "failure_stage": "suite_input_snapshot before initial manifest serialization",
+  "exception": "FileNotFoundError",
+  "missing_path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/watchdog.rs",
+  "actual_module_root": "/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec/tests/watchdog",
+  "guard_policy_unchanged": true,
+  "freeze_active": true
+}

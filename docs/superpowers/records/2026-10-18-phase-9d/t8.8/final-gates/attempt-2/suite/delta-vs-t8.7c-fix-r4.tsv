@@ -1,0 +1,3 @@
+group	test	change	old row	old oracle	old crate	new row	new oracle	new crate
+base/class/Bag	TEST_HASITEM_VALUE_NOTEQUAL_INDEX	changed	Deviation(45)	passed	failed	Deviation(45)	passed	passed
+base/rexxutil/SysFileTree	TEST_TREE_DIRECTORY	changed	-	passed	passed	-	passed	failed

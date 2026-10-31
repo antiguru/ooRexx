@@ -1,0 +1,48 @@
+==============================================================================
+rexx-exec keyword body report -- ootest/ooRexx/base/keyword @ r13178
+*** REPORT MODE -- NOT THE GATE. Set REXX_KEYWORD_GATE=1 to run this as the gate. ***
+892 of 896 bodies passing, carrying 1745 of 1773 assertSame calls -- REPORT MODE, NOT THE GATE
+per group (bodies passing/total, assertions passing/total):
+  ADDRESS                10/10       11/11
+  ASSIGNMENT              8/8       265/265
+  CALL                    5/8        26/50
+  DO                     85/85      507/507
+  IF                     25/25       29/29
+  INTERPRET               2/2         3/3
+  ITERATE                18/18       20/20
+  LEAVE                  15/15       17/17
+  NOP                     2/2         3/3
+  NUMERIC                50/51       59/63
+  PARSE                 659/659     778/778
+  SELECT                  8/8         8/8
+  SelectCase              1/1         1/1
+  TRACE                   3/3        13/13
+  VarRef                  1/1         5/5
+outside the extracted population, by reason (methods, assertSame calls):
+  outside any test-prefixed method             1       2
+  inside a comment, not a call                 3       3
+  on a continued line                          2       3
+  body's only send is assertSameList           0       0
+  body uses another assert* spelling         138     169
+  body uses a message send                    96     491
+  unparsed call shape                          0       0
+  not a clause of its own                      0       0
+not passing, by what would unblock it:
+  RAISED                                   4
+first construct hit, for a body that failed loudly:
+assertion failures (4) -- not gaps: the body ran and disagreed:
+  CALL::test_literal: raised exit 213; stderr=     2 *-* call "";
+Error 43 running /nonexistent/keyword-body.rex line 2:  Routine not found.
+Error 43.1:  Could not find routine "".
+
+  CALL::test_expression: raised exit 213; stderr=     3 *-* call ("label");
+Error 43 running /nonexistent/keyword-body.rex line 3:  Routine not found.
+Error 43.1:  Could not find routine "label".
+
+  CALL::test_on_name: raised exit 213; stderr=    16 *-* call charin "/"
+Error 43 running /nonexistent/keyword-body.rex line 16:  Routine not found.
+Error 43.1:  Could not find routine "TRAP".
+
+  NUMERIC::test_42: raised exit 3; stderr=
+*** REPORT MODE -- NOT THE GATE. 892 of 896 means 4 bodies are not passing yet; it is a progress signal, not a claim that base/keyword is covered. ***
+==============================================================================

@@ -1,0 +1,43 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-353-crate-base__rexxutil__SysFileDateTime/run
+TZ=None
+status=Some(0) ended=Exited(0) took=91.68874ms
+GroupRun {
+    group: "base/rexxutil/SysFileDateTime",
+    expected: {},
+    started: {
+        "TEST_GET_NO_ARGS",
+        "TEST_GET_OPTION_INVALID",
+        "TEST_GET_OPTION_NULL",
+        "TEST_GET_THREE_ARGS_TOO_MANY",
+        "TEST_SET_DATETIME_INVALID",
+        "TEST_SET_FOUR_ARGS_TOO_MANY",
+        "TEST_SET_GET_DATETIME",
+        "TEST_SET_NO_ARGS",
+    },
+    passed: {
+        "TEST_GET_NO_ARGS",
+        "TEST_GET_OPTION_INVALID",
+        "TEST_GET_OPTION_NULL",
+        "TEST_GET_THREE_ARGS_TOO_MANY",
+        "TEST_SET_DATETIME_INVALID",
+        "TEST_SET_FOUR_ARGS_TOO_MANY",
+        "TEST_SET_GET_DATETIME",
+        "TEST_SET_NO_ARGS",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: Memcap,
+    tests_ran: Some(
+        "8",
+    ),
+    took: 91.68874ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-353-crate-base__rexxutil__SysFileDateTime/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-353-crate-base__rexxutil__SysFileDateTime/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 248, modified: SystemTime { tv_sec: 1793406131, tv_nsec: 766536950 }, accessed: SystemTime { tv_sec: 1793406131, tv_nsec: 795833908 }, created: SystemTime { tv_sec: 1793406131, tv_nsec: 760435194 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-353-crate-base__rexxutil__SysFileDateTime/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-353-crate-base__rexxutil__SysFileDateTime/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-353-crate-base__rexxutil__SysFileDateTime/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406131, tv_nsec: 789453768 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-353-crate-base__rexxutil__SysFileDateTime/run/ooRexx/base/rexxutil/SysFileDateTime.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-353-crate-base__rexxutil__SysFileDateTime/run/ooRexx/base/rexxutil/SysFileDateTime.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 7887, modified: SystemTime { tv_sec: 1793406131, tv_nsec: 705148750 }, accessed: SystemTime { tv_sec: 1793406131, tv_nsec: 756435310 }, created: SystemTime { tv_sec: 1793406131, tv_nsec: 704355252 }, .. })

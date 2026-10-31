@@ -1,0 +1,26 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-267-oracle-base__rexxutil__platform__windows__SysIni/run
+TZ=None
+status=Some(0) ended=Exited(0) took=16.529597ms
+GroupRun {
+    group: "base/rexxutil/platform/windows/SysIni",
+    expected: {},
+    started: {},
+    passed: {},
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "0",
+    ),
+    took: 16.529597ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-267-oracle-base__rexxutil__platform__windows__SysIni/started.txt canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-267-oracle-base__rexxutil__platform__windows__SysIni/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-267-oracle-base__rexxutil__platform__windows__SysIni/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-267-oracle-base__rexxutil__platform__windows__SysIni/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406130, tv_nsec: 520487890 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-267-oracle-base__rexxutil__platform__windows__SysIni/run/ooRexx/base/rexxutil/platform/windows/SysIni.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-267-oracle-base__rexxutil__platform__windows__SysIni/run/ooRexx/base/rexxutil/platform/windows/SysIni.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 8481, modified: SystemTime { tv_sec: 1793406130, tv_nsec: 527858623 }, accessed: SystemTime { tv_sec: 1793406130, tv_nsec: 542755235 }, created: SystemTime { tv_sec: 1793406130, tv_nsec: 527259310 }, .. })

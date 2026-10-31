@@ -1,0 +1,4 @@
+a_child_writes_no_sim_line_into_output_its_parent_captures: test
+a_damaged_trace_is_refused_before_the_run: test
+a_seed_gives_one_output_in_two_processes: test
+a_seed_gives_one_trace_hash_in_two_processes: test

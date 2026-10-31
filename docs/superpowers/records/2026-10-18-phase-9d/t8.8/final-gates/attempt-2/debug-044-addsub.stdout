@@ -1,0 +1,12 @@
+
+running 7 tests
+test a_borrow_leaves_a_leading_zero_that_rounding_must_count ... ok
+test adding_zero_returns_the_other_operand_canonicalised ... ok
+test addition_emits_a_carry_digit_only_when_there_is_a_carry ... ok
+test alignment_adjustment_changes_which_digit_rounding_sees ... ok
+test an_operand_too_small_to_reach_the_result_is_discarded ... ok
+test ordinary_arithmetic ... ok
+test trailing_zeros_propagate_through_the_result ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,0 +1,8 @@
+
+running 3 tests
+test tests::every_program_is_reachable_by_name ... ok
+test tests::the_entry_point_is_one_of_the_embedded_programs ... ok
+test tests::the_entry_program_calls_exactly_the_other_embedded_programs ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

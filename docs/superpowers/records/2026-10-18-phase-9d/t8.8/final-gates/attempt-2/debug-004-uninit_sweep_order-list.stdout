@@ -1,0 +1,5 @@
+a_second_sweep_of_the_same_registry_is_empty: test
+a_shared_bucket_keeps_entry_order: test
+an_instance_side_uninit_does_not_enter_the_sweep: test
+the_sweep_contradicts_declaration_order: test
+twenty_classes_still_run_in_bucket_order: test

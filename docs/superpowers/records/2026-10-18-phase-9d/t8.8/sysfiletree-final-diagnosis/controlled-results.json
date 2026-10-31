@@ -1,0 +1,112 @@
+{
+  "mechanism_confirmed_on_both": true,
+  "stable_control_equal_on_both": true,
+  "exact_historical_actor_proven": false,
+  "runs": {
+    "oracle-stable": {
+      "records": "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-v2/oracle-stable",
+      "before_full_names": [
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-v2/oracle-stable/tmpdir/seed.txt"
+      ],
+      "after_full_names": [
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-v2/oracle-stable/tmpdir/seed.txt"
+      ],
+      "added_full_names": [],
+      "count_before": 1,
+      "count_after": 1,
+      "tree_rc": 0,
+      "status": 0,
+      "stderr_bytes": 0,
+      "executable": {
+        "path": "/home/moritz/dev/repos/ooRexx/build/bin/rexx",
+        "sha256": "bb5bb8ccbb96c376e329b91aafdad891f975ba06c941dbceba82c3848fa13019"
+      },
+      "channel_hashes": {
+        "stdout": "283327db615d55117b58a613883ab17070fbaa1a5b10df5b1400609616e33db9",
+        "stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "status": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      }
+    },
+    "oracle-create": {
+      "records": "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-v2/oracle-create",
+      "before_full_names": [
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-v2/oracle-create/tmpdir/seed.txt"
+      ],
+      "after_full_names": [
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-v2/oracle-create/tmpdir/injected.txt",
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-v2/oracle-create/tmpdir/seed.txt"
+      ],
+      "added_full_names": [
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-v2/oracle-create/tmpdir/injected.txt"
+      ],
+      "count_before": 1,
+      "count_after": 2,
+      "tree_rc": 0,
+      "status": 0,
+      "stderr_bytes": 0,
+      "executable": {
+        "path": "/home/moritz/dev/repos/ooRexx/build/bin/rexx",
+        "sha256": "bb5bb8ccbb96c376e329b91aafdad891f975ba06c941dbceba82c3848fa13019"
+      },
+      "channel_hashes": {
+        "stdout": "16a2d87811e212b3e5c56af51631efb1a11b40b7768290db13032b95a590a0f6",
+        "stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "status": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      }
+    },
+    "crate-stable": {
+      "records": "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-stable",
+      "before_full_names": [
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-stable/tmpdir/seed.txt"
+      ],
+      "after_full_names": [
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-stable/tmpdir/seed.txt"
+      ],
+      "added_full_names": [],
+      "count_before": 1,
+      "count_after": 1,
+      "tree_rc": 0,
+      "status": 0,
+      "stderr_bytes": 0,
+      "executable": {
+        "path": "/tmp/codex-p9d-t88-pins/8.8-corpus-registration-rexx",
+        "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145"
+      },
+      "channel_hashes": {
+        "stdout": "99557235d733270a90074b8498540bf1bff1044ddc6c000c31f610365b8ba7fb",
+        "stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "status": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      }
+    },
+    "crate-create": {
+      "records": "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-create",
+      "before_full_names": [
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-create/tmpdir/seed.txt"
+      ],
+      "after_full_names": [
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-create/tmpdir/injected.txt",
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-create/tmpdir/seed.txt"
+      ],
+      "added_full_names": [
+        "/tmp/codex-p9d-t88-sysfiletree-final-diagnosis/controlled-crate-outercap/crate-create/tmpdir/injected.txt"
+      ],
+      "count_before": 1,
+      "count_after": 2,
+      "tree_rc": 0,
+      "status": 0,
+      "stderr_bytes": 0,
+      "executable": {
+        "path": "/tmp/codex-p9d-t88-pins/8.8-corpus-registration-rexx",
+        "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145"
+      },
+      "channel_hashes": {
+        "stdout": "949d1c9b86f4a5986651c07008c66c79bc043acc9ddb2288be207a5c81ead1f7",
+        "stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "status": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      }
+    }
+  },
+  "limits": "Oracle: ulimit -v 1048576 and timeout20; crate: outer memcap2G and child timeout20.",
+  "observer_correction": "V1 used special RESULT; preserved before v2 tree_rc correction.",
+  "launch_correction": "Inner memcap unavailable cgroup; controller-directed outer memcap succeeded. No cap fallback."
+}

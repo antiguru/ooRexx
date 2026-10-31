@@ -1,0 +1,69 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-177-oracle-base__keyword__LOOP/run
+TZ=None
+status=Some(0) ended=Exited(0) took=21.210256ms
+GroupRun {
+    group: "base/keyword/LOOP",
+    expected: {},
+    started: {
+        "TEST_LOOP",
+        "TEST_LOOP_4",
+        "TEST_LOOP_A=4",
+        "TEST_LOOP_COUNTER",
+        "TEST_LOOP_FOR",
+        "TEST_LOOP_I=-4.04 BY 1.01",
+        "TEST_LOOP_I=0_BY_2",
+        "TEST_LOOP_I=0_TO_3_BY_2",
+        "TEST_LOOP_I=1",
+        "TEST_LOOP_I=1_TO_3",
+        "TEST_LOOP_I=4.04 BY -1.01",
+        "TEST_LOOP_LABEL",
+        "TEST_LOOP_LABEL_ERROR 10.2",
+        "TEST_LOOP_LABEL_WITH_INTERPRET",
+        "TEST_LOOP_UNTIL_.TRUE, .TRUE, I>3",
+        "TEST_LOOP_UNTIL_I>3",
+        "TEST_LOOP_WHILE_.TRUE, .TRUE, I<4",
+        "TEST_LOOP_WHILE_I<4",
+        "TEST_MULTIPLE_COUNTER",
+        "TEST_NO_END",
+        "TEST_NO_END_COUNTER",
+    },
+    passed: {
+        "TEST_LOOP",
+        "TEST_LOOP_4",
+        "TEST_LOOP_A=4",
+        "TEST_LOOP_COUNTER",
+        "TEST_LOOP_FOR",
+        "TEST_LOOP_I=-4.04 BY 1.01",
+        "TEST_LOOP_I=0_BY_2",
+        "TEST_LOOP_I=0_TO_3_BY_2",
+        "TEST_LOOP_I=1",
+        "TEST_LOOP_I=1_TO_3",
+        "TEST_LOOP_I=4.04 BY -1.01",
+        "TEST_LOOP_LABEL",
+        "TEST_LOOP_LABEL_ERROR 10.2",
+        "TEST_LOOP_LABEL_WITH_INTERPRET",
+        "TEST_LOOP_UNTIL_.TRUE, .TRUE, I>3",
+        "TEST_LOOP_UNTIL_I>3",
+        "TEST_LOOP_WHILE_.TRUE, .TRUE, I<4",
+        "TEST_LOOP_WHILE_I<4",
+        "TEST_MULTIPLE_COUNTER",
+        "TEST_NO_END",
+        "TEST_NO_END_COUNTER",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "21",
+    ),
+    took: 21.210256ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-177-oracle-base__keyword__LOOP/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-177-oracle-base__keyword__LOOP/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 600, modified: SystemTime { tv_sec: 1793406129, tv_nsec: 397923130 }, accessed: SystemTime { tv_sec: 1793406129, tv_nsec: 401016613 }, created: SystemTime { tv_sec: 1793406129, tv_nsec: 396471411 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-177-oracle-base__keyword__LOOP/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-177-oracle-base__keyword__LOOP/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-177-oracle-base__keyword__LOOP/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406129, tv_nsec: 368504620 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-177-oracle-base__keyword__LOOP/run/ooRexx/base/keyword/LOOP.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-177-oracle-base__keyword__LOOP/run/ooRexx/base/keyword/LOOP.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 10246, modified: SystemTime { tv_sec: 1793406129, tv_nsec: 382970049 }, accessed: SystemTime { tv_sec: 1793406129, tv_nsec: 396134240 }, created: SystemTime { tv_sec: 1793406129, tv_nsec: 382062455 }, .. })

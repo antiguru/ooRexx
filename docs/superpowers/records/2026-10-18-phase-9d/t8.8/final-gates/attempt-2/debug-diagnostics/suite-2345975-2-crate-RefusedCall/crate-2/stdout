@@ -1,0 +1,28 @@
+Searching for test containers
+Executing automated test suite
+
+ooTest Framework - Automated Test of the ooRexx Interpreter
+
+Interpreter:        REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026
+OS Name:            LINUX
+SysVersion:         Linux 7.2.11+deb14-amd64
+
+Tests ran:          3
+Assertions:         2
+Failures:           1
+Errors:             0
+
+[failure] 20261031 02:06:20.623573
+  Test:   TEST_D
+  Class:  RefusedCall.testGroup
+  File:   .../ooRexx/RefusedCall.testGroup
+  Line:   27
+  Failed: assertSame
+    Expected: 1
+    Actual:   2
+
+File search:        00:00:00.001240
+Suite construction: 00:00:00.001043
+Test execution:     00:00:00.000966
+Total time:         00:00:00.004712
+

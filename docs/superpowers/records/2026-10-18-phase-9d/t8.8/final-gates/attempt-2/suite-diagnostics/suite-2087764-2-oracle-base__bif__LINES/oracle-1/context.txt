@@ -1,0 +1,59 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-2-oracle-base__bif__LINES/run
+TZ=None
+status=Some(0) ended=Exited(0) took=26.887856ms
+GroupRun {
+    group: "base/bif/LINES",
+    expected: {},
+    started: {
+        "TEST_BAD_OPT_GOODFILE",
+        "TEST_BAD_OPT_NOFILE",
+        "TEST_BAD_OPT_STDIN",
+        "TEST_BAD_OPT_STDIN_NULLSTRING",
+        "TEST_COUNT_BYTES",
+        "TEST_COUNT_NEGATIVETEST1",
+        "TEST_FILESTREAM_COUNT",
+        "TEST_FILESTREAM_NORMAL",
+        "TEST_LINES_NOTREADY_DIRECTORY",
+        "TEST_LINES_NOTREADY_INVALID",
+        "TEST_LINES_NOTREADY_NONEXISTING",
+        "TEST_NORMAL_BYTES",
+        "TEST_NORMAL_NEGATIVETEST1",
+        "TEST_TOO_MANY_OPT_GOODFILE",
+        "TEST_TOO_MANY_OPT_STDIN",
+        "TEST_WAY_TOO_MANY_OPT_STDIN",
+    },
+    passed: {
+        "TEST_BAD_OPT_GOODFILE",
+        "TEST_BAD_OPT_NOFILE",
+        "TEST_BAD_OPT_STDIN",
+        "TEST_BAD_OPT_STDIN_NULLSTRING",
+        "TEST_COUNT_BYTES",
+        "TEST_COUNT_NEGATIVETEST1",
+        "TEST_FILESTREAM_COUNT",
+        "TEST_FILESTREAM_NORMAL",
+        "TEST_LINES_NOTREADY_DIRECTORY",
+        "TEST_LINES_NOTREADY_INVALID",
+        "TEST_LINES_NOTREADY_NONEXISTING",
+        "TEST_NORMAL_BYTES",
+        "TEST_NORMAL_NEGATIVETEST1",
+        "TEST_TOO_MANY_OPT_GOODFILE",
+        "TEST_TOO_MANY_OPT_STDIN",
+        "TEST_WAY_TOO_MANY_OPT_STDIN",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "16",
+    ),
+    took: 26.887856ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-2-oracle-base__bif__LINES/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-2-oracle-base__bif__LINES/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 519, modified: SystemTime { tv_sec: 1793406126, tv_nsec: 996849162 }, accessed: SystemTime { tv_sec: 1793406127, tv_nsec: 5006964 }, created: SystemTime { tv_sec: 1793406126, tv_nsec: 994132908 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-2-oracle-base__bif__LINES/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-2-oracle-base__bif__LINES/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-2-oracle-base__bif__LINES/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406126, tv_nsec: 680582640 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-2-oracle-base__bif__LINES/run/ooRexx/base/bif/LINES.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-2-oracle-base__bif__LINES/run/ooRexx/base/bif/LINES.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 13962, modified: SystemTime { tv_sec: 1793406126, tv_nsec: 977454936 }, accessed: SystemTime { tv_sec: 1793406126, tv_nsec: 988573701 }, created: SystemTime { tv_sec: 1793406126, tv_nsec: 976185121 }, .. })

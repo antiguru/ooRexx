@@ -1,0 +1,37 @@
+run=/tmp/codex-p9d-t88-target/tmp/suite-2087764-394-oracle-base__rexxutil__SysFormatMessage/run
+TZ=None
+status=Some(0) ended=Exited(0) took=16.112859ms
+GroupRun {
+    group: "base/rexxutil/SysFormatMessage",
+    expected: {},
+    started: {
+        "TEST_LONG_SUBSTITUTIONS",
+        "TEST_NO_ARGS_TOO_FEW",
+        "TEST_ONE_ARG_TOO_FEW",
+        "TEST_SUBSTITUTIONS",
+        "TEST_TOO_MANY_SUBS",
+    },
+    passed: {
+        "TEST_LONG_SUBSTITUTIONS",
+        "TEST_NO_ARGS_TOO_FEW",
+        "TEST_ONE_ARG_TOO_FEW",
+        "TEST_SUBSTITUTIONS",
+        "TEST_TOO_MANY_SUBS",
+    },
+    failed: {},
+    blocked: {},
+    blocked_at_load: None,
+    ended_before_a_test: None,
+    iterations: 1,
+    ended_normally: true,
+    cap: OracleUlimit,
+    tests_ran: Some(
+        "5",
+    ),
+    took: 16.112859ms,
+}
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-394-oracle-base__rexxutil__SysFormatMessage/started.txt canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-394-oracle-base__rexxutil__SysFormatMessage/started.txt") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100664 (-rw-rw-r--) }), len: 144, modified: SystemTime { tv_sec: 1793406132, tv_nsec: 500503171 }, accessed: SystemTime { tv_sec: 1793406132, tv_nsec: 502929323 }, created: SystemTime { tv_sec: 1793406132, tv_nsec: 499778791 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-394-oracle-base__rexxutil__SysFormatMessage/run/child.rex canonical=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" }) metadata=Err(Os { code: 2, kind: NotFound, message: "No such file or directory" })
+read failed: No such file or directory (os error 2)
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-394-oracle-base__rexxutil__SysFormatMessage/bin-rexx/rexx canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-394-oracle-base__rexxutil__SysFormatMessage/bin-rexx/rexx") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 67515656, modified: SystemTime { tv_sec: 1793402527, tv_nsec: 237921052 }, accessed: SystemTime { tv_sec: 1793406132, tv_nsec: 443238815 }, created: SystemTime { tv_sec: 1793402527, tv_nsec: 224212624 }, .. })
+path=/tmp/codex-p9d-t88-target/tmp/suite-2087764-394-oracle-base__rexxutil__SysFormatMessage/run/ooRexx/base/rexxutil/SysFormatMessage.testGroup canonical=Ok("/tmp/codex-p9d-t88-target/tmp/suite-2087764-394-oracle-base__rexxutil__SysFormatMessage/run/ooRexx/base/rexxutil/SysFormatMessage.testGroup") metadata=Ok(Metadata { file_type: FileType { is_file: true, is_dir: false, is_symlink: false, .. }, permissions: Permissions(FilePermissions { mode: 0o100775 (-rwxrwxr-x) }), len: 5072, modified: SystemTime { tv_sec: 1793406132, tv_nsec: 488292622 }, accessed: SystemTime { tv_sec: 1793406132, tv_nsec: 499528728 }, created: SystemTime { tv_sec: 1793406132, tv_nsec: 487840325 }, .. })

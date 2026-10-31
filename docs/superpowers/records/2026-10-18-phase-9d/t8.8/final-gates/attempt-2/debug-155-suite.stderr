@@ -1,0 +1,16 @@
+
+thread 'selection::tests::empty_selectors_fail_visibly' (2346504) panicked at crates/rexx-exec/tests/suite/selection/mod.rs:17:5:
+REXX_SUITE_GROUPS must name at least one group
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'selection::tests::empty_selectors_fail_visibly' (2346504) panicked at crates/rexx-exec/tests/suite/selection/mod.rs:17:5:
+REXX_SUITE_GROUPS must name at least one group
+
+thread 'selection::tests::empty_selectors_fail_visibly' (2346504) panicked at crates/rexx-exec/tests/suite/selection/mod.rs:17:5:
+REXX_SUITE_GROUPS must name at least one group
+
+thread 'selection::tests::empty_selectors_fail_visibly' (2346504) panicked at crates/rexx-exec/tests/suite/selection/mod.rs:17:5:
+REXX_SUITE_GROUPS must name at least one group
+
+thread 'selection::tests::unknown_groups_keep_the_named_diagnostic' (2346506) panicked at crates/rexx-exec/tests/suite/selection/mod.rs:33:5:
+REXX_SUITE_GROUPS names no group ["missing/Group"]

@@ -1,0 +1,78 @@
+{
+  "source_commit": "6b6f3fb460049c6ef63f565ceb78e11b5582f165",
+  "driver_sha256": "af2bfb41da1d71930e2b7eb3c09319d16ac685609365dce8aa9a8dc1587f85e4",
+  "initial_child_status": 0,
+  "initial_driver_status": 1,
+  "semantic_rerun": false,
+  "summary": [
+    1239,
+    0,
+    0,
+    0,
+    0
+  ],
+  "nested_summary_proof": {
+    "names": [
+      "input::tests::spawn_failure_on_stdin_reaches_syntax_without_reading",
+      "input::tests::spawn_failure_preserves_partial_input_and_requeues_other_posts",
+      "input::tests::stdin_recovers_in_configured_inline_mode_after_spawn_failure",
+      "input::tests::stdin_recovers_with_a_pooled_worker_after_spawn_failure",
+      "scheduler::tests::spawn_failure::command_spawn_failure_creates_no_child_and_repeats",
+      "scheduler::tests::spawn_failure::guarded_native_spawn_failure_releases_receiver_for_progress",
+      "scheduler::tests::spawn_failure::native_spawn_failure_reaches_main_and_started_handlers"
+    ],
+    "summaries": [
+      [
+        1,
+        0,
+        0,
+        0,
+        1238
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        1238
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        1238
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        1238
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        1238
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        1238
+      ],
+      [
+        1,
+        0,
+        0,
+        0,
+        1238
+      ]
+    ],
+    "source": "rust/crates/rexx-exec/src/test_process.rs",
+    "source_sha256": "db5e3eec619d3a8c13c89d083e5d06bb2ae99eeb01fadfa0cfcd929c419254ed"
+  }
+}

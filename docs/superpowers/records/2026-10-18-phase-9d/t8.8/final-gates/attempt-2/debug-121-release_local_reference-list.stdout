@@ -1,0 +1,3 @@
+a_release_loop_runs_in_memory_that_does_not_grow_with_its_passes: test
+releases_answer_as_the_oracles_do: test
+under_a_collection_at_every_allocation_only_the_released_string_goes: test

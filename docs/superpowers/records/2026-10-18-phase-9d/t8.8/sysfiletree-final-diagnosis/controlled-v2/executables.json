@@ -1,0 +1,10 @@
+{
+  "crate": {
+    "path": "/tmp/codex-p9d-t88-pins/8.8-corpus-registration-rexx",
+    "sha256": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145"
+  },
+  "oracle": {
+    "path": "/home/moritz/dev/repos/ooRexx/build/bin/rexx",
+    "sha256": "bb5bb8ccbb96c376e329b91aafdad891f975ba06c941dbceba82c3848fa13019"
+  }
+}
