@@ -1,0 +1,18 @@
+{
+  "base": "4714f6521f54e583e86c579bd803a80067a6939d",
+  "original_suite_sha256": "a3068bda099fa404d226814bea4f19ddca9b1889d152448083a4605b2cdcfd7e",
+  "moved_body_sha256": "31c10b71663e4350214a4425df36f3e1a78b8b7769c712a5c37b1398f870ebd5",
+  "moved_body_exact": true,
+  "functions": [
+    "run_group_on_oracle",
+    "run_group_on_oracle_from",
+    "run_group_on_crate",
+    "crate_deadline",
+    "run_group_on_crate_within",
+    "crate_run_once",
+    "remove_work",
+    "run_group"
+  ],
+  "protected_sha256": "0e3e287344577115c7c1ba9a270bda0316d2cf72b7fd9c164e95dc295ddece22",
+  "baseline_tests": 68
+}
