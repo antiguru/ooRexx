@@ -213,6 +213,66 @@ fn memcap() -> Option<PathBuf> {
 }
 
 #[test]
+fn sysfiletree_launches_use_distinct_populated_child_temporary_directories() {
+    let parent_tmpdir = std::env::var_os("TMPDIR");
+    let private = scratch_run("sysfiletree-isolation-source");
+    let observation = private.parent().unwrap().join("observed.txt");
+    let group = "base/rexxutil/SysFileTree.testGroup";
+    let source = root().join("temporary_directory").join(group);
+    let target = private.join(group);
+    fs::create_dir_all(target.parent().unwrap()).unwrap();
+    let text = fs::read_to_string(source).unwrap().replace(
+        "OBSERVATION_PATH_LITERAL",
+        &format!("'{}'", observation.to_string_lossy().replace('\'', "''")),
+    );
+    fs::write(target, text).unwrap();
+    let oracle =
+        run_group_on_oracle_from(&private, "base/rexxutil", "SysFileTree", &BTreeSet::new());
+    let settings = CrateSettings {
+        root: private.clone(),
+        ..settings()
+    };
+    let ours = run_group_on_crate_within(
+        &settings,
+        "base/rexxutil",
+        "SysFileTree",
+        &BTreeSet::new(),
+        settings.floor,
+    );
+    let observed = fs::read_to_string(&observation).expect("external child observations");
+    eprintln!("SysFileTree oracle={oracle:#?} crate={ours:#?}\n{observed}");
+    assert_eq!(std::env::var_os("TMPDIR"), parent_tmpdir);
+    for run in [&oracle, &ours] {
+        assert!(run.ended_normally, "{run:#?}");
+        assert_eq!(run.iterations, 1, "{run:#?}");
+        assert!(run.blocked.is_empty(), "{run:#?}");
+        assert!(run.failed.is_empty(), "{run:#?}");
+        assert_eq!(run.passed, names(&["TEST_TEMPORARY_DIRECTORY"]));
+    }
+    let paths: Vec<PathBuf> = observed
+        .lines()
+        .filter_map(|line| line.strip_prefix("TMPDIR="))
+        .map(PathBuf::from)
+        .collect();
+    assert_eq!(paths.len(), 2);
+    assert_ne!(paths[0], paths[1]);
+    for path in paths {
+        assert_eq!(path.file_name().unwrap(), "sysfiletree-tmp");
+        assert!(!path.exists(), "child work survived cleanup: {path:?}");
+        assert!(!path.parent().unwrap().exists());
+    }
+    assert_eq!(
+        observed
+            .lines()
+            .filter_map(|line| line.strip_prefix("NAMES="))
+            .collect::<Vec<_>>(),
+        ["stable-directory stable-file.txt"; 2]
+    );
+    assert!(observation.is_file());
+    fs::remove_dir_all(private.parent().unwrap()).unwrap();
+}
+
+#[test]
 fn a_child_refusing_on_the_inherited_stderr_leaves_the_run_ended_normally() {
     let run = scratch_run("child-refuses");
     let (process, tests) = crate_run_once(

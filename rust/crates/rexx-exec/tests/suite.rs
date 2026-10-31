@@ -25,8 +25,8 @@
 #[path = "suite/launch/mod.rs"]
 mod launch;
 pub use launch::{
-    crate_deadline, crate_run_once, run_group, run_group_on_crate,
-    run_group_on_crate_within, run_group_on_oracle, run_group_on_oracle_from,
+    crate_deadline, crate_run_once, run_group, run_group_on_crate, run_group_on_crate_within,
+    run_group_on_oracle, run_group_on_oracle_from,
 };
 
 #[path = "suite/diagnostics.rs"]

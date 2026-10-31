@@ -1,0 +1,61 @@
+#!/usr/bin/env rexx
+/* The launch harness gives this exact logical group a populated private TMPDIR. */
+  parse source . . s
+  group = .TestGroup~new(s)
+  group~add(.SysFileTree.testGroup)
+  if group~isAutomatedTest then return group
+  testResult = group~suite~execute~~print
+return testResult
+
+::requires 'ooTest.frm'
+
+::class SysFileTree.testGroup subclass ooTestCase public
+
+::method test_temporary_directory
+  temporary = .File~temporaryPath
+  files = temporary~listFiles
+  names = .Array~new
+  paths = .Array~new
+  do file over files
+    names~append(file~name)
+    paths~append(file~absolutePath)
+  end
+  names~sort
+  paths~sort
+  observed = ''
+  do name over names
+    observed = observed name
+  end
+  /* The Rust test substitutes a quoted external observation filename. */
+  observation = .Stream~new(OBSERVATION_PATH_LITERAL)
+  observation~open('write append')
+  observation~lineout('TMPDIR=' || temporary~absolutePath)
+  observation~lineout('NAMES=' || observed~strip)
+  observation~close
+
+  run = .File~new(self~class~package~name)~parentFile~parentFile~parentFile~parentFile
+  expected = .File~new('sysfiletree-tmp', run)
+  self~assertSame(expected~absolutePath, temporary~absolutePath, 'private child TMPDIR')
+  self~assertSame('stable-directory stable-file.txt', observed~strip, 'exact seed names')
+  file = .File~new('stable-file.txt', temporary)
+  directory = .File~new('stable-directory', temporary)
+  self~assertTrue(file~isFile)
+  self~assertFalse(file~isDirectory)
+  self~assertTrue(directory~isDirectory)
+  self~assertFalse(directory~isFile)
+  self~assertSame(0, directory~list~items)
+  stream = .Stream~new(file~absolutePath)
+  bytes = stream~charin(1, 7)
+  stream~close
+  self~assertSame('737461626C650A'x, bytes, 'seed file bytes')
+  self~assertSame(7, file~length)
+  self~assertSame(0, SysFileTree(.File~new('*', temporary)~absolutePath, tree., 'O'))
+  self~assertSame(paths~items, tree.0)
+  found = .Array~new
+  do i = 1 to tree.0
+    found~append(tree.i)
+  end
+  found~sort
+  do i = 1 to paths~items
+    self~assertSame(paths[i], found[i])
+  end

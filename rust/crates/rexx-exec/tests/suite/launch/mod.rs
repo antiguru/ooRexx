@@ -215,4 +215,3 @@ pub fn run_group(
     let ours = run_group_on_crate_within(settings, dir, group, renamed_out, deadline);
     (oracle, ours)
 }
-
