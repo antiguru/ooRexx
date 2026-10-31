@@ -1,0 +1,15 @@
+   Compiling rexx-exec v0.1.0 (/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/crates/rexx-exec)
+    Finished `test` profile [optimized + debuginfo] target(s) in 10.93s
+     Running tests/concurrency_tests.rs (/tmp/codex-p9d-t88-target/debug/deps/concurrency_tests-c48e0d34a769840f)
+TEST_CALLER_STACK_FRAME	pass	
+TEST_CALLER_STACK_FRAME_REPLY_START	pass	
+TEST_OBJECT_AND_SCOPE	pass	
+TEST_RECEIVER	pass	
+TEST_SETMAKESTRING_WITH_METHOD_OBJECT	pass	
+TEST_TRACEOBJECT_COLLECTOR	pass	
+TEST_TRACEOBJECT_COLLECTOR_AND_NOTIFY_CLASS_ATTRIBUTES	pass	
+TEST_TRACEOBJECT_OPTION	pass	
+TEST_TRACEOBJECT_OPTION_INVALID	pass	
+TEST_VARIABLE	pass	
+
+altered TESTINT01: oracle Some("Assertions:         9"), ours Some("Assertions:         5")
