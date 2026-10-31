@@ -1,0 +1,40 @@
+--- accepted-resume-delta.py
++++ proposed-final-delta.py
+@@ -1,11 +1,12 @@
+ """Retain the exact Task 8.7c to Task 8.8 suite-row delta."""
+ 
+ import csv
++import hashlib
+ import json
+ from pathlib import Path
+ 
+ old_root = Path('/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.7c/fix-r4/suite')
+-new_root = Path('/tmp/codex-p9d-t88-final-gates-resume/suite')
++new_root = Path('/tmp/codex-p9d-t88-final-gates-final/suite')
+ 
+ 
+ def load(path, fields):
+@@ -45,3 +46,23 @@
+ (new_root / 'delta-summary.json').write_text(json.dumps({'old_tests': len(before), 'new_tests': len(after), 'groups': len(groups), 'changed_rows': len(changes), 'added': len(after.keys() - before.keys()), 'removed': len(before.keys() - after.keys())}, indent=2) + '\n')
+ assert before.keys() == after.keys(), 'Population changed: reconcile retained delta'
+ assert groups == {group for group, _ in before} and len(groups) == 402
++
++# A separate fixed join preserves the earlier resumed attempt's licences and outcomes.
++prior_root = Path('/tmp/codex-p9d-t88-final-gates-resume/suite')
++prior_lines, prior_rows = load(prior_root / 'tests.tsv', fields)
++assert '# groups all' in prior_lines
++prior = {(row['group'], row['test']): row for row in prior_rows}
++assert prior_rows and len(prior) == len(prior_rows)
++prior_changes = []
++for group, test in sorted(prior.keys() | after.keys()):
++    a, b = prior.get((group, test)), after.get((group, test))
++    if a != b:
++        prior_changes.append([group, test, 'added' if a is None else 'removed' if b is None else 'changed', *[(a or {}).get(k, '<absent>') for k in fields[2:]], *[(b or {}).get(k, '<absent>') for k in fields[2:]]])
++with (new_root / 'delta-vs-attempt-2.tsv').open('x') as output:
++    writer = csv.writer(output, delimiter='\t', lineterminator='\n')
++    writer.writerow(['group', 'test', 'change', 'old row', 'old oracle', 'old crate', 'new row', 'new oracle', 'new crate'])
++    writer.writerows(prior_changes)
++(new_root / 'attempt-2-delta-summary.json').write_text(json.dumps({'old_tests': len(prior), 'new_tests': len(after), 'groups': len(groups), 'changed_rows': len(prior_changes), 'added': len(after.keys() - prior.keys()), 'removed': len(prior.keys() - after.keys())}, indent=2) + '\n')
++assert prior.keys() == after.keys(), 'Population changed against retained attempt 2'
++paths = [old_root / 'tests.tsv', prior_root / 'tests.tsv', new_root / 'tests.tsv', new_root / 'table.tsv', new_root / 'verdicts.tsv', new_root / 'oracle-differences.tsv']
++(new_root / 'delta-input-sha256.json').write_text(json.dumps({str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}, indent=2) + '\n')

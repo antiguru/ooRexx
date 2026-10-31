@@ -1,0 +1,68 @@
+{
+  "driver": {
+    "path": "/tmp/codex-p9d-t88-final-gate-final.py",
+    "before_sha256": "af2bfb41da1d71930e2b7eb3c09319d16ac685609365dce8aa9a8dc1587f85e4",
+    "after_sha256": "6e6696a48d592ae937974bab49a0cb8875146bbb555306b7a54681a33e69cdb3"
+  },
+  "helper": {
+    "path": "/tmp/codex-p9d-t88-final-final-suite-delta.py",
+    "before_sha256": "058a7adb629464b79e2117e57528d4045ae73d032b7bd3d039b31b7dc5b773a5",
+    "after_sha256": "33114e2b18f1d6c47d6528253315fd13ba9dc45eaa886e09281bd31160b66290"
+  },
+  "source_bridge_candidate": {
+    "path": "/tmp/codex-p9d-t88-final-source-bridge.json",
+    "sha256": "26280d4cd5082193bd773caf886a61c68329bf33628e775ac03ff8937f0a2330",
+    "settled_source_commit": "ac446500e03c18b5143f2967ca30015e6d64b95f",
+    "changed_test_inputs": 9,
+    "production_inputs": 300,
+    "registration_inputs": 11,
+    "protected_ootest_files": 553,
+    "prior_default_targets": 156,
+    "harness_review_accepted": true
+  },
+  "syntax_validation": "ast.parse only; neither driver/helper imported or executed, no Cargo/semantic action",
+  "final_config_created": false,
+  "profile_attestation_created": false,
+  "freeze_started": false,
+  "builds_or_tests_launched": false,
+  "protected_file_population_identity_checked": true,
+  "production_identity_commits_checked": [
+    "9d919b7c3832c55edc3a0a07974309f092102201",
+    "f65066b04fe1f2355ce64d8be581fa9e79641673",
+    "6b6f3fb460049c6ef63f565ceb78e11b5582f165",
+    "ac446500e03c18b5143f2967ca30015e6d64b95f"
+  ],
+  "helper_path_collision": {
+    "preserved_path": "/tmp/codex-p9d-t88-final-suite-delta.py",
+    "preserved_sha256": "d293a87767001d7acb6b918f2b719bb883c3daa07fdbc5d24013fa491977f674",
+    "accepted_distinct_path": "/tmp/codex-p9d-t88-final-final-suite-delta.py",
+    "root_authorized": true
+  },
+  "review_evidence_commit": "dc8b8caf83e933a3115219d352b2e7306dbdfb8c",
+  "unchanged_function_ast_checks": [
+    "git_output",
+    "check_source",
+    "digest",
+    "release_artifacts",
+    "deadline",
+    "key",
+    "artifacts",
+    "reconcile",
+    "capture_path",
+    "verified_summary"
+  ],
+  "protected_file_hash_and_mode_identity_checked": 553,
+  "configuration_schema_sha256": "18716d59225578c791b9856cdc87b7aa7e2480d4944d9771e4638fe8562e26d2",
+  "preparation_only_failures": [
+    {
+      "cause": "Original planned helper path already occupied by preserved attempt1 helper",
+      "driver_or_semantic_action_started": false,
+      "remedy": "Root accepted distinct final helper path"
+    },
+    {
+      "cause": "Generator expected record variable key, original runner uses k",
+      "driver_or_semantic_action_started": false,
+      "remedy": "Narrow generator string correction; initial bridge candidate preserved"
+    }
+  ]
+}

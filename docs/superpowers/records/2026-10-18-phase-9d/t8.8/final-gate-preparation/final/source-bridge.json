@@ -1,0 +1,879 @@
+{
+  "prior_validation_source_commit": "6b6f3fb460049c6ef63f565ceb78e11b5582f165",
+  "settled_source_commit": "ac446500e03c18b5143f2967ca30015e6d64b95f",
+  "settled_rust_tree": "5835d04d1a3dde2bb6a4c2949feda240afbf6188",
+  "normal_pin_producer_source_commit": "f65066b04fe1f2355ce64d8be581fa9e79641673",
+  "measured_runtime_source_commit": "9d919b7c3832c55edc3a0a07974309f092102201",
+  "normal_pin_provenance": {
+    "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/corpus-registration-repair/implementation/release-pin.json",
+    "sha256": "e19cbcf353dbd70dd485b36c3c4ddea8cc94cf67cd46bbaa8a2a0a33c9909187"
+  },
+  "production_manifest": {
+    "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/corpus-registration-repair/implementation/production-manifest.json",
+    "sha256": "593073463602158d59e98322416036af7a9515ba87a48c51072aedaffb447493",
+    "files": 300
+  },
+  "registration_source_proof": {
+    "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/corpus-registration-repair/implementation/source-proof.json",
+    "sha256": "1392f5e088827159bb1dea34599a9efe59ee956eb698e91fece19d23310e5854",
+    "inputs": 11
+  },
+  "changed_test_inputs": {
+    "rust/crates/rexx-exec/tests/concurrency_tests.rs": {
+      "before_git": "100644 blob 7d73b2eb4bb2650c7a99b0eb4953c0eaa5d8f617\trust/crates/rexx-exec/tests/concurrency_tests.rs",
+      "after_git": "100644 blob 52bac5fc01276a0f74238c1dcefd84785b863e94\trust/crates/rexx-exec/tests/concurrency_tests.rs",
+      "sha256": "4be36d6bcaa529c5044af3401ae72ebe1da3e613c761d6bc86068fde1d2c5879"
+    },
+    "rust/crates/rexx-exec/tests/dispatch_seam.rs": {
+      "before_git": "100644 blob fd89ccfef5ace8907eacb43a84fc78d6cee16725\trust/crates/rexx-exec/tests/dispatch_seam.rs",
+      "after_git": "100644 blob 09da2e854fa240c68f7c2a6de5c5ae96e235bfc1\trust/crates/rexx-exec/tests/dispatch_seam.rs",
+      "sha256": "9cc3a818e9d7b89ba61db1eaafddc55196a754e9caa31563d8663177abf8788d"
+    },
+    "rust/crates/rexx-exec/tests/group_runs/mod.rs": {
+      "before_git": null,
+      "after_git": "100644 blob bd3247317e33e9fbd7cb001222afef328f0056dd\trust/crates/rexx-exec/tests/group_runs/mod.rs",
+      "sha256": "d1ff1197ad2690be1e4b20ffed55f9d2530d0c8eb7b0ae9b462e126a5fc5e2e5"
+    },
+    "rust/crates/rexx-exec/tests/group_runs/whole_groups.rs": {
+      "before_git": null,
+      "after_git": "100644 blob 9ba4bd4a9704d6818f0eeaca88a271aab63f8b83\trust/crates/rexx-exec/tests/group_runs/whole_groups.rs",
+      "sha256": "1a87d2e9ea3e410559a9c19853c6c645c2801238bd06135b8e95043012e30e08"
+    },
+    "rust/crates/rexx-exec/tests/suite.rs": {
+      "before_git": "100644 blob 5f53e521b5e8c05ae258f2485d8ea7a467652eef\trust/crates/rexx-exec/tests/suite.rs",
+      "after_git": "100644 blob 153072f048e37482692f2a3d1569c567e68697a1\trust/crates/rexx-exec/tests/suite.rs",
+      "sha256": "e9913744ba6f465d74434fe0a1df33b5b29948c3500a803395363b6fa012bc62"
+    },
+    "rust/crates/rexx-exec/tests/suite/diagnostics.rs": {
+      "before_git": "100644 blob 16855db017fccec1fa0b3ae4643262cf2e1e1af2\trust/crates/rexx-exec/tests/suite/diagnostics.rs",
+      "after_git": "100644 blob 157627682adff4dc4d8a40ea72c948508a76d03a\trust/crates/rexx-exec/tests/suite/diagnostics.rs",
+      "sha256": "ac49183dcab0ec98ba498f8bc786cf42593ebaea63bdb2b19f43d6ecffcc93b1"
+    },
+    "rust/crates/rexx-exec/tests/suite/fixtures/temporary_directory/base/rexxutil/SysFileTree.testGroup": {
+      "before_git": null,
+      "after_git": "100644 blob 58d7d0e4c08c7ebf8847a56489f90e42a20e0463\trust/crates/rexx-exec/tests/suite/fixtures/temporary_directory/base/rexxutil/SysFileTree.testGroup",
+      "sha256": "53a6dbe660a6b7c5cd37746b641c2535d0c031dd51dcd6e8d32c8f56d07c7ec4"
+    },
+    "rust/crates/rexx-exec/tests/suite/fixtures/tests.rs": {
+      "before_git": "100644 blob 4d9538dbabad24b8cf9ca59660f8cc3487e2a0c5\trust/crates/rexx-exec/tests/suite/fixtures/tests.rs",
+      "after_git": "100644 blob b89a7df5340f4151659f78c33beb39bb1748a3ba\trust/crates/rexx-exec/tests/suite/fixtures/tests.rs",
+      "sha256": "9f59247098d50b4d315a29e6bd3b9540da55fd1964ac964ff202722f0f72f6cc"
+    },
+    "rust/crates/rexx-exec/tests/suite/launch/mod.rs": {
+      "before_git": null,
+      "after_git": "100644 blob f098dcbaff29996634a918a7db2077fee09186c0\trust/crates/rexx-exec/tests/suite/launch/mod.rs",
+      "sha256": "fd47f68828635b981d100e4ef3a61e562cf7fbb36a71285d24f6acba046b3ff7"
+    }
+  },
+  "protected_reference_manifest": {
+    "path": "/tmp/codex-p9d-t88-final-gates-resume/suite-static-inputs-before.json",
+    "sha256": "109c412b19e118ae6804fbcc1fd96f55d43c08d51fd3d924a90814b32b97dfa7",
+    "files": 553
+  },
+  "prior_default_artifacts": {
+    "path": "/tmp/codex-p9d-t88-final-gates-resume/artifacts.json",
+    "sha256": "e382646f628077deadbea0152a28271c4629223ba4c0fe7c4a697cbdb8db60dc",
+    "targets": 156
+  },
+  "prior_default_listings": {
+    "[\"rexx-oracle\",\"rexx-diff\",[\"bin\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-000-rexx-diff-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-oracle\",\"normalize\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-001-normalize-list.stdout",
+      "sha256": "e493ecb48f0fd47b2e23d4d77dc20a3705403df5a2ff3be2d3490ef1431ec174",
+      "tests": 2
+    },
+    "[\"rexx-classes\",\"behaviour_wiring\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-002-behaviour_wiring-list.stdout",
+      "sha256": "44a198ad13c8296fcd4f1a3474d82ab13ad9b5af31621a59ffbd6b1b7fdc633c",
+      "tests": 21
+    },
+    "[\"rexx-classes\",\"native_classes_wiring\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-003-native_classes_wiring-list.stdout",
+      "sha256": "35d4281eb79421cfede17e4b7154a4db9e4246b54c9ac38a57c8e2fc34d70e94",
+      "tests": 31
+    },
+    "[\"rexx-classes\",\"uninit_sweep_order\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-004-uninit_sweep_order-list.stdout",
+      "sha256": "6f1beb0af277996882b8ed8d8d95ce71c7ad3c663a7e71bcef17aca5c72e2858",
+      "tests": 5
+    },
+    "[\"rexx-classes\",\"rexx_classes\",[\"lib\"],[\"lib\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-005-rexx_classes-list.stdout",
+      "sha256": "49635683e17bf51526831f24bbc809d50bcd6dd1ed91f7fbe4c49821d0147a60",
+      "tests": 3
+    },
+    "[\"rexx-lib\",\"rexx_lib\",[\"lib\"],[\"lib\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-006-rexx_lib-list.stdout",
+      "sha256": "6d53971bdbbfc7652392c51491d7a0ffa3a3d7f49402b2e6b71fc403b54d7c87",
+      "tests": 3
+    },
+    "[\"rexx-api\",\"layout\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-007-layout-list.stdout",
+      "sha256": "48bd105d4febb8708387407129574d394ddf39bc035b788e81ed5e7843726f55",
+      "tests": 24
+    },
+    "[\"rexx-extract\",\"extract\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-008-extract-list.stdout",
+      "sha256": "d0fa7ee5a599a821bd1c002b5b95252dd04baa914eb40eb4538709617f8defa2",
+      "tests": 3
+    },
+    "[\"rexx-extract\",\"extract_docs\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-009-extract_docs-list.stdout",
+      "sha256": "73f5e1b45c81b5c7a666bd8334944a194fa3a05c6bd9f0acc3f71f5d6630795f",
+      "tests": 11
+    },
+    "[\"rexx-extract\",\"rexx-extract-docs\",[\"bin\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-010-rexx-extract-docs-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-api\",\"invoke\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-011-invoke-list.stdout",
+      "sha256": "f6a716b939f8ad159cf143563a0b8085778bc99adb22eb7d9b99094cd141820b",
+      "tests": 16
+    },
+    "[\"rexx-api\",\"handles\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-012-handles-list.stdout",
+      "sha256": "097f8258cf2fe30120ee33e9fd7dbfba8d796b9be075971dc95296129ef3eb0e",
+      "tests": 6
+    },
+    "[\"rexx-extract\",\"rexx-extract-assertions\",[\"bin\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-013-rexx-extract-assertions-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-extract\",\"extract_bif\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-014-extract_bif-list.stdout",
+      "sha256": "db43f1a23bccc223d35808da2b0961fa274726547491d8f60ac0b22f36c691e4",
+      "tests": 10
+    },
+    "[\"rexx-extract\",\"rexx-extract\",[\"bin\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-015-rexx-extract-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-api\",\"context\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-016-context-list.stdout",
+      "sha256": "6f8ed3a3b26d2dbe80744ca2cfdcd179b7e39876c33a1f4c4a9ce9e323dfab89",
+      "tests": 14
+    },
+    "[\"rexx-extract\",\"extract_assertions\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-017-extract_assertions-list.stdout",
+      "sha256": "3ecc46ec93743a63144e8c448d6d1d09b3aa49934dc5c40ac543c06a80d61901",
+      "tests": 19
+    },
+    "[\"rexx-parse\",\"sourceline\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-018-sourceline-list.stdout",
+      "sha256": "656ddb9869e06f7e0a2e2fd27c4f02f0c12ef1f3900bd83c1883bb1109e18a00",
+      "tests": 25
+    },
+    "[\"rexx-core\",\"uninit\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-019-uninit-list.stdout",
+      "sha256": "9e4dc358ff60f3f792167867dbcbc210f3b7e5f0fda64a6bc69e28c119d9b465",
+      "tests": 8
+    },
+    "[\"rexx-api\",\"values\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-020-values-list.stdout",
+      "sha256": "7af6e988091d7e3f7bc161d8eb0c2cc56864092eadde0d9be863b5329467756d",
+      "tests": 83
+    },
+    "[\"rexx-num\",\"muldiv\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-021-muldiv-list.stdout",
+      "sha256": "36620cd250fab7705f6664e19a9e6aa5c645a106f0c9986e4a92ad369bf17e48",
+      "tests": 11
+    },
+    "[\"rexx-core\",\"buffer_bytes\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-022-buffer_bytes-list.stdout",
+      "sha256": "e3c49e2be0311d134cb9b317194d8dcc6856510f420f5ad93f94ef1261b262bc",
+      "tests": 6
+    },
+    "[\"rexx-bench\",\"rexx-time\",[\"bin\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-023-rexx-time-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-bench\",\"rexx-bench-band\",[\"bin\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-024-rexx-bench-band-list.stdout",
+      "sha256": "3c1faf57f20c96feafa9560c277f23ed6951911361d0198fd4e081ac2c6d1830",
+      "tests": 10
+    },
+    "[\"rexx-core\",\"unsafe_sites\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-025-unsafe_sites-list.stdout",
+      "sha256": "ec4ec8c65e78f3432f58ea0750b5cc68ad172a720c0b2c3bf86ce656d04239d8",
+      "tests": 2
+    },
+    "[\"rexx-parse\",\"scanner\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-026-scanner-list.stdout",
+      "sha256": "e27f7e745c0be0789a30166da9ab3a7db7f127db9f6ea728cbf4cb7710b3e098",
+      "tests": 36
+    },
+    "[\"rexx-bench\",\"rexx_bench\",[\"lib\"],[\"lib\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-027-rexx_bench-list.stdout",
+      "sha256": "6355187acb32f4d56c96f708033a5e86f2fec12d7141b71c1006cca8dc2fb43e",
+      "tests": 30
+    },
+    "[\"rexx-num\",\"addsub\",[\"bin\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-028-addsub-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-num\",\"fmt-check\",[\"bin\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-029-fmt-check-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-core\",\"behaviour\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-030-behaviour-list.stdout",
+      "sha256": "c28e9f3ec3a3e25ca450c615f77ede28da9467908d5871e632b0f3f7a893c412",
+      "tests": 6
+    },
+    "[\"rexx-num\",\"muldiv\",[\"bin\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-031-muldiv-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-num\",\"compare\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-032-compare-list.stdout",
+      "sha256": "c1d2ffb98387b0010672e88af5aa5889f431b4ae5e6693d1cc9a517b56634758",
+      "tests": 15
+    },
+    "[\"rexx-num\",\"rendered\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-033-rendered-list.stdout",
+      "sha256": "7691ee2f57097dbaa915b5afbba25ab8d86add469ecbb433ebc53e8bd64c98ee",
+      "tests": 2
+    },
+    "[\"rexx-num\",\"rexx_num\",[\"lib\"],[\"lib\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-034-rexx_num-list.stdout",
+      "sha256": "aa1140ed499feb97a9336c04d7ad8431ff4f366af090d6056be6cb0b97595561",
+      "tests": 23
+    },
+    "[\"rexx-parse\",\"samples\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-035-samples-list.stdout",
+      "sha256": "256cb2b92d144009fdba582f485f47a0b1442132e716eb00473b5bf0de03fc7c",
+      "tests": 1
+    },
+    "[\"rexx-core\",\"trace\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-036-trace-list.stdout",
+      "sha256": "247e23c133289c364eaff28d67d25218df4efc889b67f5eba93a50e51511a3f6",
+      "tests": 5
+    },
+    "[\"rexx-core\",\"heap\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-037-heap-list.stdout",
+      "sha256": "2c5fccda72881631bc9791c9eafa1c33400867a1ee9b132e971e05a73b04fcb7",
+      "tests": 5
+    },
+    "[\"rexx-num\",\"whole\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-038-whole-list.stdout",
+      "sha256": "ecf72396109b0cb32a6fbbf26e970e4b83d57d26f04460f3a060513eed0a393c",
+      "tests": 9
+    },
+    "[\"rexx-num\",\"int64\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-039-int64-list.stdout",
+      "sha256": "0750124d7178ca5cf90b6779f537989369ec0a1cabafcb481e38bcf6bffe1af3",
+      "tests": 7
+    },
+    "[\"rexx-parse\",\"program\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-040-program-list.stdout",
+      "sha256": "a439a78c8bdced78d9143685dc13886bd54c806b8ea21788cc18d3489680e952",
+      "tests": 28
+    },
+    "[\"rexx-parse\",\"errors\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-041-errors-list.stdout",
+      "sha256": "21a6d84269958311b606a30360991a94ea2c6148f588dde269a40752e76d36de",
+      "tests": 34
+    },
+    "[\"rexx-core\",\"rexx_core\",[\"lib\"],[\"lib\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-042-rexx_core-list.stdout",
+      "sha256": "36f9b3f8263db030e9ca4f8003dccb81a0c1e0de7c85386e377153d89f8bc76e",
+      "tests": 22
+    },
+    "[\"rexx-num\",\"pow\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-043-pow-list.stdout",
+      "sha256": "d670f58e4a951b673c09d97bd8abc2ac589d7a144a60abcdb35f3ede9966b7bd",
+      "tests": 12
+    },
+    "[\"rexx-num\",\"addsub\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-044-addsub-list.stdout",
+      "sha256": "8f4bba61d77e56aaf902f55a0f7375529b7356eaa357baa8cea62b34c6cbff2c",
+      "tests": 7
+    },
+    "[\"rexx-parse\",\"variants\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-045-variants-list.stdout",
+      "sha256": "fd033ede1e1b2050b8ccb62cadea3a8ad521ace0b514beea3da051f767141624",
+      "tests": 1
+    },
+    "[\"rexx-parse\",\"deep\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-046-deep-list.stdout",
+      "sha256": "a48442ff7cd428d813fee18e93c1bf9f6453716436430f19a9ee285c14b79e43",
+      "tests": 6
+    },
+    "[\"rexx-core\",\"handle\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-047-handle-list.stdout",
+      "sha256": "5e3e4437d7371f8506debef9cf27a43ce286bfb60427ef7daa46ffb8cab9945f",
+      "tests": 9
+    },
+    "[\"rexx-num\",\"settings\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-048-settings-list.stdout",
+      "sha256": "a88f2dc73e4699de840552f8c1698fdc65af89caebf3916cecd9b6fc305fe082",
+      "tests": 17
+    },
+    "[\"rexx-bench\",\"rexx-bench-suite\",[\"bin\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-049-rexx-bench-suite-list.stdout",
+      "sha256": "147cd31a1fc039ec4aa2b18a45b538f27142944e0b0bbd6758727d7032da07af",
+      "tests": 15
+    },
+    "[\"rexx-core\",\"scope_pools\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-050-scope_pools-list.stdout",
+      "sha256": "1299f461a1debddb352376cb9a4e0451740ebd4cdbfea90cd1286171b852c798",
+      "tests": 5
+    },
+    "[\"rexx-bench\",\"rexx-arms\",[\"bin\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-051-rexx-arms-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-num\",\"gen-cases\",[\"bin\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-052-gen-cases-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-parse\",\"rexx_parse\",[\"lib\"],[\"lib\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-053-rexx_parse-list.stdout",
+      "sha256": "f8c1bf307a2fe641e5058d36ff2e650cd6189377733dffc47fc6fb304deeb43b",
+      "tests": 260
+    },
+    "[\"rexx-num\",\"format\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-054-format-list.stdout",
+      "sha256": "91638f8c6d3449dfd53e1a0377a028778d2653eafc4fdb052af31788c6a399fe",
+      "tests": 52
+    },
+    "[\"rexx-num\",\"canon\",[\"bin\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-055-canon-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-parse\",\"tokens\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-056-tokens-list.stdout",
+      "sha256": "fcd7fa9c59c4368028ffbcc932ac5760463cf0635a54de1afc7c4dd46a30fd88",
+      "tests": 9
+    },
+    "[\"rexx-parse\",\"tiling\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-057-tiling-list.stdout",
+      "sha256": "1aaa19bb3cd052a52d8aabf0fc7e5ed4d0e1b568d541b466c3b0c9c8f53da7f7",
+      "tests": 12
+    },
+    "[\"rexx-parse\",\"scan-check\",[\"bin\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-058-scan-check-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-num\",\"parse\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-059-parse-list.stdout",
+      "sha256": "5a88ad71fc43f975aea3873428af458d8280d5011b2d07ed90bbf617ffd8f59f",
+      "tests": 14
+    },
+    "[\"rexx-parse\",\"sourceline_oracle\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-060-sourceline_oracle-list.stdout",
+      "sha256": "278a49d395d8ff3b5ba6401b2fde8bc2b2035fb57ae3e24920b0960da941e3fe",
+      "tests": 1
+    },
+    "[\"rexx-num\",\"rounding\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-061-rounding-list.stdout",
+      "sha256": "9ba33a6c0d73c6775013a5fd1eb11dd210f65b02de276c88a304e50159d4e04a",
+      "tests": 13
+    },
+    "[\"rexx-num\",\"errors\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-062-errors-list.stdout",
+      "sha256": "92f5f0aecf7d5e439423f8db7e4d567bc82618e235759a23c5f904fb0561d673",
+      "tests": 17
+    },
+    "[\"rexx-core\",\"collect\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-063-collect-list.stdout",
+      "sha256": "3f530b7ed2ea1a134680d4ea864fb3c69c40001b3fad61499ce33eee0b27ac7b",
+      "tests": 16
+    },
+    "[\"rexx-api\",\"concrete_owners\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-064-concrete_owners-list.stdout",
+      "sha256": "cb281041b425a5d99b89b45c4417485793146a9e098de7d7e6dcb29c42f2aed4",
+      "tests": 2
+    },
+    "[\"rexx-core\",\"roots\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-065-roots-list.stdout",
+      "sha256": "892b8b84370a7afe01fcb32b89022f22dca701a7ae17452448bc9af36d737c7c",
+      "tests": 22
+    },
+    "[\"rexx-extract\",\"extract_keyword\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-066-extract_keyword-list.stdout",
+      "sha256": "c0627a7eb6505a605f2b11648ff78f6ba13d2db98232e6c890b97e8877fb1dd3",
+      "tests": 22
+    },
+    "[\"rexx-api\",\"load\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-067-load-list.stdout",
+      "sha256": "2643e6e71dd9a389a8fc456da4844939a407891384a3d64760b93089e65681f7",
+      "tests": 11
+    },
+    "[\"rexx-inventory\",\"oracle_agreement\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-068-oracle_agreement-list.stdout",
+      "sha256": "b2b3f225802a34b4cb02fcdf6ffb4a9f1adc1442a6a76749fa2645efccad5d7b",
+      "tests": 1
+    },
+    "[\"rexx-inventory\",\"builtins\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-069-builtins-list.stdout",
+      "sha256": "7666f0488beb71940c05f61b111db91a65c881c926ba03c4db63ca18c946b8a2",
+      "tests": 2
+    },
+    "[\"rexx-inventory\",\"errors\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-070-errors-list.stdout",
+      "sha256": "e4534712dac2e17f262016ee53114059292a635222f2f1e04302f323a1c23e93",
+      "tests": 8
+    },
+    "[\"rexx-inventory\",\"rexx_inventory\",[\"lib\"],[\"lib\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-071-rexx_inventory-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-oracle\",\"rexx_oracle\",[\"lib\"],[\"lib\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-072-rexx_oracle-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-extract\",\"rexx_extract\",[\"lib\"],[\"lib\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-073-rexx_extract-list.stdout",
+      "sha256": "f40e0fa2c6fc94d2d3df2e38b6c128cb34e217c7a2bed24d529bddba6e4c39fc",
+      "tests": 32
+    },
+    "[\"rexx-api\",\"rexx_api\",[\"lib\"],[\"lib\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-074-rexx_api-list.stdout",
+      "sha256": "f425158090b3615bbb262fb69986803f232496fb98fa04662611b0822e4d2a55",
+      "tests": 70
+    },
+    "[\"rexx-exec\",\"builtin_status\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-075-builtin_status-list.stdout",
+      "sha256": "2023503add2c69e663f357dce907cdaf8a6122d70f62d25a9fcbc2844a5a44e9",
+      "tests": 31
+    },
+    "[\"rexx-exec\",\"coverage\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-076-coverage-list.stdout",
+      "sha256": "0f50a0ad80bd71f932aa4815bdf69ee70010e7dfb33a2e9b365e05e2e15b253f",
+      "tests": 21
+    },
+    "[\"rexx-exec\",\"internal_routines\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-077-internal_routines-list.stdout",
+      "sha256": "bba26860918a8f3f530711b747105d806e0e13d9c3c2cf0e4f003f3924aab966",
+      "tests": 2
+    },
+    "[\"rexx-exec\",\"native_entries\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-078-native_entries-list.stdout",
+      "sha256": "c330a8c1206245ffc822c6aa1e84769bf8652c01810b858d4eac5fb911cb8cd7",
+      "tests": 29
+    },
+    "[\"rexx-exec\",\"refusal_dispositions\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-079-refusal_dispositions-list.stdout",
+      "sha256": "86ed6d74396f796e7eb90c5e9cf7bf24adac649be1e7adce9baadfc4b5514ccf",
+      "tests": 3
+    },
+    "[\"rexx-exec\",\"rexxc\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-080-rexxc-list.stdout",
+      "sha256": "9b1a5c08e08f0eb39379a5931112feba6604a51cdd84e79be62335808474f02f",
+      "tests": 4
+    },
+    "[\"rexx-exec\",\"stream_handle\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-081-stream_handle-list.stdout",
+      "sha256": "44ddbece999cde73b450d9971b5171c83c10face9c1e3c90e5b1bc917f48c732",
+      "tests": 8
+    },
+    "[\"rexx-exec\",\"compiled\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-082-compiled-list.stdout",
+      "sha256": "e25adbcdac7d57f953c13a24a131440656e568aa341ebce4d8d2b1b34d8f6773",
+      "tests": 2
+    },
+    "[\"rexx-exec\",\"bif_assertions\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-083-bif_assertions-list.stdout",
+      "sha256": "4406936b260d89b5797f956ca9802ed36cf18f7f72d875e216e278c9497b6724",
+      "tests": 5
+    },
+    "[\"rexx-exec\",\"loom\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-084-loom-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-exec\",\"phase_ten_reasons\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-085-phase_ten_reasons-list.stdout",
+      "sha256": "1ddc0ce83588de9956d5cb98d8b6457b1a9048a57d32f0378a6c24532475e820",
+      "tests": 5
+    },
+    "[\"rexx-exec\",\"rexx_exec\",[\"lib\"],[\"lib\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-086-rexx_exec-list.stdout",
+      "sha256": "e7b7ea57f2a48c6573b24faa3f8f319e9cfd29e9fcf714161ace75dca2582a67",
+      "tests": 1239
+    },
+    "[\"rexx-exec\",\"trace_oracle\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-087-trace_oracle-list.stdout",
+      "sha256": "76b07f71f82d3ccb0b9d51dd0c0371353ff903208d21195276dbfb59d5e67557",
+      "tests": 46
+    },
+    "[\"rexx-exec\",\"rexx-ir\",[\"bin\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-088-rexx-ir-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-exec\",\"state_builtin_oracle\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-089-state_builtin_oracle-list.stdout",
+      "sha256": "91ae71ed4d81e24a93777ef6fbb749f3ad7fe61ea5004acf7a2b265abcefdcda",
+      "tests": 27
+    },
+    "[\"rexx-exec\",\"gate_table_d\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-090-gate_table_d-list.stdout",
+      "sha256": "bec6874734f822ba771a4a92b38e9ca6e8283d7ae86db7b6d16c9d83acd84aef",
+      "tests": 28
+    },
+    "[\"rexx-exec\",\"environment_seam\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-091-environment_seam-list.stdout",
+      "sha256": "c11172a944c93f507a731ec273b43d13c3e2875802d597dc0a5686974ce6414c",
+      "tests": 3
+    },
+    "[\"rexx-exec\",\"representation_refusals\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-092-representation_refusals-list.stdout",
+      "sha256": "9d2852f185dd8e80d17309e096b85725aa2202cb1d79876128821a9617c2d7bf",
+      "tests": 3
+    },
+    "[\"rexx-exec\",\"owners\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-093-owners-list.stdout",
+      "sha256": "1d4efdcc05e9e9e7c3f76cc40ba50e89396fe2835085d2900ddae78d387057db",
+      "tests": 6
+    },
+    "[\"rexx-exec\",\"keyword_assertions\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-094-keyword_assertions-list.stdout",
+      "sha256": "4a03b4758942db7c1de601dd22380ae4f44567538468b70c5ffa92e7107787a4",
+      "tests": 7
+    },
+    "[\"rexx-exec\",\"collect_stress\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-095-collect_stress-list.stdout",
+      "sha256": "138262d7b2816fa1b74b252120b5947861b4ea3b50449d38ddf906d7c6502f90",
+      "tests": 79
+    },
+    "[\"rexx-exec\",\"sim_processes\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-096-sim_processes-list.stdout",
+      "sha256": "177a2165881cff5982b9ba85ac6671841e6decbebaddabd9509e2138f378bb84",
+      "tests": 4
+    },
+    "[\"rexx-exec\",\"class_weak_reference\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-097-class_weak_reference-list.stdout",
+      "sha256": "6cb730dd382ce005aa4ced71709ab2c6c04708951ff5a60f27bebda419c7d5e1",
+      "tests": 1
+    },
+    "[\"rexx-exec\",\"api_group_partition\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-098-api_group_partition-list.stdout",
+      "sha256": "d3bae983c9ce223568e1ec01e2bb9ec610312c5a891992ec8a57290febf2d47b",
+      "tests": 27
+    },
+    "[\"rexx-exec\",\"trace_delivery_memory\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-099-trace_delivery_memory-list.stdout",
+      "sha256": "f49d221aca8ef87b04fb959d1cf43e41c2012e2feefd146e9235ff0d4eae3e54",
+      "tests": 26
+    },
+    "[\"rexx-exec\",\"deadline\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-100-deadline-list.stdout",
+      "sha256": "85e05ae49ed1c6c8c11401303fa33dd6953b806e43a445c9623caaa32da4f53e",
+      "tests": 10
+    },
+    "[\"rexx-exec\",\"security_replacements\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-101-security_replacements-list.stdout",
+      "sha256": "6edec1032870fdc88a43a328a9160b6478a790db1e4a424a663debd095c982bd",
+      "tests": 2
+    },
+    "[\"rexx-exec\",\"buffer_growth_error_exit\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-102-buffer_growth_error_exit-list.stdout",
+      "sha256": "52f5e6b793ca44ce44bf43367eb4b9b2d2413bb1c3979605bc8a9c1f2154c823",
+      "tests": 1
+    },
+    "[\"rexx-exec\",\"string_answer_arguments\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-103-string_answer_arguments-list.stdout",
+      "sha256": "42a1b66de92363b66544b32cc66841100ef2b0662d5b97d8837689fb31d8038d",
+      "tests": 1
+    },
+    "[\"rexx-exec\",\"instance_copy_memory\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-104-instance_copy_memory-list.stdout",
+      "sha256": "1e22b2f643e27e3ee99fae4a65b1fa61368b82aeaeb72b943298bedb4cc8b0df",
+      "tests": 26
+    },
+    "[\"rexx-exec\",\"introspection_scopes\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-105-introspection_scopes-list.stdout",
+      "sha256": "7a3ac9fb92c099f69d3215c75e261e93b5d891f03fbe2ef0dfea2f69ea1f1b3d",
+      "tests": 29
+    },
+    "[\"rexx-exec\",\"numeric_model\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-106-numeric_model-list.stdout",
+      "sha256": "d251cd9d1a749002944c2d93bb020b65c523b95f5605a459d5a6a33942afc38c",
+      "tests": 28
+    },
+    "[\"rexx-exec\",\"stdout_write_errors\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-107-stdout_write_errors-list.stdout",
+      "sha256": "8165cc256b98300b1ab8115377d9e998304474304f8b049043a058b41f312443",
+      "tests": 5
+    },
+    "[\"rexx-exec\",\"prompt_before_read\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-108-prompt_before_read-list.stdout",
+      "sha256": "56d2db1356db32128374d7eb13e9dfc27be8a360eaabc3c125f6fb06dc41e58b",
+      "tests": 2
+    },
+    "[\"rexx-exec\",\"corpus\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-109-corpus-list.stdout",
+      "sha256": "ee325b539a0db86a5c39e695f0050aa251c500710d0fa03da5ab91e1abe3529c",
+      "tests": 35
+    },
+    "[\"rexx-exec\",\"unreachable_classes\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-110-unreachable_classes-list.stdout",
+      "sha256": "44612ff8c771378623448c06caae74fe35ea0e730055c358e54cc0e857d6403a",
+      "tests": 26
+    },
+    "[\"rexx-exec\",\"assertions\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-111-assertions-list.stdout",
+      "sha256": "bd7141ed9a1d6fec78e9fe70c18f1ad5561027e43eb0a1c7b0be8de5cd9d4be6",
+      "tests": 5
+    },
+    "[\"rexx-exec\",\"method_bodies\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-112-method_bodies-list.stdout",
+      "sha256": "3d187a92750aa7f83e021940367261dc51725427f406bebb595aeb38d05be9a9",
+      "tests": 28
+    },
+    "[\"rexx-exec\",\"rexx\",[\"bin\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-113-rexx-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-exec\",\"collection_scopes\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-114-collection_scopes-list.stdout",
+      "sha256": "bbf6553c4aa4f9e4c79a77d40e5d23557c9bf8ba36203f2001e7d0308017d06c",
+      "tests": 28
+    },
+    "[\"rexx-exec\",\"licensed_divergences\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-115-licensed_divergences-list.stdout",
+      "sha256": "ceab807b4d3eb1eec01cf939d3c9d3e51002f0b4fb84deffaa64c9739c062ca1",
+      "tests": 27
+    },
+    "[\"rexx-exec\",\"standard_stream_reopen\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-116-standard_stream_reopen-list.stdout",
+      "sha256": "9034954207ee432057f01b020a788b027616699c78324019f174fbcf4a143366",
+      "tests": 2
+    },
+    "[\"rexx-exec\",\"collect_policy\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-117-collect_policy-list.stdout",
+      "sha256": "938e10873ff469613e043aaf0141a7e18ed87532e6bdbc6e99b83c9df476292d",
+      "tests": 2
+    },
+    "[\"rexx-exec\",\"dispatch_seam\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-118-dispatch_seam-list.stdout",
+      "sha256": "9503fd9f73da0866dcd610d2e62ce63017ab9517f1ae83a60bf484f6fa676cb0",
+      "tests": 6
+    },
+    "[\"rexx-exec\",\"trace_indent\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-119-trace_indent-list.stdout",
+      "sha256": "b0f42f6f3e57793e9e2f7773cc1ab67ab34852d342bc7f2b5dd970312057d0db",
+      "tests": 28
+    },
+    "[\"rexx-exec\",\"parse_version_oracle\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-120-parse_version_oracle-list.stdout",
+      "sha256": "c282e5aff14a22cf5c61342149c7a4d913cd801b79ba5186d456e3c31363ab6d",
+      "tests": 26
+    },
+    "[\"rexx-exec\",\"release_local_reference\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-121-release_local_reference-list.stdout",
+      "sha256": "bd0a778bbf37e276f4f440084aa588ed49990518f5d5d52d5209204c25ae6f75",
+      "tests": 3
+    },
+    "[\"rexx-exec\",\"gate_table_c\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-122-gate_table_c-list.stdout",
+      "sha256": "33fe3ca7d3d68c88d626f63cc7c862f901ab49928a421c9fc0dd79ea28f808e2",
+      "tests": 27
+    },
+    "[\"rexx-exec\",\"signals\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-123-signals-list.stdout",
+      "sha256": "1c8a92324dc90a9d9eeea33cb36e1d24a8973e5ee4105e5175f5957846296985",
+      "tests": 42
+    },
+    "[\"rexx-exec\",\"ir_recorded_oracle\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-124-ir_recorded_oracle-list.stdout",
+      "sha256": "8d0d7e6520085620689255b8a2fd2a4a469a12a9a144e48b16120340cfc778bb",
+      "tests": 26
+    },
+    "[\"rexx-exec\",\"class_lifetime\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-125-class_lifetime-list.stdout",
+      "sha256": "1914268e28dcfa87a330844ded4514436f532ed668c67eaed424c8951c1785d8",
+      "tests": 5
+    },
+    "[\"rexx-exec\",\"outer_context\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-126-outer_context-list.stdout",
+      "sha256": "839c6cc2504eb3ad5565323b1f48131d429bd196c8ea5a476d251f3d3b1abb74",
+      "tests": 28
+    },
+    "[\"rexx-exec\",\"no_process_state\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-127-no_process_state-list.stdout",
+      "sha256": "c014739f861b20b36faf0c902a93336b26ddf36dc9786525ecaa3705f7c94d41",
+      "tests": 1
+    },
+    "[\"rexx-exec\",\"timing_witnesses\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-128-timing_witnesses-list.stdout",
+      "sha256": "0d9516e5d6f7f7afecefd6ba74418cc1fada95731104e4096c7c8f6d75494aac",
+      "tests": 29
+    },
+    "[\"rexx-exec\",\"rexxutil_process\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-129-rexxutil_process-list.stdout",
+      "sha256": "03ec8315e179a32dd86bd7b1e0aa87166f8f77675a35ed56ecac008aecd3c7ad",
+      "tests": 5
+    },
+    "[\"rexx-exec\",\"introspection_arity\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-130-introspection_arity-list.stdout",
+      "sha256": "a6d410cf287cabbb842e48fa6738622a555f71c98a4389559476964bf0b57845",
+      "tests": 31
+    },
+    "[\"rexx-exec\",\"datetime_zone\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-131-datetime_zone-list.stdout",
+      "sha256": "17cd22754794a94b9db45778465da4a7030d07c274f53fce371e84d95abd4000",
+      "tests": 28
+    },
+    "[\"rexx-exec\",\"refusal_sites\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-132-refusal_sites-list.stdout",
+      "sha256": "9a73fbd963efa1a35c891c2499e75afd8bd6b7997427fc9fd93649443713e635",
+      "tests": 8
+    },
+    "[\"rexx-exec\",\"bootstrap_install_oracle\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-133-bootstrap_install_oracle-list.stdout",
+      "sha256": "f409ff8591e1223cf5c77b4a0442feb918fbf915f787869f6f07d21a38e0916c",
+      "tests": 27
+    },
+    "[\"rexx-exec\",\"loud\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-134-loud-list.stdout",
+      "sha256": "8ca423e906e340afa4817fc10f03ac0090c72c93df26a89b01c715463c8b7a7d",
+      "tests": 9
+    },
+    "[\"rexx-exec\",\"program_end\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-135-program_end-list.stdout",
+      "sha256": "04de3557f68a174ba9d79a12452d83dcfaf69e69ab96a45e41c9ee8a171b2fed",
+      "tests": 8
+    },
+    "[\"rexx-exec\",\"input_oracle\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-136-input_oracle-list.stdout",
+      "sha256": "c7d9edf2bd01b5d34cca7102cded3cb84091849c7b86ba6df88fb0b466434e85",
+      "tests": 34
+    },
+    "[\"rexx-exec\",\"stream_model\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-137-stream_model-list.stdout",
+      "sha256": "ab2ebaaa54a01f0a2f7b1806cff6805540e26d64230f73e041b6c140788669d6",
+      "tests": 31
+    },
+    "[\"rexx-exec\",\"stdin_contention\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-138-stdin_contention-list.stdout",
+      "sha256": "15578d115547c9c6c90a6d8f1086bbd6f6a41b852f087d5ace9f197db5614a8f",
+      "tests": 1
+    },
+    "[\"rexx-exec\",\"truth\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-139-truth-list.stdout",
+      "sha256": "2dc41685a370b643815cd83ec0f1880351a4960be8866b0317b8fb0e56df67d1",
+      "tests": 1
+    },
+    "[\"rexx-exec\",\"frame_block\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-140-frame_block-list.stdout",
+      "sha256": "2d5dba060b853718452743fe61f61e237cfd8fa51619040e50d3da0679ebfc34",
+      "tests": 2
+    },
+    "[\"rexx-exec\",\"collection_arity\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-141-collection_arity-list.stdout",
+      "sha256": "1e5f2acc1f0b44c37a0e39208617755e36962ccd54285a9fc0fe42ac7650e82a",
+      "tests": 29
+    },
+    "[\"rexx-exec\",\"library_routine_memory\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-142-library_routine_memory-list.stdout",
+      "sha256": "33d3337c273591c05143238009986c8a71a4621c43c1c320162188e4dcc8adf7",
+      "tests": 28
+    },
+    "[\"rexx-exec\",\"rexx_command\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-143-rexx_command-list.stdout",
+      "sha256": "1b013793c5b27d1efa87672e8e4ee7674a5661a8c466aec489bc8c6b2c71b282",
+      "tests": 1
+    },
+    "[\"rexx-exec\",\"spike\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-144-spike-list.stdout",
+      "sha256": "9079efeee5e3625e7f58b64ec435cf100f27c334576f71fef1ef02ce17ea10dd",
+      "tests": 9
+    },
+    "[\"rexx-exec\",\"trace_delivery_schedule\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-145-trace_delivery_schedule-list.stdout",
+      "sha256": "6d5d3edcdbc307b363e6fd0c51e7dd7043970e5e6e83dbd240490b69cb9aaa00",
+      "tests": 1
+    },
+    "[\"rexx-exec\",\"rexxc\",[\"bin\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-146-rexxc-list.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tests": 0
+    },
+    "[\"rexx-exec\",\"api_group_tests\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-147-api_group_tests-list.stdout",
+      "sha256": "46fbae5136490a0d327222fab1a5d6f0d563bab326236130a33cc40b65e068c5",
+      "tests": 31
+    },
+    "[\"rexx-exec\",\"package_requires\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-148-package_requires-list.stdout",
+      "sha256": "7cf764ce0889c2b55f7dcc68710f779e3d7dde10011bd4d903d60f6d302a6fdb",
+      "tests": 29
+    },
+    "[\"rexx-exec\",\"closed_phases\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-149-closed_phases-list.stdout",
+      "sha256": "e4701d3624cbab6b4d998deab4cfb27603a61e0002ddd2547c2d3cce4fdbe5de",
+      "tests": 8
+    },
+    "[\"rexx-exec\",\"directive_options\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-150-directive_options-list.stdout",
+      "sha256": "209df776db6cdd1b9d0a84757ffe0f52528a611be9ae6a3e56f337cde6b27078",
+      "tests": 29
+    },
+    "[\"rexx-exec\",\"oracle_deadline\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-151-oracle_deadline-list.stdout",
+      "sha256": "f797864b2c28dc678a0d6b4fa0397c4c9f4f13bbd7736d2e085f2c9180fe0aa6",
+      "tests": 33
+    },
+    "[\"rexx-exec\",\"semantic_boundaries\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-152-semantic_boundaries-list.stdout",
+      "sha256": "ea781e2d3490bd9e096d333564f23f2274162c0671005f55769b95b49fc52210",
+      "tests": 5
+    },
+    "[\"rexx-exec\",\"ir_recorded\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-153-ir_recorded-list.stdout",
+      "sha256": "6fab27a8c27384da655b4927db35e52e5864dfe860af4f526ad7e39c9075ac42",
+      "tests": 33
+    },
+    "[\"rexx-exec\",\"concurrency_tests\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-154-concurrency_tests-list.stdout",
+      "sha256": "f02ca08fe52b5ee0f46245cff117351885d280f5b8cbaf839b78815ff516256a",
+      "tests": 63
+    },
+    "[\"rexx-exec\",\"suite\",[\"test\"],[\"bin\"]]": {
+      "path": "/tmp/codex-p9d-t88-final-gates-resume/debug-155-suite-list.stdout",
+      "sha256": "7f96e2945966423f8245ffa4599da78064e6da009fab38684bd8dea85321c631",
+      "tests": 68
+    }
+  },
+  "expected_added_tests": {
+    "suite": [
+      "fixtures::tests::sysfiletree_launches_use_distinct_populated_child_temporary_directories",
+      "fixtures::tests::sysfiletree_temporary_directory_selection_is_exact"
+    ]
+  },
+  "reviews": {
+    "assertion": {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/final-test-repair/review.md",
+      "sha256": "7c6fa54cad40c8ad96e9b89557d34e5ade9c11dd4de861b8fc66bca49fbeed48",
+      "accepted_by_root": true
+    },
+    "harness": {
+      "path": "/home/moritz/dev/repos/ooRexx-rust-rewrite/docs/superpowers/records/2026-10-18-phase-9d/t8.8/sysfiletree-isolation/review.md",
+      "sha256": "b1f01ab83bffa68b4c27a2673137509ba6463b848a087356ac32ee371f2e2e65",
+      "accepted_by_root": true
+    }
+  },
+  "readiness": "CANDIDATE ONLY: both scoped reviews accepted in dc8b8caf83e933a3115219d352b2e7306dbdfb8c; runner inspection, final HEAD/config/profile attestation/freeze pending"
+}

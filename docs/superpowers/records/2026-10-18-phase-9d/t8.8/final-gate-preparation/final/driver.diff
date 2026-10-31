@@ -1,0 +1,240 @@
+--- accepted-resume.py
++++ proposed-final.py
+@@ -14,7 +14,7 @@
+ 
+ ROOT = Path('/home/moritz/dev/repos/ooRexx-rust-rewrite')
+ RUST = ROOT / 'rust'
+-OUT = Path('/tmp/codex-p9d-t88-final-gates-resume')
++OUT = Path('/tmp/codex-p9d-t88-final-gates-final')
+ PRIOR_OUT = Path('/tmp/codex-p9d-t88-final-gates')
+ TARGET = '/tmp/codex-p9d-t88-target'
+ BASE = ROOT / 'docs/superpowers/records/2026-10-18-phase-9d/t8.8/prerequisites'
+@@ -36,11 +36,28 @@
+         'group_runs::whole_groups::sim_gate::calibration': 'group_runs::whole_groups::sim_gate::calibration::calibration',
+     },
+ }
+-CONFIG_PATH = Path('/tmp/codex-p9d-t88-final-resume-config.json')
++APPROVED_TEST_DELTA = (
++    'rust/crates/rexx-exec/tests/concurrency_tests.rs',
++    'rust/crates/rexx-exec/tests/dispatch_seam.rs',
++    'rust/crates/rexx-exec/tests/group_runs/mod.rs',
++    'rust/crates/rexx-exec/tests/group_runs/whole_groups.rs',
++    'rust/crates/rexx-exec/tests/suite.rs',
++    'rust/crates/rexx-exec/tests/suite/diagnostics.rs',
++    'rust/crates/rexx-exec/tests/suite/fixtures/temporary_directory/base/rexxutil/SysFileTree.testGroup',
++    'rust/crates/rexx-exec/tests/suite/fixtures/tests.rs',
++    'rust/crates/rexx-exec/tests/suite/launch/mod.rs',
++)
++ADDED_SUITE_TESTS = frozenset({
++    'fixtures::tests::sysfiletree_launches_use_distinct_populated_child_temporary_directories',
++    'fixtures::tests::sysfiletree_temporary_directory_selection_is_exact',
++})
++
++CONFIG_PATH = Path('/tmp/codex-p9d-t88-final-final-config.json')
+ CONFIG = json.loads(CONFIG_PATH.read_text())
+-assert set(CONFIG) == {'source_commit', 'profile_completion_record', 'release_binary', 'release_binary_sha256', 'release_pin_provenance'}
++assert set(CONFIG) == {'source_commit', 'profile_completion_record', 'release_binary', 'release_binary_sha256', 'release_pin_provenance', 'validation_source_bridge'}
+ PIN = CONFIG['source_commit']
+ RELEASE_PIN_PROVENANCE = ROOT / CONFIG['release_pin_provenance']
++VALIDATION_SOURCE_BRIDGE = Path(CONFIG['validation_source_bridge'])
+ ENV = {k: v for k, v in os.environ.items() if not k.startswith('REXX_')}
+ for key_name in list(ENV):
+     if key_name in {'RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'RUSTDOCFLAGS', 'CARGO_ENCODED_RUSTDOCFLAGS', 'CARGO_BUILD_RUSTFLAGS', 'CARGO_BUILD_RUSTDOCFLAGS', 'CARGO_BUILD_TARGET'} or key_name.startswith('CARGO_PROFILE_') or (key_name.startswith('CARGO_TARGET_') and key_name.endswith(('_RUNNER', '_RUSTFLAGS', '_RUSTDOCFLAGS', '_LINKER'))):
+@@ -56,7 +73,7 @@
+               'CARGO_BIN_NAME', 'CARGO_TARGET_TMPDIR', 'OUT_DIR', 'LD_LIBRARY_PATH',
+               'DYLD_FALLBACK_LIBRARY_PATH', 'CARGO_INCREMENTAL', 'CARGO_TARGET_DIR',
+               'CARGO_BUILD_JOBS', 'REXX_CORPUS_GATE', 'REXX_SUITE_DIAGNOSTICS',
+-              'REXX_SUITE_GATE', 'REXX_SUITE_TABLE')
++              'REXX_SUITE_GATE', 'REXX_SUITE_TABLE', 'TMPDIR')
+ 
+ 
+ def git_output(*args):
+@@ -76,6 +93,9 @@
+     frozen = json.loads((OUT / 'input-freeze.json').read_text())
+     assert frozen['source_commit'] == PIN
+     assert frozen['config_sha256'] == digest(CONFIG_PATH), 'Final gate config changed'
++    assert frozen['validation_source_bridge_sha256'] == digest(VALIDATION_SOURCE_BRIDGE), 'Final source bridge changed'
++    for review in frozen['source_bridge_reviews'].values():
++        assert digest(review['path']) == review['sha256'], 'Frozen review changed'
+     assert frozen['authorized_evidence_outputs'] == []
+     check_source()
+     assert hashlib.sha256(git_output('ls-files', '--stage', '-z')).hexdigest() == frozen['index_staging_sha256'], 'Index staging changed'
+@@ -84,6 +104,72 @@
+ 
+ def digest(path):
+     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
++
++
++def validation_source_bridge(provenance):
++    bridge = json.loads(VALIDATION_SOURCE_BRIDGE.read_text())
++    assert bridge['prior_validation_source_commit'] == '6b6f3fb460049c6ef63f565ceb78e11b5582f165'
++    assert bridge['settled_source_commit'] == 'ac446500e03c18b5143f2967ca30015e6d64b95f'
++    assert bridge['normal_pin_producer_source_commit'] == provenance['source_commit'] == 'f65066b04fe1f2355ce64d8be581fa9e79641673'
++    assert bridge['measured_runtime_source_commit'] == '9d919b7c3832c55edc3a0a07974309f092102201'
++    assert bridge['settled_rust_tree'] == git_output('rev-parse', bridge['settled_source_commit'] + ':rust').decode().strip()
++    assert bridge['settled_rust_tree'] == git_output('rev-parse', PIN + ':rust').decode().strip(), 'Final Rust tree differs from reviewed settled repair'
++    assert set(bridge['reviews']) == {'assertion', 'harness'}
++    for review in bridge['reviews'].values():
++        assert review['accepted_by_root'] is True and review['sha256'], 'Scoped review/root acceptance pending'
++        assert digest(review['path']) == review['sha256'], 'Accepted review changed'
++    refs = [('normal_pin_provenance', RELEASE_PIN_PROVENANCE, None),
++            ('production_manifest', RELEASE_PIN_PROVENANCE.parent / 'production-manifest.json', 300),
++            ('registration_source_proof', RELEASE_PIN_PROVENANCE.parent / 'source-proof.json', 11)]
++    for name, path, count in refs:
++        assert bridge[name]['path'] == str(path) and bridge[name]['sha256'] == digest(path)
++        if count is not None:
++            assert bridge[name]['files' if name == 'production_manifest' else 'inputs'] == count
++    changed = git_output('diff', '--name-only', bridge['prior_validation_source_commit'], PIN, '--', 'rust').decode().splitlines()
++    assert sorted(changed) == sorted(APPROVED_TEST_DELTA) == sorted(bridge['changed_test_inputs']), 'Unreviewed Rust input delta'
++    for path, row in bridge['changed_test_inputs'].items():
++        for ref, field in [(bridge['prior_validation_source_commit'], 'before_git'), (PIN, 'after_git')]:
++            actual = git_output('ls-tree', ref, '--', path).decode().strip() or None
++            assert actual == row[field], f'Test-input Git identity changed: {path}'
++        assert digest(ROOT / path) == row['sha256'], f'Test input changed: {path}'
++    protected = bridge['protected_reference_manifest']
++    assert protected['path'] == '/tmp/codex-p9d-t88-final-gates-resume/suite-static-inputs-before.json'
++    assert protected['sha256'] == '109c412b19e118ae6804fbcc1fd96f55d43c08d51fd3d924a90814b32b97dfa7' == digest(protected['path'])
++    reference = json.loads(Path(protected['path']).read_text())['entries']
++    selected = {path: row for path, row in reference.items() if path.startswith(str(ROOT / 'ootest') + '/') and row['kind'] == 'file'}
++    assert len(selected) == protected['files'] == 553
++    found = set()
++    for directory, dirs, files in os.walk(ROOT / 'ootest', followlinks=False):
++        dirs[:] = [name for name in dirs if name not in {'.git', '.svn', '.hg'}]
++        found.update(str(Path(directory) / name) for name in files)
++    assert found == selected.keys(), 'Protected ooTest file population changed'
++    for path, row in selected.items():
++        assert digest(path) == row['sha256'] and Path(path).lstat().st_mode == row['mode'], f'Protected ooTest changed: {path}'
++        if 'symlink_target' in row:
++            assert os.readlink(path) == row['symlink_target']
++    prior = bridge['prior_default_artifacts']
++    assert prior['path'] == '/tmp/codex-p9d-t88-final-gates-resume/artifacts.json'
++    assert prior['targets'] == len(json.loads(Path(prior['path']).read_text())) == len(bridge['prior_default_listings']) == 156
++    assert digest(prior['path']) == prior['sha256']
++    assert bridge['expected_added_tests'] == {'suite': sorted(ADDED_SUITE_TESTS)}
++    for row in bridge['prior_default_listings'].values():
++        assert digest(row['path']) == row['sha256'], 'Prior actual test listing changed'
++    return {'path': str(VALIDATION_SOURCE_BRIDGE), 'sha256': digest(VALIDATION_SOURCE_BRIDGE),
++            'prior_validation_source_commit': bridge['prior_validation_source_commit'], 'settled_source_commit': bridge['settled_source_commit'],
++            'validation_rust_tree': bridge['settled_rust_tree'], 'changed_test_inputs': bridge['changed_test_inputs'],
++            'protected_files': len(selected), 'reviews': bridge['reviews']}
++
++
++def final_test_population(item, names):
++    bridge = json.loads(VALIDATION_SOURCE_BRIDGE.read_text())
++    row = bridge['prior_default_listings'][json.dumps(key(item), separators=(',', ':'))]
++    assert digest(row['path']) == row['sha256']
++    previous = {line[:-6] for line in Path(row['path']).read_text().splitlines() if line.endswith(': test')}
++    assert len(previous) == row['tests']
++    added = ADDED_SUITE_TESTS if key(item) == ('rexx-exec', 'suite', ('test',), ('bin',)) else frozenset()
++    assert not previous & added
++    assert set(names) == previous | added, 'Final names differ from prior actual population plus the two reviewed suite tests'
++    return {'previous_tests': len(previous), 'added_tests': sorted(added), 'fresh_tests': len(names)}
+ 
+ 
+ def release_provenance():
+@@ -93,7 +179,7 @@
+     assert provenance['byte_identical_to_measured_normal'] is True
+     assert provenance['measured_normal_sha256'] == CONFIG['release_binary_sha256'] == digest(Path(provenance['measured_normal_pin']))
+     runtime_tree = git_output('rev-parse', provenance['source_commit'] + ':rust').decode().strip()
+-    assert runtime_tree == git_output('rev-parse', PIN + ':rust').decode().strip(), 'Pinned runtime Rust tree differs from gate source'
++    bridge = validation_source_bridge(provenance)
+     proof_path = RELEASE_PIN_PROVENANCE.parent / 'source-proof.json'
+     manifest_path = RELEASE_PIN_PROVENANCE.parent / 'production-manifest.json'
+     assert digest(proof_path) == provenance['source_proof_sha256'], 'Registration source proof changed'
+@@ -136,6 +222,7 @@
+     assert artifact in output_artifacts, 'Declared normal Cargo artifact absent from its hashed build output'
+     return {'path': str(RELEASE_PIN_PROVENANCE), 'sha256': digest(RELEASE_PIN_PROVENANCE),
+             'pin_producer_source_commit': provenance['source_commit'], 'rust_tree': runtime_tree,
++            'validation_rust_tree': bridge['validation_rust_tree'], 'validation_source_bridge': bridge,
+             'source_proof_path': str(proof_path), 'source_proof_sha256': provenance['source_proof_sha256'],
+             'production_manifest_path': str(manifest_path), 'production_manifest_sha256': provenance['production_manifest_sha256'],
+             'production_manifest_files': len(production), 'measured_normal_pin': provenance['measured_normal_pin'],
+@@ -161,7 +248,7 @@
+     assert proof['actual_cli_sha256'] == proof['test_built_sha256'] == authorization['test_cli_sha256']
+     assert proof['rustix_artifact']['features'] == authorization['test_rustix_features']
+     assert proof['cli_artifact']['features'] == [] and not proof['cli_artifact']['profile']['test']
+-    return {'source_commit': PIN, 'pin_producer_source_commit': normal['pin_producer_source_commit'], 'rust_tree': normal['rust_tree'],
++    return {'source_commit': PIN, 'pin_producer_source_commit': normal['pin_producer_source_commit'], 'rust_tree': normal['validation_rust_tree'],
+             'causal_proof_source_commit': proof['source_commit'], 'causal_runtime_source_commit': authorization['runtime_source_commit'],
+             'normal_pin_identity_bridge': {'prior_path': prior['normal_pin']['path'], 'current_path': CONFIG['release_binary'], 'sha256': CONFIG['release_binary_sha256'],
+                                            'production_manifest_sha256': normal['production_manifest_sha256'], 'source_proof_sha256': normal['source_proof_sha256']},
+@@ -227,7 +314,7 @@
+              RUST / 'crates/rexx-exec/tests/support', RUST / 'crates/rexx-exec/tests/watchdog',
+              Path(TARGET) / 'release/rexx', Path(TARGET) / 'release/rexxc',
+              Path(json.loads((OUT / 'release-artifacts-verified.json').read_text())['tests']['suite']['executable']),
+-             Path('/tmp/codex-p9d-t88-final-gate-resume.py'), Path('/tmp/codex-p9d-t88-final-resume-suite-delta.py')]
++             Path('/tmp/codex-p9d-t88-final-gate-final.py'), Path('/tmp/codex-p9d-t88-final-final-suite-delta.py')]
+     entries = {}
+     excluded = {'.git', '.svn', '.hg'}
+ 
+@@ -284,7 +371,7 @@
+     guard()
+     record = {'source_commit': PIN, 'command': args, 'cwd': str(cwd),
+               'bound_seconds': bound, 'started_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+-              'env': {k: env[k] for k in PUBLIC_ENV if k in env}}
++              'env': {k: env[k] for k in PUBLIC_ENV if k in env}, 'parent_tmpdir': env.get('TMPDIR')}
+     start = time.monotonic()
+     with (OUT / (name + '.stdout')).open('xb') as stdout, (OUT / (name + '.stderr')).open('xb') as stderr:
+         proc = subprocess.Popen(args, cwd=cwd, env=env, stdout=stdout, stderr=stderr, start_new_session=True)
+@@ -387,6 +474,8 @@
+     with (OUT / 'input-freeze.json').open('x') as output:
+         json.dump({'source_commit': PIN, 'authorized_evidence_outputs': [],
+                    'config_sha256': digest(CONFIG_PATH),
++                   'validation_source_bridge_sha256': digest(VALIDATION_SOURCE_BRIDGE),
++                   'source_bridge_reviews': provenance['validation_source_bridge']['reviews'],
+                    'release_pin_provenance': provenance,
+                    'profiling_completion_record': str(completion_path), 'profiling_completion': completion,
+                    'index_staging_sha256': hashlib.sha256(git_output('ls-files', '--stage', '-z')).hexdigest(),
+@@ -402,7 +491,7 @@
+         'release-build': ['python3', 'scripts/test_preflight.py', '--', 'cargo', 'test', '--release', '--locked', '-j4', '-p', 'rexx-exec', '--test', 'corpus', '--test', 'suite', '--no-run', '--message-format=json'],
+         'release-corpus': ['cargo', 'test', '--release', '--locked', '-j4', '-p', 'rexx-exec', '--test', 'corpus', '--message-format=json', '--', '--test-threads=1', '--nocapture'],
+         'release-suite': ['cargo', 'test', '--release', '--locked', '-j4', '-p', 'rexx-exec', '--test', 'suite', 'l3_core_suite', '--message-format=json', '--', '--exact', '--test-threads=1', '--nocapture'],
+-        'suite-delta': ['python3', '/tmp/codex-p9d-t88-final-resume-suite-delta.py'],
++        'suite-delta': ['python3', '/tmp/codex-p9d-t88-final-final-suite-delta.py'],
+         'sysfiletree-diagnostic': ['cargo', 'test', '--release', '--locked', '-j4', '-p', 'rexx-exec', '--test', 'suite', 'fixtures::tests::sysfiletree_group_retains_assertion_and_metadata_context', '--', '--exact', '--ignored', '--test-threads=1', '--nocapture'],
+         'pinning': ['cargo', 'test', '--locked', '-j4', '-p', 'rexx-exec', '--lib', '--features', 'pinning', 'scheduler::tests::mutants::', '--', '--test-threads=1', '--nocapture'],
+     }
+@@ -464,7 +553,7 @@
+     items = artifacts()
+     reconciliation = json.loads((OUT / 'artifact-population-reconciliation.json').read_text())
+     assert items and len(items) == reconciliation['fresh_count']
+-    lines = [f'memcap 8G python3 /tmp/codex-p9d-t88-final-gate-resume.py target {index}' for index in range(len(items))]
++    lines = [f'memcap 8G python3 /tmp/codex-p9d-t88-final-gate-final.py target {index}' for index in range(len(items))]
+     (OUT / 'target-commands.txt').write_text('\n'.join(lines) + '\n')
+ elif mode == 'capture':
+     executable = sys.argv[2]
+@@ -514,7 +603,7 @@
+     host = subprocess.check_output(['rustc', '-vV'], cwd=RUST, text=True, timeout=10)
+     triple = next(line.removeprefix('host: ') for line in host.splitlines() if line.startswith('host: '))
+     env = ENV.copy()
+-    env['CARGO_TARGET_' + triple.upper().replace('-', '_') + '_RUNNER'] = 'python3 /tmp/codex-p9d-t88-final-gate-resume.py capture'
++    env['CARGO_TARGET_' + triple.upper().replace('-', '_') + '_RUNNER'] = 'python3 /tmp/codex-p9d-t88-final-gate-final.py capture'
+     result = run('cargo-dispatch-only', ['cargo', 'test', '--workspace', '--lib', '--bins', '--tests', '--locked', '-j4', '--no-fail-fast', '--', '--test-threads=1', '--nocapture'], RUST, env, 525)
+     assert result['returncode'] == 0 and not result['timed_out'], result
+     items = artifacts()
+@@ -540,6 +629,7 @@
+     assert listed['returncode'] == 0 and not listed['timed_out'], listed
+     names = [line[:-6] for line in (OUT / (name + '-list.stdout')).read_text().splitlines() if line.endswith(': test')]
+     assert len(names) == len(set(names))
++    final_population = final_test_population(item, names)
+     old_target = next((old for old in json.loads((BASE / 'targets.json').read_text()) if key(old) == key(item)), None)
+     assert old_target is not None or key(item) in ADDED_TARGETS
+     old_tests = [old for old in json.loads((BASE / 'tests.json').read_text()) if old_target is not None and old['target_record'] == old_target['name']]
+@@ -556,7 +646,7 @@
+     stdout = (OUT / (name + '.stdout')).read_text(errors='replace')
+     summary, nested_proof = verified_summary(stdout, names, item)
+     assert not result['timed_out'], 'Timed-out run'
+-    result.update(listed_tests=len(names), executable_sha256=dispatch['sha256'], summary=summary, nested_summary_proof=nested_proof)
++    result.update(listed_tests=len(names), executable_sha256=dispatch['sha256'], summary=summary, nested_summary_proof=nested_proof, final_population=final_population)
+     (OUT / (name + '.json')).write_text(json.dumps(result, indent=2) + '\n')
+     sys.exit(0 if result['returncode'] == 0 else 1)
+ elif mode == 'doc':
+@@ -577,6 +667,8 @@
+     for index, item in enumerate(items):
+         name = f'debug-{index:03}-{item["target"]["name"]}'
+         record = json.loads((OUT / (name + '.json')).read_text())
++        listed_names = [line[:-6] for line in (OUT / (name + '-list.stdout')).read_text().splitlines() if line.endswith(': test')]
++        assert record['final_population'] == final_test_population(item, listed_names)
+         assert record['source_commit'] == PIN and record['returncode'] == 0 and not record['timed_out']
+         assert record['summary'][1] == 0 and record['summary'][3:] == [0, 0]
+         assert sum(record['summary']) == record['listed_tests']

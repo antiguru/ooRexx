@@ -1,0 +1,33 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_commit",
+    "profile_completion_record",
+    "release_binary",
+    "release_binary_sha256",
+    "release_pin_provenance",
+    "validation_source_bridge"
+  ],
+  "properties": {
+    "source_commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "profile_completion_record": {
+      "const": "/tmp/codex-p9d-t88-final-final-profile-completion.json"
+    },
+    "release_binary": {
+      "const": "/tmp/codex-p9d-t88-pins/8.8-corpus-registration-rexx"
+    },
+    "release_binary_sha256": {
+      "const": "d9210f4b9f17498ff59da85b6226a532aebaf0765bd8e3fb482025d54ff02145"
+    },
+    "release_pin_provenance": {
+      "const": "docs/superpowers/records/2026-10-18-phase-9d/t8.8/corpus-registration-repair/implementation/release-pin.json"
+    },
+    "validation_source_bridge": {
+      "const": "/tmp/codex-p9d-t88-final-source-bridge.json"
+    }
+  }
+}
